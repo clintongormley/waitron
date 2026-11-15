@@ -140,27 +140,30 @@ export class ServerRouter extends EventTarget {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const answers = Promise.all(
-        [...urls].map(async (url) => {
-          try {
-            const fetchImpl = this.#fetch;
-            const response = await fetchImpl(`${url}/api/node`, {
-              signal: controller.signal,
-              cache: "no-store",
-            });
-            if (!response.ok) return false;
-            const body: unknown = await response.json();
-            return (
-              body !== null &&
-              typeof body === "object" &&
-              "nodeId" in body &&
-              body.nodeId === mainId
-            );
-          } catch {
-            return false;
-          }
-        }),
-      ).then((found) => found.some(Boolean));
+      const answers = new Promise<boolean>((resolve) => {
+        void Promise.all(
+          [...urls].map(async (url) => {
+            try {
+              const fetchImpl = this.#fetch;
+              const response = await fetchImpl(`${url}/api/node`, {
+                signal: controller.signal,
+                cache: "no-store",
+              });
+              if (!response.ok) return false;
+              const body: unknown = await response.json();
+              const matched =
+                body !== null &&
+                typeof body === "object" &&
+                "nodeId" in body &&
+                body.nodeId === mainId;
+              if (matched) resolve(true);
+              return matched;
+            } catch {
+              return false;
+            }
+          }),
+        ).then(() => resolve(false));
+      });
       return await Promise.race([
         answers,
         new Promise<false>((resolve) => {

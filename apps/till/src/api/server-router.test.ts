@@ -1345,6 +1345,29 @@ describe("Cloud emergency main check", () => {
     }).toEqual(before);
   });
 
+  it.each(["page", "main"])(
+    "recognizes the main at its %s address while the other address hangs",
+    async (where) => {
+      const answering = where === "page" ? CLOUD : BOX;
+      const fetchImpl = (input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).startsWith(answering)
+          ? Promise.resolve(Response.json({ nodeId: "b", acceptingSales: false, term: 1 }))
+          : new Promise<Response>((_resolve, reject) =>
+              init!.signal!.addEventListener("abort", () => reject(new Error("cancelled")), {
+                once: true,
+              }),
+            );
+      const r = new ServerRouter({
+        origin: CLOUD,
+        fetchImpl,
+        storage: memoryStorage(),
+        timeoutMs: 500,
+      });
+      r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+      await expect(r.probeEmergencyMain()).resolves.toBe(true);
+    },
+  );
+
   it.each([false, true])(
     "keeps the main identity when its address is the page origin (cached %s)",
     async (cached) => {

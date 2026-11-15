@@ -29,6 +29,7 @@ it("shows the emergency address, requirements, roles and QR without offering an 
   const text = el.shadowRoot?.textContent ?? "";
   expect(text).toContain(entrance.address);
   expect(text).toContain("emergency code");
+  expect(text).toContain("saved from Cloud services");
   expect(text).toContain("password");
   expect(text).toContain("authenticator");
   expect(text).toContain("recovery code");

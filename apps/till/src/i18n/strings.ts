@@ -1998,7 +1998,7 @@ export const en = {
   "cloud_emergency.start": "Start the venue in the cloud",
   "cloud_emergency.main_answering": "The main server is answering again.",
   "cloud_emergency.requirements":
-    "Take the emergency code from your recovery pack. You will need your Waitron password and a code from an authenticator app set up beforehand, or a recovery code.",
+    "Have the emergency code you saved from Cloud services on the dashboard. You will need your Waitron password and a code from an authenticator app set up beforehand, or a recovery code.",
   "cloud_emergency.next":
     "Enter the code on Cloud, then sign in and confirm that the old box is switched off. Cloud checks availability before starting the venue.",
   "cloud_emergency.roles": "Roles that can start it:",
@@ -4060,7 +4060,7 @@ export const es: Record<StringKey, string> = {
   "cloud_emergency.start": "Iniciar el local en la nube",
   "cloud_emergency.main_answering": "El servidor principal vuelve a responder.",
   "cloud_emergency.requirements":
-    "Busca el código de emergencia en el paquete de recuperación. Necesitarás tu contraseña de Waitron y un código de una aplicación de autenticación configurada previamente, o un código de recuperación.",
+    "Ten a mano el código de emergencia que guardaste desde Servicios Cloud en el panel. Necesitarás tu contraseña de Waitron y un código de una aplicación de autenticación configurada previamente, o un código de recuperación.",
   "cloud_emergency.next":
     "Introduce el código en Cloud, inicia sesión y confirma que la caja anterior está apagada. Cloud comprueba la disponibilidad antes de iniciar el local.",
   "cloud_emergency.roles": "Roles que pueden iniciarlo:",
