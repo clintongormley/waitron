@@ -2584,18 +2584,23 @@ colour it needs, and then also sets any focus ring on that element, which the th
 leave in the brand colour. Three do so today:
 
 - the shared field box (`fieldStyles`) draws its bottom line in `CanvasText` on a `::after` laid
-  over the box, so the box keeps its height; the line is twice as thick when the field is invalid,
-  an outline in `Highlight` marks focus, and a disabled field has a single dashed `GrayText` line;
+  over the box, so the box is the same height with the theme on or off; an invalid field's line is
+  drawn at the focus line's width (`--wt-field-line-width-active`), and a disabled field's is a
+  single dashed `GrayText` line; an outline in `Highlight` marks focus, and a focused invalid
+  field's line sits just above the outline's bottom band, so it still reads thicker than a focused
+  valid field's;
 - `wt-switch` outlines its track and fills its thumb; ON fills the track in `Highlight` with a
-  `HighlightText` thumb at the far end, a disabled switch is drawn in `GrayText` without being
-  dimmed, and a keyboard-focused switch is ringed in `Highlight`;
+  `HighlightText` thumb at the far end; a disabled switch's track, thumb and label are drawn in
+  `GrayText` at full strength rather than faded; and a keyboard-focused switch is ringed in
+  `Highlight`;
 - `wt-tabs` underlines only the selected tab, in `Highlight`.
 
-The others do not yet, among them `wt-combobox`, `wt-colour-chooser`, `wt-data-table`,
-`wt-floor-map` and the floor plan's rings (`floor-ring.ts`); see
-[the backlog](../backlog/dashboard.md#bundle-other-browser-check).
+The others do not yet, among them `wt-help-switch`'s pressed state, `wt-combobox`'s open-list
+line, `wt-colour-chooser`'s checked ring, `wt-data-table`, `wt-floor-map` and the floor plan's
+rings (`floor-ring.ts`); see
+[the backlog](../backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives).
 
-Their tests turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
+The tests for those three turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
 which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks
 the theme took, and reads pixels from a real screenshot with `elementPixels`:
 `packages/ui-core/src/components/wt-input.forced-colors.test.ts`,
@@ -5118,6 +5123,7 @@ test pins `pre-wrap`, so replacing the shorthand keeps whitespace preservation c
 7. If it draws an edge, a focus mark or a state with a box-shadow, a background or a transparent
    border, add a `@media (forced-colors: active)` block and a
    `src/components/<name>.forced-colors.test.ts` (see "Forced colours (Windows contrast themes)").
+   Nothing checks that it does.
 8. Add it to the workbench and to the table above.
 
 ## Workbench

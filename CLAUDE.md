@@ -342,7 +342,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a
   CSS class.** Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours,
-  `rem` or `em`; system colours only inside `@media (forced-colors: active)`.** Guards:
+  `rem` or `em`; system colours only inside `@media (forced-colors: active)`, which nothing guards.** Guards:
   `packages/ui/src/no-hardcoded-chrome.test.ts` (UI package only),
   `scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name: values in the `css` tags of
   the dashboard, the till and modules' dashboard screens only, no `px`
@@ -353,7 +353,9 @@ called weaker than its name, the topic file lists what it does not see.
   `color:` declarations as text, in tracked files only; what it misses is in
   [design-system.md](docs/developers/design-system.md).
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
-  axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
+  axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes;
+  one that draws an edge or state with a shadow, background or transparent border also needs a
+  `*.forced-colors.test.ts` screenshot test. Nothing checks the third.
 - **A shared `wt-*` component's custom events are named `wt-*`, carry `detail`, and are dispatched
   `bubbles: true, composed: true` — and the triggering event is stopped with
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
