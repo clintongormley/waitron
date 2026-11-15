@@ -585,8 +585,7 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
 
 ## A974. Finish the remaining English names in general code.
 
-- **A974. Finish the remaining English names in general code.** Private dish helpers remain in
-  `collect-by-invoice.test.ts` and `take-payment-permission.test.ts`.
+- **A974. Finish the remaining English names in general code.**
   A private person binding (`marta`, shown as Martha) remains in the protected
   `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.

@@ -109,7 +109,7 @@ async function paymentAttemptOf(id: string): Promise<string | null> {
 }
 
 /** A counter order of one Tarta (18.00), presented without an invoice. */
-async function presentedTarta(): Promise<string> {
+async function presentedCake(): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
   await parkOrder(deps, venue.cfg, {
@@ -253,7 +253,7 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
   }
 
   it("refuses and leaves the presented order placed, with no invoice and no tender", async () => {
-    const id = await presentedTarta();
+    const id = await presentedCake();
     gate.deny = true;
 
     expectRefused(await collectCash(id));
@@ -266,7 +266,7 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
   });
 
   it("collects the same order when the permission is held", async () => {
-    const id = await presentedTarta();
+    const id = await presentedCake();
 
     const answer = await collectCash(id);
 
@@ -312,7 +312,7 @@ describe("POST /api/working-orders/:id/payments needs payment.take on every entr
 
 describe("POST /api/working-orders/:id/close-deferred needs payment.take", () => {
   /** An open counter order of one Tarta (18.00), on a till whose profile may close a bill as a deferred payment. */
-  async function openTarta(): Promise<{ id: string; body: Record<string, unknown> }> {
+  async function openCake(): Promise<{ id: string; body: Record<string, unknown> }> {
     await inTx(venue, async (tx) => {
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })
@@ -368,7 +368,7 @@ describe("POST /api/working-orders/:id/close-deferred needs payment.take", () =>
   }
 
   it("refuses and leaves the order open, with no invoice and no closure", async () => {
-    const { id, body } = await openTarta();
+    const { id, body } = await openCake();
     gate.deny = true;
 
     expectRefused(await closeDeferred(id, body));
@@ -381,7 +381,7 @@ describe("POST /api/working-orders/:id/close-deferred needs payment.take", () =>
   });
 
   it("refuses inside the write when the permission is gone after the check before the queue", async () => {
-    const { id, body } = await openTarta();
+    const { id, body } = await openCake();
     gate.deny = true;
     gate.allowFirst = 1;
 
