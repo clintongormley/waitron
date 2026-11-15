@@ -826,12 +826,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       /* The raised surface equals the resting one in the light theme, so a row that opens something
          takes the lifted one. Last, and as specific as the pinned and joined rules, so it wins over
          both. */
-      /* In-cell controls keep their focus paint, including focus inside a shared control's shadow. */
-      tbody tr.clickable:is(
-          :hover,
-          :focus-within:not(:has(.row-activate:focus:not(:focus-visible)))
-        )
-        td {
+      tbody tr.clickable:is(:hover, [data-focus-visible]) td {
         background: var(--wt-color-surface-lifted);
         cursor: pointer;
       }
@@ -1190,10 +1185,26 @@ export class WtDataTable<Row = unknown> extends LitElement {
       panel.showPopover();
   }
 
+  // The composed path reaches a shared control's native button; CSS :has() stops at its shadow.
+  readonly #paintRowFocus = (event: Event): void => {
+    const path = event.composedPath();
+    const row = path.find(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement && node.matches("tbody tr.clickable"),
+    );
+    const control = path[0];
+    row?.toggleAttribute(
+      "data-focus-visible",
+      event.type !== "focusout" && control instanceof Element && control.matches(":focus-visible"),
+    );
+  };
+
   override connectedCallback(): void {
     super.connectedCallback();
     document.addEventListener("focusin", this.#containFilterFocus);
     this.renderRoot.addEventListener("focusin", this.#containFilterFocus);
+    for (const name of ["focusin", "focusout", "keydown"])
+      this.renderRoot.addEventListener(name, this.#paintRowFocus);
     this.#observeHost();
     if (this.hasUpdated) {
       this.#observeScroll();
@@ -1210,6 +1221,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.disconnectedCallback();
     document.removeEventListener("focusin", this.#containFilterFocus);
     this.renderRoot.removeEventListener("focusin", this.#containFilterFocus);
+    for (const name of ["focusin", "focusout", "keydown"])
+      this.renderRoot.removeEventListener(name, this.#paintRowFocus);
     this.#endColumnDrag();
     // Removal hides an open popover without firing beforetoggle, so `placed` never records the close.
     if (!this.sideFilters) this.filtersOpen = false;

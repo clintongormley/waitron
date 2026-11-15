@@ -1,3 +1,4 @@
+import { html } from "lit";
 import { afterEach, expect, test, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { cleanup, formMessageOf, host, mount } from "../test-helpers.js";
@@ -1382,9 +1383,13 @@ test("gives a form's action row in its body the raised surface it paints, and ke
   expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
-test.each(["mouse", "keyboard"] as const)(
-  "returns row focus without pointer decoration after a typed editor (%s)",
-  async (opening) => {
+test.each(
+  (["mouse", "keyboard"] as const).flatMap((opening) =>
+    (["row", "native", "shared"] as const).map((opener) => [opening, opener] as const),
+  ),
+)(
+  "returns row focus without pointer decoration after a typed editor (%s, %s)",
+  async (opening, openerKind) => {
     const table = (await mount(
       `<wt-data-table aria-label="Devices"></wt-data-table><wt-modal heading="Edit device"><input aria-label="Device name"><button>Save</button></wt-modal>`,
     )) as WtDataTable<{ id: string; name: string }>;
@@ -1395,9 +1400,23 @@ test.each(["mouse", "keyboard"] as const)(
       { id: "bar", name: "Bar" },
     ];
     table.rowKey = (row) => row.id;
-    table.rowClick = () => {
+    const open = () => {
       modal.open = true;
     };
+    table.rowClick = open;
+    if (openerKind !== "row")
+      table.columns = [
+        ...table.columns,
+        {
+          key: "actions",
+          label: "Actions",
+          pinned: "end",
+          cell: (row) =>
+            openerKind === "native"
+              ? html`<button data-edit=${row.id} @click=${open}>Edit</button>`
+              : html`<wt-button data-edit=${row.id} @click=${open}>Edit</wt-button>`,
+        },
+      ];
     modal.querySelector("button")!.addEventListener("click", () => {
       modal.open = false;
     });
@@ -1409,12 +1428,16 @@ test.each(["mouse", "keyboard"] as const)(
     ];
     const firstCell = first!.closest("td")!;
     const secondCell = second!.closest("td")!;
+    const opener =
+      openerKind === "row"
+        ? first!
+        : table.shadowRoot!.querySelector<HTMLElement>("[data-edit=counter]")!;
     const resting = getComputedStyle(firstCell).backgroundColor;
     expect(resting).not.toBe("rgb(30, 40, 50)");
-    if (opening === "mouse") await userEvent.click(first!);
+    if (opening === "mouse") await userEvent.click(opener);
     else {
       await userEvent.keyboard("{Tab}");
-      first!.focus();
+      opener.focus();
       await userEvent.keyboard("{Enter}");
     }
     await modal.updateComplete;
@@ -1431,7 +1454,7 @@ test.each(["mouse", "keyboard"] as const)(
       expect(getComputedStyle(secondCell).backgroundColor).toBe("rgb(30, 40, 50)"),
     );
     expect({
-      returnedToOpener: table.shadowRoot!.activeElement === first,
+      returnedToOpener: table.shadowRoot!.activeElement === opener,
       openerBackground: getComputedStyle(firstCell).backgroundColor,
       hoveredBackground: getComputedStyle(secondCell).backgroundColor,
     }).toEqual({

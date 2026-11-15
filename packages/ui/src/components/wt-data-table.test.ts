@@ -4320,6 +4320,14 @@ test("keeps a clickable row lifted when Tab reaches a shared button inside it", 
   expect(button.shadowRoot!.activeElement?.matches(":focus-visible")).toBe(true);
   for (const cell of button.closest("tr")!.querySelectorAll("td"))
     expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!);
+  await userEvent.click(button);
+  await commands.parkPointer();
+  expect(button.shadowRoot!.activeElement?.matches(":focus-visible")).toBe(false);
+  expect(getComputedStyle(button.closest("td")!).backgroundColor).not.toBe("rgb(30, 40, 50)");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(button.shadowRoot!.activeElement?.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(button.closest("td")!).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
 test("a real pointer click on an in-cell control does not fall through to the row activator", async () => {
