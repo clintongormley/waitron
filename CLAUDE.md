@@ -1020,12 +1020,13 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   machine (owner, 2026-11-13: "we should never just accept another device's match automatically.
   instead, we should always ask for confirmation, and that confirmation should be protected"; the
   conflict switch's proof is not owner-approved: the proposal the owner agreed named an
-  administrator sign-in). A minute whose name is already in a history the box reads is not taken. Its waits, its other
-  refusals and when a name can repeat:
+  administrator sign-in). A restore's start uses the restore page's choice while the box's boot id
+  is unchanged and its clock has not been stepped since. A minute whose name is already in a history the box reads is not taken. Its waits,
+  its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
   Restore takes one source; working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/minute-selection-unknown-name
   suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`,
   weaker than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a

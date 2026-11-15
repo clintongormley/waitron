@@ -4314,7 +4314,35 @@ it (**This device**); otherwise `select` is refused `sif.allocation_invalid`, re
 `confirmation_required` (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a device's agreeing
 time selects only once the person confirms it"; owner, 2026-11-13: "we should never just accept
 another device's match automatically. instead, we should always ask for confirmation, and that
-confirmation should be protected"). A minute a name in the history it can read already holds is not taken: a
+confirmation should be protected").
+
+The restore's start, after the box restarts the server, does not ask the person again: the `select`
+stores, with the hour it chose, the box's clock reading it admitted and the boot id and
+`/proc/uptime` read just after that reading. A later `select` for the same event that passes the
+same checks keeps the hour, and stores them afresh when the boot id has changed since; on the same
+boot it keeps the stored ones (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a repeated
+select keeps its chosen hour, and stores the boot reading it judged after a restart"); a
+preview or a read of the chosen hour after a restart leaves them alone (the same file's "a preview or a selected
+read after a restart leaves the stored boot reading alone"). The start counts the select as its second clock when the
+boot id is the same and not null and the wall clock has moved within 1 second of `/proc/uptime`
+since. There is no time limit. A different or missing boot id, an uptime below zero, or a wall clock
+stepped by more than a second, even between the select's clock check and its boot reading, leaves
+the start to its own clocks, and without the internet time service it is refused
+`second_clock_missing` (`packages/fiscal-verifactu/src/hosted-hour-recovery.test.ts`, "a restore's
+start without an internet clock reuses the page's select on the same boot", "a restore's start
+without an internet clock waits for a second clock when %s" and "... when the clock was stepped after
+the select judged it"); a saved uptime below zero is refused `history_invalid` (the
+`hour-selection.test.ts` case "refuses a persisted intent whose boot reading has %s"). The server's
+restore host reads the boot through `bootReader` (`apps/server/src/module-operation-host.test.ts`,
+"a restore's host reads the box's boot by default"). With no internet clock, a staged Cloud restore
+and the default `waitron-restore restore` command both place on the boot the page selected on, and
+so does a restore whose page selected again after a switch-off
+(`apps/server/src/hour-recovery-placement-3.test.ts`, "a fresh-box Cloud restore places without an
+internet clock while the box stayed on since the page's select", "the default archive command places
+without an internet clock while the box stayed on since the page's select" and "a restore whose page
+selected again after a switch-off places without an internet clock on that boot").
+
+A minute a name in the history it can read already holds is not taken: a
 restore's first choice is then refused with how long until the next free minute is taken and when
 to check again (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at
 the settle target in the surviving database"; `packages/fiscal-verifactu/src/hour-selection.test.ts`,
@@ -6376,7 +6404,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   that confirmation should be protected"; This device and the list of proofs follow the watcher's
   09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
   switch, which it gave as an administrator sign-in and whose page checks the box's current
-  recovery key, a choice that is not owner-approved); a minute whose name is already in a
+  recovery key, a choice that is not owner-approved); a restore's start uses the restore page's
+  choice while the box's boot id is unchanged and its clock has not been stepped since
+  ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)); a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6387,7 +6417,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name suites (the
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/minute-selection-unknown-name suites (the
   last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
   than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 

@@ -14,6 +14,7 @@ import {
   interactiveHost,
   clock,
   stageBucketRoute,
+  boot,
 } from "../test/hour-recovery-host.js";
 import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
@@ -488,6 +489,7 @@ describe("selected-hour admission before archive placement", () => {
             monotonicFinishedMs: performance.now(),
           },
     );
+    if (reason === "offline") boot.id = "after-switch-off";
     if (reason === "old seller")
       command.argv = command.argv.filter((arg) => arg !== "--confirm-old-box-gone");
     if (reason === "missing sole confirmation")
@@ -528,6 +530,13 @@ describe("selected-hour admission before archive placement", () => {
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
     expect(output.join("\n")).not.toContain(key.secret);
     expect(output.join("\n")).not.toContain(command.env.WAITRON_BACKUP_RECOVERY_KEY);
+  });
+
+  it("the default archive command places without an internet clock while the box stayed on since the page's select", async () => {
+    const f = await archiveHost();
+    const command = await archiveCommand(f);
+    expect(await runRestore({ ...command, out: () => {} })).toBe(0);
+    expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
   });
 
   it("the archive-pack command uses the downloaded exact archive and the pack password", async () => {
@@ -706,13 +715,42 @@ describe("selected-hour admission before archive placement", () => {
     expect(external.internet).not.toHaveBeenCalled();
   });
 
-  it("a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places on the next start", async () => {
+  it("a fresh-box Cloud restore places without an internet clock while the box stayed on since the page's select", async () => {
     const f = await archiveHost();
     const managed = await managedHttp(f);
     const options: Parameters<typeof runStagedRestore>[0] = {
       ...f.restore,
       onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
     };
+    expect(await runStagedRestore(options)).toBe(true);
+    expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
+  });
+
+  it("a restore whose page selected again after a switch-off places without an internet clock on that boot", async () => {
+    const f = await archiveHost();
+    boot.id = "after-switch-off";
+    const page = createSelectedRecoveryPreparation(f.options);
+    const selected = (await recoverySelectPastWaits(clock, page, { onBox: false })) as {
+      status: string;
+      input: unknown;
+    };
+    expect(selected).toMatchObject({ status: "selected", input: f.outcome.input });
+    const start = createSelectedRecoveryPreparation(f.options);
+    await restoreFromArtifact({
+      ...f.restore,
+      withModuleOperations: start.runner(selected.input, { refresh: true }),
+    });
+    expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
+  });
+
+  it("a fresh-box Cloud restore refused at placement after a switch-off for no internet clock keeps its request and places on the next start", async () => {
+    const f = await archiveHost();
+    const managed = await managedHttp(f);
+    const options: Parameters<typeof runStagedRestore>[0] = {
+      ...f.restore,
+      onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
+    };
+    boot.id = "after-switch-off";
     await expect(runStagedRestore(options)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "second_clock_missing" },

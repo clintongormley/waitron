@@ -45,6 +45,7 @@ export function createModuleOperationHost(
     testClock?: ModuleOperationHost["testClock"];
     setBoxClock?: ModuleOperationHost["setBoxClock"];
     timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
+    readBoot?: ModuleOperationHost["readBoot"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
@@ -54,6 +55,7 @@ export function createModuleOperationHost(
     ...(evidence?.timeServiceSynchronised === undefined
       ? {}
       : { timeServiceSynchronised: evidence.timeServiceSynchronised }),
+    ...(evidence?.readBoot === undefined ? {} : { readBoot: evidence.readBoot }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.readRecoveryFacts === undefined
       ? {}

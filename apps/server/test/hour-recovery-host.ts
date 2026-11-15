@@ -136,6 +136,9 @@ export let clock: HourTestClock;
 /** Defaults to a browser on another device; a case about the box's own screen sets it. */
 export const seams: { requestFromBox: () => boolean } = { requestFromBox: () => false };
 const client = () => ({ onBox: seams.requestFromBox() });
+/** The box's boot as this suite's restores read it; a restart after a switch-off changes `id`. */
+export const boot = { id: "suite-boot" };
+const readBoot = () => ({ id: boot.id, ms: performance.now() });
 let value: unknown;
 const bucketServers = new Set<Server>();
 beforeEach(async () => {
@@ -146,6 +149,7 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   clock = createFakeTimersHourClock();
   seams.requestFromBox = () => false;
+  boot.id = "suite-boot";
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "unavailable",
@@ -270,6 +274,7 @@ export async function host() {
     nodeDatabase: () => suite.node,
     selected,
     readRecoveryFacts: async () => facts,
+    readBoot,
   };
   const service = createSelectedRecoveryPreparation(options);
   const configured = service.modules;
@@ -359,6 +364,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     artifact,
     recoveryKey: "archive password",
     log: () => {},
+    readBoot,
   };
   let selected = await previewRecoveryArchive(restore);
   const entries = unpackArchive(decryptArtifact(artifact, "archive password")).filter(
@@ -418,6 +424,7 @@ export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>)
       WAITRON_RECOVERY_OPERATION_FILE: operationPath,
       WAITRON_NODE_RECOVERY_KEY: key.secret,
     },
+    readBoot,
   };
 }
 
@@ -831,7 +838,13 @@ export async function interactiveHost() {
   const f = await archiveHost();
   clock.set(Date.parse("2026-10-16T13:40:00Z"));
   const coordinator = createFirstSetupCoordinator();
-  const options = { ...f.roots, coordinator, modules: ALL_MODULES, migrationsRoot: null };
+  const options = {
+    ...f.roots,
+    coordinator,
+    modules: ALL_MODULES,
+    migrationsRoot: null,
+    readBoot,
+  };
   const session = createInteractiveRecoveryPreparation(options);
   const request = {
     binding: { ...f.options.binding, eventId: "interactive-browser" },

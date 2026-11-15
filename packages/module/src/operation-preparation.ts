@@ -75,6 +75,11 @@ export interface ModuleOperationHost {
   readonly testClock?: { wall(): number; monotonic(): number };
   /** Whether the box's internet time service says its clock is synchronised; absent answers no. */
   timeServiceSynchronised?(): Promise<boolean>;
+  /**
+   * `/proc/uptime` in milliseconds and the boot id, null when the uptime was not read there;
+   * absent, a restore's start carries no earlier choice.
+   */
+  readBoot?(): { ms: number; id: string | null };
   readPublicEvidence(
     binding: OperationBinding,
   ): Promise<{ trust: unknown; current: unknown } | undefined>;

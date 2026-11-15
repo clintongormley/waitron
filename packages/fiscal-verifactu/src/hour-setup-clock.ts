@@ -161,7 +161,13 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         },
       };
     },
-    async compare(key: string, browser: SetupBrowserClockSample | null, client: SetupClockClient) {
+    /** `carried` stands in for the browser when none was sent. */
+    async compare(
+      key: string,
+      browser: SetupBrowserClockSample | null,
+      client: SetupClockClient,
+      carried?: HourClockObservation,
+    ) {
       const state = session(key);
       const { challenge, received, elapsed, timed } =
         browser === null
@@ -181,7 +187,8 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
           monotonicStartedMs: challenge.monotonic,
           monotonicFinishedMs: received.monotonicFinishedMs,
         });
-      } else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
+      } else if (browser === null && carried !== undefined) observations.push(carried);
+      else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
       observations.push(await observeTimeServiceHourClock(timeService, { wall, monotonic }));
       if (sessions.get(key) !== state) return refuse("clock_stale");
       const sample = box();

@@ -11,6 +11,7 @@ import {
   createHourSelection,
   type HourSelectionFacts,
   type HourSelectionStore,
+  type SelectBoot,
 } from "./hour-selection.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
@@ -111,6 +112,7 @@ interface PreparationOptions {
   read(binding: ModuleOperationInput["binding"], comparisonId?: string): Promise<HourRecoveryFacts>;
   readContext?(binding: ModuleOperationInput["binding"]): Promise<RecoveryContext>;
   monotonicNow(): number;
+  readBoot?(): Omit<SelectBoot, "wallMs"> | undefined;
 }
 export function createHourRecoveryPreparation(options: PreparationOptions) {
   return createPreparation(options, false);

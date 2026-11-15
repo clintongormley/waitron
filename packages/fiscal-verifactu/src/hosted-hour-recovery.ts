@@ -18,7 +18,8 @@ import {
 import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
-import { conflictPreparationStatus } from "./hour-selection.js";
+import { chosenHourBoot, conflictPreparationStatus } from "./hour-selection.js";
+import type { HourClockObservation } from "./hour-clock.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -39,6 +40,7 @@ function createHostedHourRecovery(
   if (host.readRecoveryFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
   const monotonicNow = clock.monotonicNow ?? (() => performance.now());
+  const wall = clock.wall ?? Date.now;
   const clocks = createSetupHourClock({
     ...(clock.wall === undefined ? {} : { wall: clock.wall }),
     monotonic: monotonicNow,
@@ -52,6 +54,12 @@ function createHostedHourRecovery(
   const options: Parameters<typeof createHourRecoveryPreparation>[0] = {
     withState: host.withPreparationState,
     monotonicNow,
+    readBoot: () => {
+      const boot = host.readBoot?.();
+      return boot === undefined || boot.id === null || !(Number.isFinite(boot.ms) && boot.ms >= 0)
+        ? undefined
+        : { bootId: boot.id, uptimeMs: boot.ms };
+    },
     readContext: async (binding) => {
       const current = await facts(binding);
       return {
@@ -70,6 +78,36 @@ function createHostedHourRecovery(
         ...reading,
       };
     },
+  };
+  /** The select's clocks, still standing while the box ran on unstepped on the same boot. */
+  const carried = (
+    state: Parameters<typeof chosenHourBoot>[0],
+    binding: ModuleOperationInput["binding"],
+  ): HourClockObservation | undefined => {
+    const select = chosenHourBoot(state, binding);
+    const boot = host.readBoot?.();
+    if (
+      select === undefined ||
+      boot === undefined ||
+      boot.id !== select.bootId ||
+      !(Number.isFinite(boot.ms) && boot.ms >= 0)
+    )
+      return undefined;
+    const wallMs = wall();
+    const measured = monotonicNow();
+    const instantMs = select.wallMs + boot.ms - select.uptimeMs;
+    // The 1-second figure `clock_corrected` uses for a stepped clock.
+    if (!(Math.abs(wallMs - instantMs) <= 1000)) return undefined;
+    return {
+      source: "browser",
+      result: "usable",
+      instantMs,
+      uncertaintyMs: 0,
+      wallStartedMs: wallMs,
+      wallFinishedMs: wallMs,
+      monotonicStartedMs: measured,
+      monotonicFinishedMs: measured,
+    };
   };
   const recoveryPreparation = createHourRecoveryPreparation(options);
   const promotionPreparation = createHourPromotionPreparation(options);
@@ -161,11 +199,16 @@ function createHostedHourRecovery(
     async resume(operation: Pick<ModuleOperationInput, "binding" | "authority">) {
       const held = { ...operation, binding: Object.freeze({ ...operation.binding }) };
       operatorFor(held);
-      await host.withPreparationState!(held.binding, async () => {
+      await host.withPreparationState!(held.binding, async (state) => {
         const current = await facts(held.binding);
         operatorFor(held);
         if (current.priorActivation === "committed") return;
-        await clocks.compare(current.contextKey, null, { onBox: true });
+        await clocks.compare(
+          current.contextKey,
+          null,
+          { onBox: true },
+          carried(state, held.binding),
+        );
         operatorFor(held);
       });
     },

@@ -307,6 +307,9 @@ not null, and the wall clock moved within 1 s of `/proc/uptime` since (the 1-sec
 on unstepped since. A different or missing boot id, or a step, leaves the start to its other second
 clocks and so to the wait. No time limit: the owner's condition is only "provided the box has not
 been switched off since" (Q1).
+(2026-11-15, PR 3b1 as built: `readBoot` returns only the boot id and uptime; `wallMs` is the box
+clock reading the check admitted, never a later `Date.now()`, and a select repeated after a reboot
+stores the new reading. PR 3b2's stored confirmation pairs its readings the same way.)
 
 **D-key (PR 3b2). After a power cut the start asks the same browser, which keeps the key it
 already holds.** On a successful "Restore backup" the setup app keeps the node recovery key from

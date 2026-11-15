@@ -54,6 +54,7 @@ import {
   type PrepareStreamDeps,
   type WriteStreamArgs,
 } from "./restore-stream.js";
+import type { BootReading } from "./boot-reader.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import { parseBackupVerificationJson } from "./backup-verification-protocol.js";
@@ -371,6 +372,8 @@ export interface StagedRestoreDeps {
   onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
   /** Absent, the restore's series check asks the box's host service. */
   timeServiceSynchronised?: () => Promise<boolean>;
+  /** Absent, the box's own boot reading. */
+  readBoot?: () => BootReading;
 }
 
 type Restore = (deps: RestoreFileDeps) => Promise<void>;

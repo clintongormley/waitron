@@ -237,10 +237,13 @@ spent-name record to retry. An uncertain outcome needs inspection rather than a 
 
 The box makes the new series when it places the backup, after the restart the restore asks for, and
 it asks its internet time service again at that moment whether it is synchronised. If it is not,
-placement is refused (`sif.allocation_invalid`, `second_clock_missing`), the staged
-restore is kept, and the next start tries again (`apps/server/src/hour-recovery-placement-3.test.ts`,
-"a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places
-on the next start"). How long a Cloud download took makes no difference to this (0 and 31 seconds were tried while
+the start still carries on when the box's operating system has not restarted since the restore
+page confirmed the time (the same boot id) and its clock has not been stepped by more than a second
+since (`apps/server/src/hour-recovery-placement-3.test.ts`, "a fresh-box Cloud restore places
+without an internet clock while the box stayed on since the page's select"). Otherwise placement is
+refused (`sif.allocation_invalid`, `second_clock_missing`), the staged restore is kept, and the next
+start tries again (the same file's "a fresh-box Cloud restore refused at placement after a
+switch-off for no internet clock keeps its request and places on the next start"). How long a Cloud download took makes no difference to this (0 and 31 seconds were tried while
 building A1385; no test keeps that comparison). The box restarts by
 itself after a failed start (`restart: unless-stopped`, `deploy/compose.yml`); after three failed
 starts in a row (`RECOVERY_AT`, `apps/server/src/recovery-state.ts`) it shows the start-failure
