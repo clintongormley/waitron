@@ -59,6 +59,7 @@ describe("station queue rest of the order", () => {
       quantity: 1000,
       unitPriceGross: 121,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 121,
     });
     await db
@@ -134,6 +135,7 @@ describe("station queue rest of the order", () => {
         quantity: 1000,
         unitPriceGross: 121,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 121,
         servedAt: "served" in item ? nowIso() : null,
         servedQuantity: "served" in item ? 1000 : 0,
@@ -163,6 +165,7 @@ describe("station queue rest of the order", () => {
       quantity: 1000,
       unitPriceGross: 121,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 121,
     });
     await db
@@ -270,6 +273,7 @@ describe("station queue bump mode", () => {
         quantity: 1000,
         unitPriceGross: 121,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 121,
       });
       await db

@@ -78,6 +78,7 @@ import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
 import { listLateSendManagerDepartmentIds } from "./late-send.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
+import { venueChargesTakeawayVat } from "./dining.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -490,6 +491,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
       serviceSteps: await listServiceSteps(tx),
       courses: await listStepCourses(tx),
+      takeawayVat: await venueChargesTakeawayVat(tx),
     });
 
     mountFloorPlanSetRoutes(app, ctx, log, run);

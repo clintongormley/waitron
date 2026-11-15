@@ -27,6 +27,7 @@ import {
   jobOrigin,
   normalisePartyName,
   rawCentsToDecimal,
+  type Dining,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -34,6 +35,7 @@ import { enqueuePartyNameChange } from "./kitchen-print.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
+import { readOrderDinings, type DiningChoice } from "./order-dining.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
@@ -108,6 +110,9 @@ export interface PartyBill {
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
   deferred?: true;
+  /** The bill's own way of selling, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
 }
 
 export type CommandScope =
@@ -160,13 +165,15 @@ export function moduleCoreServices(
 }
 
 /**
- * Make an empty open bill on the party, in its zone, numbered next in the party. The party's
- * revision is left alone: a caller moves it once for its whole command.
+ * Make an empty open bill on the party, in its zone, numbered next in the party, sold `keepDining`
+ * when given (the way of the bill its dishes come from). The party's revision is left alone: a
+ * caller moves it once for its whole command.
  */
 export async function insertPartyBill(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
+  keepDining?: Dining,
 ): Promise<string> {
   const billId = randomUUID();
   const zoneId = await partyZone(tx, partyId);
@@ -174,6 +181,7 @@ export async function insertPartyBill(
     zoneId: zoneId ?? undefined,
     partyId,
     existingService: true,
+    ...(keepDining === undefined ? {} : { keepDining }),
   });
   return billId;
 }
@@ -576,6 +584,10 @@ export async function readPartyBills(
     tx,
     filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
   );
+  const dinings = await readOrderDinings(
+    tx,
+    bills.map((bill) => bill.workingOrderId),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -620,6 +632,7 @@ export async function readPartyBills(
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
       ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
+      ...dinings.get(bill.workingOrderId)!,
     };
   });
 }
@@ -647,6 +660,8 @@ export type FamilyBill = Omit<
   | "invoiceType"
   | "invoiceDelivery"
   | "recipient"
+  | "dining"
+  | "diningChoice"
 > & {
   lines: number;
 };

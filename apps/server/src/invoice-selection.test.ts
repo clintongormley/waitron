@@ -44,6 +44,7 @@ async function bill(full = false) {
         source: "operator_script",
         nodeId: node!.id,
         orderNumber: 1,
+        dining: "eat_in",
         invoiceType: full ? "F1" : "F2",
         recipientTaxId: full ? recipient.taxId : null,
         recipientLegalName: full ? recipient.legalName : null,

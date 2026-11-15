@@ -35,7 +35,7 @@ beforeEach(() => {
       "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     db.run(
-      sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into working_orders (id,source,order_number,opened_at,dining) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z','eat_in')`,
     );
     db.run(
       sql`insert into adjustment_reasons (id,name,names,kind,actions,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]',0,'2026-10-20T08:00:00.000Z')`,

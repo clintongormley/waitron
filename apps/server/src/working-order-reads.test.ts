@@ -79,6 +79,7 @@ beforeAll(async () => {
     quantity: 1000,
     unitPriceGross: 121,
     vatClass: "general",
+    takeawayVatClass: "general",
     lineTotal: 121,
   });
   const queuedAt = new Date(Date.now() - 3 * MINUTE_MS).toISOString();
@@ -182,6 +183,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       quantity: 1000,
       unitPriceGross: 121,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
@@ -232,6 +234,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       quantity: 1000,
       unitPriceGross: 121,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({

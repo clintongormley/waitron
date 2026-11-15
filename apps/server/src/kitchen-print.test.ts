@@ -336,6 +336,7 @@ describe("show the rest of the order", () => {
         quantity: 1000,
         unitPriceGross: 150,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 150,
       });
       await tx.insert(ticketItems).values({
@@ -353,6 +354,7 @@ describe("show the rest of the order", () => {
         quantity: 1000,
         unitPriceGross: 100,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 100,
       });
       await seedPerson(tx, { id: OPERATOR });
@@ -382,6 +384,7 @@ describe("show the rest of the order", () => {
           quantity: 1000,
           unitPriceGross: 100,
           vatClass: "general",
+          takeawayVatClass: "general",
           lineTotal: 100,
           groupId: group!.id,
         });
@@ -512,6 +515,7 @@ async function fireContextlessDish(
     quantity: 1000,
     unitPriceGross: 150,
     vatClass: "general",
+    takeawayVatClass: "general",
     lineTotal: 150,
   };
   const [parent] = await tx

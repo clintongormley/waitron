@@ -32,6 +32,8 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type Dining,
+  appliedVatClass,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -252,6 +254,13 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
+import {
+  readOrderDinings,
+  refuseTakeawaySetLunch,
+  requireOrderDining,
+  storedOrderDining,
+  type DiningChoice,
+} from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -345,6 +354,7 @@ export async function captureOrderEdit(
     | "save"
     | "line"
     | "label"
+    | "dining"
     | "discard"
     | "invoice-choice"
     | "receipt-language"
@@ -460,6 +470,7 @@ function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): OfferMo
         ),
         kitchenName: item.kitchenName,
         vatClass: item.vatClass as VatClass,
+        takeawayVatClass: item.takeawayVatClass as VatClass,
       });
     }
     extras.push({
@@ -602,13 +613,15 @@ const FROZEN_EXTRAS = Symbol("frozenExtras");
 
 /**
  * Return insertable snapshots and their gross lines together, so a caller filing
- * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
- * classification are what the line files.
+ * the same basket rates those rather than pricing it twice. The stored gross unit price and
+ * classification are what the line files, at its class for the order's way of selling.
  */
 export async function priceOrderLines(
   tx: Transaction,
   cfg: TradingContext,
   workingOrderId: string,
+  /** The gross lines are priced at this way's classes; the rows store both. */
+  dining: Dining,
   // `courseId` absent or null = the offer's default course; a string is an override.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
@@ -775,6 +788,9 @@ export async function priceOrderLines(
         (line[ADDED_EXTRAS_ONLY] !== true || line[RECORDED_OFFER] !== undefined),
     };
   });
+  if (dining === "takeaway" && lines.some((line) => line.setLunch)) {
+    await refuseTakeawaySetLunch(tx, workingOrderId, zoneId);
+  }
   // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
@@ -845,6 +861,8 @@ export async function priceOrderLines(
         unit: ExtraChild["unitContext"];
         portionable: boolean;
         late?: { periodName: string; confirmedBy: string };
+        vatClass: VatClass;
+        takeawayVatClass: VatClass;
       }
     | {
         kind: "child";
@@ -855,6 +873,8 @@ export async function priceOrderLines(
         extraListId: string;
         unit?: ExtraChild["unitContext"];
         late?: { periodName: string; confirmedBy: string };
+        vatClass: VatClass;
+        takeawayVatClass: VatClass;
       };
   const lunchProducts = [
     ...new Set(
@@ -882,12 +902,16 @@ export async function priceOrderLines(
       contentConfig.defaultLanguage,
       contentConfig.languages,
     );
+    const classes = {
+      vatClass: selection.vatClass as VatClass,
+      takeawayVatClass: selection.takeawayVatClass as VatClass,
+    };
     const product = {
       name: selection.name,
       unitPrice: selection.unitPrice,
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
-      vatClass: selection.vatClass as VatClass,
+      vatClass: appliedVatClass(dining, classes),
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -950,7 +974,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: line.setLunch ? product.vatClass : child.vatClass,
+        vatClass: line.setLunch ? product.vatClass : appliedVatClass(dining, child),
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -967,6 +991,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable: takesExtras(selection.unit),
+      ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
         id: selection.unit.id,
@@ -991,6 +1016,9 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
+        // A set lunch is sold only eaten here, and its choices at the dish's class.
+        vatClass: line.setLunch ? classes.vatClass : child.vatClass,
+        takeawayVatClass: line.setLunch ? classes.vatClass : child.takeawayVatClass,
         ...(mark === undefined ? {} : { late: mark }),
       });
     }
@@ -1056,7 +1084,8 @@ export async function priceOrderLines(
       // re-price, so a later menu price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
-      vatClass: line.vatClass,
+      vatClass: meta.vatClass,
+      takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),
@@ -1121,7 +1150,10 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  vatClass: workingOrderLines.vatClass,
+  // A line files at the class for its order's way of selling, so both readers join the order.
+  vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
+    when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
+    else ${workingOrderLines.vatClass} end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -1136,7 +1168,9 @@ const storedLineColumns = {
 };
 
 type StoredLineRow = {
-  [K in keyof typeof storedLineColumns]: GetColumnData<(typeof storedLineColumns)[K]>;
+  [K in keyof typeof storedLineColumns]: (typeof storedLineColumns)[K] extends SQL<infer T>
+    ? T
+    : GetColumnData<Exclude<(typeof storedLineColumns)[K], SQL>>;
 };
 
 /**
@@ -1155,6 +1189,7 @@ export async function readLockedLines(
   const rows = await tx
     .select({ ...storedLineColumns, ...portionColumns })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
@@ -1176,6 +1211,7 @@ async function readLockedLinesForIssuance(
       active: productActive,
     })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
@@ -1414,6 +1450,7 @@ export interface ParkOrderRequest {
   label?: string;
   operatorId?: string;
   lateSend?: LateSendConfirmation;
+  dining?: Dining;
 }
 
 export interface ParkOrderResult {
@@ -1449,6 +1486,10 @@ export async function createOpenOrder(
     creditedTo?: string;
     invalidMakeAt?: "ignore";
     lateSend?: LateSendConfirmation;
+    /** The way the till showed; refused `order.dining_fixed` where the department sells otherwise. */
+    dining?: Dining;
+    /** The way of the existing order this one takes dishes from, whatever its department says. */
+    keepDining?: Dining;
     invoiceChoice?: {
       invoiceType: unknown;
       recipient: unknown;
@@ -1476,6 +1517,7 @@ export async function createOpenOrder(
   }
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
+  let copiedDining: Dining | undefined;
   if (placement.copyServiceContextFrom !== undefined) {
     const context = await VENUE_SERVICE.findOrderContext(tx, placement.copyServiceContextFrom);
     if (context === null) {
@@ -1484,6 +1526,11 @@ export async function createOpenOrder(
       });
     }
     effectiveZoneId = context.zoneId;
+    const [source] = await tx
+      .select({ dining: workingOrders.dining })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, placement.copyServiceContextFrom));
+    copiedDining = source?.dining;
   }
   if (deliveryTableId !== null) {
     const [table] = await tx
@@ -1512,10 +1559,15 @@ export async function createOpenOrder(
   if (placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
   }
+  const dining =
+    copiedDining ??
+    placement.keepDining ??
+    (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
   const pricedLines = await priceOrderLines(
     tx,
     cfg,
     id,
+    dining,
     lines,
     effectiveZoneId,
     undefined,
@@ -1558,6 +1610,7 @@ export async function createOpenOrder(
     deliveryTableId,
     partyId: placement.partyId ?? null,
     receiptLocale: placement.receiptLocale ?? null,
+    dining,
   });
   if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
 
@@ -1595,6 +1648,7 @@ export async function parkOrder(
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
         lateSend: req.lateSend,
+        dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
       return { id: req.id, orderNumber };
@@ -2921,6 +2975,7 @@ export async function priceTabRound(
     tx,
     cfg,
     tabId,
+    await storedOrderDining(tx, tabId),
     lines,
     context?.zoneId,
     undefined,
@@ -4017,6 +4072,7 @@ export async function moveOrderLines(
       id: workingOrders.id,
       status: workingOrders.status,
       orderNumber: workingOrders.orderNumber,
+      dining: workingOrders.dining,
     })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)));
@@ -4027,6 +4083,10 @@ export async function moveOrderLines(
   }
   if (to === undefined || to.status !== "open") {
     throw new AppError("tab.not_open", { tabId: toTabId });
+  }
+  // A line is rated by its order's way, so a move across ways would change a sent line's rate.
+  if (from.dining !== to.dining) {
+    throw new AppError("order.dining_differs", { fromOrderId: fromTabId, toOrderId: toTabId });
   }
   const sourceWhere =
     lineNos === undefined
@@ -4620,6 +4680,7 @@ async function carveLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       priceQuantity: workingOrderLines.priceQuantity,
       vatClass: workingOrderLines.vatClass,
+      takeawayVatClass: workingOrderLines.takeawayVatClass,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -4794,6 +4855,7 @@ async function carveLines(
         unitPriceGross: decimalToCents(row.unitPriceGross),
         priceQuantity: decimalToThousandths(row.priceQuantity),
         vatClass: row.vatClass,
+        takeawayVatClass: row.takeawayVatClass,
         lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved, row.priceQuantity)),
         category: row.category,
         unitName: row.unitName,
@@ -5029,6 +5091,9 @@ export interface HeldOrder {
   receiptLanguage?: string;
   /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
   invoiceType: "F1" | "F2";
+  /** The order's own way of selling, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -5342,6 +5407,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       invoiceType: order.invoiceType,
+      ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       lines,
     };
   });
@@ -5370,6 +5436,8 @@ export interface UpdateHeldOrderRequest {
    * period ended earlier today.
    */
   lateSend?: LateSendConfirmation;
+  /** The way the till showed; refused `working_order.out_of_date` when the order has the other. */
+  dining?: Dining;
 }
 
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
@@ -5485,7 +5553,7 @@ interface LineIntent {
   extras: { set: unknown } | null;
 }
 
-type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
+type RequestedLine = Parameters<typeof priceOrderLines>[4][number];
 
 /**
  * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
@@ -6197,6 +6265,7 @@ async function applyLineEdits(
     tx,
     cfg,
     orderId,
+    await storedOrderDining(tx, orderId),
     pricing,
     context?.zoneId,
     snapshot,
@@ -6971,6 +7040,7 @@ export async function updateHeldOrder(
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
     const { label } = await requireEditableOrder(tx, id, req.revision);
+    await requireOrderDining(tx, id, req.dining);
     await requireOrderBillEditor(tx, id, {
       operatorId: req.operatorId,
       expectedEdit: req.expectedEdit,

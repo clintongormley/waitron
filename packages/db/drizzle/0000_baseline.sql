@@ -88,6 +88,7 @@ CREATE TABLE `working_order_lines` (
 	`price_quantity` integer DEFAULT 1000 NOT NULL,
 	`unit_price_gross` integer NOT NULL,
 	`vat_class` text NOT NULL,
+	`takeaway_vat_class` text NOT NULL,
 	`line_total` integer NOT NULL,
 	`category` text,
 	`served_at` text,
@@ -112,6 +113,7 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_quantity_ck" CHECK("working_order_lines"."quantity" <> 0),
 	CONSTRAINT "working_order_lines_price_quantity_ck" CHECK("working_order_lines"."price_quantity" > 0),
 	CONSTRAINT "working_order_lines_vat_class_ck" CHECK("working_order_lines"."vat_class" in ('general','reduced','super_reduced','zero')),
+	CONSTRAINT "working_order_lines_takeaway_vat_class_ck" CHECK("working_order_lines"."takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1)
 );
 --> statement-breakpoint
@@ -145,11 +147,13 @@ CREATE TABLE `working_orders` (
 	`receipt_locale` text,
 	`payment_attempt_at` text,
 	`party_id` text,
+	`dining` text NOT NULL,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_orders_status_ck" CHECK("working_orders"."status" in ('open', 'placed', 'settled', 'abandoned')),
+	CONSTRAINT "working_orders_dining_ck" CHECK("working_orders"."dining" in ('eat_in', 'takeaway')),
 	CONSTRAINT "working_orders_source_ck" CHECK("working_orders"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "working_orders_source_device_ck" CHECK(("working_orders"."source" = 'device') = ("working_orders"."device_id" is not null)),
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
@@ -2246,6 +2250,8 @@ CREATE TABLE `departments` (
 	`paid_when` text DEFAULT 'prepay' NOT NULL,
 	`collection_number` text DEFAULT 'none' NOT NULL,
 	`print_trading_name` integer DEFAULT true NOT NULL,
+	`dining` text DEFAULT 'eat_in' NOT NULL,
+	`dining_starts_as` text DEFAULT 'eat_in' NOT NULL,
 	`transfer_desk_profile_id` text,
 	`receipt_text` text,
 	`receipt_logo_image_id` text,
@@ -2256,7 +2262,9 @@ CREATE TABLE `departments` (
 	FOREIGN KEY (`receipt_logo_image_id`) REFERENCES `media_images`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "departments_order_start_ck" CHECK("departments"."order_start" in ('table', 'counter')),
 	CONSTRAINT "departments_paid_when_ck" CHECK("departments"."paid_when" in ('prepay', 'ticket_then_pay')),
-	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered'))
+	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered')),
+	CONSTRAINT "departments_dining_ck" CHECK("departments"."dining" in ('eat_in', 'takeaway', 'till_choice')),
+	CONSTRAINT "departments_dining_starts_as_ck" CHECK("departments"."dining_starts_as" in ('eat_in', 'takeaway'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
@@ -3269,6 +3277,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.course_id IS old.course_id
@@ -3305,6 +3314,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.served_at IS old.served_at
@@ -3343,6 +3353,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.served_at IS old.served_at
@@ -3407,6 +3418,29 @@ BEGIN
   );
 END;
 --> statement-breakpoint
+-- Created before working_orders_enforce_transition, so that trigger (SQLite fires the newest-created
+-- first) answers for an order that is not open. Pinned by the per-column cases in
+-- scripts/behavioural-triggers.test.ts.
+CREATE TRIGGER working_orders_dining_fixed
+BEFORE UPDATE OF dining ON working_orders
+FOR EACH ROW
+WHEN new.dining IS NOT old.dining
+BEGIN
+  SELECT raise(abort, 'an order''s way of selling is fixed once the kitchen has it or money is taken')
+  WHERE old.status <> 'open'
+    OR old.payment_attempt_at IS NOT NULL
+    OR exists (SELECT 1 FROM working_order_lines WHERE working_order_id = old.id AND sent_at IS NOT NULL)
+    OR exists (
+      SELECT 1 FROM ticket_items
+      INNER JOIN working_order_lines ON working_order_lines.id = ticket_items.working_order_line_id
+      WHERE working_order_lines.working_order_id = old.id
+    )
+    OR exists (
+      SELECT 1 FROM bill_payments WHERE working_order_id = old.id AND state IN ('pending', 'received')
+    )
+    OR exists (SELECT 1 FROM sales WHERE working_order_id = old.id);
+END;
+--> statement-breakpoint
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
 FOR EACH ROW
@@ -3423,7 +3457,8 @@ BEGIN
         AND new.recipient_identifier_type IS old.recipient_identifier_type
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
-        AND new.receipt_locale IS old.receipt_locale)
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
         AND new.source IS old.source
@@ -3435,6 +3470,7 @@ BEGIN
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.dining IS old.dining
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -3470,6 +3506,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
         AND new.delivery_table_label IS old.delivery_table_label)
     OR (old.status = 'settled' AND new.status = 'settled'
@@ -3494,6 +3531,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
         AND new.delivery_table_label IS old.delivery_table_label)
     -- A paid bill not yet handed over may leave its party, once; only the server limits this to Finish table's counter collection (A758-7).
@@ -3522,7 +3560,8 @@ BEGIN
         AND new.recipient_identifier_type IS old.recipient_identifier_type
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
-        AND new.receipt_locale IS old.receipt_locale)
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
         AND new.id IS old.id
@@ -3545,6 +3584,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.party_id IS old.party_id)
   );

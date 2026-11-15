@@ -42,6 +42,8 @@ const EXPECTED: Record<
       "departments_order_start_ck",
       "departments_paid_when_ck",
       "departments_collection_number_ck",
+      "departments_dining_ck",
+      "departments_dining_starts_as_ck",
     ],
     indexes: ["departments_name_key", "departments_one_default_key"],
     uniqueConstraints: [],

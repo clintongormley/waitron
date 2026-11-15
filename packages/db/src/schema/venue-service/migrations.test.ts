@@ -555,6 +555,43 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     ).toEqual([{ order_start: "counter" }]);
   });
 
+  it("a department sells to eat in, starting eaten in, unless told otherwise", async () => {
+    const v = await orderStartPolicies();
+    expect(
+      (
+        await db.execute(sql`select dining, dining_starts_as from departments
+      where id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ dining: "eat_in", dining_starts_as: "eat_in" }]);
+    await db.execute(sql`update departments
+      set dining = 'till_choice', dining_starts_as = 'takeaway'
+      where id = ${v.departmentId}`);
+    expect(
+      (
+        await db.execute(sql`select dining, dining_starts_as from departments
+      where id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ dining: "till_choice", dining_starts_as: "takeaway" }]);
+  });
+
+  it.each([
+    ["dining", "sometimes", "departments_dining_ck"],
+    ["dining_starts_as", "sometimes", "departments_dining_starts_as_ck"],
+    ["dining_starts_as", "till_choice", "departments_dining_starts_as_ck"],
+    ["dining", null, "NOT NULL constraint failed: departments.dining"],
+    ["dining_starts_as", null, "NOT NULL constraint failed: departments.dining_starts_as"],
+  ] as const)("refuses %s = %j", async (column, value, message) => {
+    const v = await orderStartPolicies();
+    const error = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx.execute(sql`update departments set ${sql.identifier(column)} = ${value}
+          where id = ${v.departmentId}`),
+      ),
+    );
+    if (value !== null) expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(message);
+  });
+
   /**
    * Asserts that `statement` is refused by a foreign key — but not WHICH one: SQLite's message names
    * no key, so `constraint` is only the assertion's label. Each statement below reaches a shape only
@@ -873,8 +910,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, quantity: number, stationId: string) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
@@ -923,8 +960,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, direction: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
@@ -969,8 +1006,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, cancelledExtra: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity,

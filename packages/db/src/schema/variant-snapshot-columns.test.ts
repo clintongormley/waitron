@@ -68,6 +68,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       quantity: 1000,
       unitPriceGross: 143,
       vatClass: "reduced",
+      takeawayVatClass: "reduced",
       lineTotal: 143,
       ...overrides,
     };

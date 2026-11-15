@@ -57,5 +57,9 @@ it("keeps only the named allergy guards on the floor and kitchen tables", () => 
     triggers
       .filter((trigger) => !trigger.name.startsWith("waitron_change_") && area.test(trigger.sql))
       .map((trigger) => trigger.name),
-  ).toEqual(["party_allergy_guests_need_answer_insert", "party_allergy_guests_need_answer_update"]);
+  ).toEqual([
+    "party_allergy_guests_need_answer_insert",
+    "party_allergy_guests_need_answer_update",
+    "working_orders_dining_fixed",
+  ]);
 });

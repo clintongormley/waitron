@@ -79,6 +79,7 @@ describe("order_amendments append helper", () => {
         deviceId: null,
         nodeId: node,
         orderNumber: orderNumberSeq,
+        dining: "eat_in",
         status: "open",
         openedAt: AT,
       })

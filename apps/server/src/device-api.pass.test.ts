@@ -398,6 +398,7 @@ describe("the pass screen's device routes", () => {
         deviceId: null,
         nodeId: foreignNode,
         orderNumber: 1,
+        dining: "eat_in",
         status: "open",
       })
       .returning({ id: workingOrders.id });
@@ -411,6 +412,7 @@ describe("the pass screen's device routes", () => {
         quantity: 1000,
         unitPriceGross: 100,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 100,
       })
       .returning({ id: workingOrderLines.id });

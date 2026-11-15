@@ -1353,8 +1353,8 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db);
   await db.execute(sql`
-    insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at)
-    values (${id}, 'device', ${cfg.origin.deviceId}, ${otherNode}, 1, 'open', ${nowIso()})`);
+    insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, dining)
+    values (${id}, 'device', ${cfg.origin.deviceId}, ${otherNode}, 1, 'open', ${nowIso()}, 'eat_in')`);
   return id;
 }
 
@@ -2082,6 +2082,8 @@ describe("getHeldOrder", () => {
       label: "Table 7",
       revision: 0,
       invoiceType: "F2",
+      dining: "eat_in",
+      diningChoice: "none",
       kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
       lines: [
         {
@@ -3377,6 +3379,7 @@ async function insertContextlessLines(
       quantity,
       unitPriceGross: 150,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: (quantity * 150) / 1000,
     })),
   );
@@ -3700,6 +3703,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         quantity: 1000,
         unitPriceGross: 150,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 150,
       });
       const [line] = await fireableLines(tx, id);

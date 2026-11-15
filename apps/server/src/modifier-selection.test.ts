@@ -120,6 +120,7 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Wine diner", es: "Vino cliente" },
       kitchenName: "Wine kitchen",
       vatClass: "general",
+      takeawayVatClass: "general",
     },
   ],
   [
@@ -130,6 +131,7 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Sourdough diner" },
       kitchenName: "Sourdough kitchen",
       vatClass: "reduced",
+      takeawayVatClass: "general",
     },
   ],
   [
@@ -140,6 +142,7 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Rye diner" },
       kitchenName: "Rye kitchen",
       vatClass: "reduced",
+      takeawayVatClass: "general",
     },
   ],
 ]);
@@ -375,6 +378,7 @@ describe("buildLineExtras", () => {
         listId: "list-drinks",
         // The wine's own 21% class, not the 10% of the dish this is an extra on.
         vatClass: "general",
+        takeawayVatClass: "general",
         // The picks per dish as sent — this function never multiplies by the dish count.
         quantity: 2,
         physicalQuantity: "2",

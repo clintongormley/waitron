@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import type { Dining } from "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
@@ -545,6 +546,23 @@ declare module "@waitron/shared" {
      * settle or fail.
      */
     "order.payment_in_flight": { workingOrderId: string };
+    /**
+     * Declared by `@waitron/venue-service` too, with the same params. A set lunch is sold only eaten
+     * here. `canSwitch`: staff may still switch this order to eaten here (its department leaves the
+     * way to the till, the region charges takeaway VAT, and nothing is sent or paid).
+     */
+    "order.set_lunch_takeaway": { canSwitch: boolean };
+    /**
+     * Declared by `@waitron/venue-service` too, with the same params. When an order opens: a request
+     * for a way its department or region does not offer, `dining` being the way they fix. On a
+     * switch: an order whose own department does not leave the way to the till, or in a region
+     * without takeaway VAT, `dining` being the order's way.
+     */
+    "order.dining_fixed": { dining: Dining };
+    /** The order's way of selling can no longer be switched: its kitchen has it, or a payment has started. */
+    "order.dining_locked": { reason: "sent" | "paid" };
+    /** Dishes move only between two orders sold the same way (eaten here or taken away). */
+    "order.dining_differs": { fromOrderId: string; toOrderId: string };
     /**
      * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
      * abandoned, or absent — one code for all).

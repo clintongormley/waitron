@@ -202,6 +202,7 @@ describe("A773 waiter request: extras", () => {
           quantity: 1000,
           unitPriceGross: 100,
           vatClass: "general",
+          takeawayVatClass: "general",
           lineTotal: 100,
           courseId,
           parentLineId: water!.id,

@@ -12,7 +12,14 @@ import {
   stringToCents,
   stringToThousandths,
 } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleId, SaleLineClassification, SeriesId } from "@waitron/shared";
+import type {
+  Dining,
+  DeviceId,
+  NodeId,
+  SaleId,
+  SaleLineClassification,
+  SeriesId,
+} from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -444,6 +451,7 @@ export async function seedFiredLine(
       quantity: stringToThousandths("1.000"),
       unitPriceGross: stringToCents("1.00"),
       vatClass: "reduced",
+      takeawayVatClass: "reduced",
       lineTotal: stringToCents("1.00"),
       servedAt: opts.served ? firedAt : null,
     })
@@ -475,6 +483,7 @@ export async function seedOpenOrder(
   db: Database,
   seed: { deviceId: DeviceId; nodeId: NodeId },
   orderNumber: number,
+  dining: Dining = "eat_in",
 ): Promise<{ orderId: string }> {
   const [order] = await db
     .insert(workingOrders)
@@ -484,6 +493,7 @@ export async function seedOpenOrder(
       nodeId: seed.nodeId,
       orderNumber,
       status: "open",
+      dining,
     })
     .returning({ id: workingOrders.id });
   return { orderId: order!.id };

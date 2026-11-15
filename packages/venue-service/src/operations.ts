@@ -17,6 +17,7 @@ import {
   type ServiceStepInput,
 } from "./service-steps.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
+import { applyDepartmentDining } from "./dining.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   menus,
@@ -498,6 +499,8 @@ export interface EffectiveSalePolicy {
   paidWhen: DepartmentSalePolicyRow["paidWhen"];
   collectionNumber: DepartmentSalePolicyRow["collectionNumber"];
   printTradingName: boolean;
+  dining: DepartmentSalePolicyRow["dining"];
+  diningStartsAs: DepartmentSalePolicyRow["diningStartsAs"];
 }
 
 export async function resolveSalePolicy(
@@ -514,6 +517,8 @@ export async function resolveSalePolicy(
       departmentPaidWhen: departments.paidWhen,
       departmentCollectionNumber: departments.collectionNumber,
       printTradingName: departments.printTradingName,
+      dining: departments.dining,
+      diningStartsAs: departments.diningStartsAs,
       zoneOrderStart: floorZones.orderStart,
       zonePaidWhen: floorZones.paidWhen,
       zoneCollectionNumber: floorZones.collectionNumber,
@@ -531,6 +536,8 @@ export async function resolveSalePolicy(
     paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
     collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
     printTradingName: row.printTradingName,
+    dining: row.dining,
+    diningStartsAs: row.diningStartsAs,
   };
 }
 
@@ -562,7 +569,7 @@ export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
 
 type DepartmentPolicyField = Pick<
   DepartmentSalePolicyRow,
-  "orderStart" | "paidWhen" | "collectionNumber" | "printTradingName"
+  "orderStart" | "paidWhen" | "collectionNumber" | "printTradingName" | "dining" | "diningStartsAs"
 >;
 type ZoneSalePolicyRow = Pick<
   typeof floorZones.$inferSelect,
@@ -582,6 +589,8 @@ export async function listSalePolicies(tx: Transaction) {
       paidWhen: departments.paidWhen,
       collectionNumber: departments.collectionNumber,
       printTradingName: departments.printTradingName,
+      dining: departments.dining,
+      diningStartsAs: departments.diningStartsAs,
     })
     .from(departments)
     .where(inArray(departments.id, [...departmentIds]));
@@ -1040,8 +1049,10 @@ export async function retargetOrderServiceContext(
 ): Promise<void> {
   const context = await resolveZoneContext(tx, zoneId);
   const previous = await getOrderServiceContext(tx, workingOrderId);
-  if (previous.departmentId !== context.departmentId)
+  if (previous.departmentId !== context.departmentId) {
     await withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
+    await applyDepartmentDining(tx, workingOrderId, context);
+  }
   const updated = await tx
     .update(orderServiceContexts)
     .set({
@@ -1132,6 +1143,22 @@ export async function findOrderServiceZones(
     .from(orderServiceContexts)
     .where(inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]));
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
+}
+
+/** Whether any of the order's lines is a set lunch, as {@link readLunchLineIds} reads it. */
+export async function orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean> {
+  const lines = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+  return (
+    (
+      await readLunchLineIds(
+        tx,
+        lines.map((line) => line.id),
+      )
+    ).size > 0
+  );
 }
 
 export async function readLunchLineIds(

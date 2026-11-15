@@ -17,6 +17,7 @@ import {
   BILL_REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
   DAY_START_HISTORY_REFUSAL,
+  DINING_FIXED_REFUSAL,
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
@@ -115,6 +116,7 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_delete",
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
+  "working_orders_dining_fixed",
   "working_orders_enforce_transition",
   "working_orders_invoice_type_insert",
   "working_orders_invoice_type_update",
@@ -190,8 +192,8 @@ function workingOrder(id, status, extra = {}) {
   const collectedAt = extra.collectedAt ? `'${extra.collectedAt}'` : "null";
   const partyId = extra.partyId ? `'${extra.partyId}'` : "null";
   return (
-    `insert into working_orders (id, source, device_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
-    `values ('${id}', 'device', 'dev-active', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
+    `insert into working_orders (id, source, device_id, order_number, status, opened_at, settled_at, collected_at, dining, party_id) ` +
+    `values ('${id}', 'device', 'dev-active', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, 'eat_in', ${partyId})`
   );
 }
 
@@ -210,9 +212,9 @@ function line(id, orderId, descriptions, variantDescriptions = null) {
   return (
     `insert into working_order_lines ` +
     `(id, working_order_id, line_no, name, descriptions, variant_descriptions, ` +
-    ` quantity, unit_price_gross, vat_class, line_total) ` +
+    ` quantity, unit_price_gross, vat_class, takeaway_vat_class, line_total) ` +
     `values ('${id}', '${orderId}', ${nextLineNo}, 'Item', '${descriptions}', ${variant}, ` +
-    ` 1000, 121, 'general', 121)`
+    ` 1000, 121, 'general', 'general', 121)`
   );
 }
 
@@ -399,6 +401,12 @@ function seed(connection) {
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id = 'wo-sent-settled'`,
     `update working_orders set status = 'abandoned' where id = 'wo-sent-abandoned'`,
+
+    // An order's way of selling: one still free to change, one whose line the kitchen has.
+    workingOrder("wo-dining-free", "open"),
+    workingOrder("wo-dining-sent", "open"),
+    line("line-dining-sent", "wo-dining-sent", '{"es":"Plato","ca":"Plat"}'),
+    `update working_order_lines set sent_at = '${STAMP}' where id = 'line-dining-sent'`,
 
     // A venue whose invoice locales change once every line below is written, as a receipt-language
     // change leaves them. Lines carrying a variant map reach both locale triggers; the `plain` ones
@@ -664,6 +672,26 @@ describe("working_orders_enforce_transition", () => {
           `where id = 'wo-settled-payment'`,
       ),
     ).toBe(TRANSITION_REFUSAL);
+  });
+});
+
+describe("working_orders_dining_fixed", () => {
+  it("refuses an open order's way of selling changing once a line is sent", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set dining = 'takeaway' where id = 'wo-dining-sent'`,
+      ),
+    ).toBe(DINING_FIXED_REFUSAL);
+  });
+
+  it("accepts it on an open order nothing has fixed", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set dining = 'takeaway' where id = 'wo-dining-free'`,
+      ),
+    ).toBeUndefined();
   });
 });
 

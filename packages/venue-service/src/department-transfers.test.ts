@@ -4,7 +4,16 @@ import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addProductToMenu, createMenu, createProduct, units } from "@waitron/menu";
+import {
+  addProductToMenu,
+  buildMenuDocument,
+  createMenu,
+  createProduct,
+  menuDocumentHash,
+  publishMenu,
+  units,
+} from "@waitron/menu";
+import type { Dining, DiningPolicy } from "@waitron/shared";
 import {
   departments,
   departmentTransferRequests,
@@ -31,6 +40,7 @@ import {
   getOrderServiceContext,
   recordOrderServiceContext,
   retargetOrderServiceContext,
+  setDepartmentSalePolicyField,
 } from "./operations.js";
 import { setProfileServiceScope } from "./profile-access.js";
 import * as service from "./index.js";
@@ -942,6 +952,7 @@ describe("departmental tab transfers", () => {
           quantity: 1000,
           unitPriceGross: 235,
           vatClass: "general",
+          takeawayVatClass: "general",
           lineTotal: 235,
           makeAtStationId: station!.id,
           note: "Pickup at deli",
@@ -1364,6 +1375,183 @@ describe("departmental tab transfers", () => {
       receivedAt: "2026-10-07T08:00:00.000Z",
     });
   });
+
+  describe("an order's way of selling when it is accepted into another department (A1522)", () => {
+    type Pending = Awaited<ReturnType<typeof pending>>;
+
+    /** The deli's counter order sold `dining`, accepted into the restaurant's zone. */
+    async function deliOrder(
+      dining: Dining,
+      restaurant: { dining: DiningPolicy; orderStart: "table" | "counter" },
+    ): Promise<Pending> {
+      const v = await pending();
+      await withTransaction(suite.db, async (tx) => {
+        await setDepartmentSalePolicyField(tx, v.a, "dining", "till_choice");
+        await setDepartmentSalePolicyField(tx, v.b, "dining", restaurant.dining);
+        await setDepartmentSalePolicyField(tx, v.b, "orderStart", restaurant.orderStart);
+        await tx
+          .update(orderServiceContexts)
+          .set({ serviceMode: "prepay" })
+          .where(eq(orderServiceContexts.workingOrderId, v.tab));
+        await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, v.tab));
+      });
+      return v;
+    }
+
+    async function addLine(
+      tx: Transaction,
+      v: Pending,
+      options: { sentAt?: string } = {},
+    ): Promise<string> {
+      const [line] = await tx
+        .insert(workingOrderLines)
+        .values({
+          workingOrderId: v.tab,
+          lineNo: 1,
+          name: "Set lunch",
+          descriptions: { "en-GB": "Set lunch" },
+          quantity: 1000,
+          unitPriceGross: 1400,
+          vatClass: "reduced",
+          takeawayVatClass: "reduced",
+          lineTotal: 1400,
+          ...(options.sentAt === undefined ? {} : { sentAt: options.sentAt }),
+        })
+        .returning({ id: workingOrderLines.id });
+      return line!.id;
+    }
+
+    /** A line recorded from a published menu whose product is a set lunch. */
+    async function addSetLunch(v: Pending): Promise<void> {
+      await withTransaction(suite.db, async (tx) => {
+        const [unit] = await tx
+          .insert(units)
+          .values({
+            staffName: `Unit ${randomUUID()}`,
+            staffAbbreviation: "su",
+            name: { en: "each" },
+            abbreviation: { en: "ea" },
+            precision: 0,
+            seedKey: `each-${randomUUID()}`,
+          })
+          .returning();
+        const menu = await createMenu(tx, { name: `Lunch ${randomUUID()}` });
+        const product = await createProduct(tx, {
+          categoryId: null,
+          name: "Set lunch",
+          pricingUnit: "each",
+          unitPrice: "14.00",
+          vatClass: "reduced",
+          setLunch: true,
+        });
+        const offer = await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
+        const { document } = await buildMenuDocument(tx, menu.id);
+        const { versionId } = await publishMenu(
+          tx,
+          menu.id,
+          menuDocumentHash(document),
+          "person-1",
+        );
+        const lineId = await addLine(tx, v);
+        await tx.insert(workingLineContexts).values({
+          workingOrderLineId: lineId,
+          menuItemId: offer.id,
+          menuId: menu.id,
+          menuVersionId: versionId,
+          menuName: "Lunch",
+          departmentId: v.a,
+          departmentName: "Deli",
+          categoryName: "Lunch",
+          unitId: unit!.id,
+          unitName: { en: "ea" },
+          unitPrecision: 0,
+          soldInEach: true,
+          vatClass: "reduced",
+        });
+      });
+    }
+
+    async function diningOf(tab: string): Promise<Dining> {
+      const [row] = await suite.db
+        .select({ dining: workingOrders.dining })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tab));
+      return row!.dining;
+    }
+
+    it("makes an unsent takeaway counter order eaten here in a department that sells only eaten here", async () => {
+      const v = await deliOrder("takeaway", { dining: "eat_in", orderStart: "counter" });
+      await accept(v);
+      expect(await diningOf(v.tab)).toBe("eat_in");
+    });
+
+    it("makes an unsent counter order eaten here takeaway in a department that sells only takeaway", async () => {
+      const v = await deliOrder("eat_in", { dining: "takeaway", orderStart: "counter" });
+      await accept(v);
+      expect(await diningOf(v.tab)).toBe("takeaway");
+    });
+
+    it.each(["eat_in", "takeaway"] as const)(
+      "leaves an unsent %s counter order's way for staff to switch in a till-choice department",
+      async (dining) => {
+        const v = await deliOrder(dining, { dining: "till_choice", orderStart: "counter" });
+        await accept(v);
+        expect(await diningOf(v.tab)).toBe(dining);
+      },
+    );
+
+    it("refuses taking a set lunch away and leaves the order where it was", async () => {
+      const v = await deliOrder("eat_in", { dining: "takeaway", orderStart: "counter" });
+      await addSetLunch(v);
+      await expect(accept(v)).rejects.toMatchObject({
+        code: "order.set_lunch_takeaway",
+        params: { canSwitch: false },
+      });
+      expect(await diningOf(v.tab)).toBe("eat_in");
+      expect(await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab))).toEqual({
+        zoneId: v.az,
+        departmentId: v.a,
+        serviceMode: "prepay",
+      });
+      const [request] = await suite.db
+        .select({ status: departmentTransferRequests.status })
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id));
+      expect(request).toEqual({ status: "pending" });
+    });
+
+    it.each(["till_choice", "eat_in"] as const)(
+      "keeps an unsent takeaway counter order takeaway at a table of a %s department",
+      async (dining) => {
+        const v = await deliOrder("takeaway", { dining, orderStart: "table" });
+        await accept(v);
+        expect(await diningOf(v.tab)).toBe("takeaway");
+      },
+    );
+
+    it.each(["eat_in", "till_choice"] as const)(
+      "keeps a sent takeaway order takeaway in a %s department",
+      async (dining) => {
+        const v = await deliOrder("takeaway", { dining, orderStart: "counter" });
+        await withTransaction(suite.db, (tx) =>
+          addLine(tx, v, { sentAt: "2026-10-07T08:00:00.000Z" }),
+        );
+        await accept(v);
+        expect(await diningOf(v.tab)).toBe("takeaway");
+      },
+    );
+
+    it("leaves an unsent order's way alone in a region without takeaway VAT", async () => {
+      const v = await deliOrder("takeaway", { dining: "eat_in", orderStart: "counter" });
+      await suite.db.run(sql`update taxpayer set country = 'GB'`);
+      try {
+        await accept(v);
+      } finally {
+        await suite.db.run(sql`update taxpayer set country = 'ES'`);
+      }
+      expect(await diningOf(v.tab)).toBe("takeaway");
+    });
+  });
 });
 
 describe("combined department transfer settings", () => {
@@ -1399,6 +1587,8 @@ describe("combined department transfer settings", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
     });
   });

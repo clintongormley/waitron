@@ -263,6 +263,8 @@ describe("related bills", () => {
         outstanding: "14.00",
         hasPayments: false,
         receiptAvailable: false,
+        dining: "eat_in",
+        diningChoice: "none",
       },
       {
         workingOrderId: checkId,
@@ -280,6 +282,8 @@ describe("related bills", () => {
         outstanding: "30.00",
         hasPayments: false,
         receiptAvailable: false,
+        dining: "eat_in",
+        diningChoice: "none",
       },
     ]);
     expect(total(before)).toBe("44.00");
@@ -1303,6 +1307,8 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
       creditNotes: [],
       amountDue: "18.00",
+      dining: "eat_in",
+      diningChoice: "none",
     });
     expect(total(before)).toBe("18.00");
 

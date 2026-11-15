@@ -389,6 +389,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.course_id IS old.course_id
@@ -425,6 +426,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.served_at IS old.served_at
@@ -463,6 +465,7 @@ BEGIN
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
+      AND new.takeaway_vat_class IS old.takeaway_vat_class
       AND new.line_total IS old.line_total
       AND new.category IS old.category
       AND new.served_at IS old.served_at
@@ -527,6 +530,29 @@ BEGIN
   );
 END;
 --> statement-breakpoint
+-- Created before working_orders_enforce_transition, so that trigger (SQLite fires the newest-created
+-- first) answers for an order that is not open. Pinned by the per-column cases in
+-- scripts/behavioural-triggers.test.ts.
+CREATE TRIGGER working_orders_dining_fixed
+BEFORE UPDATE OF dining ON working_orders
+FOR EACH ROW
+WHEN new.dining IS NOT old.dining
+BEGIN
+  SELECT raise(abort, 'an order''s way of selling is fixed once the kitchen has it or money is taken')
+  WHERE old.status <> 'open'
+    OR old.payment_attempt_at IS NOT NULL
+    OR exists (SELECT 1 FROM working_order_lines WHERE working_order_id = old.id AND sent_at IS NOT NULL)
+    OR exists (
+      SELECT 1 FROM ticket_items
+      INNER JOIN working_order_lines ON working_order_lines.id = ticket_items.working_order_line_id
+      WHERE working_order_lines.working_order_id = old.id
+    )
+    OR exists (
+      SELECT 1 FROM bill_payments WHERE working_order_id = old.id AND state IN ('pending', 'received')
+    )
+    OR exists (SELECT 1 FROM sales WHERE working_order_id = old.id);
+END;
+--> statement-breakpoint
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
 FOR EACH ROW
@@ -543,7 +569,8 @@ BEGIN
         AND new.recipient_identifier_type IS old.recipient_identifier_type
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
-        AND new.receipt_locale IS old.receipt_locale)
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
         AND new.source IS old.source
@@ -555,6 +582,7 @@ BEGIN
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.dining IS old.dining
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -590,6 +618,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
         AND new.delivery_table_label IS old.delivery_table_label)
     OR (old.status = 'settled' AND new.status = 'settled'
@@ -614,6 +643,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
         AND new.delivery_table_label IS old.delivery_table_label)
     -- A paid bill not yet handed over may leave its party, once; only the server limits this to Finish table's counter collection (A758-7).
@@ -642,7 +672,8 @@ BEGIN
         AND new.recipient_identifier_type IS old.recipient_identifier_type
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
-        AND new.receipt_locale IS old.receipt_locale)
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
         AND new.id IS old.id
@@ -665,6 +696,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.dining IS old.dining
         AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.party_id IS old.party_id)
   );

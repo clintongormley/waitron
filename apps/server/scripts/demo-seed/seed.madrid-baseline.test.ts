@@ -924,6 +924,31 @@ for (const locale of ["en", "es"] as const) {
         { name: "takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
       for (const row of Object.values(products.rows)) row.takeaway_vat_class = null;
+      const salePolicies = expected[phase].tables.department_sale_policies!;
+      for (const name of ["dining", "dining_starts_as"]) {
+        salePolicies.columns.push({
+          name,
+          type: "TEXT",
+          notnull: 1,
+          dflt_value: "'eat_in'",
+          pk: 0,
+        });
+        for (const row of Object.values(salePolicies.rows)) row[name] = "eat_in";
+      }
+      const orders = expected[phase].tables.working_orders!;
+      orders.columns.splice(
+        orders.columns.findIndex((column) => column.name === "party_id") + 1,
+        0,
+        { name: "dining", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(orders.rows)) row.dining = "eat_in";
+      const orderLines = expected[phase].tables.working_order_lines!;
+      orderLines.columns.splice(
+        orderLines.columns.findIndex((column) => column.name === "vat_class") + 1,
+        0,
+        { name: "takeaway_vat_class", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(orderLines.rows)) row.takeaway_vat_class = row.vat_class;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );
@@ -1214,6 +1239,8 @@ for (const locale of ["en", "es"] as const) {
             paid_when: "paid_when",
             collection_number: "collection_number",
             print_trading_name: "print_trading_name",
+            dining: "dining",
+            dining_starts_as: "dining_starts_as",
           },
         },
         {
@@ -1312,7 +1339,7 @@ for (const locale of ["en", "es"] as const) {
         },
       ]);
       const department = expected[phase].tables.departments!;
-      const policyColumns = department.columns.splice(-5);
+      const policyColumns = department.columns.splice(-7);
       department.columns.splice(
         department.columns.findIndex((column) => column.name === "release_reminder_minutes"),
         0,

@@ -77,6 +77,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         quantity: 1000,
         unitPriceGross: 110,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 110,
       })
       .returning({ id: workingOrderLines.id });

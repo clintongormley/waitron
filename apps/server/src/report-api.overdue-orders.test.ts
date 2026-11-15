@@ -70,6 +70,7 @@ async function seedFiredOrder(
       quantity: 1000,
       unitPriceGross: 100,
       vatClass: "reduced",
+      takeawayVatClass: "reduced",
       lineTotal: 100,
     })
     .returning({ id: workingOrderLines.id });

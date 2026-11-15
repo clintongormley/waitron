@@ -191,6 +191,7 @@ describe("whole-order kitchen note routes", () => {
         unitPriceGross: 800,
         lineTotal: 800,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         note: "No croutons",
       })
       .returning();

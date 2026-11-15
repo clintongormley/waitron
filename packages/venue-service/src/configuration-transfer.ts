@@ -1,6 +1,6 @@
 import { serviceStepOrder } from "./service-steps.js";
 import { getCountryPack } from "@waitron/country-packs";
-import { AppError } from "@waitron/shared";
+import { AppError, DINING_POLICIES, DININGS } from "@waitron/shared";
 import type { PackLookup } from "./holidays.js";
 import { isLocalDate } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
@@ -563,6 +563,20 @@ function validateOrderStarts(tables: Tables): void {
   }
 }
 
+function validateDepartmentDining(tables: Tables): void {
+  const choices = [
+    ["dining", DINING_POLICIES],
+    ["dining_starts_as", DININGS],
+  ] as const;
+  for (const row of tables.departments ?? []) {
+    for (const [column, allowed] of choices) {
+      const value = row[column];
+      if (value !== undefined && !(allowed as readonly unknown[]).includes(value))
+        refuse(`departments.${column}`);
+    }
+  }
+}
+
 function validateServiceSteps(tables: Tables): void {
   const departments = ids(tables.departments);
   const courses = ids(tables.kitchen_courses);
@@ -651,6 +665,7 @@ function validateVenueServiceConfiguration(
     screenProfiles.add(row.device_profile_id);
   }
   validateOrderStarts(tables);
+  validateDepartmentDining(tables);
   validateServiceHierarchy(tables);
   validateServiceSteps(tables);
   validateDepartmentCourses(tables);

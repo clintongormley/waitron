@@ -21,6 +21,7 @@ export interface ExtraProductFacts {
   descriptions: Record<string, string>;
   kitchenName: string | null;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
 }
 
 /**
@@ -36,8 +37,9 @@ export interface ExtraChild {
   price: string;
   /** The list the pick was taken from, stored on the child line as `extra_list_id`. */
   listId: string;
-  /** The extra PRODUCT's own class, never the dish's. */
+  /** The extra PRODUCT's own classes, served here and taken away, never the dish's. */
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   /**
    * The picks for ONE dish, NOT multiplied by the dish count: `grossBasketWithOptions`
    * (`packages/menu/src/pricing.ts`) does that multiplication.
@@ -151,6 +153,7 @@ export function buildLineExtras(
           price: item.price,
           listId: list.id,
           vatClass: product.vatClass,
+          takeawayVatClass: product.takeawayVatClass,
           quantity: pick.quantity,
           physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
           priceQuantity: item.portion,
@@ -347,6 +350,7 @@ export function editLineExtras<
         price: item.price,
         listId: list.id,
         vatClass: product.vatClass,
+        takeawayVatClass: product.takeawayVatClass,
         quantity: pick.quantity,
         physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
         priceQuantity: item.portion,

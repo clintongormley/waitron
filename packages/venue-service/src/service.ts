@@ -74,6 +74,7 @@ import {
   listWorkingLineContexts,
   readLunchOffers,
   readLunchLineIds,
+  orderHasSetLunch,
   readLinesSoldInEach,
   readLateSendMarks,
   productsOfferedIn,
@@ -93,6 +94,7 @@ import {
   orderInZones,
   orderZoneIdSql,
 } from "./operations.js";
+import { applyDepartmentDining, findOrdersWithDiningChoice, resolveOrderDining } from "./dining.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
@@ -174,6 +176,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listLineContexts: listWorkingLineContexts,
   readLunchOffers,
   readLunchLineIds,
+  orderHasSetLunch,
   readLinesSoldInEach,
   readLateSendMarks,
   listServiceZones,
@@ -184,6 +187,9 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readKeepOpen,
   keepZoneOpen,
   resolveSalePolicy,
+  resolveOrderDining,
+  findOrdersWithDiningChoice,
+  applyDepartmentDining,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
   readDepartmentReceipt,

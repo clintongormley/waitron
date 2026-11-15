@@ -143,8 +143,8 @@ it("an open order keeps its copied category label after the category is deleted"
     // Raw SQL so the stored counts are written literally; `id` is named because only the insert
     // builder generates one.
     await tx.execute(sql`
-      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, category) values (${randomUUID()}, ${order.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
-         200, 'reduced', 200, 'Bakery')
+      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, category, takeaway_vat_class) values (${randomUUID()}, ${order.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
+         200, 'reduced', 200, 'Bakery', 'reduced')
     `);
 
     await deleteCategory(tx, category.id);

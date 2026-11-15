@@ -74,6 +74,7 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
         nodeId: cfg.nodeId,
         orderNumber: nextOrderNumber,
         partyId: party!.id,
+        dining: "eat_in",
       });
       await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
       return { tabId, partyId: party!.id };

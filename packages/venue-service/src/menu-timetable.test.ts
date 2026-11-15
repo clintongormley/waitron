@@ -1470,8 +1470,8 @@ async function recordedLine(v: Timed) {
     await publish(tx, v.menus.Desayunos);
     const orderId = randomUUID();
     await tx.execute(sql`
-      insert into working_orders (id, source, node_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${nodeId}, 1, ${AT.toISOString()})`);
+      insert into working_orders (id, source, node_id, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', ${nodeId}, 1, ${AT.toISOString()}, 'eat_in')`);
     await recordOrderServiceContext(tx, orderId, v.sala);
     const lineId = randomUUID();
     await tx.insert(workingOrderLines).values({
@@ -1484,6 +1484,7 @@ async function recordedLine(v: Timed) {
       quantity: 1000,
       unitPriceGross: 450,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 450,
       category: "Uncategorised",
     });

@@ -132,6 +132,7 @@ describe("rest of the order read", () => {
         quantity: 9000,
         unitPriceGross: 100,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 100,
         servedAt: "served" in item && item.served ? nowIso() : null,
         servedQuantity: "served" in item && item.served ? 9000 : 0,

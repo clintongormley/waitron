@@ -470,7 +470,7 @@ describe("core backup source binding", () => {
     seed();
     for (const db of [before.db, after.db]) {
       db.run(
-        sql`insert into working_orders (id, source, node_id, order_number, opened_at) values ('order', 'dashboard', 'source', 1, '2026-10-20T00:00:00.000Z')`,
+        sql`insert into working_orders (id, source, node_id, order_number, opened_at, dining) values ('order', 'dashboard', 'source', 1, '2026-10-20T00:00:00.000Z', 'eat_in')`,
       );
     }
     await withTransaction(before.db, (tx) =>
@@ -507,7 +507,7 @@ describe("core backup source binding", () => {
     for (const id of ["old-order", "new-order"]) {
       for (const db of [before.db, after.db])
         db.run(
-          sql`insert into working_orders (id, source, node_id, order_number, opened_at) values (${id}, 'dashboard', 'source', ${id === "old-order" ? 1 : 2}, '2026-10-20T00:00:00.000Z')`,
+          sql`insert into working_orders (id, source, node_id, order_number, opened_at, dining) values (${id}, 'dashboard', 'source', ${id === "old-order" ? 1 : 2}, '2026-10-20T00:00:00.000Z', 'eat_in')`,
         );
       for (let i = 0; i < 3; i++)
         await withTransaction(before.db, (tx) =>

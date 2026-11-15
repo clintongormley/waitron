@@ -1002,6 +1002,34 @@ describe("configuration order starts", () => {
   );
 });
 
+describe("configuration department dining", () => {
+  const bundle = (row: Record<string, unknown>) => ({
+    departments: [{ id: RESTAURANT, ...row }],
+  });
+
+  it.each([
+    ["dining", ["sometimes", "", null, 1, ["eat_in"]]],
+    ["dining_starts_as", ["till_choice", "sometimes", "", null, 1]],
+  ] as const)("refuses a malformed %s", (column, values) => {
+    for (const value of values) {
+      expect(() =>
+        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(bundle({ [column]: value })),
+      ).toThrowError(refusal(`departments.${column}`));
+    }
+  });
+
+  it("accepts every stored value and a row without them", () => {
+    for (const row of [
+      {},
+      { dining: "eat_in", dining_starts_as: "eat_in" },
+      { dining: "takeaway", dining_starts_as: "takeaway" },
+      { dining: "till_choice", dining_starts_as: "takeaway" },
+    ]) {
+      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(bundle(row))).not.toThrow();
+    }
+  });
+});
+
 it.each([0, false])(
   "refuses a deleted department with active=%j even without children",
   (active) => {

@@ -657,6 +657,8 @@ describe("receipt and printing policy transaction", () => {
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "till_choice",
+        diningStartsAs: "takeaway",
       })
       .where(eq(departments.id, f.id));
     const receipt = { printAddress: false, operationDescription: "Dining service" };
@@ -672,6 +674,8 @@ describe("receipt and printing policy transaction", () => {
           paidWhen: departments.paidWhen,
           collectionNumber: departments.collectionNumber,
           printTradingName: departments.printTradingName,
+          dining: departments.dining,
+          diningStartsAs: departments.diningStartsAs,
         })
         .from(departments)
         .where(eq(departments.id, f.id)),
@@ -681,6 +685,8 @@ describe("receipt and printing policy transaction", () => {
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "till_choice",
+        diningStartsAs: "takeaway",
         ...policy,
       },
     ]);

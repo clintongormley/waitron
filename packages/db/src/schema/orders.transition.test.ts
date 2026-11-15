@@ -57,6 +57,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         orderNumber,
         status: "open",
         openedAt: AT,
+        dining: "eat_in",
       })
       .returning({ id: workingOrders.id });
     return row!.id;
@@ -74,6 +75,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         quantity: 1000,
         unitPriceGross: 110,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 100,
       }),
     );
@@ -492,6 +494,7 @@ describe("working_orders state machine (enforce_transition)", () => {
             orderNumber: nextOrderNumber++,
             status: "open",
             openedAt: AT,
+            dining: "eat_in",
             invoiceType,
           })
           .returning({ invoiceType: workingOrders.invoiceType }),
@@ -501,8 +504,8 @@ describe("working_orders state machine (enforce_transition)", () => {
     const error = await captureError(() =>
       inTx(async (tx) =>
         tx.run(sql`
-      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, invoice_type)
-      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
+      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, dining, invoice_type)
+      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${nextOrderNumber++}, 'open', ${AT}, 'eat_in', 'other')
     `),
       ),
     );

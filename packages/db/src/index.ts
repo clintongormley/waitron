@@ -32,6 +32,7 @@ export { runMigrations } from "./migrate.js";
 export { correctivesOf } from "./correctives-of.js";
 export { tableExists } from "./table-exists.js";
 export { tableInService } from "./table-in-service.js";
+export { orderDiningLocked, ordersDiningLocked } from "./order-dining.js";
 export { needsMoving, resetRowMoves } from "./joined-parts.js";
 export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
@@ -313,6 +314,7 @@ export {
   BILL_REFUND_CHANGE_REFUSAL,
   BILL_REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
+  DINING_FIXED_REFUSAL,
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,

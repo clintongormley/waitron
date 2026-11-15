@@ -24,6 +24,7 @@ import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { originChecks, sourceColumn } from "./origin.js";
 import { parties } from "./parties.js";
+import { dining } from "./sale-rule-types.js";
 
 export const workingOrderStatus = enumType([
   "open",
@@ -60,6 +61,11 @@ export type StagedInvoiceDelivery =
  *
  * Each exception names the columns it holds unchanged; a new column must enter
  * those lists, or the trigger will permit it to change on a placed order.
+ *
+ * `dining` is fixed earlier still, while the order is open: once a line has been
+ * sent or has a kitchen ticket item, a payment attempt has started, a payment is
+ * pending or received, or a sale exists (`working_orders_dining_fixed`;
+ * `orderDiningLocked` asks the same question).
  */
 export const workingOrders = table(
   "working_orders",
@@ -106,6 +112,8 @@ export const workingOrders = table(
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
+    // Eaten here or taken away. No default: whoever opens an order decides it.
+    dining: dining("dining").notNull(),
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
@@ -122,6 +130,7 @@ export const workingOrders = table(
     }),
     index("working_orders_party_idx").on(t.partyId),
     check("working_orders_status_ck", enumCheck(t.status)),
+    check("working_orders_dining_ck", enumCheck(t.dining)),
     ...originChecks("working_orders", t.source, t.deviceId),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
@@ -181,9 +190,13 @@ export const workingOrderLines = table(
     // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which
     // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
-    // The class the published menu version froze, taken when the line was added. The rate it
-    // carries is looked up on the day the invoice is issued, so no rate is stored here.
+    // The class the line takes when its order is eaten here, frozen by the published menu version
+    // when the line was added; `takeaway_vat_class` is the one it takes when taken away. The rate
+    // either carries is looked up on the day the invoice is issued, so no rate is stored here.
     vatClass: label("vat_class").notNull(),
+    // Already resolved: a product with no takeaway class of its own stores its served class here.
+    // The order's `dining` picks which of the two classes applies.
+    takeawayVatClass: label("takeaway_vat_class").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from
     // the FILED `sale_lines.line_total`, which is the NET base.
@@ -261,6 +274,10 @@ export const workingOrderLines = table(
     check(
       "working_order_lines_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
+    check(
+      "working_order_lines_takeaway_vat_class_ck",
+      sql`${t.takeawayVatClass} in ('general','reduced','super_reduced','zero')`,
     ),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],

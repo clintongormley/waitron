@@ -21,6 +21,14 @@ export const POST_SETTLEMENT_REFUSAL = "tender rejected: the sale is already set
 export const TRANSITION_REFUSAL = "working order cannot make that transition";
 
 /**
+ * `working_orders_dining_fixed`: an order's `dining` changed after the kitchen had it or money was
+ * taken on it. On an order that is no longer open, `working_orders_enforce_transition` answers
+ * first, with {@link TRANSITION_REFUSAL}.
+ */
+export const DINING_FIXED_REFUSAL =
+  "an order's way of selling is fixed once the kitchen has it or money is taken";
+
+/**
  * `working_order_lines_require_open_parent_*`: the order is not open, or does not exist; an update
  * also refuses a line moved off an order that is not open. On an order that exists but is not open,
  * an update changing what was served and nothing else is let through; on a placed order, an

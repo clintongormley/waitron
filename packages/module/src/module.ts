@@ -14,6 +14,8 @@ import type {
   DeleteImpactRefusal,
   DeleteImpactItem,
   ChangeSource,
+  Dining,
+  DiningPolicy,
 } from "@waitron/shared";
 import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
@@ -186,6 +188,8 @@ export interface EffectiveSalePolicy {
   readonly paidWhen: "prepay" | "ticket_then_pay";
   readonly collectionNumber: "none" | "numbered";
   readonly printTradingName: boolean;
+  readonly dining: DiningPolicy;
+  readonly diningStartsAs: Dining;
 }
 
 export interface ServiceZoneSummary {
@@ -853,6 +857,26 @@ export interface VenueServiceContribution {
     actor: ActivityActor,
   ): Promise<void>;
   resolveSalePolicy(tx: Transaction, zoneId: string): Promise<EffectiveSalePolicy>;
+  /** The way a new order in `zoneId` sells; refuses `order.dining_fixed` for a way it cannot. */
+  resolveOrderDining(
+    tx: Transaction,
+    zoneId: string,
+    requested: Dining | undefined,
+  ): Promise<Dining>;
+  /** Of the named orders, those whose department leaves the way to the till, in a region that
+   *  charges takeaway VAT; read at once. */
+  findOrdersWithDiningChoice(
+    tx: Transaction,
+    workingOrderIds: readonly string[],
+  ): Promise<ReadonlySet<string>>;
+  /** An existing order's way once its department becomes `to.departmentId`; called when an order's
+   *  department changes or is first set. Refuses `order.set_lunch_takeaway` when it would take a set
+   *  lunch away. */
+  applyDepartmentDining(
+    tx: Transaction,
+    workingOrderId: string,
+    to: { departmentId: string; serviceMode: ServiceMode },
+  ): Promise<void>;
   recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
   readDepartmentReceiptPolicy(
     tx: Transaction,
@@ -1085,6 +1109,8 @@ export interface VenueServiceContribution {
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
   readLunchLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>>;
+  /** Whether any of the order's lines is a set lunch, as its recorded menu version says. */
+  orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean>;
   readLunchOffers(
     tx: Transaction,
     workingOrderId: string,

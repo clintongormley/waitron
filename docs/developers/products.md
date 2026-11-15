@@ -119,9 +119,9 @@ Rescheduling records the old and new activation times and the acting person in
 
 ## What a sold line freezes
 
-A line freezes its names, its gross price and its VAT class when it is added and never reads them
-from the menu again, so editing a product does not rewrite yesterday's receipt; the VAT class
-comes from the published menu, and the rate from the day the invoice is issued, below. `working_order_lines` and `sale_lines` each carry:
+A line freezes its names, its gross price and its two VAT classes (eaten here and taken away) when
+it is added and never reads them from the menu again, so editing a product does not rewrite yesterday's receipt; the VAT classes
+come from the published menu, the order's way of selling picks one, and the rate comes from the day the invoice is issued, below. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -164,14 +164,18 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed line
 (sales classification spec §3). Neither table has a `variant_id` column.
 
-**A line's VAT class is the one its published menu froze, fixed when its price is; its rate is the
-one in force on the day the invoice is issued.** Each published menu version records the VAT class
-of each dish, variant and extras item, and no rate (`buildMenuDocument`,
-`packages/menu/src/menu-document.ts`), and a till is served that class rather than the
-product's current one. A line added to a held order or a tab stores that
-class (`working_order_lines.vat_class`) with its gross price; a walk-up sale is priced at payment,
+**A line's VAT classes are the ones its published menu froze, fixed when its price is; the rate of
+the one its order's way picks is the one in force on the day the invoice is issued.** Each published
+menu version records the two VAT classes of each dish, variant and extras item, and no rate (`buildMenuDocument`,
+`packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
+product's current ones. A line added to a held order or a tab stores that
+class (`working_order_lines.vat_class`) and its takeaway class (`takeaway_vat_class`, the served
+class again where the product has none) with its gross price, which is the same either way. The
+order's `working_orders.dining` picks which class a bill, payment or filing rates the line at; it is
+fixed once the kitchen has any of the order, a payment has started or the order is no longer open
+(`working_orders_dining_fixed`); a walk-up sale is priced at payment,
 from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
-no class of its own was frozen at its parent's class, and an extras line takes the class frozen for
+no class of its own was frozen at its parent's class, and an extras line takes the classes frozen for
 its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
 an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
 a till only when a menu including it is published again, and until then that menu shows
@@ -733,7 +737,7 @@ prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 `apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
 it is refused `product.variant_required`, as a raise of a line whose product has become archived or
 Unavailable is refused. Paying a held order bills its stored lines at their stored prices and
-VAT classes, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
+at the stored VAT class the order's way of selling picks, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
 a card payment already captured is filed as it stands). On the till, retrieving the order keeps

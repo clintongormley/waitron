@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3988da75-7e4c-4fec-a92d-7beb747c45a0",
+  "id": "7cdb789a-5ace-4434-883e-1e5a5c1e5a86",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -575,6 +575,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "takeaway_vat_class": {
+          "name": "takeaway_vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "line_total": {
           "name": "line_total",
           "type": "integer",
@@ -812,6 +819,10 @@
           "name": "working_order_lines_vat_class_ck",
           "value": "\"working_order_lines\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
         },
+        "working_order_lines_takeaway_vat_class_ck": {
+          "name": "working_order_lines_takeaway_vat_class_ck",
+          "value": "\"working_order_lines\".\"takeaway_vat_class\" in ('general','reduced','super_reduced','zero')"
+        },
         "working_order_lines_line_no_ck": {
           "name": "working_order_lines_line_no_ck",
           "value": "\"working_order_lines\".\"line_no\" >= 1"
@@ -991,6 +1002,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "dining": {
+          "name": "dining",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1076,6 +1094,10 @@
         "working_orders_status_ck": {
           "name": "working_orders_status_ck",
           "value": "\"working_orders\".\"status\" in ('open', 'placed', 'settled', 'abandoned')"
+        },
+        "working_orders_dining_ck": {
+          "name": "working_orders_dining_ck",
+          "value": "\"working_orders\".\"dining\" in ('eat_in', 'takeaway')"
         },
         "working_orders_source_ck": {
           "name": "working_orders_source_ck",
@@ -14860,6 +14882,22 @@
           "autoincrement": false,
           "default": true
         },
+        "dining": {
+          "name": "dining",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'eat_in'"
+        },
+        "dining_starts_as": {
+          "name": "dining_starts_as",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'eat_in'"
+        },
         "transfer_desk_profile_id": {
           "name": "transfer_desk_profile_id",
           "type": "text",
@@ -14963,6 +15001,14 @@
         "departments_collection_number_ck": {
           "name": "departments_collection_number_ck",
           "value": "\"departments\".\"collection_number\" in ('none', 'numbered')"
+        },
+        "departments_dining_ck": {
+          "name": "departments_dining_ck",
+          "value": "\"departments\".\"dining\" in ('eat_in', 'takeaway', 'till_choice')"
+        },
+        "departments_dining_starts_as_ck": {
+          "name": "departments_dining_starts_as_ck",
+          "value": "\"departments\".\"dining_starts_as\" in ('eat_in', 'takeaway')"
         }
       }
     },

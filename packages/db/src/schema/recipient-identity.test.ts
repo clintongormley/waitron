@@ -60,12 +60,12 @@ async function order(identity = FOREIGN, status = "placed", delivery = false): P
   await suite.db.run(sql`insert into working_orders
     (id, source, node_id, order_number, status, opened_at, settled_at,
      invoice_type, recipient_tax_id, recipient_legal_name, recipient_address, recipient_country_code,
-     recipient_identifier_type, recipient_identifier_country_code, party_id, delivery_table_id)
+     recipient_identifier_type, recipient_identifier_country_code, party_id, delivery_table_id, dining)
     values (${id}, 'dashboard', ${node}, ${++number}, ${status}, ${AT},
       ${status === "settled" ? AT : null}, ${identity.value === null ? "F2" : "F1"},
       ${identity.value}, ${identity.value === null ? null : "Customer"},
       ${identity.value === null ? null : "2 Main Street, Paris"}, ${identity.value === null ? null : "FR"},
-      ${identity.kind}, ${identity.issuer}, ${partyId}, ${delivery ? tableId : null})`);
+      ${identity.kind}, ${identity.issuer}, ${partyId}, ${delivery ? tableId : null}, 'eat_in')`);
   return id;
 }
 

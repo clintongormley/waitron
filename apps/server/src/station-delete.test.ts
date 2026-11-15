@@ -93,6 +93,7 @@ async function food(
         unitPriceGross: 500,
         lineTotal: 500,
         vatClass: "general",
+        takeawayVatClass: "general",
         productId: v.productId("Flan"),
         makeAtStationId: id,
         servedAt: flags.served ? at : null,
