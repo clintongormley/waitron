@@ -66,6 +66,16 @@ At 09:26 the watcher also cleared removal of the two retired ordering-trigger en
 `scripts/migration-upgrade.test.ts` and their unused constant in
 `packages/db/src/trigger-refusals.ts`, after a search confirms no imports remain.
 
+Run-it review correction, 2026-11-15: these two trigger positions were already in the original
+prediction. The 09:17 edit duplicated them; the prediction lists each once again. No trigger
+body, timing, event or order is changed to resolve this documentation error.
+
+The watcher cleared the run-it corrections on 2026-11-15 at 09:51: preserve the existing
+create contract (omission means unreviewed; explicit null remains an update value), deduplicate
+archive ids before batching, group archived variants by parent, and add one bulk-folder case
+with real products. Parent-plus-variant selections and edited-bundle validation cases are
+left out under the campaign's unlikely-event rule. Archive documentation names its entry paths.
+
 ## What it builds
 
 1. **Measurement first** (tables-menu.md §8 item 1, Task 1): the name check by scan at 1,000
@@ -243,12 +253,6 @@ extra table products.checks[products_ordering_ck]
 extra table products.checks[products_unit_price_ck]
 missing trigger products_ordering_check_insert
 missing trigger products_ordering_check_update
-changed trigger products_media_image_fk_insert.order
-old: 2
-new: 1
-changed trigger products_media_image_fk_update.order
-old: 3
-new: 2
 changed trigger products_media_image_fk_insert.order
 old: 2
 new: 1

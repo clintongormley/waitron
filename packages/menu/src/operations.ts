@@ -908,7 +908,7 @@ async function insertProduct(
   const takeawayVatClass = input.takeawayVatClass ?? null;
   if (takeawayVatClass !== null && !VAT_CLASSES.includes(takeawayVatClass))
     throw new AppError("product.invalid", { field: "takeawayVatClass" });
-  const allergens = input.allergens == null ? null : validateAllergens(input.allergens);
+  const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
     categoryId: input.categoryId,

@@ -64,8 +64,9 @@ text, or a product, category or section colour other than null or lowercase `#rr
 You store one allergen declaration. Saving sorts cereal and nut kinds and removes repeats;
 `null` means you have not reviewed it, while `{}` means you reviewed it and declared none.
 The diet profile is calculated when read from the declared override over unknown vegan and
-vegetarian values; it is not stored separately (`overlayDietProfile`). Archiving records the
-product name, the variants archived with it and the person who acted in `activity_log`.
+vegetarian values; it is not stored separately (`overlayDietProfile`). Deleting a product or folder,
+or switching Active off in the product editor, records the product name, the variants archived
+with it and the person who acted in `activity_log`.
 
 The three resolvers, one per audience:
 

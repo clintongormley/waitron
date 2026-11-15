@@ -3248,6 +3248,7 @@ describe("mountMenuApi — products", () => {
   });
 
   it.each([
+    ["explicit_null", null, "allergen.invalid_code"],
     ["invalid_code", { notacode: { presence: "contains" } }, "allergen.invalid_code"],
     ["kinds_required", { gluten: {} }, "allergen.kinds_required"],
     ["invalid_kind", { nuts: { kinds: ["wheat"] } }, "allergen.invalid_kind"],

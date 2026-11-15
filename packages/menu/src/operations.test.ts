@@ -829,7 +829,7 @@ describe("menu operations", () => {
         unitId: null,
         unitPrice: "1.00",
         vatClass: "general",
-        allergens,
+        ...(allergens === null ? {} : { allergens }),
       });
       expect(product.allergens).toEqual(allergens);
       await updateProduct(tx, product.id, { allergens: { milk: {} } });

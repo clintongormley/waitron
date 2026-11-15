@@ -2,6 +2,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
+  activityLog,
   categories,
   extraListItems,
   extraLists,
@@ -33,7 +34,7 @@ import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
 import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.js";
 
-import { setMainReportingCategory } from "./categories.js";
+import { createCategory, setMainReportingCategory } from "./categories.js";
 
 const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -784,4 +785,36 @@ describe("product archive history", () => {
       );
     },
   );
+});
+
+it("records each product once when a bulk folder deletion also selects one of its products", async () => {
+  await menusFixture(fx.db);
+  const ids = Array.from(
+    { length: 1000 },
+    (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  );
+  const folder = await app((tx) => createCategory(tx, { name: "Bulk archive" }));
+  await app(async (tx) => {
+    for (let offset = 0; offset < ids.length; offset += 100)
+      await tx
+        .insert(products)
+        .values(
+          ids
+            .slice(offset, offset + 100)
+            .map((id, index) => ({
+              id,
+              name: `Archived dish ${offset + index}`,
+              categoryId: folder.id,
+              unitPrice: 100,
+              vatClass: "general",
+            })),
+        );
+    await deleteProductItems(tx, { productIds: [ids.at(-1)!], categoryIds: [folder.id] }, "delete");
+  });
+  expect(await readActivityForSubject(fx.db, { kind: "product", id: ids.at(-1)! })).toHaveLength(1);
+  const events = await fx.db
+    .select({ subjectId: activityLog.subjectId })
+    .from(activityLog)
+    .where(eq(activityLog.kind, "product.archived"));
+  expect(events.map((row) => row.subjectId).sort()).toEqual(ids);
 });
