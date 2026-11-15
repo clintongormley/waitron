@@ -42,6 +42,7 @@ import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memo
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
+import "./widgets/main-server-strip.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
@@ -117,7 +118,7 @@ import {
   type MadeHereItem,
   type KitchenNoteSnapshot,
 } from "./api/client.js";
-import type { ServerRouter } from "./api/server-router.js";
+import { MAIN_SILENT_MS, type ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
 import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
@@ -2546,9 +2547,55 @@ export class TillApp extends LitElement {
   };
 
   readonly #onServerState = (): void => {
+    this.#watchMainSilence();
+    if (this.#mainServerStrip() === undefined) this.mainServerRefused = false;
     this.requestUpdate();
     this.#decideReload();
   };
+
+  /** Opens a page in this tab. */
+  navigate: (url: string) => void = (url) => location.assign(url);
+
+  @state() private mainServerRefused = false;
+  #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Present once the main server has been silent for `MAIN_SILENT_MS` at a venue with a spare. */
+  #mainServerStrip(): { spareAnswering: boolean } | undefined {
+    const since = this.router?.mainSilentSince ?? null;
+    const spare = this.router?.spare;
+    if (since === null || spare === undefined || Date.now() - since < MAIN_SILENT_MS)
+      return undefined;
+    return { spareAnswering: spare.answering };
+  }
+
+  /** Repaints when the silence the router reports reaches `MAIN_SILENT_MS`. */
+  #watchMainSilence(): void {
+    clearTimeout(this.#mainSilentTimer);
+    this.#mainSilentTimer = undefined;
+    const since = this.router?.mainSilentSince ?? null;
+    if (since === null || this.router?.spare === undefined) return;
+    const left = MAIN_SILENT_MS - (Date.now() - since);
+    if (left > 0)
+      this.#mainSilentTimer = setTimeout(() => {
+        this.#mainSilentTimer = undefined;
+        this.requestUpdate();
+      }, left);
+  }
+
+  /** The spare's page takes over only while the main server stays silent to one more probe. */
+  async #onSwitchToSpare(): Promise<void> {
+    const router = this.router;
+    if (router === undefined) return;
+    if (await router.probeMain()) {
+      this.mainServerRefused = true;
+      return;
+    }
+    const spare = router.spare;
+    if (spare === undefined) return;
+    const url = new URL("/handover/emergency", spare.url);
+    url.searchParams.set("back", location.href);
+    this.navigate(url.href);
+  }
 
   #subscribeRouter(): void {
     if (this.#subscribedRouter === this.router) return;
@@ -2559,6 +2606,8 @@ export class TillApp extends LitElement {
   }
 
   #detach(): void {
+    clearTimeout(this.#mainSilentTimer);
+    this.#mainSilentTimer = undefined;
     this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
     this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
     this.#subscribedRouter = undefined;
@@ -21187,6 +21236,26 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
+  /** The lock screen draws its own; the strip takes the waiting line's place while it shows. */
+  #renderServerNotice() {
+    const strip = this.#mainServerStrip();
+    if (strip !== undefined)
+      return html`<till-main-server-strip
+        .spareAnswering=${strip.spareAnswering}
+        .showSwitch=${!this.deviceMode && this.permissions.includes("node.manage")}
+        .refused=${this.mainServerRefused}
+        @switch-to-spare=${() => void this.#onSwitchToSpare()}
+      ></till-main-server-strip>`;
+    return this.router?.waiting
+      ? html`<p class="banner" role="status">${t("server.waiting_promotion")}</p>`
+      : nothing;
+  }
+
+  #lockMainServer(): { spareAnswering: boolean; refused: boolean } | undefined {
+    const strip = this.#mainServerStrip();
+    return strip === undefined ? undefined : { ...strip, refused: this.mainServerRefused };
+  }
+
   #inShell(): boolean {
     return this.formFactor !== undefined && this.#shellActive();
   }
@@ -22490,15 +22559,7 @@ export class TillApp extends LitElement {
         }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         ${this.#renderRefreshNotice("waiting")}
-        <!-- The waiting-for-promotion banner. On the shell surface (an operator
-             mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
-             server.waiting_promotion copy compactly here while the router reports no server is accepting
-             sales. Gated on the shell surface so it never double-renders beside the lock screen's own line. -->
-        ${
-          this.#inShell() && (this.router?.waiting ?? false)
-            ? html`<p class="banner" role="status">${t("server.waiting_promotion")}</p>`
-            : nothing
-        }
+        ${this.#inShell() ? this.#renderServerNotice() : nothing}
         <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
              override is in flight. It takes the eligible authorizers + the retry error as PROPS and emits
              override-confirm/override-cancel (wired on the app wrapper above) — the app owns the request. -->
@@ -22888,6 +22949,8 @@ export class TillApp extends LitElement {
                           .serverStatuses=${this.router?.statuses() ?? []}
                           .serverCurrent=${this.router?.current ?? ""}
                           .serverWaiting=${this.router?.waiting ?? false}
+                          .mainServer=${this.#lockMainServer()}
+                          @switch-to-spare=${() => void this.#onSwitchToSpare()}
                           .clockNotice=${this.pinClockNotice}
                           @check-again=${() => void this.router?.probeNow()}
                         ></till-lock-screen>`,

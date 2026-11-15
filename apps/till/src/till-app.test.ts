@@ -46,6 +46,7 @@ import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { TillMainServerStrip } from "./widgets/main-server-strip.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
@@ -16310,6 +16311,203 @@ describe("till-app follows a server move", () => {
     await flush(el);
     expect(router.waiting).toBe(true);
     expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
+  });
+});
+
+describe("the main-server strip", () => {
+  const ORIGIN = "https://waitron.local";
+  const MAIN = "https://box-a.waitron.local";
+  const SPARE = "https://box-b.waitron.local";
+  const T0 = Date.UTC(2026, 10, 14, 21, 0);
+  const bothServers = [
+    { nodeId: "a", url: MAIN, standing: "serving-primary" as const },
+    { nodeId: "b", url: SPARE, standing: "serving-secondary" as const },
+  ];
+
+  let answering: { main: boolean; spare: boolean };
+  let originalLocale = currentLocale();
+
+  beforeEach(() => {
+    originalLocale = currentLocale();
+    setLocale("en");
+    vi.useFakeTimers({ now: T0 });
+    answering = { main: false, spare: true };
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setLocale(originalLocale);
+  });
+
+  function venueFetch(): typeof fetch {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith(MAIN) && answering.main)
+        return Response.json({ acceptingSales: false, term: 1, nodeId: "a" });
+      if (url.startsWith(SPARE) && answering.spare)
+        return Response.json({ acceptingSales: false, term: 1, nodeId: "b" });
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+  }
+
+  async function settle(el: TillApp): Promise<void> {
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+  }
+
+  async function mount(
+    servers: {
+      nodeId: string;
+      url: string;
+      standing: "serving-primary" | "serving-secondary";
+    }[] = bothServers,
+    overrides: Record<string, unknown> = {},
+  ) {
+    const router = new ServerRouter({
+      origin: ORIGIN,
+      fetchImpl: venueFetch(),
+      storage: memoryStorage(),
+    });
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers }), ...overrides });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await settle(el);
+    return { el, router };
+  }
+
+  async function signIn(el: TillApp, permissions: string[]): Promise<void> {
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions });
+    await settle(el);
+  }
+
+  /** A probe round now finds the main server silent, then the clock moves on by `ms`. */
+  async function silentFor(el: TillApp, router: ServerRouter, ms: number): Promise<void> {
+    await router.probeNow();
+    await settle(el);
+    await vi.advanceTimersByTimeAsync(ms);
+    await el.updateComplete;
+  }
+
+  type Strip = TillMainServerStrip;
+  const shellStrip = (el: TillApp) => el.shadowRoot!.querySelector<Strip>("till-main-server-strip");
+  const lockStrip = (el: TillApp) =>
+    lock(el)!.shadowRoot!.querySelector<Strip>("till-main-server-strip");
+  const waitingLine = (el: TillApp) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(".banner[role='status']")].find((banner) =>
+      banner.textContent!.includes(t("server.waiting_promotion")),
+    );
+  const press = (strip: Strip) =>
+    strip.dispatchEvent(new CustomEvent("switch-to-spare", { bubbles: true, composed: true }));
+
+  it("shows the main-server strip after 20 seconds of silence, not before", async () => {
+    const { el, router } = await mount();
+    await signIn(el, ["node.manage"]);
+    await silentFor(el, router, 19_900);
+    expect(shellStrip(el)).toBeNull();
+    expect(waitingLine(el)).toBeDefined();
+    await vi.advanceTimersByTimeAsync(100);
+    await el.updateComplete;
+    expect(shellStrip(el)).not.toBeNull();
+    expect(shellStrip(el)!.spareAnswering).toBe(true);
+    expect(waitingLine(el)).toBeUndefined();
+  });
+
+  it("offers the switch on a locked till and to a node.manage holder, not to other signed-in staff", async () => {
+    const locked = await mount();
+    await silentFor(locked.el, locked.router, 20_000);
+    expect(lockStrip(locked.el)!.showSwitch).toBe(true);
+    locked.el.remove();
+
+    const manager = await mount();
+    await signIn(manager.el, ["node.manage"]);
+    await silentFor(manager.el, manager.router, 20_000);
+    expect(shellStrip(manager.el)!.showSwitch).toBe(true);
+    manager.el.remove();
+
+    const waiter = await mount();
+    await signIn(waiter.el, ["payment.take"]);
+    await silentFor(waiter.el, waiter.router, 20_000);
+    expect(shellStrip(waiter.el)).not.toBeNull();
+    expect(shellStrip(waiter.el)!.showSwitch).toBe(false);
+  });
+
+  it("a kitchen display shows the strip without the switch", async () => {
+    const { el, router } = await mount(bothServers, {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        servers: bothServers,
+        formFactor: kdsFormFactor,
+        capabilities: ["act-as-kds"],
+      }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [stationScreen],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+    });
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
+    await silentFor(el, router, 20_000);
+    expect(shellStrip(el)).not.toBeNull();
+    expect(shellStrip(el)!.showSwitch).toBe(false);
+  });
+
+  it("a press while the main server answers shows the refusal and does not navigate", async () => {
+    const { el, router } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    answering.main = true;
+    press(lockStrip(el)!);
+    await settle(el);
+    expect(lockStrip(el)!.refused).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("a press while the main server is silent opens the spare's switch page with the way back", async () => {
+    const { el, router } = await mount();
+    await signIn(el, ["node.manage"]);
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    press(shellStrip(el)!);
+    await settle(el);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    const opened = new URL(navigate.mock.calls[0]![0] as string);
+    expect(`${opened.origin}${opened.pathname}`).toBe(`${SPARE}/handover/emergency`);
+    expect(opened.searchParams.get("back")).toBe(location.href);
+    expect(shellStrip(el)!.refused).toBe(false);
+  });
+
+  it("a till that reaches no server shows no switch", async () => {
+    answering.spare = false;
+    const { el, router } = await mount();
+    await silentFor(el, router, 20_000);
+    expect(lockStrip(el)).not.toBeNull();
+    expect(lockStrip(el)!.spareAnswering).toBe(false);
+    await lockStrip(el)!.updateComplete;
+    expect(lockStrip(el)!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
+  });
+
+  it("a venue with no spare shows today's waiting line and no strip", async () => {
+    const { el, router } = await mount([bothServers[0]!]);
+    await signIn(el, ["node.manage"]);
+    await silentFor(el, router, 20_000);
+    expect(shellStrip(el)).toBeNull();
+    expect(waitingLine(el)).toBeDefined();
+  });
+
+  it("the strip and its refusal clear when the main server answers again", async () => {
+    const { el, router } = await mount();
+    await silentFor(el, router, 20_000);
+    answering.main = true;
+    press(lockStrip(el)!);
+    await settle(el);
+    expect(lockStrip(el)!.refused).toBe(true);
+    await router.probeNow();
+    await settle(el);
+    expect(lockStrip(el)).toBeNull();
+    answering.main = false;
+    await silentFor(el, router, 20_000);
+    expect(lockStrip(el)!.refused).toBe(false);
   });
 });
 

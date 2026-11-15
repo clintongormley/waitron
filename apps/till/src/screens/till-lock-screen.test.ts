@@ -821,6 +821,29 @@ describe("till-lock-screen", () => {
     expect(again).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the main-server strip, with the switch, in place of the waiting line", async () => {
+    const statuses: ServerStatus[] = [
+      { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
+      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 2 },
+    ];
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: statuses,
+      serverWaiting: true,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-main-server-strip")).toBeNull();
+    el.mainServer = { spareAnswering: true, refused: false };
+    await el.updateComplete;
+    const strip = el.shadowRoot!.querySelector<HTMLElement & { showSwitch: boolean }>(
+      "till-main-server-strip",
+    )!;
+    expect(strip.showSwitch).toBe(true);
+    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
+    expect(line).toContain("box.deli.test");
+    expect(line).not.toContain(t("server.waiting_promotion"));
+  });
+
   it("marks the CURRENT server with On: <label> when it is primary; others stay label: state", async () => {
     const statuses: ServerStatus[] = [
       { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 2 },
