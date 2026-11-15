@@ -318,3 +318,10 @@ EQUAL. Any line is a stop.
 
 Nothing to change: Cloud calls `PUT` and `GET /api/backup/stream` with today's body and reads today's
 answer (`integration-stream.mjs:59,65` in its repository, at `d4451d227`), both unchanged here.
+
+## Current-main correction, 2026-11-15
+
+Watcher 01:12 cleared required `personId: string | null` on `writeStreamSettings` and
+`deleteStreamSettings`, preserving vb2's request actor through their credential and settings writes.
+Keep `writeArchiveSettings`'s existing actor argument and the existing actor assertions.
+No new mechanism or compatibility path is added.
