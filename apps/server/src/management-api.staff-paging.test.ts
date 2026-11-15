@@ -1,7 +1,8 @@
 import { expect, it } from "vitest";
 import { Hono } from "hono";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { ensureBuiltInRoles } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mountManagementApi } from "./management-api.js";
@@ -10,7 +11,12 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function fixture() {
   const { token } = await openManagementSession(suite.db, "admin");
-  await seedPersons(suite.db, { displayName: "Needle", role: "staff" });
+  await withTransaction(suite.db, (tx) =>
+    seedPersons(tx, [
+      { displayName: "Needle", role: "staff" },
+      { displayName: "Unselected", role: "manager" },
+    ]),
+  );
   const app = new Hono();
   mountManagementApi(
     app,
@@ -31,7 +37,10 @@ async function fixture() {
 }
 it("returns one capped page and preserves a trailing space in the whole-word search", async () => {
   const send = await fixture();
-  const response = await send("sortKey=&page=0&locale=en-GB");
+  const roles = await withTransaction(suite.db, ensureBuiltInRoles);
+  const response = await send(
+    `sortKey=&page=0&locale=en-GB&roleId=${roles.staff}&roleId=${roles.admin}`,
+  );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ page: 0, pageSize: 50, total: 2, anyPeople: true });
   const exact = await send("search=Need&status=all");

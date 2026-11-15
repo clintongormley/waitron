@@ -8,7 +8,7 @@ import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import type { DashboardApi, PersonSummary } from "../api/client.js";
+import type { DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
@@ -301,6 +301,40 @@ describe("staff-screen", () => {
     expect(api.listStaffPage).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "User 999", roleIds: ["staff"], page: 0 }),
     );
+  });
+
+  it("keeps saved details when the person leaves the page with access-role edits still open", async () => {
+    const person = { ...people[0]!, displayName: "Alias", telephone: null };
+    let roster = [person];
+    const api = stubApi({
+      listStaff: vi.fn(async () => roster),
+      savePerson: vi.fn(async (_id: string, details: PersonEditDetails) => {
+        roster = [{ ...person, ...details }];
+      }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      canAdminister: true,
+      api,
+    });
+    await flush(el);
+    await typeSearch(el, "Alias");
+    await openEdit(el, "p1");
+    const edit = editForm(el);
+    await edit.updateComplete;
+    const roles = edit.shadowRoot!.querySelector<HTMLElement>('wt-combobox[name="accessRoles"]')!;
+    await chooseOptions(roles, ["staff"]);
+    await saveThroughEdit(el, "edit-display-name", "Zed");
+    await vi.waitFor(() =>
+      expect(api.savePerson).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({ displayName: "Zed" }),
+      ),
+    );
+    await vi.waitFor(async () => expect(await drawn(el)).toEqual([]));
+    expect(edit.open).toBe(true);
+    expect(edit.person?.displayName).toBe("Zed");
+    expect(await nativeDisabled(edit, "save")).toBe(true);
+    expect((roles as HTMLElement & { values: string[] }).values).toEqual(["staff"]);
   });
 
   it("keeps a failed row action open for retry and ignores invalid or self-disable requests", async () => {
