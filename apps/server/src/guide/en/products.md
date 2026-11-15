@@ -22,6 +22,9 @@ To correct the class on the live menu without publishing your other changes to t
 [Patch the live menu in an emergency](products.md#patch-live-menu).
 A line already on an order keeps the class it was added with.
 
+Where your region taxes takeaway food differently, **VAT when taken away** sets this product's class
+when it is taken away. Leave it empty to charge the same class as when it is served here.
+
 ## Set how a product is sold {#selling}
 
 Open **Selling** to change Available or **Standalone ordering by**: Anyone, Staff only or Nobody.

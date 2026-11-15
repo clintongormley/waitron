@@ -3698,6 +3698,35 @@ it("reads the venue's default into a new editor without replacing an open draft"
   expect(tax().value).toBe("reduced");
 });
 
+it.each([true, false])(
+  "hands the editor whether the venue's region charges a takeaway VAT class (%s)",
+  async (takeawayVat) => {
+    const api = stubApi({
+      getVenueDefaults: vi.fn().mockResolvedValue({
+        receiptLanguage: "es-ES",
+        receiptLanguageChoices: ["es-ES"],
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: "general",
+        takeawayVat,
+      }),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    expect(editor(el).takeawayVat).toBe(takeawayVat);
+  },
+);
+
+it("hides the takeaway VAT class when the venue defaults cannot be read", async () => {
+  const api = stubApi({
+    getVenueDefaults: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+  });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+  await flush(el);
+  expect(editor(el).takeawayVat).toBe(false);
+  expect(list(el).products).toEqual(products);
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+});
+
 describe("archived product entry", () => {
   it("reads archived details passively from the existing background client", async () => {
     history.replaceState(null, "", "/manage/products");

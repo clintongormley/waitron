@@ -24,6 +24,7 @@ const MADRID: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "reduced",
+  takeawayVat: false,
 };
 const BARCELONA: VenueDefaults = {
   ...MADRID,

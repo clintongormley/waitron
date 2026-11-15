@@ -45,6 +45,8 @@ export interface VenueDefaults {
   /** The one language the law gives the venue's region, if any. */
   fixedReceiptLanguage: string | null;
   defaultProductVatClass: VatClass;
+  /** Whether the venue's region charges a product a second VAT class when it is taken away. */
+  takeawayVat: boolean;
 }
 
 export interface VenueClockView {

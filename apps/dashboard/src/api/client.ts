@@ -646,6 +646,7 @@ export interface VenueDefaults {
   receiptLanguageChoices: string[];
   fixedReceiptLanguage: string | null;
   defaultProductVatClass: VatClass;
+  takeawayVat: boolean;
 }
 
 export interface VenuePrivacy {
