@@ -124,8 +124,12 @@ export class TillStationToday extends LitElement {
     openDishCount: number;
   }> {
     if (!this.deviceMode) return this.api!.stationToday(id);
-    const answer = await this.api!.deviceStationToday(id);
-    return answer;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      return await this.api!.deviceStationToday(id, { signal: limit.signal });
+    } finally {
+      limit.done();
+    }
   }
   #askDeviceManager(intent: StationTodayWrite): void {
     this.#intent = intent;
@@ -172,7 +176,7 @@ export class TillStationToday extends LitElement {
         const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {
           const people = this.deviceMode
-            ? (await this.api.deviceStationToday(id)).authorizers
+            ? (await this.api.deviceStationToday(id, { signal: limit.signal })).authorizers
             : await this.api.serviceDayAuthorizers({ signal: limit.signal });
           if (this.#current(generation, id)) {
             this.authorizers = people;

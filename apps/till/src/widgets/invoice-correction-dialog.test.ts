@@ -935,6 +935,33 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     expect(root(el).querySelector("[data-choice=check]")).not.toBeNull();
   });
 
+  it("says who can approve could not be read when filing needs approval, not that the answer was lost", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: { gross: "2.00", vatBreakdown: SPLIT },
+    });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.rectify" }),
+    );
+    api.listApprovers.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.approvers_failed"),
+      ),
+    );
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.rectify", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(el.busy).toBe(false);
+  });
+
   it("reads the correction again after a step that was under way when a card refund ended", async () => {
     const api = sendingApi();
     let answer!: (value: unknown) => void;
@@ -1355,7 +1382,7 @@ describe("the correction window's other paths", () => {
       await el.updateComplete;
 
       expect(el.busy).toBe(false);
-      expect(actionsError(el)).toBe(t("invoice_correction.unknown"));
+      expect(actionsError(el)).toBe(t("invoice_correction.approvers_failed"));
       expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
     } finally {
       vi.useRealTimers();

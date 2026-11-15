@@ -3463,12 +3463,20 @@ export class TillApi {
     return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
   }
 
-  deviceStationToday(stationId: string): Promise<{
+  deviceStationToday(
+    stationId: string,
+    options: ReadOptions = {},
+  ): Promise<{
     destinations: StationDestination[];
     authorizers: StaffMember[];
     openDishCount: number;
   }> {
-    return this.#request(`/api/device/stations/${encodeURIComponent(stationId)}/today`, "GET");
+    return this.#request(
+      `/api/device/stations/${encodeURIComponent(stationId)}/today`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   deviceSetStationToday(

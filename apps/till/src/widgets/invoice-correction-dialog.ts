@@ -516,7 +516,8 @@ export class TillInvoiceCorrectionDialog extends LitElement {
           );
           this.pinError = null;
         } catch (failure) {
-          this.sendRefusal = refusalOf(failure);
+          const read = refusalOf(failure);
+          this.sendRefusal = read.code === "network" ? { code: "approvers" } : read;
         } finally {
           limit.done();
         }
@@ -937,6 +938,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.stillLost = this.savedOpen !== null && this.sendRefusal?.code === "network";
   }
   #sendText(refusal: PayRefusal): string {
+    if (refusal.code === "approvers") return t("invoice_correction.approvers_failed");
     return refusal.code === "network" ? t(this.lostKey) : this.#words(refusal);
   }
   #body() {
