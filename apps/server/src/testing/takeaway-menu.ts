@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { createExtraList, createMenu, createProduct, writeProductModifiers } from "@waitron/menu";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import type { VatClass } from "@waitron/menu";
 
 /**
@@ -18,7 +18,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
   setLunch: string;
   burgerExtras: string;
 }> {
-  const menu = await createMenu(tx, { name: `Takeaway VAT menu ${crypto.randomUUID()}` });
   const product = async (
     name: string,
     unitPrice: string,
@@ -28,7 +27,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
   ) =>
     (
       await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",

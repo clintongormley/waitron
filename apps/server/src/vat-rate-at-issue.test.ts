@@ -185,7 +185,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const wine = await product("Vino", "3.63", "general");
     // Served here at `general`, taken away at `reduced`: the class whose rate the release changes.
     const juice = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Juice",
       pricingUnit: "each",

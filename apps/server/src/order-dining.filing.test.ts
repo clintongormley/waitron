@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sales, withTransaction, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createMenu, createProduct, updateProduct } from "@waitron/menu";
+import { createProduct, updateProduct } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining } from "@waitron/shared";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
@@ -37,7 +37,6 @@ useVenueDb({
       menu = await seedTakeawayProducts(tx);
       icedTea = (
         await createProduct(tx, {
-          menuId: (await createMenu(tx, { name: "Republished menu" })).id,
           categoryId: null,
           name: "Iced tea",
           pricingUnit: "each",

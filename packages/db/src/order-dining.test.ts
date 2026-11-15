@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { orderDiningLocked, ordersDiningLocked } from "./order-dining.js";
 import { billPayments } from "./schema/bill-payments.js";
 import { kitchenStations } from "./schema/kitchen-stations.js";
-import { menus, products } from "./schema/menus.js";
+import { products } from "./schema/menus.js";
 import { workingOrderLines, workingOrders } from "./schema/orders.js";
 import { sales } from "./schema/sales.js";
 import { invoiceSeries } from "./schema/series.js";
@@ -192,10 +192,9 @@ describe("an order's way of selling, once the kitchen has it or money is taken",
     await seedVenue(db, { invoiceLocales: ["es", "ca"] });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
-    const [menu] = await db.insert(menus).values({ name: "Drinks" }).returning({ id: menus.id });
     const [product] = await db
       .insert(products)
-      .values({ menuId: menu!.id, name: "Cola", unitPrice: 180, vatClass: "reduced" })
+      .values({ name: "Cola", unitPrice: 180, vatClass: "reduced" })
       .returning({ id: products.id });
     productId = product!.id;
     const [station] = await db

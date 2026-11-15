@@ -1437,7 +1437,6 @@ describe("departmental tab transfers", () => {
           .returning();
         const menu = await createMenu(tx, { name: `Lunch ${randomUUID()}` });
         const product = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name: "Set lunch",
           pricingUnit: "each",
