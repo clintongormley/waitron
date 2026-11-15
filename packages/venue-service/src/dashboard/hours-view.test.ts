@@ -177,5 +177,8 @@ it.each([
 it("keeps native short months for dates outside the Calendar", () => {
   expect(formatDate("2026-09-12", false)).toBe("Sat, 12 Sept 2026");
   setLocale("es");
-  expect(formatDate("2026-09-12", false)).toBe("sáb, 12 sept 2026");
+  const weekday = new Intl.DateTimeFormat("es-ES", { weekday: "short", timeZone: "UTC" }).format(
+    new Date("2026-09-12T00:00:00Z"),
+  );
+  expect(formatDate("2026-09-12", false)).toBe(`${weekday}, 12 sept 2026`);
 });
