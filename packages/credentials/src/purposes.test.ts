@@ -57,17 +57,16 @@ describe("backup.stream purpose", () => {
         secretAccessKey: "S",
       }),
     ).not.toThrow();
-    expect([...PURPOSES["backup.stream"]].sort()).toEqual([
-      "accessKeyId",
-      "secretAccessKey",
-    ]);
+    expect([...PURPOSES["backup.stream"]].sort()).toEqual(["accessKeyId", "secretAccessKey"]);
   });
 });
 
 describe("backup.archive purpose", () => {
   it("holds only the archive bucket keys", () => {
     expect(PURPOSES["backup.archive"]).toEqual(["accessKeyId", "secretAccessKey"]);
-    expect(() => validatePayload("backup.archive", { accessKeyId: "A", secretAccessKey: "S" })).not.toThrow();
+    expect(() =>
+      validatePayload("backup.archive", { accessKeyId: "A", secretAccessKey: "S" }),
+    ).not.toThrow();
   });
 });
 
