@@ -33,10 +33,16 @@ This supersedes the exclusion/holding limits above; no owner plan approval is cl
 Add exactly those two exclusions to `packages/ui/stryker.config.json`; add the same
 files to the existing UI-only exclusion assertion in `scripts/mutation-shard.test.mjs`,
 keeping all prior values and the 90 floor. No source or coverage setting changes.
-Remove both duplicate helper backlog entries in `docs/backlog/ci.md`, retain the DB
-static-mutant question and its index link in `docs/backlog.md`, and record this choice
-under CI’s decisions. Additional code/config about +3/-1, guard +2/-0, docs +6/-20.
+Remove the standalone helper entry and the obsolete two-entry bundle in
+`docs/backlog/ci.md`; point its index row directly to the retained DB static-mutant
+question at `backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score`.
+Record the helper choice under CI’s decisions. Additional code/config about +3/-1, guard +2/-0, docs +6/-20.
 Run the complete mutation-shard guard and the three browser files; then finish/CI/land.
 Dispatch `mutation.yml --ref main -f packages=ui` and read all shard and aggregate
 results before calling the scheduled UI failure fixed. The earlier score is arithmetic,
 not qualification; no new test project, helper, mutator or lower threshold is needed.
+The earlier instructions to keep the helper bundle open and await its owner decision
+are superseded; the threshold limit remains. Claude reviewed this addendum and its
+corrections are applied; watcher clearance is still required before the config/guard build.
+If main’s score is below 90, keep this item open and report the actual score and shards;
+change no threshold and add no further exclusion.
