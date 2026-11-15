@@ -9,6 +9,7 @@ import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
+import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 
 const now = new Date("2026-10-21T00:00:00Z");
 let material: SelfSignedMaterial;
@@ -407,18 +408,12 @@ it.each(["en", "es"] as const)(
       (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
     const html = await page();
     expect(html).toContain("data-storage-warning");
+    expect(html).toContain(CONNECTION_TEXT[lang].spaceRetry);
+    expect(html).not.toContain(RECOVERY_PAGE_WORDS[lang === "en" ? "en-GB" : "es-ES"].retry);
     expect(html).toContain(
-      lang === "en"
-        ? "Once more space is free, choose Check again, then set up the secure connection."
-        : "Cuando haya más espacio libre, elige Comprobar de nuevo y configura la conexión segura.",
-    );
-    expect(html).not.toContain(
-      lang === "en" ? "Retry a normal boot" : "Reintentar un arranque normal",
-    );
-    expect(html).toContain(
-      lang === "en"
-        ? "Free space on the box's disk: 0.5 MB."
-        : "Espacio libre en el disco del equipo: 0,5 MB.",
+      RECOVERY_PAGE_WORDS[lang === "en" ? "en-GB" : "es-ES"].freeSpace(
+        lang === "en" ? "0.5 MB" : "0,5 MB",
+      ),
     );
     expect(html).toContain('id="connection-check"');
     bytes = 32 * 1024 * 1024;
@@ -454,9 +449,10 @@ it.each([
     );
     const html = await (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
     const warning = html.match(/<section data-storage-warning[^>]*>(.*?)<\/section>/s)?.[1];
-    expect(warning).toContain(lang === "en" ? "choose Check again." : "elige Comprobar de nuevo.");
-    expect(warning).not.toContain(
-      lang === "en" ? "then set up the secure connection" : "y configura la conexión segura",
+    expect(warning).toContain(CONNECTION_TEXT[lang].spaceCheckAgain);
+    expect(warning).toContain(
+      `<p>${CONNECTION_TEXT[lang].spaceAction.replace("{retry}", CONNECTION_TEXT[lang].spaceCheckAgain)}</p>`,
     );
+    expect(warning).not.toContain(CONNECTION_TEXT[lang].spaceRetry);
   },
 );

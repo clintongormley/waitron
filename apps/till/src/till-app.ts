@@ -3379,7 +3379,7 @@ export class TillApp extends LitElement {
   #stopPinScreenPoll(): void {
     this.#pinScreenPoll.stop();
     this.pinClockNotice = undefined;
-    this.pinStorageNotices = [];
+    if (this.pinStorageNotices.length > 0) this.pinStorageNotices = [];
   }
   @state() private tableSelectedMenuId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */

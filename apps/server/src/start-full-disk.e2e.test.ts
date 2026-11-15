@@ -111,6 +111,7 @@ import { mountMenuApi } from "./menu-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { escapeHtml } from "./html-page.js";
 import {
@@ -1434,9 +1435,7 @@ describe("a start on a real full disk", () => {
           const html = await page(lang);
           expect(html).toContain("data-storage-warning");
           expect(html).toContain(
-            lang === "en"
-              ? "Free space on the box's disk: 0 MB."
-              : "Espacio libre en el disco del equipo: 0 MB.",
+            RECOVERY_PAGE_WORDS[lang === "en" ? "en-GB" : "es-ES"].freeSpace("0 MB"),
           );
           expect(html).toContain('id="connection-stop"');
         }
