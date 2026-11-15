@@ -3159,8 +3159,8 @@ export class TillApp extends LitElement {
     lines: readonly OrderLine[];
   };
   /** The window asking whether the kitchen agreed to dishes whose period ended: `retry` runs the
-   * action again carrying the confirmation of `menuIds`, `remove` takes the listed dishes out of the
-   * order. */
+   * action again carrying the confirmation of `menuIds`, `remove` runs the secondary choice: it takes new
+   * dishes out, abandons added extras, or leaves stored dishes unsent. */
   @state() private lateSendWindow: {
     dishes: readonly LateSendDish[];
     periodNames: readonly [string, ...string[]];

@@ -1127,8 +1127,8 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** A mark row goes above each run of consecutive lines sent after the same period, asked or not alike,
-   *  within one head. */
+  /** A mark row goes above each run of consecutive lines with the same mark (its period, and whether
+   *  anyone was asked), within one head. */
   #sectionLines(
     rows: readonly StationQueueItem[][],
     row: (members: StationQueueItem[]) => TemplateResult,

@@ -37,7 +37,7 @@ export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPerio
 }
 
 /** What a `menu_period.ended` refusal names: the ended menus, and the late dishes by offer id —
- * and, on a Place, the stored lines they are on. */
+ * and, on a send of stored dishes, the stored lines they are on. */
 export interface LateSendRefusal {
   menus: readonly [EndedPeriod, ...EndedPeriod[]];
   menuItemIds: string[];

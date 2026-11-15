@@ -6276,6 +6276,10 @@ the status line's words, and the narrowing applies once the person leaves the ta
 A dish sent after its period ended, once the station agreed, carries "After {period} — agreed"
 (`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
+A dish sent after its period without asking anyone (a saved counter bill paid, a bill moved to a
+table, a party finished or collected, a table split) carries "After {period}"
+(`station.after_period_unasked`) in the same chip, and the ticket prints `** AFTER {PERIOD} **`. A
+change between the two marks starts a new run.
 On a card it is a row of its own above each run of consecutive dishes with the same mark, within
 one course. The pass shows no mark. The station ticket prints the same words in
 capitals between `**` above each such run. A full-width dashed divider separates that run from

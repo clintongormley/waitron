@@ -1978,7 +1978,7 @@ export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
 
 /**
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
- * fire, so their tickets print the mark. A dish already marked was judged when it was sent. Its
+ * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by an earlier send. Its
  * menu is the one it was stored from; the department is that of the order's zone now; a lunch
  * course is judged by its lunch's product.
  */
