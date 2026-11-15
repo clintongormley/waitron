@@ -192,9 +192,6 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Bread" } },
         { fallbackLanguage: "en" },
       );
-      await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       // `unit_price` counts whole cents, so 200 is the 2.00 this fixture means.
       const [inserted] = await tx
         .insert(products)
@@ -232,9 +229,6 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Large loaf" } },
         { fallbackLanguage: "en" },
       );
-      await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
       const [product] = await tx
@@ -285,9 +279,6 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       const [product] = await tx
         .insert(products)
         .values({
@@ -315,10 +306,6 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
-      menu!.id;
       const top = { pricingUnit: "each", unitPrice: 200, vatClass: "general" };
       await tx.insert(products).values([
         { ...top, id: "p-on", name: "Bread", image: image.filename },
