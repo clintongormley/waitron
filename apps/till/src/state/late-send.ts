@@ -66,21 +66,24 @@ export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
 }
 
 /**
- * The request's new lines the refusal names. A stored line is left out: the server lists
- * only new dishes (`priceOrderLines`, `apps/server/src/working-order.ts`), and one can share an
+ * The request's lines the refusal names: its new lines, and the stored lines in `extrasAddedTo` (by
+ * `workingOrderLineId`), those it adds extras to. Any other stored line is left out: it can share an
  * offer id with a fresh late dish.
  */
 export function refusedLines<T extends OrderLine>(
   lines: readonly T[],
   refusal: Pick<LateSendRefusal, "menuItemIds">,
+  extrasAddedTo: ReadonlySet<string> = new Set(),
 ): T[] {
   const ids = new Set<string | undefined>(refusal.menuItemIds);
   return lines.filter(
-    (line) => line.workingOrderLineId === undefined && ids.has(line.product.menuItemId),
+    (line) =>
+      (line.workingOrderLineId === undefined || extrasAddedTo.has(line.workingOrderLineId)) &&
+      ids.has(line.product.menuItemId),
   );
 }
 
-/** What the late-send window shows for a refusal: the request's new lines it names, and its menus. */
+/** What the late-send window shows for a refusal: the request's lines it names, and its menus. */
 export interface LateSendAsked {
   listed: OrderLine[];
   periods: LateSendRefusal["menus"];
@@ -90,10 +93,11 @@ export interface LateSendAsked {
 export function lateSendAsked(
   error: unknown,
   lines: readonly OrderLine[],
+  extrasAddedTo?: ReadonlySet<string>,
 ): LateSendAsked | undefined {
   const refusal = lateSendRefusalOf(error);
   if (refusal === undefined) return undefined;
-  const listed = refusedLines(lines, refusal);
+  const listed = refusedLines(lines, refusal, extrasAddedTo);
   return listed.length === 0 ? undefined : { listed, periods: refusal.menus };
 }
 

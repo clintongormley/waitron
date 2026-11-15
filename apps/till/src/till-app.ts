@@ -16242,14 +16242,18 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #onChangeLine(event: Event): Promise<void> {
+  async #onChangeLine(event: Event, lateSend?: LateSend): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     let saved = false;
     try {
-      await this.#applyLineChange(event, () => {
-        saved = true;
-        change.completed?.(true);
-      });
+      await this.#applyLineChange(
+        event,
+        () => {
+          saved = true;
+          change.completed?.(true);
+        },
+        lateSend,
+      );
     } finally {
       if (!saved)
         change.completed?.(
@@ -16262,7 +16266,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #applyLineChange(event: Event, onSaved: () => void): Promise<void> {
+  async #applyLineChange(event: Event, onSaved: () => void, lateSend?: LateSend): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
@@ -16297,6 +16301,7 @@ export class TillApp extends LitElement {
           patch,
           revision,
           change.expectedEdit,
+          ...(lateSend === undefined ? [] : [lateSend]),
         ),
       };
     } catch (error) {
@@ -16353,6 +16358,29 @@ export class TillApp extends LitElement {
       };
       return;
     }
+    const dish = this.#lateExtrasDish(change);
+    const asked =
+      dish === undefined
+        ? undefined
+        : lateSendAsked(outcome.error, [dish], new Set([dish.workingOrderLineId!]));
+    const retry = (confirmed: LateSend) => this.#onChangeLine(event, confirmed);
+    if (asked !== undefined) {
+      // Remove only abandons the change: the dish was never changed, so Sent is read as it stands.
+      this.#openLateSend(asked.listed, asked.periods, "send", retry, () => {
+        if (identity() && !left()) void this.#loadTabLines();
+      });
+      return;
+    }
+    const approval = lateSendApprovalAsked(outcome.error, lateSend);
+    if (approval !== undefined) {
+      await this.#askLateSendApproval(
+        approval.lateSend,
+        approval.pinError,
+        retry,
+        () => identity() && !left(),
+      );
+      return;
+    }
     if (code === "station.no_replacement" && change.saleLine !== undefined) {
       const question = limited(3_000);
       try {
@@ -16399,6 +16427,26 @@ export class TillApp extends LitElement {
     else await this.#loadTabLines();
     if (!identity()) return;
     if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
+  }
+
+  /** The sent dish a change adds extras to, for the late-send window; undefined when the change sets
+   * no extras, or the dish or its offer is not in the till's lists. */
+  #lateExtrasDish(change: ChangeLineDetail): OrderLine | undefined {
+    if (change.patch.extras === undefined) return undefined;
+    const line = this.tabLines.find((each) => each.lineNo === change.lineNo);
+    const offer = this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "");
+    if (line === undefined || offer === undefined) return undefined;
+    // The line's staff name already names its variant.
+    const product = {
+      ...menuOfferToTillProduct(offer, this.#tableOffers.versions.get(offer.menuId)),
+      name: change.lineName,
+    };
+    delete product.variantName;
+    return {
+      product,
+      quantity: change.saleLine?.quantity ?? line.quantity,
+      workingOrderLineId: line.id,
+    };
   }
 
   #releaseEditDeadEnds(): void {

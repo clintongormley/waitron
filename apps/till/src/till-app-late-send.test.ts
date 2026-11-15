@@ -2537,3 +2537,132 @@ it.each(["late-send window", "manager PIN"])(
     expect(approval(el)).toBeNull();
   },
 );
+
+describe("extras added to a sent dish after its period", () => {
+  /** Table 2's Omelette, sent at Breakfast; Lunch is running now. */
+  const sentOmelette = {
+    id: "line-omelette",
+    groupId: null,
+    lineNo: 1,
+    productId: "Omelette",
+    name: "Omelette",
+    quantity: "1",
+    unitPriceGross: "3.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: "2026-10-12T09:00:00.000Z",
+    firedAt: null,
+    state: null,
+    note: null,
+    listId: null,
+    menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
+    parentProductId: null,
+  };
+  const bacon = [{ listId: "list-extras", picks: [{ productId: "p-bacon", quantity: 1 }] }];
+  const SAVED = { revision: 3, party: { id: "party-a", revision: 1 } };
+
+  async function sentTable(updateOrderLine: ReturnType<typeof vi.fn>): Promise<TillApp> {
+    current = menu("lunch");
+    const { el } = await mountApp({
+      updateOrderLine,
+      getTabLines: vi.fn().mockResolvedValue({ lines: [sentOmelette], revision: 2 }),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el, 6);
+    return el;
+  }
+
+  /** Change dish on the sent Omelette, adding bacon, as the order screen sends it. */
+  async function addBacon(el: TillApp): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Omelette",
+      patch: { note: null, portionLineNos: [], extras: bacon },
+      revision: 2,
+      expectedEdit: order.billEdit,
+      saleLine: {
+        menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
+        quantity: "1",
+        options: [],
+        extras: bacon,
+      },
+    });
+    await flush(el, 6);
+  }
+
+  it("opens the window naming the period, and Kitchen agreed saves the extra with the refused menu", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValueOnce(SAVED);
+    const el = await sentTable(updateOrderLine);
+
+    await addBacon(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(heading(el)).toBe("Breakfast has ended");
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(updateOrderLine.mock.calls[0]).toHaveLength(5);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(updateOrderLine.mock.calls[1]![2]).toEqual({
+      note: null,
+      portionLineNos: [],
+      extras: bacon,
+    });
+    expect(updateOrderLine.mock.calls[1]![5]).toEqual({ menuIds: [BREAKFAST_MENU.id] });
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).not.toBe(
+      codeMessage("menu_period.ended"),
+    );
+  });
+
+  it("asks for a manager's PIN on the retry when the department needs one", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValueOnce(SAVED);
+    const el = await sentTable(updateOrderLine);
+    api.serviceDayAuthorizers = vi.fn().mockResolvedValue([MARTA]);
+    await addBacon(el);
+    await choose(el, "data-late-agreed");
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+
+    await authorize(el, "0123");
+
+    expect(updateOrderLine.mock.calls.map((call) => call[5])).toEqual([
+      undefined,
+      { menuIds: [BREAKFAST_MENU.id] },
+      { menuIds: [BREAKFAST_MENU.id], override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("takes back only the extra on Remove: the sent dish stays and nothing is sent again", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED);
+    const el = await sentTable(updateOrderLine);
+    await addBacon(el);
+    const reads = api.getTabLines!.mock.calls.length;
+
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(api.getTabLines!.mock.calls.length).toBeGreaterThan(reads);
+    expect(screen(el).textContent).toContain("Omelette");
+    expect(screen(el).textContent).not.toContain("bacon");
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "").toBe("");
+  });
+});

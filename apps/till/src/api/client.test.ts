@@ -2575,6 +2575,35 @@ describe("TillApi", () => {
     );
   });
 
+  it("updateOrderLine carries a late-send confirmation when one is given", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ revision: 8, party: { id: "v1", revision: 5 } }), {
+        status: 200,
+      }),
+    );
+    const lateSend = {
+      menuIds: ["breakfast"],
+      override: { personId: "p-marta", pin: "1234" },
+    };
+
+    await new TillApi("", fetchStub).updateOrderLine(
+      "ord-1",
+      3,
+      { portionLineNos: [], extras: [] },
+      7,
+      null,
+      lateSend,
+    );
+
+    expect(JSON.parse((fetchStub.mock.calls[0]![1] as RequestInit).body as string)).toEqual({
+      portionLineNos: [],
+      extras: [],
+      revision: 7,
+      expectedEdit: null,
+      lateSend,
+    });
+  });
+
   // --- Table actions on a party (/api/parties/:id/<verb>) and bill actions (/api/bills/:id/<verb>) ---
 
   it("moveGuests POSTs the target table and both parties read to the party's /move route", async () => {
