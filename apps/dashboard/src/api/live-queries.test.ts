@@ -145,7 +145,7 @@ it.each([
   ["listAlerts", [], "content_suggestions"],
   ["getContentSuggestions", [], "content_suggestions"],
   ["getContentSuggestions", [], "content_suggestion_jobs"],
-  ["getContentTranslationGaps", [], "menu_details"],
+  ["getContentTranslationGaps", [], "menus"],
   ["getContentTranslationTargets", [translationQuery], "content_suggestions"],
   [
     "getContentTranslationCells",
@@ -185,7 +185,7 @@ it.each([
   [
     "getContentTranslationCells",
     [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
-    "menu_details",
+    "menus",
   ],
   [
     "getContentTranslationCells",
@@ -204,7 +204,7 @@ it.each([
   ["getContentSuggestions", [], "extra_lists"],
   ["getContentSuggestions", [], "sections"],
   ["getContentSuggestions", [], "section_members"],
-  ["getContentSuggestions", [], "menu_details"],
+  ["getContentSuggestions", [], "menus"],
   ["getContentSuggestions", [], "menus"],
   ["getContentSuggestions", [], "units"],
   ["listHandledAlerts", [], "incidents"],
@@ -290,13 +290,11 @@ it.each([
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
-  // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "menus"]],
+  ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
   [
     "getMenuPrices",
     ["menu-1"],
     [
-      "menu_details",
       "sections",
       "section_members",
       "menu_items",
@@ -312,9 +310,7 @@ it.each([
       "units",
     ],
   ],
-  // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
-  // its menus, and each shortcut's name from `products` or `sections`.
-  ["getMenuHome", ["menu-1"], ["menu_details", "sections", "section_members", "products", "menus"]],
+  ["getMenuHome", ["menu-1"], ["sections", "section_members", "products", "menus"]],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
@@ -438,7 +434,6 @@ it.each([
       "settings.venue",
       "products",
       "categories",
-      "category_details",
       "day_cutover_changes",
     ],
   ],
@@ -477,7 +472,6 @@ it.each([
       "extra_lists",
       "sections",
       "section_members",
-      "menu_details",
       "menus",
       "units",
     ],
@@ -589,7 +583,7 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
     const observed = api.liveData.observe(dashboardQuery(api, name, args), () => {});
     try {
       await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-      for (const type of ["categories", "category_details"]) {
+      for (const type of ["categories"]) {
         const before = fetchImpl.mock.calls.length;
         api.liveData.invalidate([{ type, id: "soft-drinks" }]);
         await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
@@ -630,7 +624,7 @@ it("leaves the category report at time of sale alone when the menu is edited", a
   const observed = api.liveData.observe(query, () => {});
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-    for (const type of ["products", "categories", "category_details"]) {
+    for (const type of ["products", "categories"]) {
       api.liveData.invalidate([{ type, id: "edited" }]);
       await new Promise((settle) => setTimeout(settle, 0));
       expect(observed.snapshot.loading).toBe(false);
@@ -771,7 +765,6 @@ it("does not subscribe a Structure-only shared read to unrelated publication tab
   const api = new DashboardApi("", async () => Response.json({}));
   const query = dashboardQuery(api, "getMenuRead", ["menu-1", ["structure"]]);
   expect(query.dependencies).toEqual([
-    { type: "menu_details" },
     { type: "sections" },
     { type: "section_members" },
     { type: "menus" },
@@ -816,7 +809,6 @@ it.each([
   "extra_lists",
   "sections",
   "section_members",
-  "menu_details",
   "menus",
   "units",
 ])("refreshes translation targets passively when %s changes", async (type) => {

@@ -1,15 +1,8 @@
+import { alias } from "drizzle-orm/sqlite-core";
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
-import { eq, inArray, type SQL } from "drizzle-orm";
-import {
-  menus,
-  categories,
-  menuDetails,
-  optionLabels,
-  products,
-  sections,
-  type Transaction,
-} from "@waitron/db";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { menus, categories, optionLabels, products, sections, type Transaction } from "@waitron/db";
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
@@ -143,22 +136,40 @@ export async function buildMenuDocuments(
   menuIds?: readonly string[],
   graph?: SectionGraph,
 ): Promise<BuiltMenus> {
+  const root = alias(sections, "root");
+  const home = alias(sections, "home");
+  // Match sections_one_root_per_menu_uq's literal predicate; each equality alone misses it.
   const readDetails = (where?: SQL) =>
     tx
       .select({
-        menuId: menuDetails.menuId,
-        rootSectionId: menuDetails.rootSectionId,
-        homeSectionId: menuDetails.homeSectionId,
-        handheldColumns: menuDetails.handheldColumns,
-        handheldTiles: menuDetails.handheldTiles,
-        handheldOrder: menuDetails.handheldOrder,
-        tillColumns: menuDetails.tillColumns,
-        tillTiles: menuDetails.tillTiles,
-        tillOrder: menuDetails.tillOrder,
+        menuId: menus.id,
+        rootSectionId: root.id,
+        homeSectionId: home.id,
+        handheldColumns: menus.handheldColumns,
+        handheldTiles: menus.handheldTiles,
+        handheldOrder: menus.handheldOrder,
+        tillColumns: menus.tillColumns,
+        tillTiles: menus.tillTiles,
+        tillOrder: menus.tillOrder,
         menuName: menus.name,
       })
-      .from(menuDetails)
-      .innerJoin(menus, eq(menus.id, menuDetails.menuId))
+      .from(menus)
+      .innerJoin(
+        root,
+        and(
+          eq(root.ownerMenuId, menus.id),
+          eq(root.role, "menu_root"),
+          sql`${root.role} in ('menu_root','home_layout')`,
+        ),
+      )
+      .innerJoin(
+        home,
+        and(
+          eq(home.ownerMenuId, menus.id),
+          eq(home.role, "home_layout"),
+          sql`${home.role} in ('menu_root','home_layout')`,
+        ),
+      )
       .where(where)
       .orderBy(menus.createdAt, menus.id);
   const loaded = graph ?? (await loadSectionGraph(tx));
@@ -175,7 +186,7 @@ export async function buildMenuDocuments(
   if (menuIds === undefined) details.push(...(await readDetails()));
   else
     for (const batch of batches([...requested!]))
-      details.push(...(await readDetails(inArray(menuDetails.menuId, batch))));
+      details.push(...(await readDetails(inArray(menus.id, batch))));
   const menuRows = new Map<string, BuiltMenu>();
   const sectionNames = new Map<string, string>();
   if (details.length === 0) return { graph: loaded, menus: menuRows, sectionNames };

@@ -2,7 +2,6 @@ import type { ChangeSource } from "@waitron/shared";
 
 /** The tables this module's code owns. They live in core's set, which classifies them. */
 export const MENU_TABLES = [
-  "category_details",
   "units",
   "menu_items",
   "menu_item_variant_overrides",
@@ -13,7 +12,6 @@ export const MENU_TABLES = [
   "product_modifiers",
   "sections",
   "section_members",
-  "menu_details",
   "menu_versions",
   "menu_version_images",
   "menu_publications",

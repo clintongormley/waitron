@@ -35,6 +35,9 @@ export const sections = table(
       name: "sections_owner_menu_fk",
     }),
     check("sections_role_ck", enumCheck(t.role)),
+    uniqueIndex("sections_one_root_per_menu_uq")
+      .on(t.ownerMenuId, t.role)
+      .where(sql`${t.role} in ('menu_root','home_layout')`),
     index("sections_owner_menu_idx").on(t.ownerMenuId),
   ],
 );

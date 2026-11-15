@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import type {
   DocumentMember,
   MenuChange,
@@ -8,7 +9,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extraListItems,
-  menuDetails,
   optionLabels,
   products,
   sectionMembers,
@@ -140,10 +140,9 @@ async function memberOf(listId: string, ref: { productId?: string; sectionId?: s
 }
 
 async function homeSection(menuId: string): Promise<string> {
-  const [row] = await fx.db
-    .select({ id: menuDetails.homeSectionId })
-    .from(menuDetails)
-    .where(eq(menuDetails.menuId, menuId));
+  const [row] = await storedMenuParts(fx.db, menuId).then((rows) =>
+    rows.map((row) => ({ id: row.homeSectionId })),
+  );
   return row!.id;
 }
 

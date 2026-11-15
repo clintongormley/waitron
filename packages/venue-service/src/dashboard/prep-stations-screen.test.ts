@@ -4293,14 +4293,7 @@ describe("Routing grid", () => {
     return next;
   };
 
-  it.each([
-    "routing_cells",
-    "kitchen_stations",
-    "floor_zones",
-    "categories",
-    "category_details",
-    "products",
-  ])(
+  it.each(["routing_cells", "kitchen_stations", "floor_zones", "categories", "products"])(
     "a cell, default, station-active, zone, category-parent or product-category change refreshes the grid (%s)",
     async (type) => {
       setLocale("en");

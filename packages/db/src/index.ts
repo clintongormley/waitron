@@ -385,12 +385,10 @@ export {
 export { liveDisplayNameKey, loginEmailKey, pendingEmailKey } from "./schema/identity/persons.js";
 export { challengePurpose } from "./schema/identity/webauthn.js";
 export {
-  categoryDetails,
   contentSuggestionJobs,
   contentSuggestions,
   extraListItems,
   extraLists,
-  menuDetails,
   menuItems,
   menuItemVariantOverrides,
   menuPublications,

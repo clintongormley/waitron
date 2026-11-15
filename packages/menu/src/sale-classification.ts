@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import { categories, categoryDetails, products, type Transaction } from "@waitron/db";
+import { inArray } from "drizzle-orm";
+import { categories, products, type Transaction } from "@waitron/db";
 import { AppError, type ClassificationEntry, type SaleLineClassification } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
@@ -26,9 +26,8 @@ export async function loadClassification(
     .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, [...productIds]));
   const categoryRows = await tx
-    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
-    .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id));
+    .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
+    .from(categories);
   return {
     categories: new Map(
       categoryRows.map((row) => [row.id, { name: row.name, parentId: row.parentId }]),

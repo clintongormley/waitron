@@ -539,7 +539,6 @@ export interface MenuSummary {
   id: string;
   name: string;
   active: boolean;
-  version: number;
 }
 
 export interface CategorySummary {

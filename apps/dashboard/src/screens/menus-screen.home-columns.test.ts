@@ -55,7 +55,7 @@ it.each(["en", "es-ES"])(
         },
       );
       const api = {
-        listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+        listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
         listLibraryProducts: async () => [],
         listCategories: async () => [],
         getMenuSettings: async () => ({

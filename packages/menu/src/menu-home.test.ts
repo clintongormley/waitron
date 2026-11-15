@@ -1,8 +1,8 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   captureError,
-  menuDetails,
   menuItems,
   sectionMembers,
   sections,
@@ -24,7 +24,7 @@ import { buildMenuDocument } from "./menu-document.js";
 import { membersOf } from "./section-members.js";
 import { readSection } from "./sections.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
-import { deactivateMenu, deactivateProduct, listMenuOffers } from "./operations.js";
+import { createMenu, deactivateMenu, deactivateProduct, listMenuOffers } from "./operations.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 
 const fx = useMenuDb();
@@ -50,19 +50,17 @@ async function tileRefs(sectionId: string) {
   }));
 }
 
-/** A second `home_layout` section the menu owns, as a development venue's named layout left it. */
-async function leftoverLayout(menuId: string, productId?: string): Promise<string> {
-  const [row] = await fx.db
-    .insert(sections)
-    .values({ internalName: "Counter", role: "home_layout", ownerMenuId: menuId })
-    .returning({ id: sections.id });
+async function otherHome(productId?: string): Promise<string> {
+  const menu = await app((tx) => createMenu(tx, { name: "Other Home" }));
+  const [parts] = await storedMenuParts(fx.db, menu.id);
+  const row = { id: parts!.homeSectionId };
   if (productId !== undefined)
     await fx.db.insert(sectionMembers).values({ sectionId: row!.id, position: 0, productId });
   return row!.id;
 }
 
 async function displayRow(menuId: string) {
-  const [row] = await fx.db.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+  const [row] = await storedMenuParts(fx.db, menuId);
   return row!;
 }
 
@@ -109,7 +107,7 @@ describe("the Device Home Page", () => {
 
   it("reads only the menu's own home section", async () => {
     const f = await menusFixture(fx.db);
-    const leftover = await leftoverLayout(f.lunch, f.lemonade);
+    const leftover = await otherHome(f.lemonade);
     const home = await homeOf(f.lunch);
     expect(home).not.toBe(leftover);
     const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
@@ -459,7 +457,7 @@ describe("home tiles", () => {
 
   it("refuses unreachable menu roots and home sections as tiles", async () => {
     const f = await menusFixture(fx.db);
-    const leftover = await leftoverLayout(f.lunch);
+    const leftover = await otherHome();
     const dinnerHome = await homeOf(f.dinner);
     const lunchHome = await homeOf(f.lunch);
     for (const owned of [f.lunchRoot, leftover, f.dinnerRoot, dinnerHome, lunchHome]) {

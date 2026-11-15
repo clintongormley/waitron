@@ -10,7 +10,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "routing_cells",
     "kitchen_stations",
     "categories",
-    "category_details",
+
     "products",
     "floor_zones",
     "printers",
@@ -51,7 +51,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "categories",
     "kitchen_stations",
     "products",
-    "menu_details",
+
     "sections",
     "section_members",
     "menu_items",
@@ -81,7 +81,7 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "routing_cells",
     "routing_cell_periods",
     "categories",
-    "category_details",
+
     "products",
     "seasons",
     "department_days",

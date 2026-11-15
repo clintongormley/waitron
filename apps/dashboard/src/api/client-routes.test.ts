@@ -1127,7 +1127,7 @@ describe("DashboardApi routes", () => {
     expect(headers).toEqual(["1", null]);
   });
   it("maps the menu's internal name to the menu wire name and sends its presentation fields", async () => {
-    const saved = { id: "c1", name: "Lunch", active: true, version: 1 };
+    const saved = { id: "c1", name: "Lunch", active: true };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(saved))
@@ -1149,7 +1149,7 @@ describe("DashboardApi routes", () => {
   });
 
   it("duplicates a menu at its own duplicate route with the copy's name", async () => {
-    const copy = { id: "c9", name: "Lunch (copy)", active: true, version: 1 };
+    const copy = { id: "c9", name: "Lunch (copy)", active: true };
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(copy));
     const api = new DashboardApi("", fetchImpl);
     await expect(api.duplicateMenu("c1", "Lunch (copy)")).resolves.toEqual(copy);

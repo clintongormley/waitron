@@ -369,7 +369,7 @@ describe("OpeningHoursApi", () => {
           "routing_cells",
           "routing_cell_periods",
           "categories",
-          "category_details",
+
           "products",
           "seasons",
           "department_days",

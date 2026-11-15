@@ -1,8 +1,8 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   menus,
-  menuDetails,
   menuItems,
   menuItemVariantOverrides,
   menuPublications,
@@ -174,7 +174,7 @@ async function rowsOf(menuId: string) {
         ),
       )
       .orderBy(asc(sectionMembers.sectionId), asc(sectionMembers.position), asc(sectionMembers.id));
-    const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+    const [details] = await storedMenuParts(tx, menuId);
     const items = await tx
       .select()
       .from(menuItems)
@@ -370,7 +370,7 @@ describe("duplicateMenu", () => {
     const entries = 20;
     await app(async (tx) => {
       const root = await requireMenuRoot(tx, source);
-      const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, source));
+      const [details] = await storedMenuParts(tx, source);
       await tx.insert(sections).values(
         Array.from({ length: entries }, (_, i) => ({
           id: `tie-section-${i}`,
@@ -405,7 +405,7 @@ describe("duplicateMenu", () => {
             position,
             ref.kind === "section" ? names.get(ref.sectionId) : ref.kind,
           ]);
-        const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+        const [details] = await storedMenuParts(tx, menuId);
         return {
           structure: named((await readMenuStructure(tx, menuId)).root.members),
           home: (await readMenuHome(tx, menuId)).shortcuts.map(({ position, name }) => [

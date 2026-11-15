@@ -72,7 +72,7 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
     }),
   };
   const api = {
-    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
     listLibraryProducts: async () => [
       { id: "p-burger", name: "Burger", active: true, modifiers: [], variants: [] },
     ],

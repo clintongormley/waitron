@@ -19,7 +19,7 @@ products; categories stay. The address names the category last opened, as
 `/manage/products/category/<id>`; closing that category, or one above it, names the closed
 category's parent.
 
-A category has at most one parent, stored in `category_details.parent_id`. A save that would make
+A category has at most one parent, stored in `categories.parent_id`. A save that would make
 it its own ancestor is refused with `category.parent_cycle`. A category's name must differ,
 ignoring case and surrounding spaces, from every other category with the same parent; a save that
 breaks this is refused with `category.name_taken`. A category moving into a parent, including the
@@ -158,7 +158,7 @@ spacing. Existing duplicate names do not block presentation edits that keep the 
 changing that name must pass the check.
 
 `POST /management-api/menus/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
-of this menu's working copy and answers 201 with the new menu (`{ id, name, active, version }`). It
+of this menu's working copy and answers 201 with the new menu (`{ id, name, active }`). It
 copies the menu's own sections and their members, its Home shortcuts, its display settings, its
 products' menu prices and its variant prices (`duplicateMenu`,
 `packages/menu/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
@@ -365,14 +365,13 @@ the displays, on a menu's Home page tab; it does not call the replace route.
 No device profile chooses anything here. A device uses `handheld` when its profile's form factor is
 a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` otherwise.
 
-**Storage.** The shortcuts are the members of the `home_layout` section that
-`menu_details.default_home_layout_id` names (the column keeps its old name; the TypeScript property
-is `homeSectionId`). The displays are six columns on `menu_details`: `handheld_columns`,
-`handheld_tiles`, `handheld_order`, `till_columns`, `till_tiles` and `till_order`, each required and
-with a default. None has a CHECK, because adding one makes drizzle rebuild the table, so the
-database stores any value: `homeDisplayProblem` (`packages/shared/src/menu-document/device-home.ts`) is the
-whole of the range check. A save runs it, and so does a configuration import, which refuses a bad
-value with `setup.request_invalid` (`field` such as `menu_details.till_columns`).
+**Storage.** Find the menu's Home section through `sections.owner_menu_id` and
+`role = 'home_layout'`; its root has `role = 'menu_root'`. A partial unique index permits one of
+each per menu. The six display columns live on `menus`: `handheld_columns`, `handheld_tiles`,
+`handheld_order`, `till_columns`, `till_tiles` and `till_order`. They have required defaults and
+CHECKs for their ranges and choices. A save checks them with `homeDisplayProblem` first so it can
+name the field. A configuration import refuses an invalid value with `setup.request_invalid`
+and a field such as `menus.till_columns`.
 
 **What a till is served.** A till reads the Device Home Page from each menu's live version, not
 from the working state. Both offers routes (`GET /api/default-service-zone/offers` and
@@ -514,7 +513,7 @@ null. A blank name is `category.invalid` (400); a non-string name is `management
 `category.invalid` with `field: "color"`. A create without `color` stores none; an update without
 it keeps the current one; `null` clears it. A configuration import refuses a bundle holding a
 category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_invalid` with
-`field: "category_details.color"`.
+`field: "categories.color"`.
 
 | Route | Body or response |
 | --- | --- |
@@ -567,14 +566,10 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 
 ## Storage and development reset
 
-Both tables are in core's set: `categories` holds the name, and `category_details`, whose code is
-the menu module's, holds the parent and, since W92, the colour (`category_details.color`, added by menu `0025_category_color.sql`). The label
-tables and the category image and colour columns of the old schema were dropped by the folder
-migrations. In that old history, menu dropped media's category-image triggers before dropping
-the column, and media dropped them again after its baseline on a fresh database. Since A760 the
-section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql`). The old
-migrations were frozen at A760 and deleted on 2026-11-07 (A1422); read one with
-`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
+`categories` holds each category's name, parent and colour in core's set. Its parent key refuses
+deleting a category while a child still names it. `menus` holds its display settings, and
+`sections` holds the root and Home roles. Archiving through `deactivateMenu` writes
+`menu.archived` once for the active-to-inactive transition, with its name and the supplied person.
 
 Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>` (from
 Claude, for its own copy: `wa-wt reset own demo <worktree-name>`).

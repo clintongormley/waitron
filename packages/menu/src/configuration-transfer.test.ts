@@ -6,14 +6,13 @@ function refusal(code: string, name: string) {
 }
 
 describe("validateMenuConfiguration: category names", () => {
-  it("refuses two top-level categories sharing a name, with or without a details row", () => {
+  it("refuses two top-level categories sharing a name, with an explicit or default parent", () => {
     expect(() =>
       validateMenuConfiguration({
         categories: [
           { id: "c1", name: "ES drinks" },
-          { id: "c2", name: " es drinks " },
+          { id: "c2", name: " es drinks ", parent_id: null },
         ],
-        category_details: [{ category_id: "c2", parent_id: null }],
       }),
     ).toThrowError(refusal("category.name_taken", "es drinks"));
   });
@@ -23,12 +22,8 @@ describe("validateMenuConfiguration: category names", () => {
       validateMenuConfiguration({
         categories: [
           { id: "top", name: "Menu" },
-          { id: "c1", name: "Desserts" },
-          { id: "c2", name: "DESSERTS" },
-        ],
-        category_details: [
-          { category_id: "c1", parent_id: "top" },
-          { category_id: "c2", parent_id: "top" },
+          { id: "c1", name: "Desserts", parent_id: "top" },
+          { id: "c2", name: "DESSERTS", parent_id: "top" },
         ],
       }),
     ).toThrowError(refusal("category.name_taken", "DESSERTS"));
@@ -40,14 +35,9 @@ describe("validateMenuConfiguration: category names", () => {
         categories: [
           { id: "lunch", name: "Lunch" },
           { id: "dinner", name: "Dinner" },
-          { id: "c1", name: "Mains" },
-          { id: "c2", name: "Mains" },
-          { id: "c3", name: "Dinner" },
-        ],
-        category_details: [
-          { category_id: "c1", parent_id: "lunch" },
-          { category_id: "c2", parent_id: "dinner" },
-          { category_id: "c3", parent_id: "dinner" },
+          { id: "c1", name: "Mains", parent_id: "lunch" },
+          { id: "c2", name: "Mains", parent_id: "dinner" },
+          { id: "c3", name: "Dinner", parent_id: "dinner" },
         ],
       }),
     ).not.toThrow();
@@ -183,9 +173,9 @@ describe("validateMenuConfiguration: colours", () => {
   const coloured = (table: string, color: unknown) =>
     table === "products"
       ? { products: [{ id: "p1", name: "Water", active: 1, parent_id: null, color }] }
-      : { [table]: [{ color }] };
+      : { [table]: [{ name: "Category", color }] };
 
-  it.each(["products", "category_details", "sections"])(
+  it.each(["products", "categories", "sections"])(
     "refuses a %s colour that is not lowercase #rrggbb",
     (table) => {
       for (const color of ["#256bb1;position:fixed;inset:0", "#256BB1", "red", "", 7]) {
@@ -199,7 +189,7 @@ describe("validateMenuConfiguration: colours", () => {
     },
   );
 
-  it.each(["products", "category_details", "sections"])(
+  it.each(["products", "categories", "sections"])(
     "accepts a %s colour that is lowercase #rrggbb, null or absent",
     (table) => {
       for (const color of ["#256bb1", null, undefined]) {
@@ -216,13 +206,13 @@ describe("validateMenuConfiguration: menu display settings", () => {
     ["till_columns", "8"],
     ["handheld_tiles", "pictures"],
     ["till_order", "first"],
-  ])("refuses a menu_details row whose %s is %j", (column, value) => {
+  ])("refuses a menus row whose %s is %j", (column, value) => {
     expect(() =>
-      validateMenuConfiguration({ menu_details: [{ menu_id: "m1", [column]: value }] }),
+      validateMenuConfiguration({ menus: [{ id: "m1", [column]: value }] }),
     ).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
-        params: { field: `menu_details.${column}` },
+        params: { field: `menus.${column}` },
       }),
     );
   });
@@ -230,9 +220,9 @@ describe("validateMenuConfiguration: menu display settings", () => {
   it("accepts a row holding all six at their defaults, and a row with none of them", () => {
     expect(() =>
       validateMenuConfiguration({
-        menu_details: [
+        menus: [
           {
-            menu_id: "m1",
+            id: "m1",
             handheld_columns: 3,
             handheld_tiles: "colours",
             handheld_order: "home_first",
@@ -240,7 +230,7 @@ describe("validateMenuConfiguration: menu display settings", () => {
             till_tiles: "colours",
             till_order: "home_first",
           },
-          { menu_id: "m2" },
+          { id: "m2" },
         ],
       }),
     ).not.toThrow();

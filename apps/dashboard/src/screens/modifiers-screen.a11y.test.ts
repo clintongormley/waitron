@@ -5,7 +5,7 @@ import type { MenuSummary, DashboardApi, ExtraListRow, OptionListRow } from "../
 
 afterEach(cleanupWidgets);
 
-const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
+const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true }];
 
 /** The three names read differently, so a surface showing the wrong one is visible (CLAUDE.md §3). */
 const optionList: OptionListRow = {

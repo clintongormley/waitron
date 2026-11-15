@@ -31,7 +31,6 @@ const MENU_TYPES = [
   "menu_item_variant_overrides",
   "menu_publications",
   "menu_versions",
-  "menu_details",
   "menu_scheduled_publications",
   "option_labels",
   "option_lists",
@@ -39,7 +38,6 @@ const MENU_TYPES = [
   "extra_list_items",
   "product_modifiers",
   "categories",
-  "category_details",
   "sections",
   "section_members",
 ];
@@ -47,7 +45,6 @@ const MENU_TYPES = [
 const KITCHEN_TYPES = [
   "ticket_item_moves",
   "categories",
-  "category_details",
   ...DEVICE_TYPES,
   ...ORDER_TYPES,
   "persons",

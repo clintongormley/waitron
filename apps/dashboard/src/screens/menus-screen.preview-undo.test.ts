@@ -106,7 +106,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
   };
   const listMenus = vi.fn(async () => [
     { id: MENU, name: state.menuName, active: true, version: 2 },
-    { id: DINNER, name: "Dinner", active: true, version: 1 },
+    { id: DINNER, name: "Dinner", active: true },
   ]);
   const getMenuRead = vi.fn(async (_id: string, parts: MenuReadPart[]): Promise<MenuReadResult> =>
     Object.fromEntries(
@@ -871,7 +871,7 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
   const updateSection = vi.fn(() => write.promise);
   const menus = [
     { id: MENU, name: "Lunch Menu", active: true, version: 2 },
-    { id: DINNER, name: "Dinner", active: true, version: 1 },
+    { id: DINNER, name: "Dinner", active: true },
   ];
   const listMenus = vi.fn(async () => menus.map((menu) => ({ ...menu })));
   const fake = fakeApi({

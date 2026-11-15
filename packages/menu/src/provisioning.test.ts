@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { readSavedContentLanguages } from "./content-languages.js";
 import { readVenueInvoiceLocales } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -7,7 +8,6 @@ import {
   menus,
   CORE_MIGRATIONS,
   readSettings,
-  menuDetails,
   sections,
   taxpayer,
   units,
@@ -168,7 +168,7 @@ describe("menu provisioning", () => {
       .where(eq(sections.ownerMenuId, menu!.menuId!))
       .orderBy(asc(sections.role));
     expect(owned).toEqual([{ role: "home_layout" }, { role: "menu_root" }]);
-    expect(await suite.db.select().from(menuDetails)).toEqual([
+    expect(await storedMenuParts(suite.db)).toEqual([
       expect.objectContaining({ menuId: menu!.menuId }),
     ]);
   });

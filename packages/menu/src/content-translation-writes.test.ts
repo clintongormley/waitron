@@ -1,10 +1,10 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   extraListItems,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   productModifiers,
@@ -467,7 +467,7 @@ describe("menu translation writes", () => {
       const ids = await withTransaction(suite.db, async (tx) => {
         const shared = await fixture(tx);
         const child = await createMenu(tx, { name: "STAFF Drinks" });
-        const details = await tx.select().from(menuDetails);
+        const details = await storedMenuParts(tx);
         const root = details.find((row) => row.menuId === shared.menuId)!.rootSectionId;
         const childRoot = details.find((row) => row.menuId === child.id)!.rootSectionId;
         const [section] = await tx

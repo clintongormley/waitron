@@ -1,3 +1,4 @@
+import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
@@ -19,7 +20,6 @@ import {
   setProductVariants,
   addMember,
   setIncludeFolder,
-  menuDetails,
   sections,
   optionLists,
   optionLabels,
@@ -164,7 +164,7 @@ async function fixture() {
       name: "STAFF Drinks",
       names: { es: "CLIENT ES drinks" },
     });
-    const roots = await tx.select().from(menuDetails);
+    const roots = await storedMenuParts(tx);
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
     const product = await createProduct(tx, {

@@ -115,8 +115,8 @@ function api(state: State): DashboardApi {
               state === "empty-list"
                 ? []
                 : [
-                    { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
-                    { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
+                    { id: "menu-lunch", name: "Lunch Menu", active: true },
+                    { id: "menu-dinner", name: "Dinner Menu", active: true },
                   ],
             ),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),

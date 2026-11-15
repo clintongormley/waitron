@@ -53,7 +53,7 @@ function checkHomeDisplays(rows: Rows | undefined): void {
         order: row[`${device}_order`],
       });
       if (field !== null)
-        throw new AppError("setup.request_invalid", { field: `menu_details.${device}_${field}` });
+        throw new AppError("setup.request_invalid", { field: `menus.${device}_${field}` });
     }
 }
 
@@ -167,14 +167,12 @@ export function validateMenuConfiguration(
       throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });
     defaults.add(row.list_id);
   }
-  checkHomeDisplays(tables.menu_details);
+  checkHomeDisplays(tables.menus);
   checkColors(tables.products, "products");
-  checkColors(tables.category_details, "category_details");
+  checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
   checkIncludeFolderRows(tables.section_members, tables.sections);
-  const parentOf = new Map(
-    (tables.category_details ?? []).map((row) => [row.category_id, row.parent_id ?? null]),
-  );
+  const parentOf = new Map((tables.categories ?? []).map((row) => [row.id, row.parent_id ?? null]));
   const byParent = new Map<unknown, string[]>();
   for (const category of tables.categories ?? []) {
     const parent = parentOf.get(category.id) ?? null;
@@ -217,7 +215,6 @@ export function validateMenuConfiguration(
 export const MENU_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "category_details" },
     { name: "units" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
@@ -228,7 +225,6 @@ export const MENU_CONFIGURATION_TRANSFER = {
     { name: "product_modifiers" },
     { name: "sections" },
     { name: "section_members" },
-    { name: "menu_details" },
   ],
   validate: validateMenuConfiguration,
   async beforeImport(

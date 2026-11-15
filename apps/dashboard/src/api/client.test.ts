@@ -536,7 +536,7 @@ describe("DashboardApi", () => {
   });
 
   it("listMenus GETs the menus with credentials", async () => {
-    const menus = [{ id: "c1", name: "Lunch", active: true, version: 1 }];
+    const menus = [{ id: "c1", name: "Lunch", active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(menus));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listMenus()).toEqual(menus);
@@ -548,7 +548,7 @@ describe("DashboardApi", () => {
   });
 
   it("createMenu POSTs the name and returns the created menu", async () => {
-    const created = { id: "c2", name: "Dinner", active: true, version: 1 };
+    const created = { id: "c2", name: "Dinner", active: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.createMenu("Dinner")).toEqual(created);
@@ -561,7 +561,7 @@ describe("DashboardApi", () => {
   });
 
   it("duplicateMenu POSTs the copy's name to the menu's duplicate route and returns the copy", async () => {
-    const copy = { id: "c3", name: "Dinner (copy)", active: true, version: 1 };
+    const copy = { id: "c3", name: "Dinner (copy)", active: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(copy, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.duplicateMenu("c2", "Dinner (copy)")).toEqual(copy);

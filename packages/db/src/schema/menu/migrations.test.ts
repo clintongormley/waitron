@@ -1,9 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   captureError,
   menus,
-  categoryDetails,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   contentSuggestionJobs,
@@ -11,7 +10,6 @@ import {
   extraLists,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
-  menuDetails,
   menuItems,
   menuItemVariantOverrides,
   optionLabels,
@@ -38,9 +36,9 @@ beforeAll(() => {
 });
 
 const TABLES = [
-  "menu_details",
+  "menus",
   "menu_items",
-  "category_details",
+  "categories",
   "units",
   "menu_item_variant_overrides",
   "option_lists",
@@ -75,19 +73,18 @@ it("has no per-menu extras tables", async () => {
   expect(rows.rows).toEqual([]);
 });
 
-it("gives menu_details the six display settings, each required with its default and no check", async () => {
+it("gives menus six required display settings with their defaults", async () => {
   const columns = (
     await db.execute<{ name: string; type: string; notnull: number; dflt_value: string | null }>(
-      sql`pragma table_info('menu_details')`,
+      sql`pragma table_info('menus')`,
     )
-  ).rows.map(
-    ({ name, type, notnull, dflt_value }) =>
-      `${name} ${type.toLowerCase()} ${notnull} ${dflt_value}`,
-  );
+  ).rows
+    .filter((column) => /^(handheld|till)_/.test(column.name))
+    .map(
+      ({ name, type, notnull, dflt_value }) =>
+        `${name} ${type.toLowerCase()} ${notnull} ${dflt_value}`,
+    );
   expect(columns).toEqual([
-    "menu_id text 1 null",
-    "root_section_id text 1 null",
-    "default_home_layout_id text 1 null",
     "handheld_columns integer 1 3",
     "handheld_tiles text 1 'colours'",
     "handheld_order text 1 'home_first'",
@@ -95,8 +92,6 @@ it("gives menu_details the six display settings, each required with its default 
     "till_tiles text 1 'colours'",
     "till_order text 1 'home_first'",
   ]);
-  // The `checks` map in the keys-and-links case below is compared whole, so a named CHECK on any
-  // of the six would add an entry that case refuses.
 });
 
 describe("the menu tables carry no taxpayer column", () => {
@@ -172,9 +167,9 @@ describe("the menu tables carry no taxpayer column", () => {
     }
 
     expect(primaryKeys).toEqual({
-      menu_details: "menu_id",
+      menus: "id",
       menu_items: "id",
-      category_details: "category_id",
+      categories: "id",
       units: "id",
       menu_item_variant_overrides: "menu_item_id, variant_id",
       option_lists: "id",
@@ -191,17 +186,13 @@ describe("the menu tables carry no taxpayer column", () => {
     });
 
     expect(foreignKeys).toEqual({
-      "category_details(category_id)": "categories(id) on delete cascade",
-      "category_details(parent_id)": "categories(id) on delete restrict",
+      "categories(parent_id)": "categories(id) on delete restrict",
       "extra_list_items(list_id)": "extra_lists(id) on delete cascade",
       "extra_list_items(product_id)": "products(id) on delete restrict",
       "menu_item_variant_overrides(menu_item_id, product_id)":
         "menu_items(id, product_id) on delete cascade",
       "menu_item_variant_overrides(product_id, variant_id)":
         "products(parent_id, id) on delete restrict",
-      "menu_details(default_home_layout_id)": "sections(id) on delete no action",
-      "menu_details(menu_id)": "menus(id) on delete no action",
-      "menu_details(root_section_id)": "sections(id) on delete no action",
       "menu_items(menu_id)": "menus(id) on delete cascade",
       "menu_items(product_id)": "products(id) on delete restrict",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
@@ -222,6 +213,12 @@ describe("the menu tables carry no taxpayer column", () => {
     });
 
     expect(checks).toEqual({
+      menus_handheld_columns_ck: `"menus"."handheld_columns" between 2 and 3`,
+      menus_till_columns_ck: `"menus"."till_columns" between 4 and 10`,
+      menus_handheld_tiles_ck: `"menus"."handheld_tiles" in ('colours', 'thumbnails')`,
+      menus_till_tiles_ck: `"menus"."till_tiles" in ('colours', 'thumbnails')`,
+      menus_handheld_order_ck: `"menus"."handheld_order" in ('home_first', 'menu_first')`,
+      menus_till_order_ck: `"menus"."till_order" in ('home_first', 'menu_first')`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
@@ -273,10 +270,11 @@ describe("the menu tables carry no taxpayer column", () => {
       }
     }
     expect(indexes).toEqual({
-      category_details_parent_idx: { unique: false, columns: "parent_id" },
+      categories_parent_idx: { unique: false, columns: "parent_id" },
       extra_list_items_list_product_uq: { unique: true, columns: "list_id, product_id" },
       extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
-      menu_details_root_uq: { unique: true, columns: "root_section_id" },
+      sections_one_root_per_menu_uq: { unique: true, columns: "owner_menu_id, role" },
+      menus_one_default_uq: { unique: true, columns: "is_default" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
@@ -484,38 +482,15 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
     expect(blank).toEqual({ grossPrice: null });
   });
 
-  it("refuses menu details whose menu, root or layout does not exist, and a root two menus share", async () => {
-    const c = await menu();
-    const details = { menuId: c.menuId, rootSectionId: c.rootId, homeSectionId: c.layoutId };
-    await refusal(
-      () => db.insert(menuDetails).values({ ...details, menuId: missing }),
-      "menu_details_menu_fk",
-    );
-    await refusal(
-      () => db.insert(menuDetails).values({ ...details, rootSectionId: missing }),
-      "menu_details_root_fk",
-    );
-    await refusal(
-      () => db.insert(menuDetails).values({ ...details, homeSectionId: missing }),
-      "menu_details_default_layout_fk",
-    );
-    // The accepting control, then a second menu naming the same root.
-    await db.insert(menuDetails).values(details);
-    const shared = await captureError(() =>
-      db.insert(menuDetails).values({ ...details, menuId: c.otherMenuId }),
-    );
-    expect(isRefusal(shared, UNIQUE_VIOLATION)).toBe(true);
-  });
-
-  it("refuses category details whose category or parent does not exist", async () => {
+  it("refuses a category parent that does not exist", async () => {
     const c = await menu();
     await refusal(
-      () => db.insert(categoryDetails).values({ categoryId: missing }),
-      "category_details_category_fk",
-    );
-    await refusal(
-      () => db.insert(categoryDetails).values({ categoryId: c.categoryId, parentId: missing }),
-      "category_details_parent_fk",
+      () =>
+        db
+          .update(coreCategories)
+          .set({ parentId: missing })
+          .where(eq(coreCategories.id, c.categoryId)),
+      "categories_parent_fk",
     );
   });
 

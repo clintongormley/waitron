@@ -1,4 +1,4 @@
-import { categories, categoryDetails, now, products, type Transaction } from "@waitron/db";
+import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -127,10 +127,7 @@ export async function moveProductItems(
       .set({ categoryId: to, updatedAt: now() })
       .where(inArray(products.id, batch));
   for (const id of selection.categoryIds)
-    await tx
-      .insert(categoryDetails)
-      .values({ categoryId: id, parentId: to })
-      .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId: to } });
+    await tx.update(categories).set({ parentId: to }).where(eq(categories.id, id));
 }
 
 export async function deleteProductItems(
@@ -230,11 +227,7 @@ export async function deleteCategory(tx: Transaction, id: string): Promise<void>
 async function removeFolder(tx: Transaction, id: string, parent: string | null): Promise<void> {
   await vacateCategories(tx, [id], parent);
   // Clears the RESTRICT parent key before the delete below.
-  await tx
-    .update(categoryDetails)
-    .set({ parentId: parent })
-    .where(eq(categoryDetails.parentId, id));
-  // category_details cascades via its FK.
+  await tx.update(categories).set({ parentId: parent }).where(eq(categories.parentId, id));
   await tx.delete(categories).where(eq(categories.id, id));
 }
 

@@ -1,11 +1,12 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   contentSuggestionJobs,
   contentSuggestions,
   CORE_MIGRATIONS,
+  menus,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -54,10 +55,9 @@ interface Job {
 }
 
 async function rootOf(tx: Transaction, menuId: string): Promise<string> {
-  const [row] = await tx
-    .select({ root: menuDetails.rootSectionId })
-    .from(menuDetails)
-    .where(eq(menuDetails.menuId, menuId));
+  const [row] = await storedMenuParts(tx, menuId).then((rows) =>
+    rows.map((row) => ({ root: row.rootSectionId })),
+  );
   return row!.root;
 }
 
@@ -304,15 +304,19 @@ describe("the house style", () => {
     });
   });
 
-  it("leaves out a menu whose top-level list another menu owns, as the translations dialog does", async () => {
+  it("leaves out a Home section, as the translations dialog does", async () => {
     await inVenue(async (tx, lunch) => {
-      const terrace = await createMenu(tx, {
+      await createMenu(tx, {
         name: "STAFF Terrassa",
         names: { ca: "CLIENT-CA Terrassa" },
       });
+      const [bare] = await tx
+        .insert(menus)
+        .values({ name: "Other Home" })
+        .returning({ id: menus.id });
       await tx
         .update(sections)
-        .set({ ownerMenuId: terrace.id })
+        .set({ ownerMenuId: bare!.id, role: "home_layout" })
         .where(eq(sections.id, lunch.rootId));
       expect(
         (await readHouseStyle(tx, THREE.languages)).map((example) => example.staffName),

@@ -125,13 +125,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import {
-  categoryDetails,
-  units,
-  MENU_SETTINGS,
-  saveMenuSettings,
-  saveMenuDefaultColor,
-} from "@waitron/menu";
+import { units, MENU_SETTINGS, saveMenuSettings, saveMenuDefaultColor } from "@waitron/menu";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig, resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
@@ -477,7 +471,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 37,
+  version: 38,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -962,9 +956,6 @@ describe("configuration transfer database path", () => {
         .insert(categories)
         .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Bakery" });
       await tx
-        .insert(categoryDetails)
-        .values({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" });
-      await tx
         .update(products)
         .set({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" })
         .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
@@ -1142,7 +1133,6 @@ describe("configuration transfer database path", () => {
           -- quoting.
           p.category_id = c.id as "primary"
         from categories c
-        join category_details d on d.category_id = c.id
         cross join products p
         where p.name = 'Coffee'
       `);
@@ -1378,7 +1368,7 @@ describe("configuration transfer database path", () => {
     const imported = await targetSuite.db.execute<{ category: string; product: string }>(sql`
       select d.color as category, p.color as product
       from products p
-      join category_details d on d.category_id = p.category_id
+      join categories d on d.id = p.category_id
       where p.name = 'Flan'
     `);
     expect(imported.rows).toEqual([{ category: "#b12525", product: "#256bb1" }]);
@@ -1427,7 +1417,7 @@ describe("configuration transfer database path", () => {
     };
     const bundles = {
       products: repaint("products", "#256bb1"),
-      category_details: repaint("category_details", "#b12525"),
+      categories: repaint("categories", "#b12525"),
       sections: repaint("sections", "#aabbcc"),
     };
 
@@ -1465,7 +1455,7 @@ describe("configuration transfer database path", () => {
     await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Displayed menu" });
       await tx.execute(
-        sql`update menu_details set till_columns = 8, handheld_order = 'menu_first' where menu_id = ${menu.id}`,
+        sql`update menus set till_columns = 8, handheld_order = 'menu_first' where id = ${menu.id}`,
       );
     });
     const versions = await schemaVersionsByModule(
@@ -1486,9 +1476,8 @@ describe("configuration transfer database path", () => {
     db.execute<Record<string, unknown>>(sql`
       select d.handheld_columns, d.handheld_tiles, d.handheld_order,
              d.till_columns, d.till_tiles, d.till_order
-      from menu_details d
-      join menus c on c.id = d.menu_id
-      where c.name = 'Displayed menu'
+      from menus d
+      where d.name = 'Displayed menu'
     `);
 
   it("carries a menu's home display settings", async () => {
@@ -1512,20 +1501,18 @@ describe("configuration transfer database path", () => {
 
   it("refuses a bundle whose display setting a save would refuse", async () => {
     const { transferred, versions } = await bundleWithHomeDisplay("B44556603");
-    const details = transferred.tables.menu_details!;
+    const details = transferred.tables.menus!;
     expect(details.filter((row) => row.till_columns === 8)).toHaveLength(1);
     const malformed: ConfigurationBundle = {
       ...transferred,
       tables: {
         ...transferred.tables,
-        menu_details: details.map((row) =>
-          row.till_columns === 8 ? { ...row, till_columns: 11 } : row,
-        ),
+        menus: details.map((row) => (row.till_columns === 8 ? { ...row, till_columns: 11 } : row)),
       },
     };
     const refusal = {
       code: "setup.request_invalid",
-      params: { field: "menu_details.till_columns" },
+      params: { field: "menus.till_columns" },
     };
     const target = venue("B44556604");
     await expect(
@@ -1746,7 +1733,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
   );
   // Three menu shells and Drinks' own Beer section.
   expect(transferred.tables.sections).toHaveLength(7);
-  expect(transferred.tables.menu_details).toHaveLength(3);
+  expect(transferred.tables.menus).toHaveLength(3);
   expect(transferred.tables.section_members).toHaveLength(3);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
@@ -5576,7 +5563,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(37);
+  expect(exported.version).toBe(38);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

@@ -5,8 +5,8 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { menuItems, products, withTransaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { menuItems, products, withTransaction, readActivityForSubject } from "@waitron/db";
+import { seedTaxpayer, seedPerson } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
@@ -245,7 +245,7 @@ describe("menu operations", () => {
       const deli = await createMenu(tx, { name: "Deli" });
       const stall = await createMenu(tx, { name: "Drinks stall" });
       expect(deli.active).toBe(true);
-      expect(deli.version).toBe(1);
+      expect(deli).not.toHaveProperty("version");
       const cats = await listMenus(tx);
       expect(cats.map((c) => c.name).sort()).toEqual(["Deli", "Drinks stall"]);
       expect(cats.map((c) => c.id).sort()).toEqual([deli.id, stall.id].sort());
@@ -2036,4 +2036,21 @@ describe("declared product facts", () => {
       ).rejects.toMatchObject({ code: "product.invalid", params: { field: "variants.0.name" } });
     });
   });
+});
+
+it("records an archived menu once with its name and the given person", async () => {
+  const personId = await seedPerson(fx.db);
+  const menu = await withTransaction(fx.db, (tx) => createMenu(tx, { name: "Archive menu" }));
+  await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
+  const entries = await readActivityForSubject(fx.db, { kind: "menu", id: menu.id });
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({
+    kind: "menu.archived",
+    subjectKind: "menu",
+    subjectId: menu.id,
+    personId,
+    data: { name: "Archive menu" },
+  });
+  await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
+  expect(await readActivityForSubject(fx.db, { kind: "menu", id: menu.id })).toEqual(entries);
 });

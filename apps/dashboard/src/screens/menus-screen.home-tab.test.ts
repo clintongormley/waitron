@@ -77,8 +77,8 @@ const products: Product[] = [
 ];
 
 const menus: MenuSummary[] = [
-  { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
-  { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
+  { id: "menu-lunch", name: "Lunch Menu", active: true },
+  { id: "menu-dinner", name: "Dinner Menu", active: true },
 ];
 
 const productMember = (id: string, position: number, productId: string): SectionMember => ({
@@ -461,10 +461,7 @@ describe("the Home page tab's shortcuts", () => {
       const client = api({
         listMenus: vi
           .fn()
-          .mockResolvedValue([
-            ...menus,
-            { id: "menu-off", name: "Drinks", active: false, version: 1 },
-          ]),
+          .mockResolvedValue([...menus, { id: "menu-off", name: "Drinks", active: false }]),
         listLibraryProducts: vi
           .fn()
           .mockResolvedValue(

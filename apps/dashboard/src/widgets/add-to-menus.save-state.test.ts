@@ -8,8 +8,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 afterEach(cleanupWidgets);
 
 const menus: MenuSummary[] = [
-  { id: "m-lunch", name: "Lunch Menu", active: true, version: 1 },
-  { id: "m-dinner", name: "Dinner Menu", active: true, version: 1 },
+  { id: "m-lunch", name: "Lunch Menu", active: true },
+  { id: "m-dinner", name: "Dinner Menu", active: true },
 ];
 const structures: MenuStructure[] = [
   {

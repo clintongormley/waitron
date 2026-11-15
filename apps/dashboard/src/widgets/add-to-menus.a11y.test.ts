@@ -7,8 +7,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 afterEach(cleanupWidgets);
 
 const menus: MenuSummary[] = [
-  { id: "m-lunch", name: "Lunch Menu", active: true, version: 1 },
-  { id: "m-dinner", name: "Dinner Menu", active: true, version: 1 },
+  { id: "m-lunch", name: "Lunch Menu", active: true },
+  { id: "m-dinner", name: "Dinner Menu", active: true },
 ];
 const drinks = {
   memberId: "x",

@@ -20,7 +20,7 @@ import {
   routingCells,
   type Transaction,
 } from "@waitron/db";
-import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/menu";
+import { directIncludedMenus, loadSectionGraph } from "@waitron/menu";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
@@ -591,9 +591,9 @@ export async function readRoutingUses(
     .where(periodId === undefined ? undefined : eq(routingCellPeriods.periodId, periodId));
   if (rows.length === 0) return new Map();
   const folders = await tx
-    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
     .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+
     .orderBy(asc(categories.name), asc(categories.id));
   const { categorySlot, productSlot, noCategorySlot, path, compare } = routingRowPlaces(folders);
   const placed = rows.map((row) => {

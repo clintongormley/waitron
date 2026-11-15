@@ -1,7 +1,7 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { triggerRaised } from "@waitron/db";
 import {
   extraListItems,
-  menuDetails,
   menuPublications,
   menuVersionImages,
   menuVersions,
@@ -566,7 +566,7 @@ describe("publishMenu", () => {
 
   it("keeps empty slots for unreachable shortcuts and still publishes", async () => {
     const f = await menusFixture(fx.db);
-    const [details] = await fx.db.select().from(menuDetails).where(eq(menuDetails.menuId, f.lunch));
+    const [details] = await storedMenuParts(fx.db, f.lunch);
     await fx.db.insert(sectionMembers).values([
       { sectionId: details!.homeSectionId, position: 0, productId: f.burger },
       { sectionId: details!.homeSectionId, position: 1, productId: f.soup },

@@ -1,3 +1,4 @@
+import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -19,7 +20,6 @@ import {
   setProductVariants,
   addMember,
   setIncludeFolder,
-  menuDetails,
   sections,
   optionLists,
   optionLabels,
@@ -1187,8 +1187,7 @@ describe("free default choice with incomplete menu and image text", () => {
         name: "Staff included menu",
         names: { en: "Customer included" },
       });
-      const root = async (id: string) =>
-        (await tx.select().from(menuDetails).where(eq(menuDetails.menuId, id)))[0]!.rootSectionId;
+      const root = async (id: string) => (await storedMenuParts(tx, id))[0]!.rootSectionId;
       const menuRoot = await root(menu.id);
       const member = await addMember(tx, menuRoot, {
         kind: "section",
