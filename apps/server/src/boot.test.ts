@@ -621,12 +621,28 @@ describe("startServer, against a migrated venue directory", () => {
       const port = await freePort();
       let server: StartedServer | undefined;
       try {
-        server = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+        await withCapturedStdout(async (lines) => {
+          server = await startServer({
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+          });
+          if (corrupt) {
+            const line = lines.find((value) => {
+              try {
+                return JSON.parse(value).event === "cloud.emergency_state_failed";
+              } catch {
+                return false;
+              }
+            });
+            expect(line).toBeDefined();
+            expect(JSON.parse(line!)).toMatchObject({
+              level: "warn",
+              errorCode: "cloud.state_invalid",
+            });
+          }
         });
         const response = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
         expect(response.status).toBe(200);

@@ -346,9 +346,9 @@ it("A1188 still returns live facts when the optional hint write fails", async ()
     stale: false,
     emergency: { open: true },
   });
-  expect(f.client.emergencyHints("https://staff.test")).toEqual({
-    address: "https://emergency.example.test/",
-  });
+  expect(f.client.emergencyHints("https://staff.test")).toBeNull();
+  await f.client.status();
+  expect(f.client.emergencyHints("https://staff.test")).toBeNull();
   expect(await readFile(file, "utf8")).toBe(before);
   write.mockRejectedValueOnce(
     Object.assign(new Error("required write refused"), { code: "EACCES" }),
@@ -450,7 +450,7 @@ it.each(["unchanged", "cancel", "revoke", "newer"] as const)(
     lock.release();
     await turn;
     if (mode === "revoke" || mode === "newer") {
-      expect(await outcome).toBe(mode === "revoke" ? "cloud.not_configured" : "cloud.unavailable");
+      expect(await outcome).toBe(mode === "revoke" ? "cloud.not_configured" : "resolved");
       expect(
         JSON.parse(await readFile(join(f.options.stateDir, "cloud/connection.json"), "utf8"))
           .emergencyHints,

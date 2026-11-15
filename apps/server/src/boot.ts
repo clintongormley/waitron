@@ -1287,7 +1287,7 @@ async function bootServer(
   try {
     await writeTunnelConfiguration(config.tunnelControlDir);
   } catch (error) {
-    log("warn", "cloud.emergency_state_failed", { errorCode: codeOf(error) });
+    log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
   // Both placements run here and not in entry so that `startServer`-based starts and the dev entry
   // place too. It follows entry's ahead check, whose close drains the old file's -wal before placing
@@ -4001,7 +4001,7 @@ async function bootServer(
     await cloudConnection
       .status()
       .catch((error: unknown) =>
-        log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
+        log("warn", "cloud.emergency_state_failed", { errorCode: codeOf(error) }),
       );
   }
   const cloudReplacement =
@@ -4606,12 +4606,8 @@ async function bootServer(
       cloudConnectionJob({
         connection: cloudConnection,
         managementOrigin: config.managementOrigin,
-        onEmergencyError: (error) =>
-          log(
-            codeOf(error) === "cloud.unavailable" ? "info" : "warn",
-            "cloud.emergency_read_failed",
-            { errorCode: codeOf(error) },
-          ),
+        onEmergencyError: (error, level) =>
+          log(level, "cloud.emergency_read_failed", { errorCode: codeOf(error) }),
         isPrimary: cloudPrimary,
         onGuestMenu: (signal) => guestMenuDelivery!.reconcile(signal),
         onGuestMenuError: (error) =>

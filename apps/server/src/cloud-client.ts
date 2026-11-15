@@ -316,6 +316,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     } catch (error) {
       // Optional entrance hints must not turn a successful Cloud read into a storage failure.
       if (!optionalHints) throw error;
+      return;
     }
     heldEmergencyHints = state.emergencyHints;
   }
@@ -594,8 +595,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
               async () => {
                 const state = await read(),
                   current = registrationOf(state);
-                if (!state || current !== registration || emergencyRead !== entry)
+                if (!state || current !== registration)
                   throw new AppError(current ? "cloud.unavailable" : "cloud.not_configured", {});
+                if (emergencyRead !== entry) return;
                 if (changed(state.emergencyHints)) {
                   state.emergencyHints = hints;
                   await save(state, true);

@@ -171,7 +171,7 @@ it.each([true, false])(
       onError: (error) => {
         throw error;
       },
-      onEmergencyError: (error) => errors.push(error),
+      onEmergencyError: (error, level) => errors.push({ error, level }),
       sleep: async () => controller.abort(),
     });
     expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(1);
@@ -180,6 +180,6 @@ it.each([true, false])(
     );
     expect(seen).toEqual(["guest", "staff"]);
     if (ready) expect(errors).toEqual([]);
-    else expect(errors).toMatchObject([{ code: "cloud.unavailable" }]);
+    else expect(errors).toMatchObject([{ error: { code: "cloud.unavailable" }, level: "info" }]);
   },
 );
