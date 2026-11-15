@@ -312,7 +312,9 @@ it.each([true, false])(
     );
     const checks = el.shadowRoot!.querySelector<PaymentsScreen>("dashboard-payments-screen")!;
     expect(checks.surface).toBe("checks");
-    expect(checks.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(t("payments.checks_title"));
+    expect(checks.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(
+      t("payments.checks_title"),
+    );
     navItem(el, "payments")!.click();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).not.toBe(checks),
