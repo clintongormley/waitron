@@ -3235,6 +3235,25 @@ failed with four forbidden `readFile` calls. The corrected startup passed the re
 The executable regression is `apps/server/src/first-setup-growth.test.ts`; the paired control
 logs remain in Lane F's A1334 receipts.
 
+## Generated test wrappers build without appliance metadata
+
+Use `bundle(pairs)` from `scripts/bundle-node.mjs` for generated test wrappers whose checks
+need a standalone executable, fonts or notices, but do not read the appliance's release or
+runtime stamp. Keep the default notices. Import it by absolute file URL inside a bounded
+Node subprocess when a fixture server is already listening: the builder runs esbuild
+synchronously, so calling it in the test process would block that server.
+
+Keep the real CLI for shipped-entry and stamp checks, including the certificate entry/host,
+backup permission verifier, provisioning entry and upgrade entry. Give a shipped-only build
+its own test group and hook, so a local-wrapper filter does not build it. Keep each file's
+temporary outputs and cleanup; this setup adds no shared cross-file cache.
+
+**15 November 2026:** the certificate wrapper and shared snapshot-helper traces make zero
+Git or runtime-descriptor calls. The recovery PDF keeps its 60-second API-build limit and
+passes the retained 19-second Git / 3-second compiler control without calling Git. The audited CLI
+builds retain their stamps and allow 180 seconds for the three 20-second Git reads,
+60-second descriptor and compilation; containing hooks and cases clear that total.
+
 ## Pin release metadata beside a built command's fixed clock
 
 A child command fixed to yesterday can refuse today's build before reaching the behavior you want

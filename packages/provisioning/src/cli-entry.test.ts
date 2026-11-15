@@ -16,9 +16,9 @@ beforeAll(async () => {
   for (const name of Object.keys(env)) if (name.startsWith("GIT_")) delete env[name];
   await execute(process.execPath, ["../../scripts/bundle-node.mjs", `src/bin.ts=${binary}`], {
     env,
-    timeout: 120_000,
+    timeout: 180_000,
   });
-});
+}, 190_000);
 afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
 });

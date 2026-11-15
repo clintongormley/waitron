@@ -329,7 +329,7 @@ describe("contained upgrade data checks", () => {
     await execute(
       "pnpm",
       ["exec", "node", "../../scripts/bundle-node.mjs", `src/upgrade-check-entry.ts=${entry}`],
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     );
     await execute(process.execPath, ["scripts/copy-migrations.mjs", artifact], { timeout: 30_000 });
     await symlink(resolve("node_modules/sharp"), join(artifact, "node_modules/sharp"));
@@ -407,7 +407,7 @@ describe("contained upgrade data checks", () => {
     } finally {
       await held.close();
     }
-  }, 220_000);
+  }, 320_000);
 
   it("refuses a setup-only box before creating database state", async () => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");

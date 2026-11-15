@@ -3438,6 +3438,9 @@ This is a test-harness path correction following Task12's normal hook, not a cha
 behavior or to the guard. The production tree reviewed by both seats remains unchanged.
 The retry still must pass the complete hook and literal-current-head CI.
 
+**15 November 2026:** the generated recovery-PDF runner now imports the same root builder's
+API; see [the selective wrapper setup](../developers/testing-guide.md#generated-test-wrappers-build-without-appliance-metadata).
+
 ## Complete-CI single-field fixture correction, 2026-10-19
 
 The first full CI run reports five recovery-browser failures and two source-PDF failures.

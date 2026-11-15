@@ -1338,28 +1338,6 @@ skipped. The API tree pairs, job scopes and publication logs are retained in
 Lane E `receipts/a696-resume-20261101/`.
 
 
-## Real-source bundle tests repeat metadata work
-
-The permission verifier and certificate diagnosis suites run the real bundle CLI. Its release
-stamp reads Git three times, with 20 seconds allowed for each read. Its runtime descriptor
-subprocess then allows 60 seconds. A shared static build could avoid repeating those reads,
-but the certificate suite also builds request-specific wrappers after starting local servers.
-
-Measure selective shared setup that serves focused runs and shards without building unused
-fixtures or retaining stale outputs. Keep the real CLI stamp and permission assertions. A1271's
-trial built three static entries in one CLI invocation and in three invocations; it did not
-implement or qualify Vitest global setup. The comparison and reverse-order control are in the
-A1271 PR. The server suites' larger build limits do not remove repeated metadata work.
-
-Audit these remaining CLI callers and their containing test or hook deadlines. Both pass the
-16-second-per-Git-read control, which does not exhaust the metadata subprocess budgets:
-
-- `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit. It ran out
-  once in a local whole-package `test:coverage` run on 2026-11-14.
-- `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
-  beyond the metadata subprocess budgets for compilation. No timeout failure was reproduced.
-
-
 ## A1306. Rewrite git history to drop the development artifacts
 
 Owner, 2026-11-02: "there is no point in keeping these development artifacts as history".

@@ -50,7 +50,13 @@ await runCertificateDiagnosisEntry(() => ({ diagnoseInChild: async (input, signa
   );
   await run(
     "pnpm",
-    ["exec", "node", "../../scripts/bundle-node.mjs", `${source}=${entry.pathname}`],
+    [
+      "exec",
+      "node",
+      "--input-type=module",
+      "--eval",
+      `import { bundle } from ${JSON.stringify(pathToFileURL(resolve("../../scripts/bundle-node.mjs")).href)}; bundle(${JSON.stringify([{ entry: source, outfile: entry.pathname }])});`,
+    ],
     { timeout: 180_000, maxBuffer: 2_000_000 },
   );
   await rm(source);

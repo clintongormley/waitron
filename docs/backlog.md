@@ -1952,11 +1952,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
-- **Real-source bundle tests repeat metadata work.**
-  Measure selective shared setup and audit the remaining smaller build limits in the recovery
-  PDF and provisioning CLI tests.
-  [Detail](backlog/ci.md#real-source-bundle-tests-repeat-metadata-work).
-
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review each remaining squash against its parent and check findings against current main before
