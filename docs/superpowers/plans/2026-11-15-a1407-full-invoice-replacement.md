@@ -134,6 +134,12 @@ The success message after **Put this right** says where to print the original, i
 Spanish, and the guide says the same. This replaces correction 2 and the Task 2b text above; the
 first build of Task 2b (printer in the dialog, `fe04859713`) was dropped unpushed.
 
+**As built, 2026-11-15 (finish-branch review).** Correction 3 is narrower than written: a
+corrective refused with code `1100` is still offered a correction record; only one refused for a
+future date (`1112`) has no fix. Correction 6's alert bullet: `alert-sources.ts` had no
+`isNull(sales.correctsSaleId)` lines; it now filters through `deliversAsFullInvoiceSql()`, and its
+test prints the original from a till reprint (`transaction-receipt-api.test.ts`).
+
 ## Words used in this plan
 
 - **Full invoice (F1)**: an invoice that names the customer (tax number, name, address). The

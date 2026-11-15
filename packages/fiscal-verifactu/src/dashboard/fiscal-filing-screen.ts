@@ -681,7 +681,6 @@ export class FiscalFilingScreen extends LitElement {
 
   @property({ attribute: false }) client!: FiscalFilingClient;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
-  /** Read when a case opens; tests turn it on before the server's switch is. */
   fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON;
 
   @state() private overview: FilingOverviewAnswer | null = null;
