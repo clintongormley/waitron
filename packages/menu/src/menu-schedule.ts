@@ -122,11 +122,6 @@ export async function cancelMenuPublication(
     .where(eq(menuReleases.versionId, versionId));
 }
 
-/**
- * Moves a queued edition to `activatesAt`, inside the caller's one transaction. Refused, writing
- * nothing, when the version has no schedule row of this menu, is no longer queued, `activatesAt`
- * is not after `at`, or the move would overtake another queued edition.
- */
 export async function rescheduleMenuPublication(
   tx: Transaction,
   menuId: string,
