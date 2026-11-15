@@ -46,10 +46,7 @@ import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
-import {
-  openTableMenu,
-  tableMenuAndSwitcherText,
-} from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -596,7 +593,7 @@ describe("till-table-order-screen", () => {
       .toHaveAccessibleName(`${t("table.sent_title")} ${sentCounts(0, 1, 0, 1)}`);
   });
 
-  it("hides the duplicate To serve card after the last pending dish is served", async () => {
+  it("keeps a pending dish in Sent alone, before and after it is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
     await openTableMenu(el);
     expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
@@ -640,7 +637,6 @@ describe("till-table-order-screen", () => {
     await closed;
     expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector(".served-line, [data-serve]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(t("table.pending_title"));
   });
 
   it("keeps an extras row's figures in its dish's columns", async () => {
@@ -790,13 +786,10 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
   });
 
-  it("handles an empty tab: no Sent counts or duplicate To serve card, zero total", async () => {
+  it("handles an empty tab: no Sent counts or pending-dishes card, zero total", async () => {
     const { el } = await mount({ orderId: "wo-4", lines: [], currentOrders: sentRows([]) });
     await openTableMenu(el);
     expect(await sentSummary(el)).toBeUndefined();
-    const text = tableMenuAndSwitcherText(el);
-    expect(text).not.toContain(t("table.none_pending"));
-    expect(text).not.toContain(t("table.pending_title"));
     expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
     const panel = await sentPanelFor(el);

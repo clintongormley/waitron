@@ -2052,25 +2052,13 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till and floor wording fixes
 
-9 entries, size M. Eight keep their text from the index they came from (backlog review, 2026-11-06);
-the remaining till unit and tab edges joined on 2026-11-12.
+5 entries, size M. Four keep their text from the index they came from (backlog review, 2026-11-06);
+the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A1107 (the floor) and A1108
+(the order screen's Sent panel) wait for the owner's redesign of the table screens (watcher, 2026-11-15).
 
 - **Remaining till unit and tab edges (A379/A385 run-it review).** The Kitchen
   title stays English in a synthetic Spanish probe; legacy unit maps cover English and Spanish only.
   [Detail](till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
-- **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
-  both, in English and Spanish.
-  [Detail](till.md#a1259-two-till-strings-have-no-user-tablepending_title-and-tablenone_pending)
-- **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
-  `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
-  reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
-  (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…».
-- **A920. The till's approval prompt: the Spanish no longer matches the English (left open by
-  A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
-  responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
-- **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
-  A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
-  in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
   [Detail](till.md#a470--the-tills-floor-map-follow-ups)
@@ -3694,14 +3682,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`
-
-**A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** On
-`main` and on A803 slice 3 only tests name them (`git grep` outside test files: `strings.ts`
-alone); their last screen or widget user went in A773-1 (#1897, `c9ad7a634`). Delete both, in
-English and Spanish; three screen test files (`.test.ts`, `.empty-drawer.a11y`,
-`.populated-drawer.a11y`) check the screen does not show them.
 
 ## A1250. The pass marks a late card in the brand colour where the station board marks it amber
 

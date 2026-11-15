@@ -18,7 +18,6 @@ import "./till-table-order-screen.js";
 import {
   closeTableMenu,
   openTableMenu,
-  tableMenuAndSwitcherText,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const dish = {
@@ -89,7 +88,6 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         const menu = q("[data-table-menu]");
         expect(menu.checkVisibility()).toBe(true);
         expect(q(".pending, .pending-line, .served-line, [data-cancel-line]")).toBeNull();
-        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.pending_title"));
         expect(q("[data-order-total]").textContent).toContain(
           formatMoney("10.00", currentLocale()),
         );

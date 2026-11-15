@@ -71,7 +71,7 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
 
     const report = await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
-    expect(report).toBe("default cancel reason ready");
+    expect(report).toBe("starter void and comp reasons ready");
     const seeded = await reasons();
     expect(
       seeded.map((reason) => [
