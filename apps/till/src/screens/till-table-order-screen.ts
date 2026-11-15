@@ -501,6 +501,8 @@ export interface BillPayDetail {
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   completed?: (saved: boolean, refusal?: string | TemplateResult) => void;
+  /** The person chose not to make the change after its refusal: a window still holding it closes. */
+  abandoned?: () => void;
   expectedEdit: BillEditExpected | null;
   lineNo: number;
   /** The line's staff name, for a message about the change. */
@@ -3392,6 +3394,9 @@ export class TillTableOrderScreen extends LitElement {
               if (this.lunchPending !== pending) return;
               if (saved) this.lunchPending = null;
               else this.lunchRefusal = refusal ?? nothing;
+            },
+            abandoned: () => {
+              if (this.lunchPending === pending) this.lunchPending = null;
             },
           } satisfies ChangeLineDetail);
         }}
