@@ -23,6 +23,19 @@ describe("SumUpPaymentsClient.readerStatus", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("gives up at 50 seconds when a status never arrives", async () => {
+    const errors: unknown[] = [];
+    const fetchImpl: FetchLike = () => new Promise(() => {});
+    void new SumUpPaymentsClient(createRequest({ fetchImpl }))
+      .readerStatus("r-1")
+      .catch((error: unknown) => errors.push(error));
+
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(errors).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(errors).toEqual([{ code: "connection.timed_out" }]);
+  });
+
   it("waits for a status SumUp takes 45 seconds to give", async () => {
     const status = { online: true, pairingStatus: "paired" };
     const fetchImpl = vi.fn<FetchLike>(
