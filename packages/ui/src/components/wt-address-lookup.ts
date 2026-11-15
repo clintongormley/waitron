@@ -235,6 +235,8 @@ export class WtAddressLookup extends LitElement {
   }
 
   private onKeydown(event: KeyboardEvent): void {
+    // Safari reports an input method's confirming Enter by key code 229 alone.
+    if (event.key === "Enter" && (event.isComposing || event.keyCode === 229)) return;
     const count = this.suggestions.length;
     if (event.key === "Enter") {
       // A form that submits on Enter skips a handled key; Enter here chooses, never submits.

@@ -674,6 +674,8 @@ export class WtCombobox extends LitElement {
   }
 
   private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
+    // Safari reports an input method's confirming Enter by key code 229 alone.
+    if (event.key === "Enter" && (event.isComposing || event.keyCode === 229)) return;
     if (event.key === "Enter") {
       // Whether or not a row is active, so a form's submit-on-Enter never sees it.
       event.preventDefault();

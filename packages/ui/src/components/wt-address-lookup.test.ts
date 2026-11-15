@@ -742,3 +742,31 @@ test("the form's line shows again for the next choice, even when its text is the
   await settle(el);
   expect(status(el)).toBe("That address is in another country.");
 });
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Enter that confirms an input-method character (%s) chooses no suggestion",
+  async (how) => {
+    const provider = fakeProvider();
+    const el = await mountLookup(provider, true);
+    input(el).focus();
+    type(el, "Calle Mayor");
+    await settle(el);
+    await userEvent.keyboard("{ArrowDown}");
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      isComposing: how === "isComposing",
+    });
+    if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+    input(el).dispatchEvent(event);
+    await settle(el);
+    expect(provider.calls.resolve).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    expect(provider.calls.resolve).toHaveLength(1);
+  },
+);

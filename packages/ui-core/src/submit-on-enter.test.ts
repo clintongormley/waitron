@@ -161,3 +161,17 @@ it("leaves Enter unhandled when its explicit action is missing", async () => {
   expect(clicked).not.toHaveBeenCalled();
   expect(errors).toEqual([]);
 });
+
+it("ignores an Enter that confirms an input-method character, as Safari reports it (key code 229)", async () => {
+  const { input, clicked } = await fixture();
+  const event = new KeyboardEvent("keydown", {
+    key: "Enter",
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, "keyCode", { value: 229 });
+  input.dispatchEvent(event);
+  expect(clicked).not.toHaveBeenCalled();
+  expect(event.defaultPrevented).toBe(false);
+});
