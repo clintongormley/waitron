@@ -75,7 +75,7 @@ Move repeated bottom-message assembly, attempt, refusal-dismissal and render-bef
 plumbing in the remaining dashboard editors and the till's forms onto `FormFeedback` in
 `@waitron/ui`. The product editor, Department receipt, Venue privacy and time-zone repair
 form, invoice-customer Find, menu-publication Schedule, stream settings, office-printer Add,
-the main Access roles editor, Add to menus, Devices Pair/Edit, VAT-return download, configuration export and the floor-plan Add tables/Add joined table dialogs also use it;
+the main Access roles editor, Add to menus, Devices Pair/Edit, VAT-return download, configuration export, the floor-plan Add tables/Add joined table dialogs and Wi-Fi join also use it;
 keep their field-specific or guarded refusal focus local. Inventory each later batch before
 migrating it; leave single-job forms local.
 Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
@@ -86,6 +86,7 @@ Keep fresh sign-in local: its message joiner is small, and its child-form focus 
 Keep Device profiles local: only its attempt flag is reusable; tab reveal and kitchen-switch focus stay specific to the form.
 Keep Profile local: its footer deduplicates hidden-field errors and its focus callback checks the current modal; moving its attempt flag alone adds no useful reuse.
 Keep receipt-printer forms local: they already use the shared message joiner and one form-scoped render/focus callback, leaving only attempt flags to move.
+Keep the variant editor local: only attempt state repeats helper work; its named-field focus stays in `updated()`.
 Keep station field-refusal dismissal local: it is one domain-specific conditional clearing the refusal that names the edited field.
 Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the

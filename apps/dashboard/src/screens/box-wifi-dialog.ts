@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
@@ -48,7 +49,7 @@ export class BoxWifiDialog extends LitElement {
   @state() private busy = false;
   @state() private choice = "";
   @state() private password = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private refusal = "";
   @state() private bottom = "";
   #generation = 0;
@@ -104,7 +105,7 @@ export class BoxWifiDialog extends LitElement {
     this.busy = false;
     this.scanning = false;
     this.scanFailed = false;
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = "";
     this.bottom = "";
   }
@@ -152,12 +153,11 @@ export class BoxWifiDialog extends LitElement {
     const network = this.#selected();
     if (!network || network.security === "other" || this.busy || this.scanning || this.blocked)
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = "";
     this.bottom = "";
     if (this.password === "") {
-      await this.updateComplete;
-      this.#dialog()?.querySelector<WtInput>("wt-input")?.focus();
+      await this.#feedback.focus(this.renderRoot);
       return;
     }
     this.busy = true;
@@ -191,8 +191,7 @@ export class BoxWifiDialog extends LitElement {
                   : "box_status.network.password_wpa",
               )
             : codeMessage(codeOf(error));
-        await this.updateComplete;
-        this.#dialog()?.querySelector<WtInput>("wt-input")?.focus();
+        await this.#feedback.focus(this.renderRoot);
       } else {
         const code = codeOf(error);
         this.bottom = wifiRequestError(error);
@@ -206,7 +205,7 @@ export class BoxWifiDialog extends LitElement {
   override render() {
     const fieldError =
       this.refusal ||
-      (this.attempted && !this.password ? t("box_status.network.password_required") : "");
+      (this.#feedback.attempted && !this.password ? t("box_status.network.password_required") : "");
     const disabled = this.busy || this.scanning || this.blocked;
     return html`<wt-dialog
       heading=${t("box_status.network.scan")}
@@ -269,7 +268,7 @@ export class BoxWifiDialog extends LitElement {
           data-test="wifi-join"
           variant=${disabled || !this.#selected() ? "secondary" : "primary"}
           ?loading=${this.busy}
-          ?disabled=${disabled || !this.#selected() || (this.attempted && !this.password)}
+          ?disabled=${disabled || !this.#selected() || (this.#feedback.attempted && !this.password)}
           @click=${() => void this.#join()}
           >${t("box_status.network.join")}</wt-button
         >
