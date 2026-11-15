@@ -327,8 +327,8 @@ export const SPAIN: CountryPack = {
   starterCourses: [
     { name: "Sharing plates", heldUntilFired: false },
     { name: "Starters", heldUntilFired: false },
-    { name: "Mains", heldUntilFired: true },
-    { name: "Desserts", heldUntilFired: true },
+    { name: "Mains", heldUntilFired: true, starterKey: "mains" },
+    { name: "Desserts", heldUntilFired: true, starterKey: "desserts" },
   ],
   availableForVenueSetup: true,
   administrativeAreas,

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
   CHECK_VIOLATION,
@@ -9,6 +9,7 @@ import {
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
+  restrictRefused,
   kitchenCourses,
   parties,
   serviceStepCompletions,
@@ -33,7 +34,7 @@ let db: Database;
 let departmentId = "";
 let courseId = "";
 
-beforeAll(async () => {
+beforeEach(async () => {
   db = suite.db;
   for (const id of ["sender", "waiter-1", "waiter-2"])
     await seedPerson(db, { id, displayName: id });
@@ -81,9 +82,16 @@ async function refused(row: Step, kind: readonly number[], words: string) {
 
 describe("the service_steps table", () => {
   it("stores a step with each start, a course only for a course start", async () => {
+    const setupId = randomUUID();
     const rows: Step[] = [
-      step({ position: 0, name: "Set up", start: "seated", minutes: 0 }),
-      step({ position: 1, name: "Take order", start: "after_previous", minutes: 2 }),
+      step({ id: setupId, position: 0, name: "Set up", start: "seated", minutes: 0 }),
+      step({
+        position: 1,
+        name: "Take order",
+        start: "after_step",
+        afterStepId: setupId,
+        minutes: 2,
+      }),
       step({ position: 2, name: "Dessert?", start: "course_served", courseId, minutes: 10 }),
       step({ position: 3, name: "Anything else?", start: "all_served", minutes: 120 }),
       step({ position: 4, name: "Check in", start: "since_last_order", minutes: 1 }),
@@ -101,7 +109,7 @@ describe("the service_steps table", () => {
       .orderBy(asc(serviceSteps.position));
     expect(stored).toEqual([
       { name: "Set up", start: "seated", courseId: null, minutes: 0 },
-      { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
+      { name: "Take order", start: "after_step", courseId: null, minutes: 2 },
       { name: "Dessert?", start: "course_served", courseId, minutes: 10 },
       { name: "Anything else?", start: "all_served", courseId: null, minutes: 120 },
       { name: "Check in", start: "since_last_order", courseId: null, minutes: 1 },
@@ -115,6 +123,37 @@ describe("the service_steps table", () => {
       "service_steps_course_ck",
     );
     await refused(step({ start: "seated", courseId }), CHECK_VIOLATION, "service_steps_course_ck");
+  });
+
+  it("keeps a named predecessor in its department and refuses removing it while a child remains", async () => {
+    const parentId = randomUUID();
+    await insert(step({ id: parentId }));
+    const [other] = await db
+      .insert(departments)
+      .values({ name: "Bar", tradingName: "Bar" })
+      .returning();
+    await refused(
+      step({ departmentId: other!.id, start: "after_step", afterStepId: parentId }),
+      FOREIGN_KEY_VIOLATION,
+      "FOREIGN KEY constraint failed",
+    );
+    await refused(
+      step({ start: "after_step", afterStepId: null }),
+      CHECK_VIOLATION,
+      "service_steps_after_step_ck",
+    );
+    await refused(step({ afterStepId: parentId }), CHECK_VIOLATION, "service_steps_after_step_ck");
+    const self = randomUUID();
+    await refused(
+      step({ id: self, start: "after_step", afterStepId: self }),
+      CHECK_VIOLATION,
+      "service_steps_after_step_ck",
+    );
+    await insert(step({ start: "after_step", afterStepId: parentId }));
+    const error = await captureError(() =>
+      withTransaction(db, (tx) => tx.delete(serviceSteps).where(eq(serviceSteps.id, parentId))),
+    );
+    expect(restrictRefused(error)).toBe(true);
   });
 
   it("refuses minutes past 120, and 0 for a repeating start", async () => {

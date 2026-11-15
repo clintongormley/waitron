@@ -148,7 +148,11 @@ export interface CountryPack {
   readonly officialLocales?: readonly string[];
   readonly requiredContentLocales?: readonly string[];
   readonly moduleIds: readonly string[];
-  readonly starterCourses?: readonly { readonly name: string; readonly heldUntilFired: boolean }[];
+  readonly starterCourses?: readonly {
+    readonly name: string;
+    readonly heldUntilFired: boolean;
+    readonly starterKey?: string;
+  }[];
   /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */
   readonly availableForVenueSetup: boolean;
   readonly administrativeAreas: readonly AdministrativeArea[];

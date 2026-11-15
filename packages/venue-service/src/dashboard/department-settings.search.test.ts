@@ -22,8 +22,24 @@ it.each(["en", "es"] as const)(
     el.model = structuredClone(el.model);
     el.model.departments[2]!.active = true;
     el.model.serviceSteps = [
-      { id: "s1", departmentId: "d1", name: "Start", start: "seated", courseId: null, minutes: 0 },
-      { id: "s2", departmentId: "d1", name: "Later", start: "seated", courseId: null, minutes: 5 },
+      {
+        afterStepId: null,
+        id: "s1",
+        departmentId: "d1",
+        name: "Start",
+        start: "seated",
+        courseId: null,
+        minutes: 0,
+      },
+      {
+        afterStepId: null,
+        id: "s2",
+        departmentId: "d1",
+        name: "Later",
+        start: "seated",
+        courseId: null,
+        minutes: 5,
+      },
     ];
     await el.updateComplete;
     await form.updateComplete;

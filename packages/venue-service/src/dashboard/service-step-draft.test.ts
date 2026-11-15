@@ -10,6 +10,7 @@ import {
 
 const rows: ServiceStep[] = [
   {
+    afterStepId: null,
     id: "s1",
     departmentId: "d1",
     name: "Set up",
@@ -18,6 +19,7 @@ const rows: ServiceStep[] = [
     minutes: 0,
   },
   {
+    afterStepId: null,
     id: "s2",
     departmentId: "d1",
     name: "Dessert?",
@@ -31,8 +33,17 @@ const drafts = (): ServiceStepDraft[] => toStepDrafts(rows);
 describe("toStepDrafts", () => {
   it("keys each row by its id and turns minutes into text", () => {
     expect(toStepDrafts(rows)).toEqual([
-      { key: "s1", id: "s1", name: "Set up", start: "seated", courseId: null, minutes: "0" },
       {
+        afterStepKey: null,
+        key: "s1",
+        id: "s1",
+        name: "Set up",
+        start: "seated",
+        courseId: null,
+        minutes: "0",
+      },
+      {
+        afterStepKey: null,
         key: "s2",
         id: "s2",
         name: "Dessert?",
@@ -50,6 +61,15 @@ describe("stepsEqual", () => {
     edit(list);
     return stepsEqual(drafts(), list);
   };
+  it("detects a different named predecessor without moving the row", () => {
+    const first = [
+      ...drafts(),
+      { ...drafts()[0]!, id: "s3", key: "s3", start: "after_step" as const, afterStepKey: "s1" },
+    ];
+    const changed = structuredClone(first);
+    changed[2]!.afterStepKey = "s2";
+    expect(stepsEqual(first, changed)).toBe(false);
+  });
   it("is true for the same rows", () => {
     expect(stepsEqual(drafts(), drafts())).toBe(true);
   });
@@ -71,7 +91,7 @@ describe("stepsEqual", () => {
     expect(changed((l) => l.pop())).toBe(false);
   });
   it("is false for a changed start, course, id or minutes", () => {
-    expect(changed((l) => (l[0]!.start = "after_previous"))).toBe(false);
+    expect(changed((l) => (l[0]!.start = "after_step"))).toBe(false);
     expect(changed((l) => (l[1]!.courseId = "c2"))).toBe(false);
     expect(changed((l) => (l[1]!.id = null))).toBe(false);
     expect(changed((l) => (l[0]!.minutes = "2"))).toBe(false);
@@ -129,7 +149,15 @@ describe("toStepInputs", () => {
   it("leaves out a null id, trims names and turns minutes into numbers", () => {
     expect(
       toStepInputs([
-        { key: "s1", id: "s1", name: " Set up ", start: "seated", courseId: null, minutes: "02" },
+        {
+          afterStepKey: null,
+          key: "s1",
+          id: "s1",
+          name: " Set up ",
+          start: "seated",
+          courseId: null,
+          minutes: "02",
+        },
         {
           key: "new",
           id: null,
@@ -140,8 +168,44 @@ describe("toStepInputs", () => {
         },
       ]),
     ).toEqual([
-      { id: "s1", name: "Set up", start: "seated", courseId: null, minutes: 2 },
-      { name: "More", start: "course_served", courseId: "c1", minutes: 10 },
+      {
+        id: "s1",
+        key: "s1",
+        afterStepKey: null,
+        name: "Set up",
+        start: "seated",
+        courseId: null,
+        minutes: 2,
+      },
+      {
+        key: "new",
+        afterStepKey: null,
+        name: "More",
+        start: "course_served",
+        courseId: "c1",
+        minutes: 10,
+      },
     ]);
   });
+});
+
+it("keeps draft predecessor keys through save ids and sends request-local keys", () => {
+  const parent = { ...drafts()[0]!, key: "parent", id: null };
+  const child = {
+    ...drafts()[1]!,
+    key: "child",
+    id: null,
+    start: "after_step" as const,
+    afterStepKey: "parent",
+  };
+  const saved = [
+    { ...parent, key: "p-id", id: "p-id", afterStepKey: null },
+    { ...child, key: "c-id", id: "c-id", afterStepKey: "p-id" },
+  ];
+  const mapped = withSavedIds([parent, child], saved)!;
+  expect(mapped.map((row) => [row.key, row.id, row.afterStepKey ?? null])).toEqual([
+    ["parent", "p-id", null],
+    ["child", "c-id", "parent"],
+  ]);
+  expect(toStepInputs([parent, child])[1]).toMatchObject({ key: "child", afterStepKey: "parent" });
 });

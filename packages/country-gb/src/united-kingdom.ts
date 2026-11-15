@@ -13,8 +13,8 @@ export const UNITED_KINGDOM: CountryPack = {
   moduleIds: [],
   starterCourses: [
     { name: "Starters", heldUntilFired: false },
-    { name: "Mains", heldUntilFired: true },
-    { name: "Desserts", heldUntilFired: true },
+    { name: "Mains", heldUntilFired: true, starterKey: "mains" },
+    { name: "Desserts", heldUntilFired: true, starterKey: "desserts" },
   ],
   availableForVenueSetup: false,
   administrativeAreas: [],

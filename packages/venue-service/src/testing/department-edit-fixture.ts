@@ -57,6 +57,17 @@ export function departmentSettingsAnswer(
         ...step,
         departmentId,
         id: step.id ?? `s${index + 1}`,
+        afterStepId:
+          input.serviceSteps!.findIndex(
+            (parent) => (parent.key ?? parent.id) === step.afterStepKey,
+          ) < 0
+            ? null
+            : (() => {
+                const at = input.serviceSteps!.findIndex(
+                  (parent) => (parent.key ?? parent.id) === step.afterStepKey,
+                );
+                return input.serviceSteps![at]!.id ?? `s${at + 1}`;
+              })(),
       })),
     ];
   return answer;

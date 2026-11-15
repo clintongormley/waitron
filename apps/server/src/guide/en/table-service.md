@@ -355,6 +355,10 @@ read the meal from seating to leaving, with its fixed moments, steps and courses
 the current send or hold choice and reminder; change the course choice on **Courses** and the
 shared reminder on the department's **Service** tab.
 
+Choose a step's start by name, such as **After Set up**, then set its delay. The list places it
+beside that start. Renaming another step keeps the link; deleting it also removes steps that
+start from it, so check those followers before you save.
+
 When a step is due, the table's card shows its name, with a **Done** button if you may take orders.
 On the map, unless something more urgent is showing, the table turns blue with a bell. Open its
 details to read the step and use **Done** if you may take orders. A table shows one

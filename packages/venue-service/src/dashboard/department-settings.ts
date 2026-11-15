@@ -671,7 +671,12 @@ export class DepartmentSettings extends LitElement {
         row = { ...this.refusedSteps[step.key] };
       if (!was) continue;
       if (was.name !== step.name) delete row.name;
-      if (was.start !== step.start || was.courseId !== step.courseId) delete row.start;
+      if (
+        was.start !== step.start ||
+        was.courseId !== step.courseId ||
+        was.afterStepKey !== step.afterStepKey
+      )
+        delete row.start;
       if (was.minutes !== step.minutes) delete row.minutes;
       if (Object.keys(row).length) kept[step.key] = row;
     }
@@ -686,11 +691,14 @@ export class DepartmentSettings extends LitElement {
     if (!this.draft || stepsEqual(this.draft.serviceSteps, this.baseline!.serviceSteps))
       return found;
     const courses = new Set(this.model?.courses.map((course) => course.id));
-    this.draft.serviceSteps.forEach((step, index) => {
+    this.draft.serviceSteps.forEach((step) => {
       const row: Partial<Record<ServiceStepField, string>> = {};
       if (!step.name.trim()) row.name = t("venue.field_required");
-      if (index === 0 && step.start === "after_previous")
-        row.start = t("venue.service_step_first_after_previous");
+      if (
+        step.start === "after_step" &&
+        !this.draft!.serviceSteps.some((parent) => parent.key === step.afterStepKey)
+      )
+        row.start = t("venue.service_step_start_invalid");
       else if (step.start === "course_served" && !courses.has(step.courseId!))
         row.start = t("venue.service_step_course_gone");
       const minutes = step.minutes.trim();

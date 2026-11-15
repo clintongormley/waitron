@@ -18,7 +18,8 @@ const STEPS: ServiceStepDraft[] = [
     key: "s2",
     id: "s2",
     name: "Take order",
-    start: "after_previous",
+    start: "after_step",
+    afterStepKey: "s1",
     courseId: null,
     minutes: "2",
   },
@@ -166,18 +167,19 @@ it("draws each step's name, start and minutes under Step and Starts", async () =
   ]);
   expect(drawn).toEqual([
     ["Set up", "When seated", "0", "min"],
-    ["Take order", "After the step before", "2", "min"],
+    ["Take order", "After Set up", "2", "min"],
     ["Dessert?", "Mains served", "10", "min"],
     ["Anything else?", "Everything served", "10", "min"],
   ]);
   expect(q(el, '[data-test="service-steps-heading"]')!.textContent!.trim()).toBe("Service steps");
 });
 
-it("offers the five starts, one per course in the order given", async () => {
+it("offers named steps except itself and its descendants, then courses in their order", async () => {
   const el = await mount();
   expect(startBox(el, 0).options.map((option) => option.label)).toEqual([
     "When seated",
-    "After the step before",
+    "After Dessert?",
+    "After Anything else?",
     "Starters served",
     "Mains served",
     "Everything served",
@@ -215,7 +217,7 @@ it("typing a name, choosing a start or changing minutes sends the whole list", a
   expect(raw).toEqual([]);
 });
 
-it("Add step adds an empty row, When seated in an empty list and After the step before otherwise, and focuses its name", async () => {
+it("Add step adds an empty row, When seated in an empty list and after the last named step otherwise, and focuses its name", async () => {
   const el = await mount({ steps: [] });
   const { changes } = record();
   await userEvent.click(addButton(el)!);
@@ -228,7 +230,13 @@ it("Add step adds an empty row, When seated in an empty list and After the step 
   await userEvent.click(addButton(el)!);
   await settle(el);
   const [first, second] = changes.at(-1)!;
-  expect(second).toMatchObject({ id: null, name: "", start: "after_previous", minutes: "0" });
+  expect(second).toMatchObject({
+    id: null,
+    name: "",
+    start: "after_step",
+    afterStepKey: first!.key,
+    minutes: "0",
+  });
   expect(second!.key).not.toBe(first!.key);
   expect(second!.key).not.toBe("");
   expect(el.shadowRoot!.activeElement).toBe(nameInput(el, 1));
@@ -249,52 +257,79 @@ it("Add step is disabled at 20 steps", async () => {
 });
 
 it("Delete in the row menu removes the step and moves focus to the next name, or to Add step", async () => {
-  const el = await mount({ steps: copy(STEPS.slice(0, 2)) });
+  const el = await mount({
+    steps: [
+      {
+        ...STEPS[1]!,
+        key: "grandchild",
+        id: "grandchild",
+        name: "Check again",
+        afterStepKey: "s2",
+      },
+      STEPS[1]!,
+      STEPS[0]!,
+      STEPS[2]!,
+    ],
+  });
   const { changes } = record();
   await remove(el, "s1");
-  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s2"]);
+  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s3"]);
   expect(el.shadowRoot!.activeElement).toBe(nameInput(el, 0));
 
-  await remove(el, "s2");
+  await remove(el, "s3");
   expect(changes.at(-1)).toEqual([]);
   expect(el.shadowRoot!.activeElement).toBe(addButton(el));
 });
 
-it("moves a step with the keyboard and announces its place", async () => {
-  const el = await mount();
-  const { changes } = record();
-  const grip = q(el, '[data-test="drag-s1"]')!;
-  expect(grip.getAttribute("aria-label")).toBe("Reorder: Set up");
-  grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+it("keeps a delay field and its row in place while typing multiple digits", async () => {
+  const el = await mount({
+    steps: [
+      STEPS[0]!,
+      ...[
+        ["alpha", "Alpha", "5"],
+        ["bravo", "Bravo", "10"],
+        ["charlie", "Charlie", "20"],
+      ].map(([key, name, minutes]) => ({
+        key: key!,
+        id: key!,
+        name: name!,
+        minutes: minutes!,
+        start: "after_step" as const,
+        afterStepKey: "s1",
+        courseId: null,
+      })),
+    ],
+  });
+  const input = minutesInput(el, 3).shadowRoot!.querySelector("input")!;
+  await userEvent.type(input, "{selectall}15");
   await settle(el);
-  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s2", "s1", "s3", "s4"]);
-  expect(
-    rows(el).map((row) => row.querySelector("[data-test^=drag-]")!.getAttribute("data-test")),
-  ).toEqual(["drag-s2", "drag-s1", "drag-s3", "drag-s4"]);
-  expect(q(el, ".reorder-status")!.textContent).toBe("Set up is now 2 of 4.");
-  expect(el.shadowRoot!.activeElement).toBe(q(el, '[data-test="drag-s1"]'));
+  expect(el.steps.find((step) => step.key === "charlie")!.minutes).toBe("15");
+  await userEvent.type(input, "{selectall}7");
+  await settle(el);
+  expect(el.steps.find((step) => step.key === "charlie")!.minutes).toBe("7");
+  expect(rows(el).map((row) => row.getAttribute("data-step"))).toEqual([
+    "s1",
+    "alpha",
+    "bravo",
+    "charlie",
+  ]);
+  expect(el.shadowRoot!.activeElement).toBe(minutesInput(el, 3));
 });
 
-it("drags a step into place", async () => {
+it("places a step by its named start and offers no dragging", async () => {
   const el = await mount();
   const { changes } = record();
-  q(el, '[data-test="drag-s1"]')!.dispatchEvent(
-    new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }),
-  );
-  for (const index of [1, 2]) {
-    const box = rows(el)[index]!.getBoundingClientRect();
-    document.dispatchEvent(
-      new PointerEvent("pointermove", {
-        bubbles: true,
-        pointerId: 9,
-        clientY: box.top + box.height / 2,
-      }),
-    );
-    await settle(el);
-  }
-  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
-  await settle(el);
-  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s2", "s3", "s1", "s4"]);
+  await choose(el, 3, "Starters served");
+  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s1", "s2", "s4", "s3"]);
+  await choose(el, 2, "After Dessert?");
+  expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s1", "s2", "s3", "s4"]);
+  expect(changes.at(-1)![3]).toMatchObject({
+    start: "after_step",
+    afterStepKey: "s3",
+    courseId: null,
+  });
+  expect(q(el, '[data-test^="drag-"]')).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(startBox(el, 3));
 });
 
 it("shows each error under its own field", async () => {
@@ -362,12 +397,11 @@ it.each([
   },
 );
 
-it("draws one table row and one handle per step, in order", async () => {
+it("draws one table row per step in order", async () => {
   const el = await mount();
-  expect(rows(el)).toHaveLength(STEPS.length);
-  expect(
-    rows(el).map((row) => row.querySelector("[data-test^=drag-]")!.getAttribute("data-test")),
-  ).toEqual(STEPS.map((step) => `drag-${step.key}`));
+  expect(rows(el).map((row) => row.getAttribute("data-step"))).toEqual(
+    STEPS.map((step) => step.key),
+  );
 });
 
 it("read-only: no handles, no menus, no Add step, fields disabled", async () => {

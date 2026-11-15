@@ -46,8 +46,8 @@ function triggerOf(
   switch (rule.start) {
     case "seated":
       return facts.openedAt;
-    case "after_previous":
-      return index === 0 ? null : (facts.doneAt.get(rules[index - 1]!.id) ?? null);
+    case "after_step":
+      return rule.afterStepId === null ? null : (facts.doneAt.get(rule.afterStepId) ?? null);
     case "course_served":
       return rule.courseId === null ? null : (facts.courseServedAt.get(rule.courseId) ?? null);
     case "all_served":

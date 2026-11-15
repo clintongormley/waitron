@@ -18,9 +18,7 @@ export function courseDeleteCopy(): DeleteDialogCopy {
       countOf(
         item.key === "course_service_steps"
           ? "kitchen.delete_course_service_steps"
-          : item.key === "course_seated_steps"
-            ? "kitchen.delete_course_seated_steps"
-            : "kitchen.delete_course_products",
+          : "kitchen.delete_course_products",
         item.count,
       ),
     refusal: (item) => codeMessage(item.code),

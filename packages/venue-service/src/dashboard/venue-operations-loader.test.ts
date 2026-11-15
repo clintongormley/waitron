@@ -573,20 +573,30 @@ it.each(["live", "one-off"] as const)(
 it("an older live copy cannot remove a saved Coffee step from the next save", async () => {
   const initial = model();
   initial.serviceSteps = [
-    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
     {
+      afterStepId: null,
+      id: "s1",
+      departmentId: "d1",
+      name: "Set up",
+      start: "seated",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      afterStepId: "s1",
       id: "s2",
       departmentId: "d1",
       name: "Take order",
-      start: "after_previous",
+      start: "after_step",
       courseId: null,
       minutes: 2,
     },
     {
+      afterStepId: "s2",
       id: "s3",
       departmentId: "d1",
       name: "Dessert?",
-      start: "after_previous",
+      start: "after_step",
       courseId: null,
       minutes: 10,
     },
@@ -610,10 +620,11 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
   await invalidate(liveData, request);
   const saved = structuredClone(initial);
   saved.serviceSteps.push({
+    afterStepId: "s3",
     id: "coffee-saved",
     departmentId: "d1",
     name: "Coffee",
-    start: "after_previous",
+    start: "after_step",
     courseId: null,
     minutes: 0,
   });
@@ -655,15 +666,32 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
     serviceSteps: unknown[];
   };
   expect(second.serviceSteps).toEqual([
-    ...initial.serviceSteps.map(({ id, name, start, courseId, minutes }) => ({
+    ...initial.serviceSteps.map(({ id, name, start, courseId, minutes, afterStepId }) => ({
+      key: id,
+      afterStepKey: afterStepId,
       id,
       name,
       start,
       courseId,
       minutes,
     })),
-    { id: "coffee-saved", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
-    { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      id: "coffee-saved",
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      name: "Tea",
+      start: "after_step",
+      courseId: null,
+      minutes: 0,
+    },
   ]);
 });
 

@@ -923,12 +923,21 @@ it("adding, renaming, moving or deleting a step dirties the form, undoing it cle
   const el = await mount();
   const view = structuredClone(model);
   view.serviceSteps = [
-    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
     {
+      afterStepId: null,
+      id: "s1",
+      departmentId: "d1",
+      name: "Set up",
+      start: "seated",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      afterStepId: "s1",
       id: "s2",
       departmentId: "d1",
       name: "Take order",
-      start: "after_previous",
+      start: "after_step",
       courseId: null,
       minutes: 2,
     },

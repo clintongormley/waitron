@@ -1,6 +1,6 @@
 import { persons } from "../identity/persons.js";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, label, newId, table, tsString } from "../columns.js";
 import { kitchenCourses } from "../kitchen-courses.js";
 import { parties } from "../parties.js";
@@ -8,7 +8,7 @@ import { departments } from "./service.js";
 
 export const SERVICE_STEP_STARTS = [
   "seated",
-  "after_previous",
+  "after_step",
   "course_served",
   "all_served",
   "since_last_order",
@@ -26,6 +26,7 @@ export const serviceSteps = table(
     name: label("name").notNull(),
     start: serviceStepStart("start").notNull(),
     courseId: id("course_id"),
+    afterStepId: id("after_step_id"),
     minutes: count("minutes").notNull(),
   },
   (t) => [
@@ -39,6 +40,16 @@ export const serviceSteps = table(
       foreignColumns: [kitchenCourses.id],
       name: "service_steps_course_fk",
     }),
+    uniqueIndex("service_steps_department_id_uq").on(t.departmentId, t.id),
+    foreignKey({
+      columns: [t.departmentId, t.afterStepId],
+      foreignColumns: [t.departmentId, t.id],
+      name: "service_steps_after_step_fk",
+    }).onDelete("restrict"),
+    check(
+      "service_steps_after_step_ck",
+      sql`(${t.start} = 'after_step') = (${t.afterStepId} is not null) and (${t.afterStepId} is null or ${t.afterStepId} <> ${t.id})`,
+    ),
     index("service_steps_department_position_idx").on(t.departmentId, t.position),
     index("service_steps_course_idx").on(t.courseId),
     check("service_steps_start_ck", enumCheck(t.start)),

@@ -10,6 +10,8 @@ import {
   withTransaction,
   menus,
   kitchenStations,
+  serviceSteps,
+  kitchenCourses,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -22,7 +24,7 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { STARTER_STEPS } from "./service-steps.js";
+import { deleteServiceSteps, STARTER_STEPS } from "./service-steps.js";
 import {
   STARTER_COURSE_NAMES,
   STARTER_PERIOD_NAMES,
@@ -86,13 +88,20 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         "en-GB",
         ["Sharing plates", "Starters", "Mains", "Desserts"],
         [false, false, true, true],
+        [null, null, "mains", "desserts"],
       ],
-      ["ES", "es-ES", null, [false, false, true, true]],
-      ["GB", "en-GB", ["Starters", "Mains", "Desserts"], [false, true, true]],
-      ["ZZ", "en-GB", [], []],
+      ["ES", "es-ES", null, [false, false, true, true], [null, null, "mains", "desserts"]],
+      [
+        "GB",
+        "en-GB",
+        ["Starters", "Mains", "Desserts"],
+        [false, true, true],
+        [null, "mains", "desserts"],
+      ],
+      ["ZZ", "en-GB", [], [], []],
     ] as const)(
       "seeds %s courses in %s with their firing defaults",
-      async (country, locale, english, held) => {
+      async (country, locale, english, held, keys) => {
         await seedVenue(db, { invoiceLocales: [locale] });
         await db.execute(sql`update taxpayer set country = ${country}`);
         const node = { nodeId: await seedNode(db) };
@@ -113,6 +122,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
             active: 1,
           })),
         );
+        expect(
+          await db.select().from(kitchenCourses).orderBy(kitchenCourses.displayOrder),
+        ).toMatchObject(keys.map((starterKey) => ({ starterKey })));
       },
     );
 
@@ -258,7 +270,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seed();
       expect(await steps()).toEqual([
         { name: "Set up", start: "seated", minutes: 0, position: 0 },
-        { name: "Take order", start: "after_previous", minutes: 2, position: 1 },
+        { name: "Take order", start: "after_step", minutes: 2, position: 1 },
         { name: "Anything else?", start: "all_served", minutes: 10, position: 2 },
       ]);
     });
@@ -267,9 +279,13 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const { seed, steps } = await venue("Starter re-run");
       await seed();
       expect(await steps()).toHaveLength(3);
-      await db.execute(
-        sql`delete from service_steps where department_id in (select id from departments )`,
-      );
+      await withTransaction(db, async (tx) => {
+        const rows = await tx.select({ id: serviceSteps.id }).from(serviceSteps);
+        await deleteServiceSteps(
+          tx,
+          rows.map((row) => row.id),
+        );
+      });
       await seed();
       expect(await steps()).toEqual([]);
     });

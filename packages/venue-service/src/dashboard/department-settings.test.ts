@@ -338,8 +338,17 @@ it("a save that does not touch the steps sends none", async () => {
   const view = structuredClone(model);
   view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
   view.serviceSteps = [
-    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
     {
+      afterStepId: null,
+      id: "s1",
+      departmentId: "d1",
+      name: "Set up",
+      start: "seated",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      afterStepId: null,
       id: "s2",
       departmentId: "d1",
       name: "Dessert?",
@@ -348,6 +357,7 @@ it("a save that does not touch the steps sends none", async () => {
       minutes: 10,
     },
     {
+      afterStepId: null,
       id: "s3",
       departmentId: "d2",
       name: "Take order",
@@ -1995,16 +2005,26 @@ const stepsView = () => {
     { id: "c2", name: "Desserts", heldUntilFired: true },
   ];
   view.serviceSteps = [
-    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
     {
+      afterStepId: null,
+      id: "s1",
+      departmentId: "d1",
+      name: "Set up",
+      start: "seated",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      afterStepId: "s1",
       id: "s2",
       departmentId: "d1",
       name: "Take order",
-      start: "after_previous",
+      start: "after_step",
       courseId: null,
       minutes: 2,
     },
     {
+      afterStepId: null,
       id: "s3",
       departmentId: "d1",
       name: "Dessert?",
@@ -2012,14 +2032,46 @@ const stepsView = () => {
       courseId: "c1",
       minutes: 10,
     },
-    { id: "s9", departmentId: "d2", name: "Greet", start: "seated", courseId: null, minutes: 2 },
+    {
+      afterStepId: null,
+      id: "s9",
+      departmentId: "d2",
+      name: "Greet",
+      start: "seated",
+      courseId: null,
+      minutes: 2,
+    },
   ];
   return view;
 };
 const SENT_STEPS = [
-  { id: "s1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
-  { id: "s2", name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
-  { id: "s3", name: "Dessert?", start: "course_served", courseId: "c1", minutes: 10 },
+  {
+    key: expect.any(String),
+    afterStepKey: null,
+    id: "s1",
+    name: "Set up",
+    start: "seated",
+    courseId: null,
+    minutes: 0,
+  },
+  {
+    key: expect.any(String),
+    afterStepKey: "s1",
+    id: "s2",
+    name: "Take order",
+    start: "after_step",
+    courseId: null,
+    minutes: 2,
+  },
+  {
+    key: expect.any(String),
+    afterStepKey: null,
+    id: "s3",
+    name: "Dessert?",
+    start: "course_served",
+    courseId: "c1",
+    minutes: 10,
+  },
 ];
 type StepControl = HTMLElement & {
   value: string;
@@ -2118,7 +2170,14 @@ it("adding a step enables Save; saving sends the whole list, the new step withou
   await expect.poll(() => writes.length).toBe(1);
   expect((writes[0]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
     ...SENT_STEPS,
-    { name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 0,
+    },
   ]);
   await expect.poll(() => save(el).disabled).toBe(true);
 });
@@ -2152,10 +2211,11 @@ it("after a save, the model's copy with the new step's id replaces the clean dra
   await expect.poll(() => save(el).disabled).toBe(true);
   const refreshed = stepsView();
   refreshed.serviceSteps.splice(3, 0, {
+    afterStepId: "s3",
     id: "s4",
     departmentId: "d1",
     name: "Coffee",
-    start: "after_previous",
+    start: "after_step",
     courseId: null,
     minutes: 0,
   });
@@ -2168,16 +2228,25 @@ it("after a save, the model's copy with the new step's id replaces the clean dra
   await expect.poll(() => writes.length).toBe(2);
   expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
     ...SENT_STEPS,
-    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      id: "s4",
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 5,
+    },
   ]);
 });
 const withCoffee = () => {
   const view = stepsView();
   view.serviceSteps.splice(3, 0, {
+    afterStepId: "s3",
     id: "s4",
     departmentId: "d1",
     name: "Coffee",
-    start: "after_previous",
+    start: "after_step",
     courseId: null,
     minutes: 0,
   });
@@ -2223,7 +2292,15 @@ it("a step edited while the saved list's refresh is pending keeps the new step's
   await expect.poll(() => writes.length).toBe(2);
   expect((writes[1]!.body as { serviceSteps: unknown[] }).serviceSteps).toEqual([
     ...SENT_STEPS,
-    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      id: "s4",
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 5,
+    },
   ]);
 });
 it("a rename made before the saved list's refresh lands keeps the rename and takes the new step's id", async () => {
@@ -2250,7 +2327,15 @@ it("a rename made before the saved list's refresh lands keeps the rename and tak
   await expect.poll(() => writes.length).toBe(3);
   expect((writes[2]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
     ...SENT_STEPS,
-    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      id: "s4",
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 5,
+    },
   ]);
 });
 it("a step added before the saved list's refresh lands is still sent as new, beside the saved step's id", async () => {
@@ -2277,8 +2362,23 @@ it("a step added before the saved list's refresh lands is still sent as new, bes
   await expect.poll(() => writes.length).toBe(2);
   expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
     ...SENT_STEPS,
-    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
-    { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      id: "s4",
+      name: "Coffee",
+      start: "after_step",
+      courseId: null,
+      minutes: 0,
+    },
+    {
+      key: expect.any(String),
+      afterStepKey: expect.any(String),
+      name: "Tea",
+      start: "after_step",
+      courseId: null,
+      minutes: 0,
+    },
   ]);
 });
 it("a step list another manager changed while a rename is in progress shows their list, and the rename saves", async () => {
@@ -2331,8 +2431,23 @@ for (const refresh of ["before any refreshed model arrives", "after the refresh 
     await expect.poll(() => writes.length).toBe(2);
     expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
       ...SENT_STEPS,
-      { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
-      { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+      {
+        key: expect.any(String),
+        afterStepKey: expect.any(String),
+        id: "s4",
+        name: "Coffee",
+        start: "after_step",
+        courseId: null,
+        minutes: 0,
+      },
+      {
+        key: expect.any(String),
+        afterStepKey: expect.any(String),
+        name: "Tea",
+        start: "after_step",
+        courseId: null,
+        minutes: 0,
+      },
     ]);
   });
 }
@@ -2384,8 +2499,22 @@ const laid = (tradingName?: string) => {
   if (tradingName) view.departments[0]!.tradingName = tradingName;
   return view;
 };
-const COFFEE = { name: "Coffee", start: "after_previous", courseId: null, minutes: 0 };
-const TEA = { name: "Tea", start: "after_previous", courseId: null, minutes: 0 };
+const COFFEE = {
+  key: expect.any(String),
+  afterStepKey: expect.any(String),
+  name: "Coffee",
+  start: "after_step",
+  courseId: null,
+  minutes: 0,
+};
+const TEA = {
+  key: expect.any(String),
+  afterStepKey: expect.any(String),
+  name: "Tea",
+  start: "after_step",
+  courseId: null,
+  minutes: 0,
+};
 const stepNames = (el: DepartmentSettings) => stepList(el).steps.map((step) => step.name);
 const sentSteps = (body: unknown) => (body as { serviceSteps?: unknown }).serviceSteps;
 function holdSaves(el: DepartmentSettings) {
@@ -2523,9 +2652,20 @@ it("a step list another manager changed while a rename's save is sent is shown a
   expect(sentSteps(sent[1])).toEqual([...SENT_STEPS.slice(0, 2), TEA]);
   finish();
 });
-it("changing a step and changing it back sends no steps", async () => {
-  const { el, writes } = await mount(stepsView());
+it("changing a step and changing it back sends no steps even after courses are reordered", async () => {
+  const view = stepsView();
+  view.serviceSteps.push({
+    id: "coffee",
+    departmentId: "d1",
+    name: "Coffee",
+    start: "course_served",
+    courseId: "c2",
+    afterStepId: null,
+    minutes: 5,
+  });
+  const { el, writes } = await mount(view);
   await selectDepartmentTab(el, "tables");
+  el.model = { ...view, courses: [...view.courses].reverse() };
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   expect(save(el).disabled).toBe(false);
@@ -2576,14 +2716,14 @@ it.each([
     fix: (el: DepartmentSettings) => editStep(el, 2, "Minutes", "1"),
   },
   {
-    rule: "a first step after the step before",
-    at: [0, 1] as const,
-    message: "The first step has no step before it.",
-    breakIt: (el: DepartmentSettings) => chooseStart(el, 0, "after_previous"),
-    fix: (el: DepartmentSettings) => chooseStart(el, 0, "all_served"),
+    rule: "a missing named predecessor",
+    at: [2, 1] as const,
+    message: "Choose a step outside this step’s following steps.",
+    breakIt: (el: DepartmentSettings) => chooseStart(el, 2, "after_step:missing"),
+    fix: (el: DepartmentSettings) => chooseStart(el, 2, "all_served"),
   },
 ])(
-  "a blank name, a fraction of a minute, 0 for a repeating step and a first step after the step before are each marked after Save, and Save stays disabled until fixed: $rule",
+  "a blank name, a fraction of a minute, 0 for a repeating step and a missing named predecessor are each marked after Save, and Save stays disabled until fixed: $rule",
   async ({ at, message, breakIt, fix }) => {
     const { el, writes } = await mount(stepsView());
     await selectDepartmentTab(el, "tables");
@@ -2711,10 +2851,11 @@ it("a course deleted meanwhile is named under every step that starts from it", a
   expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(save(el).disabled).toBe(false);
   await chooseStart(el, 1, "all_served");
+  expect(stepNames(el)).toEqual(["Set up", "Dessert?", "Take order"]);
   expect(stepErrors(el)).toEqual([
     ["", "", ""],
-    ["", "", ""],
     ["", COURSE_GONE, ""],
+    ["", "", ""],
   ]);
 });
 it("a course refusal landing after a step's start was changed to Everything served leaves that step unmarked", async () => {

@@ -13,6 +13,7 @@ export const kitchenCourses = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
+    starterKey: label("starter_key"),
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
     heldUntilFired: flag("held_until_fired").notNull().default(true),
@@ -21,6 +22,9 @@ export const kitchenCourses = table(
   (t) => [
     uniqueIndex("kitchen_courses_name_key")
       .on(t.name)
+      .where(sql`${t.active} = 1`),
+    uniqueIndex("kitchen_courses_starter_key")
+      .on(t.starterKey)
       .where(sql`${t.active} = 1`),
   ],
 );

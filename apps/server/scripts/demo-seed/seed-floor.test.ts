@@ -210,7 +210,7 @@ describe("seedFloor", () => {
     expect(steps).toEqual(
       [TRADING_NAMES.deli, TRADING_NAMES.restaurant].flatMap((department) => [
         { department, name: "Set up", start: "seated", minutes: 0 },
-        { department, name: "Take order", start: "after_previous", minutes: 2 },
+        { department, name: "Take order", start: "after_step", minutes: 2 },
         { department, name: "Anything else?", start: "all_served", minutes: 10 },
       ]),
     );

@@ -1,3 +1,4 @@
+import { serviceStepOrder } from "./service-steps.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
 import type { PackLookup } from "./holidays.js";
@@ -567,7 +568,8 @@ function validateServiceSteps(tables: Tables): void {
   const departments = ids(tables.departments);
   const courses = ids(tables.kitchen_courses);
   const starts: readonly unknown[] = SERVICE_STEP_STARTS;
-  const lowest = new Map<unknown, number>();
+  const steps = tables.service_steps ?? [];
+  const byId = new Map(steps.map((row) => [row.id, row]));
   const counts = new Map<unknown, number>();
   for (const row of tables.service_steps ?? []) {
     if (!departments.has(row.department_id)) refuse("service_steps.department_id");
@@ -595,11 +597,21 @@ function validateServiceSteps(tables: Tables): void {
       (row.start === "since_last_order" && minutes < 1)
     )
       refuse("service_steps.minutes");
-    lowest.set(row.department_id, Math.min(lowest.get(row.department_id) ?? position, position));
+    const parent = row.after_step_id ?? null;
+    if (
+      (row.start === "after_step") !== (parent !== null) ||
+      (parent !== null &&
+        (typeof parent !== "string" || byId.get(parent)?.department_id !== row.department_id))
+    )
+      refuse("service_steps.after_step_id");
   }
-  for (const row of tables.service_steps ?? [])
-    if (row.start === "after_previous" && row.position === lowest.get(row.department_id))
-      refuse("service_steps.start");
+  serviceStepOrder(
+    steps.map((row) => ({
+      key: String(row.id),
+      afterStepKey: (row.after_step_id ?? null) as string | null,
+    })),
+    () => refuse("service_steps.after_step_id"),
+  );
 }
 
 function validateVenueServiceConfiguration(

@@ -5768,8 +5768,7 @@ words.
 
 Courses and prep stations offer **Delete** on every active row, with no Status column or
 Status filter. The shared dialog reads the current impact before enabling Delete. A course
-clears product defaults, deletes the service steps that start from it (a step left first that
-started after the step before then starts When seated), and retains any row needed by recorded work. A station refuses deletion
+clears product defaults, deletes the service steps that start from it and their named followers, and retains any row needed by recorded work. A station refuses deletion
 while it is the default, an explicit effective KDS screen binding names it, or unfinished food
 remains. A hidden inactive device does not bind; an Every-stations scope alone does not. Once deletion is
 allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows
@@ -6728,7 +6727,7 @@ after the department's settings; if that request is refused, the field shows the
 unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
 and the zones that differ, and “Courses and stations”, with the shared reminder and the manager's
 PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
-bill requested and leaving, blue service-step rows with their existing start selectors, drag handles,
+bill requested and leaving, blue service-step rows placed by their named starts,
 Delete and Add step, and amber read-only course rows in course order with their current send/hold
 and reminder values. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
 holds the department's receipt

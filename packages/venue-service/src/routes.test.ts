@@ -286,6 +286,7 @@ describe("whole service settings saves", () => {
         departmentId: fx.departmentId,
         name: "Coffee",
         start: "seated",
+        afterStepId: null,
         courseId: null,
         minutes: 0,
       },
@@ -777,8 +778,14 @@ describe("whole service settings saves", () => {
     const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
       serviceSteps: [
-        { name: "Set up", start: "seated", courseId: null, minutes: 0 },
-        { name: " Take order ", start: "after_previous", minutes: 2 },
+        { key: "setup", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+        {
+          key: "order",
+          afterStepKey: "setup",
+          name: " Take order ",
+          start: "after_step",
+          minutes: 2,
+        },
         { name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
       ],
     });
@@ -790,6 +797,7 @@ describe("whole service settings saves", () => {
         departmentId: fx.departmentId,
         name: "Set up",
         start: "seated",
+        afterStepId: null,
         courseId: null,
         minutes: 0,
       },
@@ -797,7 +805,8 @@ describe("whole service settings saves", () => {
         id: expect.any(String),
         departmentId: fx.departmentId,
         name: "Take order",
-        start: "after_previous",
+        start: "after_step",
+        afterStepId: (model.serviceSteps[0] as { id: string }).id,
         courseId: null,
         minutes: 2,
       },
@@ -806,6 +815,7 @@ describe("whole service settings saves", () => {
         departmentId: fx.departmentId,
         name: "Dessert?",
         start: "course_served",
+        afterStepId: null,
         courseId: mains,
         minutes: 10,
       },
@@ -832,8 +842,8 @@ describe("whole service settings saves", () => {
     expect((await modelSteps(fx)).serviceSteps).toEqual(before);
   });
 
-  const setUp = { name: "Set up", start: "seated", minutes: 0 };
-  const takeOrder = { name: "Take order", start: "after_previous", minutes: 2 };
+  const setUp = { key: "setup", name: "Set up", start: "seated", minutes: 0 };
+  const takeOrder = { afterStepKey: "setup", name: "Take order", start: "after_step", minutes: 2 };
   const sameId = randomUUID();
   it.each<[string, unknown, string]>([
     ["not a list", "x", "serviceSteps"],
@@ -843,7 +853,7 @@ describe("whole service settings saves", () => {
     ["an id that is not one", [{ ...setUp, id: "nope" }], "serviceSteps.0.id"],
     ["a blank name", [{ ...setUp, name: "  " }], "serviceSteps.0.name"],
     ["an unknown start", [{ ...setUp, start: "later" }], "serviceSteps.0.start"],
-    ["a first step after the step before", [takeOrder], "serviceSteps.0.start"],
+    ["a named predecessor absent from the submitted list", [takeOrder], "serviceSteps.0.start"],
     [
       "a course on a seated row",
       [setUp, { ...setUp, courseId: randomUUID() }],

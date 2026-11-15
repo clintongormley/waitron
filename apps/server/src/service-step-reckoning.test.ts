@@ -17,8 +17,9 @@ function rule(
   start: StepRule["start"],
   minutes: number,
   courseId: string | null = null,
+  afterStepId: string | null = null,
 ): StepRule {
-  return { id, name: id, start, courseId, minutes };
+  return { id, name: id, start, courseId, afterStepId, minutes };
 }
 
 function facts(overrides: Partial<StepFacts> = {}): StepFacts {
@@ -46,7 +47,7 @@ describe("liveSteps", () => {
   it("the worked example of the design's §8", () => {
     const rules = [
       rule("Set up", "seated", 0),
-      rule("Take order", "after_previous", 2),
+      rule("Take order", "after_step", 2, null, "Set up"),
       rule("Dessert?", "course_served", 10, "mains"),
     ];
     expect(liveSteps(rules, facts(), at("20:30"))).toEqual([live("Set up", "20:30", "20:30")]);
@@ -73,8 +74,8 @@ describe("liveSteps", () => {
     ]);
   });
 
-  it("after the step before is triggered by the Done of the step above, and never for the first step", () => {
-    const rules = [rule("First", "after_previous", 0), rule("Second", "after_previous", 3)];
+  it("a named start needs its chosen step’s Done, and an unset reference never triggers", () => {
+    const rules = [rule("First", "after_step", 0), rule("Second", "after_step", 3, null, "First")];
     expect(liveSteps(rules, facts(), at("21:00"))).toEqual([]);
     const doneAt = new Map([["First", at("20:40")]]);
     expect(liveSteps(rules, facts({ doneAt }), at("21:00"))).toEqual([
@@ -170,7 +171,10 @@ describe("liveSteps", () => {
   });
 
   it("an order sent while a step waits out its minutes leaves it, unless it is the party's first order", () => {
-    const rules = [rule("Set up", "seated", 0), rule("Take order", "after_previous", 2)];
+    const rules = [
+      rule("Set up", "seated", 0),
+      rule("Take order", "after_step", 2, null, "Set up"),
+    ];
     const doneAt = new Map([["Set up", at("20:33")]]);
     const first = { doneAt, firstOrderAt: at("20:34"), lastOrderAt: at("20:34") };
     expect(liveSteps(rules, facts(first), at("20:36"))).toEqual([]);
@@ -181,7 +185,10 @@ describe("liveSteps", () => {
   });
 
   it("a first order at the same instant as a step's trigger does not clear it", () => {
-    const rules = [rule("Set up", "seated", 0), rule("Take order", "after_previous", 2)];
+    const rules = [
+      rule("Set up", "seated", 0),
+      rule("Take order", "after_step", 2, null, "Set up"),
+    ];
     const doneAt = new Map([["Set up", at("20:34")]]);
     const ordered = { doneAt, firstOrderAt: at("20:34"), lastOrderAt: at("20:34") };
     expect(liveSteps(rules, facts(ordered), at("20:35"))).toEqual([
@@ -218,7 +225,10 @@ describe("liveSteps", () => {
   });
 
   it("order times that are dishes arriving from another table still clear a step waiting for an order", () => {
-    const rules = [rule("Set up", "seated", 0), rule("Take order", "after_previous", 2)];
+    const rules = [
+      rule("Set up", "seated", 0),
+      rule("Take order", "after_step", 2, null, "Set up"),
+    ];
     const doneAt = new Map([["Set up", at("20:33")]]);
     const arrived = {
       doneAt,
@@ -245,7 +255,7 @@ describe("liveSteps", () => {
   });
 
   it("the Done that triggers the next step does not clear it", () => {
-    const rules = [rule("Set up", "seated", 0), rule("Bread", "after_previous", 0)];
+    const rules = [rule("Set up", "seated", 0), rule("Bread", "after_step", 0, null, "Set up")];
     const doneAt = new Map([["Set up", at("20:33")]]);
     expect(liveSteps(rules, facts({ doneAt }), at("20:33"))).toEqual([
       live("Bread", "20:33", "20:33"),
@@ -469,4 +479,24 @@ describe("servedTimes", () => {
   it("gives nothing served with no dish", () => {
     expect(servedTimes([])).toEqual({ courseServedAt: new Map(), allServedAt: null });
   });
+});
+
+it("a named start follows its chosen step despite an unrelated row placed between them", () => {
+  const rules = [
+    rule("Set up", "seated", 0),
+    rule("Water", "seated", 1),
+    { ...rule("Take order", "after_step", 2, null, "Set up"), afterStepId: "Set up" },
+  ];
+  expect(
+    liveSteps(
+      rules,
+      facts({
+        doneAt: new Map([
+          ["Set up", at("20:33")],
+          ["Water", at("20:40")],
+        ]),
+      }),
+      at("20:41"),
+    ),
+  ).toEqual([live("Take order", "20:33", "20:35")]);
 });

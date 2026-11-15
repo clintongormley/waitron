@@ -350,11 +350,17 @@ describe("readTableSteps", () => {
     );
   });
 
-  it("after the step before is triggered by a recorded Done", async () => {
+  it("a named step is triggered by a recorded Done", async () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp, takeOrder] = await setSteps(v, await tablesDepartment(v), [
-      seated("Set up"),
-      { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
+      { ...seated("Set up"), key: "setup" },
+      {
+        name: "Take order",
+        start: "after_step",
+        afterStepKey: "setup",
+        courseId: null,
+        minutes: 2,
+      },
     ]);
     const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
