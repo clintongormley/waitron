@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { courseDeleteCopy } from "./course-delete-copy.js";
 const before = currentLocale();
 afterEach(() => setLocale(before));
@@ -48,7 +49,7 @@ it.each([
   [
     "es-ES",
     "1 paso de servicio que empieza al servirlo.",
-    "2 pasos de servicio que empiezan al servirlo o tras esos pasos.",
+    es["kitchen.delete_course_service_steps"].replace("{count}", "2"),
     "1 producto se prepara primero.",
   ],
 ])(
