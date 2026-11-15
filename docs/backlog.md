@@ -2115,13 +2115,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
-- **The setup app's configuration preview types four address fields as always text.**
-  `ConfigurationPreview.venue` in `apps/setup/src/api/client.ts` is `VenueDraft`'s shape, which
-  declares `addressLine1`, `postalCode`, `city` and `province` as `string`; the server's
-  `PreparedVenue` (`packages/provisioning/src/configuration-transfer.ts`) sends each as
-  `string | null`. Type the preview as the server sends it and check what the preview screen shows
-  for an empty one.
-
 - **The venue's menu routes are named unlike their neighbours.** S5 moved them to
   `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before

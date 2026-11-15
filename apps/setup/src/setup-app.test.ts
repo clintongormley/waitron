@@ -7,7 +7,12 @@ import indexHtml from "../index.html?raw";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
-import { SetupApi, type ProvisionBody, type SetupStatus } from "./api/client.js";
+import {
+  SetupApi,
+  type ConfigurationPreview,
+  type ProvisionBody,
+  type SetupStatus,
+} from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
@@ -794,10 +799,11 @@ describe("setup-app", () => {
       rectificativeSeriesCode: "NEWR",
     };
 
-    async function staged(api: Partial<Record<keyof SetupApi, unknown>> = {}) {
-      const stageConfiguration = vi
-        .fn()
-        .mockResolvedValue({ venue: exported, counts: {}, reconnect: [] });
+    async function staged(
+      api: Partial<Record<keyof SetupApi, unknown>> = {},
+      venue: ConfigurationPreview["venue"] = exported,
+    ) {
+      const stageConfiguration = vi.fn().mockResolvedValue({ venue, counts: {}, reconnect: [] });
       const el = await mountSetupApp(stubApi({ stageConfiguration, ...api }));
       patch(el, { mode: "live" });
       configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
@@ -866,6 +872,58 @@ describe("setup-app", () => {
       expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
       expect(body.configurationImport).toBe(true);
       expect(body.venue).toMatchObject(sixFields);
+    });
+
+    it("drafts an export's empty address fields as empty text, so the form shows them empty", async () => {
+      const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision }, { ...exported, ...emptyAddress });
+      expect(readDraft(el).venue).toMatchObject({
+        name: "Prepared",
+        taxId: "B12345678",
+        addressLine1: "",
+        postalCode: "",
+        city: "",
+        province: "",
+      });
+      await choose(el, false);
+      goto(el, "venue");
+      await el.updateComplete;
+      const venue = await screenHost(el, "venue");
+      expect(
+        Object.fromEntries(Object.keys(emptyAddress).map((key) => [key, venueValue(venue, key)])),
+      ).toEqual({ addressLine1: "", postalCode: "", city: "", province: "" });
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody;
+      const sent = body.venue as unknown as Record<string, unknown>;
+      expect(Object.keys(emptyAddress).filter((key) => sent[key] === null)).toEqual([]);
+      expect(body.venue.addressLine2).toBeNull();
+    });
+
+    it("clears an earlier export's address when the next export's address is empty", async () => {
+      const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
+      const stageConfiguration = vi
+        .fn()
+        .mockResolvedValueOnce({ venue: exported, counts: {}, reconnect: [] })
+        .mockResolvedValueOnce({
+          venue: { ...exported, ...emptyAddress },
+          counts: {},
+          reconnect: [],
+        });
+      const el = await staged({ stageConfiguration });
+      expect(readDraft(el).venue).toMatchObject({ addressLine1: "Calle 1", city: "Madrid" });
+      configurationRequest(el, new File(["encrypted"], "new.waitron-config"), "passphrase");
+      await flush(el);
+      const blank = { addressLine1: "", postalCode: "", city: "", province: "" };
+      expect(readDraft(el).venue).toMatchObject(blank);
+      await choose(el, false);
+      goto(el, "venue");
+      await el.updateComplete;
+      const venue = await screenHost(el, "venue");
+      expect(
+        Object.fromEntries(Object.keys(blank).map((key) => [key, venueValue(venue, key)])),
+      ).toEqual(blank);
     });
 
     it("sends no operation description from the export", async () => {

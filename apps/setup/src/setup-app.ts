@@ -56,6 +56,7 @@ import type {
   SetupApi,
   CloudRecoveryView,
 } from "./api/client.js";
+import { PREVIEW_NULLABLE_VENUE_FIELDS } from "./api/client.js";
 import { dispatchSetupGoto } from "./events.js";
 import type {
   BucketRestoreRequestDetail,
@@ -2103,6 +2104,8 @@ export class SetupApp extends LitElement {
           .filter((key) => key in exported)
           .map((key) => [key, exported[key]]),
       );
+      for (const key of PREVIEW_NULLABLE_VENUE_FIELDS)
+        if (key in exported) venue[key] = exported[key] ?? "";
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
         venue,

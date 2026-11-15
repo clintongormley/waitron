@@ -238,8 +238,18 @@ export interface RecoveryBackupPreview {
   venueName: string;
 }
 
+export const PREVIEW_NULLABLE_VENUE_FIELDS = [
+  "addressLine1",
+  "postalCode",
+  "city",
+  "province",
+] as const satisfies readonly (keyof VenueDraft)[];
+type PreviewNullableVenueField = (typeof PREVIEW_NULLABLE_VENUE_FIELDS)[number];
+
 export interface ConfigurationPreview {
-  venue: Omit<VenueDraft, "admin"> & { operationDescription: string };
+  venue: Omit<VenueDraft, "admin" | PreviewNullableVenueField> & {
+    operationDescription: string;
+  } & Record<PreviewNullableVenueField, string | null>;
   counts: Record<string, number>;
   reconnect: string[];
 }
