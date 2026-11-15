@@ -489,6 +489,39 @@ const marksOf = (workingOrderId: string) =>
     )
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
+/** A Spreads list offering Butter at 0.50 on the Midday Toast, published. */
+async function butterOnMiddayToast(v: Venue) {
+  const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
+  const dish = (read.body.offers as { id: string; productId: string }[]).find(
+    (offer) => offer.id === v.toast.midday,
+  )!;
+  return withTransaction(suite.db, async (tx) => {
+    const extra = await createProduct(tx, {
+      categoryId: null,
+      name: "Butter",
+      pricingUnit: "each",
+      unitPrice: "0.50",
+      vatClass: "general",
+    });
+    const list = await createExtraList(
+      tx,
+      {
+        name: "Spreads",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 1,
+        active: true,
+        items: [{ productId: extra.id, maxQuantity: 1, preselected: false, price: "0.50" }],
+      },
+      SIGNED_IN_TILL_LOCALE,
+    );
+    await writeProductModifiers(tx, dish.productId, [{ kind: "extras", id: list.id }]);
+    await publishWorkingMenu(tx, v.menus["Midday menu"]);
+    return { dish, extraId: extra.id, listId: list.id };
+  });
+}
+
 describe("service periods gate only added dishes and added stored quantities", () => {
   it("after Lunch ends, a fresh Lunch line and a stored increase are both refused and nothing changes", async () => {
     at(mondayAt("13:50"));
@@ -1168,35 +1201,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("adds an extra to a stored Lunch dish after all its periods are cleared", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
-    const dish = (read.body.offers as { id: string; productId: string }[]).find(
-      (offer) => offer.id === v.toast.midday,
-    )!;
-    const { extraId, listId } = await withTransaction(suite.db, async (tx) => {
-      const extra = await createProduct(tx, {
-        categoryId: null,
-        name: "Butter",
-        pricingUnit: "each",
-        unitPrice: "0.50",
-        vatClass: "general",
-      });
-      const list = await createExtraList(
-        tx,
-        {
-          name: "Spreads",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 1,
-          active: true,
-          items: [{ productId: extra.id, maxQuantity: 1, preselected: false, price: "0.50" }],
-        },
-        SIGNED_IN_TILL_LOCALE,
-      );
-      await writeProductModifiers(tx, dish.productId, [{ kind: "extras", id: list.id }]);
-      await publishWorkingMenu(tx, v.menus["Midday menu"]);
-      return { extraId: extra.id, listId: list.id };
-    });
+    const { dish, extraId, listId } = await butterOnMiddayToast(v);
     const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
@@ -1572,6 +1577,64 @@ describe("a dish whose period ended earlier today", () => {
         expect(taken.records).toBeGreaterThan(before.records);
         expect(await sent(v, id, {})).toEqual(first);
         expect(await footprint()).toEqual(taken);
+      },
+    );
+  });
+
+  describe("an extra added to a stored dish sent in its period", () => {
+    const butterOnToast = async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const { extraId, listId } = await butterOnMiddayToast(v);
+      const held = await park(v, v.diningZone, v.toast.midday);
+      expect(held.status).toBe(200);
+      at(mondayAt("14:05"));
+      const butter = [{ listId, picks: [{ productId: extraId, quantity: 1 }] }];
+      return { v, id: held.id, butter };
+    };
+    const lateSend = (v: Venue) => ({ lateSend: { menuIds: [v.menus["Midday menu"]] } });
+
+    it.each(["order", "line"] as const)(
+      "is refused through the %s edit at 14:05 unconfirmed, and marked by the signed-in person once confirmed",
+      async (route) => {
+        const { v, id, butter } = await butterOnToast();
+        const before = await marksOf(id);
+        const send = async (confirmation: Record<string, unknown>) => {
+          const read = await sendAsTill(v, "GET", `/api/working-orders/${id}`);
+          const order = read.body as {
+            revision: number;
+            lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
+          };
+          return route === "line"
+            ? sendAsTill(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+                portionLineNos: [],
+                revision: order.revision,
+                extras: butter,
+                ...confirmation,
+              })
+            : sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+                revision: order.revision,
+                lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
+                  workingOrderLineId,
+                  menuItemId,
+                  quantity,
+                  extras: butter,
+                })),
+                ...confirmation,
+              });
+        };
+        expect(await send({})).toMatchObject(
+          periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
+        );
+        expect(await marksOf(id)).toEqual(before);
+        expect((await send(lateSend(v))).status).toBe(200);
+        expect(await marksOf(id)).toEqual(
+          expect.arrayContaining([
+            { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+            { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          ]),
+        );
+        expect(await marksOf(id)).toHaveLength(2);
       },
     );
   });

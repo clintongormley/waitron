@@ -94,7 +94,6 @@ import {
   offeredKey,
   productsOfferedIn,
   readLateSendMarks,
-  readLateSends,
   readLunchLineIds,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
@@ -3716,9 +3715,6 @@ describe("a line sent late", () => {
       expect(stored.rows.map((row) => row.late_confirmed_by)).toEqual([null, "person-7"]);
       await expect(readLateSendMarks(tx, [late, onTime])).resolves.toEqual(
         new Map([[late, "Lunch"]]),
-      );
-      await expect(readLateSends(tx, [late, onTime])).resolves.toEqual(
-        new Map([[late, { periodName: "Lunch", confirmedBy: "person-7" }]]),
       );
       await copyWorkingLineContext(tx, late, split);
       await expect(readLateSendMarks(tx, [split, onTime])).resolves.toEqual(

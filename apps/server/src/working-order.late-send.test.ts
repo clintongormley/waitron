@@ -28,7 +28,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { createBareDepartment, provisionSignedInTill } from "./testing/signed-in-till.js";
 import type { LateSendConfirmation } from "./late-send.js";
-import { createOpenOrder, updateHeldOrder } from "./working-order.js";
+import { createOpenOrder, updateHeldOrder, updateOrderLine } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -165,6 +165,7 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         toastId,
         toast,
         salad,
+        saladId,
         avocado: { listId: avocadoList, productId: avocadoId },
         beer,
         juice,
@@ -596,50 +597,177 @@ describe("a raised quantity of a stored line", () => {
 });
 
 describe("extras added later to a stored dish", () => {
-  const addAvocado = async (v: MealVenue, id: string) => {
+  const avocadoOn = (v: MealVenue, saladLineId: string) => ({
+    workingOrderLineId: saladLineId,
+    menuItemId: v.salad,
+    quantity: "1",
+    extras: [
+      { listId: v.avocado.listId, picks: [{ productId: v.avocado.productId, quantity: 1 }] },
+    ],
+  });
+  const addAvocado = async (v: MealVenue, id: string, lateSend?: LateSendConfirmation) => {
     const [salad] = await linesOf(id);
     return updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       revision: await revisionOf(id),
       expectedEdit: null,
-      lines: [
-        {
-          workingOrderLineId: salad!.id,
-          menuItemId: v.salad,
-          quantity: "1",
-          extras: [
-            { listId: v.avocado.listId, picks: [{ productId: v.avocado.productId, quantity: 1 }] },
-          ],
-        },
-      ],
+      lines: [avocadoOn(v, salad!.id)],
+      ...(lateSend === undefined ? {} : { lateSend }),
     });
   };
+  /** The Salad's mark, then its Avocado's. */
+  const saladThenAvocado = async (id: string) =>
+    (
+      await suite.db
+        .select({
+          parentLineId: workingOrderLines.parentLineId,
+          latePeriodName: workingLineContexts.latePeriodName,
+          lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+        })
+        .from(workingLineContexts)
+        .innerJoin(
+          workingOrderLines,
+          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+        )
+        .where(eq(workingOrderLines.workingOrderId, id))
+    )
+      .sort((a, b) => Number(a.parentLineId !== null) - Number(b.parentLineId !== null))
+      .map(({ latePeriodName, lateConfirmedBy }) => ({ latePeriodName, lateConfirmedBy }));
 
-  it("carry the late mark of a dish sent after its period, without asking again", async () => {
-    at("14:05");
+  it("are refused menu_period.ended after the period of an on-time dish, and write nothing", async () => {
+    at("13:50");
     const v = await mealVenue();
-    const { personId, lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
-    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id, lateSend);
-    await addAvocado(v, id);
-    expect(await linesOf(id)).toHaveLength(2);
-    expect(await marksOf(id)).toEqual([
-      { latePeriodName: "Lunch", lateConfirmedBy: personId },
-      { latePeriodName: "Lunch", lateConfirmedBy: personId },
-    ]);
-    expect(lateSend.confirm).toHaveBeenCalledTimes(1);
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
+    const before = await linesOf(id);
+    const revision = await revisionOf(id);
+    at("14:05");
+    await expect(addAvocado(v, id)).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: {
+        departmentId: v.restaurant,
+        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
+        menuItemIds: [v.salad],
+        needsManager: false,
+      },
+    });
+    expect(await linesOf(id)).toEqual(before);
+    expect(await revisionOf(id)).toBe(revision);
   });
 
-  it("stay unmarked on a dish sent in its period, and are accepted after it without a confirmation", async () => {
+  it("are marked with the new confirmation, leaving the stored dish's context as it was", async () => {
     at("13:50");
     const v = await mealVenue();
     const id = randomUUID();
     await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
     at("14:05");
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
+    await addAvocado(v, id, lateSend);
+    expect(await linesOf(id)).toHaveLength(2);
+    expect(await saladThenAvocado(id)).toEqual([
+      { latePeriodName: null, lateConfirmedBy: null },
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+    ]);
+    expect(lateSend.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("on a dish sent late record who confirmed the extra, not who confirmed the dish", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const dish = confirming([v.menus.setLunch]);
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id, dish.lateSend);
+    at("14:10");
+    const extra = confirming([v.menus.setLunch]);
+    await addAvocado(v, id, extra.lateSend);
+    expect(await saladThenAvocado(id)).toEqual([
+      { latePeriodName: "Lunch", lateConfirmedBy: dish.personId },
+      { latePeriodName: "Lunch", lateConfirmedBy: extra.personId },
+    ]);
+    expect(extra.lateSend.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("ask nothing and are not marked while the period runs", async () => {
+    at("13:00");
+    const v = await mealVenue();
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
+    at("13:50");
     await addAvocado(v, id);
     expect(await linesOf(id)).toHaveLength(2);
-    expect(await marksOf(id)).toEqual([
+    expect(await saladThenAvocado(id)).toEqual([
       { latePeriodName: null, lateConfirmedBy: null },
       { latePeriodName: null, lateConfirmedBy: null },
     ]);
+  });
+
+  it("on a set lunch, as a later course choice, are late like any other extra", async () => {
+    at("13:50");
+    const v = await mealVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await updateProduct(tx, v.saladId, { setLunch: true });
+      await publishWorkingMenu(tx, v.menus.setLunch);
+    });
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
+    at("14:05");
+    await expect(addAvocado(v, id)).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: {
+        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
+        menuItemIds: [v.salad],
+      },
+    });
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
+    await addAvocado(v, id, lateSend);
+    expect(await saladThenAvocado(id)).toEqual([
+      { latePeriodName: null, lateConfirmedBy: null },
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+    ]);
+  });
+
+  describe("through the one-line edit", () => {
+    const addOnLine = async (v: MealVenue, id: string, lateSend?: LateSendConfirmation) => {
+      const [salad] = await suite.db
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      const revision = await revisionOf(id);
+      return withTransaction(suite.db, (tx) =>
+        updateOrderLine(
+          tx,
+          v.cfg,
+          id,
+          salad!.lineNo,
+          {
+            portionLineNos: [],
+            extras: avocadoOn(v, "").extras,
+          },
+          revision,
+          { operatorId: randomUUID(), expectedEdit: null, admission: testTradingAdmission() },
+          undefined,
+          lateSend,
+        ),
+      );
+    };
+
+    it("are refused menu_period.ended without a confirmation, and marked with one", async () => {
+      at("13:50");
+      const v = await mealVenue();
+      const id = randomUUID();
+      await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
+      const before = await linesOf(id);
+      at("14:05");
+      await expect(addOnLine(v, id)).rejects.toMatchObject({
+        code: "menu_period.ended",
+        params: { menuItemIds: [v.salad] },
+      });
+      expect(await linesOf(id)).toEqual(before);
+      const { personId, lateSend } = confirming([v.menus.setLunch]);
+      await addOnLine(v, id, lateSend);
+      expect(await saladThenAvocado(id)).toEqual([
+        { latePeriodName: null, lateConfirmedBy: null },
+        { latePeriodName: "Lunch", lateConfirmedBy: personId },
+      ]);
+    });
   });
 });

@@ -1163,11 +1163,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     lineIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
-  /** `readLateSendMarks` with who confirmed each late send. */
-  readLateSends(
-    tx: Transaction,
-    lineIds: readonly string[],
-  ): Promise<ReadonlyMap<string, { periodName: string; confirmedBy: string }>>;
   /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
    *  Of the named `options`, `direction` and `cancelledExtra` (the extra taken off the dish) are

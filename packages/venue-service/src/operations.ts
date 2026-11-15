@@ -1285,21 +1285,11 @@ export async function readLateSendMarks(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<ReadonlyMap<string, string>> {
-  const marks = await readLateSends(tx, lineIds);
-  return new Map([...marks].map(([id, { periodName }]) => [id, periodName]));
-}
-
-/** {@link readLateSendMarks} with who confirmed each late send. */
-export async function readLateSends(
-  tx: Transaction,
-  lineIds: readonly string[],
-): Promise<ReadonlyMap<string, { periodName: string; confirmedBy: string }>> {
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
       workingOrderLineId: workingLineContexts.workingOrderLineId,
       latePeriodName: workingLineContexts.latePeriodName,
-      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
     })
     .from(workingLineContexts)
     .where(
@@ -1308,12 +1298,7 @@ export async function readLateSends(
         isNotNull(workingLineContexts.latePeriodName),
       ),
     );
-  return new Map(
-    rows.map((row) => [
-      row.workingOrderLineId,
-      { periodName: row.latePeriodName!, confirmedBy: row.lateConfirmedBy! },
-    ]),
-  );
+  return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
 }
 
 export async function readSentLineNutrition(

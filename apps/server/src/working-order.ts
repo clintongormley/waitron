@@ -579,11 +579,6 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 const RECORDED_OFFER = Symbol("recordedOffer");
-/**
- * The stored dish's late mark, carried by an extras-only line so its extras rows record the same
- * mark without a new confirmation. A symbol, so no JSON body can set it.
- */
-const STORED_LATE = Symbol("storedLate");
 
 /**
  * Marks a requested line that prices a raised quantity of a stored line: after its period it is
@@ -616,7 +611,6 @@ export async function priceOrderLines(
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
-    [STORED_LATE]?: { periodName: string; confirmedBy: string };
     [STORED_RISE]?: true;
   } & LineExtras &
     RetainedCourseLine)[],
@@ -676,13 +670,17 @@ export async function priceOrderLines(
     ));
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
-  // New dishes whose menu is not orderable but ended earlier today, each with its period's name.
+  // New dishes, and extras added to stored ones, whose menu is not orderable but ended earlier
+  // today, each with its period's name.
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
-  if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
+  if (periodCheck === "added") {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     const at = new Date();
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
+    // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
+    // after their dish's period they are late like a new dish of it.
+    if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
+      await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
@@ -691,7 +689,6 @@ export async function priceOrderLines(
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
-        line[ADDED_EXTRAS_ONLY] === true ||
         line[STORED_RISE] === true ||
         service.orderableMenuIds.includes(offer!.menuId)
       )
@@ -863,7 +860,7 @@ export async function priceOrderLines(
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const [index, line] of lines.entries()) {
-    const mark = marks.get(index) ?? line[STORED_LATE];
+    const mark = marks.get(index);
     const { offer } = line;
     const selection = selectMenuVariant(offer, line.variantId ?? null);
     const customerText = customerPresentationText(
@@ -5331,7 +5328,10 @@ export interface UpdateHeldOrderRequest {
   revision: number;
   /** Who saves: credited with the lines the save adds, and named by a group it starts or removes. */
   operatorId?: string;
-  /** The request's confirmation of the save's fresh dishes whose period ended earlier today. */
+  /**
+   * The request's confirmation of the save's fresh dishes, and extras added to stored dishes, whose
+   * period ended earlier today.
+   */
   lateSend?: LateSendConfirmation;
 }
 
@@ -5868,10 +5868,6 @@ async function applyLineEdits(
           .map(({ parent }) => parent.id),
       )
     : new Map<string, { offer: ZoneMenuOffer; versionId: string }>();
-  const lateSends = await VENUE_SERVICE.readLateSends(
-    tx,
-    plan.edits.filter(({ intent }) => intent.extras !== null).map(({ parent }) => parent.id),
-  );
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
@@ -6114,7 +6110,6 @@ async function applyLineEdits(
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
         ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
-        ...(lateSends.has(parent.id) ? { [STORED_LATE]: lateSends.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
     }
@@ -7035,6 +7030,8 @@ export async function updateOrderLine(
   revision: number,
   authority: OrderEditAuthority & { admission: TradingAdmission },
   attendance?: OrderAttendance,
+  /** The request's confirmation of extras it adds to a dish whose period ended earlier today. */
+  lateSend?: LateSendConfirmation,
 ): Promise<number> {
   // Admission follows the writing node.
   await requireEconomicWrite(tx, { nodeId: cfg.nodeId }, authority.admission);
@@ -7074,6 +7071,7 @@ export async function updateOrderLine(
     },
     operatorId,
     attendance,
+    lateSend,
   );
   const saved = await countEdit(tx, orderId, revision, changed, chargesUnchanged);
   if (changed) await captureOrderEdit(tx, attendance, orderId, operatorId, saved, "line", at);

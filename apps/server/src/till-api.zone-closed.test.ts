@@ -25,7 +25,9 @@ import {
   replaceMenuWeek,
   replaceZoneClosedWeek,
 } from "@waitron/venue-service";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createTable } from "./testing/live-table.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
@@ -308,6 +310,53 @@ describe("existing service in a closed zone", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual([{ note: "No ice", quantity: 1000 }]);
+  });
+
+  it("adds an extra to a stored dish", async () => {
+    const v = await venue();
+    const offers = (await request(v, "GET", `/api/service-zones/${v.zoneId}/offers`)).json
+      .offers as { id: string; productId: string; menuId: string }[];
+    const cana = offers.find((offer) => offer.id === v.offerFor("Caña"))!;
+    const extras = await withTransaction(suite.db, async (tx) => {
+      const lemon = await createProduct(tx, {
+        categoryId: null,
+        name: "Lemon",
+        pricingUnit: "each",
+        unitPrice: "0.20",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Garnish",
+          minPicks: 0,
+          maxPicks: null,
+          items: [{ productId: lemon.id, maxQuantity: 1, price: "0.20" }],
+        },
+        v.cfg.locale,
+      );
+      await writeProductModifiers(tx, cana.productId, [{ kind: "extras", id: list.id }]);
+      await publishWorkingMenu(tx, cana.menuId);
+      return [{ listId: list.id, picks: [{ productId: lemon.id, quantity: 1 }] }];
+    });
+    const id = await park(v);
+    const before = await request(v, "GET", `/api/working-orders/${id}`);
+    at("23:45");
+    expect(
+      (
+        await request(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+          portionLineNos: [],
+          revision: before.json.revision,
+          extras,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      await suite.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    ).toHaveLength(2);
   });
 
   it("takes payment for a stored order", async () => {
