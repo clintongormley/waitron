@@ -674,6 +674,14 @@ traspaso**. Elige la **Zona de destino** y, si hace falta, una **Mesa de destino
 **Guardar**. Para rechazarla, elige **Rechazar traspaso**, introduce el **Motivo del rechazo**
 y pulsa **Guardar**.
 
+## Vender para tomar aquí o para llevar {#eat-here-or-take-away}
+
+Donde la comida para llevar paga otro IVA, la pestaña **Servicio** de un departamento en el panel
+pregunta **Cómo se vende**: **Para tomar aquí**, **Para llevar** o **Se elige en la caja**. Con
+**Se elige en la caja**, el personal lo elige en cada pedido, y **Empieza como** fija cómo empieza
+un pedido de mostrador; un pedido en mesa empieza para tomar aquí. Los pedidos ya abiertos siguen
+como estaban cuando cambias esto.
+
 ## Poner nombre a una cuenta {#bill-names}
 
 Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su número y el nombre que

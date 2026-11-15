@@ -631,6 +631,13 @@ Check **Ordered items** and **Outstanding station work** before choosing **Accep
 Choose the **Destination zone** and, if needed, a **Destination table**, then **Save**. To refuse
 it, choose **Decline transfer**, enter the **Reason for declining** and choose **Save**.
 
+## Sell food eaten here or taken away {#eat-here-or-take-away}
+
+Where takeaway food is charged a different VAT, a department's **Service** tab in the dashboard
+asks **How it sells**: **Eaten in**, **Taken away** or **Chosen on the till**. With **Chosen on the
+till**, staff choose for each order, and **Starts as** sets how a counter order begins; a table
+order starts eaten here. Orders already open keep their way when you change this.
+
 ## Name a bill {#bill-names}
 
 A party's bills are numbered, and the till shows each one with its number and any name you give it,

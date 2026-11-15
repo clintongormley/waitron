@@ -3,12 +3,16 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import type { Dining, DiningPolicy } from "@waitron/shared";
 import { t } from "./strings.js";
 
 export interface ServiceSettingsValue {
   orderStart: "table" | "counter" | null;
   paidWhen: "prepay" | "ticket_then_pay" | null;
   collectionNumber: "none" | "numbered" | null;
+  /** A department's alone; drawn only while `takeawayVat` is set. */
+  dining?: DiningPolicy;
+  diningStartsAs?: Dining;
 }
 type Field = keyof ServiceSettingsValue;
 
@@ -36,6 +40,7 @@ export class ServiceSettingsFields extends LitElement {
   @property({ attribute: false }) follows?: ServiceSettingsValue;
   @property({ attribute: false }) errors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) disabled = false;
+  @property({ attribute: false }) takeawayVat = false;
 
   #change<K extends Field>(event: Event, field: K, value: ServiceSettingsValue[K]) {
     event.stopPropagation();
@@ -76,6 +81,23 @@ export class ServiceSettingsFields extends LitElement {
       @wt-change=${(event: CustomEvent<{ value: string }>) =>
         this.#change(event, field, (event.detail.value || null) as ServiceSettingsValue[K])}
     ></wt-combobox>`;
+  }
+
+  #selling() {
+    if (!this.takeawayVat || this.follows !== undefined) return nothing;
+    return html`${this.#choice("dining", t("venue.dining"), [
+      { value: "eat_in", label: t("venue.dining_eat_in") },
+      { value: "takeaway", label: t("venue.dining_takeaway") },
+      { value: "till_choice", label: t("venue.dining_till_choice") },
+    ])}
+    ${
+      this.value.dining === "till_choice"
+        ? this.#choice("diningStartsAs", t("venue.dining_starts_as"), [
+            { value: "eat_in", label: t("venue.dining_starts_eat_in") },
+            { value: "takeaway", label: t("venue.dining_takeaway") },
+          ])
+        : nothing
+    }`;
   }
 
   override render() {
@@ -124,6 +146,7 @@ export class ServiceSettingsFields extends LitElement {
               { value: "none", label: t("venue.dont_print") },
             ])
       }
+      ${this.#selling()}
     `;
   }
 }

@@ -30,6 +30,8 @@ export function departmentSettingsAnswer(
     orderStart: input.orderStart,
     paidWhen: input.paidWhen,
     collectionNumber: input.collectionNumber,
+    ...(input.dining === undefined ? {} : { dining: input.dining }),
+    ...(input.diningStartsAs === undefined ? {} : { diningStartsAs: input.diningStartsAs }),
   };
   if (policy) Object.assign(policy, fields);
   else

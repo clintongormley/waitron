@@ -14,6 +14,7 @@ import {
   saveVenueFields,
   serviceSteps,
   withTransaction,
+  workingOrders,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,12 +22,18 @@ import {
   seedTaxpayer,
   seedVenueSettings,
   seedBusinessDay,
+  seedWorkingOrder,
   seedZone,
 } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { configureZone, createDepartment, listServiceZones } from "./operations.js";
+import {
+  configureZone,
+  createDepartment,
+  listServiceZones,
+  recordOrderServiceContext,
+} from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -359,6 +366,72 @@ describe("whole service settings saves", () => {
     ).toBe("counter");
   });
 
+  it("saves how the department sells and which way a till-choice order starts", async () => {
+    const fx = await settingsFixture();
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      dining: "till_choice",
+      diningStartsAs: "takeaway",
+    });
+    expect(saved.status).toBe(200);
+    expect(
+      (await saved.json()).salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+      ),
+    ).toMatchObject({ dining: "till_choice", diningStartsAs: "takeaway" });
+    expect(
+      await db
+        .select({ dining: departments.dining, startsAs: departments.diningStartsAs })
+        .from(departments)
+        .where(eq(departments.id, fx.departmentId)),
+    ).toEqual([{ dining: "till_choice", startsAs: "takeaway" }]);
+  });
+
+  it("leaves how the department sells alone when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await db
+      .update(departments)
+      .set({ dining: "takeaway", diningStartsAs: "takeaway" })
+      .where(eq(departments.id, fx.departmentId));
+    expect(
+      (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
+    ).toBe(200);
+    expect(
+      await db
+        .select({ dining: departments.dining, startsAs: departments.diningStartsAs })
+        .from(departments)
+        .where(eq(departments.id, fx.departmentId)),
+    ).toEqual([{ dining: "takeaway", startsAs: "takeaway" }]);
+  });
+
+  it("saves eaten in while the department holds an open takeaway order, leaving that order takeaway", async () => {
+    const fx = await settingsFixture();
+    await db
+      .update(departments)
+      .set({ dining: "takeaway" })
+      .where(eq(departments.id, fx.departmentId));
+    const order = await withTransaction(db, async (tx) => {
+      const order = await seedWorkingOrder(tx, { orderNumber: 1, dining: "takeaway" });
+      await recordOrderServiceContext(tx, order.id, fx.zoneId);
+      return order;
+    });
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      dining: "eat_in",
+      diningStartsAs: "eat_in",
+    });
+    expect(saved.status).toBe(200);
+    expect(
+      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!.dining,
+    ).toBe("eat_in");
+    expect(
+      await db
+        .select({ dining: workingOrders.dining })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, order.id)),
+    ).toEqual([{ dining: "takeaway" }]);
+  });
+
   it("refuses a live name clash without writing any settings", async () => {
     const fx = await settingsFixture();
     const other = await withTransaction(db, (tx) =>
@@ -437,6 +510,9 @@ describe("whole service settings saves", () => {
       patch: { transfers: { receivingProfileId: null, destinationDepartmentIds: [1] } },
       field: "destinationDepartmentIds",
     },
+    { patch: { dining: "sometimes" }, field: "dining" },
+    { patch: { dining: null }, field: "dining" },
+    { patch: { diningStartsAs: "till_choice" }, field: "diningStartsAs" },
   ])(
     "refuses malformed department settings at $field without writes ($patch)",
     async ({ patch, field }) => {

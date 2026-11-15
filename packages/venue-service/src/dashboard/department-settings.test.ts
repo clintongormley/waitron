@@ -2945,3 +2945,117 @@ it("hides each switch's visible hint from screen readers, which hear it as the s
     expect(hint.getAttribute("aria-hidden"), control.name).toBe("true");
   }
 });
+
+function diningBox(el: DepartmentSettings, name: "dining" | "diningStartsAs") {
+  return el
+    .shadowRoot!.querySelector("dashboard-service-settings-fields")!
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(`wt-combobox[name=${name}]`);
+}
+async function chooseDining(
+  el: DepartmentSettings,
+  name: "dining" | "diningStartsAs",
+  value: string,
+) {
+  await chooseOption(diningBox(el, name)!, value);
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.updateComplete;
+}
+
+it("with takeaway VAT the Service tab asks how the department sells and saves that change alone", async () => {
+  const view = structuredClone(model);
+  view.takeawayVat = true;
+  const { el, writes } = await mount(view);
+  await selectDepartmentTab(el, "service");
+  await expect.poll(() => diningBox(el, "dining")).not.toBeNull();
+  const dining = diningBox(el, "dining")!;
+  expect(dining.label).toBe("How it sells");
+  expect(dining.value).toBe("eat_in");
+  expect(dining.options.map((option) => option.label)).toEqual([
+    "Eaten in",
+    "Taken away",
+    "Chosen on the till",
+  ]);
+  expect(diningBox(el, "diningStartsAs")).toBeNull();
+  expect(save(el).disabled).toBe(true);
+  await chooseDining(el, "dining", "till_choice");
+  const startsAs = diningBox(el, "diningStartsAs")!;
+  expect(startsAs).not.toBeNull();
+  expect(startsAs.label).toBe("Starts as");
+  expect(startsAs.value).toBe("eat_in");
+  expect(startsAs.options.map((option) => option.label)).toEqual(["Eaten here", "Taken away"]);
+  expect(save(el).disabled).toBe(false);
+  await chooseDining(el, "diningStartsAs", "takeaway");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toEqual({
+    name: "Restaurant",
+    tradingName: "Casa",
+    orderStart: "table",
+    paidWhen: "prepay",
+    collectionNumber: "none",
+    dining: "till_choice",
+    diningStartsAs: "takeaway",
+    needsClearing: false,
+    lateSendNeedsManager: false,
+    courseSettings: [],
+    transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
+  });
+  await expect.poll(() => save(el).disabled).toBe(true);
+  expect(diningBox(el, "dining")!.value).toBe("till_choice");
+  expect(diningBox(el, "diningStartsAs")!.value).toBe("takeaway");
+});
+
+it("draws a department's stored way of selling", async () => {
+  const view = structuredClone(model);
+  view.takeawayVat = true;
+  Object.assign(view.salePolicies.departments[0]!, {
+    dining: "till_choice",
+    diningStartsAs: "takeaway",
+  });
+  const { el } = await mount(view);
+  await selectDepartmentTab(el, "service");
+  await expect.poll(() => diningBox(el, "dining")?.value).toBe("till_choice");
+  expect(diningBox(el, "diningStartsAs")!.value).toBe("takeaway");
+  await chooseDining(el, "dining", "takeaway");
+  expect(diningBox(el, "diningStartsAs")).toBeNull();
+});
+
+it("without takeaway VAT draws neither choice and a save names neither", async () => {
+  const view = structuredClone(model);
+  view.takeawayVat = false;
+  Object.assign(view.salePolicies.departments[0]!, {
+    dining: "takeaway",
+    diningStartsAs: "eat_in",
+  });
+  const { el, writes } = await mount(view);
+  await selectDepartmentTab(el, "service");
+  const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+  await fields.updateComplete;
+  expect(fields.shadowRoot!.querySelector("[name=orderStart]")).not.toBeNull();
+  expect(diningBox(el, "dining")).toBeNull();
+  expect(diningBox(el, "diningStartsAs")).toBeNull();
+  await change(el, "tradingName", "Casa revised");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(Object.keys(writes[0]!.body as object)).not.toContain("dining");
+  expect(Object.keys(writes[0]!.body as object)).not.toContain("diningStartsAs");
+});
+
+it.each(["dining", "diningStartsAs"] as const)(
+  "a refused %s is shown under that field on the Service tab",
+  async (field) => {
+    const view = structuredClone(model);
+    view.takeawayVat = true;
+    const { el } = await mount(view, {
+      code: "management.request_invalid",
+      params: { field },
+    });
+    await selectDepartmentTab(el, "service");
+    await expect.poll(() => diningBox(el, "dining")).not.toBeNull();
+    await chooseDining(el, "dining", "till_choice");
+    save(el).click();
+    const message = "This value was not accepted. Change it and save again.";
+    await expect.poll(() => diningBox(el, field)?.error).toBe(message);
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  },
+);

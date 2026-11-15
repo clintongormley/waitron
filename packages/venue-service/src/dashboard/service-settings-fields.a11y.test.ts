@@ -17,6 +17,8 @@ describe.each(["light", "dark"] as const)("service fields accessibility (%s)", (
     "disabled zone",
     "errors department",
     "errors zone",
+    "department selling, chosen on the till",
+    "errors department selling, chosen on the till",
   ])("%s", async (state) => {
     setLocale("en");
     expect(
@@ -36,12 +38,19 @@ describe.each(["light", "dark"] as const)("service fields accessibility (%s)", (
       ? { orderStart: null, paidWhen: null, collectionNumber: null }
       : department;
     if (state.includes("zone")) el.follows = department;
+    if (state.includes("selling")) {
+      el.value = { ...department, dining: "till_choice", diningStartsAs: "takeaway" };
+      el.takeawayVat = true;
+    }
     el.disabled = state.includes("disabled");
     if (state.includes("errors"))
       el.errors = {
         orderStart: "Choose how orders start.",
         paidWhen: "Choose when payment happens.",
         collectionNumber: "Choose whether to print a ticket.",
+        ...(state.includes("selling")
+          ? { dining: "Choose how it sells.", diningStartsAs: "Choose how it starts." }
+          : {}),
       };
     await el.updateComplete;
     await Promise.all(

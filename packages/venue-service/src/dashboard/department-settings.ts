@@ -76,6 +76,8 @@ type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   operationDescription?: string;
 };
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
+const DINING_FIELDS = ["dining", "diningStartsAs"] as const;
+const SERVICE_FIELDS = ["orderStart", "paidWhen", "collectionNumber", ...DINING_FIELDS] as const;
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -84,6 +86,8 @@ const fieldTab: Record<Field, DepartmentTab> = {
   orderStart: "service",
   paidWhen: "service",
   collectionNumber: "service",
+  dining: "service",
+  diningStartsAs: "service",
   needsClearing: "tables",
   lateSendNeedsManager: "service",
   courseSettings: "tables",
@@ -134,6 +138,8 @@ const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
+  a.dining === b.dining &&
+  a.diningStartsAs === b.diningStartsAs &&
   a.needsClearing === b.needsClearing &&
   a.lateSendNeedsManager === b.lateSendNeedsManager &&
   a.courseSettings.length === b.courseSettings.length &&
@@ -423,6 +429,8 @@ export class DepartmentSettings extends LitElement {
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
+      dining: policy?.dining ?? "eat_in",
+      diningStartsAs: policy?.diningStartsAs ?? "eat_in",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
       lateSendNeedsManager: this.model!.lateSendManagerDepartmentIds.includes(row.id),
       courseSettings: this.model!.courses.map((course) => ({
@@ -803,6 +811,7 @@ export class DepartmentSettings extends LitElement {
       "orderStart",
       "paidWhen",
       "collectionNumber",
+      ...(this.model?.takeawayVat ? DINING_FIELDS : []),
       "needsClearing",
       "lateSendNeedsManager",
       "courseSettings",
@@ -859,6 +868,10 @@ export class DepartmentSettings extends LitElement {
     kept.tradingName = kept.tradingName.trim();
     if (!this.showsTransfers) delete kept.transfers;
     const { serviceSteps, operationDescription, ...unchanged } = kept;
+    if (!this.model?.takeawayVat) {
+      delete unchanged.dining;
+      delete unchanged.diningStartsAs;
+    }
     const description =
       operationDescription !== undefined &&
       operationDescription !== this.baseline!.operationDescription
@@ -1009,8 +1022,7 @@ export class DepartmentSettings extends LitElement {
     const errors = this.shownErrors,
       disabled = !row.active;
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
-    for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
-      if (errors[field]) serviceErrors[field] = errors[field];
+    for (const field of SERVICE_FIELDS) if (errors[field]) serviceErrors[field] = errors[field];
     const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
     if (this.receipt?.invalid) marked.add("receipt");
     const offered = this.offeredTabs;
@@ -1091,10 +1103,13 @@ export class DepartmentSettings extends LitElement {
             <dashboard-service-settings-fields
               .value=${{ ...draft }}
               .errors=${serviceErrors}
+              .takeawayVat=${this.model?.takeawayVat ?? false}
               ?disabled=${disabled}
               @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {
                 e.stopPropagation();
-                for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
+                for (const field of this.model?.takeawayVat
+                  ? SERVICE_FIELDS
+                  : SERVICE_FIELDS.filter((name) => !DINING_FIELDS.includes(name as never)))
                   if (this.draft![field] !== e.detail.value[field])
                     this.changed(field, e.detail.value[field]);
               }}
