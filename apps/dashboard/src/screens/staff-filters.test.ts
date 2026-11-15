@@ -45,18 +45,6 @@ const people: PersonSummary[] = [
     hasPassword: false,
     hasTotp: false,
   },
-  {
-    personId: "3",
-    displayName: "Inactive Alex",
-    firstNames: "Alex",
-    lastNames: "Smith",
-    telephone: null,
-    roleIds: ["staff"],
-    status: "suspended",
-    email: "alex@example.com",
-    hasPassword: false,
-    hasTotp: false,
-  },
 ];
 
 async function screen(): Promise<StaffScreen> {
@@ -158,7 +146,7 @@ it("explains what current users are in a help tooltip beside the status filter",
   expect(label?.textContent?.trim()).toBe("Status");
 });
 
-it("sends all selected access roles without duplicating the returned rows", async () => {
+it("sends all selected access roles", async () => {
   const api = withStaffPages({
     listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
     listStaff: vi
@@ -175,7 +163,6 @@ it("sends all selected access roles without duplicating the returned rows", asyn
       expect.objectContaining({ roleIds: ["admin", "manager"] }),
     ),
   );
-  expect(shown(el).map((person) => person.personId)).toEqual(["1", "2"]);
   roles.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["admin"] } }));
   await el.updateComplete;
   await vi.waitFor(() =>

@@ -2083,8 +2083,9 @@ Both buttons wait while `loading`; the first and last page disable their unavail
 page-read callback; call `setQuery` for changed search/filter/sort/locale values and `move` for a
 page event. It waits 200 ms after typing, resets changed queries to page zero and ignores equal
 queries. `reload` retains the query/page for an action refresh. Set its page to the returned page
-when the server clamps it, or back to the page still shown after a refusal, so Next can retry. It
-cancels its timer on disconnect.
+when the server clamps it, or back to the page still shown after a refused page move, so Next can
+retry. A new filter stays on page zero after a refusal; paging against the old rows retries that
+new query first. It cancels its timer on disconnect.
 Keep observation and error recovery in the query layer: the next watch replaces the old one.
 Do not release the old observation during the typing delay, or a read's recovery can lose its
 failure history. Keep existing rows while a request is pending.

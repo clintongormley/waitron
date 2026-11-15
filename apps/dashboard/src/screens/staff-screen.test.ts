@@ -316,11 +316,13 @@ describe("staff-screen", () => {
 
   it("keeps saved details when the person leaves the page with access-role edits still open", async () => {
     const person = { ...people[0]!, displayName: "Alias", telephone: null };
-    let roster = [person];
+    const readPage = vi
+      .fn()
+      .mockResolvedValue({ rows: [person], page: 0, pageSize: 50, total: 1, anyPeople: true });
     const api = stubApi({
-      listStaff: vi.fn(async () => roster),
+      listStaffPage: readPage,
       savePerson: vi.fn(async () => {
-        roster = [];
+        readPage.mockResolvedValue({ rows: [], page: 0, pageSize: 50, total: 0, anyPeople: true });
       }),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
@@ -401,7 +403,7 @@ describe("staff-screen", () => {
     });
     await flush(el);
 
-    expect(api.listStaff).toHaveBeenCalledTimes(1);
+    expect(api.listStaffPage).toHaveBeenLastCalledWith(expect.objectContaining({ page: 0 }));
     expect(list(el).people).toEqual(people);
   });
 

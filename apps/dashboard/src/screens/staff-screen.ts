@@ -105,18 +105,21 @@ export class StaffScreen extends LitElement {
   @state() private paging = { page: 0, pageSize: 50, total: 0 };
   @state() private anyPeople = true;
   #sort?: Pick<PersonPageQuery, "sortKey" | "sortDirection">;
+  #shownQuery?: Omit<PersonPageQuery, "page">;
   readonly #pages = new TableRequestController<Omit<PersonPageQuery, "page">>(
     this,
     async (query, page) => {
       try {
         await this.#queries.watch("listStaffPage", [{ ...query, page }], (value) => {
+          this.#shownQuery = query;
           this.people = value.rows;
           this.paging = { page: value.page, pageSize: value.pageSize, total: value.total };
           this.anyPeople = value.anyPeople;
           if (this.#pages.query === query) this.#pages.page = value.page;
         });
       } catch {
-        if (this.#pages.query === query) this.#pages.page = this.paging.page;
+        if (this.#pages.query === query && this.#shownQuery === query)
+          this.#pages.page = this.paging.page;
         /* The query controller owns the read message and its recovery. */
       }
     },
@@ -572,7 +575,8 @@ export class StaffScreen extends LitElement {
         }}
         @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
           event.stopPropagation();
-          this.#pages.move(event.detail.page);
+          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
+          else this.#pages.move(event.detail.page);
         }}
         .searchTerm=${this.search}
         .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}

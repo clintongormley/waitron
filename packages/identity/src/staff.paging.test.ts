@@ -233,7 +233,7 @@ it("matches every search word across names, email and telephone, closest first",
     ["pepe ", ["Pepe"]],
     ["pep ", []],
     ["gar", ["Max", "Pepe", "Ed"]],
-    ["manager", []],
+    ["staff", []],
     ["active", []],
   ] as const) {
     const result = await read(token, { roleIds: [staff], search });

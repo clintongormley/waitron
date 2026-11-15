@@ -125,3 +125,23 @@ it("retries the same next page after a refused read", async () => {
   expect(api.listStaffPage).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 }));
   expect(el.shadowRoot!.querySelector(".error[role=alert]")).toBeNull();
 });
+
+it("retries a changed filter from page zero after its read fails", async () => {
+  const { el, api } = await mount();
+  vi.mocked(api.listStaffPage).mockResolvedValueOnce(result(["Later"], 1));
+  const next = () =>
+    page.elementLocator(
+      tableOf(el).shadowRoot!.querySelector<HTMLButtonElement>("[data-next-page]")!,
+    );
+  await userEvent.click(next());
+  await vi.waitFor(async () => expect(await drawn(el)).toEqual(["Later"]));
+  vi.mocked(api.listStaffPage).mockRejectedValueOnce({ code: "server.internal" });
+  await chooseOption(el.shadowRoot!.querySelector("[data-test=status-filter]")!, "all");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".error[role=alert]")).not.toBeNull());
+  vi.mocked(api.listStaffPage).mockResolvedValueOnce(result(["Filtered"], 0));
+  await userEvent.click(next());
+  await vi.waitFor(async () => expect(await drawn(el)).toEqual(["Filtered"]));
+  expect(api.listStaffPage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ status: "all", page: 0 }),
+  );
+});
