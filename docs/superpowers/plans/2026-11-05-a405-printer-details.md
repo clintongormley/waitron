@@ -387,6 +387,7 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
   printer's, less calibration. They have no Delete (held, above). PR 3's description says so.
 - **Left open:** a station link opens the Stations tab, not the station (the module's screen
   clears its `station` word, `prep-stations-screen.ts:199`).
+  _(2026-11-15: closed by `fix/used-by-station`; the link now opens the station's edit window.)_
 - **Not a cut:** the details' A4 "Used by" shows profiles listing it for full invoices; no station
   prints to an A4 printer (`station_printers.printer_id` references `printers`).
 
