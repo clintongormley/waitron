@@ -115,7 +115,7 @@ export class StaffScreen extends LitElement {
           this.people = value.rows;
           this.paging = { page: value.page, pageSize: value.pageSize, total: value.total };
           this.anyPeople = value.anyPeople;
-          if (this.#pages.query === query) this.#pages.page = value.page;
+          if (this.#pages.query === query) this.#pages.move(value.page);
         });
       } catch {
         if (this.#pages.query === query && this.#shownQuery === query)

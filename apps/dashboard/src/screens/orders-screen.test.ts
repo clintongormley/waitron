@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { WtDataTable } from "@waitron/ui";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OrderRowDto, OrdersPageDto } from "../api/client.js";
+import type { DashboardApi, OrderRowDto, OrdersPageDto, OrdersPageQuery } from "../api/client.js";
 import "./orders-screen.js";
 import type { OrdersScreen } from "./orders-screen.js";
 
@@ -27,11 +29,18 @@ const ROW: OrderRowDto = {
   staff: [{ id: "person-1", name: "Ana" }],
   departedAt: "2026-09-30T13:00:00.000Z",
 };
-const PAGE: OrdersPageDto = { rows: [ROW], next: "cursor", from: "2026-09-30", to: "2026-09-30" };
+const PAGE: OrdersPageDto = {
+  rows: [ROW],
+  total: 101,
+  page: 0,
+  pageSize: 50,
+  from: "2026-09-30",
+  to: "2026-09-30",
+};
 
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   const api = {
-    listOrderPages: vi.fn().mockResolvedValue(PAGE),
+    listOrdersPage: vi.fn().mockResolvedValue(PAGE),
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [{ id: "person-1", name: "Ana" }] }),
     getOrder: vi.fn().mockResolvedValue({
       row: ROW,
@@ -52,7 +61,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     ...api,
     background: {
       ...api,
-      listOrderPages: vi.fn().mockResolvedValue(PAGE),
+      listOrdersPage: vi
+        .fn()
+        .mockImplementation(async (query: OrdersPageQuery) => ({ ...PAGE, page: query.page })),
       getOrder: vi.fn().mockResolvedValue({
         row: ROW,
         lines: [],
@@ -120,6 +131,21 @@ afterEach(() => {
 });
 
 describe("dashboard Orders", () => {
+  it("draws Loading orders until the first page answers", async () => {
+    let finish!: (value: OrdersPageDto) => void;
+    const first = new Promise<OrdersPageDto>((resolve) => {
+      finish = resolve;
+    });
+    const api = stubApi({ listOrdersPage: vi.fn().mockReturnValue(first) });
+    const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await vi.waitFor(() => expect(api.listOrdersPage).toHaveBeenCalledTimes(1));
+    expect(table.shadowRoot!.textContent).toContain("Loading orders");
+    finish(PAGE);
+    await vi.waitFor(() => expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1));
+    expect(table.shadowRoot!.textContent).not.toContain("Loading orders");
+  });
+
   it("keeps the status and staff choices readable in the filter bar", async () => {
     const { el } = await loaded();
     for (const name of ["status", "staff"]) {
@@ -166,7 +192,7 @@ describe("dashboard Orders", () => {
     ["F2", "Simplified invoice"],
   ])("labels a filed %s beside its number", async (invoiceType, label) => {
     const api = stubApi({
-      listOrderPages: vi.fn().mockResolvedValue({
+      listOrdersPage: vi.fn().mockResolvedValue({
         ...PAGE,
         rows: [{ ...ROW, invoiceType }],
       }),
@@ -194,7 +220,7 @@ describe("dashboard Orders", () => {
       expect(location.pathname).toBe("/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02"),
     );
     expect(
-      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
+      (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
     ).toMatchObject({
       status: "unpaid",
       from: "2026-09-01",
@@ -213,9 +239,9 @@ describe("dashboard Orders", () => {
         );
     choose("from", "");
     choose("status", "paid");
-    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.background.listOrdersPage).toHaveBeenCalled());
     expect(
-      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
+      (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
     ).toMatchObject({
       status: "paid",
       from: undefined,
@@ -231,17 +257,181 @@ describe("dashboard Orders", () => {
     >("wt-combobox[name=status]")!;
     expect(status.options.map((option) => option.value)).toContain("paid");
     expect(status.value).toBe("paid");
-    expect((api.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].status).toBe("paid");
+    expect((api.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0].status).toBe("paid");
   });
 
-  it("loads another page when Show more is chosen", async () => {
+  it("requests only the next page and resets it when a filter changes", async () => {
     const { el, api } = await loaded();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-more]")!.click();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 1 } }));
     await vi.waitFor(() =>
-      expect((api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[1]).toBe(
-        2,
-      ),
+      expect(vi.mocked(api.background.listOrdersPage).mock.lastCall?.[0].page).toBe(1),
     );
+    expect(api.listOrdersPage).toHaveBeenCalledTimes(1);
+    el.shadowRoot!.querySelector("[name=status]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "paid" } }),
+    );
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.background.listOrdersPage).mock.lastCall?.[0]).toMatchObject({
+        page: 0,
+        status: "paid",
+      }),
+    );
+    expect(table.serverPaging).toMatchObject({ total: 101, pageSize: 50 });
+  });
+
+  it("restores the header sort before the first read and sends only supported sorts", async () => {
+    sessionStorage.setItem(
+      "waitron.orders.table",
+      JSON.stringify({ sortKey: "total", sortDirection: "descending" }),
+    );
+    const { el, api } = await loaded();
+    expect(vi.mocked(api.listOrdersPage).mock.calls).toHaveLength(1);
+    expect(vi.mocked(api.listOrdersPage).mock.lastCall?.[0]).toMatchObject({
+      page: 0,
+      sortKey: "total",
+      sortDirection: "descending",
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.columns.filter((column) => column.sortValue).map((column) => column.key)).toEqual([
+      "opened",
+      "invoice",
+      "total",
+    ]);
+    table.dispatchEvent(
+      new CustomEvent("wt-query-change", {
+        detail: { search: "ignored", filters: {}, sortKey: "opened", sortDirection: "ascending" },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.background.listOrdersPage).mock.lastCall?.[0]).toMatchObject({
+        sortKey: "opened",
+        sortDirection: "ascending",
+        q: undefined,
+      }),
+    );
+  });
+
+  it("retries a refused page move and accepts a server-clamped page", async () => {
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    read
+      .mockRejectedValueOnce({ code: "orders.failed" })
+      .mockResolvedValue({ ...PAGE, page: 0, total: 1 });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const next = () =>
+      table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 1 } }));
+    next();
+    await vi.waitFor(() => expect(table.errorMessage).not.toBe(""));
+    next();
+    await vi.waitFor(() => expect(read.mock.calls.map((call) => call[0].page)).toEqual([1, 1, 0]));
+    await vi.waitFor(() => expect(table.serverPaging).toMatchObject({ page: 0, total: 1 }));
+    expect(table.errorMessage).toBe("");
+  });
+
+  it("restarts an identical corrected date query after releasing a backwards range", async () => {
+    history.replaceState(null, "", "/manage/orders/from/2026-09-01/to/2026-09-02");
+    const { el, api } = await loaded();
+    const choose = (value: string) =>
+      el
+        .shadowRoot!.querySelector("[name=to]")!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    choose("2026-08-01");
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=to]")!.error,
+      ).not.toBe(""),
+    );
+    choose("2026-09-02");
+    await vi.waitFor(() => expect(api.background.listOrdersPage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=to]")!.error,
+      ).toBe(""),
+    );
+  });
+
+  it("uses one 200 ms search timer, flushes Enter and replaces search-only history", async () => {
+    const { el, api } = await loaded();
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const search =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=q]")!;
+    const read = vi.mocked(api.background.listOrdersPage);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "q" } }));
+      search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "quokka " } }));
+      await vi.advanceTimersByTimeAsync(199);
+      expect(read).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read.mock.lastCall?.[0].q).toBe("quokka ");
+      search.value = "quokka";
+      search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "quokka" } }));
+      search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  });
+
+  it("retains rows while a query loads and ignores its late answer after a newer filter", async () => {
+    const { el, api } = await loaded();
+    let finish!: (value: OrdersPageDto) => void;
+    const late = new Promise<OrdersPageDto>((resolve) => {
+      finish = resolve;
+    });
+    const read = vi.mocked(api.background.listOrdersPage);
+    read.mockReturnValueOnce(late).mockResolvedValue({ ...PAGE, rows: [{ ...ROW, id: "newer" }] });
+    const status = el.shadowRoot!.querySelector("[name=status]")!;
+    const choose = (value: string) =>
+      status.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    const table = el.shadowRoot!.querySelector<WtDataTable<OrderRowDto>>("wt-data-table")!;
+    const header = table.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="total"]')!;
+    await userEvent.click(header);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(header.isConnected).toBe(true);
+    expect(table.shadowRoot!.activeElement).toBe(header);
+    expect(table.rows.map((row) => row.id)).toEqual([ROW.id]);
+    choose("open");
+    await vi.waitFor(() => expect(table.rows.map((row) => row.id)).toEqual(["newer"]));
+    finish({ ...PAGE, rows: [{ ...ROW, id: "stale" }] });
+    await late;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(table.rows.map((row) => row.id)).toEqual(["newer"]);
+  });
+
+  it("keeps live refreshes on the page returned after the server clamps it", async () => {
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    let total = 101;
+    read.mockImplementation(async (query) => ({
+      ...PAGE,
+      total,
+      page: Math.min(query.page, Math.ceil(total / 50) - 1),
+    }));
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 2 } }));
+    await vi.waitFor(() => expect(table.serverPaging?.page).toBe(2));
+    total = 1;
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(table.serverPaging?.page).toBe(0));
+    await vi.waitFor(() => expect(read.mock.lastCall?.[0].page).toBe(0));
+    total = 101;
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(read.mock.calls.map((call) => call[0].page)).toEqual([2, 2, 0, 0]),
+    );
+    expect(table.serverPaging?.page).toBe(0);
   });
 
   it("opens a bill's detail when its row is chosen", async () => {
@@ -274,7 +464,7 @@ describe("dashboard Orders", () => {
 
   it("places a table-filter refusal under Table and says to fix the filter bar", async () => {
     const api = stubApi({
-      listOrderPages: vi
+      listOrdersPage: vi
         .fn()
         .mockRejectedValue({ code: "management.request_invalid", params: { field: "table" } }),
     });
@@ -300,7 +490,7 @@ describe("dashboard Orders", () => {
     async (name, typed) => {
       const { el, api } = await loaded();
       // Reads after the first go through the passive API.
-      const calls = vi.mocked(api.background.listOrderPages).mock.calls;
+      const calls = vi.mocked(api.background.listOrdersPage).mock.calls;
       const before = calls.length;
       const box = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
         `wt-input[name=${name}]`,
@@ -328,8 +518,8 @@ describe("dashboard Orders", () => {
   it("refreshes changed bills through the passive API", async () => {
     const { api } = await loaded();
     api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
-    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
-    expect(api.listOrderPages).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(api.background.listOrdersPage).toHaveBeenCalled());
+    expect(api.listOrdersPage).toHaveBeenCalledTimes(1);
   });
 
   it("opens a printer picker from a bill's detail", async () => {
@@ -355,7 +545,7 @@ describe("dashboard Orders", () => {
     await vi.waitFor(() =>
       expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
     );
-    (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...PAGE,
       rows: [],
     });
@@ -378,12 +568,12 @@ describe("dashboard Orders", () => {
     await vi.waitFor(() =>
       expect(picker.shadowRoot!.textContent).toContain("Copy sent to Bar printer"),
     );
-    (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...PAGE,
       rows: [{ ...ROW }],
     });
     api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
-    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.background.listOrdersPage).toHaveBeenCalled());
     expect(picker.shadowRoot!.textContent).toContain("Copy sent to Bar printer");
     expect(api.getOrderPrinters).toHaveBeenCalledTimes(1);
   });
@@ -393,7 +583,7 @@ describe("dashboard Orders", () => {
     ["a full invoice", "F1", ["View details", "Print / Reprint"]],
   ] as const)("offers the row menu's own print action for %s", async (_name, type, labels) => {
     const row = { ...ROW, invoiceType: type };
-    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
+    const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -435,7 +625,7 @@ describe("dashboard Orders", () => {
       },
     };
     const api = stubApi({
-      listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+      listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
       getOrder: vi.fn().mockResolvedValue(detail),
     });
     const { el } = await loaded(api);
@@ -467,7 +657,7 @@ describe("dashboard Orders", () => {
       setLocale(locale);
       const full = { ...ROW, invoiceType: "F1" as const };
       const api = stubApi({
-        listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+        listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
         getOrder: vi.fn().mockResolvedValue(fullDetail(full)),
       });
       const { el } = await loaded(api);
@@ -513,7 +703,7 @@ describe("dashboard Orders", () => {
               deliveries: null,
             };
       const api = stubApi({
-        listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [shown] }),
+        listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [shown] }),
         getOrder: vi.fn().mockResolvedValue(detail),
       });
       (api.background.getOrder as ReturnType<typeof vi.fn>).mockResolvedValue(detail);
@@ -523,7 +713,7 @@ describe("dashboard Orders", () => {
       table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
       const opened = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
       await vi.waitFor(() => expect(opened.shadowRoot!.querySelector(button)).not.toBeNull());
-      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mockResolvedValue({
         ...PAGE,
         rows: [],
       });
@@ -552,7 +742,7 @@ describe("dashboard Orders", () => {
     ["an invoice without a bill", { ...ROW, kind: "sale" as const }],
     ["a bill without an invoice", { ...ROW, invoiceNumber: null, invoiceType: null }],
   ])("does not offer reprint for %s", async (_name, row) => {
-    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
+    const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -575,8 +765,8 @@ describe("dashboard Orders", () => {
     "says the dashboard's one no-matches sentence when the search and filters find no bill (%s)",
     async (locale) => {
       setLocale(locale);
-      const empty = { ...PAGE, rows: [], next: null };
-      const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue(empty) });
+      const empty = { ...PAGE, rows: [], total: 0 };
+      const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue(empty) });
       const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       await vi.waitFor(() =>
@@ -593,11 +783,11 @@ describe("dashboard Orders", () => {
       new CustomEvent("wt-change", { detail: { value: "Table 5" }, bubbles: true, composed: true }),
     );
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(api.listOrderPages).toHaveBeenCalledTimes(1);
-    expect(api.background.listOrderPages).not.toHaveBeenCalled();
+    expect(api.listOrdersPage).toHaveBeenCalledTimes(1);
+    expect(api.background.listOrdersPage).not.toHaveBeenCalled();
     await vi.waitFor(() =>
       expect(
-        (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].table,
+        (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0].table,
       ).toBe("Table 5"),
     );
   });
@@ -611,13 +801,13 @@ describe("dashboard Orders", () => {
           new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
         );
     const lastQ = () =>
-      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].q;
+      (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0].q;
     type("gin ");
     await vi.waitFor(() => expect(lastQ()).toBe("gin "));
     type("   ");
     await vi.waitFor(() => {
       expect(
-        (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.calls.length,
+        (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.calls.length,
       ).toBeGreaterThan(1);
       expect(lastQ()).toBeUndefined();
     });
@@ -638,12 +828,12 @@ describe("dashboard Orders", () => {
         el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=to]")?.error,
       ).toContain("on or after"),
     );
-    expect(api.background.listOrderPages).not.toHaveBeenCalled();
+    expect(api.background.listOrdersPage).not.toHaveBeenCalled();
   });
 
   it("keeps a paid bill's earlier departure visible", async () => {
     const paid = { ...ROW, status: "paid" as const, stillOwed: null };
-    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [paid] }) });
+    const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [paid] }) });
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -652,7 +842,7 @@ describe("dashboard Orders", () => {
 
   it("names a bill closed as a deferred payment and keeps its earlier departure visible", async () => {
     const closed = { ...ROW, status: "deferred_payment" as const, stillOwed: null };
-    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [closed] }) });
+    const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [closed] }) });
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;

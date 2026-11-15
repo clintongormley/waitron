@@ -36,8 +36,31 @@ useVenueDb({
   },
 });
 
-const get = (cookie: string, path: string) =>
-  send(venue.orders, cookie, "GET", `/management-api/orders${path}`);
+const get = async (cookie: string, path: string) => {
+  const answer = await send(venue.orders, cookie, "GET", `/management-api/orders${path}`);
+  const body = answer.json as {
+    rows?: unknown[];
+    total?: number;
+    page?: number;
+    pageSize?: number;
+  };
+  if (answer.status === 200 && body.rows && body.total !== undefined) {
+    const rows = [...body.rows];
+    for (let page = 1; page * body.pageSize! < body.total; page++) {
+      const next = await send(
+        venue.orders,
+        cookie,
+        "GET",
+        `/management-api/orders${path}${path.includes("?") ? "&" : "?"}page=${page}`,
+      );
+      expect(next.status).toBe(200);
+      rows.push(...(next.json as { rows: unknown[] }).rows);
+    }
+    expect(rows).toHaveLength(body.total);
+    body.rows = rows;
+  }
+  return answer;
+};
 
 describe("Orders routes", () => {
   it("requires a dashboard session and accepts staff and supervisor sessions", async () => {
@@ -91,8 +114,8 @@ describe("Orders routes", () => {
     ).toBe(200);
     const sale = await billlessSale(venue);
 
-    const staff = await get(venue.staffDashboard, "?anyDate=true&limit=200");
-    const manager = await get(venue.supervisorDashboard, "?anyDate=true&limit=200");
+    const staff = await get(venue.staffDashboard, "?anyDate=true");
+    const manager = await get(venue.supervisorDashboard, "?anyDate=true");
     expect(staff.status).toBe(200);
     expect(manager.status).toBe(200);
     const staffIds = (staff.json as { rows: { id: string }[] }).rows.map((row) => row.id);
@@ -162,7 +185,7 @@ describe("Orders routes", () => {
     });
   });
 
-  it("hands back a ranked page bookmark while searching words, and a plain one otherwise", async () => {
+  it("returns ranked matches and their total through the table page route", async () => {
     for (const name of ["Quimera", "Quimera Sur"]) {
       const party = await seatedWith(venue);
       const named = await send(
@@ -174,22 +197,12 @@ describe("Orders routes", () => {
       );
       expect(named.status).toBe(200);
     }
-    const page = (query: string) =>
-      get(venue.supervisorDashboard, `?anyDate=true&limit=1&${query}`) as Promise<{
-        status: number;
-        json: { rows: { partyName: string | null }[]; next: string | null };
-      }>;
-    const first = await page("q=quimera");
+    const first = await get(venue.supervisorDashboard, "?anyDate=true&q=quimera");
     expect(first.status).toBe(200);
-    expect(first.json.rows.map((row) => row.partyName)).toEqual(["Quimera"]);
-    expect(first.json.next).toMatch(/^\d{1,16}_\d{4}-\d{2}-\d{2}T[\d:.]+Z_[0-9a-f-]{36}$/);
-    const second = await page(`q=quimera&after=${encodeURIComponent(first.json.next!)}`);
-    expect(second.status).toBe(200);
-    expect(second.json.rows.map((row) => row.partyName)).toEqual(["Quimera Sur"]);
-
-    const plain = await page("");
-    expect(plain.json.next).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z_[0-9a-f-]{36}$/);
-    expect((await page(`after=${encodeURIComponent(plain.json.next!)}`)).status).toBe(200);
+    expect(first.json).toMatchObject({ total: 2, page: 0, pageSize: 50 });
+    expect(
+      (first.json as { rows: { partyName: string }[] }).rows.map((row) => row.partyName),
+    ).toEqual(["Quimera", "Quimera Sur"]);
   });
 
   it("keeps a search's trailing space, measures it trimmed, and treats spaces alone as no search", async () => {
@@ -207,7 +220,7 @@ describe("Orders routes", () => {
       tabs[name] = party.tabId;
     }
     const ids = async (query: string) => {
-      const answer = (await get(venue.supervisorDashboard, `?anyDate=true&limit=200&${query}`)) as {
+      const answer = (await get(venue.supervisorDashboard, `?anyDate=true&${query}`)) as {
         status: number;
         json: { rows: { id: string }[] };
       };
@@ -344,7 +357,7 @@ describe("Orders routes", () => {
       taxpayerDomicile: "Calle Fiscal 1, Madrid",
     });
 
-    const page = await get(venue.supervisorDashboard, "?anyDate=true&limit=200");
+    const page = await get(venue.supervisorDashboard, "?anyDate=true");
     expect(page.status).toBe(200);
     const rows = page.json.rows as { id: string; invoiceType: string | null }[];
     expect(rows.find((row) => row.id === simplified)?.invoiceType).toBe("F2");

@@ -47,7 +47,14 @@ async function mount(path = "/manage/my-schedule") {
       listMySwaps: async () => [],
       listMyAbsences: async () => [],
       listOrderStaff: async () => ({ staff: [] }),
-      listOrderPages: async () => ({ rows: [], next: null, from: null, to: null }),
+      listOrdersPage: async () => ({
+        rows: [],
+        total: 0,
+        page: 0,
+        pageSize: 50,
+        from: null,
+        to: null,
+      }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
       getDiskStop: async () => ({ stopped: false, deleted: null }),
       passkeySignals: async () => ({

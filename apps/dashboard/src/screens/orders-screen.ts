@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   UrlStateController,
+  TableRequestController,
   baseStyles,
   belongsToComposition,
   pageTitleStyles,
@@ -21,6 +22,7 @@ import {
   type DashboardApi,
   type OrderRowDto,
   type OrdersPageDto,
+  type OrdersPageQuery,
   type OrderStatusFilter,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -81,9 +83,6 @@ export class OrdersScreen extends LitElement {
       .filters wt-combobox {
         width: calc(var(--wt-cell-name-max-width) + var(--wt-space-4));
       }
-      .more {
-        margin-top: var(--wt-space-3);
-      }
       wt-data-table::part(owed) {
         font-weight: var(--wt-font-weight-bold);
       }
@@ -104,22 +103,46 @@ export class OrdersScreen extends LitElement {
   /** The session holds `personal_data.export`. */
   @property({ attribute: false }) canExportPersonalData = false;
   @state() private filter: OrdersFilter = DEFAULT_ORDERS_FILTER;
-  @state() private pages = 1;
   @state() private page?: OrdersPageDto;
   @state() private staff: { id: string; name: string | null }[] = [];
   @state() private refusal: { field: string | null; message: string } | null = null;
-  @state() private loadingMore = false;
+  @state() private loading = true;
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
   @state() private reprintMode: "receipt" | "choose" = "receipt";
   @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
+  #sort?: Pick<OrdersPageQuery, "sortKey" | "sortDirection">;
+  #rangeReleased = false;
+  #shownQuery?: Omit<OrdersPageQuery, "q" | "page"> & { search: string };
+  readonly #pages = new TableRequestController<
+    Omit<OrdersPageQuery, "q" | "page"> & { search: string }
+  >(this, async (query, page) => {
+    this.loading = this.page === undefined;
+    const { search, ...filters } = query;
+    try {
+      await this.#queries.watch(
+        "listOrdersPage",
+        [{ ...filters, q: search || undefined, page }],
+        (value) => {
+          this.page = value;
+          this.#shownQuery = query;
+          this.loading = false;
+          this.refusal = null;
+          if (this.#pages.query === query) this.#pages.move(value.page);
+        },
+      );
+    } catch {
+      if (this.#pages.query === query && this.#shownQuery === query)
+        this.#pages.page = this.page!.page;
+    }
+  });
 
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
     (error) => {
-      this.loadingMore = false;
+      this.loading = false;
       const raw = (error as { params?: { field?: unknown } } | null)?.params?.field;
       const field =
         codeOf(error) === "management.request_invalid" && typeof raw === "string"
@@ -136,7 +159,6 @@ export class OrdersScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
       this.filter = readOrdersFilter((key) => this.#url.read(key));
-      this.pages = 1;
       this.#watch();
     },
     dashboardPath,
@@ -163,25 +185,26 @@ export class OrdersScreen extends LitElement {
       this.filter.to !== undefined &&
       this.filter.from > this.filter.to
     ) {
-      this.#queries.release("listOrderPages");
+      this.#pages.hostDisconnected();
+      this.#queries.release("listOrdersPage");
+      this.#rangeReleased = true;
+      this.loading = false;
       this.refusal = { field: "to", message: t("orders.range_backwards") };
       return;
     }
-    void this.#queries
-      .watch("listOrderPages", [this.filter, this.pages], (page) => {
-        this.page = page;
-        this.loadingMore = false;
-        this.refusal = null;
-      })
-      .catch(() => undefined);
+    if (this.#sort === undefined) return;
+    const previous = this.#pages.query;
+    const released = this.#rangeReleased;
+    this.#rangeReleased = false;
+    const { q, ...filter } = this.filter;
+    this.#pages.setQuery({ ...filter, search: q ?? "", ...this.#sort });
+    if (released && previous === this.#pages.query) void this.#pages.reload();
   }
 
-  #apply(next: OrdersFilter): void {
+  #apply(next: OrdersFilter, replace = false): void {
     const filter = next.from && next.to ? next : { ...next, from: undefined, to: undefined };
     this.filter = filter;
-    this.pages = 1;
-    this.page = undefined;
-    this.#url.write(writeOrdersFilter(filter));
+    this.#url.write(writeOrdersFilter(filter), replace);
     this.#watch();
   }
 
@@ -192,12 +215,32 @@ export class OrdersScreen extends LitElement {
   }
 
   #text(field: "table" | "q", value: string, immediate = false): void {
-    clearTimeout(this.#textTimer);
     const kept = field === "q" ? value : value.trim();
     const apply = () =>
-      this.#apply({ ...this.filter, [field]: value.trim() === "" ? undefined : kept });
-    if (immediate) apply();
-    else this.#textTimer = setTimeout(apply, 400);
+      this.#apply(
+        { ...this.filter, [field]: value.trim() === "" ? undefined : kept },
+        field === "q",
+      );
+    if (field === "q") {
+      apply();
+      if (immediate) void this.#pages.reload();
+    } else {
+      clearTimeout(this.#textTimer);
+      if (immediate) apply();
+      else this.#textTimer = setTimeout(apply, 400);
+    }
+  }
+
+  #tableQuery(event: CustomEvent<Pick<OrdersPageQuery, "sortKey" | "sortDirection">>): void {
+    event.stopPropagation();
+    const { sortKey, sortDirection } = event.detail;
+    this.#sort = {
+      sortKey: ["opened", "invoice", "total"].includes(sortKey)
+        ? (sortKey as OrdersPageQuery["sortKey"])
+        : "",
+      sortDirection,
+    };
+    this.#watch();
   }
 
   /** A full invoice is printed again through its own print action instead. */
@@ -219,6 +262,7 @@ export class OrdersScreen extends LitElement {
     return [
       {
         key: "opened",
+        sortValue: (row) => row.at,
         label: t("orders.col.opened"),
         cell: (row) =>
           new Intl.DateTimeFormat(currentLocale(), {
@@ -241,6 +285,7 @@ export class OrdersScreen extends LitElement {
       },
       {
         key: "invoice",
+        sortValue: (row) => row.invoiceNumber ?? "",
         label: t("orders.col.invoice"),
         cell: (row) =>
           html`${row.invoiceNumber ?? ""}${row.invoiceType === null ? nothing : html`<span part="invoice-type">${t(row.invoiceType === "F1" ? "orders.invoice_full" : "orders.invoice_simplified")}</span>`}${row.creditNotes.map(
@@ -254,7 +299,12 @@ export class OrdersScreen extends LitElement {
         cell: (row) =>
           html`${t(`orders.status.${row.status}`)}${row.credited ? html`<span part="mark">${t(row.credited === "in_full" ? "orders.credited_in_full" : "orders.credited_in_part")}</span>` : nothing}${row.departedAt && (row.status === "paid" || row.status === "deferred_payment" || row.status === "cancelled") ? html`<span part="mark">${fill("orders.left_on", { date: new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(row.departedAt)) })}</span>` : nothing}`,
       },
-      { key: "total", label: t("orders.col.total"), cell: (row) => money(row.total) },
+      {
+        key: "total",
+        label: t("orders.col.total"),
+        sortValue: (row) => row.total,
+        cell: (row) => money(row.total),
+      },
       {
         key: "owed",
         label: t("orders.col.owed"),
@@ -406,6 +456,15 @@ export class OrdersScreen extends LitElement {
         alwaysShownColumnLabel=${t("table.column_always_shown")}
         lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
+        .serverPaging=${{ page: this.page?.page ?? 0, pageSize: 50, total: this.page?.total ?? 0 }}
+        .pageRangeLabel=${(from: number, to: number, total: number) => fill("table.page_range", { from: from.toLocaleString(currentLocale()), to: to.toLocaleString(currentLocale()), total: total.toLocaleString(currentLocale()) })}
+        previousPageLabel=${t("table.previous_page")}
+        nextPageLabel=${t("table.next_page")}
+        @wt-query-change=${this.#tableQuery}
+        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
+          event.stopPropagation();
+          this.#pages.move(event.detail.page);
+        }}
         .rows=${rows}
         .columns=${this.#columns()}
         .rowKey=${(row: OrderRowDto) => row.id}
@@ -413,27 +472,11 @@ export class OrdersScreen extends LitElement {
           this.openId = row.id;
         }}
         .rowClickLabel=${() => t("orders.view")}
-        .loading=${this.page === undefined && this.refusal === null}
+        .loading=${this.loading}
         .loadingMessage=${t("orders.loading")}
         .emptyMessage=${tableNoMatches()}
         .errorMessage=${this.refusal?.field === null ? this.refusal.message : this.refusal ? t("form.fix_fields") : ""}
       ></wt-data-table>
-      ${
-        this.page?.next
-          ? html`<wt-button
-              class="more"
-              variant="secondary"
-              data-test="show-more"
-              ?loading=${this.loadingMore}
-              @click=${() => {
-                this.loadingMore = true;
-                this.pages++;
-                this.#watch();
-              }}
-              >${t("orders.show_more")}</wt-button
-            >`
-          : nothing
-      }
       <dashboard-order-detail-dialog
         .api=${this.api}
         .orderId=${this.openId}

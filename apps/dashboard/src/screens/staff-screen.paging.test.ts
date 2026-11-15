@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -63,7 +64,7 @@ it("uses supplied row order and sends page/filter changes exactly once", async (
   expect(api.listStaffPage).toHaveBeenLastCalledWith(
     expect.objectContaining({ page: 0, status: "current", search: "", locale: "en-GB" }),
   );
-  vi.mocked(api.listStaffPage).mockResolvedValue(result(["Next"], 1));
+  vi.mocked(api.listStaffPage).mockResolvedValueOnce(result(["Next"], 1));
   await userEvent.click(
     page.elementLocator(
       tableOf(el).shadowRoot!.querySelector<HTMLButtonElement>("[data-next-page]")!,
@@ -144,4 +145,30 @@ it("retries a changed filter from page zero after its read fails", async () => {
   expect(api.listStaffPage).toHaveBeenLastCalledWith(
     expect.objectContaining({ status: "all", page: 0 }),
   );
+});
+
+it("keeps live refreshes on the page returned after the server clamps it", async () => {
+  const { el, api } = await mount();
+  const liveData = new LiveData();
+  Object.assign(api, { liveData });
+  let total = 101;
+  const read = vi.mocked(api.listStaffPage);
+  read.mockImplementation(async (query) => ({
+    ...result(["Here"], Math.min(query.page, Math.ceil(total / 50) - 1)),
+    total,
+  }));
+  tableOf(el).dispatchEvent(
+    new CustomEvent("wt-page-change", { detail: { page: 2 }, bubbles: true, composed: true }),
+  );
+  await vi.waitFor(() => expect(tableOf(el).serverPaging?.page).toBe(2));
+  total = 1;
+  liveData.refresh();
+  await vi.waitFor(() => expect(tableOf(el).serverPaging?.page).toBe(0));
+  await vi.waitFor(() => expect(read.mock.lastCall?.[0].page).toBe(0));
+  total = 101;
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(read.mock.calls.map((call) => call[0].page)).toEqual([0, 2, 2, 0, 0]),
+  );
+  expect(tableOf(el).serverPaging?.page).toBe(0);
 });

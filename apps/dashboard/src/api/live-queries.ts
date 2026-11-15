@@ -234,7 +234,7 @@ export const QUERY_DEPENDENCIES = {
 
     "day_cutover_changes",
   ],
-  listOrderPages: [
+  listOrdersPage: [
     "working_orders",
     "working_order_lines",
     "order_amendments",

@@ -186,7 +186,7 @@ try {
       .from(db.floorPlans)
       .where(eq(db.floorPlans.zoneId, zone!.id));
     const managementRoutes = [
-      "/management-api/orders?limit=50",
+      "/management-api/orders",
       `/management-api/orders/${String(seated.tabId)}`,
       "/management-api/venue-service/routing",
       "/management-api/venue-service/departments-and-zones",
@@ -288,7 +288,7 @@ try {
     ]);
     const companions = managementRoutes.slice(14);
     const readerRoutes: Record<string, string[]> = {
-      "dashboard:listOrderPages": [managementRoutes[0]!],
+      "dashboard:listOrdersPage": [managementRoutes[0]!],
       "dashboard:getOrder": [managementRoutes[1]!],
       "dashboard:getFolderRouting": [managementRoutes[2]!, ...companions],
       "dashboard:getProfileScopeChoices": [managementRoutes[3]!],

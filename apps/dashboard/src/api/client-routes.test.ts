@@ -113,24 +113,24 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));
     const api = new DashboardApi("", fetchImpl);
 
-    await api.listOrders(
-      {
-        status: "unpaid",
-        from: "2026-09-01",
-        to: "2026-09-02",
-        anyDate: false,
-        credited: true,
-        staff: "person-1",
-        table: "Table 5",
-        q: "A/12",
-      },
-      { after: "cursor" },
-    );
+    await api.listOrdersPage({
+      status: "unpaid",
+      from: "2026-09-01",
+      to: "2026-09-02",
+      anyDate: false,
+      credited: true,
+      staff: "person-1",
+      table: "Table 5",
+      q: "A/12",
+      page: 2,
+      sortKey: "invoice",
+      sortDirection: "ascending",
+    });
     await api.reprintOrder("bill-1", "printer-2");
 
     expect(callsOf(fetchImpl)).toEqual([
       [
-        "/management-api/orders?status=unpaid&from=2026-09-01&to=2026-09-02&credited=true&staff=person-1&table=Table+5&q=A%2F12&after=cursor",
+        "/management-api/orders?status=unpaid&from=2026-09-01&to=2026-09-02&credited=true&staff=person-1&table=Table+5&q=A%2F12&page=2&sortKey=invoice&sortDirection=ascending",
         "GET",
         undefined,
       ],
