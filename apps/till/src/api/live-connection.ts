@@ -25,7 +25,6 @@ const ORDER_TYPES = [
 ];
 const MENU_TYPES = [
   "products",
-  "product_units",
   "units",
   "menus",
   "menu_items",
@@ -53,7 +52,6 @@ const KITCHEN_TYPES = [
   ...ORDER_TYPES,
   "persons",
   "products",
-  "product_units",
   "units",
   "kitchen_courses",
   "kitchen_stations",
@@ -182,7 +180,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "party_tables",
     "dining_tables",
     "persons",
-    "product_units",
     "products",
     "units",
   ],

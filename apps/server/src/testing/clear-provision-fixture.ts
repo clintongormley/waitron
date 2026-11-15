@@ -47,7 +47,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "menu_details",
       "sections",
       "menus",
-      "product_units",
       "units",
       "settings",
       "taxpayer",

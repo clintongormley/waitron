@@ -699,7 +699,7 @@ async function seedProduct(): Promise<string> {
     .values({
       menuId: cat!.id,
       name: "Routed product",
-      pricingUnit: "each",
+
       unitPrice: 100,
       vatClass: "general",
     })

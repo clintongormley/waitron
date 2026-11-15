@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import { products, productUnits, units, type Transaction } from "@waitron/db";
+import { inArray } from "drizzle-orm";
+import { products, units, type Transaction } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
@@ -55,8 +55,7 @@ async function borrowedProductFacts(
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .where(inArray(products.id, named));
   return new Map(
     rows.map((product) => [

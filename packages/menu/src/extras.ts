@@ -5,7 +5,6 @@ import {
   extraLists,
   productModifiers,
   products,
-  productUnits,
   units,
   type Transaction,
 } from "@waitron/db";
@@ -218,8 +217,7 @@ async function itemPortions(
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .where(
       inArray(
         products.id,

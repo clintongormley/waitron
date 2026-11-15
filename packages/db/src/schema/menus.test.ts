@@ -66,31 +66,14 @@ describe("menu — menu, taxonomy and priced items", () => {
     expect((await columnsOf(db, "categories")).map((c) => c.name)).not.toContain("station_id");
   });
 
-  it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
-    // A real parent row, so the INSERTs below reach the CHECKs rather than the foreign key.
+  it("rejects a bad vat_class on its own CHECK", async () => {
     const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
-
-    // `id` and the timestamps are named because their defaults are `$defaultFn` generators a raw
-    // insert never reaches; raw SQL because the TypeScript type rejects the values under test.
-    const insertProduct = (pricingUnit: string, vatClass: string): ReturnType<typeof sql> =>
-      sql`insert into products (id, menu_id, name, pricing_unit, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', ${pricingUnit}, 100, ${vatClass}, ${AT}, ${AT})`;
-
-    // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
-    const pricingError = await captureError(() => db.execute(insertProduct("bogus", "general")));
-    expect(isRefusal(pricingError, CHECK_VIOLATION)).toBe(true);
-    // The class alone cannot say WHICH of the two CHECKs fired; the constraint's name can.
-    expect(engineErrorMessage(pricingError)).toBe(
-      "CHECK constraint failed: products_pricing_unit_ck",
-    );
-
-    // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
-    const vatError = await captureError(() => db.execute(insertProduct("each", "bogus")));
+    const insertProduct = (vatClass: string): ReturnType<typeof sql> =>
+      sql`insert into products (id, menu_id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
+    const vatError = await captureError(() => db.execute(insertProduct("bogus")));
     expect(isRefusal(vatError, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");
-
-    // The control in the other direction: the same statement with both values valid is accepted, so
-    // the two refusals above are the CHECKs biting and not the insert being malformed.
-    await db.execute(insertProduct("each", "general"));
+    await db.execute(insertProduct("general"));
   });
 
   it("has a snapshot category column on both line tables", async () => {

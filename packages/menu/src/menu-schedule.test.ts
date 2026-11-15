@@ -178,7 +178,6 @@ const DRAFT_TABLES = [
   "option_labels",
   "option_lists",
   "product_modifiers",
-  "product_units",
   "products",
   "section_members",
   "sections",

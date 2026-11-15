@@ -14,6 +14,7 @@ import {
   products,
   sectionMembers,
   sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -65,7 +66,7 @@ import { setIncludeFolder } from "./include-folder.js";
 import { readMenuStructure, type MenuStructureNode } from "./menu-structure.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
+import { createUnit, EACH_UNIT, updateUnit, reassignProductsToUnit } from "./units.js";
 import { createExtraList } from "./extras.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
@@ -2343,3 +2344,33 @@ function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
     return body;
   });
 }
+
+it("a published offer's pricingUnit follows its unit for the offer and its variants", async () => {
+  const f = await menusFixture(fx.db);
+  const unit = await app((tx) =>
+    createUnit(
+      tx,
+      {
+        staffName: "Litre",
+        staffAbbreviation: "l",
+        name: { en: "litre" },
+        abbreviation: { en: "l" },
+        precision: 3,
+      },
+      "en",
+    ),
+  );
+  const [kg] = await fx.db.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+  await app(async (tx) => {
+    await updateProduct(tx, f.lemonade, { unitId: unit.id });
+    await reassignProductsToUnit(tx, unit.id, [f.lemonade], kg!.id);
+  });
+  const offerId = await app((tx) => offerOf(tx, f.dinner, f.lemonade));
+  const offer = (await build(f.dinner)).offers[offerId]!;
+  expect(offer).toMatchObject({ pricingUnit: "weight" });
+  expect(offer.variants.find((variant) => variant.id === f.large)!.pricingUnit).toBe("weight");
+  await app((tx) => reassignProductsToUnit(tx, kg!.id, [f.lemonade], unit.id));
+  const each = (await build(f.dinner)).offers[offerId]!;
+  expect(each).toMatchObject({ pricingUnit: "each" });
+  expect(each.variants.find((variant) => variant.id === f.large)!.pricingUnit).toBe("each");
+});

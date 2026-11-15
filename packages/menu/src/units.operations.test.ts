@@ -32,7 +32,7 @@ async function product(tx: Transaction, name: string) {
     .values({
       menuId: menu!.id,
       name,
-      pricingUnit: "each",
+
       unitPrice: 1,
       vatClass: "general",
     })

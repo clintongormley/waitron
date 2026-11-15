@@ -100,7 +100,6 @@ export {
   optionLabels,
   optionLists,
   productModifiers,
-  productUnits,
   sectionMembers,
   sections,
   units,

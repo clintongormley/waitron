@@ -409,7 +409,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 32,
+  version: 33,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -867,11 +867,23 @@ describe("configuration transfer database path", () => {
       await tx
         .insert(menus)
         .values({ id: "11111111-aaaa-aaaa-aaaa-111111111111", name: "Prepared menu" });
+      const [sourceUnit] = await tx
+        .insert(units)
+        .values({
+          staffName: "Source kilogram",
+          staffAbbreviation: "kg",
+          name: {},
+          abbreviation: {},
+          precision: 3,
+          hardwareUnit: "kg",
+        })
+        .returning({ id: units.id });
       await tx.insert(products).values({
         id: "22222222-aaaa-aaaa-aaaa-222222222222",
+        unitId: sourceUnit!.id,
         menuId: "11111111-aaaa-aaaa-aaaa-111111111111",
         name: "Coffee",
-        pricingUnit: "each",
+
         unitPrice: 150,
         vatClass: "general",
       });
@@ -1017,6 +1029,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
+    expect(transferred.tables.products![0]!.unit_id).toEqual(expect.stringMatching(/.+/));
     expect(transferred.venue.fullSeriesCode).toBe("FF");
     expect(transferred.venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28001 Madrid");
     expect(transferred.venue).not.toHaveProperty("tillName");
@@ -1045,6 +1058,13 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
+      const [importedUnit] = await tx
+        .select({ id: units.id, staffName: units.staffName, hardwareUnit: units.hardwareUnit })
+        .from(products)
+        .innerJoin(units, eq(units.id, products.unitId))
+        .where(eq(products.name, "Coffee"));
+      expect(importedUnit).toMatchObject({ staffName: "Source kilogram", hardwareUnit: "kg" });
+      expect(importedUnit!.id).not.toBe(transferred.tables.products![0]!.unit_id);
       const named = await tx.select({ name: categories.name }).from(categories);
       expect(named).toEqual([{ name: "Bakery" }]);
       const category = await tx.execute<{ primary: number }>(sql`
@@ -5475,7 +5495,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(32);
+  expect(exported.version).toBe(33);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

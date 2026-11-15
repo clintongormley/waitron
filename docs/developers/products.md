@@ -537,16 +537,14 @@ written: there is no data-migration code before go-live (CLAUDE.md §3) and the 
 before then. So an older variant row may still store one until the next save of the variant's
 own page or until that category is deleted.
 
-Its unit is always its parent's too (A222), and with it the legacy `pricing_unit`: the unit read
-joins the parent's `product_units` row, never one the variant stores (`unitOwnerJoin`, same file),
-and `effectiveProductColumns.pricingUnit` reads the parent's. `readProductEditor` returns
-`unitId: null` for a variant; the editor save refuses a variant body naming a unit
-(`product.invalid`, field `unitId`) and otherwise deletes any unit row the variant stores and
-blanks its `pricing_unit`; and `assignProductUnit` answers a variant's id with `product.not_found`.
-No migration clears the units variants stored before this rule: that carries the owner's category
-decision above over to units, which the owner has yet to confirm. Unit management ignores such a
-row: `productsUsingUnit` lists products with no parent only, reassigning a unit's products skips a
-variant, and `deleteUnit` deletes those rows before the unit (`packages/menu/src/units.ts`).
+Its unit is always its parent's too: `unitOwnerJoin` joins `units` through the parent's
+`products.unit_id`, ignoring the variant's own column. Reads derive `pricingUnit` from that unit's
+hardware mapping: no mapping means `each`, a mapping means `weight`.
+`readProductEditor` returns `unitId: null` for a variant and its parent's value in `inherited.unitId`.
+The editor refuses a variant body naming a unit (`product.invalid`, field `unitId`) and otherwise
+clears its stored unit. `assignProductUnit` answers a variant's id with `product.not_found`.
+Unit management lists and reassigns only top-level products; `deleteUnit` clears any variant
+assignments before deleting the unit (`packages/menu/src/units.ts`).
 
 Its colour is always its parent's too (W92), whatever its own `color` column holds:
 `effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns

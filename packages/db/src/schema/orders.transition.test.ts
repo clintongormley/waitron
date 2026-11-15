@@ -135,7 +135,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       .values({
         menuId: menu!.id,
         name: "Café solo",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: "general",
       })

@@ -82,7 +82,7 @@ async function seed(db: Database): Promise<void> {
     .values({
       menuId: catA.id,
       name: "Café solo",
-      pricingUnit: "each",
+
       unitPrice: 130,
       vatClass: "general",
     })
@@ -765,7 +765,7 @@ describe("working_order_lines — the draft line's links", () => {
       .values({
         menuId: (await db.select({ id: menus.id }).from(menus))[0]!.id,
         name: "Café solo",
-        pricingUnit: "each",
+
         unitPrice: 130,
         vatClass: "general",
       })

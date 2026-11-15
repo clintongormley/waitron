@@ -42,7 +42,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       .values({
         menuId: cat!.id,
         name: "Café solo",
-        pricingUnit: "each",
+
         unitPrice: 130,
         vatClass: "general",
       })

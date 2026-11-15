@@ -502,7 +502,7 @@ describe("site content languages", () => {
         menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread", "fr-FR": "Pain" },
-        pricingUnit: "each",
+
         unitPrice: 200,
         vatClass: "general",
       });
@@ -556,7 +556,7 @@ describe("site content languages", () => {
         menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread" },
-        pricingUnit: "each",
+
         unitPrice: 200,
         vatClass: "general",
       });

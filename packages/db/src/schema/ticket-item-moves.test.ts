@@ -44,7 +44,7 @@ describe("ticket_item_moves schema", () => {
       .values({
         menuId: menu!.id,
         name: "Food",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: "general",
       })

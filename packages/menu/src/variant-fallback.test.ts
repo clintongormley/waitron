@@ -6,7 +6,6 @@ import {
   FOREIGN_KEY_VIOLATION,
   kitchenCourses,
   products,
-  productUnits,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -136,15 +135,12 @@ beforeEach(async () => {
         menuId: menu.id,
         parentId: parent.id,
         name: "125 ml",
-        pricingUnit: null,
+
         unitPrice: null,
         vatClass: null,
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
-    // Its own value for every inherited field, and its own names. Its category, unit row and
-    // pricing unit are ones a variant still holds from before it always took its parent's, and its
-    // colour one no save writes; every read ignores all four.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -155,7 +151,7 @@ beforeEach(async () => {
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         description: { en: "A sweet red from Toro" },
-        pricingUnit: "weight",
+
         unitPrice: 550,
         vatClass: "general",
         dietaryDeclarations: ["vegetarian"],
@@ -169,7 +165,7 @@ beforeEach(async () => {
         variantOrder: 1,
       })
       .returning({ id: products.id });
-    await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
+    await tx.update(products).set({ unitId: largeGlass.id }).where(eq(products.id, wine175!.id));
     await assignMenuToVenue(tx, menu.id);
     return {
       menuId: menu.id,
@@ -391,7 +387,7 @@ describe("a variant's main category is always its parent's", () => {
           parentId: f.parentId,
           name: "250 ml",
           categoryId: null,
-          pricingUnit: null,
+
           unitPrice: null,
           vatClass: null,
           dietaryDeclarations: null,
@@ -414,7 +410,7 @@ describe("a variant's main category is always its parent's", () => {
 });
 
 describe("a variant's unit is always its product's", () => {
-  it("reads Each for a variant whose product has no unit, whatever unit row the variant stores", async () => {
+  it("reads Each for a variant whose product has no unit, whatever unit the variant stores", async () => {
     const { parentId, variantId } = await run(async (tx) => {
       const parent = await createProduct(tx, {
         menuId: f.menuId,
@@ -428,7 +424,7 @@ describe("a variant's unit is always its product's", () => {
         .insert(products)
         .values({ menuId: f.menuId, parentId: parent.id, name: "Cider pint" })
         .returning({ id: products.id });
-      await plantStoredUnit(tx, variant!.id, f.largeGlass, "weight");
+      await plantStoredUnit(tx, variant!.id, f.largeGlass);
       await addProductToMenu(tx, { menuId: f.menuId, productId: parent.id, grossPrice: null });
       return { parentId: parent.id, variantId: variant!.id };
     });
@@ -564,7 +560,7 @@ describe("effectiveProductColumns, entry by entry", () => {
   // Every entry read straight, for the parent and both variants: 125 ml has every field blank and
   // 175 ml every field set, each different from the parent's. An entry with its two sides swapped
   // fails one of the two.
-  it("reads the parent's value for a blank field and the variant's own for a set one, except the category, pricing unit and colour, always the parent's", async () => {
+  it("reads the parent's value for a blank field and the variant's own for a set one, except the category and colour, always the parent's", async () => {
     const raw = await run((tx) =>
       tx
         .select({ id: products.id, ...pickRaw() })
@@ -586,9 +582,7 @@ describe("effectiveProductColumns, entry by entry", () => {
       expect(parentRaw[key], key).not.toBeNull();
       expect(wine175Raw[key], key).not.toEqual(parentRaw[key]);
       expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
-      // The category, the pricing unit and the colour are the entries a variant cannot set: its
-      // stored ones are ignored.
-      const parentsAlways = key === "categoryId" || key === "pricingUnit" || key === "color";
+      const parentsAlways = key === "categoryId" || key === "color";
       const own = parentsAlways ? parentRaw[key] : wine175Raw[key];
       expect(byId.get(f.wine175)![key], key).toEqual(own);
     }
@@ -655,7 +649,7 @@ describe("what the products table refuses", () => {
       fx.db.insert(products).values({
         menuId: f.menuId,
         name: "No VAT",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: null,
       }),
@@ -670,7 +664,7 @@ describe("what the products table refuses", () => {
       fx.db.insert(products).values({
         menuId: f.menuId,
         name: "No price",
-        pricingUnit: "each",
+
         unitPrice: null,
         vatClass: "general",
       }),
@@ -680,14 +674,13 @@ describe("what the products table refuses", () => {
     });
   });
 
-  // Also pins that `products_vat_class_ck` and `products_pricing_unit_ck` let a NULL through.
-  it("accepts a variant with no VAT class, price or pricing unit", async () => {
+  it("accepts a variant with no VAT class or price", async () => {
     await expect(
       fx.db.insert(products).values({
         menuId: f.menuId,
         parentId: f.parentId,
         name: "Wine 500",
-        pricingUnit: null,
+
         unitPrice: null,
         vatClass: null,
       }),
@@ -746,7 +739,6 @@ describe("INHERITED_KEYS", () => {
         "dietaryDeclarations",
         "image",
         "manualAllergens",
-        "pricingUnit",
         "unitPrice",
         "vatClass",
       ].sort(),

@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { products } from "../menus.js";
+import { check, unique } from "drizzle-orm/sqlite-core";
 import { count, flag, id, json, label, newId, table } from "../columns.js";
 
 export const units = table(
@@ -24,28 +23,5 @@ export const units = table(
     unique("units_seed_key_key").on(t.seedKey),
     check("units_precision_ck", sql`${t.precision} between 0 and 3`),
     check("units_hardware_unit_ck", sql`${t.hardwareUnit} in ('kg', 'g', 'mg')`),
-  ],
-);
-
-export const productUnits = table(
-  "product_units",
-  {
-    productId: id("product_id").notNull(),
-    unitId: id("unit_id").notNull(),
-  },
-  (t) => [
-    // A PRIMARY KEY on `product_id` alone, not a bare UNIQUE: one unit per product.
-    primaryKey({ columns: [t.productId] }),
-    foreignKey({
-      columns: [t.productId],
-      foreignColumns: [products.id],
-      name: "product_units_product_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.unitId],
-      foreignColumns: [units.id],
-      name: "product_units_unit_fk",
-    }).onDelete("restrict"),
-    index("product_units_unit_idx").on(t.unitId),
   ],
 );

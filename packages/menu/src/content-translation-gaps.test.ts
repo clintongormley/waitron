@@ -62,7 +62,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
       customerName: names,
       kitchenName: "KITCHEN Variant",
       unitPrice: 200,
-      pricingUnit: "each",
+
       vatClass: "reduced",
     })
     .returning();
@@ -209,7 +209,7 @@ describe("complete translation gap predicates", () => {
             customerName: { es: text, en: "CLIENT Present" },
             kitchenName: `KITCHEN ${i}`,
             unitPrice: 200,
-            pricingUnit: "each" as const,
+
             vatClass: "reduced",
           })),
         )

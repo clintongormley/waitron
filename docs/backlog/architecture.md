@@ -1023,10 +1023,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   with repeated kinds.
 - **Menu names (W72): there is no unique index, and no backfill.**
   [Detail](menu.md#menu-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
-- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
-  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.
-  **Next action:** keep it in step with the unit or drop it.
-  [Detail](menu.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
 - **The menu picker was deleted and nothing replaced it.** `selectedMenuId`
   (`products-screen.ts`) takes the first menu in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next

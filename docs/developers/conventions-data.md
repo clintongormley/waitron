@@ -6554,8 +6554,18 @@ names, the mounted test checks every registered method and path against the shar
 
 ### Menu names and configuration format 32 (2026-11-14, A1308 mn3)
 
+> Historical format: superseded by the format-33 note below.
+
 Your new export names the `menus` table and `products.menu_id` and uses format 32. A format-31
 export is refused as outdated. The previous format is pinned by the pre-menu-rename case in
 `apps/server/src/configuration-import.test.ts`; the writer and parser are in
 `packages/provisioning/src/configuration-transfer.ts`. Guest sharing uses `settings.guest_menu`;
 menu defaults retain `settings.menu`.
+
+
+### Product units and configuration format 33 (2026-11-15, A1308 mn4)
+
+Your export carries the product's unit in `products.unit_id` and uses format 33. A format-32
+export is refused as outdated. The pre-product-unit-column case in
+`apps/server/src/configuration-import.test.ts` checks that refusal; the writer and parser are in
+`packages/provisioning/src/configuration-transfer.ts`.

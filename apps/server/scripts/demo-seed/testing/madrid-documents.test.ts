@@ -272,3 +272,57 @@ it("moves both captured menu settings rows and keeps the capture", () => {
   expect(Object.keys(result.tables)).toEqual(["settings"]);
   expect(captured).toEqual(before);
 });
+
+it("folds captured product units into nullable product columns without editing the capture", async () => {
+  const documents = await import("./madrid-documents.js");
+  expect(documents).toHaveProperty("madridWithProductUnits");
+  const capture: import("./madrid-semantics.js").CanonicalMadridSemantics = {
+    tables: {
+      products: {
+        columns: [{ name: "pricing_unit", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 }],
+        foreignKeys: [],
+        rows: {
+          parent: { id: "parent", pricing_unit: "weight" },
+          variant: { id: "variant", pricing_unit: null },
+        },
+      },
+      product_units: {
+        columns: [{ name: "unit_id", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 }],
+        foreignKeys: [
+          {
+            id: 0,
+            seq: 0,
+            table: "units",
+            from: "unit_id",
+            to: "id",
+            on_update: "NO ACTION",
+            on_delete: "RESTRICT",
+            match: "NONE",
+          },
+        ],
+        rows: { assignment: { product_id: "parent", unit_id: "kg" } },
+      },
+    },
+  };
+  const before = structuredClone(capture);
+  const result = documents.madridWithProductUnits(capture);
+  expect(result.tables).not.toHaveProperty("product_units");
+  expect(result.tables.products).toEqual({
+    columns: [{ name: "unit_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 }],
+    foreignKeys: [
+      {
+        id: 0,
+        seq: 0,
+        table: "units",
+        from: "unit_id",
+        to: "id",
+        on_update: "NO ACTION",
+        on_delete: "RESTRICT",
+        match: "NONE",
+      },
+    ],
+    rows: { parent: { id: "parent", unit_id: "kg" }, variant: { id: "variant", unit_id: null } },
+  });
+  expect(capture).toEqual(before);
+  expect(() => documents.madridWithProductUnits(result)).toThrow("missing captured product units");
+});

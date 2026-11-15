@@ -204,7 +204,7 @@ describe("metadata and references", () => {
         .values({
           menuId: menu!.id,
           name: "Bread",
-          pricingUnit: "each",
+
           unitPrice: 200,
           vatClass: "general",
           image: image.filename,
@@ -246,7 +246,7 @@ describe("metadata and references", () => {
         .values({
           menuId: menu!.id,
           name: "Bread",
-          pricingUnit: "each",
+
           unitPrice: 200,
           vatClass: "general",
         })
@@ -299,7 +299,7 @@ describe("metadata and references", () => {
         .values({
           menuId: menu!.id,
           name: "Bread",
-          pricingUnit: "each",
+
           unitPrice: 200,
           vatClass: "general",
           image: image.filename,

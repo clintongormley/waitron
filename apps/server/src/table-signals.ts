@@ -3,7 +3,6 @@ import { alias } from "drizzle-orm/sqlite-core";
 import {
   parentJoin,
   parentProducts,
-  productUnits,
   staffPresentationName,
   unitOwnerJoin,
   units,
@@ -85,8 +84,8 @@ async function readKitchenLines(
       products,
       eq(products.id, sql`coalesce(${dish.productId}, ${workingOrderLines.productId})`),
     )
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, dish.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .where(

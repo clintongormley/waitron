@@ -1984,7 +1984,7 @@ describe("getHeldOrder", () => {
       update products
       set name = 'Renamed espresso',
           customer_name = ${JSON.stringify({ [LOCALE]: "Renamed house espresso" })},
-          pricing_unit = 'weight', vat_class = 'reduced',
+          vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: {} })}
       where id = ${coffeeId}`);
     await withTransaction(db, async (tx) => {
@@ -9774,13 +9774,7 @@ describe("a variant is sold as the product it is", () => {
       const seeded = await seedWine(tx, menuId);
       // Wine by the glass sells by the each; 175 ml still stores kg, from before a variant always
       // took its product's unit. The menu is published after, so the live menu is built from it.
-      await tx.execute(
-        sql`insert into product_units (product_id, unit_id) values (${seeded.wine175}, ${kgUnitId})`,
-      );
-      await tx
-        .update(products)
-        .set({ pricingUnit: "weight" })
-        .where(eq(products.id, seeded.wine175));
+      await tx.execute(sql`update products set unit_id = ${kgUnitId} where id = ${seeded.wine175}`);
       await publishWorkingMenu(tx, menuId);
       return seeded;
     });

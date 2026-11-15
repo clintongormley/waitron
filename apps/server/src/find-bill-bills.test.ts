@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
+  products,
   workingOrders,
   workingOrderLines,
   billPayments,
@@ -158,6 +159,18 @@ describe("Find Bills SQL paging", () => {
           ],
           "en",
         );
+        const [ownUnit] = await tx
+          .insert(units)
+          .values({
+            staffName: "Variant unit",
+            staffAbbreviation: "v",
+            name: {},
+            abbreviation: {},
+            precision: 0,
+            hardwareUnit: hardwareUnit === null ? "kg" : null,
+          })
+          .returning({ id: units.id });
+        await tx.update(products).set({ unitId: ownUnit!.id }).where(eq(products.id, variant!.id));
         await tx
           .update(workingOrderLines)
           .set({ productId: variant!.id, quantity, unitPrecision: frozen })

@@ -797,7 +797,7 @@ describe("collecting what is missing", () => {
           name: `STAFF Item ${index}`,
           kitchenName: `KITCHEN Item ${index}`,
           customerName: { ca: `CLIENT-CA Item ${index}` },
-          pricingUnit: "each",
+
           unitPrice: 300,
           vatClass: "reduced",
         })),

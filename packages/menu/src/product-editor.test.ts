@@ -181,7 +181,7 @@ it("reads a product with no unit as unitId null", async () => {
   // (`packages/store/src/node-sqlite-adapter.ts`), so the value is wrapped for a caller whose
   // parameter is typed as a promise.
   await withTransaction(fx.db, (tx) =>
-    Promise.resolve(tx.execute(sql`delete from product_units where product_id = ${saved.id}`)),
+    Promise.resolve(tx.execute(sql`update products set unit_id = null where id = ${saved.id}`)),
   );
   const value = await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id));
   expect(value.unitId).toBeNull();
@@ -667,7 +667,7 @@ describe("a variant's own page", () => {
         .select({
           unitPrice: products.unitPrice,
           vatClass: products.vatClass,
-          pricingUnit: products.pricingUnit,
+          unitId: products.unitId,
           categoryId: products.categoryId,
           manualAllergens: products.manualAllergens,
           dietaryDeclarations: products.dietaryDeclarations,
@@ -729,7 +729,7 @@ describe("a variant's own page", () => {
     expect(await storedRow(variantId)).toEqual({
       unitPrice: 200,
       vatClass: null,
-      pricingUnit: null,
+      unitId: null,
       categoryId: null,
       manualAllergens: null,
       dietaryDeclarations: null,
@@ -752,13 +752,13 @@ describe("a variant's own page", () => {
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
     });
-    expect(await storedRow(variantId)).toMatchObject({ pricingUnit: null });
+    expect(await storedRow(variantId)).toMatchObject({ unitId: null });
     const cleared = await save(variantId, value);
     expect(cleared).toEqual(value);
     expect(await storedRow(variantId)).toEqual({
       unitPrice: 200,
       vatClass: null,
-      pricingUnit: null,
+      unitId: null,
       categoryId: null,
       manualAllergens: null,
       dietaryDeclarations: null,
@@ -796,8 +796,7 @@ describe("a variant's own page", () => {
   });
 
   describe("holding a unit of its own, stored before a variant always took its parent's", () => {
-    // The parent sells by kg; the planted row names the Each-like unit and pricing unit instead.
-    beforeEach(() => plantStoredUnit(fx.db, variantId, input.unitId!, "each"));
+    beforeEach(() => plantStoredUnit(fx.db, variantId, input.unitId!));
     const storedUnit = (id: string) => withTransaction(fx.db, (tx) => storedUnitId(tx, id));
 
     it("reads no unit of its own, and its parent's beside it", async () => {
@@ -809,7 +808,7 @@ describe("a variant's own page", () => {
 
     it("refuses a unit of its own, naming the field, and leaves the row and its unit as they were", async () => {
       const before = await storedRow(variantId);
-      expect(before).toMatchObject({ pricingUnit: "each" });
+      expect(before).toMatchObject({ unitId: input.unitId });
       expect(await storedUnit(variantId)).toBe(input.unitId);
       await expect(
         save(variantId, { ...(await read(variantId)), unitId: kgUnitId }),
@@ -818,10 +817,10 @@ describe("a variant's own page", () => {
       expect(await storedUnit(variantId)).toBe(input.unitId);
     });
 
-    it("clears the stored unit and pricing unit when the read value is saved back", async () => {
+    it("clears the stored unit when the read value is saved back", async () => {
       const value = await read(variantId);
       expect(await save(variantId, value)).toEqual(value);
-      expect(await storedRow(variantId)).toMatchObject({ pricingUnit: null });
+      expect(await storedRow(variantId)).toMatchObject({ unitId: null });
       expect(await storedUnit(variantId)).toBeNull();
     });
   });

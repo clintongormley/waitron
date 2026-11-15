@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6946bc86-ef96-49ed-b7f3-6bfd5251dd16",
+  "id": "86d30d50-2ce4-4677-9237-421c2d7d0aed",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6692,8 +6692,8 @@
           "autoincrement": false,
           "default": "'[]'"
         },
-        "pricing_unit": {
-          "name": "pricing_unit",
+        "unit_id": {
+          "name": "unit_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -6809,6 +6809,13 @@
           ],
           "isUnique": false
         },
+        "products_unit_idx": {
+          "name": "products_unit_idx",
+          "columns": [
+            "unit_id"
+          ],
+          "isUnique": false
+        },
         "products_course_idx": {
           "name": "products_course_idx",
           "columns": [
@@ -6873,6 +6880,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "products_unit_id_units_id_fk": {
+          "name": "products_unit_id_units_id_fk",
+          "tableFrom": "products",
+          "tableTo": "units",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "products_parent_id_menu_id_products_id_menu_id_fk": {
           "name": "products_parent_id_menu_id_products_id_menu_id_fk",
           "tableFrom": "products",
@@ -6894,11 +6914,7 @@
       "checkConstraints": {
         "products_top_level_owns_ck": {
           "name": "products_top_level_owns_ck",
-          "value": "\"products\".\"parent_id\" is not null or (\"products\".\"vat_class\" is not null and \"products\".\"pricing_unit\" is not null and \"products\".\"unit_price\" is not null and \"products\".\"dietary_declarations\" is not null)"
-        },
-        "products_pricing_unit_ck": {
-          "name": "products_pricing_unit_ck",
-          "value": "\"products\".\"pricing_unit\" in ('each','weight')"
+          "value": "\"products\".\"parent_id\" is not null or (\"products\".\"vat_class\" is not null and \"products\".\"unit_price\" is not null and \"products\".\"dietary_declarations\" is not null)"
         },
         "products_vat_class_ck": {
           "name": "products_vat_class_ck",
@@ -12732,65 +12748,6 @@
           "tableTo": "categories",
           "columnsFrom": [
             "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "product_units": {
-      "name": "product_units",
-      "columns": {
-        "product_id": {
-          "name": "product_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unit_id": {
-          "name": "unit_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "product_units_unit_idx": {
-          "name": "product_units_unit_idx",
-          "columns": [
-            "unit_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "product_units_product_fk": {
-          "name": "product_units_product_fk",
-          "tableFrom": "product_units",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "product_units_unit_fk": {
-          "name": "product_units_unit_fk",
-          "tableFrom": "product_units",
-          "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
           ],
           "columnsTo": [
             "id"

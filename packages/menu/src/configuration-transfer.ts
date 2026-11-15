@@ -204,7 +204,6 @@ export const MENU_CONFIGURATION_TRANSFER = {
   tables: [
     { name: "category_details" },
     { name: "units" },
-    { name: "product_units" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
     { name: "option_lists", references: ["default_label_id"] },

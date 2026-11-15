@@ -1008,7 +1008,7 @@ CREATE TABLE `products` (
 	`description` text,
 	`kitchen_name` text,
 	`dietary_declarations` text DEFAULT '[]',
-	`pricing_unit` text,
+	`unit_id` text,
 	`unit_price` integer,
 	`vat_class` text,
 	`active` integer DEFAULT true NOT NULL,
@@ -1025,14 +1025,15 @@ CREATE TABLE `products` (
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`parent_id`,`menu_id`) REFERENCES `products`(`id`,`menu_id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."pricing_unit" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
-	CONSTRAINT "products_pricing_unit_ck" CHECK("products"."pricing_unit" in ('each','weight')),
+	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
 	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
 CREATE INDEX `products_menu_id_idx` ON `products` (`menu_id`);--> statement-breakpoint
 CREATE INDEX `products_name_key_idx` ON `products` (`name_key`);--> statement-breakpoint
+CREATE INDEX `products_unit_idx` ON `products` (`unit_id`);--> statement-breakpoint
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_id_menu_key` ON `products` (`id`,`menu_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
@@ -1918,14 +1919,6 @@ CREATE TABLE `category_details` (
 );
 --> statement-breakpoint
 CREATE INDEX `category_details_parent_idx` ON `category_details` (`parent_id`);--> statement-breakpoint
-CREATE TABLE `product_units` (
-	`product_id` text PRIMARY KEY NOT NULL,
-	`unit_id` text NOT NULL,
-	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE INDEX `product_units_unit_idx` ON `product_units` (`unit_id`);--> statement-breakpoint
 CREATE TABLE `units` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seed_key` text,

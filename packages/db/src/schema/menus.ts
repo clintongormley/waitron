@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
 import type { AllergenMap, ProductOrdering } from "@waitron/shared";
+import { units } from "./menu/units.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 
@@ -70,7 +71,9 @@ export const products = table(
     description: json<Record<string, string>>("description"),
     kitchenName: label("kitchen_name"),
     dietaryDeclarations: json<string[]>("dietary_declarations").default([]),
-    pricingUnit: label("pricing_unit"),
+    /* v8 ignore start */
+    unitId: id("unit_id").references(() => units.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     unitPrice: money("unit_price"),
     vatClass: label("vat_class"),
     // `active` is whether the product exists for the venue — deleting makes it false and removes no
@@ -115,6 +118,7 @@ export const products = table(
   (t) => [
     index("products_menu_id_idx").on(t.menuId),
     index("products_name_key_idx").on(t.nameKey),
+    index("products_unit_idx").on(t.unitId),
     index("products_course_idx").on(t.courseId),
     unique("products_id_menu_key").on(t.id, t.menuId),
     // Target of menu's `menu_item_variant_overrides` key `(product_id, variant_id)`.
@@ -126,9 +130,8 @@ export const products = table(
     // A product with no parent owns every value a variant may inherit.
     check(
       "products_top_level_owns_ck",
-      sql`${t.parentId} is not null or (${t.vatClass} is not null and ${t.pricingUnit} is not null and ${t.unitPrice} is not null and ${t.dietaryDeclarations} is not null)`,
+      sql`${t.parentId} is not null or (${t.vatClass} is not null and ${t.unitPrice} is not null and ${t.dietaryDeclarations} is not null)`,
     ),
-    check("products_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
     check(
       "products_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,

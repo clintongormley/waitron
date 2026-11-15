@@ -178,3 +178,36 @@ export function madridWithMenuSettings(
   delete result.tables.unit_seed_states;
   return result;
 }
+
+export function madridWithProductUnits(
+  original: CanonicalMadridSemantics,
+): CanonicalMadridSemantics {
+  const result = structuredClone(original);
+  const assignments = result.tables.product_units;
+  const products = result.tables.products;
+  if (!assignments || !products) throw new Error("missing captured product units");
+  const position = products.columns.findIndex((column) => column.name === "pricing_unit");
+  if (position < 0) throw new Error("missing captured pricing unit");
+  const column = assignments.columns.find((column) => column.name === "unit_id")!;
+  products.columns.splice(position, 1, { ...column, notnull: 0 });
+  const byProduct = new Map(
+    Object.values(assignments.rows).map((row) => [row.product_id, row.unit_id]),
+  );
+  for (const row of Object.values(products.rows)) {
+    row.unit_id = byProduct.get(row.id) ?? null;
+    delete row.pricing_unit;
+  }
+  const keys = assignments.foreignKeys.filter((key) => key.from === "unit_id");
+  const parentKeys = products.foreignKeys.filter(
+    (key) => key.from === "parent_id" || (key.from === "menu_id" && key.table === "products"),
+  );
+  const otherKeys = products.foreignKeys.filter((key) => !parentKeys.includes(key));
+  const ids = new Map<string, number>();
+  products.foreignKeys = [...parentKeys, ...keys, ...otherKeys].map((key) => {
+    const group = `${key.table}:${key.id}`;
+    if (!ids.has(group)) ids.set(group, ids.size);
+    return { ...key, id: ids.get(group)! };
+  });
+  delete result.tables.product_units;
+  return result;
+}
