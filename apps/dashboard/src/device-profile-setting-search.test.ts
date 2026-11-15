@@ -55,11 +55,7 @@ it("resolves offered profile settings passively", async () => {
   ]);
   expect((await resolve("passScreenZones", "capabilities")).map((r) => r.id)).toEqual(["p/+"]);
   expect((await resolve("passScreenZones", "kitchen")).map((r) => r.id)).toEqual(["monitor"]);
-  expect((await resolve("invoicePrinterIds", "equipment")).map((r) => r.id)).toEqual([
-    "p/+",
-    "kds",
-    "monitor",
-  ]);
+  expect((await resolve("invoicePrinterIds", "equipment")).map((r) => r.id)).toEqual(["p/+"]);
   answers["/management-api/page-printers"] = [];
   expect(await resolve("invoicePrinterIds", "equipment")).toEqual([]);
   expect(

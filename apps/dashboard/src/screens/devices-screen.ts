@@ -138,6 +138,10 @@ export function deviceSettingIsOffered(
         profile !== undefined &&
         data.deviceProfiles.some((p) => p.id !== profile.id && p.formFactor === profile.formFactor)
       );
+    case "receiptPrinterId":
+    case "paymentSlipPrinterId":
+    case "cashDrawerPrinterId":
+    case "invoicePrinterId":
     case "madeHereStationIds":
       return !shared;
     default:

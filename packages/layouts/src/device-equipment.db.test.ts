@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,6 +162,41 @@ describe("which printer each of a device's roles resolves to", () => {
     await seedPrinter("Handheld 2", { portable: true });
     drawer = await seedPrinter("Drawer", { hasCashDrawer: true });
     away = await seedPrinter("Other venue");
+  });
+
+  it("taking one portable printer from a saved kitchen device releases its other printer too", async () => {
+    const second = await seedPrinter("Second carried printer", { portable: true });
+    await suite.db
+      .update(devices)
+      .set({ active: false })
+      .where(eq(devices.deviceProfileId, profile));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ formFactor: "kds" })
+      .where(eq(deviceProfiles.id, profile));
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: p1, paymentSlipPrinterId: second })
+      .where(eq(devices.id, a));
+    await suite.db.insert(printerHolders).values([
+      { printerId: p1, deviceId: a },
+      { printerId: second, deviceId: a },
+    ]);
+    const [ordering] = await seedDeviceProfiles(suite.db, {
+      name: "Replacement till",
+      formFactor: "till",
+      capabilities: [],
+    });
+    const next = await seedDevice(suite.db, { label: "Replacement till", profileId: ordering!.id });
+    await inTx((tx) =>
+      setProfilePrinterLists(tx, next.profileId, lists({ receiptPrinterIds: [p1] })),
+    );
+    expect(await choose(next.deviceId, "receipt", { id: p1 }, "scan", true)).toEqual({
+      ok: true,
+      previousHolderDeviceId: a,
+    });
+    expect(await holders()).toEqual([[p1, next.deviceId]]);
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
   });
 
   it("a kitchen device resolves no printer roles and cannot choose one, even with saved equipment", async () => {

@@ -54,7 +54,7 @@ it.each(["en-GB", "es-ES"])(
         await expect
           .poll(() => screen.shadowRoot!.querySelector("[data-test=printers-loading]"))
           .toBeNull();
-        if (equipment !== "empty")
+        if (formFactor !== "kds" && equipment !== "empty")
           await expect
             .poll(() => screen.shadowRoot!.querySelector("[name=invoicePrinterDefaultId]"))
             .toBeTruthy();

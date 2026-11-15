@@ -442,8 +442,18 @@ export const profileSettingFields: readonly ProfileSetting[] = [
     ),
   ]),
   ...PRINTER_LISTS.flatMap((list) => [
-    profileField(list.key, list.heading, "equipment", (_p, _s, printers) => printers),
-    profileField(list.defaultKey, list.defaultLabel, "equipment", (_p, _s, printers) => printers),
+    profileField(
+      list.key,
+      list.heading,
+      "equipment",
+      (p, _s, printers) => orderingProfile(p) && printers,
+    ),
+    profileField(
+      list.defaultKey,
+      list.defaultLabel,
+      "equipment",
+      (p, _s, printers) => orderingProfile(p) && printers,
+    ),
   ]).map((f) => ({ ...f, equipment: true })),
   ...[
     profileField(
