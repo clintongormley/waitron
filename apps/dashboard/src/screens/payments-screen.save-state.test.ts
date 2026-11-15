@@ -153,13 +153,21 @@ async function noComplaint(el: PaymentsScreen, dialog: string) {
   expect((await formMessageOf(actions))?.textContent?.trim() ?? "").toBe("");
 }
 
-async function mount(api: DashboardApi = stubApi()) {
+async function mount(
+  api: DashboardApi = stubApi(),
+  surface: PaymentsScreen["surface"] = "readers",
+) {
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
     api,
+    surface,
     request: vi.fn() as unknown as PaymentsScreen["request"],
     panels: [],
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=edit-r-1]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(
+      q(el, surface === "checks" ? "[data-test=bill-recovery]" : "[data-test=edit-r-1]"),
+    ).not.toBeNull(),
+  );
   return { el, api };
 }
 
@@ -176,7 +184,7 @@ async function openRename(api: DashboardApi = stubApi()) {
 }
 
 async function openAttest(api: DashboardApi = stubApi(), el?: PaymentsScreen) {
-  const screen = el ?? (await mount(api)).el;
+  const screen = el ?? (await mount(api, "checks")).el;
   await vi.waitFor(() => expect(q(screen, "[data-test=attest-bill-payment-bp-1]")).not.toBeNull());
   q(screen, "[data-test=attest-bill-payment-bp-1]")!.click();
   await vi.waitFor(() => expect(q(screen, "[data-test=confirm-bill-attest]")).not.toBeNull());
@@ -511,7 +519,7 @@ async function openHeld(
     recordHeldOutcome: vi.fn().mockResolvedValue({ outcome: "kept" }),
   }),
 ) {
-  const { el } = await mount(api);
+  const { el } = await mount(api, "checks");
   await vi.waitFor(() => expect(q(el, "[data-test=record-held-h-1]")).not.toBeNull());
   q(el, "[data-test=record-held-h-1]")!.click();
   await vi.waitFor(() => expect(q(el, "[data-test=confirm-held-outcome]")).not.toBeNull());
@@ -625,16 +633,21 @@ class SharedLeaveFixture extends LitElement {
 }
 customElements.define("payments-save-state-leave-fixture", SharedLeaveFixture);
 
-async function mountUnderCoordinator() {
+async function mountUnderCoordinator(surface: PaymentsScreen["surface"] = "readers") {
   const { el: app } = await mountWidget<SharedLeaveFixture>(
     "payments-save-state-leave-fixture",
     {},
   );
   const el = document.createElement("dashboard-payments-screen");
   el.api = stubApi();
+  el.surface = surface;
   el.panels = [];
   app.append(el);
-  await vi.waitFor(() => expect(q(el, "[data-test=edit-r-1]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(
+      q(el, surface === "checks" ? "[data-test=bill-recovery]" : "[data-test=edit-r-1]"),
+    ).not.toBeNull(),
+  );
   return el;
 }
 
@@ -650,7 +663,7 @@ describe("under the dashboard's leave coordinator", () => {
   });
 
   it("the attestation opens quiet, wakes on an edit and quiets when it is emptied", async () => {
-    const el = await mountUnderCoordinator();
+    const el = await mountUnderCoordinator("checks");
     await openAttest(undefined, el);
     expect(await state(el, "confirm-bill-attest")).toEqual(quiet);
     await type(el, "bill-attest-note", "Provider confirmed");
