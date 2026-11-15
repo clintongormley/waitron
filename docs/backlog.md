@@ -2118,7 +2118,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
   The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
-  Local former-number station and today-name counter-group samples use English; accented party names remain.
+  Local former-number station and today-name counter-group samples use English; accented group names (García birthday) and the Ana party name remain.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
