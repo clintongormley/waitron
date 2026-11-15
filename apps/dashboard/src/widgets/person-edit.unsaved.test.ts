@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -25,7 +26,7 @@ beforeEach(() => {
   vi.spyOn(DashboardApi.prototype, "getLocales").mockResolvedValue({
     locales: [
       { code: "en-GB", label: "English" },
-      { code: "es-ES", label: "Español" },
+      { code: "es-ES", label: SUPPORTED_LOCALES[0].label },
     ],
     venueDefault: "en-GB",
     loginDefault: "en-GB",

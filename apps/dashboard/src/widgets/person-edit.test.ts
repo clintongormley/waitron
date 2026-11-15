@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardApi, type PersonSummary } from "../api/client.js";
@@ -14,7 +15,7 @@ beforeEach(() => {
   vi.spyOn(DashboardApi.prototype, "getLocales").mockResolvedValue({
     locales: [
       { code: "en-GB", label: "English" },
-      { code: "es-ES", label: "Español" },
+      { code: "es-ES", label: SUPPORTED_LOCALES[0].label },
     ],
     venueDefault: "en-GB",
     loginDefault: "en-GB",

@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -24,7 +25,7 @@ const person: PersonSummary = {
 };
 const metadata = {
   locales: [
-    { code: "es-ES", label: "Español" },
+    { code: "es-ES", label: SUPPORTED_LOCALES[0].label },
     { code: "en-GB", label: "English" },
   ],
   venueDefault: "en-GB",
@@ -61,7 +62,7 @@ it("uses the profile choices and preserves an unset preference on a contact save
   expect(picker(el).label).toBe("Language");
   expect(picker(el).required).toBe(true);
   expect(picker(el).options).toEqual([
-    { value: "es-ES", label: "Español" },
+    { value: "es-ES", label: SUPPORTED_LOCALES[0].label },
     { value: "en-GB", label: "English" },
   ]);
   expect(picker(el).value).toBe("en-GB");
