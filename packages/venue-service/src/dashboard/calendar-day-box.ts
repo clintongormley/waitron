@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import type { DayPoint } from "./day-picking.js";
 import { flatParent, scrollTargets } from "./flat-tree.js";
 import { format } from "./hours-view.js";
 import { stationIcon } from "./station-icon.js";
@@ -10,6 +11,7 @@ export interface DayBoxRow {
   name: string;
   station?: boolean;
   text: string;
+  /** Starts a section when the box uses sectioned rows. */
   strong?: boolean;
   inheritedFrom?: string;
 }
@@ -39,6 +41,10 @@ export class CalendarDayBox extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         overflow-wrap: anywhere;
+      }
+      [popover].sectioned {
+        width: var(--wt-modal-standard-width);
+        max-width: min(var(--wt-modal-standard-width), calc(100vw - 2 * var(--wt-space-2)));
       }
       wt-icon {
         margin-inline-end: var(--wt-space-1);
@@ -97,12 +103,25 @@ export class CalendarDayBox extends LitElement {
       dt {
         color: var(--wt-color-text-muted);
       }
+      dl.sectioned dt {
+        color: var(--wt-color-text);
+      }
+      dt.heading {
+        grid-column: 1 / -1;
+      }
+      dd[hidden] {
+        display: none;
+      }
       dt.strong {
         color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
       }
       dd {
         margin: 0;
+      }
+      .range {
+        display: inline-block;
+        max-width: 100%;
       }
       .actions {
         display: flex;
@@ -121,7 +140,9 @@ export class CalendarDayBox extends LitElement {
   @property() name = "";
   @property() nameKind: "special" | "holiday" | "" = "";
   @property() line = "";
+  @property({ type: Boolean }) linkedLine = false;
   @property({ attribute: false }) rows: readonly DayBoxRow[] = [];
+  @property({ type: Boolean }) sectioned = false;
   @property() message = "";
   /** A failed read, drawn as an alert beside the rows it leaves shown, if any. */
   @property() error = "";
@@ -133,16 +154,21 @@ export class CalendarDayBox extends LitElement {
   @state() private hasSeasonActions = false;
 
   #anchor: HTMLElement | undefined;
+  #point?: DayPoint;
+  #returnTo?: HTMLElement;
   #focusWasInside = false;
   #scrollTargets: EventTarget[] = [];
 
-  /** Opens below `anchor`, else above it, else beside it, covering it only when none of those fit,
+  /** A pointer point is relative to the real anchor, which owns clipping; `returnTo` owns focus.
+   *  Opens below `anchor`, else above it, else beside it, covering it only when none of those fit,
    *  kept on screen; called again after the content changes, it places the box again without
    *  moving focus. While open, on each window resize and each scroll of the page or of a box
    *  `anchor` is drawn inside, slots included, it places itself again, or closes when no part of
    *  `anchor` is left inside the window and inside every such ancestor whose overflow is not
    *  visible, in the directions it limits. */
-  show(anchor: HTMLElement): void {
+  show(anchor: HTMLElement, point?: DayPoint, returnTo: HTMLElement = anchor): void {
+    this.#returnTo = returnTo;
+    this.#point = point;
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
     this.#place();
@@ -151,7 +177,7 @@ export class CalendarDayBox extends LitElement {
   }
 
   #place(): void {
-    placePopover(this.popup, this.#anchor!, false, true);
+    placePopover(this.popup, this.#anchor!, false, true, this.#point);
   }
 
   #follow(anchor: HTMLElement): void {
@@ -228,15 +254,56 @@ export class CalendarDayBox extends LitElement {
 
   #toggle(event: ToggleEvent): void {
     if (event.newState !== "closed") return;
-    if (this.#focusWasInside) this.#anchor?.focus({ preventScroll: true });
+    if (this.#focusWasInside) this.#returnTo?.focus({ preventScroll: true });
     this.dispatchEvent(
       new CustomEvent("calendar-day-box-close", { bubbles: true, composed: true }),
     );
   }
 
+  #sections(): DayBoxRow[][] {
+    const sections: DayBoxRow[][] = [];
+    for (const row of this.rows) {
+      if (row.strong || !sections.length) sections.push([]);
+      sections.at(-1)!.push(row);
+    }
+    return sections;
+  }
+
+  #rows(rows: readonly DayBoxRow[]) {
+    return html`<dl class=${this.sectioned ? "sectioned" : ""}>
+      ${rows.map(
+        (row) => html`
+          <dt
+            class=${`${row.strong ? "strong" : ""} ${this.sectioned && !row.text ? "heading" : ""}`}
+          >
+            ${row.station ? stationIcon() : nothing}${row.name}
+          </dt>
+          <dd
+            ?hidden=${this.sectioned && !row.text}
+            class=${row.inheritedFrom !== undefined ? "inherited" : ""}
+          >
+            ${
+              this.sectioned
+                ? row.text
+                    .split(" · ")
+                    .map(
+                      (range, index, all) =>
+                        html`${index ? " " : nothing}<span class="range"
+                            >${range}${index < all.length - 1 ? "\u00a0·" : nothing}</span
+                          >`,
+                    )
+                : row.text
+            }${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
+          </dd>
+        `,
+      )}
+    </dl>`;
+  }
+
   protected override render() {
     return html`<div
       popover="auto"
+      class=${this.sectioned ? "sectioned" : ""}
       role="dialog"
       aria-labelledby="heading"
       @beforetoggle=${this.#beforeToggle}
@@ -251,7 +318,7 @@ export class CalendarDayBox extends LitElement {
           : nothing
       }
       <div class="season" ?hidden=${!this.line && !this.hasSeasonActions}>
-        ${this.line ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}
+        ${this.line && !this.linkedLine ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}
         <slot
           name="season-action"
           @slotchange=${(event: Event) => (this.hasSeasonActions = (event.target as HTMLSlotElement).assignedElements().length > 0)}
@@ -263,17 +330,12 @@ export class CalendarDayBox extends LitElement {
           ? html`<p class="message" data-test="message" role="status">${this.message}</p>`
           : this.rows.length === 0
             ? nothing
-            : html`<dl>
-                ${this.rows.map(
-                  (row) =>
-                    html`<dt class=${row.strong ? "strong" : ""}>
-                        ${row.station ? stationIcon() : nothing}${row.name}
-                      </dt>
-                      <dd class=${row.inheritedFrom !== undefined ? "inherited" : ""}>
-                        ${row.text}${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
-                      </dd>`,
-                )}
-              </dl>`
+            : this.sectioned
+              ? this.#sections().map(
+                  (rows) =>
+                    html`<section aria-label=${rows[0]!.name}>${this.#rows(rows)}</section>`,
+                )
+              : this.#rows(this.rows)
       }
       <div class="actions" ?hidden=${!this.hasActions}>
         <slot

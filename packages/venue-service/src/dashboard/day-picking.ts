@@ -4,6 +4,11 @@ import { pointerElementsAt } from "@waitron/ui/src/reorder-table.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays, daysBetween } from "../hours-rules.js";
 
+export interface DayPoint {
+  x: number;
+  y: number;
+}
+
 /** A run of days, `from` <= `to`. */
 export interface DayRun {
   from: LocalDate;
@@ -23,7 +28,7 @@ export interface DayPickerOptions {
   /** The long press, in milliseconds. Default 500. */
   holdMs?: number;
   /** A click, a tap, Space. */
-  choose(date: LocalDate, trigger: HTMLElement): void;
+  choose(date: LocalDate, trigger: HTMLElement, point?: DayPoint): void;
   /** The run changed. The picker asks the host to redraw either way. */
   picked?(run: DayRun | null): void;
   /** A double-click, a long press, Enter. */
@@ -376,7 +381,12 @@ export class DayPicker implements ReactiveController {
       return;
     }
     this.#pick(date, date);
-    this.#options.choose(date, trigger);
+    const rect = trigger.getBoundingClientRect();
+    this.#options.choose(
+      date,
+      trigger,
+      event.detail > 0 ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : undefined,
+    );
   }
 
   #dblclick(event: MouseEvent): void {

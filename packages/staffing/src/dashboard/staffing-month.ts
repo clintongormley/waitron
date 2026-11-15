@@ -129,11 +129,13 @@ export class StaffingMonthView extends LitElement {
         overflow: hidden;
       }
       .run {
+        background: var(--wt-color-surface);
         position: absolute;
         inset-block-start: 0;
         inset-inline: 0;
         block-size: var(--wt-space-1);
-        background: ${unsafeCSS(SPECIAL_DAY_LINE)};
+        border-block-start: var(--wt-space-1) dashed ${unsafeCSS(SPECIAL_DAY_LINE)};
+        box-sizing: border-box;
         border-radius: var(--wt-radius-sm);
         pointer-events: none;
       }

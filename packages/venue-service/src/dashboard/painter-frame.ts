@@ -58,7 +58,8 @@ export class PainterFrame extends LitElement {
         background: var(--season-tint-line);
       }
       .band[data-special] {
-        background: ${unsafeCSS(SPECIAL_DAY_LINE)};
+        border-block-start: var(--wt-space-2) dashed ${unsafeCSS(SPECIAL_DAY_LINE)};
+        box-sizing: border-box;
       }
       .bar {
         display: grid;

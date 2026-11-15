@@ -88,17 +88,6 @@ The special-day editor draws every date from the first date's business-day start
 notice when the selected dates have different starts. Zone closures are stored whole and read
 against each actual day's department hours; drawing each date on its own start remains open.
 
-## A purple season looks like a special day
-
-A purple season's line (`--wt-color-station-purple-dot`) against the special-day purple
-(`--wt-color-palette-purple`) is 1.26:1 in light and 1.63:1 in dark (hand-computed over the token
-values, the plan's "Receipts for the contrast decisions"). So a purple season's band in the
-painters looks like the special-day band, and its line in the Staffing month like a special day's
-run. What tells them apart today: the painter's heading says "standard week" or "special day", and
-the month's special-day run is joined across the gaps between its dates where a season's line
-keeps them. Options: keep purple out of the season chooser, or give the special-day marks a shape
-of their own.
-
 ## Loose ends left by A788
 
 Found while building A788 (the business-day start changes at the next changeover). Unless an entry
@@ -266,39 +255,9 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **A season painter save writes each edited week whole**
   [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
 
-## A1546. The Calendar: prep-station hours and the day box
-
-Owner, 2026-11-15, reviewing the Calendar's Opening hours tab. Mock-ups were shown to the owner and
-approved; they are not committed. Mostly `packages/venue-service/src/dashboard/`
-(`opening-hours-year.ts`, `-month.ts`, `-week.ts`, `-screen.ts`, `hours-view.ts`, `strings.ts`).
-
-1. **The day box, every view:**
-   - Sections: one per department, its name bold and its zones beneath in normal weight; then a
-     "Prep stations" section, its heading bold and the stations in normal weight. Bold no longer
-     marks a zone's own hours: a zone that follows its department keeps its hours in grey italics,
-     and one with its own hours (Terrace's 09:00–23:00) shows them in normal text.
-   - A station fed by more than one department lists its periods department by department, one
-     line each ("Restaurant and bar: Lunch 13:00–16:00 · …", "Deli: …").
-   - Each "·" is joined to the range before it by a non-breaking space, so a wrapped line starts
-     with a time range and the ranges stay left-aligned. The box is wider so more ranges fit, and
-     scrolls when it is still too tall.
-   - On an ordinary day "Winter standard hours" becomes the link to the season's standard week, in
-     place of the "Edit Winter's standard week" button. A special day keeps its "Edit special day"
-     button.
-   - On the prep-station views: it opens from a click anywhere on a day's row, including the grey
-     closed stretches; it opens beside where you clicked, not at the left edge; it drops the
-     repeated explanation and Periods link; and it ends with the same buttons as the other day
-     boxes (today it has none). "Open this week" is left out on the week it is already showing.
-2. **Taken in from the former "Calendar marks" bundle** (backlog review, 2026-11-06):
-    - [A purple season looks like a special day](#a-purple-season-looks-like-a-special-day).
-    - The Opening hours Month marks a special day only by its name — left open by A762, #1850 (its
-      plan's Decision 11): the Staffing month draws a purple run over a special day's dates, the
-      Opening hours Month does not. The owner's "even on the month view the special day is not
-      shown" may mean it too.
-
-The Opening hours guide (EN and ES) and design-system.md's Calendar section follow.
-
 ## Decisions and deliberate limits
+
+- **A1546, watcher 2026-11-15 17:05:** special-day bands and month runs use dashed purple; season lines remain solid and purple remains selectable. Day boxes show selected stations, or all without a station filter, to managers in every view. Viewers keep their station-read exclusion. The season-hours link remains on special dates too.
 
 - **Pop-up in painters (A1545, owner, 2026-11-15).** Keep the small period pop-up inside
   the Calendar painters; elsewhere use the Periods pages. The owner chose “Pop-up in painters”
@@ -515,6 +474,7 @@ the season painter continues saving through the season-week route._
 - **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it
   offers "Show {season}'s standard week", which opens the read-only painter. In Staffing a viewer's
   box offers "Show {special day} staffing" and "Show {season}'s standard week".
+  _2026-11-15, A1546: Opening hours now links its season-hours line instead of a separate Show/Edit button; Staffing keeps its actions._
 
 - **The Calendar's keys (A720, 2026-10-15).** The arrow keys move and pick one day, Shift with an
   arrow stretches the run, Enter opens the special-day editor and Space opens the day box; for a

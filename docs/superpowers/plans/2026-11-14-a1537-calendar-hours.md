@@ -1,5 +1,7 @@
 # A1537: Calendar opening hours
 
+_2026-11-15, A1546 slice 2 supersedes the day-box presentation: department and station sections, season-hours links and pointer-relative station openings. See [Calendar](../../developers/design-system.md#tabbed-management-pages). Special-day bands and month runs are dashed; season lines remain solid._
+
 **Finish line:** One PR: merged opening times in pop-ups/Month; detailed Week bars opening days; touching Closed stretches shown once; standard-week action beside season, others below.
 
 **Authority:** `docs/backlog.md`, owner’s A1537, at `f44d6694c4099fd184d87ec1d06acaac4129f11a`. Claude reviewed the proposal; the watcher cleared it on 2026-11-14 at 22:10 (Lane D questions.md). The owner did not approve this plan. No migration. Exclude A1535, A1538’s selection/editor chrome, A1539’s station changes, new infrastructure and unrelated repairs.

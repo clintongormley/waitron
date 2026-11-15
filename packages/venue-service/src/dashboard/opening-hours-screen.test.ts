@@ -166,8 +166,8 @@ const dayBox = (el: Screen) => el.shadowRoot!.querySelector("calendar-day-box");
 const boxOpen = (el: Screen) =>
   dayBox(el)?.shadowRoot?.querySelector("[popover]")?.matches(":popover-open") ?? false;
 const boxButtons = (el: Screen) =>
-  [...(dayBox(el)?.querySelectorAll<HTMLElement>("wt-button") ?? [])].map((button) =>
-    (button.textContent ?? "").trim(),
+  [...(dayBox(el)?.querySelectorAll<HTMLElement>("wt-button, a[data-test=edit-week]") ?? [])].map(
+    (button) => (button.textContent ?? "").trim(),
   );
 const boxButton = (el: Screen, test: string) =>
   dayBox(el)?.querySelector<HTMLElement>(`[data-test=${test}]`) ?? null;
@@ -1117,7 +1117,7 @@ describe("Year view", () => {
     expect(dayBox(el)!.line).toBe("");
     expect(boxButtons(el)).toEqual([
       "Edit special day",
-      "Edit All year's standard week",
+      "All year standard hours",
       "Open this week",
     ]);
   });
@@ -1252,11 +1252,11 @@ describe("Year view", () => {
     yearDate(await shownYear(view), "2026-10-13").click();
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe(t("day.loading"));
-    expect(boxButtons(el)).toEqual(["Show All year's standard week", "Open this week"]);
+    expect(boxButtons(el)).toEqual(["All year standard hours", "Open this week"]);
     await expect.poll(() => held.length).toBe(1);
     held[0]!.release(await redated("2026-10"));
     await expect.poll(() => dayBox(el)?.line).not.toBe("");
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
+    expect(boxButtons(el)).toEqual(["Winter standard hours", "Open this week"]);
     expect(boxButton(el, "special-edit")).toBeNull();
     expect(boxButton(el, "special-add")).toBeNull();
   });
@@ -1662,7 +1662,7 @@ describe("Month view", () => {
   });
 
   it.each([
-    ["Edit Winter's standard week", "edit-week"],
+    ["Winter standard hours", "edit-week"],
     ["Make a special day", "special-add"],
   ])(
     "does nothing with %s when the screen has gone before the box's button acts",
@@ -1686,7 +1686,7 @@ describe("Month view", () => {
   );
 
   it.each([
-    ["Edit Winter's standard week", "edit-week"],
+    ["Winter standard hours", "edit-week"],
     ["Make a special day", "special-add"],
   ])(
     "does nothing with %s when the screen has gone before the box's button acts, under the dashboard's navigation guard",
@@ -1766,12 +1766,12 @@ describe("Month view", () => {
     expect(boxButton(el, "special-add")!.slot).toBe("");
     expect(boxButtons(el)).toEqual([
       "Make a special day",
-      "Edit Winter's standard week",
+      "Winter standard hours",
       "Open this week",
     ]);
   });
 
-  it("Edit Winter's standard week opens the season painter on that season, keeping the month's department", async () => {
+  it("Winter standard hours opens the season painter on that season, keeping the month's department", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/department/bar/month/2026-12",
       false,
@@ -1790,7 +1790,7 @@ describe("Month view", () => {
     expect(boxOpen(el)).toBe(false);
   });
 
-  it("Edit Winter's standard week carries a department chosen in the month's picker, and none after All departments", async () => {
+  it("Winter standard hours carries a department chosen in the month's picker, and none after All departments", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
       false,
@@ -1877,20 +1877,38 @@ describe("Month view", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
   });
 
-  it("a viewer's box offers only Show Winter's standard week, which opens the read-only painter", async () => {
+  it("a viewer's box offers only Winter standard hours, which opens the read-only painter", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
       true,
       withWinter,
     );
     await openBox(el, await shown(view));
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
+    expect(boxButtons(el)).toEqual(["Winter standard hours", "Open this week"]);
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => el.shadowRoot!.querySelector("season-painter")?.seasonId)
       .toBe("winter");
     expect(el.shadowRoot!.querySelector("season-painter")!.readOnly).toBe(true);
     expect(location.pathname).toMatch(/^\/manage\/opening-hours\/view\/season\/season\/winter/);
+  });
+
+  it("the season link and its plain click both drop an inactive selected department", async () => {
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/department/bar/month/2026-12",
+      false,
+      (data) => {
+        withWinter(data);
+        data.departments.find((department) => department.id === "bar")!.active = false;
+      },
+    );
+    await openBox(el, await shown(view));
+    const link = dayBox(el)!.querySelector<HTMLAnchorElement>("a[data-test=edit-week]")!;
+    expect(link.href).not.toContain("department/bar");
+    await userEvent.click(link);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("season-painter")?.departmentId)
+      .toBe("rest");
   });
 
   it("Escape closes the box and focus returns to the date", async () => {

@@ -33,6 +33,7 @@ class OpeningLeaveApp extends LitElement {
         zonePaint: [],
       };
     if (path.endsWith("/special-days")) return [];
+    if (path === "/management-api/stations") return [];
     if (path.includes("/opening-hours/month?"))
       return monthModel({ month: new URL(path, "http://x").searchParams.get("month")! });
     if (path.includes("/opening-hours/year?"))

@@ -104,7 +104,7 @@ export function openingHoursDay(
           return {
             name: names.name(zone.zoneId),
             text: openHoursText(own.ranges),
-            ...(own.closed.length ? { strong: true } : { inheritedFrom: department.name }),
+            ...(!own.closed.length ? { inheritedFrom: department.name } : {}),
           };
         }),
       ];
@@ -122,6 +122,6 @@ export function openHoursText(ranges: readonly (ClosedRange & Placed)[]): string
   return joined.length
     ? joined
         .map(({ startsAt, endsAt }) => format("day.open_range", { start: startsAt, end: endsAt }))
-        .join(", ")
+        .join(" · ")
     : t("hours.closed");
 }

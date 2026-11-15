@@ -22,6 +22,7 @@ class DayPickingHost extends LitElement {
     }
   `;
   chosen: LocalDate[] = [];
+  points: ({ x: number; y: number } | undefined)[] = [];
   opened: [LocalDate, DayRun][] = [];
   openedDates: (readonly LocalDate[])[] = [];
   ranged: DayRun[] = [];
@@ -40,7 +41,10 @@ class DayPickingHost extends LitElement {
       dragOnTouch: this.dragOnTouch,
       multiple: this.multiple,
       holdMs: 300,
-      choose: (date) => this.chosen.push(date),
+      choose: (date, _trigger, point) => {
+        this.chosen.push(date);
+        this.points.push(point);
+      },
       picked: (run) => {
         this.onPicked?.(run);
         this.requestUpdate();
@@ -668,4 +672,24 @@ describe("DayPicker", () => {
     expect(seen.some(Boolean)).toBe(true);
     expect(host.picker.dragging).toBe(false);
   });
+});
+
+it("passes an anchor-relative click point, leaving keyboard choices at the anchor", async () => {
+  const host = await mount();
+  const trigger = host.shadowRoot!.querySelector<HTMLElement>(
+    'td[data-date="2026-10-01"] > button',
+  )!;
+  const rect = trigger.getBoundingClientRect();
+  trigger.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      detail: 1,
+      clientX: rect.left + 25,
+      clientY: rect.top + 15,
+    }),
+  );
+  expect(host.points).toEqual([{ x: 25, y: 15 }]);
+  trigger.click();
+  expect(host.points).toEqual([{ x: 25, y: 15 }, undefined]);
 });

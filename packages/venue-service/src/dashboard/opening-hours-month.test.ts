@@ -1398,3 +1398,44 @@ it("retains department rows while Show all's station read is loading", async () 
   });
   expect(cell(el, "2026-12-01").querySelectorAll(".segment").length).toBeGreaterThan(0);
 });
+
+it.each([1280, 390].flatMap((width) => ["light", "dark"].map((theme) => ({ width, theme }))))(
+  "draws dashed special-day runs with separate ids and week ends at $width px in $theme",
+  async ({ width, theme }) => {
+    await page.viewport(width, 844);
+    const model = monthModel();
+    model.seasons = model.seasons.map((season) => ({ ...season, colour: "purple" }));
+    for (const day of model.days)
+      day.specialDay = ["2026-12-18", "2026-12-19", "2026-12-20", "2026-12-21"].includes(day.date)
+        ? { id: "fair", name: "Fair" }
+        : day.date === "2026-12-22"
+          ? { id: "next", name: "Next fair" }
+          : null;
+    const el = await mount(model);
+    el.dataset.theme = theme;
+    applyTokens(el);
+    const run = (date: string) =>
+      cell(el, date).querySelector<HTMLElement>('[data-test="special-run"]')!;
+    const mark = run("2026-12-19");
+    expect(mark).not.toBeNull();
+    expect(getComputedStyle(mark).borderTopStyle).toBe("dashed");
+    const surface = document.createElement("span");
+    surface.style.background = "var(--wt-color-surface)";
+    el.shadowRoot!.append(surface);
+    expect(getComputedStyle(mark).backgroundColor).toBe(getComputedStyle(surface).backgroundColor);
+    expect(getComputedStyle(mark).borderTopColor).not.toBe(getComputedStyle(mark).backgroundColor);
+    surface.remove();
+    expect(mark.hasAttribute("data-joins-previous")).toBe(true);
+    expect(mark.hasAttribute("data-joins-next")).toBe(true);
+    expect(
+      Math.abs(mark.getBoundingClientRect().right - run("2026-12-20").getBoundingClientRect().left),
+    ).toBeLessThanOrEqual(1);
+    expect(run("2026-12-20").hasAttribute("data-joins-next")).toBe(false);
+    expect(run("2026-12-21").hasAttribute("data-joins-previous")).toBe(false);
+    expect(run("2026-12-21").hasAttribute("data-joins-next")).toBe(false);
+    expect(run("2026-12-22").hasAttribute("data-joins-previous")).toBe(false);
+    expect(run("2026-12-23")).toBeNull();
+    expect(getComputedStyle(dayButton(el, "2026-12-23")).borderTopStyle).toBe("solid");
+    await page.viewport(1280, 800);
+  },
+);
