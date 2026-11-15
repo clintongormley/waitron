@@ -314,49 +314,6 @@ fixture must abort and await that call during teardown. Those runs did not estab
 sends any further requests after the fake printer closes or retains a live resource; do not
 infer either from the missing outcome alone.
 
-## A1398-2: slow browser test files
-
-Keep the four-minute goal open after the selected draft autosave waits are advanced.
-The watcher's initial 2026-11-11 16:38 cut targeted the drafts file in till shard 1 only.
-The coverage-on baseline run 43034947887 recorded shard 1 at 266 s, shard 2 at
-253 s (215 s of tests), and shard 5 at 250 s (59 s installing dependencies).
-The watcher's 2026-11-11 21:23 cut shortens only the menu test mount helper's
-loading poll, keeping the selector, timeout and every case. Compare its paired
-coverage-on file measurements in the pull request before attributing a saving.
-The watcher's 2026-11-11 23:38 cut shortens the disclosure duration only in the
-36 static product-editor phone-layout fixtures, keeping animation settlement and
-every geometry assertion. The watcher’s 2026-11-12 01:03 cut removes only the two
-save-only screenshot calls from product-list’s alignment and root-controls matrices,
-keeping every row, frame wait and assertion. The watcher’s 2026-11-12 03:30 cut
-removes the Menus structure matrix’s six save-only captures per row, retaining
-settleStructure, both animation frames, and every row, action and assertion.
-The printer pick-up-role matrix runs without its two save-only captures, keeping
-every interaction, flush, geometry and accessibility assertion. The shared axe helper stays unchanged; reducing unused result detail did not justify a shared change.
-Dashboard packing uses refreshed complete-run file durations. Measure the current-head
-coverage-on whole jobs from a green full run with healthy checkout timings before claiming a
-speed gain or the four-minute goal; any
-remaining product-editor, product-list or menu cut still needs a demonstrated cause.
-The 12 November diagnosis traced the warm-cache rebuild to a cache writer without
-compiler tools. The root pnpm setting now skips the optional `cpu-features` and
-`ssh2` native builds. The retained hosted qualification now measures the install without those native builds; see
-[the archiver evidence](#a1398-2-archiver-evidence). Keep the whole-job target separate from
-that install measurement.
-Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
-PR timings with those coverage-on timings as a measured speed gain. Bring the next
-cause and its measurement to the watcher before splitting files or changing capacity.
-
-Dashboard uses six shards. The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
-records the measured dashboard/till baseline and the rationale for that count.
-The [parties task-wait cut](../superpowers/plans/2026-11-14-a1398-till-task-waits.md) replaces its repeated zero-delay timers with MessageChannel task turns, retaining the original assertions, rounds, fake timers and explicit waits. Judge the four-minute goal by healthy hosted whole-job timings; keep any remaining whole-job gap open. The historical archive-command interval is recorded below.
-
-The watcher accepted the dashboard and till measurements on 14 November at 06:51 and 09:44.
-The [stream readiness polling cut](../superpowers/plans/2026-11-14-a1398-stream-clock-poll.md), cleared at 11:18, polls the existing sleeping condition every millisecond with the existing explicit timeout values and assertions. The forced-stop test waits for the real child exit rather than spending the manual clock’s finite wakes on it. Judge it by its PR whole-job timing, not the local file-time gain. Server shard 2 remains separate: retained whole-job samples of 226/238/254 seconds do not establish a recurring gap or a cause.
-
-The [root colour scan](../superpowers/plans/2026-11-14-a1398-root-colour-scan.md) skips parsing when the raw source lacks the colour token, case-insensitively.
-Qualify its root whole-job time from the PR's own CI, recording the runner and coverage; the local file-time cut does not establish the four-minute goal.
-The [table-write detector cut](../superpowers/plans/2026-11-14-a1398-table-write-regex.md) shares the combined detector's syntax across its listed names. Its PR must still qualify the root whole-job time separately from local guard timing.
-The [history guard prefilter](../superpowers/plans/2026-11-14-a1398-history-scan.md) uses a text precheck before the existing AST detector, preserving its Unicode handling and file walk. Its local timing target was missed; keep root whole-job qualification and the later cleared full run open.
-
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
@@ -540,6 +497,54 @@ The remaining work concerns live routing qualification and the action-repository
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
 ## Decisions and deliberate limits
+
+### A1398-2: slow browser test files
+
+**15 November 2026 qualification.** The watcher accepted root at 244 seconds and
+light jobs at 242–244 seconds as “about four minutes” at 06:17, after removing the
+checkout-time filter and the requirement for unrelated jobs to pass at 06:09.
+Qualification checks each measured job's passing test inventory and coverage,
+plus incident and download-error evidence. Checkout seconds remain part of
+whole-job time. The watcher made these qualification decisions; the measurements
+do not establish a speed gain.
+
+The cleared full [run 43678677640](https://github.com/clintongormley/waitron/actions/runs/43678677640),
+from `a88ac161049776bb27d9711ed202ff0f69de5522`, records root at 244 seconds
+(196 files, 21,741 tests; statement/branch/function/line coverage
+98.12/96.71/98.87/98.65), stream at 135 seconds (15 files, 93 tests), light-a
+and light-b at 242 seconds each (16 and 17 package coverage summaries), and all
+24 server shards at 132–235 seconds. Root's coverage step is 211 seconds;
+light-a's and light-b's test steps are 214 and 217 seconds. These are whole-job
+observations; file times overlap and do not explain the complete wall time.
+
+The watcher had already accepted dashboard and till measurements on 14 November
+at 06:51 and 09:44. This run's dashboard jobs take 188–250 seconds and till jobs
+172–238 seconds. The 250-second dashboard shard remains visible in the record;
+it is not rounded to 240. Setup's separate statement coverage failure belongs
+to its repair and does not invalidate passing jobs' timings.
+
+The [server coverage merge](https://github.com/clintongormley/waitron/actions/runs/43678677640/job/132710589600)
+passed at 05:49:31 UTC: 1,413 files, 33,411 passing tests and one skip, with
+statement/branch/function/line coverage of 98.26/96.13/98.61/98.95. That includes
+all 24 server shards and the stream job. The six other coverage merges and shared
+mutation summary also pass. The incident-history read found no overlapping
+Actions, Git Operations, API Requests or Webhooks incident across the measured
+run, and the log scan identified no download HTTP 5xx. Setup's separate gap is
+still open: its 2,792 tests pass but statement coverage is 97.95%, below 98%.
+This closes the watcher's remaining A1398-2 qualification; it does not make the
+whole full run green.
+
+Earlier cuts and their limits remain in their dated plans:
+[dashboard packing](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md),
+[till task turns](../superpowers/plans/2026-11-14-a1398-till-task-waits.md),
+[stream readiness polling](../superpowers/plans/2026-11-14-a1398-stream-clock-poll.md),
+[root colour scan](../superpowers/plans/2026-11-14-a1398-root-colour-scan.md),
+[table-write detection](../superpowers/plans/2026-11-14-a1398-table-write-regex.md)
+and [history prefilter](../superpowers/plans/2026-11-14-a1398-history-scan.md).
+The local history-prefilter timing target was missed; it is not a measured hosted
+gain. The accent-precheck proposal was withdrawn and remains unbuilt. Do not add
+another small cut without a measured whole-job benefit. The archiver's separate
+observations follow below; A1027 still requires a captured stall.
 
 ### A1398-2 archiver evidence
 

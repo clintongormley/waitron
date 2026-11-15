@@ -1989,7 +1989,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A1398-2. Qualify the remaining four-minute CI job gaps.** Dashboard and till timings are accepted. Reduce and qualify the remaining root-guard cost, then qualify stream readiness and the other CI jobs together in the next cleared full run. Keep whole-job timings separate from local file-time gains. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
