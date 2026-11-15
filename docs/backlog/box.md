@@ -314,8 +314,9 @@ qualify power loss during placement; A1415's process-kill tests establish restar
   confirmed, so the image should also keep time through a power cut (hardware with a battery-backed clock), and set
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
   set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
-  right, and the running server switches it back on whenever it reads it switched off
-  (`apps/server/src/time-service-kept-on.ts`); the image makes it standing.
+  right, and the running server asks the host to switch it back on whenever it reads it switched
+  off, waiting an hour after a failed try (`apps/server/src/time-service-kept-on.ts`); the image
+  makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Kiosk options, none built: Chromium in the box image, every box (the owner's decision in B3's
