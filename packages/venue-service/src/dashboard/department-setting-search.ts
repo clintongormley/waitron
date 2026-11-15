@@ -29,7 +29,16 @@ export const departmentSettingSearchDestinations: readonly DashboardSettingSearc
         );
         if (!receipt.operationDescriptionRequired) return [];
       }
-      return departments.map((row) => ({
+      if (field.requiresTakeawayVat && !model.takeawayVat) return [];
+      const shown =
+        field.name === "diningStartsAs"
+          ? departments.filter(
+              (row) =>
+                model.salePolicies.departments.find((policy) => policy.departmentId === row.id)
+                  ?.dining === "till_choice",
+            )
+          : departments;
+      return shown.map((row) => ({
         id: row.id,
         label: row.name,
         path: `/manage/venue-operations/department/${encodePathSegment(row.id)}${field.tab === "details" ? "" : `/view/${field.tab}`}`,

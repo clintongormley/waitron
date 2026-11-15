@@ -76,8 +76,9 @@ type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   operationDescription?: string;
 };
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
+const POLICY_FIELDS = ["orderStart", "paidWhen", "collectionNumber"] as const;
 const DINING_FIELDS = ["dining", "diningStartsAs"] as const;
-const SERVICE_FIELDS = ["orderStart", "paidWhen", "collectionNumber", ...DINING_FIELDS] as const;
+const SERVICE_FIELDS = [...POLICY_FIELDS, ...DINING_FIELDS] as const;
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -104,6 +105,8 @@ export const departmentSettingFields = (
     ["orderStart", "venue.order_start"],
     ["paidWhen", "venue.counter_paid_when"],
     ["collectionNumber", "venue.print_collection_ticket"],
+    ["dining", "venue.dining"],
+    ["diningStartsAs", "venue.dining_starts_as"],
     ["courseSettings", "venue.release_reminder"],
     ["lateSendNeedsManager", "venue.late_send_needs_manager"],
     ["needsClearing", "venue.needs_clearing"],
@@ -116,6 +119,7 @@ export const departmentSettingFields = (
   labelKey,
   tab: fieldTab[name],
   requiresDescription: name === "operationDescription",
+  requiresTakeawayVat: name === "dining" || name === "diningStartsAs",
 }));
 const copy = (value: DepartmentDraft): DepartmentDraft => ({
   ...value,
@@ -139,7 +143,7 @@ const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.dining === b.dining &&
-  a.diningStartsAs === b.diningStartsAs &&
+  (a.dining !== "till_choice" || a.diningStartsAs === b.diningStartsAs) &&
   a.needsClearing === b.needsClearing &&
   a.lateSendNeedsManager === b.lateSendNeedsManager &&
   a.courseSettings.length === b.courseSettings.length &&
@@ -868,10 +872,9 @@ export class DepartmentSettings extends LitElement {
     kept.tradingName = kept.tradingName.trim();
     if (!this.showsTransfers) delete kept.transfers;
     const { serviceSteps, operationDescription, ...unchanged } = kept;
-    if (!this.model?.takeawayVat) {
-      delete unchanged.dining;
+    if (!this.model?.takeawayVat) delete unchanged.dining;
+    if (!this.model?.takeawayVat || unchanged.dining !== "till_choice")
       delete unchanged.diningStartsAs;
-    }
     const description =
       operationDescription !== undefined &&
       operationDescription !== this.baseline!.operationDescription
@@ -1107,9 +1110,7 @@ export class DepartmentSettings extends LitElement {
               ?disabled=${disabled}
               @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {
                 e.stopPropagation();
-                for (const field of this.model?.takeawayVat
-                  ? SERVICE_FIELDS
-                  : SERVICE_FIELDS.filter((name) => !DINING_FIELDS.includes(name as never)))
+                for (const field of this.model?.takeawayVat ? SERVICE_FIELDS : POLICY_FIELDS)
                   if (this.draft![field] !== e.detail.value[field])
                     this.changed(field, e.detail.value[field]);
               }}

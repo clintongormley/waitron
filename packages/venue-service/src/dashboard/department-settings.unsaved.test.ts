@@ -1049,6 +1049,11 @@ it("choosing how the department sells dirties the form, choosing the stored way 
   await choose("dining", "till_choice");
   await choose("diningStartsAs", "takeaway");
   await choose("dining", "eat_in");
+  expect(box("diningStartsAs")).toBeNull();
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await choose("dining", "till_choice");
   expect(el.hasUnsavedChanges).toBe(true);
   const leaving = el.requestLeave("navigation");
   await choice("keep");

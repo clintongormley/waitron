@@ -3005,6 +3005,22 @@ it("with takeaway VAT the Service tab asks how the department sells and saves th
   expect(diningBox(el, "diningStartsAs")!.value).toBe("takeaway");
 });
 
+it("a Starts as change hidden by leaving Chosen on the till is neither dirty nor sent", async () => {
+  const view = structuredClone(model);
+  view.takeawayVat = true;
+  const { el, writes } = await mount(view);
+  await selectDepartmentTab(el, "service");
+  await expect.poll(() => diningBox(el, "dining")).not.toBeNull();
+  await chooseDining(el, "dining", "till_choice");
+  await chooseDining(el, "diningStartsAs", "takeaway");
+  await chooseDining(el, "dining", "takeaway");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ dining: "takeaway" });
+  expect(Object.keys(writes[0]!.body as object)).not.toContain("diningStartsAs");
+});
+
 it("draws a department's stored way of selling", async () => {
   const view = structuredClone(model);
   view.takeawayVat = true;
