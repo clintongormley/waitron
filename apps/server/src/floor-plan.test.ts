@@ -1399,6 +1399,50 @@ describe("short names", () => {
     expect((await shortNamesOf(z)).get(ids.a!)).toBe(`Q${d}`);
   });
 
+  it("refuses a sent short name holding + that the table did not already have", async () => {
+    const z = await zone();
+    const error = await refusal(
+      check(z, { revision: 0, tables: [entry("a", fresh("Plus"), { shortName: "1+2" })] }),
+    );
+    expect(error.code).toBe("floor_plan.invalid");
+    expect(error.params).toEqual({ field: "tables.0.shortName" });
+  });
+
+  it("keeps a short name holding + that the table already had", async () => {
+    const z = await zone();
+    const label = fresh("Joined");
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("a", label, { shortName: short() })],
+    });
+    const joined = `${digits()}+`;
+    await inTx(v, (tx) =>
+      tx.update(floorPlanTables).set({ shortName: joined }).where(eq(floorPlanTables.id, ids.a!)),
+    );
+    await save(z, {
+      revision: 1,
+      tables: [entry("a", label, { id: ids.a!, shortName: joined, seats: 6 })],
+    });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBe(joined);
+  });
+
+  it("proposes a short name without + for a new table whose name holds one", async () => {
+    const z = await zone();
+    const d = digits();
+    // Read as one word, "1000+" would give "100".
+    const { ids } = await save(z, { revision: 0, tables: [entry("a", `${d}+`)] });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBe(d);
+  });
+
+  it("refuses a new table whose name holds + when its proposal is taken", async () => {
+    const z = await zone();
+    const d = digits();
+    await masterHolding(`Q${d}`);
+    const error = await refusal(check(z, { revision: 0, tables: [entry("a", `Q+${d}`)] }));
+    expect(error.code).toBe("floor_plan.invalid");
+    expect(error.params).toEqual({ field: "tables.0.shortName" });
+  });
+
   it("keeps a sent short name and reads it back", async () => {
     const z = await zone();
     const s = short();

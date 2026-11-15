@@ -7,9 +7,10 @@ import {
   AppError,
   isBumpMode,
   isChangesAfterSending,
-  isStationColour,
   isShortNameShaped,
+  isStationColour,
   isTicketGrouping,
+  refusesShortNamePlus,
   shortNameKey,
 } from "@waitron/shared";
 import { storeTableShortNameKeys } from "./table-short-names.js";
@@ -52,11 +53,17 @@ export function validateCoreConfiguration(
     const keys = new Set<string>();
     for (const row of tables[table] ?? []) {
       const shortName = row.short_name;
-      if (shortName === undefined || shortName === null) continue;
+      if (shortName === undefined || shortName === null) {
+        // The till shows a table with no short name by its full name, where a "+" reads as a join.
+        if (typeof row.label === "string" && row.label.includes("+"))
+          throw new AppError("setup.request_invalid", { field });
+        continue;
+      }
       if (
         typeof shortName !== "string" ||
         shortName.trim() !== shortName ||
-        !isShortNameShaped(shortName)
+        !isShortNameShaped(shortName) ||
+        refusesShortNamePlus(shortName)
       )
         throw new AppError("setup.request_invalid", { field });
       const key = shortNameKey(shortName);

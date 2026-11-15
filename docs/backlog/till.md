@@ -1366,17 +1366,6 @@ Terrace tables lie beyond the visible canvas, so none shows without scrolling; a
 panel leaves a large blank space between Add tables / Add joined table and the list.
 
 
-## A1112. The server, the API and a configuration file still accept a "+" in a short name.
-
-The dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table
-already had it stored (`refusesPlus`, `apps/dashboard/src/screens/floor-plan-draft.ts`; A797
-slice 2), because the till writes tables joined for today as "T1+T2". The server's save
-(`resolveShortNames`, `apps/server/src/table-short-names.ts`) and the configuration import do
-not, and the proposal keeps a name of four characters or fewer whole, so a seed, an API call or
-an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
-of today's joins.
-
-
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
 
 Measured

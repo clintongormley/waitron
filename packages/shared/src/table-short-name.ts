@@ -19,6 +19,14 @@ export function isShortNameShaped(value: string): boolean {
   return value.trim() !== "" && shortNameLength(value) <= SHORT_NAME_MAX;
 }
 
+/**
+ * The till joins table names with "+" (`@waitron/ui`'s `mergeLabel`), so a new one would read as a
+ * join.
+ */
+export function refusesShortNamePlus(shortName: string, storedShortName?: string | null): boolean {
+  return shortName.includes("+") && shortName !== storedShortName;
+}
+
 /** The steps are `@waitron/identity`'s `foldForUniqueness`. */
 export function shortNameKey(shortName: string): string {
   return shortName.trim().normalize("NFC").toLowerCase().normalize("NFC");
@@ -28,8 +36,9 @@ function firstCharacters(value: string, count: number): string {
   return characters(value).slice(0, count).join("").trim();
 }
 
+/** Reads "+" as a space, so no proposal holds the "+" {@link refusesShortNamePlus} refuses. */
 export function proposeShortName(label: string): string {
-  const name = label.normalize("NFC").trim().replace(SPACE_RUN, " ");
+  const name = label.replaceAll("+", " ").normalize("NFC").trim().replace(SPACE_RUN, " ");
   if (shortNameLength(name) <= KEPT_WHOLE_MAX) return name;
   const number = TRAILING_NUMBER.exec(name)?.[0] ?? "";
   const words = name.slice(0, name.length - number.length).split(" ");

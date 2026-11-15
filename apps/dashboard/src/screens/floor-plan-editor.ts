@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { SHORT_NAME_MAX, shortNameKey, shortNameLength } from "@waitron/shared";
+import {
+  SHORT_NAME_MAX,
+  refusesShortNamePlus,
+  shortNameKey,
+  shortNameLength,
+} from "@waitron/shared";
 import {
   UndoHistory,
   UrlStateController,
@@ -49,7 +54,6 @@ import {
   deleteTable,
   draftFromPlan,
   joinedTableOf,
-  refusesPlus,
   rekeyDraft,
   rekeyWith,
   restoreTable,
@@ -165,7 +169,8 @@ function tableProblem(draft: FloorPlanDraft, key: string): DraftCheck | null {
   const shortName = table.shortName.trim();
   if (shortName === "") return { key, problem: "short_name_missing" };
   if (shortNameLength(shortName) > SHORT_NAME_MAX) return { key, problem: "short_name_too_long" };
-  if (refusesPlus(table, shortName)) return { key, problem: "short_name_plus" };
+  if (refusesShortNamePlus(shortName, table.savedShortName))
+    return { key, problem: "short_name_plus" };
   const holder = draft.tables.find(
     (t) => t.key !== key && shortNameKey(t.shortName.trim()) === shortNameKey(shortName),
   );

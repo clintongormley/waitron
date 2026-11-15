@@ -11,7 +11,13 @@ import {
   type LeaveReason,
   type WtModal,
 } from "@waitron/ui";
-import { SHORT_NAME_MAX, proposeShortName, shortNameKey, shortNameLength } from "@waitron/shared";
+import {
+  SHORT_NAME_MAX,
+  proposeShortName,
+  refusesShortNamePlus,
+  shortNameKey,
+  shortNameLength,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -27,7 +33,6 @@ import {
   MAX_SEATS,
   addTables,
   followName,
-  refusesPlus,
   sendChange,
   tableName,
   type FloorPlanDraft,
@@ -232,9 +237,7 @@ export class FloorPlanAddTables extends LitElement {
     if (form.naming === "automatic" && count !== null) {
       for (const label of this.#automatic(form, count)) {
         const shortName = proposeShortName(label);
-        errors.prefix = refusesPlus(undefined, shortName)
-          ? t("floor_plan_editor.short_name_plus")
-          : taken(shortName);
+        errors.prefix = taken(shortName);
         if (errors.prefix !== "") break;
         holders.set(shortNameKey(shortName), label);
       }
@@ -253,7 +256,7 @@ export class FloorPlanAddTables extends LitElement {
         if (shortName === "") return t("floor_plan_editor.short_name_missing");
         if (shortNameLength(shortName) > SHORT_NAME_MAX)
           return t("floor_plan_editor.short_name_too_long");
-        if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
+        if (refusesShortNamePlus(shortName)) return t("floor_plan_editor.short_name_plus");
         const problem = taken(shortName);
         if (problem === "") {
           holders.set(shortNameKey(shortName), tableName({ label: form.names[i] ?? "" }));

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isShortNameShaped,
   proposeShortName,
+  refusesShortNamePlus,
   SHORT_NAME_MAX,
   shortNameKey,
   shortNameLength,
@@ -45,6 +46,12 @@ describe("proposeShortName", () => {
     expect(proposeShortName("Bar2")).toBe("Bar2");
   });
 
+  it("reads + as a space, since the till joins table names with it", () => {
+    expect(proposeShortName("1+2")).toBe("1 2");
+    expect(proposeShortName("Long+Name 8")).toBe("LN8");
+    expect(proposeShortName("+")).toBe("");
+  });
+
   it("drops initials before digits, and keeps a long number's last five", () => {
     expect(proposeShortName("A B C D 12")).toBe("ABC12");
     expect(proposeShortName("A B 1234")).toBe("A1234");
@@ -82,5 +89,22 @@ describe("isShortNameShaped", () => {
     ["   ", false],
   ])("judges %j as %s", (value, expected) => {
     expect(isShortNameShaped(value)).toBe(expected);
+  });
+});
+
+describe("refusesShortNamePlus", () => {
+  it("refuses a + in a short name the table did not already have", () => {
+    expect(refusesShortNamePlus("1+2")).toBe(true);
+    expect(refusesShortNamePlus("1+2", null)).toBe(true);
+    expect(refusesShortNamePlus("1+2", "T1")).toBe(true);
+  });
+
+  it("keeps a + the table already had", () => {
+    expect(refusesShortNamePlus("T1+T2", "T1+T2")).toBe(false);
+  });
+
+  it("never refuses a short name without +", () => {
+    expect(refusesShortNamePlus("T1")).toBe(false);
+    expect(refusesShortNamePlus("T1", "T1+T2")).toBe(false);
   });
 });

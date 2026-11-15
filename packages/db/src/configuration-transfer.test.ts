@@ -229,6 +229,33 @@ describe("validateCoreConfiguration", () => {
       },
     );
 
+    it("refuses a short name holding +, which marks tables joined for the day", () => {
+      expect(() => validateCoreConfiguration({ [table]: [{ short_name: "T1+T2" }] })).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.short_name` },
+        }),
+      );
+    });
+
+    it.each([{ label: "4+5", short_name: null }, { label: "4+5" }])(
+      "refuses a table whose name holds + and has no short name, since the till shows its name: %j",
+      (row) => {
+        expect(() => validateCoreConfiguration({ [table]: [row] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.short_name` },
+          }),
+        );
+      },
+    );
+
+    it("accepts a table whose name holds + when it has a short name without one", () => {
+      expect(() =>
+        validateCoreConfiguration({ [table]: [{ label: "4+5", short_name: "4 5" }] }),
+      ).not.toThrow();
+    });
+
     it("refuses a short name of spaces", () => {
       expect(() => validateCoreConfiguration({ [table]: [{ short_name: "  " }] })).toThrowError(
         expect.objectContaining({
