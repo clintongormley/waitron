@@ -3438,6 +3438,115 @@ describe("a corrective invoice", () => {
     expect(text(el)).not.toContain(labels.rectificationAmount);
   });
 
+  const replacementOfFull: Partial<TillSaleResult> = {
+    invoiceType: "R4",
+    invoiceNumber: "R/4",
+    issuer: { venueName: "Filed Venue SL", nif: "B87654321", domicile: "Calle Fiscal 27, Madrid" },
+    recipient: {
+      legalName: "Filed Customer SL",
+      taxId: "B11223344",
+      address: "Avenida original 123, Madrid",
+      countryCode: "ES",
+    },
+    corrects: {
+      invoiceNumber: "F/9",
+      issuedAt: "2026-08-04T10:05:00.000Z",
+      issuedOffsetMinutes: 120,
+      inFull: true,
+    },
+    lines: [
+      {
+        ...result.lines[0]!,
+        net: {
+          unitPrice: "1.24",
+          priceQuantity: "1.000",
+          base: "2.48",
+          rate: "21.00",
+          tax: "0.52",
+        },
+      },
+    ],
+  };
+
+  it("lays out a replacement of a full invoice as a full invoice, with its customer and the corrective heading", async () => {
+    const labels = receiptLabelsFor("es-ES");
+    const { el } = await mount(replacementOfFull);
+    const content = text(el);
+    expect(content).toContain("Filed Customer SL");
+    expect(content).toContain("NIF: B11223344");
+    expect(content).toContain("Avenida original 123, Madrid");
+    expect(content).toContain("Calle Fiscal 27, Madrid");
+    const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
+      /\s+/g,
+      " ",
+    );
+    expect(meta).toContain(labels.correctiveInvoice);
+    expect(meta).toContain(labels.replacesInvoiceInFull);
+    expect(meta).toContain("F/9");
+    expect(meta).toContain(`${labels.rectificationAmount} ${norm(formatMoney("0.00", "es-ES"))}`);
+    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
+      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+    expect(facts[0]).toContain("IVA 21.00% 0,52 €");
+    expect(el.shadowRoot!.querySelector(".issuer")!.textContent).not.toContain(labels.fullInvoice);
+  });
+
+  it("offers no full-invoice (A4) choice on a replacement of a full invoice", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, ...replacementOfFull },
+      originalReceiptPrint: { status: "not_queued" },
+      invoicePrintersEnabled: true,
+    });
+    const toggle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!;
+    await userEvent.click(toggle);
+    expect(el.shadowRoot!.querySelector("[data-test=document-invoice]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=email-invoice]")).toBeNull();
+  });
+
+  it.each([
+    ["R4", "en-GB"],
+    ["R5", "en-GB"],
+    ["R4", "es-ES"],
+    ["R5", "es-ES"],
+  ] as const)(
+    "shows an %s replacement's day of sale in %s, below its own date",
+    async (type, locale) => {
+      const labels = receiptLabelsFor(locale);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        result: {
+          ...result,
+          ...(type === "R4" ? replacementOfFull : {}),
+          invoiceType: type,
+          locale,
+          corrects: { invoiceNumber: "F/9", issuedAt: "2026-08-04T10:05:00.000Z", inFull: true },
+          saleDay: "2026-03-15",
+        },
+      });
+      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
+        /\s+/g,
+        " ",
+      );
+      const day = norm(
+        new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+          new Date("2026-03-15T00:00:00Z"),
+        ),
+      ).replace(/\s+/g, " ");
+      expect(meta).toContain(`${labels.saleDate} ${day}`);
+      expect(meta.indexOf(labels.saleDate)).toBeLessThan(
+        meta.indexOf(labels.replacesInvoiceInFull),
+      );
+    },
+  );
+
+  it("shows no day of sale on a replacement whose sale day is its issue day", async () => {
+    const { el } = await mount(replacementOfFull);
+    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").saleDate);
+  });
+
   it("marks nothing on an invoice that corrects none", async () => {
     const { el } = await mount();
     expect(text(el)).not.toContain(receiptLabelsFor("es-ES").correctiveInvoice);
