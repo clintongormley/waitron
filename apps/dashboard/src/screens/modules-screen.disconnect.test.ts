@@ -144,6 +144,7 @@ describe("Disconnect precheck and confirmation", () => {
       expect(notice(el)?.textContent).toContain(codeMessage("payment.provider_in_use")),
     );
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    await vi.waitFor(() => expect(button(el).hasAttribute("disabled")).toBe(false));
     await press(el);
     expect(button(el).textContent?.trim()).toBe("Disconnect this provider?");
     await press(el);
