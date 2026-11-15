@@ -2518,6 +2518,11 @@ export interface OrdersQuery {
   table?: string;
   q?: string;
 }
+export interface OrdersPageQuery extends OrdersQuery {
+  page: number;
+  sortKey: "" | "opened" | "invoice" | "total";
+  sortDirection: "ascending" | "descending";
+}
 export interface OrderRowDto {
   kind: "bill" | "sale";
   id: string;
@@ -2541,7 +2546,9 @@ export interface OrderRowDto {
 }
 export interface OrdersPageDto {
   rows: OrderRowDto[];
-  next: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
   from: string | null;
   to: string | null;
 }
@@ -4637,7 +4644,7 @@ export class DashboardApi {
     );
   }
 
-  listOrders(query: OrdersQuery, page: { after?: string } = {}): Promise<OrdersPageDto> {
+  listOrdersPage(query: OrdersPageQuery): Promise<OrdersPageDto> {
     const params = new URLSearchParams();
     if (query.status !== "all") params.set("status", query.status);
     if (query.anyDate) params.set("anyDate", "true");
@@ -4649,19 +4656,10 @@ export class DashboardApi {
     if (query.staff !== undefined) params.set("staff", query.staff);
     if (query.table !== undefined) params.set("table", query.table);
     if (query.q !== undefined) params.set("q", query.q);
-    if (page.after !== undefined) params.set("after", page.after);
+    params.set("page", String(query.page));
+    params.set("sortKey", query.sortKey);
+    params.set("sortDirection", query.sortDirection);
     return this.#request<OrdersPageDto>(`/management-api/orders?${params}`, "GET");
-  }
-
-  /** Re-read every page on refresh so a row shown from an older page stays current. */
-  async listOrderPages(query: OrdersQuery, pages: number): Promise<OrdersPageDto> {
-    let page = await this.listOrders(query);
-    const rows = [...page.rows];
-    for (let n = 1; n < pages && page.next !== null; n++) {
-      page = await this.listOrders(query, { after: page.next });
-      rows.push(...page.rows);
-    }
-    return { ...page, rows };
   }
 
   listOrderStaff(): Promise<{ staff: { id: string; name: string | null }[] }> {

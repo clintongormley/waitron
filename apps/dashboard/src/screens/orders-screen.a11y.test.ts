@@ -39,7 +39,9 @@ const detail = {
   reprints: [],
 };
 const api = {
-  listOrderPages: vi.fn().mockResolvedValue({ rows: [row], next: null, from: null, to: null }),
+  listOrdersPage: vi
+    .fn()
+    .mockResolvedValue({ rows: [row], total: 1, page: 0, pageSize: 50, from: null, to: null }),
   listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
   getOrder: vi.fn().mockResolvedValue(detail),
   getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
@@ -88,7 +90,9 @@ for (const theme of ["light", "dark"] as const) {
 const fullRow: OrderRowDto = { ...row, invoiceType: "F1" };
 const fullApi = {
   ...api,
-  listOrderPages: vi.fn().mockResolvedValue({ rows: [fullRow], next: null, from: null, to: null }),
+  listOrdersPage: vi
+    .fn()
+    .mockResolvedValue({ rows: [fullRow], total: 1, page: 0, pageSize: 50, from: null, to: null }),
   getOrder: vi.fn().mockResolvedValue({
     ...detail,
     row: fullRow,

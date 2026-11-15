@@ -115,8 +115,34 @@ const translationQuery: TranslationQuery = { languages: ["en"], missing: { mode:
 
 it.each([
   ["listMyShifts", ["2026-05-04", "2026-05-11"], "roster_versions"],
-  ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
-  ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],
+  [
+    "listOrdersPage",
+    [
+      {
+        status: "all",
+        anyDate: false,
+        credited: false,
+        page: 0,
+        sortKey: "",
+        sortDirection: "descending",
+      },
+    ],
+    "working_orders",
+  ],
+  [
+    "listOrdersPage",
+    [
+      {
+        status: "all",
+        anyDate: false,
+        credited: false,
+        page: 0,
+        sortKey: "",
+        sortDirection: "descending",
+      },
+    ],
+    "bill_payments",
+  ],
   ["getOrder", ["bill-1"], "receipt_reprints"],
   ["getOrder", ["bill-1"], "invoice_deliveries"],
   ["getOrder", ["bill-1"], "invoice_pdf_downloads"],
@@ -248,8 +274,8 @@ it.each([
     const fetchImpl = vi.fn(
       async () =>
         new Response(
-          name === "listOrderPages"
-            ? JSON.stringify({ rows: [], next: null, from: null, to: null })
+          name === "listOrdersPage"
+            ? JSON.stringify({ rows: [], total: 0, page: 0, pageSize: 50, from: null, to: null })
             : "[]",
         ),
     );

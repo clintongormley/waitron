@@ -26,16 +26,15 @@ import {
 import { queryFlag, resolveVenueClock } from "./report-api.js";
 import {
   DEFAULT_ORDER_PAGE_SIZE,
-  MAX_ORDER_PAGE_SIZE,
   ORDER_STATUS_FILTERS,
   listOrderStaff,
-  isNumberSearch,
   listOrders,
+  listOrdersTablePage,
   optionalSearch,
   orderInvoicePrinters,
   readOrderDetail,
-  type OrderCursor,
   type OrderListFilter,
+  type OrderTableRequest,
 } from "./orders-list.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
@@ -70,8 +69,6 @@ const run = createErrorBoundary(STATUS, "orders.failed");
 // A reprint names its printer only in the body's `printerId`.
 const runReprint = createErrorBoundary({ ...STATUS, "printer.not_found": 400 }, "orders.failed");
 
-const CURSOR = /^(?:(\d{1,16})_)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
-const PAGE_SIZE = /^[1-9]\d{0,2}$/;
 const TEXT_MAX = 100;
 
 const invalid = (field: string) => new AppError("management.request_invalid", { field });
@@ -83,25 +80,12 @@ function optionalText(raw: string | undefined, field: string): string | undefine
   return trimmed === "" ? undefined : trimmed;
 }
 
-/** A ranked cursor belongs to a word search, and a word search takes only a ranked cursor. */
-function requireCursor(
-  raw: string | undefined,
-  search: string | undefined,
-): OrderCursor | undefined {
-  if (raw === undefined) return undefined;
-  const match = CURSOR.exec(raw);
-  if (match === null || !isUuid(match[3]!)) throw invalid("after");
-  const words = search !== undefined && !isNumberSearch(search);
-  if (words !== (match[1] !== undefined)) throw invalid("after");
-  const cursor = { at: match[2]!, id: match[3]!.toLowerCase() };
-  return words ? { rank: Number(match[1]), ...cursor } : cursor;
-}
-
 /** Each refusal names the query field, so the screen can show it under that control. */
 export function parseOrdersQuery(query: (name: string) => string | undefined): {
   dates: "any" | { from: string; to: string } | undefined;
   // `scope` comes from the session, never from the request.
   filter: Omit<OrderListFilter, "dates" | "scope">;
+  paging: OrderTableRequest;
 } {
   const status = requireEnum(query("status") ?? "all", "status", ORDER_STATUS_FILTERS);
   const from = query("from");
@@ -115,20 +99,33 @@ export function parseOrdersQuery(query: (name: string) => string | undefined): {
       : requireRange(from, to);
   const staff = query("staff");
   if (staff !== undefined && !isUuid(staff)) throw invalid("staff");
-  const limit = query("limit");
-  if (limit !== undefined && (!PAGE_SIZE.test(limit) || Number(limit) > MAX_ORDER_PAGE_SIZE))
-    throw invalid("limit");
+  for (const field of ["limit", "after", "pageSize"])
+    if (query(field) !== undefined) throw invalid(field);
+  const rawPage = query("page") ?? "0";
+  const page = Number(rawPage);
+  if (!/^\d+$/.test(rawPage) || !Number.isSafeInteger(page * DEFAULT_ORDER_PAGE_SIZE))
+    throw invalid("page");
+  const sortKey = requireEnum(query("sortKey") ?? "", "sortKey", [
+    "",
+    "opened",
+    "invoice",
+    "total",
+  ] as const);
+  const sortDirection = requireEnum(query("sortDirection") ?? "descending", "sortDirection", [
+    "ascending",
+    "descending",
+  ] as const);
   const search = optionalSearch(query("q"));
   return {
     dates,
+    paging: { page, sortKey, sortDirection },
     filter: {
       status,
       credited: queryFlag(query("credited"), "credited"),
       staffId: staff?.toLowerCase(),
       table: optionalText(query("table"), "table"),
       search,
-      limit: limit === undefined ? DEFAULT_ORDER_PAGE_SIZE : Number(limit),
-      after: requireCursor(query("after"), search),
+      limit: DEFAULT_ORDER_PAGE_SIZE,
     },
   };
 }
@@ -219,7 +216,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
   app.get("/management-api/orders", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { dates, filter } = parseOrdersQuery((name) => c.req.query(name));
+      const { dates, filter, paging } = parseOrdersQuery((name) => c.req.query(name));
       const answer = await scoped(sessionId, async (tx, scope, clock) => {
         let range: { from: string; to: string } | null = null;
         let window: OrderListFilter["dates"] = "any";
@@ -228,15 +225,14 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
           range = dates ?? { from: today, to: today };
           window = { ...range, ...clock };
         }
-        const page = await listOrders(tx, { ...filter, dates: window, scope });
+        const page = await listOrdersTablePage(tx, { ...filter, dates: window, scope }, paging);
         return { ...page, range };
       });
       return c.json({
         rows: answer.rows,
-        next:
-          answer.next === null
-            ? null
-            : `${answer.next.rank === undefined ? "" : `${answer.next.rank}_`}${answer.next.at}_${answer.next.id}`,
+        total: answer.total,
+        page: answer.page,
+        pageSize: answer.pageSize,
         from: answer.range?.from ?? null,
         to: answer.range?.to ?? null,
       });

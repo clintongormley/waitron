@@ -13,7 +13,13 @@ import {
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
-import { listOrders, ordersPageSql, type OrderListFilter } from "./orders-list.js";
+import {
+  listOrders,
+  listOrdersTablePage,
+  ordersPageSql,
+  ordersTableSql,
+  type OrderListFilter,
+} from "./orders-list.js";
 
 // Wrapped before the store opens its connections, so every registration of the matcher counts.
 let rankCalls = 0;
@@ -62,11 +68,17 @@ async function oneOfEach(): Promise<void> {
   await departed(venue, "Croquettes");
 }
 
-async function readsFor(limit: number) {
+async function readsFor(limit: number, table = false) {
   return withTransaction(venue.db, async (tx) => {
     const spies = [vi.spyOn(tx, "select"), vi.spyOn(tx, "selectDistinct"), vi.spyOn(tx, "execute")];
     try {
-      const page = await listOrders(tx, { ...ANY, limit });
+      const page = table
+        ? await listOrdersTablePage(tx, ANY, {
+            page: limit === 1 ? 1 : 0,
+            sortKey: "",
+            sortDirection: "descending",
+          })
+        : await listOrders(tx, { ...ANY, limit });
       return {
         statuses: page.rows.map((row) => row.status),
         reads: spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0),
@@ -87,6 +99,12 @@ describe("reads per page", () => {
     expect(fifty.statuses).toHaveLength(50);
     expect(fifty.reads).toBe(7);
     expect((await readsFor(1)).reads).toBeLessThanOrEqual(7);
+    const table = await readsFor(50, true);
+    expect(table.statuses).toHaveLength(50);
+    expect(table.reads).toBe(8);
+    const last = await readsFor(1, true);
+    expect(last.statuses).toEqual(["open"]);
+    expect(last.reads).toBe(6);
   });
 });
 
@@ -123,6 +141,19 @@ describe("ranking work", () => {
       dayCutover: "05:00",
     };
     expect(await ranked(oneDay)).toEqual({ rows: 1, calls: 1 });
+    rankCalls = 0;
+    const table = await withTransaction(venue.db, (tx) =>
+      listOrdersTablePage(
+        tx,
+        { ...ANY, dates: oneDay, search: "quokka" },
+        { page: 0, sortKey: "total", sortDirection: "descending" },
+      ),
+    );
+    expect(table).toMatchObject({
+      total: 1,
+      rows: [expect.objectContaining({ partyName: "Quokka" })],
+    });
+    expect(rankCalls).toBe(2);
     // The control: unfiltered by date, all four are ranked, so the count above is the filter's doing.
     expect((await ranked("any")).rows).toBe(4);
     expect((await ranked("any")).calls).toBeGreaterThanOrEqual(4);
@@ -136,54 +167,59 @@ describe("ranking work", () => {
  * the PR and report it; do not loosen the pattern.
  */
 describe("which index a read starts from", () => {
-  async function plan(filter: Partial<OrderListFilter>): Promise<string> {
+  async function plan(filter: Partial<OrderListFilter>): Promise<string[]> {
     return withTransaction(venue.db, async (tx) => {
-      const { rows } = await tx.execute<{ detail: string }>(
-        sql`explain query plan ${ordersPageSql({ ...ANY, ...filter })}`,
-      );
-      return rows.map((row) => row.detail).join("\n");
+      const results: string[] = [];
+      const paging = { page: 0, sortKey: "", sortDirection: "descending" } as const;
+      for (const query of [
+        ordersPageSql({ ...ANY, ...filter }),
+        ordersTableSql({ ...ANY, ...filter }, paging),
+        ordersTableSql({ ...ANY, ...filter }, paging, true),
+      ]) {
+        const { rows } = await tx.execute<{ detail: string }>(sql`explain query plan ${query}`);
+        results.push(rows.map((row) => row.detail).join("\n"));
+      }
+      return results;
     });
   }
 
   it("Unpaid at any date reads bills through the status index", async () => {
-    expect(await plan({ status: "unpaid" })).toMatch(/working_orders_tenant_status_idx/);
+    for (const result of await plan({ status: "unpaid" }))
+      expect(result).toMatch(/working_orders_tenant_status_idx/);
   });
 
   it("a session without report.view reads unfinished bills and today's finished bills", async () => {
-    expect(
-      await plan({
-        status: "all",
-        scope: {
-          today: {
-            cutoverChanges: [],
-            from: "2026-10-02",
-            to: "2026-10-02",
-            timeZone: "Europe/Madrid",
-            dayCutover: "05:00",
-          },
-        },
-      }),
-    ).toMatch(/working_orders_(taxpayer_status|opened_at)_idx/);
-  });
-
-  it("a date range reads bills through the opened-at index", async () => {
-    expect(
-      await plan({
-        dates: {
+    for (const result of await plan({
+      status: "all",
+      scope: {
+        today: {
           cutoverChanges: [],
-          from: "2026-03-01",
-          to: "2026-03-02",
+          from: "2026-10-02",
+          to: "2026-10-02",
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-      }),
-    ).toMatch(/working_orders_opened_at_idx/);
+      },
+    }))
+      expect(result).toMatch(/working_orders_(taxpayer_status|opened_at)_idx/);
+  });
+
+  it("a date range reads bills through the opened-at index", async () => {
+    for (const result of await plan({
+      dates: {
+        cutoverChanges: [],
+        from: "2026-03-01",
+        to: "2026-03-02",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+      },
+    }))
+      expect(result).toMatch(/working_orders_opened_at_idx/);
   });
 
   // The control: if this one also names an index, the two above prove nothing.
   it("All at any date reads every bill, through neither index", async () => {
-    expect(await plan({ status: "all" })).not.toMatch(
-      /working_orders_(taxpayer_status|opened_at)_idx/,
-    );
+    for (const result of await plan({ status: "all" }))
+      expect(result).not.toMatch(/working_orders_(taxpayer_status|opened_at)_idx/);
   });
 });

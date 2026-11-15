@@ -150,6 +150,10 @@ destination named by **Retry original** or choose the named receipt printer inst
 
 ## Print from dashboard Orders {#dashboard-documents}
 
+To find an older bill, choose **Any date** or set the date range. Search covers every matching bill,
+including other pages. Use **Previous page** and **Next page** to move through 50 bills at a time.
+Click **Opened**, **Invoice** or **Total** to sort; click the same heading again to reverse it.
+
 For a document later, open **Orders** in the dashboard and choose **Print / Reprint** on the bill.
 For a full invoice, choose **Receipt** for receipt paper or **Invoice** for the mixed printer list;
 both keep the recorded invoice and customer. A simplified invoice opens its receipt printers directly.

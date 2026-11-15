@@ -64,7 +64,6 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_STATUS_FILTERS = ["all", ...ORDER_STATUSES, "unpaid"] as const;
 export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
 export const DEFAULT_ORDER_PAGE_SIZE = 50;
-export const MAX_ORDER_PAGE_SIZE = 200;
 export interface OrderCursor {
   /** The row's search rank key; present exactly when the list is searched by words. */
   rank?: number;
@@ -110,6 +109,11 @@ export interface OrderRow {
 export interface OrderPage {
   rows: OrderRow[];
   next: OrderCursor | null;
+}
+export interface OrderTableRequest {
+  page: number;
+  sortKey: "" | "opened" | "invoice" | "total";
+  sortDirection: "ascending" | "descending";
 }
 
 const ZERO = centsToDecimal(0);
@@ -410,6 +414,54 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
         }
       : null;
 
+  return { rows: await hydrateOrderRows(tx, raw), next };
+}
+
+export function ordersTableSql(
+  filter: OrderListFilter,
+  request: OrderTableRequest,
+  count = false,
+): SQL {
+  const words = wordSearch(filter);
+  const matches =
+    words === undefined
+      ? sql`with r as (${rowsSql(filter)}), matched as (select r.* from r where ${whereOf(filterClauses(filter))})`
+      : sql`with base as (${rowsSql(filter)}), ranked as materialized (
+        select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
+          coalesce(
+            (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id where pt.party_id = r.party_id),
+            (select group_concat(n.value, ' ') from json_each(r.party_table_names) n))) as search_rank
+        from base r where ${whereOf(filterClauses(filter))}
+      ), matched as (select r.* from ranked r where r.search_rank is not null)`;
+  if (count) return sql`${matches} select count(*) as total from matched`;
+  const direction = request.sortDirection === "ascending" ? sql`asc` : sql`desc`;
+  const sorts = {
+    "": sql``,
+    opened: sql`r.at ${direction},`,
+    invoice: sql`r.invoice_number is null, r.series_code collate nocase ${direction}, r.invoice_number ${direction},`,
+    total: sql`cast(coalesce(r.sale_total, r.lines_total) as integer) ${direction},`,
+  };
+  return sql`${matches} select r.*, ${CREDITED} as credited from matched r
+    order by ${words === undefined ? sql`` : sql`r.search_rank,`}
+      ${sorts[request.sortKey]} r.at desc, r.id desc
+    limit ${DEFAULT_ORDER_PAGE_SIZE} offset ${request.page * DEFAULT_ORDER_PAGE_SIZE}`;
+}
+
+export async function listOrdersTablePage(
+  tx: Transaction,
+  filter: OrderListFilter,
+  request: OrderTableRequest,
+): Promise<{ rows: OrderRow[]; total: number; page: number; pageSize: number }> {
+  const { rows: counts } = await tx.execute<{ total: number }>(
+    ordersTableSql(filter, request, true),
+  );
+  const total = counts[0]!.total;
+  const page = Math.min(request.page, Math.max(0, Math.ceil(total / DEFAULT_ORDER_PAGE_SIZE) - 1));
+  const { rows: raw } = await tx.execute<RawRow>(ordersTableSql(filter, { ...request, page }));
+  return { rows: await hydrateOrderRows(tx, raw), total, page, pageSize: DEFAULT_ORDER_PAGE_SIZE };
+}
+
+async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRow[]> {
   const bills = raw.filter((row) => row.kind === "bill");
   const owing = bills.filter((row) => OWING.includes(row.status));
   // Awaited in turn: they share one transaction (CLAUDE.md §3).
@@ -486,7 +538,7 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
       departedAt: row.departed_at,
     };
   });
-  return { rows, next };
+  return rows;
 }
 
 /**

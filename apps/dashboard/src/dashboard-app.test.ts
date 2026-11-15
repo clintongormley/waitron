@@ -306,7 +306,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       topSellers: [],
     }),
-    listOrderPages: vi.fn().mockResolvedValue({ rows: [], next: null, from: null, to: null }),
+    listOrdersPage: vi
+      .fn()
+      .mockResolvedValue({ rows: [], total: 0, page: 0, pageSize: 50, from: null, to: null }),
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),

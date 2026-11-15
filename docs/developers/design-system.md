@@ -2118,6 +2118,12 @@ empty venue and an empty filtered result retain their different actions.
 A large table, such as bills or orders, must sort in SQL or be measured before adopting this
 in-memory key sort. The shared request controller makes no assumption about the callback's sort.
 
+Orders uses the same controller with SQL sorting by Opened, Invoice or Total, after word-search
+rank. Each request returns 50 rows and the count for the same filters and session scope. Invoice
+sorting uses series code then numeric invoice number, with uninvoiced bills last in either
+direction. Total sorts the original amount in cents; ties use opened time then id, both descending.
+Its existing external filters remain above the table; search-only address changes replace history.
+
 Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
 `toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also
 offers Filters when no column has a filter. Clear all emits `wt-filters-clear` with an empty detail

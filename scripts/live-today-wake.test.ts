@@ -22,7 +22,7 @@ const todayReaders = [
   "till:floor",
 ];
 const baseOnlyReaders = [
-  "dashboard:listOrderPages", // Order rows show saved table and zone names.
+  "dashboard:listOrdersPage", // Order rows show saved table and zone names.
   "dashboard:getOrder", // Order detail resolves table names.
   "dashboard:getFolderRouting", // Folder routes include zones.
   "dashboard:getProfileScopeChoices", // Profiles offer department zones.

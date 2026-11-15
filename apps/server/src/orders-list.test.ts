@@ -64,16 +64,32 @@ async function rowOf(id: string): Promise<Row> {
 }
 async function list(
   query: string,
-): Promise<{ rows: Row[]; next: string | null; from: string | null; to: string | null }> {
-  const answer = await send(
-    venue.orders,
-    venue.supervisorDashboard,
-    "GET",
-    `/management-api/orders?${query}`,
-  );
-  expect(answer.status).toBe(200);
-  return answer.json as never;
+): Promise<{ rows: Row[]; total: number; from: string | null; to: string | null }> {
+  const rows: Row[] = [];
+  let answer!: {
+    rows: Row[];
+    total: number;
+    page: number;
+    pageSize: number;
+    from: string | null;
+    to: string | null;
+  };
+  for (let page = 0; ; page++) {
+    const response = await send(
+      venue.orders,
+      venue.supervisorDashboard,
+      "GET",
+      `/management-api/orders?${query}&page=${page}`,
+    );
+    expect(response.status).toBe(200);
+    answer = response.json as typeof answer;
+    rows.push(...answer.rows);
+    if ((answer.page + 1) * answer.pageSize >= answer.total) break;
+  }
+  expect(rows).toHaveLength(answer.total);
+  return { ...answer, rows };
 }
+
 const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 
 describe("facts this list relies on", () => {
@@ -246,10 +262,10 @@ describe("a bill closed as a deferred payment", () => {
     expect((await collect(venue, cash, "18.00")).status).toBe(200);
 
     expect(await rowOf(id)).toMatchObject({ status: "deferred_payment", stillOwed: null });
-    const paid = ids((await list("status=paid&anyDate=true&limit=200")).rows);
+    const paid = ids((await list("status=paid&anyDate=true")).rows);
     expect(paid).toContain(cash);
     expect(paid).not.toContain(id);
-    const deferredIds = ids((await list("status=deferred_payment&anyDate=true&limit=200")).rows);
+    const deferredIds = ids((await list("status=deferred_payment&anyDate=true")).rows);
     expect(deferredIds).toEqual([id]);
   });
 });
@@ -303,7 +319,7 @@ describe("a replaced invoice", () => {
     );
     const replaced = await rowOf(id);
     expect(replaced).toMatchObject({ credited: null, stillOwed: "30.00", creditNotes: [] });
-    expect(ids((await list("anyDate=true&limit=200&credited=true")).rows)).not.toContain(id);
+    expect(ids((await list("anyDate=true&credited=true")).rows)).not.toContain(id);
     const detail = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
     expect(detail.invoices.map((invoice) => invoice.kind)).toEqual(["invoice", "replacement"]);
 
@@ -314,11 +330,11 @@ describe("a replaced invoice", () => {
       stillOwed: "27.58",
       creditNotes: [expect.stringMatching(/^R\/\d+$/)],
     });
-    expect(ids((await list("anyDate=true&limit=200&credited=true")).rows)).toContain(id);
+    expect(ids((await list("anyDate=true&credited=true")).rows)).toContain(id);
     const refundNumber = (refunded.creditNotes as string[])[0]!;
-    expect(
-      ids((await list(`anyDate=true&limit=200&q=${encodeURIComponent(refundNumber)}`)).rows),
-    ).toEqual([id]);
+    expect(ids((await list(`anyDate=true&q=${encodeURIComponent(refundNumber)}`)).rows)).toEqual([
+      id,
+    ]);
     const after = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
     expect(after.invoices.map((invoice) => invoice.kind)).toEqual([
       "invoice",
@@ -330,8 +346,7 @@ describe("a replaced invoice", () => {
   it("is not credited in a word search; a refund of its replacement credits it there", async () => {
     const party = await departed(venue, "Red wine bottle");
     const table = ((await rowOf(party.tabId)).tables as string[])[0]!;
-    const byWord = async () =>
-      (await list(`anyDate=true&limit=200&q=${encodeURIComponent(table)}`)).rows;
+    const byWord = async () => (await list(`anyDate=true&q=${encodeURIComponent(table)}`)).rows;
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, party.tabId)),
     );
@@ -370,7 +385,7 @@ describe("filters and search", () => {
     const waiting = await placedIssuedBill(venue, "Caña");
     const debt = await departed(venue, "Caña");
     const open = await seatedWith(venue, "Caña");
-    const found = ids((await list("status=unpaid&anyDate=true&limit=200")).rows);
+    const found = ids((await list("status=unpaid&anyDate=true")).rows);
     expect(found).toEqual(expect.arrayContaining([waiting, debt.tabId]));
     expect(found).not.toContain(open.tabId);
   });
@@ -381,10 +396,7 @@ describe("filters and search", () => {
     const row = await rowOf(id);
     const [, number] = (row.invoiceNumber as string).split("/");
     for (const q of [row.invoiceNumber as string, number!, (row.creditNotes as string[])[0]!]) {
-      expect(
-        ids((await list(`anyDate=true&limit=200&q=${encodeURIComponent(q)}`)).rows),
-        q,
-      ).toContain(id);
+      expect(ids((await list(`anyDate=true&q=${encodeURIComponent(q)}`)).rows), q).toContain(id);
     }
   });
 
@@ -392,21 +404,18 @@ describe("filters and search", () => {
     const party = await seatedWith(venue, "Caña");
     const row = await rowOf(party.tabId);
     expect(row.invoiceNumber).toBeNull();
-    expect(
-      ids((await list(`anyDate=true&limit=200&q=${row.orderNumber as number}`)).rows),
-    ).toContain(party.tabId);
+    expect(ids((await list(`anyDate=true&q=${row.orderNumber as number}`)).rows)).toContain(
+      party.tabId,
+    );
   });
 
   it("matches a table in any letter case, and a % literally", async () => {
     const party = await seatedWith(venue, "Caña");
     const label = (await rowOf(party.tabId)).tables as string[];
     expect(
-      ids(
-        (await list(`anyDate=true&limit=200&table=${encodeURIComponent(label[0]!.toUpperCase())}`))
-          .rows,
-      ),
+      ids((await list(`anyDate=true&table=${encodeURIComponent(label[0]!.toUpperCase())}`)).rows),
     ).toEqual([party.tabId]);
-    expect((await list("anyDate=true&limit=200&q=%25")).rows).toEqual([]);
+    expect((await list("anyDate=true&q=%25")).rows).toEqual([]);
   });
 
   it("finds a party by its name", async () => {
@@ -416,19 +425,15 @@ describe("filters and search", () => {
       expectedPartyRevision: party.revision,
     });
     expect(named.status).toBe(200);
-    expect(ids((await list("anyDate=true&limit=200&q=ortega")).rows)).toEqual([party.tabId]);
+    expect(ids((await list("anyDate=true&q=ortega")).rows)).toEqual([party.tabId]);
   });
 
   it("filters by who a line is credited to, and by having a credit note", async () => {
     const id = await placedIssuedBill(venue, "Octopus");
     await credit(venue, id, "2.00", "-2.42");
-    expect(ids((await list(`anyDate=true&limit=200&staff=${venue.operatorId}`)).rows)).toContain(
-      id,
-    );
-    expect(
-      ids((await list(`anyDate=true&limit=200&staff=${venue.supervisorId}`)).rows),
-    ).not.toContain(id);
-    const credited = (await list("anyDate=true&limit=200&credited=true")).rows;
+    expect(ids((await list(`anyDate=true&staff=${venue.operatorId}`)).rows)).toContain(id);
+    expect(ids((await list(`anyDate=true&staff=${venue.supervisorId}`)).rows)).not.toContain(id);
+    const credited = (await list("anyDate=true&credited=true")).rows;
     expect(ids(credited)).toContain(id);
     expect(credited.every((row) => row.credited !== null)).toBe(true);
   });
@@ -564,10 +569,26 @@ describe("dates and pages", () => {
     } finally {
       vi.useRealTimers();
     }
-    const query = "from=2026-02-02&to=2026-02-02&limit=1";
-    const first = await list(query);
-    expect(first.next).toMatch(/^2026-02-02T12:00:00\.000Z_/);
-    const second = await list(`${query}&after=${encodeURIComponent(first.next!)}`);
+    const read = (after?: OrderCursor) =>
+      withTransaction(venue.db, (tx) =>
+        listOrders(tx, {
+          status: "all",
+          dates: {
+            from: "2026-02-02",
+            to: "2026-02-02",
+            cutoverChanges: [],
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+          },
+          credited: false,
+          scope: "all",
+          limit: 1,
+          after,
+        }),
+      );
+    const first = await read();
+    expect(first.next).toMatchObject({ at: "2026-02-02T12:00:00.000Z" });
+    const second = await read(first.next!);
     expect([...ids(first.rows), ...ids(second.rows)]).toEqual([...pair!].sort().reverse());
     expect(second.next).toBeNull();
   });
