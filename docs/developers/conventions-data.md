@@ -733,8 +733,10 @@ in the zone also sells its product and variant on its own, and otherwise refuses
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
 rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
-D19–D28. The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
-menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
+D19–D28. Extras added later to a marked dish by an edit copy its period and confirmer
+(`STORED_LATE`), and no new confirmation is asked (A1085, closing D25's stated limit). The till
+learns which menus ended from each menu's `endedPeriodName` on the zone-offers and menu-state reads,
+and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`). It
 sends `lateSend` only after the waiter chooses Kitchen agreed in its late-send window
 (`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:

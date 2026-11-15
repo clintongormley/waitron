@@ -224,6 +224,14 @@ const linesOf = (id: string) =>
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id));
 
+const revisionOf = async (id: string) =>
+  (
+    (await suite.db
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))) as [{ revision: number }]
+  )[0].revision;
+
 const orderRows = (id: string) =>
   suite.db.select({ id: workingOrders.id }).from(workingOrders).where(eq(workingOrders.id, id));
 
@@ -568,10 +576,7 @@ describe("a raised quantity of a stored line", () => {
     const id = randomUUID();
     await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id);
     const before = await linesOf(id);
-    const [{ revision }] = (await suite.db
-      .select({ revision: workingOrders.revision })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id))) as [{ revision: number }];
+    const revision = await revisionOf(id);
     at("14:05");
     await expect(
       updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
@@ -591,13 +596,6 @@ describe("a raised quantity of a stored line", () => {
 });
 
 describe("extras added later to a stored dish", () => {
-  const revisionOf = async (id: string) =>
-    (
-      (await suite.db
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, id))) as [{ revision: number }]
-    )[0].revision;
   const addAvocado = async (v: MealVenue, id: string) => {
     const [salad] = await linesOf(id);
     return updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {

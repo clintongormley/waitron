@@ -579,6 +579,10 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 const RECORDED_OFFER = Symbol("recordedOffer");
+/**
+ * The stored dish's late mark, carried by an extras-only line so its extras rows record the same
+ * mark without a new confirmation. A symbol, so no JSON body can set it.
+ */
 const STORED_LATE = Symbol("storedLate");
 
 /**
