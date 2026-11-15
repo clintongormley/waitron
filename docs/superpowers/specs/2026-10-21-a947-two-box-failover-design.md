@@ -1875,7 +1875,10 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   Built to [`2026-11-14-a947-4c-devices-follow.md`](../plans/2026-11-14-a947-4c-devices-follow.md)
   (2026-11-15): a till or handheld shows the strip after 20 s and opens the spare's own switch page,
   which links back to it; the till says "server" («servidor»), not «equipo»; no "ask for help" line
-  when the clocks differ. Moved to 4d (watcher, 2026-11-14 22:01): the dashboard's entry, the
+  when the clocks differ. On the till's sign-in screen everyone sees the switch button, and a
+  signed-in person only with `node.manage`; the spare's page asks for a `node.manage` sign-in (plan
+  D2). The switch page's no-second-clock wait also says «servidor» (a check on that page forbids
+  «equipo») and that it carries on by itself "while this page stays open". Moved to 4d (watcher, 2026-11-14 22:01): the dashboard's entry, the
   spare's banner, the same-site cookie measurement and the switch's passkey.
 - **4d. Reaching the switch from any device.** The spare's switch page; the spare answering the
   venue's name with only that page while the main box is silent, and stopping when it answers; the
