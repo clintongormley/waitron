@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
-import { isCopyIntact, waitForCopyCheck } from "./handover-integrity.js";
+import { isCopyIntact, copyCheckRunning } from "./handover-integrity.js";
 
 let scratch: string;
 beforeEach(async () => {
@@ -260,17 +260,9 @@ describe("a check whose thread has not exited", () => {
         params: { module: "core" },
       });
       expect(startWorker).toHaveBeenCalledOnce();
-      expect(await waitForCopyCheck(path, undefined, false)).toBe(false);
-      let finished = false;
-      const waiting = waitForCopyCheck(path).then(() => {
-        finished = true;
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(finished).toBe(false);
+      expect(copyCheckRunning(path)).toBe(true);
       thread.emit("exit", 1);
-      await waiting;
-      expect(finished).toBe(true);
-      expect(await waitForCopyCheck(path, undefined, false)).toBe(true);
+      expect(copyCheckRunning(path)).toBe(false);
       expect(await isCopyIntact(path)).toBe(true);
     } finally {
       thread.emit("exit", 1);

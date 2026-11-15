@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Worker } from "node:worker_threads";
-import { isCopyIntact } from "./handover-integrity.js";
+import { isCopyIntact, copyCheckRunning } from "./handover-integrity.js";
 import {
   createServer as createHttpServer,
   type RequestListener,
@@ -74,6 +74,7 @@ vi.mock("@waitron/db", async (importOriginal) => {
   };
 });
 vi.mock("./handover-store.js", { spy: true });
+vi.mock("./handover-integrity.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 
 const RING: KeyRing = loadKeyRing({
@@ -1714,7 +1715,7 @@ it("persists a reason after failed writes without repeating waiting and error lo
   }
 });
 
-it("waits for a stopped integrity thread before deleting a rejected copy", async () => {
+it("a restarted duty defers deletion of a busy copy and keeps reading status", async () => {
   const r = await rig();
   await r.stepDownM1();
   await r.listen(r.m1App({ restricted: true }));
@@ -1797,6 +1798,40 @@ it("keeps reading status while a retained copy's old integrity thread is busy", 
     duty.wake();
     await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(2));
     expect(r.copyReads()).toBe(1);
+  } finally {
+    thread.emit("exit", 1);
+    await duty.stop();
+  }
+});
+
+it("removes a closed folder on an ordinary pass after its busy thread exits", async () => {
+  const r = await rig();
+  const folder = join(r.stateDir, "handover", OP);
+  await mkdir(folder, { recursive: true });
+  await writeFile(r.received(), "old copy");
+  await advanceHandover(r.m2Store, OP, "replaced", {});
+  const thread = Object.assign(new EventEmitter(), {
+    terminate: () => new Promise<number>(() => {}),
+    unref() {},
+  });
+  const stopping = new AbortController();
+  const pending = isCopyIntact(r.received(), {
+    signal: stopping.signal,
+    startWorker: () => thread as unknown as Worker,
+    stopWaitMs: 1,
+  }).catch(() => {});
+  stopping.abort();
+  await pending;
+  vi.mocked(copyCheckRunning).mockClear();
+  const duty = (await r.start())!;
+  try {
+    await vi.waitFor(() =>
+      expect(vi.mocked(copyCheckRunning).mock.calls).toContainEqual([r.received()]),
+    );
+    expect(existsSync(folder)).toBe(true);
+    thread.emit("exit", 1);
+    duty.wake();
+    await vi.waitFor(() => expect(existsSync(folder)).toBe(false));
   } finally {
     thread.emit("exit", 1);
     await duty.stop();

@@ -33,29 +33,10 @@ parentPort.postMessage({ intact });
 
 type WorkerStarter = (source: string, options: WorkerOptions) => Worker;
 
-const runningChecks = new Map<string, Promise<void>>();
+const runningChecks = new Set<string>();
 
-/** A stopped caller can return before SQLite closes its file; replacement waits for actual exit. */
-export async function waitForCopyCheck(
-  path: string,
-  signal?: AbortSignal,
-  wait = true,
-): Promise<boolean> {
-  const running = runningChecks.get(resolvePath(path));
-  if (running === undefined) return true;
-  if (!wait) return false;
-  signal?.throwIfAborted();
-  let stop!: () => void;
-  const stopped = new Promise<never>((_resolve, reject) => {
-    stop = () => reject(signal!.reason);
-    signal?.addEventListener("abort", stop, { once: true });
-  });
-  try {
-    await Promise.race([running, stopped]);
-    return true;
-  } finally {
-    signal?.removeEventListener("abort", stop);
-  }
+export function copyCheckRunning(path: string): boolean {
+  return runningChecks.has(resolvePath(path));
 }
 
 /**
@@ -85,13 +66,7 @@ export function isCopyIntact(
     if (runningChecks.has(key))
       throw new AppError("handover.copy_check_failed", { module: "core" });
     const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path } });
-    let finished!: () => void;
-    runningChecks.set(
-      key,
-      new Promise<void>((resolve) => {
-        finished = resolve;
-      }),
-    );
+    runningChecks.add(key);
     let stopWait: NodeJS.Timeout | undefined;
     const stop = () => {
       const stopped = () => {
@@ -112,7 +87,6 @@ export function isCopyIntact(
     // outlasts `stopWaitMs` answers without this, with the file possibly still open.
     worker.once("exit", (code) => {
       runningChecks.delete(key);
-      finished();
       signal?.removeEventListener("abort", stop);
       clearTimeout(stopWait);
       if (signal?.aborted) reject(signal.reason);

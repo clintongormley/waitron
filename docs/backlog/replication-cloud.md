@@ -570,7 +570,7 @@ the cap. The owner sees this in Slice 5's PR.
 
 A rejected copy is fetched again with a delay capped at sixty seconds. A check on the old box before
 it stops selling could avoid a handover waiting on a dangling row; that check is not built.
-A closed operation's folder that cannot be removed is retried only at duty start or on a pass with
+A closed operation's folder that cannot be removed, or whose check is still busy, is retried only at duty start or on a pass with
 no work, so another live operation can leave it on disk. A full disk can still prevent the waiting
 reason from being stored. The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
 is available when the copy keeps failing its checks.

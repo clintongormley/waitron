@@ -1,4 +1,4 @@
-import { waitForCopyCheck } from "./handover-integrity.js";
+import { copyCheckRunning } from "./handover-integrity.js";
 import { errnoOf } from "./errno.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { HANDOVER_DIR } from "@waitron/store";
@@ -179,8 +179,8 @@ interface DutyWork {
   operation: HandoverOperation;
 }
 
-async function discardCopy(path: string, signal: AbortSignal): Promise<boolean> {
-  if (!(await waitForCopyCheck(path, signal, false))) return false;
+async function discardCopy(path: string): Promise<boolean> {
+  if (copyCheckRunning(path)) return false;
   await rm(path, { force: true });
   await rm(`${path}.partial`, { force: true });
   return true;
@@ -342,8 +342,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
 
   async function removeFolder(operationId: string): Promise<void> {
     const folder = dirname(receivedCopyPath(deps.stateDir, operationId));
-    if (!(await waitForCopyCheck(receivedCopyPath(deps.stateDir, operationId), signal, false)))
-      return;
+    if (copyCheckRunning(receivedCopyPath(deps.stateDir, operationId))) return;
     await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
       deps.log("error", "handover-destination.remove_failed", {
         operationId,
@@ -399,7 +398,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const path = receivedCopyPath(deps.stateDir, operationId);
     const trust = { ca, rejectUnauthorized: true };
     const routes = `${base}/api/node/handover/${operationId}`;
-    const discard = () => discardCopy(path, signal);
+    const discard = () => discardCopy(path);
     let indicator: unknown;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -466,8 +465,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   }
 
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
-    if (monotonicNow() < copy.compareDueAt || !(await waitForCopyCheck(copy.path, signal, false)))
-      return;
+    if (monotonicNow() < copy.compareDueAt || copyCheckRunning(copy.path)) return;
     copy.compareDueAt = monotonicNow() + compareRetryMs;
     await recordWait(operation, null);
     let outcome: CompareOutcome;
@@ -488,7 +486,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       if (REFUSALS_FETCHED_AGAIN.has(outcome.reason)) {
         delayFetch();
         held = undefined;
-        await discardCopy(copy.path, signal);
+        await discardCopy(copy.path);
       }
       return waitOn(operation, outcome.reason, { detail: outcome.detail });
     }
