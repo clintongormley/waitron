@@ -812,3 +812,39 @@ test("typed text has a scalable minimum and respects larger inherited text", asy
     else document.documentElement.setAttribute("style", rootStyle);
   }
 });
+
+test("an identifier field turns off autocorrect, the capital first letter and spellcheck", async () => {
+  const el = await mount(
+    '<wt-input label="Host" autocapitalize="none" autocorrect="off" spellcheck="false"></wt-input>',
+  );
+  const { input } = parts(el);
+  expect(input.getAttribute("autocapitalize")).toBe("none");
+  expect(input.getAttribute("autocorrect")).toBe("off");
+  expect(input.getAttribute("spellcheck")).toBe("false");
+  expect(input.spellcheck).toBe(false);
+});
+
+test("the same switches set as properties reach the input", async () => {
+  const el = (await mount('<wt-input label="Host"></wt-input>')) as HTMLElement & {
+    autocorrect: boolean;
+  };
+  el.spellcheck = false;
+  el.autocorrect = false;
+  el.autocapitalize = "none";
+  await (el as unknown as LitElement).updateComplete;
+  const { input } = parts(el);
+  expect(input.getAttribute("autocapitalize")).toBe("none");
+  expect(input.getAttribute("autocorrect")).toBe("off");
+  expect(input.getAttribute("spellcheck")).toBe("false");
+});
+
+test("a plain field leaves autocorrect, capitals and spellcheck to the browser", async () => {
+  const plain = await mount('<wt-input label="Name"></wt-input>');
+  const on = await mount('<wt-input label="Name" autocorrect="on" spellcheck="true"></wt-input>');
+  for (const el of [plain, on]) {
+    const { input } = parts(el);
+    expect(input.hasAttribute("autocapitalize")).toBe(false);
+    expect(input.hasAttribute("autocorrect")).toBe(false);
+    expect(input.hasAttribute("spellcheck")).toBe(false);
+  }
+});

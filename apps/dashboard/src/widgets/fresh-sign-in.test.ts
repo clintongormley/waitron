@@ -111,6 +111,16 @@ describe("the code field", () => {
     expect(code.label).toBe(t("fresh_sign_in.code"));
     expect(code.placeholder).toBe(t("fresh_sign_in.code_hint"));
   });
+
+  it("turns off autocorrect, the capital first letter and spellcheck", async () => {
+    const { root } = await mount(profile({ hasTotp: true }));
+    const code = field(root, "totp")!;
+    await code.updateComplete;
+    const input = code.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
 });
 
 describe("the sign-in body", () => {

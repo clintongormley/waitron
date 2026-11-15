@@ -460,7 +460,8 @@ export class ProductList extends LitElement {
   };
 
   #startDrag(event: PointerEvent, key: string, grip: boolean): void {
-    if (this.#pointerDrag || event.button !== 0) return;
+    if (this.#pointerDrag || event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey))
+      return;
     if (event.pointerType === "touch" && !grip) return;
     this.#pointerDrag = {
       pointerId: event.pointerId,

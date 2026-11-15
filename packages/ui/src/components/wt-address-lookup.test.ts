@@ -306,6 +306,18 @@ test("no suggestions says so", async () => {
   expect(input(el).getAttribute("aria-expanded")).toBe("false");
 });
 
+test("the no-results line is spoken by changing the text of a status line already in the page", async () => {
+  const el = await mountLookup(fakeProvider([]));
+  const before = el.shadowRoot!.querySelector<HTMLElement>('[role="status"]');
+  expect(before).not.toBeNull();
+  expect(before!.getBoundingClientRect().height).toBe(0);
+  expect(getComputedStyle(before!).marginTop).toBe("0px");
+  type(el, "Nowhere street");
+  await settle(el);
+  expect(el.shadowRoot!.querySelector('[role="status"]')).toBe(before);
+  expect(before!.textContent!.trim()).toBe("No address found.");
+});
+
 test("a refused or throwing search says suggestions are unavailable", async () => {
   for (const suggest of [
     () => Promise.reject(new Error("down")),

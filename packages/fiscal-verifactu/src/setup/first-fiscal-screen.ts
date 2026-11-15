@@ -395,6 +395,9 @@ export class FirstFiscalScreen extends LitElement {
           ? html`<wt-input
                 data-test="serials"
                 name="proposed-fiscal-serials"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 label=${t.serials}
                 placeholder=${t.serialsHint}
                 required
@@ -478,6 +481,9 @@ export class FirstFiscalScreen extends LitElement {
               <wt-textarea
                 data-test="fingerprint"
                 name="independent-custodian-fingerprint"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 label=${t.fingerprint}
                 required
                 .value=${this.draft.fingerprint}
@@ -520,6 +526,9 @@ export class FirstFiscalScreen extends LitElement {
               <wt-input
                 data-test="incident"
                 name="current-original-record-reference"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 label=${t.incident}
                 required
                 .value=${this.draft.incident}

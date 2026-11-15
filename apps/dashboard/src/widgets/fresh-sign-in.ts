@@ -319,6 +319,9 @@ export class FreshSignIn extends LitElement {
   #codeField() {
     return html`<wt-input
       name="totp"
+      autocapitalize="none"
+      autocorrect="off"
+      spellcheck="false"
       label=${t(this.allowRecoveryCode ? "fresh_sign_in.code" : "fresh_sign_in.authenticator_code")}
       placeholder=${t(this.allowRecoveryCode ? "fresh_sign_in.code_hint" : "fresh_sign_in.authenticator_hint")}
       required

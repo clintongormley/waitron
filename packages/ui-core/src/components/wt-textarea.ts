@@ -60,6 +60,9 @@ export class WtTextarea extends LitElement {
   /** HTML reads `spellcheck="false"` as off; a plain Lit Boolean would read any present attribute as on. */
   @property({ converter: { fromAttribute: (value: string | null) => value !== "false" } })
   override spellcheck = true;
+  /** HTML reads `autocorrect="off"` as off; a plain Lit Boolean would read any present attribute as on. */
+  @property({ converter: { fromAttribute: (value: string | null) => value !== "off" } })
+  override autocorrect = true;
   @property() override autocapitalize = "";
   @property() autocomplete = "";
 
@@ -105,6 +108,7 @@ export class WtTextarea extends LitElement {
             maxlength=${this.maxlength ?? nothing}
             spellcheck=${this.spellcheck ? "true" : "false"}
             autocapitalize=${this.autocapitalize || nothing}
+            autocorrect=${this.autocorrect ? nothing : "off"}
             autocomplete=${this.autocomplete || nothing}
             aria-label=${this.hideLabel && this.label ? this.label : nothing}
             ?required=${this.required}

@@ -360,7 +360,23 @@ it("while loading Confirm is quiet (secondary) and disabled; a failed read shows
   await el.updateComplete;
   expect(confirm(el).variant).toBe("danger");
   expect(confirm(el).disabled).toBe(false);
-  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  const status = el.shadowRoot!.querySelector("[role=status]")!;
+  expect(status.querySelector("wt-spinner")).toBeNull();
+  expect(status.textContent!.trim()).toBe("");
+});
+
+it("the loading line is spoken by changing the text of a status line already in the page", async () => {
+  const el = await mount(impactOf());
+  const before = el.shadowRoot!.querySelector<HTMLElement>("[role=status]");
+  expect(before).not.toBeNull();
+  expect(before!.textContent!.trim()).toBe("");
+  expect(before!.getBoundingClientRect().height).toBe(0);
+  el.impact = undefined;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBe(before);
+  expect(before!.textContent!.trim()).toBe("Checking what changes…");
+  expect(before!.querySelector("wt-spinner")).not.toBeNull();
+  expect(before!.getBoundingClientRect().height).toBeGreaterThan(0);
 });
 
 it("a failed re-read while an earlier impact is on screen shows the error and Retry, and keeps the impact", async () => {

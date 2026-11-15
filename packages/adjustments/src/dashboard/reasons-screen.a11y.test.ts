@@ -311,7 +311,7 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
   });
 
   test.each([
-    ["loading", () => new Promise<never>(() => {}), ".status[role=status]"],
+    ["loading", () => new Promise<never>(() => {}), ".status[role=status] wt-spinner"],
     ["ready", async () => impact(), "[data-irreversible]:not([data-group=refusals] ~ *)"],
     [
       "refused",

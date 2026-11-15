@@ -379,6 +379,9 @@ export class SumUpAddReader extends LitElement {
       <wt-input
         class="field"
         name="pairingCode"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
         data-test="pairing-code"
         label=${t("payments.sumup.pairing_code")}
         required

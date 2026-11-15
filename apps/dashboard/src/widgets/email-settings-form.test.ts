@@ -57,6 +57,16 @@ it("opens quiet with redacted server details and empty credentials", async () =>
   await el.updateComplete;
   expect(client.saveEmailSettings).not.toHaveBeenCalled();
 });
+it("turns off autocorrect, the capital first letter and spellcheck on the server and user name", async () => {
+  const { el } = await mount();
+  for (const name of ["server", "user"]) {
+    await field(el, name).updateComplete;
+    const input = field(el, name).shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  }
+});
 it("requires fresh authentication before changing an authenticated gateway", async () => {
   const { el, client } = await mount();
   await edit(el, "from", "changed@example.test");

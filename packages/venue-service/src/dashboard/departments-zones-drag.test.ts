@@ -39,9 +39,11 @@ function pointer(
   target: Element | Document,
   type: string,
   at: { clientX: number; clientY: number },
+  init: PointerEventInit = {},
 ) {
   target.dispatchEvent(
     new PointerEvent(type, {
+      ...init,
       ...at,
       pointerId: 42,
       button: 0,
@@ -73,6 +75,16 @@ it("a grip drag lifts the complete visible row, marks every target cell and writ
     .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }]]);
   expect(el.model!.zones[0]!.departmentId).toBe("d1");
   expect(table.shadowRoot!.querySelector('[part~="dragging"]')).toBeNull();
+});
+it("a Control-click on a grip, a Mac's context-menu click, lifts no row and writes no move", async () => {
+  const { el, table, writes, grip } = await setup();
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip), { pointerType: "mouse", ctrlKey: true });
+  pointer(document, "pointermove", point(target));
+  expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+  pointer(document, "pointerup", point(target));
+  await el.updateComplete;
+  expect(writes).toEqual([]);
 });
 it.each(["same", "zone", "outside", "cancel", "escape", "disconnect", "refresh"])(
   "%s cancels without a move",

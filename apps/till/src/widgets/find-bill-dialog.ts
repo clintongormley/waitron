@@ -374,6 +374,9 @@ export class TillFindBillDialog extends LitElement {
             ></wt-price-input>`
           : html`<wt-input
                 name="terminal-reference"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 .label=${t("find_bill.card_reference")}
                 .value=${live(this.externalRef)}
                 .disabled=${this.busy || this.unconfirmed}

@@ -529,6 +529,24 @@ describe("choosing where backups go", () => {
     expect(api.applyBackup).not.toHaveBeenCalled();
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the folder and every bucket setting", async () => {
+    const { el } = await openConfigure();
+    await choose(el, "custom-s3");
+    const fields = [
+      q(el, "[data-test=destination]") as Field,
+      ...["endpoint", "region", "name", "prefix", "access-key-id", "secret-access-key"].map(
+        (name) => customField(el, name),
+      ),
+    ];
+    for (const field of fields) {
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(
+        ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+      ).toEqual(["none", "off", "false"]);
+    }
+  });
+
   it("a saved bucket opens as custom fields with Save quiet", async () => {
     const { el } = await openEdit(ON_STREAM_BUCKET);
     expect(choice(el)!.value).toBe("custom-s3");

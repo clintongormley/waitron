@@ -38,6 +38,16 @@ describe("till-invoice-recipient-dialog", () => {
     ).toBe("Spain");
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the tax number", async () => {
+    const el = await mountDialog();
+    const field = el.shadowRoot!.querySelector<TillInvoiceRecipientDialog>("wt-input[name=taxId]")!;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it.each(["en", "es-ES"])(
     "puts a server field refusal under its field with a generic bottom message in %s",
     async (locale) => {

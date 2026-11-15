@@ -1,5 +1,5 @@
 import { expect, test, afterEach } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-switch.js";
 
@@ -427,4 +427,16 @@ test("off track paints from the field-line token", async () => {
   expect(getComputedStyle(el.shadowRoot!.querySelector(".track")!).backgroundColor).toBe(
     "rgb(16, 17, 18)",
   );
+});
+
+test("the thumb slides, and under reduced motion it moves at once", async () => {
+  const el = await mount('<wt-switch label="Training mode"></wt-switch>');
+  const thumb = el.shadowRoot!.querySelector<HTMLElement>(".thumb")!;
+  expect(getComputedStyle(thumb).transitionDuration).not.toBe("0s");
+  await commands.emulateReducedMotion("reduce");
+  try {
+    expect(getComputedStyle(thumb).transitionDuration).toBe("0s");
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
 });

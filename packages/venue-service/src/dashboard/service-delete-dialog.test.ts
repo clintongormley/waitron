@@ -309,8 +309,14 @@ it.each([
     try {
       const dialog = await openDelete(screen);
       await ready(dialog);
-      const body = [...dialog.shadowRoot!.querySelector("wt-modal")!.children].filter(
-        (child) => child.getAttribute("slot") !== "footer",
+      const children = [...dialog.shadowRoot!.querySelector("wt-modal")!.children];
+      const status = children.filter((child) => child.getAttribute("role") === "status");
+      expect(status).toHaveLength(1);
+      expect(status[0]!.textContent!.trim()).toBe("");
+      expect(status[0]!.querySelector("wt-spinner")).toBeNull();
+      const body = children.filter(
+        (child) =>
+          child.getAttribute("slot") !== "footer" && child.getAttribute("role") !== "status",
       );
       expect(body.map((child) => child.textContent!.trim())).toEqual(["Restaurant", irreversible]);
     } finally {

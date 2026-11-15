@@ -128,6 +128,17 @@ describe("wizard Email step", () => {
     expect(el.shadowRoot!.querySelector("[data-test=from]")!.getAttribute("error")).toBeTruthy();
     expect(button(el, "test").disabled).toBe(false);
   });
+  it("turns off autocorrect, the capital first letter and spellcheck on the server and user name", async () => {
+    const { el } = await mount();
+    for (const name of ["server", "user"]) {
+      const field = el.shadowRoot!.querySelector<SetupEmailScreen>(`[data-test=${name}]`)!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(
+        ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+      ).toEqual(["none", "off", "false"]);
+    }
+  });
   it("renders semantic required inputs and Spanish labels", async () => {
     setLocale("es-ES");
     const { el } = await mount();

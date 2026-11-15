@@ -181,6 +181,21 @@ describe("stream-settings-panel: the bucket form", () => {
     ]);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on every bucket setting", async () => {
+    const { el } = await mount(stubApi());
+    const inputs = [...el.shadowRoot!.querySelectorAll("wt-input")] as (HTMLElement & {
+      updateComplete: Promise<unknown>;
+    })[];
+    expect(inputs).toHaveLength(6);
+    for (const field of inputs) {
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(
+        ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+      ).toEqual(["none", "off", "false"]);
+    }
+  });
+
   it("explains every missing field beside it and once above Save, focuses the first, and sends nothing", async () => {
     const api = stubApi();
     const { el } = await mount(api);

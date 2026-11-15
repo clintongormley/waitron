@@ -554,11 +554,12 @@ test("a column asking for end alignment aligns its header and its cells to the e
   expect(getComputedStyle(countCell!).textAlign).toBe("end");
 });
 
-test("only a sortable column offers a sort button, and one not sorted by reports no order", async () => {
+test("only a sortable column offers a sort button, and one not sorted by carries no aria-sort", async () => {
   const el = await table({ sortKey: "name" });
   const [name, count, actions] = [...el.shadowRoot!.querySelectorAll("th")];
   expect(name!.getAttribute("aria-sort")).toBe("ascending");
-  expect(count!.getAttribute("aria-sort")).toBe("none");
+  expect(count!.hasAttribute("aria-sort")).toBe(false);
+  expect(count!.querySelector("button.sort")).not.toBeNull();
   expect(actions!.hasAttribute("aria-sort")).toBe(false);
   expect(name!.querySelector("button.sort")).not.toBeNull();
   expect(actions!.querySelector("button")).toBeNull();
@@ -5266,7 +5267,7 @@ test("a hidden column stops sorting the rows, and showing it again restores its 
   expect(rowText(el)).toEqual(["Beaxb", "Adaxa"]);
   expect(el.sortKey).toBe("count");
   expect(el.sortDirection).toBe("descending");
-  expect(el.shadowRoot!.querySelector('th[aria-sort="none"] [data-sort="name"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('th:not([aria-sort]) [data-sort="name"]')).not.toBeNull();
   await choose(el, "count");
   expect(rowText(el)).toEqual(["Ada10xa", "Bea2xb"]);
 });

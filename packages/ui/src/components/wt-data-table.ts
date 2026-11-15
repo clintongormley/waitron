@@ -1560,7 +1560,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #startColumnDrag(event: PointerEvent, key: string): void {
-    if (event.button !== 0 || this.#columnDrag) return;
+    if (event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey) || this.#columnDrag)
+      return;
     const row = (event.currentTarget as HTMLElement).closest<HTMLElement>("[data-column-row]")!;
     this.#columnDrag = {
       key,
@@ -2658,11 +2659,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       : nothing
                 }
                 aria-sort=${
-                  column.sortValue === undefined
-                    ? nothing
-                    : this.sortKey === column.key
-                      ? this.sortDirection
-                      : "none"
+                  column.sortValue !== undefined && this.sortKey === column.key
+                    ? this.sortDirection
+                    : nothing
                 }
               >
                 ${this.#treeHeading(

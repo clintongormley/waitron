@@ -424,8 +424,8 @@ test("a selected tab wider than the strip shows its start, cut where the action 
     .getBoundingClientRect();
   expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
   expect(tablist(el).scrollLeft).toBeGreaterThan(0);
-  expect(tab.left).toBeGreaterThanOrEqual(strip.left - 1);
-  expect(tab.left).toBeLessThanOrEqual(strip.left + 1);
+  expect(tab.left).toBeGreaterThanOrEqual(strip.left);
+  expect(tab.left).toBeLessThan(strip.left + 1);
   expect(strip.right).toBeLessThanOrEqual(action.left + 1);
 });
 
@@ -442,8 +442,9 @@ test.each(["ltr", "rtl"] as const)(
     const tab = buttons(el)[2]!.getBoundingClientRect();
     expect(strip.left).toBeGreaterThanOrEqual(40);
     expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
-    if (dir === "ltr") expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
-    else expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+    const start = dir === "ltr" ? tab.left - strip.left : strip.right - tab.right;
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(start).toBeLessThan(1);
   },
 );
 
@@ -457,7 +458,8 @@ test("right to left, a selected tab wider than the strip shows its start at the 
   const tab = buttons(el)[2]!.getBoundingClientRect();
   expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
   expect(tablist(el).scrollLeft).toBeLessThan(0);
-  expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+  expect(strip.right - tab.right).toBeGreaterThanOrEqual(0);
+  expect(strip.right - tab.right).toBeLessThan(1);
 });
 
 test("right to left, a selected tab that fits scrolls in only as far as its end", async () => {
@@ -647,8 +649,8 @@ function expectSelectedInView(el: WtTabs) {
   const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
   const strip = tablist(el).getBoundingClientRect();
   const box = selected.getBoundingClientRect();
-  expect(box.left).toBeGreaterThanOrEqual(strip.left - 1);
-  expect(box.right).toBeLessThanOrEqual(strip.right + 1);
+  expect(box.left).toBeGreaterThanOrEqual(strip.left);
+  expect(box.right).toBeLessThanOrEqual(strip.right);
 }
 async function selectLastWide() {
   const el = await setup();
@@ -815,7 +817,9 @@ test("a marked tab shows a star after its label and is named with what the star 
   const star = marked.querySelector<HTMLElement>(".mark")!;
   expect(star.textContent).toBe("*");
   expect(star.getAttribute("aria-hidden")).toBe("true");
-  expect(marked.textContent!.replace(/\s+/g, " ").trim().startsWith("Menus*")).toBe(true);
+  const shown = marked.cloneNode(true) as HTMLElement;
+  shown.querySelector(".bold-copy")!.remove();
+  expect(shown.textContent!.replace(/\s+/g, " ").trim().startsWith("Menus*")).toBe(true);
   await expect
     .element(page.getByRole("tab", { name: "Menus, unpublished changes", exact: true }))
     .toBeInTheDocument();
@@ -1001,18 +1005,20 @@ test("a marked tab keeps its colour under the fade, which masks the strip and no
 function fadeWidth(el: WtTabs): number {
   return 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6"));
 }
-/** The selected tab lies clear of each faded end, so no part of it is drawn faint. */
+/** The selected tab lies clear of each faded end, so no part of it is drawn faint. A fade is
+ * never wider than half the room beside the tab. */
 function expectSelectedClearOfFade(el: WtTabs) {
   expectSelectedInView(el);
   const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
   const strip = tablist(el).getBoundingClientRect();
   const box = selected.getBoundingClientRect();
+  const fade = Math.min(fadeWidth(el), (strip.width - box.width) / 2);
   const rtl = getComputedStyle(tablist(el)).direction === "rtl";
   const overflow = el.dataset.overflow ?? "";
   const leftCut = ["both", rtl ? "end" : "start"].includes(overflow);
   const rightCut = ["both", rtl ? "start" : "end"].includes(overflow);
-  if (leftCut) expect(box.left).toBeGreaterThanOrEqual(strip.left + fadeWidth(el) - 1);
-  if (rightCut) expect(box.right).toBeLessThanOrEqual(strip.right - fadeWidth(el) + 1);
+  if (leftCut) expect(box.left).toBeGreaterThanOrEqual(strip.left + fade - 1);
+  if (rightCut) expect(box.right).toBeLessThanOrEqual(strip.right - fade + 1);
 }
 
 test.each(["ltr", "rtl"] as const)(
@@ -1048,8 +1054,10 @@ test.each(["ltr", "rtl"] as const)(
     const strip = tablist(el).getBoundingClientRect();
     const box = buttons(el)[1]!.getBoundingClientRect();
     expect(el.dataset.overflow).toBe("both");
-    if (dir === "ltr") expect(box.left - strip.left).toBeCloseTo(40, 0);
-    else expect(strip.right - box.right).toBeCloseTo(40, 0);
+    // The strip stops at a whole pixel, so the tab lands up to a pixel clear of the fade.
+    const short = dir === "ltr" ? box.left - strip.left : strip.right - box.right;
+    expect(short).toBeGreaterThanOrEqual(40);
+    expect(short).toBeLessThan(41);
   },
 );
 
@@ -1300,17 +1308,18 @@ test.each(["ltr", "rtl"] as const)(
 
 // Chromium rounds scrollWidth to the nearest pixel but cuts a right-to-left strip's far-end scroll
 // position toward zero, so a strip pulled back to an end of 70.69 px reports 70 against an end of
-// 71, the position it was left at.
+// 71, the position it was left at. The widths are fixed before the tab is selected: with labels
+// wide enough, the strip would start at its end, already past that position.
 test("rtl, a selected tab that shrinks, pulling the strip back a pixel to an end it rounds up to where it was, and then grows is scrolled back so all of it is in view", async () => {
   const el = await setup();
   host.dir = "rtl";
   host.style.width = "300px";
-  el.value = "routes";
-  await el.updateComplete;
   const [first, second, selected] = buttons(el);
   first!.style.width = "100px";
   second!.style.width = "100px";
   selected!.style.width = "150.7px";
+  el.value = "routes";
+  await el.updateComplete;
   await frames();
   const shown = Math.abs(tablist(el).scrollLeft);
   selected!.style.width = "146.7px";
@@ -1364,4 +1373,109 @@ test("stops watching a tab once another is selected, and watches the new one", a
   await el.updateComplete;
   expect(unobserve).toHaveBeenCalledWith(old);
   expect(observe).toHaveBeenCalledWith(buttons(el)[0], { box: "border-box" });
+});
+
+test("Tab from the selected tab goes straight to the first control in its panel", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><div slot="plain"><p>Notes</p><button id="first">First</button></div><div slot="field"><wt-input label="Name"></wt-input></div><div slot="text">Only text</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [
+    { key: "plain", label: "Plain" },
+    { key: "field", label: "Field" },
+    { key: "text", label: "Text" },
+  ];
+  await el.updateComplete;
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  expect(document.activeElement!.id).toBe("first");
+  await userEvent.click(page.elementLocator(buttons(el)[1]!));
+  await userEvent.tab();
+  expect(document.activeElement).toBe(el.querySelector("wt-input"));
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(el.shadowRoot!.activeElement).toBe(buttons(el)[1]);
+  await userEvent.click(page.elementLocator(buttons(el)[2]!));
+  await userEvent.tab();
+  expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+});
+
+test("selecting a tab keeps every tab's width and position, though its label turns bold", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><div slot="a">a</div><div slot="b">b</div><div slot="c">c</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [
+    { key: "a", label: "Allergens and dietary" },
+    { key: "b", label: "Availability windows" },
+    { key: "c", label: "Prices", help: { label: "About prices", text: "Prices help." } },
+  ];
+  await el.updateComplete;
+  const strip = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+  const boxes = () =>
+    buttons(el).map((tab) => {
+      const box = tab.getBoundingClientRect();
+      return [box.left + strip.scrollLeft, box.width];
+    });
+  const before = boxes();
+  for (const key of ["b", "c"]) {
+    el.value = key;
+    await el.updateComplete;
+    const selected = el.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!;
+    expect(getComputedStyle(selected).fontWeight).not.toBe(
+      getComputedStyle(buttons(el)[0]!).fontWeight,
+    );
+    expect(boxes()).toEqual(before);
+  }
+  await expect
+    .element(page.elementLocator(buttons(el)[1]!))
+    .toHaveAccessibleName("Availability windows");
+});
+
+async function panelHolding(content: string) {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><section slot="a"><p>Notes</p>${content}</section></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [{ key: "a", label: "A" }];
+  await el.updateComplete;
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  return el;
+}
+
+test.each([
+  ["a hidden input", '<input type="hidden" name="id">'],
+  ["a button inside a hidden element", "<div hidden><button>Hidden</button></div>"],
+  ["a button inside an inert element", "<div inert><button>Inert</button></div>"],
+  ["a button shown nowhere", '<button style="display: none">Gone</button>'],
+  ["an invisible button", '<button style="visibility: hidden">Invisible</button>'],
+  ["text that cannot be edited", '<p contenteditable="false">Fixed</p>'],
+  ["a link with no address", "<a>Nowhere</a>"],
+  ["a disabled button", "<button disabled>Off</button>"],
+  ["a button taken out of the tab order", '<button tabindex="-1">Skipped</button>'],
+])("a panel holding text and %s is a Tab stop of its own", async (_, content) => {
+  const el = await panelHolding(content);
+  expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+});
+
+test.each([
+  ["a details summary", "<details><summary>More</summary><p>Hidden</p></details>", "summary"],
+  ["editable text", "<p contenteditable>Edit me</p>", "[contenteditable]"],
+  ["a link", '<a href="#notes">Notes</a>', "a"],
+])("a panel holding %s gives Tab to it, not to the panel", async (_, content, selector) => {
+  const el = await panelHolding(content);
+  expect(document.activeElement).toBe(el.querySelector(selector));
+  expect(el.shadowRoot!.querySelector('[role="tabpanel"]')!.hasAttribute("tabindex")).toBe(false);
+});
+
+test("a panel whose only control sits in a shadow root inside a shadow root gives Tab to it", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><section slot="a"><p>Notes</p><div></div></section></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [{ key: "a", label: "A" }];
+  await el.updateComplete;
+  const inner = document.createElement("div");
+  el.querySelector("section > div")!.attachShadow({ mode: "open" }).append(inner);
+  const control = document.createElement("button");
+  inner.attachShadow({ mode: "open" }).append(control);
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  expect(inner.shadowRoot!.activeElement).toBe(control);
 });

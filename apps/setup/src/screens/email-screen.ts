@@ -216,6 +216,9 @@ export class SetupEmailScreen extends LitElement {
     return html`<wt-input
       class="field"
       name=${`smtp-${field}`}
+      autocapitalize="none"
+      autocorrect="off"
+      spellcheck="false"
       data-test=${field}
       label=${t(`email.${field}.label`)}
       hint=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : t(`email.${field}.hint`)}

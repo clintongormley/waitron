@@ -6,12 +6,12 @@ import "./wt-spinner.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-spinner a11y (%s theme)", (theme) => {
-  test.each(["sm", "md", "lg"] as const)("%s status spinner", async (size) => {
+  test.each(["sm", "md", "lg"] as const)("%s progress-bar spinner", async (size) => {
     await mountThemed(`<wt-spinner size="${size}"></wt-spinner>`, theme);
     await expectNoA11yViolations(host);
   });
 
-  test("status spinner with a localized label", async () => {
+  test("progress-bar spinner with a localized label", async () => {
     await mountThemed('<wt-spinner label="Buscando"></wt-spinner>', theme);
     await expectNoA11yViolations(host);
   });

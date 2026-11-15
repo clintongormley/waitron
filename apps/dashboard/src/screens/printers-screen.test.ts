@@ -993,6 +993,40 @@ describe("guided printer calibration", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on a printer's host and probe address", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    openDetailsEdit(el);
+    await flush(el);
+    const host = q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput;
+    await host.updateComplete;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) =>
+        host.shadowRoot!.querySelector("input")!.getAttribute(name),
+      ),
+    ).toEqual(["none", "off", "false"]);
+    const { el: adding } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(adding);
+    q(adding, "[data-test=open-add-printer]")!.click();
+    await flush(adding);
+    q(adding, "[data-test=probe-panel] summary")!.click();
+    await flush(adding);
+    const probe = q(adding, "[data-test=probe-host]") as import("@waitron/ui").WtInput;
+    await probe.updateComplete;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) =>
+        probe.shadowRoot!.querySelector("input")!.getAttribute(name),
+      ),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("does not resend detail edits when finishing calibration", async () => {
     let stored = { ...printers[0]! };
     const api = stubApi({

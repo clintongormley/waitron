@@ -259,6 +259,21 @@ describe("setup-venue-screen", () => {
     }
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the tax number and series codes only", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const attributes = async (name: string) => {
+      const field = el.shadowRoot!.querySelector<SetupVenueScreen>(`wt-input[name=${name}]`)!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      return ["autocapitalize", "autocorrect", "spellcheck"].map((attr) =>
+        input.getAttribute(attr),
+      );
+    };
+    for (const name of ["taxId", "seriesCode", "fullSeriesCode", "rectificativeSeriesCode"])
+      expect(await attributes(name)).toEqual(["none", "off", "false"]);
+    expect(await attributes("legalName")).toEqual([null, null, null]);
+  });
+
   it("collects every field and emits the nested venue patch, then a screen-agnostic advance", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);

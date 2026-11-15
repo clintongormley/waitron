@@ -225,7 +225,8 @@ export class PhotoFramingDialog extends LitElement {
     });
   }
   #start(event: PointerEvent): void {
-    if (event.button !== 0 || this.#pointer || !this.dimensions) return;
+    if (event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey)) return;
+    if (this.#pointer || !this.dimensions) return;
     event.preventDefault();
     event.stopPropagation();
     const frame = event.currentTarget as HTMLElement;

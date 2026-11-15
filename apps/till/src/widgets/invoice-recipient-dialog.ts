@@ -547,6 +547,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
         }
         <wt-input
           name="taxId"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
           required
           autocomplete="off"
           .label=${t(this.identifierType === "tax-number" ? "invoice.tax_id" : "invoice.document_number")}

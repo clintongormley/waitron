@@ -1084,6 +1084,18 @@ test.each(["Escape", "open"] as const)(
 
 type WithOpener = Openable & { opener: HTMLElement | null };
 
+/** In the tab order, yet takes no focus: its focus goes to its first control, which is disabled. */
+customElements.define(
+  "test-delegating-host",
+  class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open", delegatesFocus: true }).innerHTML =
+        "<button disabled>Later</button>";
+    }
+  },
+);
+
 /** A dialog after a row of two buttons, the first to have focus at opening, with a button after the
  * dialog to name as its opener. */
 async function scene() {
@@ -1117,6 +1129,14 @@ test.each(lostByClosing)(
     expect(deepActiveElement()).toBe(nearby);
   },
 );
+
+test("closed with no opener, passes over a component in the tab order that takes no focus", async () => {
+  const { el, target, nearby } = await scene();
+  target.after(document.createElement("test-delegating-host"));
+  target.nextElementSibling!.setAttribute("tabindex", "0");
+  await openAndClose(el, target, "open", () => target.remove());
+  expect(deepActiveElement()).toBe(nearby);
+});
 
 test.each(lostByClosing)(
   "closed by %s, puts focus on the opener when what had it at opening was %s",
@@ -1740,6 +1760,10 @@ test.each([
   [
     "a field inside a wrapper that takes focus only from script",
     '<div tabindex="-1"><label>Note <input name="note" /></label></div>',
+  ],
+  [
+    "after a component in the tab order whose own controls are all switched off",
+    '<div><test-delegating-host tabindex="0"></test-delegating-host><input name="note" /></div>',
   ],
 ])("opens a long dialog with focus on its first field when that is %s", async (_, field) => {
   await openAtPhoneSize(`${field}<div style="height: 1800px">Long order</div>`);

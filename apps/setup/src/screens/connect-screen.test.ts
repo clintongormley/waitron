@@ -184,6 +184,17 @@ describe("setup-connect-screen", () => {
     ]);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the sign-in code", async () => {
+    const { el } = await mount();
+    await toLogin(el);
+    const field = q(el, "[data-test=totp]") as SetupConnectScreen;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("carries a filled TOTP into the credential object", async () => {
     const { el, host } = await mount();
     const events = collect(host);

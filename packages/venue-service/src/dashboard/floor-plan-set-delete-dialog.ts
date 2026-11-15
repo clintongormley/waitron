@@ -48,6 +48,9 @@ export class FloorPlanSetDeleteDialog extends LitElement {
         margin: 0;
         padding-block: var(--wt-space-3);
       }
+      .status:empty {
+        padding-block: 0;
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -128,6 +131,10 @@ export class FloorPlanSetDeleteDialog extends LitElement {
     if (!this.open || !this.set) return nothing;
     const set = this.set;
     const impact = this.impact;
+    const status =
+      impact || this.readError
+        ? nothing
+        : html`<wt-spinner size="sm" decorative></wt-spinner>${t("period.delete_loading")}`;
     return html`<wt-modal
       open
       size="compact"
@@ -140,16 +147,13 @@ export class FloorPlanSetDeleteDialog extends LitElement {
         this.emit("floor-plan-set-delete-close");
       }}
     >
+      <p class="status" role="status">${status}</p>
       ${
         impact
           ? html`<div class="body" data-test="body">
               ${this.lines(impact).map((line) => html`<p>${line}</p>`)}${this.picker(impact)}
             </div>`
-          : this.readError
-            ? nothing
-            : html`<p class="status" role="status">
-                <wt-spinner size="sm" decorative></wt-spinner>${t("period.delete_loading")}
-              </p>`
+          : nothing
       }
       <wt-form-actions slot="footer" .error=${this.bottomError()}>
         <wt-button

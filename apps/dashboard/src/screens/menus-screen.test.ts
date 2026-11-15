@@ -799,8 +799,11 @@ function emit(target: Element, name: string, detail: unknown): void {
   target.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
 
+/** A node's visible text, without a `wt-tabs` label's hidden bold copy. */
 function text(node: Element | null): string {
-  return (node?.textContent ?? "").replace(/\s+/g, " ").trim();
+  const copy = node?.cloneNode(true) as Element | undefined;
+  copy?.querySelectorAll('.bold-copy[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+  return (copy?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 /** Opens a list for editing the way a person does, through the tree. */

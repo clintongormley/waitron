@@ -115,6 +115,18 @@ async function fillAndPair(el: SumUpAddReader): Promise<void> {
 }
 
 describe("sumup-add-reader", () => {
+  it("turns off autocorrect, the capital first letter and spellcheck on the pairing code", async () => {
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+      request: stubRequest({}),
+    });
+    const field = q(el, "[data-test=pairing-code]") as SumUpAddReader;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("keeps a reader paired after Cancel while the pair POST was still pending", async () => {
     vi.useFakeTimers();
     try {

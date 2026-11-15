@@ -829,3 +829,15 @@ test("changing the heading while the section opens lets the opening carry on whe
   await finishHeightTransition(body, opening);
   expect(body.getBoundingClientRect().height).toBe(200);
 });
+
+test("the chevron turns, and under reduced motion it turns at once", async () => {
+  const el = await mount('<wt-disclosure heading="Details"><p>body</p></wt-disclosure>');
+  const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
+  expect(getComputedStyle(chevron).transitionDuration).not.toBe("0s");
+  await commands.emulateReducedMotion("reduce");
+  try {
+    expect(getComputedStyle(chevron).transitionDuration).toBe("0s");
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
+});

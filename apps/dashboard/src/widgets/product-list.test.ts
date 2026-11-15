@@ -1819,6 +1819,34 @@ it("ignores a right-button press on a product name", async () => {
   expect(cell.closest("tr")!.part.contains("dragging")).toBe(false);
 });
 
+it("ignores a Control-click on a product name, a Mac's context-menu click", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "bun" })],
+  });
+  const cell = (await tableRoot(el)).querySelector<HTMLElement>('[part~="product-cell"]')!;
+  const offered: string[][] = [];
+  el.addEventListener("drag-items", (event) =>
+    offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 9,
+      pointerType: "mouse",
+      button: 0,
+      buttons: 1,
+      ctrlKey: true,
+    }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, composed: true, pointerId: 9, clientY: 40 }),
+  );
+  expect(offered.filter((keys) => keys.length)).toEqual([]);
+  expect(cell.closest("tr")!.part.contains("dragging")).toBe(false);
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9 }));
+});
+
 it("does not start the browser's native image drag from a product thumbnail", async () => {
   const { el } = await mountWidget<ProductList>("dashboard-product-list", {
     products: [product({ id: "pictured", image: mediaTestReference("abc123.webp") })],

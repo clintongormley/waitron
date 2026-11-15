@@ -1533,6 +1533,20 @@ it("drags a member below a sibling, marking it, with a ghost and a gap, and send
   expect(ghost(el)).toBeNull();
 });
 
+it("a Control-click on a grip, a Mac's context-menu click, starts no drag and moves nothing", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-fav");
+  const down = pointer(from, "pointerdown", from, { pointerType: "mouse", ctrlKey: true });
+  pointer(from, "pointermove", nameAt(el, "m-burger"));
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  expect(ghost(el)).toBeNull();
+  expect(down.defaultPrevented).toBe(false);
+  pointer(from, "pointerup", nameAt(el, "m-burger"));
+  expect(moves).toEqual([]);
+});
+
 it("shows the gap before the sibling when dragging upwards", async () => {
   const el = await mount();
   const moves = listen(el, "wt-member-move");

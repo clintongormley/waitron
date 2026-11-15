@@ -288,8 +288,22 @@ test("while the impact loads, its status shows and Delete stays quiet and disabl
   expect(inner(el, "confirm").disabled, "an impact still refreshing").toBe(true);
   el.loading = false;
   await settle(el);
-  expect(el.shadowRoot!.querySelector('[role="status"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe("");
+  expect(el.shadowRoot!.querySelector('[role="status"] wt-spinner')).toBeNull();
   expect(inner(el, "confirm").disabled).toBe(false);
+});
+
+test("the loading line is spoken by changing the text of a status line already in the page", async () => {
+  const el = await openDialog({ impact: readyImpact() });
+  const before = el.shadowRoot!.querySelector<HTMLElement>('[role="status"]');
+  expect(before).not.toBeNull();
+  expect(before!.getBoundingClientRect().height).toBe(0);
+  expect(getComputedStyle(before!).marginBottom).toBe("0px");
+  el.loading = true;
+  await settle(el);
+  expect(el.shadowRoot!.querySelector('[role="status"]')).toBe(before);
+  expect(before!.textContent!.trim()).toBe(copy.loading);
+  expect(before!.getBoundingClientRect().height).toBeGreaterThan(0);
 });
 
 test("a failed read shows its message above the buttons, keeps Delete off and offers Retry", async () => {

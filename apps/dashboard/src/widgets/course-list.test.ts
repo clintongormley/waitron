@@ -1469,7 +1469,7 @@ describe("permanent delete lifecycle", () => {
     q(el, '[data-test="remove-c1"]')!.click();
     await settle(el);
     expect(deleteControl(el, "confirm")!.disabled).toBe(true);
-    expect(inDelete(el, '[role="status"]')).not.toBeNull();
+    expect(inDelete(el, '[role="status"] wt-spinner')).not.toBeNull();
     deleteControl(el, "confirm")!.click();
     expect(api.deleteCourse).not.toHaveBeenCalled();
     answer(impactFor("c1"));

@@ -4,6 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import { HelpModeController } from "../help-mode.js";
+import { holdsTabbable } from "../tabbable.js";
 import "./wt-help-tooltip.js";
 import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 
@@ -19,6 +20,12 @@ export interface TabItem {
 
 /** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
 const FADE_SPACES = 2;
+
+// Chromium leaves the strip at a whole pixel (asked for 155.33, it stops at 155), so a distance
+// that brings an edge in is rounded up, landing that edge inside the strip, not a fraction past it.
+function scrollStrip(bar: HTMLElement, by: number): void {
+  bar.scrollLeft += by > 0 ? Math.ceil(by) : Math.floor(by);
+}
 
 @customElement("wt-tabs")
 export class WtTabs extends LitElement {
@@ -102,6 +109,17 @@ export class WtTabs extends LitElement {
         color: var(--wt-color-text-muted);
         font: inherit;
         cursor: pointer;
+      }
+      /* A hidden bold copy sets every label's width, so selecting a tab moves nothing. */
+      .label {
+        display: inline-flex;
+        flex-direction: column;
+      }
+      .bold-copy {
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        font-weight: var(--wt-font-weight-bold);
       }
       button[aria-selected="true"] {
         color: var(--wt-color-text);
@@ -279,9 +297,11 @@ export class WtTabs extends LitElement {
     const barBounds = bar.getBoundingClientRect();
     const tabBounds = selected.getBoundingClientRect();
     const rtl = getComputedStyle(bar).direction === "rtl";
-    // A tab wider than the strip shows its start, so its label reads from the beginning.
+    // A tab wider than the strip shows its start, so its label reads from the beginning; rounded
+    // like `scrollStrip`, toward keeping that start inside.
     if (tabBounds.width > barBounds.width) {
-      bar.scrollLeft += rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      const by = rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      bar.scrollLeft += rtl ? Math.ceil(by) : Math.floor(by);
     } else {
       // Stop short of a faded end wherever another tab lies beyond it, so that tab is the faint one.
       const fade = this.#fadeWidth(bar, selected);
@@ -289,8 +309,8 @@ export class WtTabs extends LitElement {
       const after = index < tabs.length - 1 ? fade : 0;
       const toLeft = tabBounds.left - barBounds.left - (rtl ? after : before);
       const toRight = tabBounds.right - barBounds.right + (rtl ? before : after);
-      if (rtl ? toRight > 0 : toLeft < 0) bar.scrollLeft += rtl ? toRight : toLeft;
-      else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
+      if (rtl ? toRight > 0 : toLeft < 0) scrollStrip(bar, rtl ? toRight : toLeft);
+      else if (rtl ? toLeft < 0 : toRight > 0) scrollStrip(bar, rtl ? toLeft : toRight);
     }
     this.#shownScroll = bar.scrollLeft;
   }
@@ -359,9 +379,27 @@ export class WtTabs extends LitElement {
     tabs[index]!.focus({ preventScroll: true });
   }
 
+  constructor() {
+    super();
+    // Checked as focus arrives and before Tab moves it, when slotted content has rendered.
+    this.addEventListener("focusin", () => this.#syncPanelStop());
+    this.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") this.#syncPanelStop();
+    });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated) this.#observeSizes();
+  }
+
+  /** A panel is a Tab stop of its own only when nothing inside it can take focus. */
+  #syncPanelStop(): void {
+    for (const panel of this.renderRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')) {
+      const slotted = panel.querySelector("slot")!.assignedElements({ flatten: true });
+      if (panel.hidden || holdsTabbable(slotted)) panel.removeAttribute("tabindex");
+      else panel.tabIndex = 0;
+    }
   }
 
   override disconnectedCallback(): void {
@@ -380,6 +418,7 @@ export class WtTabs extends LitElement {
     this.#showOverflow();
     this.#placeBadges();
     this.#syncStickyHeight();
+    this.#syncPanelStop();
   }
 
   #syncStickyHeight(): void {
@@ -427,9 +466,10 @@ export class WtTabs extends LitElement {
                 @click=${(event: MouseEvent) => this.#select(event, item.key)}
                 @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
               >
-                ${item.help ? html`<span class="tab-label">${item.label}</span>` : item.label}${
-                  item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing
-                }
+                <span class="label"
+                  ><span class=${item.help ? "tab-label" : nothing}>${item.label}</span
+                  ><span class="bold-copy" aria-hidden="true">${item.label}</span></span
+                >${item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing}
               </button>`,
           )}
         </div>
@@ -454,7 +494,6 @@ export class WtTabs extends LitElement {
             role="tabpanel"
             id=${`${this.#id}-panel-${index}`}
             aria-labelledby=${`${this.#id}-tab-${index}`}
-            tabindex="0"
             ?hidden=${item.key !== this.#selected}
           >
             <slot name=${item.key}></slot>

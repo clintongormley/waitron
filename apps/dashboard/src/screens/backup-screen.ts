@@ -1519,6 +1519,9 @@ export class BackupScreen extends LitElement {
           ? html`<wt-input
               data-test="destination"
               name="backup-folder"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               required
               label=${t("backup.destination.label")}
               hint=${t("backup.destination.hint")}
@@ -1712,6 +1715,9 @@ export class BackupScreen extends LitElement {
           ? html`<wt-input
                 data-test="paste-key"
                 name="recovery-key"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 label=${t("backup.key.paste_label")}
                 .value=${this.pastedKey}
                 .error=${this.#pastedKeyInvalid ? codeMessage("backup.recovery_key_too_short") : ""}

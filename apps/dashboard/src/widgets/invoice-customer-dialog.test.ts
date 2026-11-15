@@ -175,6 +175,15 @@ describe.each([
     return mountDialog(find, undefined, download);
   };
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the tax number", async () => {
+    const { el } = await mount(async () => THREE);
+    await taxField(el).updateComplete;
+    const input = taxField(el).shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("keeps Find quiet and disabled while the field is empty, and primary once it has text", async () => {
     const { el } = await mount(async () => THREE);
     expect(findButton(el).disabled).toBe(true);

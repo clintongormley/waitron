@@ -1047,7 +1047,7 @@ export class WtFloorPlanCanvas extends LitElement {
     )
       return;
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
-    if (this.#drag !== null || e.button !== 0) return;
+    if (this.#drag !== null || e.button !== 0 || (e.pointerType === "mouse" && e.ctrlKey)) return;
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
     e.preventDefault();
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });

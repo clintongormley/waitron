@@ -130,8 +130,11 @@ function q<T extends Element = HTMLElement>(el: MenusScreen, selector: string): 
   return el.shadowRoot!.querySelector<T>(selector);
 }
 
+/** A node's visible text, without a `wt-tabs` label's hidden bold copy. */
 function text(node: Element | null): string {
-  return (node?.textContent ?? "").replace(/\s+/g, " ").trim();
+  const copy = node?.cloneNode(true) as Element | undefined;
+  copy?.querySelectorAll('.bold-copy[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+  return (copy?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 /** Every element matching `selector` in `root` and in every shadow root under it. */

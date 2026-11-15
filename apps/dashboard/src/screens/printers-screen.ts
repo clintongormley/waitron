@@ -3496,6 +3496,9 @@ export class PrintersScreen extends LitElement {
         network
           ? html`<wt-input
                 name="printer-detail-host"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
                 label=${t("printers.host")}
                 required
                 ?disabled=${draft.saving}
@@ -5053,6 +5056,9 @@ export class PrintersScreen extends LitElement {
         >
           <wt-input
             name="printer-probe-address"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
             required
             label=${t("printers.probe_host")}
             data-test="probe-host"

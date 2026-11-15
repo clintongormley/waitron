@@ -49,6 +49,13 @@ export class WtInput extends LitElement {
   @property() type = "text";
   @property({ attribute: "decimal-locale" }) decimalLocale = "";
   @property() autocomplete = "";
+  /** HTML reads `spellcheck="false"` as off; a plain Lit Boolean would read any present attribute as on. */
+  @property({ converter: { fromAttribute: (value: string | null) => value !== "false" } })
+  override spellcheck = true;
+  /** HTML reads `autocorrect="off"` as off; a plain Lit Boolean would read any present attribute as on. */
+  @property({ converter: { fromAttribute: (value: string | null) => value !== "off" } })
+  override autocorrect = true;
+  @property() override autocapitalize = "";
   @property() placeholder = "";
   @property({ type: Number }) maxlength?: number;
   @property({ type: Number }) step?: number;
@@ -119,6 +126,9 @@ export class WtInput extends LitElement {
             type=${this.decimalLocale ? "text" : this.type}
             inputmode=${this.decimalLocale ? "decimal" : nothing}
             autocomplete=${this.autocomplete || nothing}
+            autocapitalize=${this.autocapitalize || nothing}
+            autocorrect=${this.autocorrect ? nothing : "off"}
+            spellcheck=${this.spellcheck ? nothing : "false"}
             placeholder=${this.placeholder || this.hint}
             maxlength=${this.maxlength ?? nothing}
             step=${this.step ?? nothing}

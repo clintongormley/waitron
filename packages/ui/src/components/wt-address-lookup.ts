@@ -104,6 +104,10 @@ export class WtAddressLookup extends LitElement {
       .status {
         margin: var(--wt-space-1) 0 0;
       }
+
+      .status:empty {
+        margin: 0;
+      }
     `,
   ];
 
@@ -333,7 +337,7 @@ export class WtAddressLookup extends LitElement {
             </li>`,
         )}
       </ul>
-      ${line ? html`<p id=${this.statusId} class="status" role="status">${line}</p>` : nothing}
+      <p id=${this.statusId} class="status" role="status">${line || nothing}</p>
     `;
   }
 }
