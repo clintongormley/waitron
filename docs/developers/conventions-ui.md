@@ -2564,3 +2564,19 @@ does not see.
 
 > The inventory guard is weaker than its name: only its till/device/schedule mounts, and
 > device-proof refusals.
+
+## Root receipts moved on 2026-11-15
+
+These excerpts are from `CLAUDE.md` at `53688274b5`; they are not new measurements. Each heading
+names the root entry the excerpt was cut from; the entry keeps its rule, guard and pointer.
+
+### A login refusal never reveals account existence
+
+> or attempts sent at once finish sooner for an unknown address.
+
+> Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
+
+### The unauthenticated recovery page's title and action are fixed strings chosen by the error code
+
+> the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
+> read the text tables, not the page.

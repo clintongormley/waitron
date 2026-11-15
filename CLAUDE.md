@@ -166,8 +166,8 @@ hook, or how tests are scheduled. What named guards miss:
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
   gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: the process-tree probe covers pnpm setup only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
-  GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
+  rule; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  GNU preference and deadline arguments.
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
   and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:
@@ -231,6 +231,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
+
+[Receipts moved on 2026-11-15](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-15).
 
 - **A refusal explains what happened and what each choice does; offer any needed administrator or
   owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody
@@ -327,8 +329,8 @@ called weaker than its name, the topic file lists what it does not see.
   after the same hashing work, as one sentence with no field marked. Only missing/malformed
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
-  stable per address, or attempts sent at once finish sooner for an unknown address.
-  Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
+  stable per address.
+  Guards: identity login and route suites, weaker than the set looks.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
   service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
@@ -383,8 +385,7 @@ called weaker than its name, the topic file lists what it does not see.
   suggesting removal (A1098, A1501). The
   tail's span and the cost of taking that password without HTTPS:
   [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
-  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
-  read the text tables, not the page.
+  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -1035,7 +1036,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 ## 6. Workflow
 
 The commands, the dev stack and the receipts are in
-[workflow-guide.md](docs/developers/workflow-guide.md#root-detail-moved-on-2026-10-26). **Model selection is not a waitron rule** —
+[workflow-guide.md](docs/developers/workflow-guide.md#root-detail-moved-on-2026-10-26) and
+[receipts moved on 2026-11-15](docs/developers/workflow-guide.md#root-receipts-moved-on-2026-11-15).
+**Model selection is not a waitron rule** —
 it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse: Codex implements and Claude reviews — so establish who is driving
 before treating an implementation as a rule violation.
 
@@ -1056,8 +1059,7 @@ before treating an implementation as a rule violation.
   `CONFLICTING` or a failed check. Procedure:
   [workflow-guide.md](docs/developers/workflow-guide.md#commits-pull-requests-and-merging).
   Package-level failures caused only by combining branches are checked at the next full run, not at
-  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
-  merge commit carries no sign-off and fails DCO.
+  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`**.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.
   Procedure: [workflow-guide.md](docs/developers/workflow-guide.md).
@@ -1086,10 +1088,9 @@ before treating an implementation as a rule violation.
   `~/workspace/.waitron-dev/claude/<name>`** (owner, 2026-11-14). The owner's demo venue, shared
   by the owner's checkouts, survives moving between them, so a branch's migrations can fail on its
   rows. Claude rebuilds it only from the main checkout (`wa-wt reset demo waitron`, which stops and
-  restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Cost: a Claude
-  reset on slot 2 rewrote the main checkout's `.env`, and the owner's next start got a dashboard that
-  could not reach its server. Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name (stand-in `pnpm`
-  and `docker`, run by hand), and `apps/server/scripts/dev-setup.test.ts`,
+  restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy.
+  Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name, and
+  `apps/server/scripts/dev-setup.test.ts`,
   `apps/server/scripts/dev-onboard.test.ts` and `apps/server/scripts/dev-server.test.ts` for
   `WAITRON_DEV_ENV_FILE`. [Detail](docs/developers/workflow-guide.md#the-owners-dev-stack-and-claudes).
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
