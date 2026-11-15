@@ -85,6 +85,7 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
         quantity: 1000,
         unitPriceGross: 2200,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 2200,
         groupId,
       });

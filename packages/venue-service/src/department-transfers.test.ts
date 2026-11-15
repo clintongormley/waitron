@@ -942,6 +942,7 @@ describe("departmental tab transfers", () => {
           quantity: 1000,
           unitPriceGross: 235,
           vatClass: "general",
+          takeawayVatClass: "general",
           lineTotal: 235,
           makeAtStationId: station!.id,
           note: "Pickup at deli",

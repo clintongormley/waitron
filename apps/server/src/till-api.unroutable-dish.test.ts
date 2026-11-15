@@ -884,6 +884,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         quantity: 1000,
         unitPriceGross: 150,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 150,
       }),
     );

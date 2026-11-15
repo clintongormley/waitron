@@ -1276,8 +1276,8 @@ describe("retained optional append-only tables at boot", () => {
     tamper(
       venueDir,
       `
-      insert into working_orders (id, source, order_number, opened_at)
-        values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z');
+      insert into working_orders (id, source, order_number, opened_at, dining)
+        values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z', 'eat_in');
       insert into payments (id, working_order_id, source, provider, payment_ref, amount, state, created_at, updated_at)
         values ('retained-payment', 'retained-order', 'operator_script', 'stripe', 'retained-ref', 1000, 'captured', '2026-11-14T10:00:00.000Z', '2026-11-14T10:00:00.000Z');
       insert into payment_resolutions (id, payment_id, working_order_id, outcome, cancelled_at_provider, person_id, resolved_at)

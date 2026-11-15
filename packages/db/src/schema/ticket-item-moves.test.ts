@@ -66,6 +66,7 @@ describe("ticket_item_moves schema", () => {
         quantity: 1000,
         unitPriceGross: 110,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 110,
       })
       .returning({ id: workingOrderLines.id });

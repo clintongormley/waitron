@@ -98,8 +98,8 @@ describe("park & retrieve schema", () => {
     // Positive control: a product_id naming a real row is accepted — so the rejection below
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
-      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total) values (${randomUUID()}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A},
-         1000, 110, 'reduced', 100)`,
+      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, takeaway_vat_class) values (${randomUUID()}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A},
+         1000, 110, 'reduced', 100, 'reduced')`,
     );
     // Read back to pin the insert's scale: a `1` would be accepted and mean a thousandth of a
     // unit. Cast to text so the assertion does not turn on how the driver renders the integer.
@@ -112,8 +112,8 @@ describe("park & retrieve schema", () => {
     // the same insert with a real `product_id`, differing otherwise only in line number.
     const error = await captureError(() =>
       suite.db.execute(
-        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total) values (${randomUUID()}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A},
-           1000, 110, 'reduced', 100)`,
+        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, takeaway_vat_class) values (${randomUUID()}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A},
+           1000, 110, 'reduced', 100, 'reduced')`,
       ),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);

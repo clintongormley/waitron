@@ -109,6 +109,7 @@ async function workingLine(id = partyId, parentLineId?: string) {
       unitPriceGross: 500,
       lineTotal: 500,
       vatClass: "general",
+      takeawayVatClass: "general",
       parentLineId,
     })
     .returning();
@@ -594,6 +595,7 @@ it("rejects duplicate line ids and extras children while keeping existing assign
       unitPriceGross: 100,
       lineTotal: 100,
       vatClass: "general",
+      takeawayVatClass: "general",
     })
     .returning();
   const tick = { guestId: state.guests[0]!.id, workingLineId };

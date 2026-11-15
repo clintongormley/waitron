@@ -190,11 +190,12 @@ export const workingOrderLines = table(
     // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which
     // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
-    // The class the published menu version froze, taken when the line was added. The rate it
-    // carries is looked up on the day the invoice is issued, so no rate is stored here.
+    // The class the line takes when its order is eaten here, frozen by the published menu version
+    // when the line was added; `takeaway_vat_class` is the one it takes when taken away. The rate
+    // either carries is looked up on the day the invoice is issued, so no rate is stored here.
     vatClass: label("vat_class").notNull(),
-    // The class the line takes when its order is taken away, already resolved: a product with no
-    // takeaway class of its own stores its served class here. The order's `dining` picks one.
+    // Already resolved: a product with no takeaway class of its own stores its served class here.
+    // The order's `dining` picks which of the two classes applies.
     takeawayVatClass: label("takeaway_vat_class").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from

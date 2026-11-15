@@ -39,6 +39,7 @@ describe("charged service cancellations", () => {
           priceQuantity: 1000,
           unitPriceGross: 750,
           vatClass: "reduced",
+          takeawayVatClass: "reduced",
           lineTotal: 2250,
         })
         .returning();

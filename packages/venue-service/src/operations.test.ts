@@ -822,7 +822,7 @@ describe("venue service routing", () => {
         where id = ${zone}`);
 
       await tx.execute(sql`
-        insert into working_orders (id, source, node_id, order_number, opened_at) values ('00000000-0000-4000-8000-000000000001', 'dashboard', ${nodeId}, 1, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, node_id, order_number, opened_at, dining) values ('00000000-0000-4000-8000-000000000001', 'dashboard', ${nodeId}, 1, ${new Date().toISOString()}, 'eat_in')`);
       await recordOrderServiceContext(tx, "00000000-0000-4000-8000-000000000001", zone);
       const workingLineId = "00000000-0000-4000-8000-000000000002";
       await tx.insert(workingOrderLines).values({
@@ -836,6 +836,7 @@ describe("venue service routing", () => {
         quantity: 250,
         unitPriceGross: 2490,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 623,
         category: "Cold cuts",
       });
@@ -936,7 +937,7 @@ describe("venue service routing", () => {
       const copiedOrderId = "00000000-0000-4000-8000-000000000003";
       const copiedLineId = "00000000-0000-4000-8000-000000000004";
       await tx.execute(sql`
-        insert into working_orders (id, source, node_id, order_number, opened_at) values (${copiedOrderId}, 'dashboard', ${nodeId}, 2, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, node_id, order_number, opened_at, dining) values (${copiedOrderId}, 'dashboard', ${nodeId}, 2, ${new Date().toISOString()}, 'eat_in')`);
       await tx.insert(workingOrderLines).values({
         id: copiedLineId,
         workingOrderId: copiedOrderId,
@@ -948,6 +949,7 @@ describe("venue service routing", () => {
         quantity: 100,
         unitPriceGross: 2490,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 249,
         category: "Cold cuts",
       });
@@ -1003,8 +1005,8 @@ describe("venue service routing", () => {
       const orderId = "00000000-0000-4000-8000-000000000101";
       const workingLineId = "00000000-0000-4000-8000-000000000102";
       await tx.execute(sql`
-        insert into working_orders (id, source, node_id, order_number, opened_at)
-        values (${orderId}, 'dashboard', ${nodeId}, 1, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, node_id, order_number, opened_at, dining)
+        values (${orderId}, 'dashboard', ${nodeId}, 1, ${new Date().toISOString()}, 'eat_in')`);
       await recordOrderServiceContext(tx, orderId, zone);
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
@@ -1016,6 +1018,7 @@ describe("venue service routing", () => {
         quantity: 1000,
         unitPriceGross: 120,
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         lineTotal: 120,
         category: "Uncategorised",
       });
@@ -2082,8 +2085,8 @@ describe("retired and moved zones", () => {
 async function openOrder(tx: Transaction, venue: SellingVenue, orderNumber: number) {
   const id = randomUUID();
   await tx.execute(sql`
-    insert into working_orders (id, source, node_id, order_number, opened_at)
-    values (${id}, 'dashboard', ${venue.nodeId}, ${orderNumber}, ${new Date().toISOString()})`);
+    insert into working_orders (id, source, node_id, order_number, opened_at, dining)
+    values (${id}, 'dashboard', ${venue.nodeId}, ${orderNumber}, ${new Date().toISOString()}, 'eat_in')`);
   return id;
 }
 
@@ -2099,6 +2102,7 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
     quantity: 1000,
     unitPriceGross: 450,
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     lineTotal: 450,
     category: "Uncategorised",
   });

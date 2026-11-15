@@ -54,6 +54,7 @@ describe("A738 order previews", () => {
             quantity: 2000,
             unitPriceGross: 100,
             vatClass: "general",
+            takeawayVatClass: "general",
             lineTotal: 200,
           },
           {
@@ -69,6 +70,7 @@ describe("A738 order previews", () => {
             quantity: 375,
             unitPriceGross: 400,
             vatClass: "general",
+            takeawayVatClass: "general",
             lineTotal: 150,
             note: "No salt <please>",
           },
@@ -83,6 +85,7 @@ describe("A738 order previews", () => {
             quantity: 750,
             unitPriceGross: 100,
             vatClass: "general",
+            takeawayVatClass: "general",
             lineTotal: 75,
           },
         ]);

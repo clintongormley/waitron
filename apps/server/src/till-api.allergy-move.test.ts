@@ -433,6 +433,7 @@ it("previews parent nutrition and distinct extras, retaining unknown versus revi
       unitPriceGross: 0,
       lineTotal: 0,
       vatClass: "general",
+      takeawayVatClass: "general",
     });
   const before = frozen();
   const response = await f.request();

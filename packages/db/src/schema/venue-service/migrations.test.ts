@@ -910,8 +910,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, quantity: number, stationId: string) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
@@ -960,8 +960,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, direction: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
@@ -1006,8 +1006,8 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, order_number, opened_at)
-      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at, dining)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()}, 'eat_in')`);
     const notice = (kind: string, cancelledExtra: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity,

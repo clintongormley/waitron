@@ -232,6 +232,7 @@ describe("printersInTrouble", () => {
       id: randomUUID(),
       source: "dashboard" as const,
       orderNumber: 1,
+      dining: "eat_in" as const,
     }));
     await withTransaction(suite.db, async (tx) => {
       await insertInChunks(tx, printJobs, [...tickets, ...others]);

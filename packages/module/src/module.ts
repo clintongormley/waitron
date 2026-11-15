@@ -14,6 +14,8 @@ import type {
   DeleteImpactRefusal,
   DeleteImpactItem,
   ChangeSource,
+  Dining,
+  DiningPolicy,
 } from "@waitron/shared";
 import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
@@ -186,6 +188,8 @@ export interface EffectiveSalePolicy {
   readonly paidWhen: "prepay" | "ticket_then_pay";
   readonly collectionNumber: "none" | "numbered";
   readonly printTradingName: boolean;
+  readonly dining: DiningPolicy;
+  readonly diningStartsAs: Dining;
 }
 
 export interface ServiceZoneSummary {

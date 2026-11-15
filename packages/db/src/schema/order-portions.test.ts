@@ -29,6 +29,7 @@ const LINE = {
   quantity: 1000,
   unitPriceGross: 950,
   vatClass: "reduced",
+  takeawayVatClass: "reduced",
   lineTotal: 950,
 };
 

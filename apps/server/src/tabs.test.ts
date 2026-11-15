@@ -1785,6 +1785,7 @@ async function heldDishWithExtraApart() {
     unitPriceGross: 0,
     lineTotal: 0,
     vatClass: "general",
+    takeawayVatClass: "general",
     groupId: dish!.groupId,
   });
   await db

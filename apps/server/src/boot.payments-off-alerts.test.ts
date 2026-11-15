@@ -135,7 +135,7 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
             },
           });
           tx.run(
-            sql`insert into working_orders (id, source, order_number, opened_at) values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z')`,
+            sql`insert into working_orders (id, source, order_number, opened_at, dining) values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z', 'eat_in')`,
           );
           tx.run(sql`insert into payments (id, working_order_id, source, provider, payment_ref, amount, state, created_at, updated_at)
             values ('retained-payment', 'retained-order', 'operator_script', 'stripe', 'retained-ref', 1000, 'attempting', '2026-11-14T10:00:00.000Z', '2026-11-14T10:00:00.000Z')`);

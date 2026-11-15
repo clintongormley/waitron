@@ -867,6 +867,7 @@ describe("the floor's attention signals", () => {
         quantity: 2000,
         unitPriceGross: 100,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 200,
         parentLineId: burger.id,
         groupId,

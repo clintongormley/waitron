@@ -67,6 +67,7 @@ async function rawLine(
       quantity: 1000,
       unitPriceGross: 150,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 150,
       courseId,
     })
@@ -218,6 +219,7 @@ describe("device made-here stations", () => {
         priceQuantity: 50,
         unitPriceGross: 1,
         vatClass: "general",
+        takeawayVatClass: "general",
         lineTotal: 3,
       };
       await tx.insert(workingOrderLines).values([
@@ -514,6 +516,7 @@ describe("device made-here stations", () => {
           quantity: 1000,
           unitPriceGross: 150,
           vatClass: "general",
+          takeawayVatClass: "general",
           lineTotal: 150,
         })
         .returning();

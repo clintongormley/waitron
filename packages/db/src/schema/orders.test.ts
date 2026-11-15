@@ -57,6 +57,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 let DASHBOARD_ORDER: {
   readonly source: "dashboard";
   readonly deviceId: null;
+  readonly dining: "eat_in";
 };
 
 let productA = "";
@@ -75,7 +76,7 @@ async function seed(db: Database): Promise<void> {
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
-  DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
+  DASHBOARD_ORDER = { source: "dashboard", deviceId: null, dining: "eat_in" };
   const [prodA] = await db
     .insert(products)
     .values({
@@ -105,6 +106,7 @@ const LINE = {
   // 1.30 net at 10% VAT, gross, in whole cents.
   unitPriceGross: 143,
   vatClass: "reduced",
+  takeawayVatClass: "reduced",
   lineTotal: 130,
 };
 
@@ -135,8 +137,8 @@ describe("working_orders", () => {
       db.execute(
         // `id` and `order_number` are named so the statement reaches the status CHECK rather than
         // a NOT NULL refusal: `id` is a `$defaultFn` generator a raw insert never runs.
-        sql`insert into working_orders (id, source, order_number, status, opened_at)
-             values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'paid', ${AT})`,
+        sql`insert into working_orders (id, source, order_number, status, opened_at, dining)
+             values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'paid', ${AT}, 'eat_in')`,
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -146,8 +148,8 @@ describe("working_orders", () => {
     // assertion above just as well; `placed` is a listed status and no other case in this file
     // writes one, so it is the value that separates "this list is enforced" from "nothing gets in".
     await db.execute(
-      sql`insert into working_orders (id, source, order_number, status, opened_at)
-           values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'placed', ${AT})`,
+      sql`insert into working_orders (id, source, order_number, status, opened_at, dining)
+           values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'placed', ${AT}, 'eat_in')`,
     );
     const placed = await rows<{ status: string }>(
       db,
@@ -399,6 +401,7 @@ describe("working_orders", () => {
         deviceId,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
+        dining: "eat_in",
       })
       .returning({ id: workingOrders.id });
     const fromDashboard = await openOrder(db);
@@ -425,6 +428,7 @@ describe("working_orders", () => {
         deviceId,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
+        dining: "eat_in",
       }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -451,8 +455,8 @@ describe("working_orders", () => {
   it("refuses a source that is not on the list", async () => {
     const error = await captureError(() =>
       db.execute(
-        sql`insert into working_orders (id, source, order_number, status, opened_at)
-             values (${randomUUID()}, 'till', ${++orderNumberSeq}, 'open', ${AT})`,
+        sql`insert into working_orders (id, source, order_number, status, opened_at, dining)
+             values (${randomUUID()}, 'till', ${++orderNumberSeq}, 'open', ${AT}, 'eat_in')`,
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -467,6 +471,7 @@ describe("working_orders", () => {
         deviceId: ghost,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
+        dining: "eat_in",
       }),
     );
     expect(isRefusal(noDevice, FOREIGN_KEY_VIOLATION)).toBe(true);
@@ -658,8 +663,8 @@ describe("working_order_lines — the draft line's links", () => {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, parent_line_id) values (${randomUUID()}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
-             ${descriptions}, 1000, 143, 'reduced', 130,
+      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, takeaway_vat_class, line_total, parent_line_id) values (${randomUUID()}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+             ${descriptions}, 1000, 143, 'reduced', 'reduced', 130,
              ${opts.parentLineId ?? null}
            ) returning id`,
     );
@@ -716,6 +721,7 @@ describe("working_order_lines — the draft line's links", () => {
         workingOrderId: orderId,
         lineNo: i + 1,
         vatClass,
+        takeawayVatClass: vatClass,
       })),
     );
     const stored = await db
@@ -731,7 +737,7 @@ describe("working_order_lines — the draft line's links", () => {
     const error = await captureError(() =>
       rows(
         db,
-        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, line_total) values (${randomUUID()}, ${orderId}, 1, ${productA}, 'Café solo', '{"es":"Café solo","ca":"Cafè sol"}', 1000, 143, 130)`,
+        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, takeaway_vat_class, line_total) values (${randomUUID()}, ${orderId}, 1, ${productA}, 'Café solo', '{"es":"Café solo","ca":"Cafè sol"}', 1000, 143, 'reduced', 130)`,
       ),
     );
     expect(engineErrorMessage(error)).toBe(

@@ -32,6 +32,7 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type Dining,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -388,6 +389,15 @@ export interface TillSaleDeps {
 }
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
+
+// A1522: Tasks 11, 12 and 15 replace every use of this marker; it must be gone before PR 2 ends.
+export const A1522_STAND_IN: {
+  dining: Dining;
+  takeawayVatClass: <C extends string>(vatClass: C) => C;
+} = {
+  dining: "eat_in",
+  takeawayVatClass: (vatClass) => vatClass,
+};
 
 /**
  * `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale.
@@ -1040,6 +1050,7 @@ export async function priceOrderLines(
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
       vatClass: line.vatClass,
+      takeawayVatClass: A1522_STAND_IN.takeawayVatClass(line.vatClass),
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),
@@ -1541,6 +1552,7 @@ export async function createOpenOrder(
     deliveryTableId,
     partyId: placement.partyId ?? null,
     receiptLocale: placement.receiptLocale ?? null,
+    dining: A1522_STAND_IN.dining,
   });
   if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
 
@@ -4777,6 +4789,7 @@ async function carveLines(
         unitPriceGross: decimalToCents(row.unitPriceGross),
         priceQuantity: decimalToThousandths(row.priceQuantity),
         vatClass: row.vatClass,
+        takeawayVatClass: A1522_STAND_IN.takeawayVatClass(row.vatClass),
         lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved, row.priceQuantity)),
         category: row.category,
         unitName: row.unitName,

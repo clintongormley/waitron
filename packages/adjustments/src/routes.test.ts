@@ -730,6 +730,7 @@ describe("adjustment report routes", () => {
       unitPriceGross: 1500,
       listUnitPriceGross: 2000,
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 1500,
       creditedTo: idOf("supervisor"),
     });

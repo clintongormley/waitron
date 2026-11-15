@@ -556,8 +556,8 @@ describe("readOrderStateCounts", () => {
   it("counts all zeros for an order with no lines", async () => {
     const id = randomUUID();
     venue.db.run(sql`
-      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at)
-      values (${id}, 'device', ${venue.cfg.origin.deviceId}, ${venue.cfg.nodeId}, 90001, 'open', ${nowIso()})`);
+      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, dining)
+      values (${id}, 'device', ${venue.cfg.origin.deviceId}, ${venue.cfg.nodeId}, 90001, 'open', ${nowIso()}, 'eat_in')`);
     expect(await countsOf([id])).toEqual(new Map([[id, zero]]));
   });
 

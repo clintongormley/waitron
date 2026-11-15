@@ -50,7 +50,7 @@ beforeEach(() => {
       sql`insert into floor_zones (id,name,department_id,created_at) values ('zone','Room','department','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into working_orders (id,source,order_number,opened_at,dining) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z','eat_in')`,
     );
     db.run(
       sql`insert into order_service_contexts (working_order_id, zone_id, department_id, service_mode) values ('order', 'zone', 'department', 'table_tab')`,

@@ -1305,6 +1305,7 @@ describe("free default choice with incomplete menu and image text", () => {
         unitPriceGross: 200,
         lineTotal: 200,
         vatClass: "general",
+        takeawayVatClass: "general",
       });
       const before = await snapshot();
       expect(before["menu_versions"]).toHaveLength(1);

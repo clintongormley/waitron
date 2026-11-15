@@ -247,6 +247,7 @@ export async function seedWorkingOrder(
     .values({
       source: "dashboard",
       orderNumber: 1,
+      dining: "eat_in",
       ...values,
     })
     .returning();

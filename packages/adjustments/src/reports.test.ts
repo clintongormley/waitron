@@ -115,6 +115,7 @@ async function line(
     unitPriceGross: decimalToCents(decimal(opts.unit)),
     listUnitPriceGross: opts.list === undefined ? null : decimalToCents(decimal(opts.list)),
     vatClass: "general",
+    takeawayVatClass: "general",
     lineTotal: 0,
     creditedTo: opts.creditedTo,
   });

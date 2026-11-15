@@ -118,6 +118,7 @@ async function lineOn(workingOrderId: string, quantity: string): Promise<string>
       priceQuantity: stringToThousandths("1"),
       unitPriceGross: decimalToCents(decimal("10.00")),
       vatClass: "general",
+      takeawayVatClass: "general",
       lineTotal: 0,
     })
     .returning({ id: workingOrderLines.id });
