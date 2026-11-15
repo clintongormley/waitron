@@ -76,6 +76,10 @@ export class WtDeleteDialog extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .status:empty {
+        margin: 0;
+      }
+
       .irreversible {
         margin: 0;
         font-weight: var(--wt-font-weight-bold);
@@ -168,6 +172,9 @@ export class WtDeleteDialog extends LitElement {
     if (!copy) return nothing;
     const ready = this.ready;
     const message = [this.readError, this.actionError].filter((each) => each !== "").join(" ");
+    const status = this.loading
+      ? html`<wt-spinner size="sm" decorative></wt-spinner>${copy.loading}`
+      : nothing;
     return html`
       <wt-modal
         size="compact"
@@ -178,13 +185,7 @@ export class WtDeleteDialog extends LitElement {
         @wt-close=${this.onModalClose}
       >
         ${impact ? html`<p class="target" data-target>${impact.target.name}</p>` : nothing}
-        ${
-          this.loading
-            ? html`<p class="status" role="status">
-                <wt-spinner size="sm" decorative></wt-spinner>${copy.loading}
-              </p>`
-            : nothing
-        }
+        <p class="status" role="status">${status}</p>
         ${
           impact
             ? html`
