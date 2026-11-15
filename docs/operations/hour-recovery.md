@@ -123,8 +123,9 @@ file's "the key, both statements and the details tick send nothing until Proceed
 does"). After **Proceed** the box asks its internet time service whether it is synchronised and
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
 it), and when the time service is synchronised the page asks the box for the invoice series, all by
-itself; when only the two clocks agree it shows both times and asks for the series once the person
-presses **Confirm the time**; nobody types a time (`recovery-hour.browser.test.ts`, "when only this
+itself (`recovery-hour.browser.test.ts`, "decodes the printed key and sends independent recovery
+declarations before selecting"); when only the two clocks agree it shows both times and asks for the series once the person
+presses **Confirm the time**; nobody types a time (the same file's "when only this
 device agrees, Confirm the time compares again and selects with confirmed"). Changing or clearing the key, either
 statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
 pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
@@ -142,7 +143,7 @@ page shown on the box's own screen runs on the box's clock, so it does not count
 clock (`apps/server/src/request-from-box.test.ts`;
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "a browser on the box itself
 is no second clock"). The box's clock must be within 30 seconds of every other clock it reads, ahead
-or behind, and nothing confirms past it (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
+or behind (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 name needs a second clock within 30 seconds of the box").
 
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads

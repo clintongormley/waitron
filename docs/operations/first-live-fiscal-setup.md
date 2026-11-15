@@ -27,7 +27,7 @@ box's own screen runs on the box's clock, so it does not count as the second clo
 the second clock"). While the time service is synchronised it carries on, whatever the device's clock reads
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a synchronised time service carries on past a
 browser five minutes out"). Otherwise the box's clock must be within 30 seconds of the device's,
-ahead or behind, and there is no confirmation to get past it (the same file's "a name needs a
+ahead or behind (the same file's "a name needs a
 second clock within 30 seconds of the box"). There is no "last hour" question: the page has no such field
 (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
 
@@ -77,7 +77,11 @@ made the page shows "We've created these invoice series:", explains the recovery
 
 After **Proceed** the page carries on by itself through its waits. It stops for a press only when it
 shows **Compare the clocks again** (clocks that differ, a box time before this release, a date out of
-range, or a box clock earlier than a time it already used) or **Try again** (a failed request). The box waits 90 to 150 seconds before it takes the
+range, or a box clock earlier than a time it already used), **Try again** (a failed request) or both
+times to confirm with **Proceed** (`first-hour.browser.test.ts`, "when %s before Proceed, and only
+this device agrees at Proceed, Proceed shows the times to confirm and sends nothing; the next Proceed
+confirms them" and "a wait after a Proceed with the internet's time that ends with only this device
+agreeing shows both times and stops for Proceed"). The box waits 90 to 150 seconds before it takes the
 name, and the page counts down with no button; keep it open
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "setup checked at %s waits until %s";
 `first-hour.browser.test.ts`, "explains a waiting setup with a countdown that goes back to the

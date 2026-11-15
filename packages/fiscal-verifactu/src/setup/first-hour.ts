@@ -155,10 +155,7 @@ export class FirstSetupHour extends LitElement {
   #wait = new ClockWait<Selected>(this, () => void this.#run(true));
   /** Proceed was pressed and no field has changed since: the page carries on to the series. */
   #confirmed = false;
-  /**
-   * The box had recorded a wait before this page asked it for one or any field changed, so while the
-   * page carries on by itself its own re-checks go on to the series without the tick or Proceed.
-   */
+  /** The box had recorded a wait before this page asked it for one or any field changed. */
   #recordedWait = false;
   /**
    * Since it loaded, the page asked the box for the series, a field changed, or it was taken off the

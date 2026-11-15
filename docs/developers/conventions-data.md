@@ -6353,7 +6353,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   that confirmation should be protected"; This device and the list of proofs follow the watcher's
   09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
   switch, which it gave as an administrator sign-in and whose page checks the box's current
-  recovery key); a minute whose name is already in a
+  recovery key, a choice that is not owner-approved); a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6365,7 +6365,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
   hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name suites (the
-  last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
+  last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
+  than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 
 
 ## A module's settings are one document in the shared settings table

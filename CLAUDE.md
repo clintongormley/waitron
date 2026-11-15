@@ -1016,18 +1016,17 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   another machine's clock counts only once the person proved on that page (the setup password on
   setup, the backup's node recovery key on restore, a `node.manage` sign-in on promotion, the box's
   current recovery key on the conflict switch) confirms both times or sets the box's clock from that
-  machine (owner, 2026-11-13: "we should never just accept another
-  device's match automatically. instead, we should always ask for confirmation, and that
-  confirmation should be protected"; This device and the list of proofs follow the watcher's 09:49
-  proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict switch,
-  which it gave as an administrator sign-in and whose page checks the box's current recovery key). A
-  minute whose name is already in a history the box reads is not taken. Its waits, its other
+  machine (owner, 2026-11-13: "we should never just accept another device's match automatically.
+  instead, we should always ask for confirmation, and that confirmation should be protected"; the
+  conflict switch's proof is not owner-approved: the proposal the owner agreed named an
+  administrator sign-in). A minute whose name is already in a history the box reads is not taken. Its waits, its other
   refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
   Restore takes one source; working-time chain continues from its head. Guards:
   hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name
-  suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
+  suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`,
+  weaker than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
   background duty is stopped through `apps/server/src/background-duties.ts`, or is a job on the
   runner whose mark in `apps/server/src/job-catalogue.ts` says it stops at a stepdown or why it

@@ -492,7 +492,9 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   commits a series, so nobody is asked whether a new one is needed. The person's part is the details
   tick (setup) or the recovery key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
   that — the countdown, the second-clock checks and a used code's countdown — runs by itself. A
-  wait the setup box recorded before a reload carries on with no tick and no press.
+  wait the setup box recorded before a reload carries on with no tick and no press. (Since A1420 PR
+  3a, 2026-11-15: when the box cannot check its time over the internet, a page whose clocks agree
+  shows both times and waits for the person to confirm them.)
 - **A stored series pick found taken is not retried (A1223 deleted, owner 2026-11-09):** the
   pick-time check already skips every name in the invoice series and records
   (`packages/fiscal-verifactu/src/hour-selection.ts`, the `used` loop over the history

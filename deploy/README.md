@@ -544,7 +544,8 @@ volumes is wiped, and that includes the venue's databases, because they live in 
 A reset during an unfinished first setup forgets the series name that setup chose, as Start again
 does; the clock check and setup's 90–150 second wait still guard it (outside the preproduction
 throwaway, a new name is the current UTC minute, taken only after the box's internet time service says it
-is synchronised or a clock on another machine agrees with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
+is synchronised, or a clock on another machine agrees with the box's within 30 seconds and the
+person on the setup page confirms both times or sets the box's clock from it with **This device**), unless the box and the machine that confirms its clock are wrong
 by the same amount.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
