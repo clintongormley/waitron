@@ -307,7 +307,12 @@ it("keeps a delay field and its row in place while typing multiple digits", asyn
   await userEvent.type(input, "{selectall}7");
   await settle(el);
   expect(el.steps.find((step) => step.key === "charlie")!.minutes).toBe("7");
-  expect(rows(el).map((row) => row.dataset.step)).toEqual(["s1", "alpha", "bravo", "charlie"]);
+  expect(rows(el).map((row) => row.getAttribute("data-step"))).toEqual([
+    "s1",
+    "alpha",
+    "bravo",
+    "charlie",
+  ]);
   expect(el.shadowRoot!.activeElement).toBe(minutesInput(el, 3));
 });
 
