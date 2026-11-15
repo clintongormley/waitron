@@ -46,7 +46,7 @@ export const en = {
   "permission.venue.configure.help":
     "Change venue settings, departments, service periods, floor plans, device profiles and appearance. Authorise keeping service open or sending dishes after their service period ends.",
   "permission.hardware.manage.help":
-    "Enrol devices and print agents, and manage printers and card readers. Connect or disconnect providers on Card payments, and view the venue’s modules on Modules.",
+    "Enrol devices and print agents, and manage printers and card readers. Connect or disconnect card providers and view the venue’s modules on Modules.",
   "permission.purchase.manage.help":
     "Record and review supplier invoices on Purchases. Remove an invoice there if it was entered by mistake.",
   "permission.adjustment.manage.help":
@@ -4286,7 +4286,7 @@ export const es: Record<StringKey, string> = {
   "permission.venue.configure.help":
     "Cambia la configuración del local, secciones, periodos de servicio, planos, perfiles de dispositivo y apariencia. Autoriza mantener el servicio abierto o enviar platos tras terminar su periodo.",
   "permission.hardware.manage.help":
-    "Da de alta dispositivos y agentes de impresión, y gestiona impresoras y lectores de tarjetas. Conecta o desconecta proveedores en Pagos con tarjeta y consulta los módulos del local en Módulos.",
+    "Da de alta dispositivos y agentes de impresión, y gestiona impresoras y lectores de tarjetas. Conecta o desconecta proveedores de tarjetas y consulta los módulos del local en Módulos.",
   "permission.purchase.manage.help":
     "Registra y consulta facturas de proveedores en Compras. Elimina allí una factura si se introdujo por error.",
   "permission.adjustment.manage.help":

@@ -13,6 +13,12 @@ Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de 
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
 Elige **Todas las categorías** para ver todos los módulos opcionales.
 
+## Desconectar un proveedor de tarjetas {#disconnect-provider}
+
+Para quitar las credenciales guardadas de un proveedor, elige **Desconectar** en el menú de su
+fila en Módulos y después **¿Desconectar este proveedor?** para confirmar. Si un aviso te pide
+eliminar o desvincular sus lectores, hazlo en **Pagos con tarjeta** y vuelve aquí para desconectarlo.
+
 ## Activar o desactivar un proveedor de tarjetas {#provider-state}
 
 Como administrador, elige **Desactivar** en el menú de la fila del proveedor y confirma.

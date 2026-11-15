@@ -13,6 +13,12 @@ The **Enabled**, **Disabled** and **All** filters show a module's state separate
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
 to see all optional modules.
 
+## Disconnect a card provider {#disconnect-provider}
+
+To remove a provider's saved credentials, choose **Disconnect** in its Modules row menu,
+then **Disconnect this provider?** to confirm. If a refusal asks you to remove or unpair its
+readers, do that on **Card payments**, then return here to disconnect.
+
 ## Turn a card provider on or off {#provider-state}
 
 As an administrator, choose **Turn off** in the provider's row menu and confirm. Remove or

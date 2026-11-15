@@ -1347,7 +1347,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A1529. Hardware screens brought into line (owner, 2026-11-14).**
   The owner reviewed mock-ups of the menu and profile screens and approved them. No migration.
-  The remaining card-page work follows the [Claude-reviewed, watcher-cleared plan](superpowers/plans/2026-11-15-a1529-card-pages.md).
+  The remaining readers-only page and Reporting move follow the [Claude-reviewed, watcher-cleared plan](superpowers/plans/2026-11-15-a1529-card-pages.md).
   Remaining work:
   - **The Card payments page is only about the card readers:** the readers table, with Add reader
     at the top; the demo-mode notice stays. The Providers list and the "Configure card providers"
