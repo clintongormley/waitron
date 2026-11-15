@@ -172,10 +172,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      [popover].\\:popover-open {
-        z-index: 100;
-      }
-
       .visually-hidden {
         ${visuallyHiddenStyles}
       }

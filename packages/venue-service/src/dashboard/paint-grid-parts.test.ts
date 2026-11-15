@@ -364,4 +364,5 @@ test("paint chooser fallback layout is positioned, hittable and cancels", async 
   await userEvent.click(cancel);
   expect(chooser.matches(":popover-open")).toBe(false);
   expect(el.copied).toEqual([]);
+  expect(chooser.getBoundingClientRect().height).toBe(0);
 });

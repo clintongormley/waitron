@@ -9,6 +9,9 @@ export {
 // Lit replaces adopted sheets when it creates the render root, so the polyfill's
 // injected hiding rule does not survive. Keep it in the component styles themselves.
 export const popoverVisibilityStyles = css`
+  [popover].\\:popover-open {
+    z-index: 100;
+  }
   [popover]:not(:is(:popover-open, .\\:popover-open)) {
     display: none;
   }

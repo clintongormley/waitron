@@ -160,6 +160,7 @@ it("product appearance fallback layout is positioned, hittable and dismisses", a
     await userEvent.click(control);
     await userEvent.keyboard("{Escape}");
     expect(panel.matches(":popover-open")).toBe(false);
+    expect(panel.getBoundingClientRect().height).toBe(0);
   } finally {
     await page.viewport(1280, 720);
   }

@@ -53,6 +53,9 @@ function visible(popup: HTMLElement): void {
   expect(rect.right).toBeLessThanOrEqual(innerWidth);
   expect(rect.top).toBeGreaterThanOrEqual(0);
   expect(rect.bottom).toBeLessThanOrEqual(innerHeight);
+  const root = popup.getRootNode() as ShadowRoot;
+  const hit = root.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 4);
+  expect(hit !== null && (popup.contains(hit) || root.host.contains(hit))).toBe(true);
 }
 
 for (const width of [390, 1280]) {
@@ -67,6 +70,10 @@ for (const width of [390, 1280]) {
         (el as WtColourChooser).choices = [
           { value: "red", label: "Red", fill: "var(--wt-color-palette-red)" },
         ];
+      const next = document.createElement("wt-colour-chooser");
+      next.label = "Next field";
+      host.append(next);
+      await next.updateComplete;
       await (el as WtCombobox).updateComplete;
       const trigger = el.shadowRoot!.querySelector<HTMLElement>(selector)!;
       expect(el.shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false).toBe(
@@ -78,6 +85,8 @@ for (const width of [390, 1280]) {
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[popover]")).not.toBeNull());
       const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
       await vi.waitFor(() => visible(popup));
+      if (name === "combobox")
+        await userEvent.click(popup.querySelector<HTMLInputElement>(".search")!);
       if (name === "language" || name === "theme")
         expect(getComputedStyle(popup).display).toBe("flex");
       expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -98,6 +107,9 @@ for (const width of [390, 1280]) {
         expect(el.shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false).toBe(
           false,
         ),
+      );
+      expect(el.shadowRoot!.querySelector("[popover]")?.getBoundingClientRect().height ?? 0).toBe(
+        0,
       );
     },
   );
@@ -275,7 +287,11 @@ test.each([false, true])(
   async (clickable) => {
     const table = (await mount("<wt-data-table></wt-data-table>")) as WtDataTable<{ id: number }>;
     table.rowKey = (row) => String(row.id);
-    if (clickable) table.rowClick = () => {};
+    const rowClicks: number[] = [];
+    if (clickable)
+      table.rowClick = (row) => {
+        rowClicks.push(row.id);
+      };
     const picked: number[] = [];
     table.columns = [
       { key: "name", label: "Name", cell: (row) => `Order ${row.id}` },
@@ -297,8 +313,14 @@ test.each([false, true])(
     >("wt-row-actions")!;
     await menu.updateComplete;
     await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await vi.waitFor(() => expect(menu.hasAttribute("data-fallback-popover-open")).toBe(true));
     await userEvent.click(menu.querySelectorAll("button")[1]!);
     expect(picked).toEqual([1]);
+    expect(rowClicks).toEqual([]);
     await vi.waitFor(() => expect(menu.hasAttribute("data-fallback-popover-open")).toBe(false));
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await vi.waitFor(() => expect(menu.hasAttribute("data-fallback-popover-open")).toBe(true));
+    menu.remove();
+    expect(menu.hasAttribute("data-fallback-popover-open")).toBe(false);
   },
 );

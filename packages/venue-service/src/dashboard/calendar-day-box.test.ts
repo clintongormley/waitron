@@ -474,4 +474,5 @@ it("calendar day fallback layout is positioned, hittable and light dismisses", a
   host.append(outside);
   await userEvent.click(outside);
   await expect.poll(() => closes).toBe(1);
+  expect(popup().getBoundingClientRect().height).toBe(0);
 });

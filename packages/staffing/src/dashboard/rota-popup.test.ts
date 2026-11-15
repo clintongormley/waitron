@@ -469,4 +469,5 @@ it("rota popup fallback layout is positioned, hittable and light dismisses", asy
   host.append(outside);
   await userEvent.click(outside);
   await expect.poll(() => closes).toBe(1);
+  expect(popup().getBoundingClientRect().height).toBe(0);
 });
