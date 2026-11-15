@@ -349,23 +349,6 @@ approved; they are not committed. Mostly `packages/venue-service/src/dashboard/`
 
 The Opening hours guide (EN and ES) and design-system.md's Calendar section follow.
 
-## A1547. Closed on a special day closes the chosen department, not the whole venue
-
-Owner, 2026-11-15: in the special-day editor, with Deli chosen, ticking Closed for the whole day
-closes the whole venue. The tick is drawn under the department picker
-(`special-day-painter.ts`, `paintArea`), but it writes `special_day_dates.closed_all_day`, one
-value per date with no department (`packages/db/src/schema/venue-service/seasons.ts`), which the
-design calls "the whole-venue tick" (2026-10-11 opening-hours design, `special_day_dates` row).
-
-The ask: Closed closes only the chosen department for that day, through the department's own
-all-day paint, which the painter can already store and draw ("Restaurant closed all day" behind a
-zone's grid). Closing the whole venue on a date stays a separate, clearly named action (the
-Calendar's "Close the whole venue" already exists). Check the season week editor and any other
-painter that puts a Closed control under a department picker. Whether `closed_all_day` is still
-needed, and how the day resolver (`day-resolver.ts`) and the year's closed marking read the change,
-is for the plan. It changes which parts of the venue are open on a date, so it takes the full
-review.
-
 ## Decisions and deliberate limits
 
 - **A holiday name has one date per year in each place** (lane C's default, 2026-11-15, with the

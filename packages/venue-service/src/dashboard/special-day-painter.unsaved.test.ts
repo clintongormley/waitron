@@ -95,7 +95,7 @@ async function choose(decision: "keep" | "discard") {
 const dismiss = (painter: SpecialDayPainter) =>
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
 const tick = (painter: SpecialDayPainter) =>
-  painter.shadowRoot!.querySelector<HTMLInputElement>('input[name="closed.2026-12-14"]')!;
+  painter.shadowRoot!.querySelector<HTMLInputElement>('input[name="venueClosed.2026-12-14"]')!;
 
 it("✕ with no edits closes at once", async () => {
   const painter = await mount();

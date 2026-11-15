@@ -2929,8 +2929,13 @@ are, at most 366 at a time (a longer run adds nothing and says "Choose at most 3
 is drawn marked only while a drag is under way. One hint line under the month says so. A date another special day holds is marked with that day's name but still offered. Every year notes that, with
 Yes, a date on a holiday repeats on that holiday whatever its date that year; that note shows, Yes or
 No, when a stored date was saved on a public holiday or a new date is one. With Yes, a second note warns that 29 February repeats only in leap years. The grid has a column
-per date, headed by its short weekday, day and month, with a Closed tick under each heading that
-shuts the whole date.
+per date, headed by its short weekday, day and month, with a department Closed tick under each heading. It writes all-day Closed paint only for the chosen
+department at that date’s changeover. Before Save, unticking restores that department’s prior draft
+hours. A separate Close the whole venue tick writes the date’s global flag, retaining paint; while
+it is ticked, department Closed is checked and disabled. A zone shows only the whole-venue tick
+and keeps its Open/Closed strokes. Department all-day paint uses the grid’s Closed all day display
+when dates have different changeovers and prevents strokes until unticked. Changing the venue’s
+changeover can refuse until affected all-day department paint is unticked.
 Each date's season hours are drawn faded under the paint; what is painted replaces them for that
 stretch. A department paints its periods and Closed; a zone paints Open and Closed over its
 department's day, with the zone's season closures drawn as Closed. A zone's Closed paint keeps its full range,
@@ -2942,7 +2947,7 @@ name and its date (on a picked run whose first date is the holiday, every date o
 be saved as it opened; when a special day of that name exists, the painter
 first offers Add to <name>, which opens the one with the latest date with this date, or every date of the picked run, added as an
 unsaved change, or Add special day; once the new day is edited or a save of it is sent, no offer is made. Save stays quiet until the draft changes and sends the name,
-Every year, the dates and their Closed ticks, and paint only for each department or zone and date
+Every year, the dates and their whole-venue Closed ticks, and paint only for each department or zone and date
 whose paint differs from what is saved. Save closes the painter, back to the view it was opened
 over; a refused save keeps it open with its message beside Save; paint made while a save is in
 flight keeps it open, unsaved, with the answer as the saved state, and so does paint dropped while
@@ -2950,7 +2955,7 @@ the save was out because its department or zone was removed or made inactive, wi
 says so. A save
 answered after a newer painter has opened neither closes nor marks the newer one. A live refresh reads a stored day again: its name and Every year each follow what is now
 stored unless the draft has changed them, when the draft and what it is compared against both stay.
-The dates follow what is stored one by one: the draft keeps the dates it added and the Closed ticks
+The dates follow what is stored one by one: the draft keeps the dates it added and the whole-venue Closed ticks
 it changed, leaves out the dates it removed, and keeps a date no longer stored when it changed that
 date's tick or paint, so Save puts the date back. Paint follows per department or zone and date: the saved paint takes what is stored, and
 the draft keeps its own only on the dates it changed (`merge`, `special-day-painter.ts`; the cases in

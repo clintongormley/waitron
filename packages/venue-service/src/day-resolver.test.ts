@@ -676,6 +676,46 @@ describe("special-day paint over the season", () => {
     });
   });
 
+  it("closes Deli by all-day paint while Restaurant keeps its overnight hours", async () => {
+    const v = await autumnAndWinter();
+    const deli = await scoped(async (tx) => {
+      const { id } = await createDepartment(tx, { name: "Deli", orderStart: "table" });
+      const period = await saveMenuPeriod(tx, id, {
+        name: "Deli service",
+        menuId: v.menus.Dinner!,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        id,
+        menuWeek({
+          [SATURDAY]: [{ periodId: period.id, startsAt: "10:00", endsAt: "18:00" }],
+        }),
+        AT,
+        1,
+        { seasonId: v.seasons.Autumn! },
+      );
+      return id;
+    });
+    expect(
+      (await scoped((tx) => resolveDepartmentDays(tx, deli, ["2030-11-30"], CLOCK))).get(
+        "2030-11-30",
+      )?.ranges,
+    ).toEqual([{ periodId: expect.any(String), startsAt: "10:00", endsAt: "18:00" }]);
+    await specialDay(v, "2030-11-30", {
+      paint: {
+        [deli]: [{ periodId: null, startsAt: "06:00", endsAt: "06:00" }],
+      },
+    });
+    const days = await scoped((tx) =>
+      resolveDepartmentsDays(tx, [deli, v.departmentId], ["2030-11-30"], CLOCK),
+    );
+    expect(days.get(deli)?.get("2030-11-30")?.ranges).toEqual([]);
+    expect(days.get(v.departmentId)?.get("2030-11-30")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" },
+    ]);
+  });
+
   it("lays a special day's Closed paint over the department's season, leaving zones their week", async () => {
     const v = await venue();
     await menuSeason(v, v.seasons.Winter!, {

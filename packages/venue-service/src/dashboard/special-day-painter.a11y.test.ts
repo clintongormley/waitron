@@ -29,6 +29,7 @@ describe.each(["light", "dark"] as const)("special-day painter (%s)", (theme) =>
   test.each([
     "new",
     "stored",
+    "department closed",
     "painting help",
     "zone closed behind",
     "refused",
@@ -67,6 +68,12 @@ describe.each(["light", "dark"] as const)("special-day painter (%s)", (theme) =>
     await settle(painter);
     await expect.poll(() => part(painter, "loading")).toBeNull();
     await settle(painter);
+    if (state === "department closed") {
+      painter
+        .shadowRoot!.querySelector<HTMLInputElement>('input[name="closed.2026-12-15"]')!
+        .click();
+      await settle(painter);
+    }
     if (state === "painting help") {
       setHelpMode(true);
       const help = painter.shadowRoot!.querySelector("wt-help-tooltip")!;
