@@ -38,9 +38,12 @@ import {
 import { claimPrintJobs, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { printingAlertSource } from "./alert-sources.js";
+import type { ClockServiceStatus } from "./box-host-client.js";
 import {
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
+  DEVICE_CLOCK_NOTICE_OWNER,
+  deviceClockNoticeSource,
   deviceNoticeSources,
   devicePrinterNoticeSources,
   documentPrintersOf,
@@ -1870,6 +1873,53 @@ describe("GET /api/device/equipment's notices", () => {
       expect(body.noticesUnavailable).toEqual(["printers"]);
       expect(body.notices.map((n) => n.key)).toContain("box-error");
     });
+  });
+
+  it("a device whose clock is off waits for the box's time service without holding the write lock", async () => {
+    const boxAt = READING.instant;
+    const witnesses = () => [
+      {
+        id: venue.deviceId,
+        boxAt: boxAt.toISOString(),
+        witnessAt: new Date(boxAt.getTime() + 2 * 3_600_000).toISOString(),
+        uncertaintyMs: 0,
+      },
+    ];
+    let asked!: () => void;
+    const hostAsked = new Promise<void>((resolve) => (asked = resolve));
+    let answer!: (status: ClockServiceStatus) => void;
+    const hostAnswer = new Promise<ClockServiceStatus>((resolve) => (answer = resolve));
+    const status = () => {
+      asked();
+      return hostAnswer;
+    };
+    const app = noticeApp([], {
+      deviceSources: async (deviceId) => [
+        await deviceClockNoticeSource({ witnesses, status }, deviceId),
+      ],
+    });
+    const events: string[] = [];
+    const body = read(app);
+    await hostAsked;
+    const write = suite.db.withWriteLock(() => {
+      events.push("wrote");
+      return Promise.resolve();
+    });
+    // A free lock runs the write in this turn's microtasks; one held by the read cannot.
+    await new Promise((resolve) => setImmediate(resolve));
+    events.push("host answered");
+    answer({
+      available: true,
+      service: "on",
+      unit: "systemd-timesyncd.service",
+      synchronised: true,
+      lastSyncAt: null,
+    });
+    await write;
+    expect(events).toEqual(["wrote", "host answered"]);
+    expect((await body).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+      { key: "clock.device_wrong", owner: DEVICE_CLOCK_NOTICE_OWNER },
+    ]);
   });
 
   it("the box's red comes before a module's red", async () => {

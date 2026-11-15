@@ -274,7 +274,11 @@ import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
-import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
+import {
+  deviceClockNoticeSource,
+  deviceNoticeSources,
+  devicePrinterNoticeSources,
+} from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
   BOX_EMAIL_CHECK_MS,
@@ -2738,6 +2742,8 @@ async function bootServer(
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
+  const clockService = sharedClockServiceReading(boxHost, now);
+  const readClockService = clockService.read;
   const recordHeads = (tx: Transaction) => nodeBackend.recordHeads?.(tx) ?? Promise.resolve({});
   // Before the tills' routes, which set the clock through it.
   const correction = clockCorrection({
@@ -3047,6 +3053,7 @@ async function bootServer(
     const pairingMode = createPairingMode({
       changed: () => publishState(liveEvents, "pairing", log),
     });
+    const printerNotices = devicePrinterNoticeSources({ now });
     mountDeviceApi(
       app,
       {
@@ -3073,7 +3080,13 @@ async function bootServer(
             },
             enabledAtStart,
           ),
-          deviceSources: devicePrinterNoticeSources({ now }),
+          deviceSources: async (deviceId) => [
+            ...printerNotices(deviceId),
+            await deviceClockNoticeSource(
+              { witnesses: () => clockWitnesses.witnesses(), status: readClockService },
+              deviceId,
+            ),
+          ],
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },
@@ -3648,8 +3661,6 @@ async function bootServer(
       remember: boxEmails.remember,
       log,
     });
-  const clockService = sharedClockServiceReading(boxHost, now);
-  const readClockService = clockService.read;
   // Before the listener opens, so its first answer already knows whether the start is confirmed.
   if (
     (await startClockCheck({
@@ -3726,6 +3737,7 @@ async function bootServer(
     ),
     clockDisagreesAlertSource(
       clockWitnesses,
+      readClockService,
       async () => (await spareFollow?.facts())?.clock ?? null,
     ),
     clockUnconfirmedAlertSource(startClockWaits),

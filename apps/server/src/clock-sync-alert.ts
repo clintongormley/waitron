@@ -14,6 +14,8 @@ export function clockSyncAlertSource(deps: {
   return {
     area: "box",
     permission: "system.manage",
+    // Asks the host, which can take seconds; outside, so no write waits on it.
+    readOutsideTransaction: true,
     async read() {
       const status = await deps.status();
       let reason: Reason | null;

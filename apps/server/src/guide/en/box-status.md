@@ -342,8 +342,12 @@ and handhelds send their own clock to the box about every 15 seconds while someo
 them or while they show the sign-in screen. Station screens do not send theirs. A till or handheld
 running on the box itself does not count, and devices at one network address count as one.
 
-When two or more devices agree with each other that the box's clock is more than a minute off, the
-bell warns the people who can manage the system: **2 devices
+While the box's time service keeps its clock right over the internet, the box trusts its own clock:
+a till or handheld more than a minute away from it shows **This device's time is wrong. Correct it in
+this device's settings.**, and the bell says nothing.
+
+Otherwise, when two or more devices agree with each other that the box's clock is more than a minute
+off, the bell warns the people who can manage the system: **2 devices
 agree that the time is 2026-10-23 21:40, but the box's clock reads 2026-10-23 21:10. Check the box's
 date and time on the Box status page.** Staff on the tills see nothing for this.
 

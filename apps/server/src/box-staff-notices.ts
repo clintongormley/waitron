@@ -1,5 +1,6 @@
 import { printers, printJobs, type Transaction } from "@waitron/db";
 import { and, eq, sql } from "drizzle-orm";
+import { CLOCK_WITNESS_MARGIN_MS, type ClockWitness } from "@waitron/fiscal";
 import { readPrinterRoles } from "@waitron/layouts";
 import type {
   StaffNotice,
@@ -7,6 +8,8 @@ import type {
   StaffNoticeSource,
   WaitronModule,
 } from "@waitron/module";
+import type { ClockServiceStatus } from "./box-host-client.js";
+import { clockServiceSynchronised } from "./clock-service-reading.js";
 import type { StartClockWaiting } from "./clock-unconfirmed-alert.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
@@ -105,6 +108,41 @@ export function deviceNoticeSources(
           },
         ]),
     ...enabledStaffNoticeSources(modules),
+  ];
+}
+
+/** Owner name of the device's own clock notice; no module is named this. */
+export const DEVICE_CLOCK_NOTICE_OWNER = "device-clock";
+
+/** `clock.device_wrong` while the box's time service is synchronised and `deviceId`'s latest fresh
+ * reading is more than a minute from the box's clock. The time service is asked here, before the
+ * read's write-lock turns, and only for a device that is off; the source answers what was found
+ * then. A failed look fails the source's read, never this call. */
+export async function deviceClockNoticeSource(
+  deps: {
+    witnesses: () => readonly ClockWitness[];
+    status: () => Promise<ClockServiceStatus>;
+  },
+  deviceId: string,
+): Promise<OwnedStaffNoticeSource> {
+  const read = await deviceClockNotices(deps, deviceId).then(
+    (notices) => () => Promise.resolve(notices),
+    (error: unknown) => () => Promise.reject(error as Error),
+  );
+  return { owner: DEVICE_CLOCK_NOTICE_OWNER, source: { read } };
+}
+
+async function deviceClockNotices(
+  deps: Parameters<typeof deviceClockNoticeSource>[0],
+  deviceId: string,
+): Promise<StaffNotice[]> {
+  const mine = deps.witnesses().find((w) => w.id === deviceId);
+  if (mine === undefined) return [];
+  const differenceMs = Date.parse(mine.witnessAt) - Date.parse(mine.boxAt);
+  if (Math.abs(differenceMs) - mine.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS) return [];
+  if (!(await clockServiceSynchronised(deps.status))) return [];
+  return [
+    { key: "clock.device_wrong", code: "clock.device_wrong", severity: "warning", params: {} },
   ];
 }
 

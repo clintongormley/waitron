@@ -80,6 +80,9 @@ If the server's [start-up](box-status.md#clock-at-start) ends while the dialog i
 the dialog says so and offers **Administrator sign-in**, so that an administrator can sign in there
 with their PIN and set the clock from the same till.
 
+**This device's time is wrong. Correct it in this device's settings.** is amber: the server keeps its
+time over the internet, and this till's clock is more than a minute away from it.
+
 **The server is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
 running out. A manager should free space before it runs out, on the
 [Box status page](box-status.md#free-space).

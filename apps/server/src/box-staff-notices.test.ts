@@ -5,6 +5,8 @@ import {
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
   clockCheckNoticeSource,
+  DEVICE_CLOCK_NOTICE_OWNER,
+  deviceClockNoticeSource,
   deviceNoticeSources,
   devicePrinterNoticeSources,
   printerStaffNoticeSource,
@@ -372,5 +374,86 @@ describe("printer notices", () => {
     now = new Date(AT.getTime() + 10_000);
     await one[0]!.source.read(CTX);
     expect(trouble).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("this device's own clock", () => {
+  const witness = (id: string, differenceMs: number) => ({
+    id,
+    boxAt: AT.toISOString(),
+    witnessAt: new Date(AT.getTime() + differenceMs).toISOString(),
+    uncertaintyMs: 0,
+  });
+  const WITNESSES = [witness("till-a", 60_001), witness("till-b", 60_000)];
+  const SYNCED = {
+    available: true,
+    service: "on",
+    unit: "systemd-timesyncd.service",
+    synchronised: true,
+    lastSyncAt: null,
+  } as const;
+  const status = () => Promise.resolve(SYNCED);
+  const WRONG = {
+    key: "clock.device_wrong",
+    code: "clock.device_wrong",
+    severity: "warning",
+    params: {},
+  };
+
+  it("tells the device more than a minute off, while the box's time service is synchronised", async () => {
+    const off = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, "till-a");
+    expect(off.owner).toBe(DEVICE_CLOCK_NOTICE_OWNER);
+    expect(await off.source.read(CTX)).toEqual([WRONG]);
+  });
+
+  it("tells a device exactly a minute off nothing, nor one with no reading", async () => {
+    for (const id of ["till-b", "till-c"]) {
+      const source = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, id);
+      expect(await source.source.read(CTX)).toEqual([]);
+    }
+  });
+
+  it("tells a device off in the other direction too", async () => {
+    const source = await deviceClockNoticeSource(
+      { witnesses: () => [witness("till-a", -3_600_000)], status },
+      "till-a",
+    );
+    expect(await source.source.read(CTX)).toEqual([WRONG]);
+  });
+
+  it("tells nobody while the time service is not synchronised or does not answer", async () => {
+    for (const status of [
+      () => Promise.resolve({ ...SYNCED, synchronised: false }),
+      () => Promise.resolve({ ...SYNCED, service: "off" as const, synchronised: false }),
+      () => Promise.resolve({ available: false as const, reason: "missing" as const }),
+      () => Promise.reject(new Error("host gone")),
+    ]) {
+      const off = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, "till-a");
+      expect(await off.source.read(CTX)).toEqual([]);
+    }
+  });
+
+  it("judges synchronised as the start check does, whatever the service reports", async () => {
+    for (const service of ["off", "stopped"] as const) {
+      const off = await deviceClockNoticeSource(
+        { witnesses: () => WITNESSES, status: () => Promise.resolve({ ...SYNCED, service }) },
+        "till-a",
+      );
+      expect(await off.source.read(CTX)).toEqual([WRONG]);
+    }
+  });
+
+  it("a failing look at the readings fails only the source's own read", async () => {
+    const failing = new Error("witnesses gone");
+    const source = await deviceClockNoticeSource(
+      {
+        witnesses: () => {
+          throw failing;
+        },
+        status,
+      },
+      "till-a",
+    );
+    await expect(source.source.read(CTX)).rejects.toBe(failing);
   });
 });

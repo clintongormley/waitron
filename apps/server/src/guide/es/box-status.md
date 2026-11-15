@@ -374,7 +374,11 @@ pantalla de inicio de sesión. Las pantallas de estación no envían la suya. Un
 funciona en el propio servidor no cuenta, y los dispositivos con una misma dirección de red cuentan
 como uno.
 
-Cuando dos o más dispositivos coinciden entre sí en que el reloj del servidor va desviado más de un
+Mientras el servicio de hora del servidor mantiene su reloj en hora por internet, el servidor se fía
+de su propio reloj: una caja o un terminal que se aleja de él más de un minuto muestra **La hora de
+este dispositivo es incorrecta. Corrígela en los ajustes del dispositivo.**, y la campana no dice nada.
+
+Si no, cuando dos o más dispositivos coinciden entre sí en que el reloj del servidor va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el servidor marca 2026-10-23
 21:10. Comprueba la fecha y la hora del servidor en Estado del servidor.** El personal de los terminales
 no ve nada de esto.

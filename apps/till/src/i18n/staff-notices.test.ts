@@ -36,6 +36,17 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     );
   });
 
+  it("tells the person to correct this device's own time, and offers nothing else", () => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.device_wrong", params: {} }, true)).toEqual({
+      main:
+        locale === "en-GB"
+          ? "This device's time is wrong. Correct it in this device's settings."
+          : "La hora de este dispositivo es incorrecta. Corrígela en los ajustes del dispositivo.",
+      hint: "",
+    });
+  });
+
   it.each([
     {},
     { agreed: 2, cause: "start" },

@@ -9,16 +9,26 @@ function storeAt(wallMs: number, monoMs: number) {
   return createClockWitnessStore({ wall: () => wallMs, monotonic: () => monoMs });
 }
 
+const UNSYNCHRONISED = () =>
+  Promise.resolve({
+    available: true,
+    service: "on",
+    unit: "systemd-timesyncd.service",
+    synchronised: false,
+    lastSyncAt: null,
+  } as const);
+
 async function readAlerts(
   store: ReturnType<typeof createClockWitnessStore>,
   now: Date,
+  status: Parameters<typeof clockDisagreesAlertSource>[1] = UNSYNCHRONISED,
 ): Promise<readonly unknown[]> {
-  return clockDisagreesAlertSource(store).read({ tx: {} as never, now });
+  return clockDisagreesAlertSource(store, status).read({ tx: {} as never, now });
 }
 
 describe("clock.disagrees", () => {
   it("is a box alert for whoever manages the system", () => {
-    const source = clockDisagreesAlertSource(storeAt(BOX_MS, 0));
+    const source = clockDisagreesAlertSource(storeAt(BOX_MS, 0), UNSYNCHRONISED);
     expect(source.area).toBe("box");
     expect(source.permission).toBe("system.manage");
   });
@@ -106,6 +116,51 @@ describe("clock.disagrees", () => {
       expect.objectContaining({ params: expect.objectContaining({ count: 2 }) }),
     ]);
   });
+
+  it("says nothing while the box's time service is synchronised, which is trusted over devices", async () => {
+    const store = storeAt(BOX_MS, 0);
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    store.noteDevice("till-b", "192.168.10.32", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    const synchronised = async () => ({ ...(await UNSYNCHRONISED()), synchronised: true });
+    expect(await readAlerts(store, new Date(BOX_MS), synchronised)).toEqual([]);
+    // As the start check judges it: the host refuses a clock set while synchronised, whatever
+    // the service reports.
+    const serviceOff = async () => ({ ...(await synchronised()), service: "off" as const });
+    expect(await readAlerts(store, new Date(BOX_MS), serviceOff)).toEqual([]);
+    const unanswered = () => Promise.reject(new Error("host gone"));
+    expect(await readAlerts(store, new Date(BOX_MS), unanswered)).toEqual([
+      expect.objectContaining({ code: "clock.disagrees" }),
+    ]);
+  });
+});
+
+describe("the early clock comparison while the box's time service is synchronised", () => {
+  const synchronised = async () => ({ ...(await UNSYNCHRONISED()), synchronised: true });
+
+  it("leaves a device out, and still compares the other box", async () => {
+    const store = storeAt(BOX_MS, 0);
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 30_000, { wallMs: BOX_MS, monoMs: 0 });
+    let peer: { boxAt: string; peerAt: string } | null = null;
+    const source = clockDisagreesAlertSource(store, synchronised, async () => peer);
+    const context = { tx: {} as never, now: new Date(BOX_MS) };
+    expect(await source.read(context)).toEqual([]);
+    peer = {
+      boxAt: new Date(BOX_MS).toISOString(),
+      peerAt: new Date(BOX_MS + 20_000).toISOString(),
+    };
+    expect(await source.read(context)).toEqual([
+      expect.objectContaining({
+        code: "clock.peer_disagrees",
+        params: { peer: true, differenceMs: 20_000 },
+      }),
+    ]);
+  });
 });
 
 describe("the early clock comparison", () => {
@@ -135,7 +190,7 @@ describe("the early clock comparison", () => {
       boxAt: new Date(BOX_MS).toISOString(),
       peerAt: new Date(BOX_MS + 20000).toISOString(),
     };
-    const source = clockDisagreesAlertSource(store, async () => peer);
+    const source = clockDisagreesAlertSource(store, UNSYNCHRONISED, async () => peer);
     const context = { tx: {} as never, now: new Date(BOX_MS + 60000) };
     expect(await source.read(context)).toEqual([
       expect.objectContaining({

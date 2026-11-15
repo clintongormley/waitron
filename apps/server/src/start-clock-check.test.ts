@@ -44,6 +44,13 @@ describe("the start's look at the time service", () => {
     expect(l.clockStatus).toHaveBeenCalledTimes(1);
   });
 
+  it("is by the internet when synchronised whatever the service reports, as the host refuses a set", async () => {
+    for (const service of ["off", "stopped"] as const) {
+      const l = look(async () => ({ ...clockServiceAnswer(true), service }));
+      await expect(startClockCheck(l.deps)).resolves.toBe("by_internet");
+    }
+  });
+
   it("waits when the time service is not synchronised", async () => {
     const l = look(async () => clockServiceAnswer(false));
     await expect(startClockCheck(l.deps)).resolves.toBe("waiting");

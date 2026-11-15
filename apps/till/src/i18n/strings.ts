@@ -2004,6 +2004,8 @@ export const en = {
   "staff_notice.clock.unusable": "Sales can't be recorded: the server's clock is wrong",
   "staff_notice.storage.space_low": "The server is nearly out of space",
   "staff_notice.clock.check_time": "The server's time needs checking",
+  "staff_notice.clock.device_wrong":
+    "This device's time is wrong. Correct it in this device's settings.",
   "staff_notice.clock.unconfirmed":
     "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
   "staff_notice.clock.unconfirmed_jumped":
@@ -4051,6 +4053,8 @@ export const es: Record<StringKey, string> = {
     "No se pueden registrar ventas: la hora del servidor es incorrecta",
   "staff_notice.storage.space_low": "Queda poco espacio en el servidor",
   "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
+  "staff_notice.clock.device_wrong":
+    "La hora de este dispositivo es incorrecta. Corrígela en los ajustes del dispositivo.",
   "staff_notice.clock.unconfirmed":
     "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.clock.unconfirmed_jumped":
