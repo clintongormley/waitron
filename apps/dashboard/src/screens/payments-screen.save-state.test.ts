@@ -603,7 +603,7 @@ describe("the held payment's Record", () => {
 describe("the Add a reader rows", () => {
   it("open savable: each row holds the provider's name, and Add adopts the reader under it", async () => {
     const { el, api } = await mount();
-    q(el, "[data-test=add-reader-acme]")!.click();
+    q(el, "[data-test=add-reader]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=adopt-v-1]")).not.toBeNull());
     await settle(el);
     expect(value(el, "name-v-1")).toBe("My Reader");

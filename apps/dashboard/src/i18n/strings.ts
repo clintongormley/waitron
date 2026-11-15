@@ -3043,6 +3043,7 @@ export const en = {
   "payments.disconnect_confirm": "Disconnect this provider?",
   "payments.no_providers": "No payment providers are available.",
   "payments.add_reader": "Add reader",
+  "payments.choose_provider": "Choose a card provider",
   "payments.readers_empty": "No card readers yet.",
   "payments.unpair_failed_unchanged":
     "The provider did not confirm the unpairing. The reader is still available; try again.",
@@ -7343,6 +7344,7 @@ export const es: Record<StringKey, string> = {
   "payments.disconnect_confirm": "¿Desconectar este proveedor?",
   "payments.no_providers": "No hay proveedores de pago disponibles.",
   "payments.add_reader": "Añadir lector",
+  "payments.choose_provider": "Elige un proveedor de tarjetas",
   "payments.readers_empty": "Todavía no hay lectores de tarjetas.",
   "payments.unpair_failed_unchanged":
     "El proveedor no confirmó la desvinculación. El lector sigue disponible; inténtalo de nuevo.",

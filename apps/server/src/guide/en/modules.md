@@ -2,8 +2,7 @@
 
 ## Set up a card provider {#set-up}
 
-Open **Modules** in System, or choose **Configure card providers** on **Card payments**.
-The Card payments link shows every card provider, including those that still need setup.
+Open **Modules** in System to configure a card provider.
 
 Choose **Configure** in the provider's row menu, enter its credentials and choose **Save**.
 Use **Cancel** to discard your changes. A configured provider can still refuse a payment;
@@ -13,6 +12,12 @@ in Reporting.
 The **Enabled**, **Disabled** and **All** filters show a module's state separately from its
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
 to see all optional modules.
+
+## Add a card reader {#add-reader}
+
+Open **Card payments** in Hardware and choose **Add reader** above the readers table.
+Choose the provider if asked, then add a reader from its list or pair a new one.
+If no provider is connected, choose **Configure card providers** to set one up first.
 
 ## Disconnect a card provider {#disconnect-provider}
 

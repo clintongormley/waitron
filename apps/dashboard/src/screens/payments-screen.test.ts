@@ -244,37 +244,29 @@ describe("payments-screen", () => {
     );
   });
 
-  it("lists providers with their state badges", async () => {
+  it("keeps provider setup and state badges off the connected readers page", async () => {
     const { el, api } = await mount();
-
     expect(api.listPaymentProviders).toHaveBeenCalled();
-    expect(q(el, "[data-test=provider-acme]")?.textContent).toContain("Acme Pay");
-    expect(q(el, "[data-test=provider-state-acme]")?.textContent).toContain("Connected");
-    expect(q(el, "[data-test=provider-state-zeta]")?.textContent).toContain("Not connected");
-  });
-
-  it("a provider's name draws the Bold weight", async () => {
-    const { el, host } = await mount();
-    host.style.setProperty("--wt-font-weight-bold", "800");
-    const name = q(el, "[data-test=provider-acme] .provider-name")!;
-    expect(name.textContent).toContain("Acme Pay");
-    expect(getComputedStyle(name).fontWeight).toBe("800");
-  });
-
-  it("links configuration to the complete provider menu rather than embedding connect forms", async () => {
-    const { el } = await mount();
+    expect(q(el, "[data-test=provider-acme]")).toBeNull();
+    expect(q(el, "[data-test=provider-state-acme]")).toBeNull();
+    expect(q(el, "[data-test=provider-state-zeta]")).toBeNull();
     expect(q(el, "[data-test=fake-connect-zeta]")).toBeNull();
-    expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(
-      "/manage/modules/view/card-providers/state/all",
-    );
+    expect(q(el, "[data-test=disconnect-acme]")).toBeNull();
+    expect(q(el, "a[data-test=configure-providers]")).toBeNull();
   });
 
-  it("keeps provider setup reachable while Disconnect lives on Modules", async () => {
-    const { el } = await mount();
-    expect(q(el, "[data-test=disconnect-acme]")).toBeNull();
-    expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(
-      "/manage/modules/view/card-providers/state/all",
+  it("names the provider choices from the registered catalogue", async () => {
+    const { el } = await mount(
+      stubApi({
+        listPaymentProviders: vi
+          .fn()
+          .mockResolvedValue(PROVIDERS.map((provider) => ({ ...provider, state: "connected" }))),
+      }),
     );
+    q(el, "[data-test=add-reader]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=add-reader-acme]")?.textContent).toContain("Acme Pay");
+    expect(q(el, "[data-test=add-reader-zeta]")?.textContent).toContain("Zeta Pay");
   });
 
   it("renders the readers in a data table with name/provider/status/default-count/actions", async () => {
@@ -357,7 +349,7 @@ describe("payments-screen", () => {
     const { el, api } = await mount();
     (api.listReaders as ReturnType<typeof vi.fn>).mockClear();
 
-    q(el, "[data-test=add-reader-acme]")!.click();
+    q(el, "[data-test=add-reader]")!.click();
     await flush(el);
     q(el, "[data-test=pair-new-reader]")!.click();
     await flush(el);
@@ -383,7 +375,7 @@ describe("payments-screen", () => {
         </button>`,
     };
     const { el, api } = await mount(stubApi(), { panels: [panel] });
-    q(el, "[data-test=add-reader-acme]")!.click();
+    q(el, "[data-test=add-reader]")!.click();
     await flush(el);
     q(el, "[data-test=pair-new-reader]")!.click();
     await flush(el);
@@ -458,7 +450,7 @@ describe("payments-screen", () => {
     const { el } = await mount(stubApi(), { mode: "demo" });
 
     expect(q(el, "[data-test=simulator-banner]")).not.toBeNull();
-    expect(q(el, "[data-test=provider-state-acme]")?.textContent).toContain("Simulator");
+    expect(q(el, "[data-test=provider-state-acme]")).toBeNull();
   });
 
   it("hides the simulator banner in live mode", async () => {
@@ -542,7 +534,7 @@ function changeName(el: PaymentsScreen, selector: string, value: string): void {
   q(el, selector)!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
 }
 async function openAdd(el: PaymentsScreen) {
-  q(el, "[data-test=add-reader-acme]")!.click();
+  q(el, "[data-test=add-reader]")!.click();
   await flush(el);
 }
 async function bottomOf(el: PaymentsScreen, dialog: string): Promise<string> {
@@ -1047,10 +1039,13 @@ describe("payments-screen remaining edges", () => {
       el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tbody tr"),
     ).map((row) => row.querySelector("td")!.textContent!.trim());
 
-  it("says so when no payment provider is available", async () => {
+  it("offers provider setup when no payment provider is connected", async () => {
     const { el } = await mount(stubApi({ listPaymentProviders: vi.fn().mockResolvedValue([]) }));
 
-    expect(el.shadowRoot!.textContent).toContain("No payment providers are available.");
+    expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(
+      "/manage/modules/view/card-providers/state/all",
+    );
+    expect(q(el, "[data-test=add-reader]")).toBeNull();
     expect(q(el, ".providers")).toBeNull();
   });
 
@@ -1754,7 +1749,10 @@ describe("the providers and readers once the server answers again", () => {
     await vi.waitFor(() =>
       expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
     );
-    expect(q(el, "[data-test=provider-state-acme]")?.textContent).toContain("Connected");
+    expect(
+      q(el, "[data-test=add-reader]")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .disabled,
+    ).toBe(false);
     expect(q(el, "[role=alert]")).toBeNull();
   });
 

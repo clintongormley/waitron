@@ -81,6 +81,6 @@ To add a different agent, follow the setup steps in **Add an agent** and match i
 
 In **Card payments**, find the reader under **Card readers** and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
 
-To use the reader again, choose **Add reader** for its provider. A recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.
+To use the reader again, choose **Add reader** above the table and select its provider if asked. A recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.
 
 Choose **Unpair from …** to remove only its provider registration while keeping it listed in Waitron. You will need to add or pair it again before using it.

@@ -2,8 +2,7 @@
 
 ## Configurar un proveedor de tarjeta {#set-up}
 
-Abre **Módulos** en Sistema, o elige **Configurar proveedores de tarjeta** en **Pagos con tarjeta**.
-El enlace de Pagos con tarjeta muestra todos los proveedores, incluidos los que aún necesitan configuración.
+Abre **Módulos** en Sistema para configurar un proveedor de tarjetas.
 
 Elige **Configurar** en el menú de la fila del proveedor, introduce sus credenciales y pulsa **Guardar**.
 Usa **Cancelar** para descartar los cambios. Un proveedor configurado puede rechazar un pago;
@@ -13,6 +12,12 @@ consulta el estado de los lectores en **Pagos con tarjeta**. Para revisar pagos 
 Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de un módulo por separado
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
 Elige **Todas las categorías** para ver todos los módulos opcionales.
+
+## Añadir un lector de tarjetas {#add-reader}
+
+Abre **Pagos con tarjeta** en Hardware y elige **Añadir lector** encima de la tabla de lectores.
+Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
+Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
 
 ## Desconectar un proveedor de tarjetas {#disconnect-provider}
 
