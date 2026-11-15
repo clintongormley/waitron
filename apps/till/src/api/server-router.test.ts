@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  MAIN_SILENT_MS,
-  SERVERS_STORAGE_KEY,
-  ServerRouter,
-  withServerTarget,
-} from "./server-router.js";
+import { SERVERS_STORAGE_KEY, ServerRouter, withServerTarget } from "./server-router.js";
 
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
@@ -1104,10 +1099,6 @@ describe("ServerRouter — the main box and the spare", () => {
     vi.useRealTimers();
   });
 
-  it("names twenty seconds as the main box's silence threshold", () => {
-    expect(MAIN_SILENT_MS).toBe(20_000);
-  });
-
   it("mainSilentSince starts at the main box's first failed probe and clears when it answers", async () => {
     vi.useFakeTimers({ now: T0 });
     const table: Record<string, Answer> = {
@@ -1213,17 +1204,6 @@ describe("ServerRouter — the main box and the spare", () => {
     table[B] = "down";
     await r.probeNow();
     expect(r.spare).toEqual({ url: B, answering: false });
-  });
-
-  it("spare is undefined when the list holds only the main box", async () => {
-    const r = new ServerRouter({
-      origin: VENUE,
-      fetchImpl: probeFetch({ [VENUE]: "down", [A]: "down" }),
-      storage: memoryStorage(),
-    });
-    r.setServers([chartList[0]!]);
-    await r.probeNow();
-    expect(r.spare).toBeUndefined();
   });
 
   it("a saved entry without a standing is neither the main box nor the spare", async () => {

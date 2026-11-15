@@ -16419,6 +16419,46 @@ describe("the main-server strip", () => {
     expect(waitingLine(el)).toBeUndefined();
   });
 
+  it("a till attached to a router already silent shows the strip 20 seconds after the silence began", async () => {
+    const router = new ServerRouter({
+      origin: ORIGIN,
+      fetchImpl: venueFetch(),
+      storage: memoryStorage(),
+    });
+    router.setServers(bothServers);
+    await router.probeNow();
+    expect(router.mainSilentSince).toBe(T0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers: bothServers }) });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await settle(el);
+    await router.probeNow();
+    await vi.advanceTimersByTimeAsync(14_800);
+    await router.probeNow();
+    await el.updateComplete;
+    expect(router.mainSilentSince).toBe(T0);
+    expect(lockStrip(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(200);
+    await el.updateComplete;
+    expect(lockStrip(el)).not.toBeNull();
+  });
+
+  it("a till put back on the page during silence shows the strip 20 seconds after the silence began", async () => {
+    const { el, router } = await mount();
+    await silentFor(el, router, 5_000);
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await settle(el);
+    await vi.advanceTimersByTimeAsync(14_800);
+    await router.probeNow();
+    await el.updateComplete;
+    expect(lockStrip(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(200);
+    await el.updateComplete;
+    expect(lockStrip(el)).not.toBeNull();
+  });
+
   it("offers the switch on a locked till and to a node.manage holder, not to other signed-in staff", async () => {
     const locked = await mount();
     await silentFor(locked.el, locked.router, 20_000);
@@ -16457,18 +16497,6 @@ describe("the main-server strip", () => {
     await silentFor(el, router, 20_000);
     expect(shellStrip(el)).not.toBeNull();
     expect(shellStrip(el)!.showSwitch).toBe(false);
-  });
-
-  it("a press while the main server answers shows the refusal and does not navigate", async () => {
-    const { el, router } = await mount();
-    const navigate = vi.fn();
-    el.navigate = navigate;
-    await silentFor(el, router, 20_000);
-    answering.main = true;
-    press(lockStrip(el)!);
-    await settle(el);
-    expect(lockStrip(el)!.refused).toBe(true);
-    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("a press while the main server is silent opens the spare's switch page with the way back", async () => {
@@ -16511,6 +16539,20 @@ describe("the main-server strip", () => {
     const failProbe = holdNextFetch(fetchImpl);
     press(lockStrip(el)!);
     el.remove();
+    failProbe();
+    await settle(el);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("a page hidden during the final probe does not navigate when it is shown again", async () => {
+    const { el, router, fetchImpl } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    press(lockStrip(el)!);
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
     failProbe();
     await settle(el);
     expect(navigate).not.toHaveBeenCalled();
@@ -16564,17 +16606,21 @@ describe("the main-server strip", () => {
     const { el, router } = await mount([bothServers[0]!]);
     await signIn(el, ["node.manage"]);
     await silentFor(el, router, 20_000);
+    expect(router.spare).toBeUndefined();
     expect(shellStrip(el)).toBeNull();
     expect(waitingLine(el)).toBeDefined();
   });
 
-  it("the strip and its refusal clear when the main server answers again", async () => {
+  it("a press while the main server answers shows the refusal, does not navigate, and clears when it answers again", async () => {
     const { el, router } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
     await silentFor(el, router, 20_000);
     answering.main = true;
     press(lockStrip(el)!);
     await settle(el);
     expect(lockStrip(el)!.refused).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
     await router.probeNow();
     await settle(el);
     expect(lockStrip(el)).toBeNull();

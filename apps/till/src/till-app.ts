@@ -2334,6 +2334,10 @@ export class TillApp extends LitElement {
     this.#routerLive();
   };
   readonly #resumeLive = () => this.#live?.start();
+  readonly #onPageHide = () => {
+    this.#switchGeneration++;
+    this.#pauseLive();
+  };
 
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
@@ -2559,7 +2563,8 @@ export class TillApp extends LitElement {
 
   @state() private mainServerRefused = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Moves on when the till leaves the page, its router or its server; voids a pending switch. */
+  /** Moves on at `pagehide`, when the till is detached from the page or its router, and when its
+   * server changes; voids a pending switch. */
   #switchGeneration = 0;
 
   /** Present once the main server has been silent for `MAIN_SILENT_MS` at a venue with a spare. */
@@ -2609,6 +2614,7 @@ export class TillApp extends LitElement {
     this.router?.addEventListener("server-changed", this.#onServerChanged);
     this.router?.addEventListener("state-changed", this.#onServerState);
     this.#subscribedRouter = this.router;
+    this.#watchMainSilence();
   }
 
   #detach(): void {
@@ -2685,7 +2691,7 @@ export class TillApp extends LitElement {
     document.addEventListener("visibilitychange", this.#onVisibility);
     window.addEventListener("focus", this.#onDraftFocus);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
-    window.addEventListener("pagehide", this.#pauseLive);
+    window.addEventListener("pagehide", this.#onPageHide);
     window.addEventListener("pageshow", this.#resumeLive);
     this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
@@ -2750,7 +2756,7 @@ export class TillApp extends LitElement {
     this.#candidateScope?.dispose();
     this.#candidateScope = undefined;
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
-    window.removeEventListener("pagehide", this.#pauseLive);
+    window.removeEventListener("pagehide", this.#onPageHide);
     window.removeEventListener("pageshow", this.#resumeLive);
     this.#pauseLive();
     this.#live = undefined;
