@@ -47,9 +47,11 @@ paths there are incomplete orientation, not a completed audit.
    make no box-planner or cross-runtime claims. Reuse A1532's byte-measurement method.
    The bench does not run print housekeeping: report absolute table bytes and state
    that shares with untrimmed print payloads are not comparable with A1531's.
-   Interpret “no deletion” as no real-data deletion or trim implementation; ask the
-   watcher to confirm synthetic-copy probes, falling back to eligibility counts if refused.
-   On independent freshly built disposable copies under owned scratch only, probe
+   At the clearance gate above, ask the watcher to confirm that “no deletion” permits
+   synthetic-copy probes, never real-data deletion or a trim implementation. If refused,
+   report eligibility counts and explicitly leave savings unmeasured and the ask incomplete.
+   Make one fresh build, close its venue, then use independent disposable file copies
+   under owned scratch for each probe; never rebuild 30 days per table or period. Probe
    justified periods; record eligible/kept counts at the final clock, table/index
    `dbstat`, freelist, file and compact-copy bytes, plus an unchanged control.
    A period at least as long as the sample may save nothing: report that result;
