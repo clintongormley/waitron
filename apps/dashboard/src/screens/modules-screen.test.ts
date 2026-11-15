@@ -331,3 +331,44 @@ it("keeps the Payments provider prerequisite refusal beside the confirmation", a
   );
   expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
 });
+it("narrows the modules to those whose shown name or configuration matches the search, beside the Category and State choices", async () => {
+  history.replaceState(null, "", "/manage/modules/view/all/state/all");
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const rowKeys = () =>
+    [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+  const search = async (value: string) => {
+    const box = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    box.value = value;
+    box.dispatchEvent(new Event("input"));
+    await table.updateComplete;
+  };
+  expect(table.shadowRoot!.querySelector(".table-search")!.getAttribute("aria-label")).toBe(
+    "Search modules",
+  );
+  await search("spanish workforce");
+  expect(rowKeys()).toEqual(["module:workforce-es"]);
+  await search("needs setup");
+  expect(rowKeys()).toEqual(["card-provider:stripe"]);
+  expect(el.shadowRoot!.querySelector("[name=category]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=state]")).not.toBeNull();
+});
+it("keeps the Category and State choices on screen when no module matches them", async () => {
+  const el = await mount();
+  change(el, "category", "card-providers");
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-module]")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  expect(rows(el)).toEqual([]);
+  for (const name of ["category", "state"]) {
+    const choice = el.shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`);
+    expect(choice).not.toBeNull();
+    expect(choice!.checkVisibility()).toBe(true);
+    const box = choice!.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.height).toBeGreaterThan(0);
+  }
+});

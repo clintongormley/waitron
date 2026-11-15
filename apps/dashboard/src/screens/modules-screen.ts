@@ -211,12 +211,23 @@ export class ModulesScreen extends LitElement {
       this.busy = false;
     }
   }
+  #configuration(row: ModuleRow): string {
+    if (row.category === "module") return "";
+    if (this.providersError) return text("modules.configuration_unavailable");
+    if (this.providers === undefined) return text("modules.loading");
+    return text(
+      this.providers.find((provider) => provider.providerId === row.id)?.state === "connected"
+        ? "modules.configured"
+        : "modules.needs_setup",
+    );
+  }
   #columns(): DataTableColumn<ModuleRow>[] {
     return [
       {
         key: "name",
         label: text("modules.name"),
         cell: (row) => this.#name(row),
+        searchValue: (row) => this.#name(row),
       },
       {
         key: "state",
@@ -227,19 +238,8 @@ export class ModulesScreen extends LitElement {
       {
         key: "configuration",
         label: text("modules.configuration"),
-        cell: (row) =>
-          row.category === "module"
-            ? nothing
-            : this.providersError
-              ? text("modules.configuration_unavailable")
-              : this.providers === undefined
-                ? text("modules.loading")
-                : text(
-                    this.providers.find((provider) => provider.providerId === row.id)?.state ===
-                      "connected"
-                      ? "modules.configured"
-                      : "modules.needs_setup",
-                  ),
+        cell: (row) => this.#configuration(row),
+        searchValue: (row) => this.#configuration(row),
       },
       {
         key: "actions",
@@ -325,7 +325,7 @@ export class ModulesScreen extends LitElement {
         ></wt-combobox>
       </div>
       ${this.menuError || this.providersError ? html`<p class="error" role="alert">${codeMessage(this.menuError || this.providersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
-      ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
+      ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} searchable searchLabel=${text("modules.search")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${
         this.switching

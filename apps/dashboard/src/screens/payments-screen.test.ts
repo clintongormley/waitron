@@ -14,7 +14,11 @@ import type {
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOptions,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 import { formatEquipmentCode } from "@waitron/shared";
@@ -2407,4 +2411,127 @@ it("opens the backup comparison from Card payments", async () => {
   expect(el.shadowRoot!.querySelector("dashboard-backup-audit")).toBeNull();
   button.click();
   await expect.poll(() => el.shadowRoot!.querySelector("dashboard-backup-audit")).toBeTruthy();
+});
+
+describe("searching and filtering the card readers", () => {
+  const readers: ReaderRow[] = [
+    READERS[0]!,
+    {
+      id: "r-2",
+      provider: "zeta",
+      name: "Patio reader",
+      active: true,
+      canEnable: true,
+      printsOwnSlipAutomatically: false,
+      deviceCount: 1,
+      deviceNames: ["Patio till"],
+    },
+    {
+      id: "r-3",
+      provider: "acme",
+      name: "Spare reader",
+      active: false,
+      canEnable: false,
+      printsOwnSlipAutomatically: false,
+      deviceCount: 0,
+      deviceNames: [],
+    },
+  ];
+  async function mountReaders(): Promise<PaymentsScreen> {
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers),
+        readerStatus: vi.fn((id: string) =>
+          Promise.resolve({
+            printsOwnSlipAutomatically: false,
+            online: id !== "r-2",
+          } as ReaderStatusView),
+        ),
+      }),
+    );
+    await flush(el);
+    return el;
+  }
+  const table = (el: PaymentsScreen) => el.shadowRoot!.querySelector("wt-data-table")!;
+  function rowKeys(el: PaymentsScreen): string[] {
+    return [...table(el).shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key")!,
+    );
+  }
+  async function searchReaders(el: PaymentsScreen, value: string): Promise<void> {
+    const search = table(el).shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    search.value = value;
+    search.dispatchEvent(new Event("input"));
+    await flush(el);
+    await table(el).updateComplete;
+  }
+  const filterOf = (el: PaymentsScreen, key: string) =>
+    table(el).shadowRoot!.querySelector<HTMLElement>(`wt-combobox[data-filter="${key}"]`)!;
+
+  it("narrows the readers to those whose name or till matches the search", async () => {
+    const el = await mountReaders();
+    await searchReaders(el, "patio reader");
+    expect(rowKeys(el)).toEqual(["r-2"]);
+    await searchReaders(el, "terrace till");
+    expect(rowKeys(el)).toEqual(["r-1"]);
+  });
+
+  it.each(["en", "es-ES"])(
+    "narrows the readers to those whose shown status or provider matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountReaders();
+        await searchReaders(el, t("payments.reader_status_offline"));
+        expect(rowKeys(el)).toEqual(["r-2"]);
+        await searchReaders(el, t("payments.reader_status_online"));
+        expect(rowKeys(el)).toEqual(["r-1"]);
+        await searchReaders(el, t("payments.reader_unpaired"));
+        expect(rowKeys(el)).toEqual(["r-3"]);
+        await searchReaders(el, "zeta pay");
+        expect(rowKeys(el)).toEqual(["r-2"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("narrows the readers to the provider chosen", async () => {
+    const el = await mountReaders();
+    const filter = filterOf(el, "provider") as HTMLElement & { options: { label: string }[] };
+    expect(filter.options.map((o) => o.label)).toEqual([
+      t("payments.filter_provider_all"),
+      "Acme Pay",
+      "Zeta Pay",
+    ]);
+    await chooseOptions(filter, ["zeta"]);
+    await flush(el);
+    expect(rowKeys(el)).toEqual(["r-2"]);
+  });
+
+  it("narrows the readers to the status chosen", async () => {
+    const el = await mountReaders();
+    await chooseOptions(filterOf(el, "status"), ["offline"]);
+    await flush(el);
+    expect(rowKeys(el)).toEqual(["r-2"]);
+    await chooseOptions(filterOf(el, "status"), ["unpaired"]);
+    await flush(el);
+    expect(rowKeys(el)).toEqual(["r-3"]);
+  });
+
+  it("translates the readers' filter panel", async () => {
+    const el = await mountReaders();
+    const filter = filterOf(el, "status") as HTMLElement & {
+      searchPlaceholder: string;
+      noResultsLabel: string;
+    };
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      t("categories.combobox_search"),
+      t("categories.combobox_no_results"),
+    ]);
+    expect(
+      table(el).shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label"),
+    ).toBe(t("table.filters"));
+  });
 });

@@ -93,6 +93,47 @@ type BillTarget =
   | { kind: "tender"; row: StuckTenderRefundRow };
 
 type BillDraft = { outcome: string; note: string; pin: string };
+
+type ReaderStatusKey =
+  | "online"
+  | "offline"
+  | "processing"
+  | "unknown"
+  | "timed_out"
+  | "loading"
+  | "unavailable"
+  | "unpaired";
+
+const READER_STATUS_FILTER: readonly ReaderStatusKey[] = [
+  "online",
+  "offline",
+  "processing",
+  "unknown",
+  "timed_out",
+  "unavailable",
+  "unpaired",
+];
+
+function readerStatusLabel(key: ReaderStatusKey): string {
+  switch (key) {
+    case "online":
+      return t("payments.reader_status_online");
+    case "offline":
+      return t("payments.reader_status_offline");
+    case "processing":
+      return t("payments.reader_pairing_processing");
+    case "unknown":
+      return t("payments.reader_status_unknown");
+    case "timed_out":
+      return codeMessage("connection.timed_out");
+    case "loading":
+      return t("payments.reader_status_loading");
+    case "unavailable":
+      return t("payments.reader_unavailable");
+    case "unpaired":
+      return t("payments.reader_unpaired");
+  }
+}
 type HeldField = "outcome" | "note" | "pin";
 
 function billAmount(target: BillTarget): string {
@@ -2279,15 +2320,18 @@ export class PaymentsScreen extends LitElement {
     </li>`;
   }
 
-  #statusText(reader: ReaderRow): string {
-    if (!reader.active)
-      return t(reader.canEnable ? "payments.reader_unavailable" : "payments.reader_unpaired");
+  #statusKey(reader: ReaderRow): ReaderStatusKey {
+    if (!reader.active) return reader.canEnable ? "unavailable" : "unpaired";
     const status = this.statuses.get(reader.id);
-    if (status === undefined) return t("payments.reader_status_loading");
-    if (status === "connection.timed_out") return codeMessage(status);
-    if (status === "error" || status.unreachable) return t("payments.reader_status_unknown");
-    if (status.pairingStatus === "processing") return t("payments.reader_pairing_processing");
-    return status.online ? t("payments.reader_status_online") : t("payments.reader_status_offline");
+    if (status === undefined) return "loading";
+    if (status === "connection.timed_out") return "timed_out";
+    if (status === "error" || status.unreachable) return "unknown";
+    if (status.pairingStatus === "processing") return "processing";
+    return status.online ? "online" : "offline";
+  }
+
+  #statusText(reader: ReaderRow): string {
+    return readerStatusLabel(this.#statusKey(reader));
   }
 
   #readerColumns(): DataTableColumn<ReaderRow>[] {
@@ -2296,19 +2340,46 @@ export class PaymentsScreen extends LitElement {
         key: "name",
         label: t("payments.reader_col_name"),
         cell: (reader) => reader.name,
+        searchValue: (reader) => reader.name,
         sortValue: (reader) => reader.name,
       },
       {
         key: "provider",
         choosable: "shown",
         label: t("payments.reader_col_provider"),
+        filter: {
+          label: t("payments.reader_col_provider"),
+          allLabel: t("payments.filter_provider_all"),
+          multiple: {
+            countLabel: (count) => fill("payments.filter_provider_count", { count: String(count) }),
+          },
+          value: (reader) => reader.provider,
+          options: [...new Set((this.readers ?? []).map((reader) => reader.provider))].map(
+            (provider) => ({ value: provider, label: this.#providerName(provider) }),
+          ),
+        },
         cell: (reader) => this.#providerName(reader.provider),
+        searchValue: (reader) => this.#providerName(reader.provider),
         sortValue: (reader) => this.#providerName(reader.provider),
       },
       {
         key: "status",
         choosable: "shown",
         label: t("payments.reader_col_status"),
+        filter: {
+          preserveOrder: true,
+          label: t("payments.reader_col_status"),
+          allLabel: t("payments.filter_status_all"),
+          multiple: {
+            countLabel: (count) => fill("payments.filter_status_count", { count: String(count) }),
+          },
+          value: (reader) => this.#statusKey(reader),
+          options: READER_STATUS_FILTER.map((key) => ({
+            value: key,
+            label: readerStatusLabel(key),
+          })),
+        },
+        searchValue: (reader) => this.#statusText(reader),
         cell: (reader) =>
           html`<span data-test="reader-status-${reader.id}">${this.#statusText(reader)}</span>`,
       },
@@ -2331,6 +2402,7 @@ export class PaymentsScreen extends LitElement {
         key: "deviceCount",
         choosable: "shown",
         label: t("payments.reader_col_in_use_by"),
+        searchValue: (reader) => reader.deviceNames.join(" "),
         cell: (reader) =>
           html`<span data-test=${`reader-use-${reader.id}`} title=${reader.deviceNames.join(", ")}
             >${reader.deviceNames.slice(0, 2).join(", ")}${reader.deviceNames.length > 2 ? ` +${reader.deviceNames.length - 2}` : ""}</span
@@ -2702,7 +2774,15 @@ export class PaymentsScreen extends LitElement {
             ? nothing
             : html`<wt-data-table
                 noMatchesMessage=${tableNoMatches()}
+                filterSearchPlaceholder=${t("categories.combobox_search")}
+                filterNoResultsLabel=${t("categories.combobox_no_results")}
+                filtersLabel=${t("table.filters")}
+                filteredColumnLabel=${t("table.filtered_column")}
+                filtersClearAllLabel=${t("table.filters_clear_all")}
+                filtersCloseLabel=${t("table.filters_close")}
                 aria-label=${t("payments.readers_heading")}
+                searchable
+                searchLabel=${t("payments.readers_search")}
                 viewKey="waitron.payments.readers.table"
                 customiseColumnsLabel=${t("table.customise_columns")}
                 customiseLabel=${t("table.customise")}

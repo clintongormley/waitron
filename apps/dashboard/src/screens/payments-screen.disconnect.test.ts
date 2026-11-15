@@ -46,6 +46,13 @@ async function mount(api = client([])) {
   );
   await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalled());
   await el.updateComplete;
+  // The readers table puts its search box on a row of its own on a narrow screen, a frame after it
+  // measures itself; the page's height is read only once that has happened.
+  for (let last = -1, height = el.getBoundingClientRect().height; height !== last;) {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    last = height;
+    height = el.getBoundingClientRect().height;
+  }
   return el;
 }
 const button = (el: PaymentsScreen) =>

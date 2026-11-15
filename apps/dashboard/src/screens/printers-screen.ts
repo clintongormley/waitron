@@ -67,6 +67,7 @@ import type {
   PairingModeState,
   PrintAgentRow,
   PrintJobRow,
+  PrintJobStatus,
   PrintJobPreview,
   PrintPaperWidth,
   PrintResolution,
@@ -180,6 +181,8 @@ type PrinterTableRow = { kind: "receipt"; printer: Printer } | { kind: "a4"; row
 function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
 }
+
+const JOB_STATUSES: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed"];
 
 function pageSize(media: PagePrinterRow["media"]): string {
   return t(
@@ -2668,6 +2671,7 @@ export class PrintersScreen extends LitElement {
         key: "name",
         label: t("printers.name"),
         sortValue: (a) => a.name,
+        searchValue: (a) => a.name,
         cell: (a) =>
           html`<span data-test=${`agent-row-${a.id}`}
             ><span data-test=${`agent-name-${a.id}`}>${a.name}</span></span
@@ -2677,6 +2681,8 @@ export class PrintersScreen extends LitElement {
         key: "host",
         choosable: "shown",
         label: t("printers.agent_host"),
+        searchValue: (a) =>
+          [a.host ?? "", a.nodeId === null ? "" : t("printers.provenance_self")].join(" "),
         cell: (a) =>
           html`${
             a.setupUrl && /^https?:\/\//i.test(a.setupUrl)
@@ -2713,6 +2719,8 @@ export class PrintersScreen extends LitElement {
             filterSearchPlaceholder=${t("categories.combobox_search")}
             filterNoResultsLabel=${t("categories.combobox_no_results")}
             data-test="agents-table"
+            searchable
+            searchLabel=${t("printers.agents_search")}
             viewKey="waitron.printers.agents.table"
             customiseColumnsLabel=${t("table.customise_columns")}
             customiseLabel=${t("table.customise")}
@@ -3050,10 +3058,13 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
-  #printerObservation(p: Printer): Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined {
-    let latest: Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined;
+  #printerObservation(
+    p: Printer,
+  ): Pick<DiscoveredPrinter, "agentId" | "agentName" | "lastSeenAt"> | undefined {
+    let latest: Pick<DiscoveredPrinter, "agentId" | "agentName" | "lastSeenAt"> | undefined;
     const agent = this.agents.find(({ id }) => id === p.lastPrintAgentId);
-    if (agent && p.lastPrintAt) latest = { agentName: agent.name, lastSeenAt: p.lastPrintAt };
+    if (agent && p.lastPrintAt)
+      latest = { agentId: agent.id, agentName: agent.name, lastSeenAt: p.lastPrintAt };
     for (const device of this.discovered) {
       if (device.printerId === p.id && (!latest || device.lastSeenAt > latest.lastSeenAt))
         latest = device;
@@ -3753,11 +3764,41 @@ export class PrintersScreen extends LitElement {
     ];
     const idOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.id : r.row.id);
     const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
+    const paperOf = (r: PrinterTableRow) =>
+      r.kind === "receipt" ? r.printer.paperWidth : r.row.media;
+    // The agent filter chooses by agent id, or by one of these codes where no agent is named, so a
+    // saved choice survives a language change and two agents sharing a name stay two choices.
+    const agentOf = (r: PrinterTableRow): { id: string; name: string } => {
+      if (r.kind === "a4")
+        return r.row.agentId !== null && r.row.agentName !== null
+          ? { id: r.row.agentId, name: r.row.agentName }
+          : { id: "gone", name: t("printers.invoice_printer_agent_gone") };
+      if (r.printer.transport === "cloud_poll") return { id: "cloud", name: "—" };
+      const observed = seen.get(r.printer.id);
+      return observed !== undefined && observed.agentName !== null
+        ? { id: observed.agentId, name: observed.agentName }
+        : { id: "unknown", name: t("printers.agent_unknown") };
+    };
+    const agentNameOf = (r: PrinterTableRow) => agentOf(r).name;
+    const agentChoices = new Map<string, string>();
+    for (const row of rows) {
+      const agent = agentOf(row);
+      if (!agentChoices.has(agent.id)) agentChoices.set(agent.id, agent.name);
+    }
+    const agentFallbacks = ["gone", "unknown", "cloud"];
+    const agentLabels = [...agentChoices].filter(([id]) => !agentFallbacks.includes(id));
+    const agentLabel = (id: string, name: string) => {
+      const host = this.agents.find((agent) => agent.id === id)?.host;
+      return host && agentLabels.some(([other, label]) => other !== id && label === name)
+        ? `${name} (${host})`
+        : name;
+    };
     const columns: DataTableColumn<PrinterTableRow>[] = [
       {
         key: "name",
         label: t("printers.name"),
         sortValue: nameOf,
+        searchValue: nameOf,
         cell: (r) =>
           html`<wt-button
               variant="ghost"
@@ -3772,6 +3813,21 @@ export class PrintersScreen extends LitElement {
         key: "paper",
         choosable: "shown",
         label: t("printers.invoice_printer_paper"),
+        filter: {
+          preserveOrder: true,
+          label: t("printers.invoice_printer_paper"),
+          allLabel: t("printers.filter_paper_all"),
+          multiple: {
+            countLabel: (count) => fill("printers.filter_paper_count", { count: String(count) }),
+          },
+          value: paperOf,
+          options: [
+            { value: "58mm", label: t("printers.paper_roll_58") },
+            { value: "80mm", label: t("printers.paper_roll_80") },
+            { value: "iso_a4_210x297mm", label: pageSize("iso_a4_210x297mm") },
+            { value: "na_letter_8.5x11in", label: pageSize("na_letter_8.5x11in") },
+          ],
+        },
         cell: (r) =>
           r.kind === "receipt"
             ? html`<span data-test=${`printer-paper-${r.printer.id}`}
@@ -3789,14 +3845,32 @@ export class PrintersScreen extends LitElement {
         key: "agent",
         choosable: "shown",
         label: t("printers.last_seen_by"),
+        searchValue: agentNameOf,
+        filter: {
+          label: t("printers.last_seen_by"),
+          allLabel: t("printers.filter_agent_all"),
+          multiple: {
+            countLabel: (count) => fill("printers.filter_agent_count", { count: String(count) }),
+          },
+          value: (r) => agentOf(r).id,
+          // Until the printers agents have seen are read, those printers count as "unknown"; no
+          // options keeps a saved agent choice waiting rather than letting the table drop it.
+          options: this.loading
+            ? []
+            : [
+                ...agentLabels.map(([value, name]) => ({ value, label: agentLabel(value, name) })),
+                ...agentFallbacks
+                  .filter((id) => agentChoices.has(id))
+                  .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
+              ],
+        },
         cell: (r) => {
           if (r.kind === "a4")
             return html`<span data-test=${`page-printer-agent-${r.row.id}`}
-              >${r.row.agentName ?? t("printers.invoice_printer_agent_gone")}</span
+              >${agentNameOf(r)}</span
             >`;
           const p = r.printer;
-          return html`<span data-test=${`printer-agent-${p.id}`}>
-              ${p.transport === "cloud_poll" ? "—" : (seen.get(p.id)?.agentName ?? t("printers.agent_unknown"))} </span
+          return html`<span data-test=${`printer-agent-${p.id}`}> ${agentNameOf(r)} </span
             >${this.#seenStatus(p.id, seen.get(p.id))}`;
         },
       },
@@ -3856,6 +3930,8 @@ export class PrintersScreen extends LitElement {
             filterSearchPlaceholder=${t("categories.combobox_search")}
             filterNoResultsLabel=${t("categories.combobox_no_results")}
             data-test="printers-table"
+            searchable
+            searchLabel=${t("printers.search")}
             viewKey="waitron.printers.table"
             customiseColumnsLabel=${t("table.customise_columns")}
             customiseLabel=${t("table.customise")}
@@ -3992,10 +4068,23 @@ export class PrintersScreen extends LitElement {
   }
 
   #renderJobsSection(): TemplateResult {
+    const printerNameOf = (j: PrintJobRow) =>
+      this.printers.find((p) => p.id === j.printerId)?.name ?? j.printerName;
+    const jobPrinters = new Map(this.jobs.map((j) => [j.printerId, printerNameOf(j)]));
     const columns: DataTableColumn<PrintJobRow>[] = [
       {
         key: "printer",
         label: t("printers.job_printer"),
+        searchValue: printerNameOf,
+        filter: {
+          label: t("printers.job_printer"),
+          allLabel: t("printers.filter_printer_all"),
+          multiple: {
+            countLabel: (count) => fill("printers.filter_printer_count", { count: String(count) }),
+          },
+          value: (j) => j.printerId,
+          options: [...jobPrinters].map(([value, label]) => ({ value, label })),
+        },
         cell: (j) => {
           const printer = this.printers.find((p) => p.id === j.printerId);
           return html`<span data-test=${`job-row-${j.id}`}
@@ -4018,6 +4107,22 @@ export class PrintersScreen extends LitElement {
         key: "status",
         choosable: "shown",
         label: t("printers.status"),
+        filter: {
+          preserveOrder: true,
+          label: t("printers.status"),
+          allLabel: t("printers.filter_status_all"),
+          multiple: {
+            countLabel: (count) => fill("printers.filter_status_count", { count: String(count) }),
+          },
+          value: (j) => j.status,
+          options: JOB_STATUSES.map((status) => ({ value: status, label: jobStatusName(status) })),
+        },
+        searchValue: (j) =>
+          [
+            jobStatusName(j.status),
+            j.lastError === null ? "" : jobReason(j.lastError),
+            j.waitReason === undefined ? "" : codeMessage(j.waitReason),
+          ].join(" "),
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span
@@ -4076,7 +4181,11 @@ export class PrintersScreen extends LitElement {
           html`<p class="hint">${t("printers.jobs_limit")}</p>
             <wt-data-table
               noMatchesMessage=${tableNoMatches()}
+              filterSearchPlaceholder=${t("categories.combobox_search")}
+              filterNoResultsLabel=${t("categories.combobox_no_results")}
               data-test="jobs-table"
+              searchable
+              searchLabel=${t("printers.jobs_search")}
               viewKey="waitron.printers.jobs.table"
               customiseColumnsLabel=${t("table.customise_columns")}
               customiseLabel=${t("table.customise")}

@@ -6,6 +6,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { PERMISSION_TEXT } from "../i18n/permissions.js";
+import { accessRoleName } from "../i18n/domain.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { AccessRolesScreen } from "./access-roles-screen.js";
 import "./access-roles-screen.js";
@@ -398,3 +399,27 @@ it("uses the singular delete wording for one holder", async () => {
     "1 person holds Accountant. Deleting it takes it away from them.",
   );
 });
+it.each(["en-GB", "es-ES"])(
+  "narrows the roles to those whose shown name matches the search (%s)",
+  async (locale) => {
+    const { el } = await mount({}, grants, locale);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const rowKeys = () =>
+      [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+        row.getAttribute("data-row-key"),
+      );
+    const search = async (value: string) => {
+      const box = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+      box.value = value;
+      box.dispatchEvent(new Event("input"));
+      await table.updateComplete;
+    };
+    expect(table.shadowRoot!.querySelector(".table-search")!.getAttribute("aria-label")).toBe(
+      t("access_roles.search"),
+    );
+    await search("accountant");
+    expect(rowKeys()).toEqual(["accounts"]);
+    await search(accessRoleName(roles[1]!));
+    expect(rowKeys()).toEqual(["admin"]);
+  },
+);

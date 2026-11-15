@@ -362,7 +362,7 @@ describe("units-screen", () => {
     expect(root.querySelector(".filters-clear-all")!.textContent).toContain("Borrar todo");
     expect(root.querySelector(".filter-section h3")!.textContent).toBe("Precisión");
     expect(root.querySelector("wt-combobox.table-filter")!.getAttribute("placeholder")).toBe(
-      "Todas las precisiones",
+      "Cualquier precisión",
     );
     expect(root.querySelector(".filter-clear")).toBeNull();
   });

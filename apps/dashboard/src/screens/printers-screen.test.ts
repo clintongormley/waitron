@@ -21,6 +21,7 @@ import {
 } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
+  chooseOptions,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -2125,21 +2126,26 @@ describe("printers-screen", () => {
     { locale: "en", del: "Delete", title: "Delete print agent?", add: "Add" },
     { locale: "es-ES", del: "Eliminar", title: "¿Eliminar agente de impresión?", add: "Añadir" },
   ])("words agent Delete and Add in $locale", async ({ locale, del, title, add }) => {
+    const before = currentLocale();
     setLocale(locale);
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
-    q(el, "[data-test=revoke-agent-a1]")!.click();
-    await flush(el);
-    expect(deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent).toBe(
-      title,
-    );
-    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
-    q(el, "[data-test=open-add-agent]")!.click();
-    await flush(el);
-    expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
+    try {
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
+      q(el, "[data-test=revoke-agent-a1]")!.click();
+      await flush(el);
+      expect(
+        deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent,
+      ).toBe(title);
+      await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("cancels an agent Delete without changing it", async () => {
@@ -5763,7 +5769,16 @@ describe("printer setup refinements", () => {
       api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(q(el, '[name="status-filter"]')).toBeNull();
+    const filterKeys = (name: string) =>
+      (
+        q(el, `[data-test="${name}"]`) as HTMLElement & {
+          columns: { key: string; filter?: unknown }[];
+        }
+      ).columns
+        .filter((column) => column.filter !== undefined)
+        .map((column) => column.key);
+    expect(filterKeys("printers-table")).toEqual(["paper", "agent"]);
+    expect(filterKeys("agents-table")).toEqual([]);
     expect(el.shadowRoot!.querySelectorAll("wt-tabs h2").length).toBe(0);
   });
 
@@ -12749,7 +12764,7 @@ describe("one table for every printer", () => {
       [...table(el).shadowRoot!.querySelectorAll("wt-combobox")].map((box) =>
         box.getAttribute("name"),
       ),
-    ).toEqual([]);
+    ).toEqual(["paper-filter", "agent-filter"]);
     expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
     expect(q(el, "[data-test^=page-printer-chosen-]")).toBeNull();
     expect(table(el).shadowRoot!.textContent).not.toContain("Printer for A4 invoices");
@@ -13793,4 +13808,283 @@ it("draws Check address level with the address fields beside it", async () => {
   } finally {
     await page.viewport(...before);
   }
+});
+
+describe("searching and filtering the printer tables", () => {
+  function tableOf(el: PrintersScreen, name: string): HTMLElement {
+    return q(el, `[data-test="${name}"]`)!;
+  }
+  async function searchTable(el: PrintersScreen, name: string, value: string): Promise<void> {
+    const search = tableOf(el, name).shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    search.value = value;
+    search.dispatchEvent(new Event("input"));
+    await flush(el);
+  }
+  function filterOf(el: PrintersScreen, name: string, key: string): HTMLElement {
+    return tableOf(el, name).shadowRoot!.querySelector<HTMLElement>(
+      `wt-combobox[data-filter="${key}"]`,
+    )!;
+  }
+  function rowKeys(el: PrintersScreen, name: string): string[] {
+    return [...tableOf(el, name).shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key")!,
+    );
+  }
+  const activeAgents: PrintAgentRow[] = [
+    agents[0]!,
+    { ...agents[1]!, id: "a3", name: "Terrace agent", active: true, host: "10.0.0.20" },
+  ];
+  const officePrinter: PagePrinterRow = {
+    id: "pp1",
+    name: "Back office",
+    host: "10.0.0.56",
+    port: 631,
+    resourcePath: "/ipp/print",
+    documentFormat: "application/pdf",
+    supportedFormats: ["application/pdf"],
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    active: true,
+    agentId: "a3",
+    agentName: "Terrace agent",
+  };
+  const barJob: PrintJobRow = {
+    ...jobs[0]!,
+    id: "j3",
+    printerId: "p3",
+    printerName: "Bar USB",
+    status: "queued",
+    lastError: null,
+  };
+
+  async function mountTables(overrides: Partial<DashboardApi> = {}): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listAgents: vi.fn().mockResolvedValue(activeAgents),
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue(
+            printers.map((p) => (p.id === "p3" ? { ...p, paperWidth: "58mm" as const } : p)),
+          ),
+        listPagePrinters: vi.fn().mockResolvedValue([officePrinter]),
+        listRecentJobs: vi.fn().mockResolvedValue([...jobs, barJob]),
+        ...overrides,
+      }),
+    });
+    await flush(el);
+    return el;
+  }
+
+  it("narrows the agents to those whose name or address matches the search", async () => {
+    const el = await mountTables();
+    await selectTab(el, "agents");
+    await searchTable(el, "agents-table", "terrace");
+    expect(rowKeys(el, "agents-table")).toEqual(["a3"]);
+    await searchTable(el, "agents-table", "10.0.0.20");
+    expect(rowKeys(el, "agents-table")).toEqual(["a3"]);
+  });
+
+  it("narrows the printers to those whose name or agent matches the search", async () => {
+    const el = await mountTables();
+    await searchTable(el, "printers-table", "bar usb");
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+    await searchTable(el, "printers-table", "terrace");
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp1"]);
+  });
+
+  it("narrows the printers to the paper chosen", async () => {
+    const el = await mountTables();
+    await chooseOptions(filterOf(el, "printers-table", "paper"), ["58mm"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+  });
+
+  it("narrows the printers to the agent chosen", async () => {
+    const el = await mountTables();
+    await chooseOptions(filterOf(el, "printers-table", "agent"), ["a3"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp1"]);
+  });
+
+  it("offers two agents that share a name as two choices, each narrowing to its own printers", async () => {
+    const twin: PagePrinterRow = {
+      ...officePrinter,
+      id: "pp2",
+      name: "Upstairs office",
+      host: "10.0.0.57",
+      agentId: "a4",
+    };
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listAgents: vi
+          .fn()
+          .mockResolvedValue([
+            ...activeAgents,
+            { ...activeAgents[1]!, id: "a4", host: "10.0.0.21" },
+          ]),
+        listPagePrinters: vi.fn().mockResolvedValue([officePrinter, twin]),
+      }),
+    });
+    await flush(el);
+    const filter = filterOf(el, "printers-table", "agent") as HTMLElement & {
+      options: { value: string; label: string }[];
+    };
+    expect(
+      filter.options
+        .filter((o) => o.label.startsWith("Terrace agent"))
+        .map((o) => [o.value, o.label]),
+    ).toEqual([
+      ["a3", "Terrace agent (10.0.0.20)"],
+      ["a4", "Terrace agent (10.0.0.21)"],
+    ]);
+    await chooseOptions(filter, ["a4"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp2"]);
+  });
+
+  it("keeps the agent chosen for printers no agent has seen when the language changes", async () => {
+    const before = currentLocale();
+    setLocale("en");
+    try {
+      const el = await mountTables();
+      type AgentFilter = HTMLElement & { options: { value: string; label: string }[] };
+      const unseen = (filterOf(el, "printers-table", "agent") as AgentFilter).options.find(
+        (o) => o.label === "No recent observation",
+      )!;
+      await chooseOptions(filterOf(el, "printers-table", "agent"), [unseen.value]);
+      await flush(el);
+      expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
+      setLocale("es-ES");
+      el.requestUpdate();
+      await flush(el);
+      const table = tableOf(el, "printers-table") as HTMLElement & {
+        filterValues(key: string): string[];
+      };
+      expect(table.filterValues("agent")).toEqual([unseen.value]);
+      expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
+      expect(
+        (filterOf(el, "printers-table", "agent") as AgentFilter).options.find(
+          (o) => o.value === unseen.value,
+        )?.label,
+      ).toBe("Sin observaciones recientes");
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it.each(["en", "es-ES"])(
+    "narrows the print queue to the jobs whose shown status matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountTables();
+        await selectTab(el, "queue");
+        await searchTable(el, "jobs-table", jobStatusName("failed"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+        await searchTable(el, "jobs-table", jobStatusName("queued"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps a saved agent choice while the printers agents have seen are still being read", async () => {
+    sessionStorage.setItem(
+      "waitron.printers.table",
+      JSON.stringify({ filters: { agent: ["a3"] } }),
+    );
+    let answer!: (devices: DiscoveredPrinter[]) => void;
+    const seenLater = new Promise<DiscoveredPrinter[]>((resolve) => (answer = resolve));
+    const el = await mountTables({
+      listPagePrinters: vi.fn().mockResolvedValue([]),
+      listDiscoveredPrinters: vi.fn().mockReturnValue(seenLater),
+    });
+    answer([{ ...discovered[1]!, agentId: "a3", agentName: "Terrace agent" }]);
+    await flush(el);
+    const table = tableOf(el, "printers-table") as HTMLElement & {
+      filterValues(key: string): string[];
+    };
+    expect(table.filterValues("agent")).toEqual(["a3"]);
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+    expect(JSON.parse(sessionStorage.getItem("waitron.printers.table")!).filters).toEqual({
+      agent: ["a3"],
+    });
+  });
+
+  it.each(["en", "es-ES"])(
+    "narrows the print queue to the jobs whose shown reason matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountTables({
+          listRecentJobs: vi
+            .fn()
+            .mockResolvedValue([
+              ...jobs,
+              barJob,
+              { ...barJob, id: "j4", waitReason: "printer.not_visible" },
+              { ...jobs[0]!, id: "j5", lastError: "print_job.drawer_expired" },
+            ]),
+        });
+        await selectTab(el, "queue");
+        await searchTable(el, "jobs-table", "printer offline");
+        expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+        await searchTable(el, "jobs-table", codeMessage("printer.not_visible"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j4"]);
+        await searchTable(el, "jobs-table", codeMessage("print_job.drawer_expired"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j5"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("narrows the print queue to the jobs whose printer matches the search", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    await searchTable(el, "jobs-table", "bar");
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+  });
+
+  it("narrows the print queue to the printer chosen", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    await chooseOptions(filterOf(el, "jobs-table", "printer"), ["p3"]);
+    await flush(el);
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+  });
+
+  it("narrows the print queue to the status chosen, offered in the order a job moves through", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    const filter = filterOf(el, "jobs-table", "status") as HTMLElement & {
+      options: { label: string }[];
+    };
+    expect(filter.options.map((o) => o.label)).toEqual([
+      t("printers.filter_status_all"),
+      jobStatusName("queued"),
+      jobStatusName("printing"),
+      jobStatusName("done"),
+      jobStatusName("failed"),
+    ]);
+    await chooseOptions(filter, ["failed"]);
+    await flush(el);
+    expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+  });
+
+  it("translates the queue's filter panel", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    const filter = filterOf(el, "jobs-table", "status") as HTMLElement & {
+      searchPlaceholder: string;
+      noResultsLabel: string;
+    };
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      t("categories.combobox_search"),
+      t("categories.combobox_no_results"),
+    ]);
+  });
 });
