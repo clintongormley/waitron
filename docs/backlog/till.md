@@ -510,7 +510,7 @@ Open:
   top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
   `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
   and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
-  pauses it only while the pointer or keyboard focus is on the pop-up, or while a window it is not
+  holds it, restarting it in full afterwards, only while the pointer or keyboard focus is on the pop-up, or while a window it is not
   inside is open (the account menu is a popover, not such a window). Measured in A582 slice
   2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
   Decide whether an arriving alert should close the menu.

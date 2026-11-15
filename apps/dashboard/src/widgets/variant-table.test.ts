@@ -86,6 +86,15 @@ async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
     await page.viewport(width, height);
   }
 }
+function centre(row: Element) {
+  const box = row.getBoundingClientRect();
+  return box.top + box.height / 2;
+}
+
+function pointer(target: EventTarget, type: string, clientY: number) {
+  target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
+}
+
 function handles(el: VariantTable) {
   return rows(el).map((row) => row.querySelector<HTMLButtonElement>("button.handle")!);
 }
@@ -584,12 +593,6 @@ it("puts the whole list back, hidden rows included, when Escape cancels a drag",
     const { from, to } = (event as CustomEvent<{ from: number; to: number }>).detail;
     list = reorder(list, from, to);
   });
-  const centre = (row: Element) => {
-    const box = row.getBoundingClientRect();
-    return box.top + box.height / 2;
-  };
-  const pointer = (target: EventTarget, type: string, clientY: number) =>
-    target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
   const [half, double] = rows(el);
   pointer(handles(el)[0]!, "pointerdown", centre(half!));
   pointer(document, "pointermove", centre(double!));
@@ -606,12 +609,6 @@ it("reports no move when Escape finds the dragged row's starting place gone from
   const el = await mountTable();
   const reordered = listen(el, "wt-reorder");
   const [, whole, double] = el.variants;
-  const centre = (row: Element) => {
-    const box = row.getBoundingClientRect();
-    return box.top + box.height / 2;
-  };
-  const pointer = (target: EventTarget, type: string, clientY: number) =>
-    target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
   pointer(handles(el)[2]!, "pointerdown", centre(rows(el)[2]!));
   pointer(document, "pointermove", centre(rows(el)[1]!));
   await el.updateComplete;
@@ -951,8 +948,6 @@ it("draws a dragged row over the controls of the rows it passes", async () => {
     const [dragged, passed] = rows(el) as HTMLElement[];
     const start = dragged!.getBoundingClientRect();
     const centre = start.top + start.height / 2;
-    const pointer = (target: EventTarget, type: string, clientY: number) =>
-      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
     pointer(handles(el)[0]!, "pointerdown", centre);
     try {
       // Not far enough to swap the rows: the dragged one now overlaps the top of the next.

@@ -102,7 +102,9 @@ test("a toast the pointer was on when a window opened counts down once the windo
   await setOpen(modal, false);
   await toast.updateComplete;
   expect(shown(toast)).toBe(true);
-  vi.advanceTimersByTime(150);
+  vi.advanceTimersByTime(149);
+  expect(toast.open).toBe(true);
+  vi.advanceTimersByTime(1);
   expect(toast.open).toBe(false);
 });
 
@@ -119,7 +121,9 @@ test("a toast keyboard focus was in when a window opened counts down once the wi
   await setOpen(modal, false);
   await toast.updateComplete;
   expect(shown(toast)).toBe(true);
-  vi.advanceTimersByTime(150);
+  vi.advanceTimersByTime(149);
+  expect(toast.open).toBe(true);
+  vi.advanceTimersByTime(1);
   expect(toast.open).toBe(false);
 });
 
