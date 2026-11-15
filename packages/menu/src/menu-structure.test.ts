@@ -30,6 +30,7 @@ import * as menuStructure from "./menu-structure.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
+  SECTION_NAME,
   addMember,
   deleteSection,
   createSectionIn,
@@ -162,8 +163,9 @@ describe("creating a menu", () => {
     const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>
       tx
-        .select({ id: sections.id, role: sections.role, internalName: sections.internalName })
+        .select({ id: sections.id, role: sections.role, internalName: SECTION_NAME })
         .from(sections)
+        .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
         .where(eq(sections.ownerMenuId, menu.id)),
     );
     const [details] = await app((tx) => storedMenuParts(tx, menu.id));
@@ -205,8 +207,9 @@ describe("creating a menu", () => {
     const { rootSectionId } = await app((tx) => readMenuStructure(tx, menu.id));
     const [root] = await app((tx) =>
       tx
-        .select({ internalName: sections.internalName })
+        .select({ internalName: SECTION_NAME })
         .from(sections)
+        .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
         .where(eq(sections.id, rootSectionId)),
     );
     expect(root).toEqual({ internalName: "Weekday lunch" });
@@ -978,7 +981,7 @@ it("finds a menu's root and Home sections by role without a side row", async () 
     const [root, home] = await tx
       .insert(sections)
       .values([
-        { internalName: "Root", role: "menu_root", ownerMenuId: menu!.id },
+        { internalName: null, role: "menu_root", ownerMenuId: menu!.id },
         { internalName: "Home", role: "home_layout", ownerMenuId: menu!.id },
       ])
       .returning();

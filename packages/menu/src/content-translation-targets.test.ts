@@ -437,7 +437,10 @@ describe("inline translation targets", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
-      await tx.update(sections).set({ role: "section" }).where(eq(sections.id, ids.root));
+      await tx
+        .update(sections)
+        .set({ role: "section", internalName: "Temporary list" })
+        .where(eq(sections.id, ids.root));
       const resolved = await resolveTranslationTargets(
         tx,
         "en",
@@ -448,7 +451,10 @@ describe("inline translation targets", () => {
         eligible: false,
         unavailableReason: "role",
       });
-      await tx.update(sections).set({ role: "menu_root" }).where(eq(sections.id, ids.root));
+      await tx
+        .update(sections)
+        .set({ role: "menu_root", internalName: null })
+        .where(eq(sections.id, ids.root));
       expect(
         (await resolveTranslationTargets(tx, "en", [{ kind: "menu", id: ids.root }], context))
           .targets[0]!.target.eligible,

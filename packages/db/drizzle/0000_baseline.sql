@@ -2026,14 +2026,15 @@ CREATE INDEX `section_members_product_idx` ON `section_members` (`product_id`);-
 CREATE INDEX `section_members_folder_image_idx` ON `section_members` ("folder_overrides" ->> '$.image') WHERE "section_members"."folder_overrides" ->> '$.image' is not null;--> statement-breakpoint
 CREATE TABLE `sections` (
 	`id` text PRIMARY KEY NOT NULL,
-	`internal_name` text NOT NULL,
+	`internal_name` text,
 	`names` text DEFAULT '{}' NOT NULL,
 	`role` text DEFAULT 'section' NOT NULL,
 	`owner_menu_id` text NOT NULL,
 	`image` text,
 	`color` text,
 	FOREIGN KEY (`owner_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "sections_role_ck" CHECK("sections"."role" in ('section', 'menu_root', 'home_layout'))
+	CONSTRAINT "sections_role_ck" CHECK("sections"."role" in ('section', 'menu_root', 'home_layout')),
+	CONSTRAINT "sections_root_name_ck" CHECK(("sections"."role" = 'menu_root') = ("sections"."internal_name" is null))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `sections_one_root_per_menu_uq` ON `sections` (`owner_menu_id`,`role`) WHERE "sections"."role" in ('menu_root','home_layout');--> statement-breakpoint

@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { sectionMembers, sections, type Transaction } from "@waitron/db";
+import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, FALLBACK_LOCALE, colorOrNull } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
@@ -42,9 +42,11 @@ import "./errors.js";
 
 export type SectionPatch = Partial<SectionInput>;
 
+export const SECTION_NAME = sql<string>`coalesce(${sections.internalName}, ${menus.name})`;
+
 const details = {
   id: sections.id,
-  internalName: sections.internalName,
+  internalName: SECTION_NAME,
   names: sections.names,
   image: sections.image,
   color: sections.color,
@@ -123,7 +125,11 @@ async function checkListRef(
 
 /** Any list by id; Home omits missing members. Use readMenuHome for its complete shortcuts. */
 export async function readSection(tx: Transaction, id: string): Promise<SectionDetails> {
-  const [row] = await tx.select(details).from(sections).where(eq(sections.id, id));
+  const [row] = await tx
+    .select(details)
+    .from(sections)
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
+    .where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   return { ...row, members: await membersOf(tx, id) };
 }

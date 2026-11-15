@@ -21,7 +21,7 @@ export const sections = table(
   "sections",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    internalName: label("internal_name").notNull(),
+    internalName: label("internal_name"),
     names: json<Record<string, string>>("names").notNull().default({}),
     role: sectionRole("role").notNull().default("section"),
     ownerMenuId: id("owner_menu_id").notNull(),
@@ -35,6 +35,7 @@ export const sections = table(
       name: "sections_owner_menu_fk",
     }),
     check("sections_role_ck", enumCheck(t.role)),
+    check("sections_root_name_ck", sql`(${t.role} = 'menu_root') = (${t.internalName} is null)`),
     uniqueIndex("sections_one_root_per_menu_uq")
       .on(t.ownerMenuId, t.role)
       .where(sql`${t.role} in ('menu_root','home_layout')`),

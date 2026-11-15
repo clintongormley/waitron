@@ -37,6 +37,7 @@ import {
   fixedNameLanguages,
   folderPresentation,
 } from "./include-folder-presentation.js";
+import { SECTION_NAME } from "./sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
@@ -213,13 +214,14 @@ export async function buildMenuDocuments(
   const sectionRows: SectionRow[] = await tx
     .select({
       id: sections.id,
-      internalName: sections.internalName,
+      internalName: SECTION_NAME,
       names: sections.names,
       image: sections.image,
       color: sections.color,
     })
     .from(sections)
-    .orderBy(sections.internalName, sections.id);
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
+    .orderBy(SECTION_NAME, sections.id);
   const sectionById = new Map(sectionRows.map((row) => [row.id, row]));
   for (const row of sectionRows) sectionNames.set(row.id, row.internalName);
   const offersByMenu = groupBy(offers, (offer) => offer.menuId);

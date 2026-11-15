@@ -5,7 +5,13 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { menuItems, products, withTransaction, readActivityForSubject } from "@waitron/db";
+import {
+  menuItems,
+  products,
+  sections,
+  withTransaction,
+  readActivityForSubject,
+} from "@waitron/db";
 import { seedTaxpayer, seedPerson } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -1128,12 +1134,19 @@ describe("menu operations", () => {
     expect(row!.diet).toMatchObject({ vegan: "no" });
   });
 
-  it("renames a menu", async () => {
+  it("renaming a menu writes one row", async () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       await updateMenuDetails(tx, cat.id, { name: "Delicatessen" });
       const [seen] = await listMenus(tx);
       expect(seen!.name).toBe("Delicatessen");
+      const structure = await readMenuStructure(tx, cat.id);
+      expect(structure.root.internalName).toBe("Delicatessen");
+      const [root] = await tx
+        .select({ name: sections.internalName })
+        .from(sections)
+        .where(eq(sections.id, structure.rootSectionId));
+      expect(root!.name).toBeNull();
     });
   });
 

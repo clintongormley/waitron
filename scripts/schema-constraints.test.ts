@@ -807,6 +807,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "scheduled_runs_state_ck",
   "section_members_one_ref_ck",
   "sections_role_ck",
+  "sections_root_name_ck",
   "service_commands_scope_kind_ck",
   "sessions_token_hash_ck",
   "shift_templates_ends_minute_ck",

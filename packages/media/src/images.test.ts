@@ -713,13 +713,13 @@ it("protects an image used by sections, a menu's own list among them, and counts
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
-    const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+    const [menu] = await tx.insert(menus).values({ name: "Lunch root" }).returning({
       id: menus.id,
     });
     const [root] = await tx
       .insert(sections)
       .values({
-        internalName: "Lunch root",
+        internalName: null,
         role: "menu_root",
         ownerMenuId: menu!.id,
         image: image.filename,
@@ -757,17 +757,17 @@ it("protects the photo an include's folder names, even switched off, and counts 
     const [lunch] = await tx.insert(menus).values({ name: "Lunch Menu" }).returning({
       id: menus.id,
     });
-    const [drinksMenu] = await tx.insert(menus).values({ name: "Drinks menu" }).returning({
+    const [drinksMenu] = await tx.insert(menus).values({ name: "Drinks" }).returning({
       id: menus.id,
     });
     const [lunchRoot] = await tx
       .insert(sections)
-      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: lunch!.id })
       .returning({ id: sections.id });
     const [drinksRoot] = await tx
       .insert(sections)
       .values({
-        internalName: "Drinks",
+        internalName: null,
         names: { en: "Drinks (customer)" },
         role: "menu_root",
         ownerMenuId: drinksMenu!.id,
@@ -820,7 +820,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
     });
     const [lunchRoot] = await tx
       .insert(sections)
-      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: lunch!.id })
       .returning({ id: sections.id });
     const [member] = await tx
       .insert(sectionMembers)

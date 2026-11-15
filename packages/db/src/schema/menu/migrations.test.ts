@@ -66,6 +66,43 @@ async function columnsOf(table: string) {
   ).rows;
 }
 
+it("refuses a root section with a name and a plain section without one", async () => {
+  const [menu] = await db.insert(menus).values({ name: "Root names" }).returning({ id: menus.id });
+  for (const [role, name] of [
+    ["menu_root", "Duplicate"],
+    ["section", null],
+    ["home_layout", null],
+  ]) {
+    const error = await captureError(() =>
+      db.execute(sql`
+      insert into sections (id, role, internal_name, owner_menu_id)
+      values (${crypto.randomUUID()}, ${role}, ${name}, ${menu!.id})
+    `),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("sections_root_name_ck");
+  }
+  for (const [role, name] of [
+    ["menu_root", null],
+    ["section", "Starters"],
+    ["home_layout", "Home"],
+  ]) {
+    await db.execute(sql`
+      insert into sections (id, role, internal_name, owner_menu_id)
+      values (${crypto.randomUUID()}, ${role}, ${name}, ${menu!.id})
+    `);
+  }
+  expect(
+    (await db.select().from(sections)).map(({ role, internalName }) => ({ role, internalName })),
+  ).toEqual(
+    expect.arrayContaining([
+      { role: "menu_root", internalName: null },
+      { role: "section", internalName: "Starters" },
+      { role: "home_layout", internalName: "Home" },
+    ]),
+  );
+});
+
 it("has no per-menu extras tables", async () => {
   const rows = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name in ('menu_item_extra_lists', 'menu_item_extra_items')`,
@@ -232,6 +269,7 @@ describe("the menu tables carry no taxpayer column", () => {
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
       extra_list_items_portion_ck: `"extra_list_items"."portion" > 0`,
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
+      sections_root_name_ck: `("sections"."role" = 'menu_root') = ("sections"."internal_name" is null)`,
       sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
       section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
@@ -391,7 +429,7 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
       (
         await db
           .insert(sections)
-          .values({ internalName: role, role, ownerMenuId: menu })
+          .values({ internalName: role === "menu_root" ? null : role, role, ownerMenuId: menu })
           .returning({ id: sections.id })
       )[0]!.id;
     const rootId = await ownedList(menuId, "menu_root");

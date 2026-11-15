@@ -1,3 +1,5 @@
+import { eq, getTableColumns } from "drizzle-orm";
+import { SECTION_NAME } from "./sections.js";
 import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
 import type {
@@ -106,7 +108,10 @@ export function buildSectionGraph(
 }
 
 export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
-  const sectionRows = await tx.select().from(sections);
+  const sectionRows = await tx
+    .select({ ...getTableColumns(sections), internalName: SECTION_NAME })
+    .from(sections)
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId));
   const memberRows = await tx
     .select({
       id: sectionMembers.id,

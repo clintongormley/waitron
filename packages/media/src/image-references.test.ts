@@ -269,14 +269,14 @@ describe("an image an include's folder names", () => {
   beforeEach(async () => {
     const [lunchRoot] = await suite.db
       .insert(sections)
-      .values({ internalName: "Lunch", role: "menu_root", ownerMenuId: ids.menuId })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: ids.menuId })
       .returning({ id: sections.id });
     const [drinks] = await suite.db.insert(menus).values({ name: "Drinks" }).returning({
       id: menus.id,
     });
     const [drinksRoot] = await suite.db
       .insert(sections)
-      .values({ internalName: "Drinks", role: "menu_root", ownerMenuId: drinks!.id })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: drinks!.id })
       .returning({ id: sections.id });
     const [member] = await suite.db
       .insert(sectionMembers)

@@ -83,14 +83,14 @@ export function namedRows(
     union all select 'extra_list', l.id, l.name, l.customer_name, null, null, null,
       null, null, null, null, l.active, 1, 1, null, 1, null
     from extra_lists l where ${filter("extra_list", sql`l.id`)}
-    union all select 'menu', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
+    union all select 'menu', s.id, coalesce(s.internal_name, c.name), s.names, null, s.owner_menu_id, c.name,
       null, null, null, s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), null, 1, null
     from sections s left join menus c on c.id = s.owner_menu_id
       where ${filter("menu", sql`s.id`)}
     union all select 'section', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
       null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1, null
     from sections s left join menus c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
-    union all select 'included_menu', m.id, s.internal_name, json_extract(m.folder_overrides, '$.names'),
+    union all select 'included_menu', m.id, coalesce(s.internal_name, a.name), json_extract(m.folder_overrides, '$.names'),
       s.names, l.owner_menu_id, c.name, m.section_id, m.child_section_id, s.owner_menu_id,
       s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), l.role, coalesce(a.active, 0), null
     from section_members m left join sections s on s.id = m.child_section_id
