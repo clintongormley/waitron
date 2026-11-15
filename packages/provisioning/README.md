@@ -95,7 +95,7 @@ The interactive Live flow owns its setup attempt and asks the box's internet tim
 it is synchronised (`timedatectl show -p NTPSynchronized --value`); when it is not, it explains why
 and stops. `timedatectl` reports on the machine the command runs on, so run it on the box
 itself: where `timedatectl` is missing or fails, the answer is "not synchronised" and the command
-stops (`src/time-service-command.ts`;
+stops (`src/timedatectl-reader.ts`;
 `packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"). It asks nothing about the clock or recent setups.
 When the name must wait, it prints why and the time it carries on at, and waits in the same run;

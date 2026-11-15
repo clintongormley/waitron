@@ -8,7 +8,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
-import { timedatectlSynchronised } from "./time-service-command.js";
+import { timedatectlSynchronised } from "./timedatectl-reader.js";
 import { prepareFirstSetupCommand, recheckFirstSetupCommand } from "./first-setup-command.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 import {

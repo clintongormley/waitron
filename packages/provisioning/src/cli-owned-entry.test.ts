@@ -50,8 +50,8 @@ afterAll(async () => {
 
 const SETTLE = "2026-10-18T11:40:00Z";
 /**
- * A preload that starts the child's clock at `instant`, has the internet's clock agree, and lets a
- * wait pass by moving that clock forward instead of sleeping.
+ * A preload that starts the child's clock at `instant`, has a stand-in `timedatectl` report the box's
+ * time service synchronised, and lets a wait pass by moving that clock forward instead of sleeping.
  */
 function clockPreload(instant: string, extra = "") {
   return `import childProcess from "node:child_process";
@@ -77,7 +77,7 @@ Object.defineProperty(performance, "now", { value: () => passed });
 const WAIT_WORDS =
   "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-18T11:42:00.000Z; it carries on by itself, so keep the command running.\n";
 
-it("with no network the built venue command explains, asks nothing and spends no name", async () => {
+it("with the box's time service not synchronised the built venue command explains, asks nothing and spends no name", async () => {
   const target = join(directory!, "venue");
   const stateDir = join(directory!, "state");
   await mkdir(target);

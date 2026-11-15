@@ -2,7 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { timedatectlSynchronised } from "./time-service-command.js";
+import { timedatectlSynchronised } from "./timedatectl-reader.js";
 
 let stubs: string;
 const stub = (name: string) => join(stubs, name);
