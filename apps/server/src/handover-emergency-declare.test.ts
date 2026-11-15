@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
   readNodeMembership,
+  withNodeTransaction,
   writeNodeMembership,
   type VenueDatabase,
 } from "@waitron/db";
@@ -20,7 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { managementSessions, persons } from "@waitron/identity";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
-import { nodeSigningPublicKey } from "@waitron/credentials";
+import { nodeSigningPublicKey, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverOperation, readOpenHandoverOperation } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
@@ -169,6 +170,7 @@ function service(
         destinationNodeId?: string;
         sourceServersUrl?: string;
         copy?: { identifier: string; lastChangeAtMs: number | null };
+        joinedAtMs?: number | null;
         operation?: { operationId: string; reason: string; declaredAtMs: number } | null;
         declaration?: {
           body: {
@@ -328,10 +330,53 @@ it("previews the checked spare copy without recording a declaration", async () =
       identifier: expect.stringMatching(/^[a-f0-9]{64}$/),
       lastChangeAtMs: null,
     },
+    joinedAtMs: null,
     operation: null,
   });
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
   expect(placed.node.all(sql`select * from node_handover_events`)).toEqual(before);
+});
+
+it("previews when this spare's held copy arrived, from its pair link's copied state", async () => {
+  const pairLink = {
+    role: "serves" as const,
+    peerNodeId: primary.nodeId,
+    peerPublicKey: "main-public-key",
+    storeUrl: "https://main.example:7443",
+    venueId: "venue-1",
+    accessKeyId: "waitron0123456789abcdef",
+    secretAccessKey: "ab".repeat(32),
+  };
+  await withNodeTransaction(placed.node, (tx) =>
+    writePairLinkTx(tx, ring, standby.nodeId, { ...pairLink, state: "awaiting_copy" }),
+  );
+  expect((await service().post({ signIn: request.signIn }, true, "preview")).body.joinedAtMs).toBe(
+    null,
+  );
+  vi.setSystemTime(new Date("2026-10-16T12:05:00Z"));
+  await withNodeTransaction(placed.node, (tx) => setPairLinkStateTx(tx, standby.nodeId, "copied"));
+  vi.setSystemTime(new Date("2026-10-30T09:00:00Z"));
+  expect((await service().post({ signIn: request.signIn }, true, "preview")).body.joinedAtMs).toBe(
+    Date.parse("2026-10-16T12:05:00Z"),
+  );
+});
+
+it("previews no joining date for a box whose pair link is the main box's side", async () => {
+  await withNodeTransaction(placed.node, (tx) =>
+    writePairLinkTx(tx, ring, standby.nodeId, {
+      role: "streams",
+      state: "streaming",
+      peerNodeId: primary.nodeId,
+      peerPublicKey: "spare-public-key",
+      storeUrl: "https://spare.example:7443",
+      venueId: "venue-1",
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "ab".repeat(32),
+    }),
+  );
+  const answer = await service().post({ signIn: request.signIn }, true, "preview");
+  expect(answer.status).toBe(200);
+  expect(answer.body.joinedAtMs).toBeNull();
 });
 
 it.each([

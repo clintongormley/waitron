@@ -188,7 +188,7 @@ describe("dashboard-box-status-screen", () => {
     expect(q(el, "[data-test=row-bucket]")).toBeNull();
     expect(text(q(el, "[data-test=row-spare]"))).toContain("Rebuilding the copy");
     expect(text(q(el, "[data-test=row-spare]"))).toContain(
-      "Switching still uses the copy taken when this spare joined.",
+      "A switch first brings this spare's copy up to date.",
     );
     api.liveData.refresh();
     await flush(el);

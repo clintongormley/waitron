@@ -11,6 +11,7 @@ import {
   deleteNodeModeOtherThanTx,
   deleteNodePrimaryKeyOtherThanTx,
   deleteNodeRecoveryKeyOtherThanTx,
+  deleteNodeTakeFailuresOtherThanTx,
   NODE_CLASSIFICATION,
   pinPrimaryKeyTx,
   setNodeModeTx,
@@ -59,6 +60,7 @@ const ABANDONED_ROW_SWEEPS: Readonly<
   node_signing_key: deleteNodeSigningKeyOtherThanTx,
   node_primary_key: deleteNodePrimaryKeyOtherThanTx,
   node_pair_link: deleteNodePairLinkOtherThanTx,
+  node_take_failures: deleteNodeTakeFailuresOtherThanTx,
 };
 
 /** The handover tables, which adopt leaves whole: they record what this box did, under its ids. */

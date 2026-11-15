@@ -177,6 +177,7 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
     node_primary_key: 0,
     node_recovery_key: 1,
     node_signing_key: 1,
+    node_take_failures: 0,
   });
   const { ids, actions } = await withoutSignIn(f);
   await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();

@@ -234,6 +234,11 @@ it.each<[string, string, string]>([
     "node.db holds a row: node_handover_restriction",
   ],
   [
+    "a failed take",
+    `insert into node_take_failures values ('${NODE_ID}', 1, '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_take_failures",
+  ],
+  [
     "two recovery-key checks",
     `insert into node_recovery_key values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
        ('${randomUUID()}', 'v', 'Two', '2026-10-31T00:00:00.000Z')`,

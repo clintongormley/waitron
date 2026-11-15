@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9d29d02f-a932-4e51-b9b6-65b444bcf876",
+  "id": "f61f9c5b-a375-4b65-a4f5-96c02fbf2f5c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "node_handover_events": {
@@ -625,6 +625,37 @@
           "value": "octet_length(\"node_signing_key\".\"auth_tag\") = 16"
         }
       }
+    },
+    "node_take_failures": {
+      "name": "node_take_failures",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "failures": {
+          "name": "failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_failed_at": {
+          "name": "last_failed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     }
   },
   "views": {},

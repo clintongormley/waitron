@@ -6,8 +6,8 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `taxpayer`, `nodes` and
  * `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
- * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
- * `node_handover_restriction`.
+ * `node_recovery_key`, `node_signing_key`, `node_take_failures`,
+ * `node_handover_operations`, `node_handover_events` and `node_handover_restriction`.
  *
  * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes
  * its module’s checker and revision check.
@@ -205,6 +205,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
       "node_primary_key",
       "node_recovery_key",
       "node_signing_key",
+      "node_take_failures",
       "nodes",
       "person_roles",
       "roles",

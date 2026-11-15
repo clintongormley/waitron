@@ -326,11 +326,18 @@ export interface EmergencyHandoverPreview {
   sourceNodeId: string;
   destinationNodeId: string;
   sourceServersUrl: string;
-  copy: ({ source: "mirror-copy" } | { source: "selected-backup"; sourceId: string }) & {
+  copy: (
+    { source: "mirror-copy" } | { source: "selected-backup" | "followed-copy"; sourceId: string }
+  ) & {
     identifier: string;
     lastChangeAtMs: number | null;
   };
+  /** When this spare finished joining; null when it is not a joined spare. */
+  joinedAtMs: number | null;
   operation: { operationId: string; reason: string | null; declaredAtMs: number | null } | null;
+}
+export interface FollowedCopyTake {
+  state: "restarting" | "catching-up" | "taken";
 }
 export interface EmergencyHandoverDeclaration {
   operationId: string;
@@ -371,6 +378,10 @@ export class SetupApi {
 
   previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {
     return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
+  }
+
+  takeFollowedCopy(signIn: HandoverSignIn): Promise<FollowedCopyTake> {
+    return this.#request("/api/node/handover/emergency/followed", "POST", { signIn });
   }
 
   async selectEmergencyBackup(

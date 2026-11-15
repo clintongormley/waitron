@@ -17,9 +17,11 @@ import {
   type HandoverSignIn,
   type EmergencyHandoverPreview,
   type EmergencyHandoverDeclaration,
+  type FollowedCopyTake,
 } from "../api/client.js";
 import { makeSetupId } from "../random-id.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { fileInputCopy } from "../file-input-copy.js";
 
@@ -28,6 +30,22 @@ const activated = (status?: HandoverStatus) =>
   ["activated", "return_pending", "return_complete", "return_abandoned"].includes(status.state);
 const closed = (status?: HandoverStatus) =>
   status !== undefined && ["abandoned", "replaced"].includes(status.state);
+/** Take refusals the copy this spare holds can still answer, and how each is worded. */
+const FOLLOWED_REFUSALS: Partial<Record<string, StringKey>> = {
+  "handover.copy_predates_destination": "handover.emergency.followed_not_admitted",
+  "provisioning.database_ahead": "handover.emergency.followed_ahead",
+  "restore.schema_too_new": "handover.emergency.followed_ahead",
+  "handover.chain_broken": "handover.emergency.followed_failed",
+  "handover.copy_damaged": "handover.emergency.followed_failed",
+  "handover.copy_check_failed": "handover.emergency.followed_failed",
+};
+const HELD_OFFER_AFTER_MS = 60_000;
+/** Refusals the copy the take signs in against may answer differently: it can be newer. */
+const HELD_SIGN_IN_REFUSALS = new Set([
+  "password.invalid",
+  "totp.required",
+  "authorization.not_permitted",
+]);
 
 @customElement("setup-handover-screen")
 export class SetupHandoverScreen extends LitElement {
@@ -77,6 +95,20 @@ export class SetupHandoverScreen extends LitElement {
   @state() private backupKey = "";
   @state() private needsBackupKey = false;
   @state() private backupRestarting = false;
+  @state() private followRestarting = false;
+  /** Waiting for the spare's followed copy to catch up, asking again every 2 seconds. */
+  @state() private following = false;
+  /**
+   * The copy this spare holds, read before the take; offered once the take waits or is refused, and
+   * never to a person it refused.
+   */
+  @state() private heldCopy?: EmergencyHandoverPreview;
+  @state() private heldOffered = false;
+  /** A refused take restarts the box; the held copy is offered once the box answers again. */
+  @state() private heldWaiting = false;
+  /** A copy placed earlier is not the main box's latest once the person chose it as the held copy. */
+  @state() private heldChosen = false;
+  #heldTimer?: ReturnType<typeof setTimeout>;
   @state() private reason = "";
   @state() private statements = {
     sourceSwitchedOff: false,
@@ -128,10 +160,11 @@ export class SetupHandoverScreen extends LitElement {
   #restartPolling(): void {
     this.#controller?.abort();
     clearTimeout(this.#timer);
+    clearTimeout(this.#heldTimer);
     const controller = new AbortController();
     this.#controller = controller;
     if (this.operationId) void this.#poll(controller);
-    else if (this.backupRestarting) void this.#waitForBackup(controller);
+    else if (this.backupRestarting || this.followRestarting) void this.#waitForPlaced(controller);
   }
   override disconnectedCallback(): void {
     window.removeEventListener("pagehide", this.#leavePage);
@@ -146,7 +179,10 @@ export class SetupHandoverScreen extends LitElement {
     this.password = this.code = "";
     this.backup = undefined;
     this.backupKey = "";
-    this.backupRestarting = this.restarting = false;
+    this.backupRestarting = this.followRestarting = this.restarting = false;
+    clearTimeout(this.#heldTimer);
+    this.following = this.heldOffered = this.heldWaiting = this.heldChosen = false;
+    this.heldCopy = undefined;
     this.#signInChecked = false;
     this.copyPreview = undefined;
     this.declarationSaved = false;
@@ -375,6 +411,9 @@ export class SetupHandoverScreen extends LitElement {
     const controller = this.#controller;
     const preview = await this.api.previewEmergencyHandover(this.#signIn());
     if (controller?.signal.aborted) return false;
+    return this.#showPreview(preview);
+  }
+  async #showPreview(preview: EmergencyHandoverPreview): Promise<boolean> {
     this.copyPreview = preview;
     this.#signInChecked = true;
     this.copyRefused = false;
@@ -386,40 +425,154 @@ export class SetupHandoverScreen extends LitElement {
     }
     return false;
   }
+  /**
+   * A saved declaration and a placed backup show; otherwise the take decides, signing in against the
+   * copy it takes, which may know a person the copy this spare holds does not.
+   */
   async #previewCopy(): Promise<void> {
-    if (this.busy || !this.#valid()) return;
+    if (this.busy || this.following || this.heldWaiting || !this.#valid()) return;
     if (this.#controller?.signal.aborted) this.#restartPolling();
+    const controller = this.#controller!;
     this.busy = true;
     this.actionError = "";
+    this.heldOffered = this.heldChosen = false;
     try {
-      await this.#readPreview();
+      let preview: EmergencyHandoverPreview | undefined;
+      try {
+        preview = await this.api.previewEmergencyHandover(this.#signIn());
+      } catch (cause) {
+        if (!HELD_SIGN_IN_REFUSALS.has((cause as { code?: string } | null)?.code ?? ""))
+          throw cause;
+      }
+      if (controller.signal.aborted) return;
+      if (preview?.operation != null || preview?.copy.source === "selected-backup") {
+        await this.#showPreview(preview);
+        return;
+      }
+      this.heldCopy = preview;
+      this.#signInChecked = preview !== undefined;
+      this.busy = false;
+      this.following = true;
+      this.#heldTimer = setTimeout(() => {
+        if (!controller.signal.aborted && this.following) this.heldOffered = true;
+      }, HELD_OFFER_AFTER_MS);
+      await this.#takeFollowed(controller);
     } catch (cause) {
-      this.actionError = this.#emergencyError(cause);
+      if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
     } finally {
       this.busy = false;
     }
   }
-  async #waitForBackup(controller: AbortController): Promise<void> {
+  async #takeFollowed(controller: AbortController): Promise<void> {
+    let answer: FollowedCopyTake;
+    try {
+      answer = await this.api.takeFollowedCopy(this.#signIn());
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      this.following = this.heldOffered = false;
+      clearTimeout(this.#heldTimer);
+      const refusal = FOLLOWED_REFUSALS[(cause as { code?: string } | null)?.code ?? ""];
+      if (refusal === undefined) this.actionError = this.#emergencyError(cause);
+      else {
+        this.actionError = t(refusal);
+        this.heldWaiting = true;
+        this.#timer = setTimeout(() => void this.#waitForHeld(controller), 2000);
+      }
+      return;
+    }
+    if (controller.signal.aborted) return;
+    if (answer.state === "catching-up") {
+      this.#timer = setTimeout(() => void this.#takeFollowed(controller), 2000);
+      return;
+    }
+    clearTimeout(this.#heldTimer);
+    this.following = this.heldOffered = false;
+    if (answer.state === "taken") {
+      try {
+        await this.#readPreview();
+      } catch (cause) {
+        if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
+      }
+      return;
+    }
+    this.followRestarting = this.restarting = true;
+    this.#restartPolling();
+  }
+  /** Lost answers while the box restarts are retried; any other answer ends the wait. */
+  async #waitForHeld(controller: AbortController): Promise<void> {
+    try {
+      const preview = await this.api.previewEmergencyHandover(this.#signIn());
+      if (controller.signal.aborted) return;
+      this.heldWaiting = false;
+      if (preview.operation === null && preview.copy.source !== "selected-backup") {
+        this.heldCopy = preview;
+        this.heldOffered = true;
+      } else await this.#showPreview(preview);
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      if ((cause as { code?: unknown } | null)?.code === undefined) {
+        this.#timer = setTimeout(() => void this.#waitForHeld(controller), 2000);
+        return;
+      }
+      this.heldWaiting = false;
+      this.actionError = this.#emergencyError(cause);
+    }
+  }
+  #stopFollowing(): void {
+    if (this.following || this.heldWaiting) this.#restartPolling();
+    this.following = this.heldWaiting = false;
+  }
+  async #useHeldCopy(): Promise<void> {
+    if (this.busy || !this.#valid()) return;
+    this.#restartPolling();
+    this.following = this.heldOffered = false;
+    this.heldChosen = this.busy = true;
+    this.actionError = "";
+    await this.#readHeldCopy(this.#controller!);
+  }
+  /** The old process may still have answered the offer's check; a lost answer waits for the restart. */
+  async #readHeldCopy(controller: AbortController): Promise<void> {
     try {
       await this.#readPreview();
       if (controller.signal.aborted) return;
-      if (this.copyPreview?.copy.source !== "selected-backup")
+      this.heldWaiting = this.busy = false;
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      if ((cause as { code?: unknown } | null)?.code === undefined) {
+        this.heldWaiting = true;
+        this.busy = false;
+        this.#timer = setTimeout(() => void this.#readHeldCopy(controller), 2000);
+        return;
+      }
+      this.heldWaiting = this.busy = false;
+      this.actionError = this.#emergencyError(cause);
+    }
+  }
+  async #waitForPlaced(controller: AbortController): Promise<void> {
+    try {
+      await this.#readPreview();
+      if (controller.signal.aborted) return;
+      if (
+        this.copyPreview?.copy.source !==
+        (this.followRestarting ? "followed-copy" : "selected-backup")
+      )
         throw new TypeError("copy not placed");
-      this.backupRestarting = this.restarting = this.busy = false;
+      this.backupRestarting = this.followRestarting = this.restarting = this.busy = false;
     } catch (cause) {
       if (controller.signal.aborted) return;
       const code = (cause as { code?: string }).code;
       if (code && code !== "handover.copy_mismatch") {
         this.actionError = this.#emergencyError(cause);
-        this.backupRestarting = this.restarting = this.busy = false;
+        this.backupRestarting = this.followRestarting = this.restarting = this.busy = false;
         return;
       }
-      this.#timer = setTimeout(() => void this.#waitForBackup(controller), 2000);
+      this.#timer = setTimeout(() => void this.#waitForPlaced(controller), 2000);
     }
   }
   async #selectBackup(): Promise<void> {
     if (this.busy || !this.backup || !this.#valid() || (this.needsBackupKey && !this.backupKey))
       return;
+    this.#stopFollowing();
     this.busy = true;
     this.actionError = "";
     try {
@@ -518,18 +671,41 @@ export class SetupHandoverScreen extends LitElement {
       this.busy = false;
     }
   }
+  #joinedLine(preview: EmergencyHandoverPreview) {
+    return html`<p>
+      ${
+        preview.joinedAtMs === null
+          ? t("handover.emergency.held_undated")
+          : format("handover.emergency.held_joined", {
+              joined: new Date(preview.joinedAtMs).toLocaleString(currentLocale()),
+            })
+      }
+    </p>`;
+  }
+  #activityLine(date: number | null) {
+    return html`<p>
+      ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
+    </p>`;
+  }
+  #followContent() {
+    if (this.copyPreview) return nothing;
+    const held = this.heldOffered ? this.heldCopy : undefined;
+    return html`${this.following ? html`<p role="status">${t("handover.emergency.catching_up")}</p>` : nothing}
+    ${this.heldWaiting ? html`<p role="status">${t("handover.emergency.held_waiting")}</p>` : nothing}
+    ${this.following && held ? html`<p>${t("handover.emergency.still_catching_up")}</p>` : nothing}
+    ${held ? html`<section data-test="held-copy">${held.copy.source === "mirror-copy" ? this.#joinedLine(held) : nothing}${this.#activityLine(held.copy.lastChangeAtMs)}</section>` : nothing}`;
+  }
   #emergencyContent() {
     const preview = this.copyPreview;
     if (!preview) return nothing;
     const date = preview.copy.lastChangeAtMs;
     return html`<section data-test="emergency-copy" data-wording-version="a1018-emergency-v1">
       <h2>
-        ${t(preview.copy.source === "selected-backup" ? "handover.emergency.selected_backup" : "handover.emergency.copy")}
+        ${t(preview.copy.source === "selected-backup" ? "handover.emergency.selected_backup" : preview.copy.source === "followed-copy" && !this.heldChosen ? "handover.emergency.followed" : "handover.emergency.copy")}
       </h2>
       <p>${preview.copy.identifier}</p>
-      <p>
-        ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
-      </p>
+      ${preview.copy.source === "mirror-copy" ? this.#joinedLine(preview) : nothing}
+      ${this.#activityLine(date)}
       <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>
       ${
         this.#declared
@@ -595,7 +771,8 @@ export class SetupHandoverScreen extends LitElement {
           if (name === "email") this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) {
             this.password = this.code = "";
-            this.copyPreview = undefined;
+            this.copyPreview = this.heldCopy = undefined;
+            this.heldOffered = this.following = this.heldWaiting = this.heldChosen = false;
             this.declarationSaved = false;
             this.reason = "";
             this.statements = {
@@ -648,7 +825,7 @@ export class SetupHandoverScreen extends LitElement {
             `
           : nothing
       }
-      ${this.#isEmergency ? this.#emergencyContent() : nothing}
+      ${this.#isEmergency ? html`${this.#followContent()}${this.#emergencyContent()}` : nothing}
       ${
         this.entry
           ? html`<p>${t("handover.zone")}</p>
@@ -662,13 +839,23 @@ export class SetupHandoverScreen extends LitElement {
         ${this.backup && !this.#declared ? html`<wt-button data-test="emergency-backup" .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)} variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"} @click=${() => void this.#selectBackup()}>${t("handover.emergency.use_backup")}</wt-button>` : nothing}
         ${
           this.#isEmergency && !this.copyPreview
-            ? html`<wt-button
-                data-test="emergency-preview"
-                .disabled=${this.busy || !this.#valid()}
-                variant=${this.#valid() ? "primary" : "secondary"}
-                @click=${() => void this.#previewCopy()}
-                >${t("handover.emergency.check")}</wt-button
-              >`
+            ? html`${
+                  this.heldOffered && this.heldCopy
+                    ? html`<wt-button
+                        data-test="emergency-held"
+                        .disabled=${this.busy || !this.#valid()}
+                        variant=${this.#valid() ? "primary" : "secondary"}
+                        @click=${() => void this.#useHeldCopy()}
+                        >${t("handover.emergency.use_held")}</wt-button
+                      >`
+                    : nothing
+                }<wt-button
+                  data-test="emergency-preview"
+                  .disabled=${this.busy || this.following || this.heldWaiting || !this.#valid()}
+                  variant=${this.#valid() && !this.following && !this.heldWaiting && !this.heldOffered ? "primary" : "secondary"}
+                  @click=${() => void this.#previewCopy()}
+                  >${t("handover.emergency.check")}</wt-button
+                >`
             : this.#isEmergency && !this.#declared
               ? html`<wt-button
                   data-test="emergency-declare"
@@ -719,7 +906,7 @@ export class SetupHandoverScreen extends LitElement {
             ? html`<p role="status">${t("handover.closed")}</p>`
             : this.restarting
               ? html`<p role="status">
-                  ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : "handover.restarting")}
+                  ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
                 </p>`
               : this.#isEmergency ||
                   (status?.role === "destination" &&

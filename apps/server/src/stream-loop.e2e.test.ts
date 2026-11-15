@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { processStartTime } from "./testing/aws-rehearsal-journal.js";
 import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
 import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
@@ -28,7 +28,21 @@ import {
   runStreamLoopScenario,
   type StreamLoopEvent,
 } from "./testing/stream-loop-scenario.js";
-import { STREAM_LOOP_SPARE_MS } from "./testing/stream-loop-spare.js";
+import { STREAM_LOOP_SPARE_MS, type StartedFollow } from "./testing/stream-loop-spare.js";
+
+// The spare's phases stop C's real follower for a switch, through the object its start made.
+const followers = vi.hoisted(() => [] as StartedFollow[]);
+vi.mock("./spare-follow.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-follow.js")>();
+  return {
+    ...actual,
+    startSpareFollow: (deps: Parameters<typeof actual.startSpareFollow>[0]) => {
+      const follow = actual.startSpareFollow(deps);
+      followers.push({ deps, follow });
+      return follow;
+    },
+  };
+});
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
@@ -131,6 +145,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           freeze: { pause: () => server.pause(), resume: () => server.resume() },
           signal: stop.signal,
           versitygwBin: versitygw.bin,
+          spareFollowers: () => followers,
           record: (event) => {
             events.push(event);
             console.log(

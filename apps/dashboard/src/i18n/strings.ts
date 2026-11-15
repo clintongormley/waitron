@@ -4091,7 +4091,7 @@ export const en = {
   "box_status.spare.behind": "{seconds} s behind",
   "box_status.spare.pending": "Update pending",
   "box_status.spare.last": "Last copy received {time}",
-  "box_status.spare.switch_copy": "Switching still uses the copy taken when this spare joined.",
+  "box_status.spare.switch_copy": "A switch first brings this spare's copy up to date.",
   "box_status.part.printers": "Printers",
   "box_status.part.readers": "Card readers",
   "box_status.part.clock": "Clock",
@@ -8408,7 +8408,7 @@ export const es: Record<StringKey, string> = {
   "box_status.spare.pending": "Actualización pendiente",
   "box_status.spare.last": "Última copia recibida {time}",
   "box_status.spare.switch_copy":
-    "El cambio sigue usando la copia tomada cuando se incorporó este equipo de reserva.",
+    "Al cambiar, primero se pone al día la copia de este equipo de reserva.",
   "box_status.part.printers": "Impresoras",
   "box_status.part.readers": "Lectores de tarjetas",
   "box_status.part.clock": "Reloj",

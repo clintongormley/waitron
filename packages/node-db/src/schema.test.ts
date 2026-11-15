@@ -14,6 +14,7 @@ const NODE_TABLES = [
   "node_primary_key",
   "node_recovery_key",
   "node_signing_key",
+  "node_take_failures",
 ];
 
 describe("node.db's tables", () => {

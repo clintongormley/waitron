@@ -36,6 +36,12 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   { item: "node_pair_link", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   { item: "node_primary_key", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   {
+    item: "node_take_failures",
+    where: "node.db",
+    class: "destination-owned",
+    treatment: KEEPS_OWN,
+  },
+  {
     item: "node_recovery_key",
     where: "node.db",
     class: "destination-owned",

@@ -626,7 +626,7 @@ describe("spare copy row", () => {
     lastAppliedAt: UPLOADED,
     clockAt: UPLOADED,
   };
-  it("replaces the to-spare bucket with measured seconds, last applied and the join-copy switching limit", () => {
+  it("replaces the to-spare bucket with measured seconds, last applied and how a switch brings the copy up to date", () => {
     const result = boxStatusRows(
       quietHealth({ stream: { state: "off", toSpare: true }, spare: { ...spare, lagMs: 2300 } }),
       [],
@@ -635,7 +635,7 @@ describe("spare copy row", () => {
     expect(result.rows.some((r) => r.id === "bucket")).toBe(false);
     expect(copy.line).toBe("3 s behind");
     expect(copy.details).toContain(`Last copy received ${formatIsoMinute(UPLOADED)}`);
-    expect(copy.details).toContain("Switching still uses the copy taken when this spare joined.");
+    expect(copy.details).toContain("A switch first brings this spare's copy up to date.");
     expect(copy.screen).toBe("servers");
   });
   it("keeps rebuilding and unknown separate from a quiet caught-up copy", () => {

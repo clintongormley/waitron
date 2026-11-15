@@ -2,8 +2,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
-import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
+import { format, setLocale, t } from "../i18n/t.js";
+import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
@@ -17,9 +17,16 @@ const preview = {
   sourceNodeId: "old",
   destinationNodeId: "new",
   sourceServersUrl: "https://main.example/manage/servers",
-  copy: { source: "mirror-copy", identifier: "a".repeat(64), lastChangeAtMs: null },
+  copy: {
+    source: "followed-copy",
+    sourceId: "c".repeat(64),
+    identifier: "a".repeat(64),
+    lastChangeAtMs: null,
+  },
+  joinedAtMs: 1789819200000,
   operation: null,
 };
+const heldActivityMs = 1790078400000;
 const status = {
   operationId: saved.operationId,
   role: "destination",
@@ -48,6 +55,11 @@ const selectedInput = {
 };
 const q = <T extends HTMLElement>(el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector)!;
+async function backupControlDisabled(el: HTMLElement): Promise<boolean> {
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+  await picker.updateComplete;
+  return fileControl(picker).disabled;
+}
 async function edit(el: LitElement, name: string, value: string) {
   const field = q<LitElement>(el, `[name="${name}"]`);
   await field.updateComplete;
@@ -73,6 +85,18 @@ async function mount(
     backupRefusal?: string;
     backupNeedsKeyCode?: string;
     theme?: "light" | "dark";
+    /** The spare still holds its joining copy; takes answer these in turn, the last repeating. */
+    held?: boolean;
+    takes?: string[];
+    /** Each take waits for this before answering. */
+    takeGate?: Promise<void>;
+    joinedAtMs?: null;
+    /** After a refused take the old process answers one more preview before it goes down. */
+    lateRestart?: boolean;
+    /** The signed-in person was enrolled after joining: only a followed copy knows them. */
+    unknownToHeld?: boolean;
+    /** A backup chosen earlier is already placed. */
+    backupPlaced?: boolean;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -81,7 +105,11 @@ async function mount(
   let rejected = false;
   let attemptedActivation = false;
   let copyChanged = false;
-  let backupSelected = false;
+  let backupSelected = options.backupPlaced ?? false;
+  let followedPlaced = !options.held;
+  let restartsLeft = 0;
+  let answersBeforeRestart = 0;
+  let takes = 0;
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
     if (init?.method === "GET" && options.statusUnavailable)
@@ -117,7 +145,31 @@ async function mount(
       backupSelected = true;
       return new Response(JSON.stringify({ restarting: true }));
     }
+    if (path.endsWith("/emergency/followed")) {
+      // A copy already placed at the follower's position, or a chosen backup, answers taken.
+      const answers = options.takes ?? ["taken"];
+      const answer = answers[Math.min(takes++, answers.length - 1)]!;
+      await options.takeGate;
+      // The box restarts after every refusal that follows a stopped follower.
+      if (answer.includes(".")) {
+        if (options.lateRestart) answersBeforeRestart = 1;
+        else restartsLeft = 2;
+        return new Response(JSON.stringify({ error: { code: answer } }), { status: 409 });
+      }
+      if (answer === "restarting") restartsLeft = 2;
+      if (answer === "restarting" || answer === "taken") followedPlaced = true;
+      return new Response(JSON.stringify({ state: answer }));
+    }
     if (path.endsWith("/emergency/preview")) {
+      if (restartsLeft > 0) {
+        restartsLeft -= 1;
+        throw new TypeError("box restarting");
+      }
+      if (answersBeforeRestart > 0 && --answersBeforeRestart === 0) restartsLeft = 2;
+      if (options.unknownToHeld && !followedPlaced)
+        return new Response(JSON.stringify({ error: { code: "password.invalid" } }), {
+          status: 401,
+        });
       if (options.activationMismatch && attemptedActivation)
         return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
           status: 409,
@@ -140,10 +192,17 @@ async function mount(
       return new Response(
         JSON.stringify({
           ...preview,
+          ...(options.joinedAtMs === null ? { joinedAtMs: null } : {}),
           copy: {
-            ...preview.copy,
+            ...(followedPlaced
+              ? preview.copy
+              : {
+                  source: "mirror-copy",
+                  identifier: "d".repeat(64),
+                  lastChangeAtMs: heldActivityMs,
+                }),
             ...(backupSelected ? { source: "selected-backup", sourceId: "b".repeat(64) } : {}),
-            lastChangeAtMs: copyChanged ? 1792152000000 : null,
+            ...(followedPlaced ? { lastChangeAtMs: copyChanged ? 1792152000000 : null } : {}),
           },
           operation: recorded ? saved : null,
         }),
@@ -255,6 +314,7 @@ async function startVenue(el: SetupHandoverScreen) {
   q(entry, "[data-test=compare]").click();
 }
 afterEach(() => {
+  vi.useRealTimers();
   cleanupWidgets();
   setLocale("en-GB");
   vi.restoreAllMocks();
@@ -427,7 +487,13 @@ it("recovers a lost declaration answer through preview, without declaring it aga
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(1);
-  expect(posts.filter(({ path }) => path.endsWith("/preview"))).toHaveLength(2);
+  expect(posts.map(({ path }) => path.split("/").at(-1)).slice(0, 5)).toEqual([
+    "preview",
+    "followed",
+    "preview",
+    "declare",
+    "preview",
+  ]);
   expect(location.pathname).toBe(`/handover/${saved.operationId}`);
 });
 
@@ -467,24 +533,32 @@ it("keeps the reason and statements when a code expires, and retries the same de
   expect(calls[1]!.body).toEqual({ ...calls[0]!.body, signIn: { ...signIn, totp: "654321" } });
 });
 
+// A sign-in refusal from the held copy goes on to the take, which signs in against the newer copy.
 it.each([
   [
     "handover.source_still_answering",
     "handover.emergency.source_answered",
     "https://main.example/manage/servers",
+    ["preview"],
   ],
-  ["handover.controlled_unresolved", "handover.emergency.controlled", "/handover/controlled"],
-  ["handover.copy_mismatch", "handover.emergency.copy_failed", null],
-  ["password.throttled", "handover.emergency.throttled", null],
-  ["authorization.not_permitted", "handover.emergency.permission", null],
-] as const)("offers the next step for %s", async (refusal, key, link) => {
-  const { el } = await mount({ refusal });
+  [
+    "handover.controlled_unresolved",
+    "handover.emergency.controlled",
+    "/handover/controlled",
+    ["preview"],
+  ],
+  ["handover.copy_mismatch", "handover.emergency.copy_failed", null, ["preview"]],
+  ["password.throttled", "handover.emergency.throttled", null, ["preview"]],
+  ["authorization.not_permitted", "handover.emergency.permission", null, ["preview", "followed"]],
+] as const)("offers the next step for %s", async (refusal, key, link, requests) => {
+  const { el, posts } = await mount({ refusal, takes: [refusal] });
   await edit(el, "handover-email", signIn.email);
   await edit(el, "handover-password", signIn.password);
   q(el, "[data-test=emergency-preview]").click();
   await vi.waitFor(() =>
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
   );
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(requests);
   if (link)
     expect(el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${link}"]`)).not.toBeNull();
   expect(el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/"]')!.textContent).toBe(
@@ -547,7 +621,9 @@ it("checks an uncertain declaration before retrying the same frozen request", as
   const declarations = posts.filter(({ path }) => path.endsWith("/declare"));
   expect(declarations).toHaveLength(2);
   expect(declarations[1]!.body).toEqual(declarations[0]!.body);
-  expect(posts.map(({ path }) => path.split("/").at(-1)).slice(0, 5)).toEqual([
+  expect(posts.map(({ path }) => path.split("/").at(-1)).slice(0, 7)).toEqual([
+    "preview",
+    "followed",
     "preview",
     "declare",
     "preview",
@@ -569,7 +645,7 @@ it("leaves the declaration form after a successful write even when progress cann
 });
 
 it("asks for password and code checks on the first refused sign-in, without assuming code expiry", async () => {
-  const { el } = await mount({ refusal: "password.invalid" });
+  const { el, posts } = await mount({ refusal: "password.invalid", takes: ["password.invalid"] });
   await edit(el, "handover-email", signIn.email);
   await edit(el, "handover-password", "mistyped");
   await edit(el, "handover-code", signIn.totp);
@@ -582,6 +658,8 @@ it("asks for password and code checks on the first refused sign-in, without assu
   expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(
     t("handover.emergency.code_expired"),
   );
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview", "followed"]);
+  expect(posts[1]!.body).toEqual({ signIn: { ...signIn, password: "mistyped" } });
 });
 
 it("shows a fresh copy and asks for confirmation again when it changed before declaration", async () => {
@@ -642,4 +720,340 @@ it("explains a second code expiry after replacing only the code and pressing Try
       .filter(({ path }) => path.endsWith("/activate"))
       .map(({ body }) => (body.signIn as { totp: string }).totp),
   ).toEqual(["123456", "654321"]);
+});
+
+const actions = (el: SetupHandoverScreen) => q(el, "wt-form-actions").shadowRoot!.textContent!;
+const followedTakes = (posts: { path: string }[]) =>
+  posts.filter(({ path }) => path.endsWith("/emergency/followed")).length;
+async function check(el: SetupHandoverScreen) {
+  await edit(el, "handover-email", signIn.email);
+  await edit(el, "handover-password", signIn.password);
+  await edit(el, "handover-code", signIn.totp);
+  q(el, "[data-test=emergency-preview]").click();
+}
+
+it("Check this copy first brings the copy up to date, waits for the restart, then shows it", async () => {
+  const { el, posts } = await mount({ held: true, takes: ["restarting"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  await vi.waitFor(
+    () =>
+      expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+        t("handover.emergency.followed"),
+      ),
+    { timeout: 10_000 },
+  );
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual([
+    "preview",
+    "followed",
+    "preview",
+    "preview",
+    "preview",
+  ]);
+  expect(followedTakes(posts)).toBe(1);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(true));
+  expect(posts.find(({ path }) => path.endsWith("/declare"))!.body.expectedCopy).toEqual(
+    preview.copy,
+  );
+});
+
+it("while the spare catches up the page waits and says so, then offers the copy this spare holds", async () => {
+  const { el, posts } = await mount({ held: true, takes: ["catching-up"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up")),
+  );
+  expect(followedTakes(posts)).toBe(1);
+  expect(q(el, "[data-test=emergency-held]")).toBeNull();
+  expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(followedTakes(posts)).toBe(2);
+  await vi.advanceTimersByTimeAsync(56_000);
+  expect(q(el, "[data-test=emergency-held]")).toBeNull();
+  await vi.advanceTimersByTimeAsync(2000);
+  await el.updateComplete;
+  expect(q(el, "[data-test=emergency-held]")).not.toBeNull();
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.still_catching_up"));
+  expect(await backupControlDisabled(el)).toBe(false);
+  const taken = followedTakes(posts);
+  vi.useRealTimers();
+  q(el, "[data-test=emergency-held]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=emergency-copy]").textContent).toContain(t("handover.emergency.copy")),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  expect(followedTakes(posts)).toBe(taken);
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.catching_up"));
+});
+
+it.each([
+  ["handover.copy_predates_destination", "handover.emergency.followed_not_admitted"],
+  ["handover.chain_broken", "handover.emergency.followed_failed"],
+  ["provisioning.database_ahead", "handover.emergency.followed_ahead"],
+  ["restore.schema_too_new", "handover.emergency.followed_ahead"],
+  ["handover.copy_damaged", "handover.emergency.followed_failed"],
+  ["handover.copy_check_failed", "handover.emergency.followed_failed"],
+] as const)(
+  "a refused take (%s) names its cause and, once the box answers again, offers the copy this spare holds",
+  async (code, key) => {
+    const { el, posts } = await mount({ held: true, takes: [code] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await check(el);
+    await vi.waitFor(() => expect(actions(el)).toContain(t(key)));
+    expect(q(el, "[data-test=emergency-held]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.held_waiting"));
+    // Reading a response body takes a real browser task, so each answer is awaited, not assumed.
+    await vi.advanceTimersByTimeAsync(6000);
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull());
+    expect(actions(el)).toContain(t(key));
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting"));
+    expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
+    expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+    expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual([
+      "preview",
+      "followed",
+      "preview",
+      "preview",
+      "preview",
+    ]);
+  },
+);
+
+it("says the held copy is from when this spare joined when the joining date is unknown", async () => {
+  const { el } = await mount({ held: true, takes: ["handover.chain_broken"], joinedAtMs: null });
+  await check(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=held-copy]")).not.toBeNull(), {
+    timeout: 10_000,
+  });
+  expect(q(el, "[data-test=held-copy]").textContent).toContain(
+    t("handover.emergency.held_undated"),
+  );
+});
+
+it("from the press, waits visibly with Choose a backup open, and offers the held copy at 60 seconds even while a take is still held", async () => {
+  let release!: () => void;
+  const takeGate = new Promise<void>((resolve) => (release = resolve));
+  const { el, posts } = await mount({ held: true, takes: ["catching-up"], takeGate });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await check(el);
+  await vi.waitFor(() => expect(followedTakes(posts)).toBe(1));
+  await el.updateComplete;
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up"));
+  expect(await backupControlDisabled(el)).toBe(false);
+  await vi.advanceTimersByTimeAsync(59_000);
+  expect(q(el, "[data-test=emergency-held]")).toBeNull();
+  await vi.advanceTimersByTimeAsync(1000);
+  await el.updateComplete;
+  expect(q(el, "[data-test=emergency-held]")).not.toBeNull();
+  expect(followedTakes(posts)).toBe(1);
+  release();
+});
+
+it.each(["en-GB", "es-ES"])(
+  "the held-copy action says it is the copy from when this spare joined, with its date (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ held: true, takes: ["handover.chain_broken"] });
+    await check(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull(), {
+      timeout: 10_000,
+    });
+    const joined = new Date(preview.joinedAtMs).toLocaleString(locale);
+    const activity = new Date(heldActivityMs).toLocaleString(locale);
+    const offer = q(el, "[data-test=held-copy]").textContent!;
+    expect(offer).toContain(format("handover.emergency.held_joined", { joined }));
+    expect(offer).toContain(`${t("handover.emergency.latest_activity")} ${activity}`);
+    expect(q(el, "[data-test=emergency-held]").textContent).toContain(
+      t("handover.emergency.use_held"),
+    );
+    q(el, "[data-test=emergency-held]").click();
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+    const copy = q(el, "[data-test=emergency-copy]").textContent!;
+    expect(copy).toContain(t("handover.emergency.copy"));
+    expect(copy).toContain(format("handover.emergency.held_joined", { joined }));
+    expect(q(el, "[data-test=emergency-held]")).toBeNull();
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(true));
+    expect(posts.find(({ path }) => path.endsWith("/declare"))!.body.expectedCopy).toEqual({
+      source: "mirror-copy",
+      identifier: "d".repeat(64),
+      lastChangeAtMs: heldActivityMs,
+    });
+    expect(followedTakes(posts)).toBe(1);
+  },
+);
+
+it("a saved declaration is resumed without taking a copy again", async () => {
+  const { el, posts } = await mount({ saved: true, held: true, takes: ["restarting"] });
+  await check(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(saved.reason));
+  expect(followedTakes(posts)).toBe(0);
+});
+
+it("the waiting line renders in Spanish", async () => {
+  setLocale("es-ES");
+  const waiting = t("handover.emergency.catching_up");
+  expect(waiting).not.toBe(t("handover.emergency.catching_up", "en-GB"));
+  const { el } = await mount({ held: true, takes: ["catching-up"] });
+  await check(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(waiting));
+});
+
+it("a take answering taken shows the followed copy without waiting for a restart", async () => {
+  const { el, posts } = await mount({ held: true, takes: ["taken"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+      t("handover.emergency.followed"),
+    ),
+  );
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual([
+    "preview",
+    "followed",
+    "preview",
+  ]);
+});
+
+it("pressing the held copy while the old process is still going down waits for the restart", async () => {
+  const { el, posts } = await mount({
+    held: true,
+    takes: ["handover.chain_broken"],
+    lateRestart: true,
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await check(el);
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.followed_failed")));
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull());
+  q(el, "[data-test=emergency-held]").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.held_waiting")),
+  );
+  expect(actions(el)).not.toContain(t("handover.emergency.failed"));
+  expect(await backupControlDisabled(el)).toBe(false);
+  await vi.advanceTimersByTimeAsync(4000);
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=emergency-copy]").textContent).toContain(t("handover.emergency.copy")),
+  );
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting"));
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual([
+    "preview",
+    "followed",
+    "preview",
+    "preview",
+    "preview",
+    "preview",
+  ]);
+});
+
+it.each(["en-GB", "es-ES"])(
+  "a person only the up-to-date copy knows reaches the take and sees the copy it placed (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ held: true, unknownToHeld: true, takes: ["restarting"] });
+    await check(el);
+    await vi.waitFor(
+      () =>
+        expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+          t("handover.emergency.followed"),
+        ),
+      { timeout: 10_000 },
+    );
+    expect(followedTakes(posts)).toBe(1);
+    expect(posts.find(({ path }) => path.endsWith("/followed"))!.body).toEqual({ signIn });
+    expect(actions(el)).not.toContain(t("handover.emergency.sign_in_failed"));
+  },
+);
+
+it("a person only the up-to-date copy knows waits for it, with no held copy to offer", async () => {
+  const { el, posts } = await mount({ held: true, unknownToHeld: true, takes: ["catching-up"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up")),
+  );
+  await vi.advanceTimersByTimeAsync(62_000);
+  await el.updateComplete;
+  expect(followedTakes(posts)).toBeGreaterThan(1);
+  expect(q(el, "[data-test=emergency-held]")).toBeNull();
+  expect(q(el, "[data-test=held-copy]")).toBeNull();
+  expect(actions(el)).not.toContain(t("handover.emergency.sign_in_failed"));
+  expect(await backupControlDisabled(el)).toBe(false);
+});
+
+it("a followed copy placed earlier goes through the take, which may find a newer one", async () => {
+  const { el, posts } = await mount({ takes: ["restarting"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  await vi.waitFor(
+    () =>
+      expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+        t("handover.emergency.followed"),
+      ),
+    { timeout: 10_000 },
+  );
+  expect(followedTakes(posts)).toBe(1);
+});
+
+it.each(["en-GB", "es-ES"])(
+  "a followed copy placed earlier is offered as the held copy when a newer take is refused, and named as held once chosen (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ takes: ["handover.chain_broken"] });
+    await check(el);
+    await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.followed_failed")));
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull(), {
+      timeout: 10_000,
+    });
+    expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+    expect(q(el, "[data-test=held-copy]").textContent).toContain(t("handover.emergency.no_date"));
+    q(el, "[data-test=emergency-held]").click();
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+    const heading = q(el, "[data-test=emergency-copy] h2").textContent!.trim();
+    expect(heading).toBe(t("handover.emergency.copy"));
+    expect(heading).not.toBe(t("handover.emergency.followed"));
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(true));
+    expect(posts.find(({ path }) => path.endsWith("/declare"))!.body.expectedCopy).toEqual(
+      preview.copy,
+    );
+    expect(followedTakes(posts)).toBe(1);
+  },
+);
+
+it("a backup placed earlier is shown without a take", async () => {
+  const { el, posts } = await mount({ backupPlaced: true, takes: ["restarting"] });
+  await authenticate(el);
+  expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+    t("handover.emergency.selected_backup"),
+  );
+  expect(followedTakes(posts)).toBe(0);
+});
+
+it("while a newer copy catches up, an earlier followed copy is offered as held without calling it the joining copy", async () => {
+  const { el } = await mount({ takes: ["catching-up"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await check(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up")),
+  );
+  await vi.advanceTimersByTimeAsync(60_000);
+  await el.updateComplete;
+  expect(q(el, "[data-test=emergency-held]")).not.toBeNull();
+  const offer = q(el, "[data-test=held-copy]").textContent!;
+  expect(offer).not.toContain(
+    format("handover.emergency.held_joined", {
+      joined: new Date(preview.joinedAtMs).toLocaleString("en-GB"),
+    }),
+  );
+  expect(offer).toContain(t("handover.emergency.no_date"));
 });

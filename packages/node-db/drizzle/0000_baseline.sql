@@ -105,3 +105,9 @@ CREATE TABLE `node_signing_key` (
 	CONSTRAINT "node_signing_key_iv_len_ck" CHECK(octet_length("node_signing_key"."iv") = 12),
 	CONSTRAINT "node_signing_key_auth_tag_len_ck" CHECK(octet_length("node_signing_key"."auth_tag") = 16)
 );
+--> statement-breakpoint
+CREATE TABLE `node_take_failures` (
+	`node_id` text PRIMARY KEY NOT NULL,
+	`failures` integer NOT NULL,
+	`last_failed_at` text NOT NULL
+);

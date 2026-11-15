@@ -2,13 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** revision 2, 2026-11-14 (lane A), after a fresh-context Claude plan read
+**Status:** revision 4, 2026-11-14 (lane A): the owner answered Q2 at 16:16 (build the held-copy
+button, worded as the copy from when the spare joined, with its date). Revision 3: Revision 2 followed a fresh-context Claude plan read
 (`~/waitron-campaign/receipts/a947-4b-plan-review.md`: 1 Critical, 6 Important, 4 Minor, all taken).
-No approval of this plan is claimed. The design it implements: the owner approved its second
+Revision 3 takes the campaign watcher's clearance with changes (`~/waitron-campaign/questions.md`,
+"WATCHER 2026-11-14 16:12"): Q1 settled (4c), the held-copy button not built (Q2 is the owner's),
+and three Task 2 changes. Cleared by the watcher; the owner has NOT approved this plan. The design it implements: the owner approved its second
 revision on 2026-10-22 at about 02:40 (the design's header); the A1018 amendment at its top comes
 from the A1018 design (owner, 24 October) and its build plan's two answers (owner, 2 November).
 Queued by the campaign watcher on 2026-11-14 15:47 (`~/waitron-campaign/questions.md`, "next:
 A947-4b").
+
+**As built, after the finish review (2026-11-14):** D6's count, now the `node_take_failures`
+table, counts every refused take after the follower stops (a refused copy as well as a refused
+sign-in), and a sign-in of the wrong shape is refused before anything stops. The take looks at
+the follower once (`catchUpMs: 0`) instead of waiting 30 seconds inside the turn, answers no
+`progress`, and asks the main box only just before stopping. A refused newer take keeps the earlier
+placed copy's `placed.json`. The page reaches the take even when the joining copy refuses the
+person's sign-in, and a followed copy placed earlier goes through the take again; when that newer
+take is refused, the earlier followed copy is offered as the copy this spare holds and, once
+chosen, is headed "Copy held on this spare" rather than "Latest copy from the main box". The cost of reaching the take without the joining
+copy's sign-in: a mistyped password now stops the follower, is counted as a failed take and
+restarts the spare, which then rebuilds its followed copy before a corrected retry can take it.
 
 **Goal:** when the main box dies, the emergency switch on the spare promotes the copy the spare has
 been following up to the moment the main box stopped, not the copy taken when the spare joined.
@@ -59,7 +74,8 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
   applies …, runs `PRAGMA integrity_check` and the chain verifier … Only now does it check the
   manager's sign-in, against the person rows … of the copy it has just stopped writing." The take
   route carries the page's sign-in (as `/emergency/backup` does) and checks it, with the real
-  sign-in code (`authenticate` in `handover-emergency-api.ts`), against the stopped follower's
+  sign-in code (`authenticate` in `handover-emergency-api.ts`, changed to take the database it
+  checks against; today it reads `deps.db` only), against the stopped follower's
   folder opened with `openVenueDatabase(join(stateDir, SPARE_FOLLOW_DIR))` — after the copy has
   been staged, so the sign-in's session row lands only in the follower's discarded output (the next
   start empties `scratch/`, `boot.ts:1317`, and the follower wipes its folder, `spare-follow.ts:142`).
@@ -68,11 +84,12 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
   live copy until the start after a successful sign-in.
 - **D2 — waiting, not falling back.** While the follower is rebuilding (every start does a full
   restore), unknown, or behind its store, the take answers `catching-up` with the follower's
-  progress and the page waits, asking again every 2 seconds. Only when it does not catch up within
-  60 seconds of one bounded wait does the page offer **Use the copy this spare holds** with that
-  copy's latest dated activity — today's switch, chosen by the person and recorded in the
-  declaration as source `mirror-copy`. This is question Q2: the design has no such way out, but
-  without one a spare whose store is unreadable could not switch at all.
+  progress and the page waits, asking again every 2 seconds. After 60 seconds without catching up, and after a refused take, the page also offers **Use the
+  copy this spare holds** — today's switch, chosen by the person and recorded in the declaration as
+  source `mirror-copy` (owner, 2026-11-14 16:16: "offering that button seems reasonable"). Its
+  wording says plainly that it is the copy from when this spare joined, with its date and that
+  copy's latest dated activity, so nobody takes it for the up-to-date one (owner's ask, same note).
+  **Choose a backup** (`/emergency/backup`) stays on the page too.
 - **D3 — any failure after the follower stops restarts the box.** `startSpareFollow`'s `stop()` is
   final for the process. A refused check, a refused sign-in, or any other error after stopping
   (a full disk while copying, say) answers its code and restarts in a `finally`, so the follower
@@ -81,6 +98,12 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
 - **D4 — `sourceId` of a followed copy** is `sha256Hex("<generation>:<appliedTXID>")`, the TXID read
   from the stopped output's `-txid` file (`follow.ts:87`), so the existing `isSha256Hex` check on
   `expectedCopy.sourceId` covers both sources and a repeated take compares one value.
+- **D6 — failed take sign-ins are counted in `node.db`** (watcher, 16:12). Each refused sign-in
+  restarts the box, which empties the in-memory password throttle (`createPasswordThrottle`), so
+  guessing would be bounded only by restart time and any device on the network could keep the
+  spare restarting. The take counts its failed attempts in `node.db`, checks that count BEFORE
+  stopping the follower (refusing without stopping or restarting once over the limit, with the
+  throttle's own refusal code and limit), and clears it on a successful take.
 - **D5 — one pull request**, four tasks. Estimate: production about +330/−25 (server about 250,
   setup page and client about 60, strings and guides about 20); tests about +650. Report growth past
   1,100 changed code and test lines before going on.
@@ -92,8 +115,11 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
   proof ("a passkey or a password and, when enrolled, a code, on a till as on the dashboard"), so a
   4b route would have no caller. Why it must still be held in memory in 4c: a challenge row written
   before the take would land in the joining copy, which the take then replaces. Recommended: 4c.
-- **Q2 — D2's way out.** Recommended: offer **Use the copy this spare holds** after 60 seconds
-  without catching up. The alternative is no way out (a switch waits for the store however long).
+- **Q1 answer (watcher, 2026-11-14 16:12):** moved to 4c; recorded in the dated pointer this plan
+  adds to the design's §11.
+- **Q2 answer (owner, 2026-11-14 16:16, relayed by the watcher):** build the held-copy button as D2
+  says. (Revision 2 claimed that without it such a spare "cannot switch at all"; that was false:
+  **Choose a backup** stays on the page.)
 
 ## Global constraints
 
@@ -122,8 +148,9 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
 4. **The main box answers again before the take**: refused with `handover.source_still_answering`
    before the follower is touched — Task 2.
 5. **A take refused for a reason that will not pass** (the spare's release is older than the main
-   box's, so `checkCopy` refuses, `spare-copy.ts:200`; or a broken chain): the page names the cause
-   and offers the held copy — Task 3.
+   box's, so `checkCopy` refuses, `spare-copy.ts:200`; or a broken chain): the page names the cause and offers the held copy; Choose a backup stays available — Task 3.
+6. **Repeated wrong sign-ins** cannot keep the spare restarting: the `node.db` count refuses before
+   the follower is stopped — Task 2.
 
 ---
 
@@ -184,7 +211,10 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
 
 **Files:**
 - Modify: `apps/server/src/handover-emergency-api.ts` (new route; `parse` accepts
-  `expectedCopy.source === "followed-copy"` with a sha256 `sourceId`; new deps)
+  `expectedCopy.source === "followed-copy"` with a sha256 `sourceId`; new deps; `authenticate`
+  takes the database it signs in against)
+- Modify: the `node.db` store, for D6's failed-take count (search for existing per-operation state
+  first; a new `node.db` table rebuilds its set's starting migration per CLAUDE.md §3)
 - Modify: `apps/server/src/boot.ts:~4121` (pass the follower and `restart`)
 - Modify: `apps/server/src/read-only-exemptions.ts` (the route, its admission written like
   `/emergency/backup`'s)
@@ -197,6 +227,9 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
 - Produces on the API's `Deps`: `follow?: { stopForSwitch: …; progress(): FollowProgress | null }`
   (boot passes `spareFollow`) and `restart(): void` (boot's `restart`; today it travels only inside
   `backup`).
+- Changes: `authenticate(signIn, db = deps.db)` — the take passes the stopped follower's database;
+  every existing caller is unchanged.
+- Produces: D6's count in `node.db`: read, record and clear (names chosen in the build).
 - Produces: `POST /api/node/handover/emergency/followed`, body `{ signIn }`, answering
   `{ state: "restarting" | "catching-up" | "taken"; progress?: FollowProgress | null }`. Inside
   `inTurn(deps.node, "handover-emergency", …)`, each refusing before the next:
@@ -205,11 +238,16 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
      `selected-backup` → `taken` (the person chose a backup; nothing to do).
   2. A staged `followed-copy` marker → `restarting`, stopping nothing.
   3. `sourceSilent(sourceNodeId, false)`.
-  4. `follow.progress()` names the placed `followed-copy` marker's position (D4) → `taken`.
+  4. A placed `followed-copy` marker → `taken` when `follow.progress()` names its position (D4) OR
+     the follower is rebuilding (no progress yet, or state `rebuilding`): the start after a take
+     always rebuilds, so a placed followed copy plus a rebuilding follower is the normal case.
+     A placed followed copy and a caught-up follower at another position goes on (a newer copy).
+  4a. D6: the `node.db` failed-take count is at the limit → the throttle's refusal; nothing is
+     stopped and the box does not restart.
   5. `stopForSwitch({ catchUpMs: 30_000 })`; `catching-up` → answer it, follower still running.
   6. In a `try`/`finally` that restarts on the next tick whatever happens: `stageFollowedAsCopy`;
-     sign in (D1) against the stopped follower's folder — refused: `clearSelectedCopy`, answer the
-     refusal; passed: answer `restarting`.
+     sign in (D1) against the stopped follower's folder — refused: record the failure in `node.db`
+     (D6), `clearSelectedCopy`, answer the refusal; passed: clear the count, answer `restarting`.
   New refusal codes, if any, go in the file's `STATUS` table.
 
 - [ ] **Step 1: failing tests**, with the existing emergency API test setup
@@ -225,6 +263,10 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
   - "a rebuilding follower answers catching-up and is not stopped" (Review focus 1).
   - "refuses while the main box answers, before touching the follower" (Review focus 4).
   - "refuses while a handover operation is open"; "does nothing when a backup was chosen".
+  - D6: "wrong sign-ins at the limit are refused before the follower is stopped, across
+    restarts": the count survives remounting the API on the same `node.db`; at the limit the take
+    answers the throttle's refusal and neither `stopForSwitch` nor `restart` is called; a
+    successful take clears it. Prove it by deletion (remove the check, see the case fail).
   - "a damaged followed copy is refused and the box restarts"; "a failure while copying restarts too"
     (D3: a stand-in `stageFollowedAsCopy` that throws a non-`AppError`).
   - "after placement, preview reports the followed copy and declare records it": restart simulated
@@ -259,10 +301,14 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
     "Latest copy from the main box".
   - "while the spare catches up the page waits and says so": `catching-up` → "Bringing this spare's
     copy up to date…" and another take 2 s later; after 60 s without catching up the page also
-    offers **Use the copy this spare holds** (Q2), which goes to today's preview.
+    offers **Use the copy this spare holds**, which goes to today's preview; Choose a backup stays
+    available throughout.
   - "a refused take names its cause and offers the copy this spare holds" (Review focus 5): for
     `handover.copy_predates_destination` and `handover.chain_broken`, the existing error wording
     plus the same action.
+  - "the held-copy action says it is the copy from when this spare joined, with its date": the
+    button's text or the line beside it names the joining date and the copy's latest dated
+    activity; choosing it previews and declares with source `mirror-copy`.
   - "a saved declaration is resumed without taking a copy again".
   - Spanish: the new strings render in `es`.
   - Dashboard: `box_status.spare.switch_copy` becomes "A switch first brings this spare's copy up
@@ -313,6 +359,7 @@ to `computeHuella`, the chain, series allocation, `registros_facturacion`, the a
 - `docs/backlog.md` and `docs/backlog/replication-cloud.md`: the A947 lines saying switching from
   the followed copy remains 4b now say a switch first brings the spare's copy up to date; the
   `replication-cloud.md:1065` "for 4b" dormant-setup line says it is built; Q1's answer recorded
-  where 4c's work is listed. The design's §11 4b line gets a dated pointer to this plan.
-- PR description: Changed test checks (Task 3's wording, Task 2's surface pin); D1–D3 and Q1–Q2 and
-  who answered them; "FISCAL — the owner lands it".
+  where 4c's work is listed. The design's §11 4b line gets a dated pointer to this plan, saying the in-memory passkey
+  challenge moved to 4c (watcher, 2026-11-14 16:12). Q2's answer (owner, 16:16) is recorded beside it.
+- PR description: Changed test checks (Task 3's wording, Task 2's surface pin); D1–D6 and Q1–Q2 and who answered them (the
+  watcher cleared the plan; the owner has not approved it); "FISCAL — the owner lands it".
