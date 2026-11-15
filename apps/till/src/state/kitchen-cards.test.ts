@@ -517,6 +517,16 @@ describe("A803 portion grouping: a card's rows", () => {
     expect(rows(card).flat()).toEqual([["a"], ["b"]]);
   });
 
+  it("A803 portion grouping: a portion sent after its period without asking shows apart from an agreed one", () => {
+    const card = one(
+      bill("o-1", [
+        portion("a", { afterPeriod: "Lunch" }),
+        portion("b", { afterPeriod: "Lunch", afterPeriodUnasked: true }),
+      ]),
+    );
+    expect(rows(card).flat()).toEqual([["a"], ["b"]]);
+  });
+
   it("A803 portion grouping: another course shows apart, in its own section", () => {
     const course = { id: "c-1", name: "Mains", displayOrder: 2 };
     const card = one(bill("o-1", [portion("a"), portion("b", { course })]));

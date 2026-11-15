@@ -26,7 +26,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange, LateSendMark } from "@waitron/module";
 import {
   AppError,
   compareStationNames,
@@ -114,7 +114,16 @@ function atFiredQuantity(entry: KitchenTicketItem, item: FiredItem): KitchenTick
 
 // Change paper omits late-send marks, so those marks cannot split otherwise identical portions.
 function changeItem(entry: KitchenTicketItem, item: FiredItem): KitchenTicketItem {
-  return { ...atFiredQuantity(entry, item), afterPeriod: undefined };
+  return { ...atFiredQuantity(entry, item), afterPeriod: undefined, afterPeriodUnasked: undefined };
+}
+
+function afterPeriodOf(
+  mark: LateSendMark | undefined,
+): Pick<KitchenTicketItem, "afterPeriod" | "afterPeriodUnasked"> {
+  if (mark === undefined) return {};
+  return mark.agreed
+    ? { afterPeriod: mark.periodName }
+    : { afterPeriod: mark.periodName, afterPeriodUnasked: true };
 }
 
 function ticketName(text: Record<string, string>, locale: string): string {
@@ -399,7 +408,7 @@ async function buildTicketItems(
           undefined,
         ...(contains.length === 0 ? {} : { contains }),
         ...(unit === undefined ? {} : { printedAsSold: true }),
-        ...(lateMarks.has(row.id) ? { afterPeriod: lateMarks.get(row.id)! } : {}),
+        ...afterPeriodOf(lateMarks.get(row.id)),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),

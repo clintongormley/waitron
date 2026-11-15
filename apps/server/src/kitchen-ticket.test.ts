@@ -1781,6 +1781,61 @@ describe("a dish sent after its period", () => {
     ]);
   });
 
+  it.each([
+    ["en-GB", "** AFTER LUNCH **"],
+    ["es-ES", "** TRAS LUNCH **"],
+  ])(
+    "prints a dish sent without asking anyone under its own mark, without agreed, in %s",
+    (locale, unasked) => {
+      const lines = printedLines(
+        formatKitchenTicket(
+          ticket(
+            [
+              { qty: 1, name: "Steak", afterPeriod: "Lunch" },
+              { qty: 1, name: "Fish", afterPeriod: "Lunch", afterPeriodUnasked: true },
+              { qty: 1, name: "Chips", afterPeriod: "Lunch", afterPeriodUnasked: true },
+            ],
+            locale,
+          ),
+          KITCHEN_80,
+          TEST_TIME_ZONE,
+        ),
+      );
+      expect(lines).toEqual([
+        "Kitchen",
+        "Table 4",
+        "A-17",
+        "14:30",
+        banner("Lunch", locale === "es-ES" ? "es" : "en"),
+        "1 x Steak",
+        unasked,
+        "1 x Fish",
+        "1 x Chips",
+        "",
+      ]);
+    },
+  );
+
+  it("does not merge an agreed dish with the same dish sent without asking", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        ticket([
+          { qty: 1, name: "Steak", afterPeriod: "Lunch" },
+          { qty: 1, name: "Steak", afterPeriod: "Lunch", afterPeriodUnasked: true },
+        ]),
+        KITCHEN_80,
+        TEST_TIME_ZONE,
+      ),
+    );
+    expect(lines.slice(4)).toEqual([
+      "** AFTER LUNCH — AGREED **",
+      "1 x Steak",
+      "** AFTER LUNCH **",
+      "1 x Steak",
+      "",
+    ]);
+  });
+
   it("wraps a long period name to the paper", () => {
     const period = "Late afternoon tapas and drinks";
     const lines = printedLines(

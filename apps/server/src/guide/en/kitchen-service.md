@@ -352,6 +352,8 @@ A dish sent after its period ended earlier the same business day, once the stati
 with its period's name. On its station ticket a line above it reads `** AFTER LUNCH — AGREED **`.
 A divider ends that run before the next unmarked dish; a new group or station heading also ends it.
 On the station screen, the card shows **After Lunch — agreed** above it.
+A dish sent without asking anyone, such as when a saved counter bill is paid or a bill moves to a
+table, carries the mark without "agreed": `** AFTER LUNCH **` and **After Lunch**.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
 **Manager's PIN to send after a period ends** under **Courses and stations** on its **Service**

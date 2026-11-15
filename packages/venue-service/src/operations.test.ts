@@ -3766,11 +3766,11 @@ describe("a line sent late", () => {
         where working_order_line_id in (${late}, ${onTime}) order by late_confirmed_by`);
       expect(stored.rows.map((row) => row.late_confirmed_by)).toEqual([null, "person-7"]);
       await expect(readLateSendMarks(tx, [late, onTime])).resolves.toEqual(
-        new Map([[late, "Lunch"]]),
+        new Map([[late, { periodName: "Lunch", agreed: true }]]),
       );
       await copyWorkingLineContext(tx, late, split);
       await expect(readLateSendMarks(tx, [split, onTime])).resolves.toEqual(
-        new Map([[split, "Lunch"]]),
+        new Map([[split, { periodName: "Lunch", agreed: true }]]),
       );
       await expect(readLateSendMarks(tx, [])).resolves.toEqual(new Map());
     });
@@ -3817,6 +3817,12 @@ describe("a line sent late", () => {
         [unasked]: ["Brunch", null],
         [untouched]: [null, null],
       });
+      await expect(readLateSendMarks(tx, [asked, unasked, untouched])).resolves.toEqual(
+        new Map([
+          [asked, { periodName: "Lunch", agreed: true }],
+          [unasked, { periodName: "Brunch", agreed: false }],
+        ]),
+      );
     });
   });
 });

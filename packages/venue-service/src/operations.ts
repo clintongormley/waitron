@@ -55,6 +55,7 @@ import {
   type ServedMenu,
 } from "@waitron/menu";
 import type {
+  LateSendMark,
   PreparedServiceDay,
   ServiceMode,
   ZoneMenuState,
@@ -1307,16 +1308,20 @@ export async function readLinesSoldInEach(
   return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
 
-/** The period name of each of `lineIds` whose context records a late send; unmarked lines are absent. */
+/**
+ * The period name of each of `lineIds` whose context records a late send, and whether someone
+ * agreed to it (`agreed` is false where the send asked nobody); unmarked lines are absent.
+ */
 export async function readLateSendMarks(
   tx: Transaction,
   lineIds: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, LateSendMark>> {
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
       workingOrderLineId: workingLineContexts.workingOrderLineId,
       latePeriodName: workingLineContexts.latePeriodName,
+      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
     })
     .from(workingLineContexts)
     .where(
@@ -1325,7 +1330,12 @@ export async function readLateSendMarks(
         isNotNull(workingLineContexts.latePeriodName),
       ),
     );
-  return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
+  return new Map(
+    rows.map((row) => [
+      row.workingOrderLineId,
+      { periodName: row.latePeriodName!, agreed: row.lateConfirmedBy !== null },
+    ]),
+  );
 }
 
 /**

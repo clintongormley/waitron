@@ -179,6 +179,12 @@ export interface OrderServiceContext {
   readonly serviceMode: ServiceMode;
 }
 
+/** A line's record of being sent after its period; `agreed` is false where the send asked nobody. */
+export interface LateSendMark {
+  readonly periodName: string;
+  readonly agreed: boolean;
+}
+
 export interface EffectiveSalePolicy {
   readonly orderStart: "table" | "counter";
   readonly zoneId: string;
@@ -1184,11 +1190,12 @@ export interface VenueServiceContribution {
   /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
    *  unit by that unit's current seed key; a line with no context is not. */
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;
-  /** The period name of each of `lineIds` recorded as sent late; unmarked lines are absent. */
+  /** The period name of each of `lineIds` recorded as sent late, and whether someone agreed to the
+   *  send; unmarked lines are absent. */
   readLateSendMarks(
     tx: Transaction,
     lineIds: readonly string[],
-  ): Promise<ReadonlyMap<string, string>>;
+  ): Promise<ReadonlyMap<string, LateSendMark>>;
   /** Marks each line as sent after `periodName`; `confirmedBy` is null where the send asked nobody. */
   recordLateSendMarks(
     tx: Transaction,

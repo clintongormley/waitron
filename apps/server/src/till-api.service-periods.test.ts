@@ -1918,6 +1918,7 @@ describe("a dish whose period ended earlier today", () => {
 
   describe("a dish parked during its period and sent after it", () => {
     const lunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.mark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    const unaskedLunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.unaskedMark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
     /** The Midday Toast parked at `parkedAt`, with every dish made at one station with its own printer. */
     const parkedAtLunch = async (
       parkedAt = "13:50",
@@ -1925,7 +1926,7 @@ describe("a dish whose period ended earlier today", () => {
     ) => {
       at(mondayAt(parkedAt));
       const v = await mealVenue();
-      const printerId = await withTransaction(suite.db, async (tx) => {
+      const { printerId, stationId } = await withTransaction(suite.db, async (tx) => {
         const stationId = (await createStation(tx, { name: "Kitchen" })).id;
         const printer = await createPrinter(tx, {
           name: "Kitchen printer",
@@ -1938,7 +1939,7 @@ describe("a dish whose period ended earlier today", () => {
           { row: { kind: "all" }, zoneId: v.diningZone },
           { kind: "station", stationId },
         );
-        return printer.id;
+        return { printerId: printer.id, stationId };
       });
       const held = await parkWith(v, v.toast.midday, extra(v));
       expect(held.status).toBe(200);
@@ -1946,7 +1947,7 @@ describe("a dish whose period ended earlier today", () => {
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, held.id));
-      return { v, printerId, id: held.id, lineId: line!.id };
+      return { v, printerId, stationId, id: held.id, lineId: line!.id };
     };
     const place = async (v: Venue, id: string, extra: Record<string, unknown> = {}) =>
       sendAsTill(v, "POST", `/api/working-orders/${id}/place`, {
@@ -2040,8 +2041,8 @@ describe("a dish whose period ended earlier today", () => {
       ]);
     });
 
-    it("is sent when paid at 14:05 without asking, marked with no confirmer on the line and its ticket", async () => {
-      const { v, printerId, id } = await parkedAtLunch();
+    it("is sent when paid at 14:05 without asking, marked with no confirmer on the line, its ticket and its station's queue, never as agreed", async () => {
+      const { v, printerId, stationId, id } = await parkedAtLunch();
       at(mondayAt("14:05"));
       const paid = await sendAsTill(v, "POST", "/api/sales", {
         workingOrderId: id,
@@ -2052,7 +2053,18 @@ describe("a dish whose period ended earlier today", () => {
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
       ]);
-      expect(await printed(printerId)).toEqual([expect.stringContaining(`\n${lunchMark}\n`)]);
+      expect(unaskedLunchMark).toBe("** TRAS LUNCH **");
+      expect(await printed(printerId)).toEqual([
+        expect.stringContaining(`\n${unaskedLunchMark}\n`),
+      ]);
+      expect(await printed(printerId)).toEqual([expect.not.stringContaining(lunchMark)]);
+      const queue = await sendAsTill(v, "GET", `/api/stations/${stationId}/queue`);
+      expect(queue.status).toBe(200);
+      expect(
+        (queue.body as { items: { items: Record<string, unknown>[] }[] }).items.flatMap(
+          (group) => group.items,
+        ),
+      ).toEqual([expect.objectContaining({ afterPeriod: "Lunch", afterPeriodUnasked: true })]);
     });
 
     it("is sent when moved to a table at 14:05 without asking, marked with no confirmer", async () => {
@@ -2083,6 +2095,7 @@ describe("a dish whose period ended earlier today", () => {
 
   describe("a set lunch's course stored during Lunch and sent after it", () => {
     const lunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.mark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    const unaskedLunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.unaskedMark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
     const lateSend = (v: Venue) => ({ lateSend: { menuIds: [v.menus["Midday menu"]] } });
     const partyRevisionOf = async (partyId: string) =>
       (
@@ -2462,7 +2475,10 @@ describe("a dish whose period ended earlier today", () => {
         lateConfirmedBy: null,
       });
       expect(await printed(t.printerId)).toEqual(
-        expect.arrayContaining([expect.stringContaining(`\n${lunchMark}\n`)]),
+        expect.arrayContaining([expect.stringContaining(`\n${unaskedLunchMark}\n`)]),
+      );
+      expect(await printed(t.printerId)).toEqual(
+        expect.not.arrayContaining([expect.stringContaining(lunchMark)]),
       );
     });
   });
@@ -2951,6 +2967,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     };
     const late = await queueItems(c.upstairs.stationId);
     expect(late).toEqual([expect.objectContaining({ name: "Mojito", afterPeriod: "Lunch" })]);
+    expect(late[0]).not.toHaveProperty("afterPeriodUnasked");
     const unmarked = await queueItems(c.downstairs.stationId);
     expect(unmarked).toEqual([expect.objectContaining({ name: "Mojito" })]);
     expect(unmarked[0]).not.toHaveProperty("afterPeriod");

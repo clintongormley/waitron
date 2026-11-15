@@ -8294,8 +8294,10 @@ export interface StationQueueItem {
   asServedDiet?: DietProfile;
   course: StationQueueCourse | null;
   group?: QueueGroup;
-  /** The period this dish was confirmed sent after; absent when it was not. */
+  /** The period this dish was sent after; absent when it was not. */
   afterPeriod?: string;
+  /** Set when that send asked nobody, so the station does not show it as agreed. */
+  afterPeriodUnasked?: true;
   phase: KitchenPhase;
   /** `null` while the item is held. */
   requestedAt: string | null;
@@ -8823,7 +8825,10 @@ export async function listStationQueues(
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       workingOrderLineId: row.workingOrderLineId,
       ...optional("lastMove", lastMove),
-      ...optional("afterPeriod", lateMarks.get(row.workingOrderLineId)),
+      ...optional("afterPeriod", lateMarks.get(row.workingOrderLineId)?.periodName),
+      ...(lateMarks.get(row.workingOrderLineId)?.agreed === false
+        ? { afterPeriodUnasked: true as const }
+        : {}),
       state: row.state,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,

@@ -1596,8 +1596,10 @@ export interface StationQueueItem {
   course: StationQueueCourse | null;
   /** Absent on a bill with no party, and on a line moved in from another bill. */
   group?: QueueGroup;
-  /** The period this dish was confirmed sent after; absent when it was not. */
+  /** The period this dish was sent after; absent when it was not. */
   afterPeriod?: string;
+  /** Set when that send asked nobody, so its mark does not say agreed. */
+  afterPeriodUnasked?: true;
   phase: KitchenPhase;
   /** `null` while the item is held. */
   requestedAt: string | null;
