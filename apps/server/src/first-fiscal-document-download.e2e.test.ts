@@ -203,7 +203,7 @@ it.each(["en", "es"] as const)(
       await page.locator("setup-venue-screen [data-test=province] input").fill("Madrid");
       await page.getByRole("option", { name: "Madrid", exact: true }).click();
       await click("setup-venue-screen [data-test=next]");
-      await page.locator("setup-cert-screen [data-test=pfx]").setInputFiles({
+      await page.locator("setup-cert-screen [data-test=pfx] input[type=file]").setInputFiles({
         name: "synthetic.p12",
         mimeType: "application/x-pkcs12",
         buffer: Buffer.from("synthetic"),
