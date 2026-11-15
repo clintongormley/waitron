@@ -1,13 +1,14 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "../api/client.js";
+import type { BoxNetwork, DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
 import "./box-status-screen.js";
 
-const observation = {
+const observation: BoxNetwork = {
   wired: { connected: true, address: "192.0.2.8" },
   wifi: { connectedSsidHex: "4775657374e28099732057692d4669", savedSsidHex: "426172" },
   change: null,
@@ -28,7 +29,11 @@ async function mount(client = api()) {
   return el;
 }
 const card = (el: BoxStatusScreen) => el.shadowRoot!.querySelector("[data-test=box-network]");
+beforeEach(() => {
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+});
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanupWidgets();
   setLocale("en");
 });
@@ -114,3 +119,102 @@ it("hides the card when the box cannot report its network", async () => {
   host.append(el);
   await vi.waitFor(() => expect(card(el)?.textContent).toContain("192.0.2.8"));
 });
+
+async function join(el: BoxStatusScreen, client: DashboardApi) {
+  Object.assign(client, {
+    scanBoxNetwork: vi
+      .fn()
+      .mockResolvedValue({ networks: [{ ssidHex: "426172", signal: 80, security: "wpa-psk" }] }),
+    joinBoxNetwork: vi.fn().mockResolvedValue({}),
+  });
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=wifi-scan]")!);
+  const wifi = el.shadowRoot!.querySelector("dashboard-box-wifi-dialog")!;
+  await expect.poll(() => wifi.shadowRoot!.querySelector("wt-combobox")?.options.length).toBe(1);
+  const { chooseOption } = await import("@waitron/ui/src/test-helpers.js");
+  await chooseOption(wifi.shadowRoot!.querySelector("wt-combobox")!, "426172:wpa-psk");
+  const password = wifi.shadowRoot!.querySelector("wt-input")!;
+  await userEvent.fill(password.shadowRoot!.querySelector("input")!, "join password");
+  return { wifi, button: wifi.shadowRoot!.querySelector<HTMLElement>("[data-test=wifi-join]")! };
+}
+it("closes accepted Join before refresh, keeps acceptance across failed reads, then reports Last change on reopening", async () => {
+  const read = vi.fn().mockResolvedValue(observation);
+  const client = api(read);
+  const el = await mount(client);
+  await expect.poll(() => card(el)?.textContent).toContain("192.0.2.8");
+  const { wifi, button } = await join(el, client);
+  read.mockRejectedValueOnce({ code: "box_host.failed" });
+  await userEvent.click(button);
+  await expect.poll(() => wifi.shadowRoot!.querySelector("wt-dialog")?.open).toBe(false);
+  await expect.poll(() => card(el)?.textContent).toContain("Couldn't read");
+  expect(card(el)!.textContent).toContain("accepted");
+  expect(card(el)!.querySelector("[data-test=wifi-scan]")).toBeNull();
+  read.mockResolvedValue({
+    ...observation,
+    change: { kind: "join", ssidHex: "426172", state: "applied", reason: null },
+    bootCopy: { state: "pending", reason: null, failure: null },
+  });
+  client.liveData.refresh();
+  await expect.poll(() => card(el)?.textContent).toContain("Last change");
+  expect(card(el)!.textContent).not.toContain("accepted");
+  expect(card(el)!.textContent).toContain("waiting");
+  const host = el.parentElement!;
+  el.remove();
+  host.append(el);
+  await expect.poll(() => card(el)?.textContent).toContain("Last change");
+  expect(card(el)!.textContent).toContain("Bar");
+});
+it("does not retire acceptance on a read that began before Join was accepted", async () => {
+  const read = vi.fn().mockResolvedValue(observation);
+  const client = api(read);
+  const el = await mount(client);
+  await expect.poll(() => card(el)?.textContent).toContain("192.0.2.8");
+  const { button } = await join(el, client);
+  let oldDone!: (n: typeof observation) => void;
+  let newDone!: (n: typeof observation) => void;
+  read
+    .mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          oldDone = done;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          newDone = done;
+        }),
+    );
+  client.liveData.refresh();
+  await expect.poll(() => typeof oldDone).toBe("function");
+  await userEvent.click(button);
+  await expect.poll(() => card(el)?.textContent).toContain("accepted");
+  oldDone(observation);
+  await expect.poll(() => typeof newDone).toBe("function");
+  expect(card(el)!.textContent).toContain("accepted");
+  newDone({
+    ...observation,
+    change: { kind: "join", ssidHex: "426172", state: "running", reason: null },
+  });
+  await expect.poll(() => card(el)?.textContent).not.toContain("accepted");
+  expect(card(el)!.querySelector("[data-test=wifi-scan]")?.hasAttribute("disabled")).toBe(true);
+});
+
+it.each(["connection.failed", "box_network.busy"])(
+  "refreshes Last change after %s without resending",
+  async (code) => {
+    const read = vi.fn().mockResolvedValue(observation);
+    const client = api(read);
+    const el = await mount(client);
+    await expect.poll(() => card(el)?.textContent).toContain("192.0.2.8");
+    const { button } = await join(el, client);
+    vi.mocked(client.joinBoxNetwork).mockRejectedValue({ code });
+    read.mockResolvedValue({
+      ...observation,
+      change: { kind: "join", ssidHex: "426172", state: "running", reason: null },
+    });
+    await userEvent.click(button);
+    await expect.poll(() => read.mock.calls.length).toBe(2);
+    await expect.poll(() => card(el)?.textContent).toContain("in progress");
+    expect(client.joinBoxNetwork).toHaveBeenCalledOnce();
+  },
+);

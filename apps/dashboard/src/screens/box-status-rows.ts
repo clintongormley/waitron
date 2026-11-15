@@ -1,9 +1,70 @@
 import { formatBytes } from "@waitron/dashboard-kit";
-import type { AlertView, BoxHealth, SpareFollowView } from "../api/client.js";
+import type { AlertView, BoxHealth, BoxNetwork, SpareFollowView } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+
+export function ssidName(hex: string): string {
+  return new TextDecoder().decode(
+    Uint8Array.from(hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
+  );
+}
+
+export function networkOutcome(network: Pick<BoxNetwork, "change" | "bootCopy">): string {
+  const change = network.change;
+  if (!change) return "";
+  const verb = t(change.kind === "join" ? "box_status.network.join" : "box_status.network.forget");
+  const state =
+    change.state === "running"
+      ? t("box_status.network.running")
+      : change.state === "applied"
+        ? t(
+            change.kind === "join"
+              ? "box_status.network.join_applied"
+              : "box_status.network.forget_applied",
+          )
+        : t(
+            change.reason === "password-rejected"
+              ? "box_status.network.password_rejected"
+              : change.reason === "network-not-found"
+                ? "box_status.network.not_found"
+                : change.reason === "timed-out"
+                  ? "box_status.network.timed_out"
+                  : change.kind === "join"
+                    ? "box_status.network.join_failed"
+                    : "box_status.network.forget_failed",
+          );
+  const copy = network.bootCopy;
+  const copyWords = t(
+    copy.state === "pending"
+      ? "box_status.network.copy_pending"
+      : copy.state === "current"
+        ? "box_status.network.copy_current"
+        : copy.state === "failed"
+          ? "box_status.network.copy_failed"
+          : "box_status.network.copy_absent",
+  );
+  const detail =
+    copy.state === "absent" && copy.reason
+      ? t(
+          copy.reason === "cable-only"
+            ? "box_status.network.copy_cable"
+            : copy.reason.startsWith("password-")
+              ? "box_status.network.copy_password"
+              : "box_status.network.copy_security",
+        )
+      : copy.state === "failed"
+        ? t(
+            copy.failure === "io-failed"
+              ? "box_status.network.copy_io"
+              : copy.failure === "publication-unverified"
+                ? "box_status.network.copy_unverified"
+                : "box_status.network.copy_unsafe",
+          )
+        : "";
+  return `${t("box_status.network.last_change")}: ${verb} · ${ssidName(change.ssidHex)}. ${state} ${copyWords} ${detail}`.trim();
+}
 
 export type PartId =
   "sales" | "tax" | "spare" | "bucket" | "printers" | "readers" | "clock" | "disk";

@@ -8,6 +8,30 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "box_network.no_wifi": {
+    en: "No Wi-Fi adapter is available. Connect an adapter and scan again.",
+    es: "No hay adaptador Wi-Fi disponible. Conecta uno y busca de nuevo.",
+  },
+  "box_network.password_invalid": {
+    en: "Check the password format and try Join again.",
+    es: "Revisa el formato de la contraseña y pulsa Conectar de nuevo.",
+  },
+  "box_network.busy": {
+    en: "A network change is already running. Wait for Last change before trying again.",
+    es: "Ya hay un cambio de red en curso. Espera a Último cambio antes de reintentar.",
+  },
+  "box_host.busy": {
+    en: "The box is busy. Try again shortly.",
+    es: "El servidor está ocupado. Inténtalo de nuevo en breve.",
+  },
+  "box_host.unavailable": {
+    en: "The box cannot change its network here. Use its local screen.",
+    es: "El servidor no puede cambiar su red desde aquí. Usa su pantalla local.",
+  },
+  "box_network.join_connection_insecure": {
+    en: "Open this dashboard over HTTPS at the box’s own address before entering a Wi-Fi password.",
+    es: "Abre este panel por HTTPS en la dirección del servidor antes de introducir una contraseña Wi-Fi.",
+  },
   "module.providers_enabled": {
     en: "Turn off all card providers before turning Payments off. Open Card providers and remove or unpair each provider's readers first.",
     es: "Desactiva todos los proveedores de tarjeta antes de desactivar Pagos. Abre Proveedores de tarjeta y elimina o desvincula sus lectores primero.",

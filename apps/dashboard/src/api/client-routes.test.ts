@@ -38,6 +38,27 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("scans and submits Wi-Fi changes without changing the network or password bytes", async () => {
+    const networks = [{ ssidHex: "2042617220", signal: 72, security: "sae" }];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ networks }))
+      .mockResolvedValueOnce(jsonResponse({}));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.scanBoxNetwork()).toEqual({ networks });
+    const join = {
+      ssidHex: "2042617220",
+      keyMgmt: "sae" as const,
+      psk: " pass word ",
+      hidden: false,
+    };
+    expect(await api.joinBoxNetwork(join)).toEqual({});
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/box/network/scan", "POST", {}],
+      ["/api/box/network/join", "POST", join],
+    ]);
+  });
+
   it("reads the box network without a request body", async () => {
     const answer = {
       wired: { connected: true, address: "192.0.2.8" },

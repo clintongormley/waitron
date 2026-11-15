@@ -1889,9 +1889,34 @@ export interface AlertView {
   deviceName?: string | null;
 }
 
+export type BoxNetworkChange = {
+  kind: "join" | "forget";
+  ssidHex: string;
+  state: "running" | "applied" | "refused";
+  reason: "password-rejected" | "network-not-found" | "timed-out" | "failed" | null;
+};
 export interface BoxNetwork {
+  change: BoxNetworkChange | null;
+  bootCopy: {
+    state: "pending" | "current" | "absent" | "failed";
+    reason: string | null;
+    failure: string | null;
+  };
   wired: { connected: boolean; address: string | null };
   wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
+}
+
+export interface BoxWifiNetwork {
+  ssidHex: string;
+  signal: number;
+  security: "wpa-psk" | "sae" | "other";
+}
+
+export interface BoxWifiJoin {
+  ssidHex: string;
+  keyMgmt: "wpa-psk" | "sae";
+  psk: string;
+  hidden: boolean;
 }
 
 /** Cached, signed follower facts from the main box's paired spare. */
@@ -4930,6 +4955,14 @@ export class DashboardApi {
 
   getBoxNetwork(): Promise<BoxNetwork> {
     return this.#request<BoxNetwork>("/api/box/network", "GET");
+  }
+
+  scanBoxNetwork(): Promise<{ networks: BoxWifiNetwork[] }> {
+    return this.#request("/api/box/network/scan", "POST", {});
+  }
+
+  joinBoxNetwork(input: BoxWifiJoin): Promise<Record<string, never>> {
+    return this.#request("/api/box/network/join", "POST", input);
   }
 
   async getBoxHealth(): Promise<BoxHealth> {

@@ -4085,6 +4085,49 @@ export const en = {
   "disk_stop.sign_in_as_manager": "Sign in as a manager",
   "box_status.title": "Box status",
   "box_status.network.title": "Network",
+  "box_status.network.password_wpa":
+    "Use a password of 8–63 printable ASCII characters (English letters, numbers, spaces and punctuation), or a 64-digit hexadecimal key. Then try Join again.",
+  "box_status.network.password_sae":
+    "Use a password of 1–256 UTF-8 bytes, without control characters. Then try Join again.",
+  "box_status.network.forget": "Forget saved Wi-Fi",
+  "box_status.network.accepted":
+    "The box accepted the request. The outcome can take a couple of minutes to appear here.",
+  "box_status.network.last_change": "Last change",
+  "box_status.network.running": "The change is in progress.",
+  "box_status.network.join_applied": "Wi-Fi was applied to the running configuration.",
+  "box_status.network.forget_applied": "The network was removed from the running configuration.",
+  "box_status.network.join_failed":
+    "The box could not join this network. Check the network and password, then try Join again.",
+  "box_status.network.forget_failed":
+    "The box could not forget this network. Check the latest network display before trying again.",
+  "box_status.network.password_rejected":
+    "The connection was refused; the password may be wrong. Check it and try Join again.",
+  "box_status.network.not_found": "The network was not found. Scan again near the router.",
+  "box_status.network.timed_out":
+    "The connection attempt timed out. Check the network and try Join again.",
+  "box_status.network.copy_pending": "The boot copy is waiting to be checked.",
+  "box_status.network.copy_current": "The boot copy is up to date.",
+  "box_status.network.copy_absent": "There is no Wi-Fi copy for the next boot.",
+  "box_status.network.copy_failed": "The boot copy failed.",
+  "box_status.network.copy_cable": "The box reports cable-only setup.",
+  "box_status.network.copy_password": "A usable password was unavailable for the boot copy.",
+  "box_status.network.copy_security": "This network’s security cannot be copied for boot.",
+  "box_status.network.copy_io": "The boot copy could not be written.",
+  "box_status.network.copy_unverified": "The written boot copy could not be verified.",
+  "box_status.network.copy_unsafe":
+    "The boot drive or its copy location could not be verified for writing.",
+  "box_status.network.scan": "Scan Wi-Fi",
+  "box_status.network.scan_again": "Scan again",
+  "box_status.network.join": "Join",
+  "box_status.network.password": "Wi-Fi password",
+  "box_status.network.password_required": "Enter the Wi-Fi password.",
+  "box_status.network.empty": "No networks found. Try Scan again.",
+  "box_status.network.unsupported": "Unsupported security",
+  "box_status.network.warning": "Changing Wi-Fi may disconnect this page from the box.",
+  "box_status.network.recovery":
+    "If the page loses the box, connect a network cable or use the box’s local screen to reconnect.",
+  "box_status.network.unknown":
+    "The request’s outcome is unknown. Check Last change before trying again; reconnect by cable or the local screen if needed.",
   "box_status.network.wired": "Wired",
   "box_status.network.wifi": "Current Wi-Fi",
   "box_status.network.saved": "Saved Wi-Fi",
@@ -8416,6 +8459,51 @@ export const es: Record<StringKey, string> = {
   "disk_stop.sign_in_as_manager": "Iniciar sesión como encargado",
   "box_status.title": "Estado del servidor",
   "box_status.network.title": "Red",
+  "box_status.network.password_wpa":
+    "Usa 8–63 caracteres ASCII imprimibles (letras sin acentos, números, espacios y puntuación), o una clave hexadecimal de 64 dígitos. Después pulsa Conectar de nuevo.",
+  "box_status.network.password_sae":
+    "Usa una contraseña de 1–256 bytes UTF-8, sin caracteres de control. Después pulsa Conectar de nuevo.",
+  "box_status.network.forget": "Olvidar la Wi-Fi guardada",
+  "box_status.network.accepted":
+    "El servidor ha aceptado la solicitud. El resultado puede tardar un par de minutos en aparecer aquí.",
+  "box_status.network.last_change": "Último cambio",
+  "box_status.network.running": "El cambio está en curso.",
+  "box_status.network.join_applied": "La Wi-Fi se ha aplicado a la configuración en uso.",
+  "box_status.network.forget_applied": "La red se ha eliminado de la configuración en uso.",
+  "box_status.network.join_failed":
+    "El servidor no ha podido conectarse a esta red. Revisa la red y la contraseña y pulsa Conectar de nuevo.",
+  "box_status.network.forget_failed":
+    "El servidor no ha podido olvidar esta red. Consulta los datos de red actuales antes de reintentar.",
+  "box_status.network.password_rejected":
+    "Se ha rechazado la conexión; la contraseña puede ser incorrecta. Revísala y pulsa Conectar de nuevo.",
+  "box_status.network.not_found": "No se ha encontrado la red. Busca de nuevo cerca del router.",
+  "box_status.network.timed_out":
+    "Se ha agotado el tiempo para conectar. Revisa la red y pulsa Conectar de nuevo.",
+  "box_status.network.copy_pending": "La copia de arranque está pendiente de comprobar.",
+  "box_status.network.copy_current": "La copia de arranque está al día.",
+  "box_status.network.copy_absent": "No hay copia Wi-Fi para el próximo arranque.",
+  "box_status.network.copy_failed": "Ha fallado la copia de arranque.",
+  "box_status.network.copy_cable": "El servidor indica una configuración solo por cable.",
+  "box_status.network.copy_password":
+    "No había una contraseña utilizable para la copia de arranque.",
+  "box_status.network.copy_security":
+    "No se puede copiar la seguridad de esta red para el arranque.",
+  "box_status.network.copy_io": "No se ha podido escribir la copia de arranque.",
+  "box_status.network.copy_unverified": "No se ha podido verificar la copia de arranque escrita.",
+  "box_status.network.copy_unsafe":
+    "No se ha podido verificar la unidad de arranque o la ubicación de la copia para escribir.",
+  "box_status.network.scan": "Buscar redes Wi-Fi",
+  "box_status.network.scan_again": "Buscar de nuevo",
+  "box_status.network.join": "Conectar",
+  "box_status.network.password": "Contraseña Wi-Fi",
+  "box_status.network.password_required": "Introduce la contraseña Wi-Fi.",
+  "box_status.network.empty": "No se han encontrado redes. Pulsa Buscar de nuevo.",
+  "box_status.network.unsupported": "Seguridad no compatible",
+  "box_status.network.warning": "Cambiar la Wi-Fi puede desconectar esta página del servidor.",
+  "box_status.network.recovery":
+    "Si la página pierde el servidor, conecta un cable de red o usa la pantalla local del servidor para volver a conectarlo.",
+  "box_status.network.unknown":
+    "No se conoce el resultado de la solicitud. Consulta Último cambio antes de reintentar; si hace falta, vuelve a conectar por cable o desde la pantalla local.",
   "box_status.network.wired": "Cable",
   "box_status.network.wifi": "Wi-Fi actual",
   "box_status.network.saved": "Wi-Fi guardada",

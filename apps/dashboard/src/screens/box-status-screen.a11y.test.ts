@@ -1,5 +1,6 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
@@ -100,7 +101,10 @@ async function flush(el: BoxStatusScreen): Promise<void> {
   }
 }
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (theme) => {
   const cases: [string, () => DashboardApi][] = [
@@ -112,6 +116,56 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     ["a failed read", () => stubApi(new Error("read"))],
     ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
   ];
+  it.each(["en", "es"] as const)("Wi-Fi controls and dialogs (%s)", async (locale) => {
+    setLocale(locale);
+    const address = vi
+      .spyOn(document, "URL", "get")
+      .mockReturnValue("https://box.example/manage/box-status");
+    onTestFinished(() => address.mockRestore());
+    const api = Object.assign(stubApi(health()), {
+      getBoxNetwork: vi.fn().mockResolvedValue({
+        wired: { connected: false, address: null },
+        wifi: { connectedSsidHex: null, savedSsidHex: "426172" },
+        change: null,
+        bootCopy: { state: "absent", reason: "cable-only", failure: null },
+      }),
+      scanBoxNetwork: vi
+        .fn()
+        .mockResolvedValue({ networks: [{ ssidHex: "426172", signal: 80, security: "wpa-psk" }] }),
+    });
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api },
+      theme,
+    );
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=wifi-scan]")).toBeTruthy();
+    for (const width of [390, 1280]) {
+      await page.viewport(width, 850);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=box-network]")!.scrollIntoView();
+      await expectNoA11yViolations(host);
+      if (import.meta.env.VITE_WIFI_LOOK)
+        await page.screenshot({
+          path: `__screenshots__/wifi-look/${locale}-${theme}-${width}-controls.png`,
+        });
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=wifi-scan]")!);
+      const wifi = el.shadowRoot!.querySelector("dashboard-box-wifi-dialog")!;
+      await expect
+        .poll(() => wifi.shadowRoot!.querySelector("wt-combobox")?.options.length)
+        .toBe(1);
+      await expectNoA11yViolations(host);
+      if (import.meta.env.VITE_WIFI_LOOK)
+        await page.screenshot({
+          path: `__screenshots__/wifi-look/${locale}-${theme}-${width}-join.png`,
+        });
+      const dialog = wifi.shadowRoot!.querySelector("wt-dialog")!;
+      const { dialogClosed } = await import("../widgets/test-helpers.js");
+      const closed = dialogClosed(dialog);
+      void dialog.requestClose("cancel");
+      await closed;
+    }
+    await page.viewport(1280, 768);
+  });
+
   it.each(["ready", "loading", "failed"] as const)(
     "renders the network %s accessibly",
     async (state) => {

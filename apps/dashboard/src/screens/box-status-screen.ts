@@ -21,7 +21,8 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
-import { boxStatusRows, type PartRow } from "./box-status-rows.js";
+import "./box-wifi-dialog.js";
+import { boxStatusRows, ssidName, networkOutcome, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
@@ -253,6 +254,8 @@ export class BoxStatusScreen extends LitElement {
   @property({ attribute: false }) canCheckClock = false;
   @property({ attribute: false }) canRestart = false;
 
+  @state() private networkAccepted = false;
+  #networkEpoch = 0;
   @state() private network: BoxNetwork | null = null;
   @state() private networkState: "loading" | "ready" | "failed" | "unavailable" = "loading";
   @state() private health: BoxHealth | null = null;
@@ -321,10 +324,19 @@ export class BoxStatusScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#networkQueries
-      .watch("getBoxNetwork", [], (network) => {
-        this.network = network;
-        this.networkState = "ready";
-      })
+      .watchSent(
+        "getBoxNetwork",
+        [],
+        async (read) => {
+          const epoch = this.#networkEpoch;
+          return { network: await read(), epoch };
+        },
+        ({ network, epoch }) => {
+          if (epoch === this.#networkEpoch) this.networkAccepted = false;
+          this.network = network;
+          this.networkState = "ready";
+        },
+      )
       .catch(() => undefined);
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
@@ -1017,6 +1029,14 @@ export class BoxStatusScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  #networkBusy(): boolean {
+    return this.networkAccepted || this.network?.change?.state === "running";
+  }
+  #networkAccepted(): void {
+    this.#networkEpoch++;
+    this.networkAccepted = true;
+    this.api.liveData.refresh();
+  }
   #renderNetwork(): TemplateResult | typeof nothing {
     if (this.networkState === "unavailable") return nothing;
     const network = this.network;
@@ -1032,20 +1052,31 @@ export class BoxStatusScreen extends LitElement {
               ${t(this.networkState === "failed" ? "box_status.network.failed" : "box_status.network.loading")}
             </p>`
           : html`<dl>
-              <dt>${t("box_status.network.wired")}</dt>
-              <dd>
-                ${!network.wired.connected ? t("box_status.network.disconnected") : (network.wired.address ?? t("box_status.network.no_address"))}
-              </dd>
-              <dt>${t("box_status.network.wifi")}</dt>
-              <dd>
-                ${network.wifi.connectedSsidHex === null ? t("box_status.network.disconnected") : ssidName(network.wifi.connectedSsidHex)}
-              </dd>
-              <dt>${t("box_status.network.saved")}</dt>
-              <dd>
-                ${network.wifi.savedSsidHex === null ? t("box_status.network.not_reported") : ssidName(network.wifi.savedSsidHex)}
-              </dd>
-            </dl>`
+                <dt>${t("box_status.network.wired")}</dt>
+                <dd>
+                  ${!network.wired.connected ? t("box_status.network.disconnected") : (network.wired.address ?? t("box_status.network.no_address"))}
+                </dd>
+                <dt>${t("box_status.network.wifi")}</dt>
+                <dd>
+                  ${network.wifi.connectedSsidHex === null ? t("box_status.network.disconnected") : ssidName(network.wifi.connectedSsidHex)}
+                </dd>
+                <dt>${t("box_status.network.saved")}</dt>
+                <dd>
+                  ${network.wifi.savedSsidHex === null ? t("box_status.network.not_reported") : ssidName(network.wifi.savedSsidHex)}
+                </dd>
+              </dl>
+              ${network.change ? html`<p role="status">${networkOutcome(network)}</p>` : nothing}
+              <div class="actions">
+                <wt-button
+                  data-test="wifi-scan"
+                  variant="secondary"
+                  ?disabled=${this.#networkBusy()}
+                  @click=${() => this.renderRoot.querySelector("dashboard-box-wifi-dialog")?.show(network.wired.connected)}
+                  >${t("box_status.network.scan")}</wt-button
+                >
+              </div>`
       }
+      ${this.networkAccepted ? html`<p role="status">${t("box_status.network.accepted")}</p>` : nothing}
       <a href=${guideHref("box-status.network")} target="_blank" rel="noopener"
         >${t("box_status.network.guide")}</a
       >
@@ -1057,6 +1088,14 @@ export class BoxStatusScreen extends LitElement {
       <h1 class="title">${t("box_status.title")}</h1>
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderNetwork()} ${this.#renderRestart()}
       ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()}
+      <dashboard-box-wifi-dialog
+        .api=${this.api}
+        .blocked=${this.#networkBusy()}
+        @wifi-accepted=${(event: Event) => {
+          event.stopPropagation();
+          this.#networkAccepted();
+        }}
+      ></dashboard-box-wifi-dialog>
     `;
   }
 }
@@ -1112,10 +1151,4 @@ declare global {
   interface HTMLElementTagNameMap {
     "dashboard-box-status-screen": BoxStatusScreen;
   }
-}
-
-function ssidName(hex: string): string {
-  return new TextDecoder().decode(
-    Uint8Array.from(hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
-  );
 }
