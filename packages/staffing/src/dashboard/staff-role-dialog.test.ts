@@ -270,6 +270,25 @@ describe("staff-role dialog", () => {
     expect(api.setHolders).toHaveBeenCalledWith("role-1", ["p-ana", "p-held"]);
   });
 
+  it("focuses an empty name after Save and resets feedback when reopened", async () => {
+    await mount(waiter);
+    await typeName("");
+    expect(field("wt-input", "name").error).toBe("");
+    await press();
+    expect(field("wt-input", "name").error).toBe("Enter a name");
+    expect(await bottom()).toBe("Correct the highlighted fields to continue.");
+    expect(save().disabled).toBe(true);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field("wt-input", "name")));
+    el.open = false;
+    await el.updateComplete;
+    el.staffRole = undefined;
+    el.open = true;
+    await el.updateComplete;
+    expect(field("wt-input", "name").error).toBe("");
+    expect(await bottom()).toBe("");
+    expect(save().disabled).toBe(true);
+  });
+
   it("puts a taken name under Name until the name changes, leaving Save enabled", async () => {
     const api = await mount();
     api.createStaffRole.mockRejectedValueOnce({

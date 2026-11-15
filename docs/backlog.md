@@ -1338,7 +1338,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **Form implementation leftovers:** shared plumbing, an untraced dialog focus line and eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
+- **Form implementation leftovers:** an untraced dialog focus line and eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
 
 

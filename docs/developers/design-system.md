@@ -2721,6 +2721,8 @@ menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new
 
 ### Forms
 
+When you change a form for another reason, move it onto `FormFeedback` in the same change.
+
 `FormFeedback` from `@waitron/ui` shares attempt state, keyed refusal dismissal and
 render-before-focus work for forms that repeat it. Reset it when the form resets; call
 `newRefusal()` from the form's existing refusal-property change check. Preserve field mapping,
@@ -2730,8 +2732,7 @@ messages already selected by your form, the keys marked beside fields, and the t
 correction sentence. It keeps unshown refusals in entry order, omits field text, and adds the
 correction when any field is marked. Leave a table's own message out of `errors` when the table
 already shows it.
-`bottomMessage` joins message strings; `formMessage` renders them. Forms with only one attempt
-flag or one message joiner can keep that local state.
+`bottomMessage` joins message strings; `formMessage` renders them.
 
 Field errors wrap within the control's existing width without widening it. An intrinsic-width
 number stepper may widen to fit its error; a stepper given an explicit width keeps that width.

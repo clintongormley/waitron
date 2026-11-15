@@ -69,29 +69,6 @@ preference key before go-live, following the prefixed table keys. This is separa
 printer keys.
 
 
-## The form plumbing is hand-written per form
-
-Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
-plumbing in the remaining dashboard editors and the till's forms onto `FormFeedback` in
-`@waitron/ui`. The product editor, Department receipt, Venue privacy and time-zone repair
-form, invoice-customer Find, menu-publication Schedule, stream settings, office-printer Add,
-the main Access roles editor, Add to menus, Devices Pair/Edit, VAT-return download, configuration export, the floor-plan Add tables/Add joined table dialogs and Wi-Fi join also use it;
-keep their field-specific or guarded refusal focus local. Inventory each later batch before
-migrating it; leave single-job forms local.
-Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
-Keep Backup archive settings local too: moving only its attempt flag and message joiner removes no repeated logic; its domain refusal clearing and form-scoped focus stay local.
-Keep Venue details local: only its attempt flag is reusable; its named-field focus, policy checks and address acknowledgement stay specific to the form.
-Keep Business-day start local: only its attempt state repeats helper work; its preview and refusal handling stay specific to the form.
-Keep fresh sign-in local: its message joiner is small, and its child-form focus is guarded against an older sign-in attempt completing.
-Keep Device profiles local: only its attempt flag is reusable; tab reveal and kitchen-switch focus stay specific to the form.
-Keep Profile local: its footer deduplicates hidden-field errors and its focus callback checks the current modal; moving its attempt flag alone adds no useful reuse.
-Keep receipt-printer forms local: they already use the shared message joiner and one form-scoped render/focus callback, leaving only attempt flags to move.
-Keep the variant editor local: only attempt state repeats helper work; its named-field focus stays in `updated()`.
-Keep station field-refusal dismissal local: it is one domain-specific conditional clearing the refusal that names the edited field.
-Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
-[second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
-[inventory of the remaining venue forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
-
 ## What C47 part 2 found and did not fix
 
   In a screenshot of a `wt-modal` editor after a
@@ -371,7 +348,7 @@ than becoming new items.
 
 ## Bundle: Form implementation leftovers
 
-Shared form plumbing, an untraced dialog focus line and retiring the summary once its last consumer moves away remain open.
+An untraced dialog focus line and retiring the summary once its last consumer moves away remain open.
 
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
@@ -393,6 +370,10 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+### The form plumbing is hand-written per form
+
+2026-11-15 (watcher): the standalone cleanup sweep is retired; future adoption follows [Forms](../developers/design-system.md#forms).
 
 - **New credential hashes stay inside their existing write transactions** (watcher, 2026-11-14
   17:30, Lane K questions.md). Their derivation now yields the event loop; other writes still wait
@@ -440,8 +421,7 @@ specific existing sentence applies.
 The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's
 matching series pairs and derived geography, and configuration export's matching passphrase
 minimum. Their source references are [in the approved plan](../superpowers/plans/2026-11-10-forms-refusal-placement.md), read, not run. Provider forms keep their existing credential,
-merchant and Reader ID handling. Hand-written form plumbing and the blue-line observation remain
-open above.
+merchant and Reader ID handling. The blue-line observation remains open above.
 
 
 - **A1400 save/read limit (watcher, 2026-11-07 23:12; retained 2026-11-10).** A venue-model or
@@ -758,9 +738,6 @@ forms receive field messages from their parent screen.
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-  - Move the remaining repeated form-feedback plumbing onto the shared helper, preserving each
-    form's field mapping and message behavior.
-    [Detail](dashboard.md#the-form-plumbing-is-hand-written-per-form)
   - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
     footer, in a screenshot after a refusal that names no field, which looks like the modal's
     scrolling body showing a focus ring — not traced, and not checked against `main`. A502 part 2
