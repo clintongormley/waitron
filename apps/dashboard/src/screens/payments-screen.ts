@@ -785,7 +785,6 @@ export class PaymentsScreen extends LitElement {
           const gone = (this.readers ?? []).filter(({ id }) => !listed.has(id));
           this.readers = readers;
           for (const { id } of gone) this.#readerGone(id, true);
-          this.#openLinkedReader();
           // A status may ask the provider itself, so a background refresh asks again only when the
           // set of active readers changed.
           const ids = JSON.stringify(

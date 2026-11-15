@@ -27,9 +27,11 @@ it.each(["en-GB", "es-ES"])(
     (deep(screen.shadowRoot!, "[data-test=edit-r1]") as HTMLElement).click();
     const modal = await readyReaderEditor(app);
     const actual = [...modal.querySelectorAll<HTMLElement & { label: string }>("[name]")].map(
-      (field) => [field.getAttribute("name"), field.label],
+      (field) => [field.getAttribute("name"), field.label] as const,
     );
-    const declared = editor.readerSettingFields.map((field) => [field.name, t(field.labelKey)]);
+    const declared = editor.readerSettingFields.map(
+      (field) => [field.name, t(field.labelKey)] as const,
+    );
     expect(new Map(declared)).toEqual(new Map(actual));
     expect(declared).toHaveLength(new Map(declared).size);
     expect(location.pathname).toBe("/manage/payments");
