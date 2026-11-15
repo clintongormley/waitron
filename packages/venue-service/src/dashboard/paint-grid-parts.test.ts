@@ -286,17 +286,63 @@ test("placePopover keeps a popup below its trigger near the bottom, and flips it
   expect(popup.style.top).toBe("44px");
 });
 
-test("placePopover keeps a popup that fits neither below nor above its trigger clamped on screen, even when asked to flip", () => {
-  const trigger = document.createElement("button");
-  trigger.style.cssText = "position: fixed; left: 100px; top: 30px; height: 24px;";
+function tallPopover(trigger: string, width: string) {
+  const button = document.createElement("button");
+  button.style.cssText = `position: fixed; ${trigger} top: 30px; width: 40px; height: 24px;`;
   const popup = document.createElement("div");
   popup.popover = "manual";
-  popup.style.cssText = `position: fixed; inset: auto; margin: 0; padding: 0; border: 0; width: 120px; height: ${innerHeight - 40}px;`;
-  document.body.append(trigger, popup);
+  popup.style.cssText = `position: fixed; inset: auto; margin: 0; padding: 0; border: 0; width: ${width}; height: ${innerHeight - 40}px;`;
+  document.body.append(button, popup);
   onTestFinished(() => {
     popup.remove();
-    trigger.remove();
+    button.remove();
   });
-  placePopover(popup, trigger, false, true);
+  return { button, popup };
+}
+
+test("placePopover keeps a popup that fits neither below, above nor beside its trigger clamped on screen, even when asked to flip", () => {
+  const { button, popup } = tallPopover("left: 100px;", `${innerWidth - 40}px`);
+  placePopover(popup, button, false, true);
   expect(popup.style.top).toBe("32px");
+  expect(popup.style.left).toBe("32px");
+});
+
+test("placePopover puts a popup that fits neither below nor above its trigger beside it, on the right when it fits there", () => {
+  const { button, popup } = tallPopover("left: 100px;", "120px");
+  placePopover(popup, button, false, true);
+  expect(popup.style.left).toBe("140px");
+  expect(popup.style.top).toBe("30px");
+  const box = popup.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(button.getBoundingClientRect().right);
+  expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
+});
+
+test("placePopover keeps a popup beside a trigger partly off the window's left edge the margin clear of that edge", () => {
+  const { button, popup } = tallPopover("left: -38px;", "120px");
+  placePopover(popup, button, false, true);
+  expect(popup.style.left).toBe("8px");
+  expect(popup.style.top).toBe("30px");
+  const box = popup.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(button.getBoundingClientRect().right);
+  expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
+});
+
+test("placePopover puts a popup that fits neither below, above nor on the right of its trigger on its left", () => {
+  const { button, popup } = tallPopover(`left: ${innerWidth - 60}px;`, "120px");
+  placePopover(popup, button, true, true);
+  expect(popup.style.left).toBe(`${innerWidth - 180}px`);
+  expect(popup.style.top).toBe("30px");
+  const box = popup.getBoundingClientRect();
+  expect(box.right).toBeLessThanOrEqual(button.getBoundingClientRect().left);
+  expect(box.left).toBeGreaterThanOrEqual(8);
+});
+
+test("placePopover keeps a popup beside a trigger partly off the window's right edge the margin clear of that edge", () => {
+  const { button, popup } = tallPopover(`left: ${innerWidth - 4}px;`, "120px");
+  placePopover(popup, button, true, true);
+  expect(popup.style.left).toBe(`${innerWidth - 128}px`);
+  expect(popup.style.top).toBe("30px");
+  const box = popup.getBoundingClientRect();
+  expect(box.right).toBeLessThanOrEqual(button.getBoundingClientRect().left);
+  expect(box.left).toBeGreaterThanOrEqual(8);
 });

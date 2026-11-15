@@ -1508,9 +1508,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Colour chooser placement** (bundle of 1, size S). [Detail](backlog/workforce.md#bundle-colour-chooser-placement)
 
-- **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
-  [Detail](backlog/workforce.md#a707-on-a-phone-a-paint-grids-block-menu-or-copy-to-chooser-can-cover-the-block-it-belongs-to).
-
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
   that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
   Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push

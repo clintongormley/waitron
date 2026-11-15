@@ -246,15 +246,6 @@ hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by m
 block can ask for anyone in the last hour, while `placeShift` can place a shift there. Next: decide
 whether a block may run to the day's real end.
 
-## A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to
-
-`placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
-does not fit below its trigger up over it. The staffing grid's block editor opens above its
-block when it fits there and not below; with room on neither side it still covers the block, and
-at 390 px the wide editor can cover blocks in the next column (A761's look, 2026-10-17). Opening
-hours' block menu and the Copy to… chooser have no such placement. Next: place them above or
-beside the block instead.
-
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
 
 Fills

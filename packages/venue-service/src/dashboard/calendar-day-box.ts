@@ -136,11 +136,12 @@ export class CalendarDayBox extends LitElement {
   #focusWasInside = false;
   #scrollTargets: EventTarget[] = [];
 
-  /** Opens below `anchor`, or above it when only there it fits, kept on screen; called again after
-   *  the content changes, it places the box again without moving focus. While open, on each
-   *  window resize and each scroll of the page or of a box `anchor` is drawn inside, slots
-   *  included, it places itself again, or closes when no part of `anchor` is left inside the window
-   *  and inside every such ancestor whose overflow is not visible, in the directions it limits. */
+  /** Opens below `anchor`, else above it, else beside it, covering it only when none of those fit,
+   *  kept on screen; called again after the content changes, it places the box again without
+   *  moving focus. While open, on each window resize and each scroll of the page or of a box
+   *  `anchor` is drawn inside, slots included, it places itself again, or closes when no part of
+   *  `anchor` is left inside the window and inside every such ancestor whose overflow is not
+   *  visible, in the directions it limits. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");

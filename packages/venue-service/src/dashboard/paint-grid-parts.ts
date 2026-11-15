@@ -97,7 +97,8 @@ export function columnMenu(
 export const POPOVER_MARGIN = 8;
 
 /** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen; with
- *  `flipAbove`, it sits above `trigger` instead when only there it fits without covering it. */
+ *  `flipAbove`, a popup that does not fit below goes above `trigger`, else beside it, so that it
+ *  covers `trigger` only when it fits none of those. */
 export function placePopover(
   popup: HTMLElement,
   trigger: HTMLElement,
@@ -107,18 +108,23 @@ export function placePopover(
   if (!popup.matches(":popover-open")) popup.showPopover({ source: trigger });
   const anchor = trigger.getBoundingClientRect();
   const box = popup.getBoundingClientRect();
-  const left = alignEnd ? anchor.right - box.width : anchor.left;
-  const above = anchor.top - box.height;
-  const top =
-    flipAbove &&
-    anchor.bottom + box.height > innerHeight - POPOVER_MARGIN &&
-    above >= POPOVER_MARGIN
-      ? above
-      : Math.max(
-          POPOVER_MARGIN,
-          Math.min(anchor.bottom, innerHeight - box.height - POPOVER_MARGIN),
-        );
-  popup.style.left = `${Math.max(POPOVER_MARGIN, Math.min(left, innerWidth - box.width - POPOVER_MARGIN))}px`;
+  const clampTop = (top: number) =>
+    Math.max(POPOVER_MARGIN, Math.min(top, innerHeight - box.height - POPOVER_MARGIN));
+  const clampLeft = (left: number) =>
+    Math.max(POPOVER_MARGIN, Math.min(left, innerWidth - box.width - POPOVER_MARGIN));
+  let left = clampLeft(alignEnd ? anchor.right - box.width : anchor.left);
+  let top = clampTop(anchor.bottom);
+  if (flipAbove && anchor.bottom + box.height > innerHeight - POPOVER_MARGIN) {
+    if (anchor.top - box.height >= POPOVER_MARGIN) top = anchor.top - box.height;
+    else if (anchor.right + box.width <= innerWidth - POPOVER_MARGIN) {
+      left = clampLeft(anchor.right);
+      top = clampTop(anchor.top);
+    } else if (anchor.left - box.width >= POPOVER_MARGIN) {
+      left = clampLeft(anchor.left - box.width);
+      top = clampTop(anchor.top);
+    }
+  }
+  popup.style.left = `${left}px`;
   popup.style.top = `${top}px`;
 }
 
@@ -380,7 +386,7 @@ export class CopyChooser {
     this.#set({ key, ticked: new Set() });
     await this.#host.updateComplete;
     const popup = this.#popup!;
-    placePopover(popup, this.#options.trigger(key)!, true);
+    placePopover(popup, this.#options.trigger(key)!, true, true);
     popup.querySelector<HTMLElement>('input[type="checkbox"]')?.focus();
   }
   close(refocus: boolean): void {
