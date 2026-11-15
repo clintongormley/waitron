@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ace830a4-7860-42dc-8045-1acf3e873062",
+  "id": "b1e1629c-4885-4c6e-be58-b1133b793dc8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -12976,9 +12976,25 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
+        "option_labels_one_default_uq": {
+          "name": "option_labels_one_default_uq",
+          "columns": [
+            "list_id"
+          ],
+          "isUnique": true,
+          "where": "\"option_labels\".\"is_default\" = 1"
+        },
         "option_labels_list_sort_idx": {
           "name": "option_labels_list_sort_idx",
           "columns": [
@@ -13005,7 +13021,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "option_labels_name_ck": {
+          "name": "option_labels_name_ck",
+          "value": "trim(\"option_labels\".\"name\") <> ''"
+        }
+      }
     },
     "option_lists": {
       "name": "option_lists",
@@ -13038,13 +13059,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "default_label_id": {
-          "name": "default_label_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "sort": {
           "name": "sort",
           "type": "integer",
@@ -13066,7 +13080,12 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "option_lists_name_ck": {
+          "name": "option_lists_name_ck",
+          "value": "trim(\"option_lists\".\"name\") <> ''"
+        }
+      }
     },
     "extra_list_items": {
       "name": "extra_list_items",
@@ -13263,9 +13282,13 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "extra_lists_name_ck": {
+          "name": "extra_lists_name_ck",
+          "value": "trim(\"extra_lists\".\"name\") <> ''"
+        },
         "extra_lists_picks_ck": {
           "name": "extra_lists_picks_ck",
-          "value": "\"extra_lists\".\"min_picks\" >= 0 and (\"extra_lists\".\"max_picks\" is null or \"extra_lists\".\"max_picks\" >= \"extra_lists\".\"min_picks\")"
+          "value": "\"extra_lists\".\"min_picks\" >= 0 and (\"extra_lists\".\"max_picks\" is null or (\"extra_lists\".\"max_picks\" >= 1 and \"extra_lists\".\"max_picks\" >= \"extra_lists\".\"min_picks\"))"
         }
       }
     },
