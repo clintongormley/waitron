@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   departments,
+  floorZones,
   readTaxpayer,
   readVenueSettings,
   type Transaction,
@@ -30,4 +31,38 @@ export async function departmentDining(
     .where(eq(departments.id, departmentId));
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
   return row;
+}
+
+/**
+ * The way a new order in `zoneId` sells. A department fixed one way, or a region without takeaway
+ * VAT (always eaten here), refuses a request for the other way; a till-choice department takes the
+ * request, else starts a table order eaten here and a counter order as the department says.
+ */
+export async function resolveOrderDining(
+  tx: Transaction,
+  zoneId: string,
+  requested: Dining | undefined,
+): Promise<Dining> {
+  const [zone] = await tx
+    .select({
+      zoneOrderStart: floorZones.orderStart,
+      departmentOrderStart: departments.orderStart,
+      dining: departments.dining,
+      startsAs: departments.diningStartsAs,
+    })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(eq(floorZones.id, zoneId));
+  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+  const policy = zone.dining ?? "eat_in";
+  let fixed: Dining | null = policy === "till_choice" ? null : policy;
+  if (!(await venueChargesTakeawayVat(tx))) fixed = "eat_in";
+  if (fixed !== null) {
+    if (requested !== undefined && requested !== fixed) {
+      throw new AppError("order.dining_fixed", { dining: fixed });
+    }
+    return fixed;
+  }
+  const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
+  return requested ?? (atTable ? "eat_in" : (zone.startsAs ?? "eat_in"));
 }

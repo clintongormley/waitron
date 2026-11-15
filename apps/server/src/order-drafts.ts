@@ -24,7 +24,8 @@ import {
   stringToThousandths,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { ExtraSelection, OptionSelection } from "@waitron/shared";
+import type { Dining, ExtraSelection, OptionSelection } from "@waitron/shared";
+import { requireOrderDining } from "./order-dining.js";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./order-groups.js";
@@ -716,6 +717,8 @@ export interface SubmitDraftInput extends PartyCommandArgs {
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
   lateSend?: LateSendConfirmation;
+  /** The way the till showed the bill; refused `working_order.out_of_date` when it has the other. */
+  dining?: Dining;
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
@@ -756,6 +759,7 @@ export async function submitDraft(
       const billId = uuid(draft.billId, "billId");
       if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
       await requireBillOfParty(tx, partyId, billId);
+      await requireOrderDining(tx, billId, input.dining);
       await refusePaymentInFlight(tx, [billId]);
       const edit = await requireBillEditor(tx, billId, operatorId, expectedEdit);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");

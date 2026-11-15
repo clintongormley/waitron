@@ -1,10 +1,16 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { captureError, CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
+import {
+  captureError,
+  CORE_MIGRATIONS,
+  departments,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
-import { AppError } from "@waitron/shared";
-import { departmentDining, venueChargesTakeawayVat } from "./dining.js";
+import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
+import { departmentDining, resolveOrderDining, venueChargesTakeawayVat } from "./dining.js";
 import { createDepartment, resolveSalePolicy, setDepartmentSalePolicyField } from "./operations.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -86,4 +92,117 @@ describe("venueChargesTakeawayVat", () => {
     await db.execute(sql`delete from taxpayer`);
     expect(await withTransaction(db, (tx) => venueChargesTakeawayVat(tx))).toBe(false);
   });
+});
+
+describe("resolveOrderDining", () => {
+  async function zoneSelling(
+    dining: DiningPolicy,
+    options: { startsAs?: Dining; orderStart?: "table" | "counter" } = {},
+  ): Promise<string> {
+    const department = await withTransaction(db, (tx) => createDepartment(tx, { name: "Deli" }));
+    await withTransaction(db, async (tx) => {
+      await setDepartmentSalePolicyField(tx, department.id, "dining", dining);
+      if (options.startsAs !== undefined) {
+        await setDepartmentSalePolicyField(tx, department.id, "diningStartsAs", options.startsAs);
+      }
+      await setDepartmentSalePolicyField(
+        tx,
+        department.id,
+        "orderStart",
+        options.orderStart ?? "counter",
+      );
+    });
+    return (await seedZone(db, { name: "Counter", departmentId: department.id })).id;
+  }
+
+  function resolve(zoneId: string, requested: Dining | undefined): Promise<Dining> {
+    return withTransaction(db, (tx) => resolveOrderDining(tx, zoneId, requested));
+  }
+
+  async function refusal(zoneId: string, requested: Dining | undefined): Promise<unknown> {
+    const error = await captureError(() => resolve(zoneId, requested));
+    expect(error).toBeInstanceOf(AppError);
+    return { code: (error as AppError).code, params: (error as AppError).params };
+  }
+
+  it.each([
+    ["eat_in", undefined, "eat_in"],
+    ["eat_in", "eat_in", "eat_in"],
+    ["takeaway", undefined, "takeaway"],
+    ["takeaway", "takeaway", "takeaway"],
+  ] as const)("a department fixed %s, asked %s, gives %s", async (dining, requested, expected) => {
+    await venueIn("ES", "ES-common");
+    expect(await resolve(await zoneSelling(dining), requested)).toBe(expected);
+  });
+
+  it.each([
+    ["eat_in", "takeaway"],
+    ["takeaway", "eat_in"],
+  ] as const)("a department fixed %s refuses a request for %s", async (dining, requested) => {
+    await venueIn("ES", "ES-common");
+    expect(await refusal(await zoneSelling(dining), requested)).toEqual({
+      code: "order.dining_fixed",
+      params: { dining },
+    });
+  });
+
+  it.each([
+    ["eat_in", "takeaway", "takeaway"],
+    ["takeaway", "eat_in", "eat_in"],
+    ["takeaway", undefined, "takeaway"],
+    ["eat_in", undefined, "eat_in"],
+  ] as const)(
+    "a till-choice counter starting %s, asked %s, gives %s",
+    async (startsAs, requested, expected) => {
+      await venueIn("ES", "ES-common");
+      expect(await resolve(await zoneSelling("till_choice", { startsAs }), requested)).toBe(
+        expected,
+      );
+    },
+  );
+
+  it("starts a till-choice table order eaten here, whatever the department starts as", async () => {
+    await venueIn("ES", "ES-common");
+    const zoneId = await zoneSelling("till_choice", { startsAs: "takeaway", orderStart: "table" });
+    expect(await resolve(zoneId, undefined)).toBe("eat_in");
+    expect(await resolve(zoneId, "takeaway")).toBe("takeaway");
+  });
+
+  it("sells eaten here in a department that has no sale policy row", async () => {
+    await venueIn("ES", "ES-common");
+    const [department] = await db
+      .insert(departments)
+      .values({ name: "Bare", tradingName: "Bare" })
+      .returning({ id: departments.id });
+    const zone = await seedZone(db, { name: "Bare counter", departmentId: department!.id });
+    expect(await resolve(zone.id, undefined)).toBe("eat_in");
+    expect(await refusal(zone.id, "takeaway")).toEqual({
+      code: "order.dining_fixed",
+      params: { dining: "eat_in" },
+    });
+  });
+
+  it("refuses a zone that does not exist", async () => {
+    await venueIn("ES", "ES-common");
+    const zoneId = "00000000-0000-4000-8000-000000000002";
+    expect(await refusal(zoneId, undefined)).toEqual({
+      code: "service_zone.not_found",
+      params: { zoneId },
+    });
+  });
+
+  // Review focus 4: a region without the distinction whose department row says takeaway.
+  it.each(["takeaway", "till_choice"] as const)(
+    "in a region without takeaway VAT, a %s department sells eaten here",
+    async (dining) => {
+      await venueIn("GB", "GB-vat");
+      const zoneId = await zoneSelling(dining, { startsAs: "takeaway" });
+      expect(await resolve(zoneId, undefined)).toBe("eat_in");
+      expect(await resolve(zoneId, "eat_in")).toBe("eat_in");
+      expect(await refusal(zoneId, "takeaway")).toEqual({
+        code: "order.dining_fixed",
+        params: { dining: "eat_in" },
+      });
+    },
+  );
 });

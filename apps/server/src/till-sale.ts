@@ -10,7 +10,7 @@ import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { linkSalePortions } from "./order-portions.js";
-import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
+import type { Dining, ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { randomUUID } from "node:crypto";
@@ -45,6 +45,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, ReceiptPresentation } from "@waitron/shared";
+import { refuseOtherDining } from "./order-dining.js";
 import type { GrossLines } from "@waitron/menu";
 import {
   payments,
@@ -246,6 +247,9 @@ export interface TillSaleRequest {
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
+  /** The way the till showed: a new order's is checked against its department, an existing
+   *  order's against its own (`working_order.out_of_date`). Absent, neither is checked. */
+  dining?: Dining;
 }
 
 /**
@@ -575,6 +579,9 @@ export interface PayWorkingOrderRequest {
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
+  /** The way the till showed: a new order's is checked against its department, an existing
+   *  order's against its own (`working_order.out_of_date`). Absent, neither is checked. */
+  dining?: Dining;
 }
 
 function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
@@ -644,6 +651,9 @@ export interface IntegratedPayRequest {
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
+  /** The way the till showed: a new order's is checked against its department, an existing
+   *  order's against its own (`working_order.out_of_date`). Absent, neither is checked. */
+  dining?: Dining;
 }
 
 /**
@@ -733,6 +743,7 @@ async function runPayWorkingOrder(
             partyId: workingOrders.partyId,
             revision: workingOrders.revision,
             receiptLocale: workingOrders.receiptLocale,
+            dining: workingOrders.dining,
           })
           .from(workingOrders)
           .where(eq(workingOrders.id, req.id));
@@ -756,6 +767,7 @@ async function runPayWorkingOrder(
           throw new AppError("working_order.not_open", { workingOrderId: req.id });
         }
         if (locked !== undefined) {
+          refuseOtherDining(req.id, locked, req.dining);
           await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
           await assertBillHasNoUnsent(tx, req.id);
           // Before the in-flight check, so the answer names the money already on the bill.
@@ -785,6 +797,7 @@ async function runPayWorkingOrder(
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
             lateSend: req.lateSend,
+            dining: req.dining,
             invoiceChoice: {
               invoiceType: req.invoiceType,
               recipient: req.recipient,
@@ -1190,6 +1203,7 @@ async function payIntegrated(
         partyId: workingOrders.partyId,
         revision: workingOrders.revision,
         receiptLocale: workingOrders.receiptLocale,
+        dining: workingOrders.dining,
       })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
@@ -1229,6 +1243,7 @@ async function payIntegrated(
     }
 
     if (locked !== undefined) {
+      refuseOtherDining(req.id, locked, req.dining);
       await refuseUnavailableFullInvoice(tx, req.id);
     }
     refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
@@ -1342,6 +1357,7 @@ async function payIntegrated(
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
             lateSend: req.lateSend,
+            dining: req.dining,
             invoiceChoice: {
               invoiceType: req.invoiceType,
               recipient: req.recipient,
@@ -2494,6 +2510,7 @@ async function runTillSale(
       receiptLanguage: req.receiptLanguage,
       guestCount: req.guestCount,
       lateSend: req.lateSend,
+      dining: req.dining,
     },
     operatorId,
     admit,

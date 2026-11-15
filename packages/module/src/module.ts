@@ -857,6 +857,12 @@ export interface VenueServiceContribution {
     actor: ActivityActor,
   ): Promise<void>;
   resolveSalePolicy(tx: Transaction, zoneId: string): Promise<EffectiveSalePolicy>;
+  /** The way a new order in `zoneId` sells; refuses `order.dining_fixed` for a way it cannot. */
+  resolveOrderDining(
+    tx: Transaction,
+    zoneId: string,
+    requested: Dining | undefined,
+  ): Promise<Dining>;
   recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
   readDepartmentReceiptPolicy(
     tx: Transaction,

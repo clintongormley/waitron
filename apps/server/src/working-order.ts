@@ -250,6 +250,7 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { requireOrderDining } from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -390,12 +391,10 @@ export interface TillSaleDeps {
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
 
-// A1522: Tasks 11, 12 and 15 replace every use of this marker; it must be gone before PR 2 ends.
+// A1522: Tasks 12 and 15 replace every use of this marker; it must be gone before PR 2 ends.
 export const A1522_STAND_IN: {
-  dining: Dining;
   takeawayVatClass: <C extends string>(vatClass: C) => C;
 } = {
-  dining: "eat_in",
   takeawayVatClass: (vatClass) => vatClass,
 };
 
@@ -1408,6 +1407,7 @@ export interface ParkOrderRequest {
   label?: string;
   operatorId?: string;
   lateSend?: LateSendConfirmation;
+  dining?: Dining;
 }
 
 export interface ParkOrderResult {
@@ -1443,6 +1443,8 @@ export async function createOpenOrder(
     creditedTo?: string;
     invalidMakeAt?: "ignore";
     lateSend?: LateSendConfirmation;
+    /** The way the till showed; refused `order.dining_fixed` where the department sells otherwise. */
+    dining?: Dining;
     invoiceChoice?: {
       invoiceType: unknown;
       recipient: unknown;
@@ -1470,6 +1472,7 @@ export async function createOpenOrder(
   }
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
+  let copiedDining: Dining | undefined;
   if (placement.copyServiceContextFrom !== undefined) {
     const context = await VENUE_SERVICE.findOrderContext(tx, placement.copyServiceContextFrom);
     if (context === null) {
@@ -1478,6 +1481,11 @@ export async function createOpenOrder(
       });
     }
     effectiveZoneId = context.zoneId;
+    const [source] = await tx
+      .select({ dining: workingOrders.dining })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, placement.copyServiceContextFrom));
+    copiedDining = source?.dining;
   }
   if (deliveryTableId !== null) {
     const [table] = await tx
@@ -1506,6 +1514,8 @@ export async function createOpenOrder(
   if (placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
   }
+  const dining =
+    copiedDining ?? (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
   const pricedLines = await priceOrderLines(
     tx,
     cfg,
@@ -1552,7 +1562,7 @@ export async function createOpenOrder(
     deliveryTableId,
     partyId: placement.partyId ?? null,
     receiptLocale: placement.receiptLocale ?? null,
-    dining: A1522_STAND_IN.dining,
+    dining,
   });
   if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
 
@@ -1590,6 +1600,7 @@ export async function parkOrder(
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
         lateSend: req.lateSend,
+        dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
       return { id: req.id, orderNumber };
@@ -5340,6 +5351,8 @@ export interface UpdateHeldOrderRequest {
   operatorId?: string;
   /** The request's confirmation of the save's fresh dishes whose period ended earlier today. */
   lateSend?: LateSendConfirmation;
+  /** The way the till showed; refused `working_order.out_of_date` when the order has the other. */
+  dining?: Dining;
 }
 
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
@@ -6936,6 +6949,7 @@ export async function updateHeldOrder(
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
     const { label } = await requireEditableOrder(tx, id, req.revision);
+    await requireOrderDining(tx, id, req.dining);
     await requireOrderBillEditor(tx, id, {
       operatorId: req.operatorId,
       expectedEdit: req.expectedEdit,

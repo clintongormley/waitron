@@ -274,6 +274,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
+import { parseDining } from "./order-dining.js";
 import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
@@ -500,6 +501,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
+  "order.dining_fixed": 409,
   "kitchen_note.out_of_date": 409,
   "allergy.invalid": 400,
   "allergy.out_of_date": 409,
@@ -1810,6 +1812,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
+      const dining = parseDining(body.dining);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
@@ -1841,7 +1844,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             disk: deps.disk,
           },
           saleCfg,
-          { ...body, zoneId, guestCount, lateSend: late },
+          { ...body, zoneId, guestCount, lateSend: late, dining },
           { personId, sessionId: session.sessionId },
         ),
       );
@@ -1885,6 +1888,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
+      const dining = parseDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1914,7 +1918,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             sayCardChargedNotRecorded: true,
           },
           saleCfg,
-          { ...body, zoneId, guestCount, lateSend: late },
+          { ...body, zoneId, guestCount, lateSend: late, dining },
           { personId, sessionId: session.sessionId },
         ),
       );
@@ -1941,6 +1945,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         kitchenNote?: string | null;
         lateSend?: unknown;
+        dining?: unknown;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -1949,6 +1954,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const lateSend = parseLateSend(body.lateSend);
+      const dining = parseDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1967,6 +1973,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             kitchenNote: body.kitchenNote,
             operatorId: personId,
             lateSend: late,
+            dining,
           },
           deps.attendance === undefined
             ? undefined
@@ -2023,9 +2030,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
         lateSend?: unknown;
+        dining?: unknown;
       }>(c);
       const expected = requireRevision(body.revision);
       const lateSend = parseLateSend(body.lateSend);
+      const dining = parseDining(body.dining);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         updateHeldOrder(
@@ -2039,6 +2048,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             operatorId: personId,
             expectedEdit: body.expectedEdit,
             lateSend: late,
+            dining,
           },
           { fiscal, saleCfg: sendCfg },
           deps.attendance === undefined
@@ -3830,6 +3840,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
+        dining: parseDining(body.dining),
       };
       const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
