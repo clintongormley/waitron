@@ -452,6 +452,11 @@ describe("a spare's network surface", () => {
         await readFile(join(stateDir, "tls", "ca.crt"), "utf8"),
       );
       expect(await (await app.request("/help/en/products")).text()).toContain("<h1>");
+      for (const locale of ["en", "es"]) {
+        const guide = await app.request(`/help/${locale}/servers`);
+        expect(guide.status).toBe(200);
+        expect(await guide.text()).toContain('id="emergency"');
+      }
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });

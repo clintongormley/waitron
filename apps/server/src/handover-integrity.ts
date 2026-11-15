@@ -1,3 +1,6 @@
+import { resolve as resolvePath } from "node:path";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 
 /**
@@ -30,9 +33,14 @@ parentPort.postMessage({ intact });
 
 type WorkerStarter = (source: string, options: WorkerOptions) => Worker;
 
+const runningChecks = new Set<string>();
+
+export function copyCheckRunning(path: string): boolean {
+  return runningChecks.has(resolvePath(path));
+}
+
 /**
- * A thread inside the check ends only when the check returns: `terminate` does not interrupt a
- * running SQLite call. So a stop waits this long at most, less than the server's
+ * A stop waits this long at most, less than the server's
  * `SHUTDOWN_DEADLINE_MS`.
  */
 const STOP_WAIT_MS = 5000;
@@ -54,10 +62,17 @@ export function isCopyIntact(
   } = options;
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
+    const key = resolvePath(path);
+    if (runningChecks.has(key))
+      throw new AppError("handover.copy_check_failed", { module: "core" });
     const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path } });
+    runningChecks.add(key);
     let stopWait: NodeJS.Timeout | undefined;
     const stop = () => {
-      const stopped = () => reject(signal!.reason);
+      const stopped = () => {
+        worker.unref();
+        reject(signal!.reason);
+      };
       stopWait = setTimeout(stopped, stopWaitMs);
       stopWait.unref();
       worker.terminate().catch(stopped);
@@ -71,6 +86,7 @@ export function isCopyIntact(
     // Only once it has gone, so the file is closed by the time a caller discards it. A stop that
     // outlasts `stopWaitMs` answers without this, with the file possibly still open.
     worker.once("exit", (code) => {
+      runningChecks.delete(key);
       signal?.removeEventListener("abort", stop);
       clearTimeout(stopWait);
       if (signal?.aborted) reject(signal.reason);

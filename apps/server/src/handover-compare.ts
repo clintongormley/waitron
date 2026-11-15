@@ -63,7 +63,11 @@ export interface CopyFileChecks {
 export interface CompareOptions {
   found: CopyFileChecks;
   signal?: AbortSignal;
+  integrityLimitMs?: number;
 }
+
+// Provisional controlled-handover limit, unmeasured for venue size (watcher, 2026-11-15).
+const INTEGRITY_LIMIT_MS = 30 * 60_000;
 
 const refuse = (reason: ErrorCode, detail: CanonicalValue = {}): Refusal => ({
   ok: false,
@@ -99,7 +103,7 @@ export async function compareFinalCopy(
   operation: HandoverOperation,
   indicator: unknown,
   copyPath: string,
-  { found, signal }: CompareOptions,
+  { found, signal, integrityLimitMs }: CompareOptions,
 ): Promise<CompareOutcome> {
   let body: FinalStateIndicator;
   try {
@@ -124,13 +128,14 @@ export async function compareFinalCopy(
       operation,
       body,
       copyPath,
-      { found, signal },
+      { found, signal, integrityLimitMs },
       remembered,
     );
     if (remembered && !answer.ok && answer.reason === "handover.summary_unreadable") forget(found);
     return answer;
   } catch (error) {
     if (remembered) forget(found);
+    signal?.throwIfAborted();
     throw error;
   }
 }
@@ -140,15 +145,28 @@ async function compareFile(
   operation: HandoverOperation,
   body: FinalStateIndicator,
   copyPath: string,
-  { found, signal }: CompareOptions,
+  { found, signal, integrityLimitMs }: CompareOptions,
   remembered: boolean,
 ): Promise<CompareOutcome> {
   if (remembered) {
     if (!(await stillSameSize(copyPath, body))) return fileDiffers(found);
   } else {
-    if (!(await holdsDescribedBytes(copyPath, body))) return refuse("handover.copy_mismatch");
-    if (!(await isCopyIntact(copyPath, signal === undefined ? {} : { signal }))) {
-      return refuse("handover.copy_damaged");
+    if (!(await holdsDescribedBytes(copyPath, body, signal)))
+      return refuse("handover.copy_mismatch");
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), integrityLimitMs ?? INTEGRITY_LIMIT_MS);
+    timer.unref();
+    const checking =
+      signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]);
+    try {
+      if (!(await isCopyIntact(copyPath, { signal: checking })))
+        return refuse("handover.copy_damaged");
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (deadline.signal.aborted) return refuse("handover.copy_check_failed");
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
     found.bytesAndIntegrity = true;
   }
@@ -170,14 +188,18 @@ async function compareFile(
   }
   // What this try did not check again was answered by the file as it then was. Only at the end, so
   // a wait on a setting reads the file no more often.
-  if (answer.ok && remembered && !(await holdsDescribedBytes(copyPath, body))) {
+  if (answer.ok && remembered && !(await holdsDescribedBytes(copyPath, body, signal))) {
     return fileDiffers(found);
   }
   return answer;
 }
 
-async function holdsDescribedBytes(path: string, body: FinalStateIndicator): Promise<boolean> {
-  const held = await digestFileIfPresent(path);
+async function holdsDescribedBytes(
+  path: string,
+  body: FinalStateIndicator,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const held = await digestFileIfPresent(path, signal);
   return held?.sha256 === body.snapshot.sha256 && held.bytes === body.snapshot.bytes;
 }
 

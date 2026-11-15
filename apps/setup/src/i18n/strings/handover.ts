@@ -7,6 +7,9 @@ export const handoverEn = {
     "Could not read handover progress. Keep this page open while it reconnects.",
   "handover.wait":
     "The last attempt could not continue. Keep both boxes connected; this page checks again automatically.",
+  "handover.check_failed":
+    "The copy check failed. This box has not taken over. It will retry automatically.",
+  "handover.check_help": "If checks keep failing, read how to switch to a spare",
   "handover.space":
     "The last attempt found too little room on this box. Make room, then keep this page open to try again.",
   "handover.source":
@@ -165,6 +168,9 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "No se pudo consultar el progreso. Mantén esta página abierta mientras se recupera la conexión.",
   "handover.wait":
     "El último intento no pudo continuar. Mantén los dos servidores conectados; esta página vuelve a comprobarlo automáticamente.",
+  "handover.check_failed":
+    "La comprobación de la copia ha fallado. Este servidor no ha tomado el relevo. Volverá a intentarlo automáticamente.",
+  "handover.check_help": "Si sigue fallando, consulta cómo cambiar al servidor de reserva",
   "handover.space":
     "El último intento detectó poco espacio en este servidor. Libera espacio y mantén esta página abierta para volver a intentarlo.",
   "handover.source":

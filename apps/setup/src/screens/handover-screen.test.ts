@@ -299,3 +299,59 @@ describe("This device on the handover's clock step", () => {
     expect(actions(posts)).not.toContain("select");
   });
 });
+
+it.each(["en", "es"])(
+  "explains a failed copy check and links the emergency procedure in %s",
+  async (locale) => {
+    const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+    const { currentLocale, setLocale, t } = await import("../i18n/t.js");
+    const previous = currentLocale();
+    setLocale(locale === "es" ? "es-ES" : "en-GB");
+    try {
+      const api = new SetupApi(
+        "",
+        vi.fn<typeof fetch>(
+          async () =>
+            new Response(
+              JSON.stringify({
+                body: {
+                  ...status,
+                  state: "prepared",
+                  copyPlaced: false,
+                  waitingReason: "handover.copy_check_failed",
+                },
+              }),
+            ),
+        ),
+      );
+      const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+        api,
+        operationId: "move one",
+      });
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain(
+          locale === "en"
+            ? "The copy check failed. This box has not taken over. It will retry automatically."
+            : handoverEs["handover.check_failed"],
+        ),
+      );
+      const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+        'a[href$="/servers#emergency"]',
+      )!;
+      expect(link.getAttribute("href")).toBe(`/help/${locale}/servers#emergency`);
+      expect(link.textContent).toBe(t("handover.check_help"));
+      vi.spyOn(api, "handoverStatus").mockResolvedValue({
+        ...status,
+        role: "destination",
+        scenario: "controlled",
+      });
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector('a[href$="/servers#emergency"]')).toBeNull(),
+      );
+    } finally {
+      cleanupWidgets();
+      setLocale(previous);
+    }
+  },
+);

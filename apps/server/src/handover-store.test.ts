@@ -1,6 +1,7 @@
+import { readdir } from "node:fs/promises";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { captureError, CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -23,7 +24,10 @@ import {
   beginHandover,
   beginHandoverFromOffer,
   waitHandover,
+  destinationOperationFolders,
 } from "./handover-store.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -47,6 +51,22 @@ describe("the server's handover store", () => {
       sql`select kind, detail, envelope from node_handover_events where node_id = ${NODE}`,
     );
   }
+
+  it("a missing folder is empty but a refused enumeration rejects", async () => {
+    vi.mocked(readdir).mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+    expect(await destinationOperationFolders(deps(), "/unused").next()).toEqual({
+      done: true,
+      value: undefined,
+    });
+    vi.mocked(readdir).mockRejectedValueOnce(
+      Object.assign(new Error("permission"), { code: "EACCES" }),
+    );
+    await expect(destinationOperationFolders(deps(), "/unused").next()).rejects.toMatchObject({
+      code: "EACCES",
+    });
+  });
 
   it("begins an operation once at its first state, and answers a repeat as replayed", async () => {
     expect(await beginHandover(deps(), BINDING, "destination")).toBe("created");

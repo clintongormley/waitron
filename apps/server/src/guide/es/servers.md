@@ -161,6 +161,7 @@ Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **
 progreso del traspaso**. En la página de traspaso del servidor de reserva puedes recargar para
 consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
 mantén los dos servidores conectados mientras vuelven a intentarlo.
+Si sigue fallando la comprobación de la copia, consulta [cómo cambiar al servidor de reserva](servers.md#emergency).
 
 ## Después del traspaso {#after-hand-over}
 

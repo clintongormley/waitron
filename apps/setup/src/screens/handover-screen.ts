@@ -1087,7 +1087,8 @@ export class SetupHandoverScreen extends LitElement {
     >
       <h1>${t("handover.heading")}</h1>
       ${this.#content()}
-      ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : "handover.wait")}</p>` : nothing}
+      ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : status.waitingReason === "handover.copy_check_failed" ? "handover.check_failed" : "handover.wait")}</p>` : nothing}
+      ${status?.waitingReason === "handover.copy_check_failed" ? html`<p><a href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/servers#emergency`}>${t("handover.check_help")}</a></p>` : nothing}
       ${this.readFailed && !this.restarting ? html`<p role="status">${t("handover.read_failed")}</p>` : nothing}
     </main>`;
   }

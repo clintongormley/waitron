@@ -1,3 +1,4 @@
+import { errnoOf } from "./errno.js";
 import { HANDOVER_DIR } from "@waitron/store";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -140,7 +141,10 @@ export async function* destinationOperationFolders(
   deps: HandoverStoreDeps,
   stateDir: string,
 ): AsyncGenerator<HandoverOperation> {
-  const names = await readdir(join(stateDir, HANDOVER_DIR)).catch(() => []);
+  const names = await readdir(join(stateDir, HANDOVER_DIR)).catch((error: unknown) => {
+    if (errnoOf(error) === "ENOENT") return [];
+    throw error;
+  });
   for (const name of names) {
     const row = await readHandoverOperation(deps.node, deps.nodeId, name);
     if (row?.role === "destination") yield row;

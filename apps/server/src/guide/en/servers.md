@@ -147,6 +147,7 @@ Payments already recorded remain in the transferred copy.
 If an answer is lost in Servers, keep the dialog open and choose **Check handover progress**.
 On the spare’s handover page, you can reload to read progress. Do not start another handover.
 A waiting message describes the last attempt; keep both boxes connected while they try again.
+If the copy check keeps failing, read [how to switch to a spare](servers.md#emergency).
 
 ## After the handover {#after-hand-over}
 

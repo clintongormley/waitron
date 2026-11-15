@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Worker, type WorkerOptions } from "node:worker_threads";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isCopyIntact } from "./handover-integrity.js";
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
+import { isCopyIntact, copyCheckRunning } from "./handover-integrity.js";
 
 let scratch: string;
 beforeEach(async () => {
@@ -205,8 +205,13 @@ describe("isCopyIntact", () => {
   });
 
   /** A thread that never says it has gone, whose `terminate` does what the case asks. */
-  const stuckThread = (terminate: () => Promise<number>) => () =>
-    Object.assign(new EventEmitter(), { terminate }) as unknown as Worker;
+  const stuckThread = (terminate: () => Promise<number>) => () => {
+    const worker = Object.assign(new EventEmitter(), { terminate, unref() {} });
+    onTestFinished(() => {
+      worker.emit("exit", 1);
+    });
+    return worker as unknown as Worker;
+  };
 
   it("a thread that does not go is waited for only so long, then the stop's reason answers", async () => {
     const stopping = new AbortController();
@@ -233,4 +238,34 @@ describe("isCopyIntact", () => {
     // Failing case: the test times out, well short of `stopWaitMs`.
     expect(await outcome).toBe(reason);
   }, 5000);
+});
+
+describe("a check whose thread has not exited", () => {
+  it("keeps the copy busy through a stop and a new caller until actual exit", async () => {
+    const path = database();
+    const stopping = new AbortController();
+    const thread = Object.assign(new EventEmitter(), {
+      terminate: () => new Promise<number>(() => {}),
+      unref: vi.fn(),
+    });
+    const startWorker = vi.fn(() => thread as unknown as Worker);
+    const outcome = isCopyIntact(path, { signal: stopping.signal, startWorker, stopWaitMs: 10 });
+    const rejected = expect(outcome).rejects.toThrow("stop");
+    stopping.abort(new Error("stop"));
+    await rejected;
+    try {
+      expect(thread.unref).toHaveBeenCalledOnce();
+      await expect(isCopyIntact(path, { startWorker })).rejects.toMatchObject({
+        code: "handover.copy_check_failed",
+        params: { module: "core" },
+      });
+      expect(startWorker).toHaveBeenCalledOnce();
+      expect(copyCheckRunning(path)).toBe(true);
+      thread.emit("exit", 1);
+      expect(copyCheckRunning(path)).toBe(false);
+      expect(await isCopyIntact(path)).toBe(true);
+    } finally {
+      thread.emit("exit", 1);
+    }
+  });
 });

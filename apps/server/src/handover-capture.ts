@@ -205,16 +205,20 @@ async function describeCopy(
   };
 }
 
-async function digestFile(path: string): Promise<{ sha256: string; bytes: number }> {
-  return digestBytes(createReadStream(path));
+async function digestFile(
+  path: string,
+  signal?: AbortSignal,
+): Promise<{ sha256: string; bytes: number }> {
+  return digestBytes(createReadStream(path, { signal }));
 }
 
 /** `digestFile`, where a file that is not there is an answer: `null`. */
 export async function digestFileIfPresent(
   path: string,
+  signal?: AbortSignal,
 ): Promise<{ sha256: string; bytes: number } | null> {
   try {
-    return await digestFile(path);
+    return await digestFile(path, signal);
   } catch (error) {
     if (errnoOf(error) === "ENOENT") return null;
     throw error;

@@ -566,28 +566,14 @@ If it does fill, M2 fails to activate after the old box has given up filing, wit
 file's owner clearing it. The cure is a format change: stop repeating the earlier entries, or lift
 the cap. The owner sees this in Slice 5's PR.
 
-## A waiting spare repeats work and log lines with no back-off
+## A waiting spare still retries an invalid source copy
 
-Left open by A1018 Slice 5 (Ruling R53). Each was a review's point, none loses data or files anything
-wrong, and none is reachable on a real box before A947 3b.
-- **A copy with a dangling row is fetched again for ever.** A real duty at the 5-second tick, a real
-  download from the real route over 17 seconds, with the row written into each downloaded file
-  standing in for an old box holding it: 4 whole fetches, the old box stopped, no back-off, and a
-  `handover-destination.waiting` line each pass. On this branch nothing gets the old box out: from
-  `source_stepped_down` the only moves are `filing_relinquished` or `replaced`
-  (`packages/handover/src/states.ts:35`), moving a real old box to `abandoned` threw
-  `handover.step_out_of_order`, and no code outside tests writes `emergency_declared`. A person's way
-  out is Slice 7's emergency declaration. A check for such a row on the old box before it stops
-  selling would avoid the stop; not built. `compareRetryMs` (60 s) does not apply to a refusal the
-  spare fetches again.
-- `handover.final_copy_changed` and `handover.summary_failed` repeat every 5 s.
-- `handover-destination.post_failed` warns on every tick, about 17,000 lines a day with the old box
-  off, for as long as the wait lasts.
-- A closed operation's folder that could not be removed is tried again only when the duty starts and
-  on a pass that finds no work, so it stays, with a whole venue's copy in it, while the duty has
-  another operation to work on, and after the duty closes one itself until the next wake or start.
-- With nothing free on the disk, every tick logs `handover-destination.waiting` and `pass_failed`
-  `storage.disk_full`, and the named reason is not stored (a real 0-byte filesystem).
+A rejected copy is fetched again with a delay capped at sixty seconds. A check on the old box before
+it stops selling could avoid a handover waiting on a dangling row; that check is not built.
+A closed operation's folder that cannot be removed, or whose check is still busy, is retried only at duty start or on a pass with
+no work, so another live operation can leave it on disk. A full disk can still prevent the waiting
+reason from being stored. The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
+is available when the copy keeps failing its checks.
 
 ## Slice 6's list: the handover words no screen shows yet
 
@@ -687,15 +673,10 @@ stepped down by then. Finding it while the old box still sells needs the old box
 in the offer. Left open by A1018 Slice 5 (Ruling R35).
 
 
-## A hung integrity check on a copy has no time limit.
+## The bucket restore's integrity check has no time limit
 
-Only an answer, an exit or a stop ends the
-wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
-it (read, not run). A stop asks the thread to end and answers when it has, or after `STOP_WAIT_MS` with the file
-possibly still open: a running `integrity_check` does not stop for it. The bucket restore's check
-(`isCopyIntact`, called from `restore-stream.ts`) has no time limit either and is given no stop
-signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (Ruling R53).
-
+The bucket restore calls `isCopyIntact` without a deadline or stop signal (`restore-stream.ts`).
+Only an answer or a thread exit ends its wait. The controlled-handover deadline does not cover it.
 
 ## Bundle: Series and module-preparation gaps at handover
 
@@ -723,29 +704,15 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: The spare's wait loop: back-off, reasons, stop signals
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size M.
 
-- **A new main box's chart post says too little in its log.** `chart_not_accepted` cannot tell a
-  refusal from a chart the old box already holds, because the route answers one boolean, and a
-  switched-off old box logs only `AggregateError`, with no ids. A fix to the route's answer needs a
-  ruling. Left open by A1018 Slice 5 (Ruling R53).
-- **A waiting spare repeats work and log lines with no back-off.** A copy with a dangling row was
-  fetched whole 4 times in 17 s with the old box stopped, and other waits log every 5 s. On this
-  branch nothing gets the old box out of that; a person's way out is Slice 7's emergency declaration,
-  and a check for such a row on the old box before it stops selling is not built. Left open by A1018
-  Slice 5 (Rulings R53, R56).
-  [Detail](replication-cloud.md#a-waiting-spare-repeats-work-and-log-lines-with-no-back-off)
-- **The spare's digest of a copy takes no stop signal.** A stop during it waits for the read to end;
-  the cost on a large file was not measured. Left open by A1018 Slice 5 (Ruling R53).
-- **A hung integrity check on a copy has no time limit.** Left open by A1018 Slice 5 (Ruling R53).
-  [Detail](replication-cloud.md#a-hung-integrity-check-on-a-copy-has-no-time-limit)
-- **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
-  the old box stopped (run with a journal with no `hash` column). Left open by A1018 Slice 5 (Ruling
-  R53).
-- **The spare's folder clean-up reads any `readdir` failure as an empty folder.** A refusal to read
-  ends either sweep with no log line and leaves a closed operation's venue copy
-  (`destinationOperationFolders`, `apps/server/src/handover-store.ts`, read, not run). Left open by A1018 Slice 5 (Ruling
-  R53).
+- **A chart post's yes/no answer cannot distinguish a refusal from an already-held chart.**
+  The route's answer needs a ruling. Left open by A1018 Slice 5 (Ruling R53).
+- **A waiting spare still retries an invalid source copy.** Source-side preflight, closed-folder
+  retry scheduling and full-disk reason persistence remain open.
+  [Detail](replication-cloud.md#a-waiting-spare-still-retries-an-invalid-source-copy)
+- **The bucket restore's integrity check has no time limit.**
+  [Detail](replication-cloud.md#the-bucket-restores-integrity-check-has-no-time-limit)
 - **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
   after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
   the start refuses `handover.accepted_copy_missing` (run). Left open by A1018 Slice 5 (Ruling R53).
