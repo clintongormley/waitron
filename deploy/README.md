@@ -404,8 +404,8 @@ and release the spare file, as described below. It never deletes the database, l
 `recovery.json`. If `logs`, `crash-reports` or `scratch` is a symbolic link, the start skips it.
 
 If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
-once, without counting the start, and says "The box has deleted the temporary copies, old logs and
-crash reports it can make again, and the disk is still full." It says that sales and the database
+once, without counting the start, and says "The box has deleted the files it no longer needs, and the
+disk is still full." It says that sales and the database
 are not touched, that Waitron cannot free more space by itself, and what reinstalling costs. Below the
 status line it shows the free space on the box's disk, read again each time you load the page. A start that fails later because the disk filled is named `storage.disk_full`
 as well, and deletes the same files before it records the failure.

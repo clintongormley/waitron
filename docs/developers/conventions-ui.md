@@ -1343,9 +1343,8 @@ than a week; below 256 MiB free it also deletes rotated logs but the newest
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The
-full-disk action begins "The box has deleted the temporary copies, old logs and crash reports it can
-make again, and the disk is still full." («El equipo ha quitado las copias temporales, los registros
-y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno.»). Since A1127 the
+full-disk action begins "The box has deleted the files it no longer needs, and the disk is still
+full." («El equipo ha quitado los archivos que ya no necesita, y el disco sigue lleno.»). Since A1127 the
 action names nobody to ask: it says what fills the rest of the disk, that Waitron cannot free more by
 itself, and what reinstalling costs. That start writes no
 `server.boot_started`, so "Why the last start failed" shows the last counted start's failure, if it

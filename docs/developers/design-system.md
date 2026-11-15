@@ -6548,7 +6548,8 @@ alert list.
   shows no record waiting, or shows no `fiscal.records_unsent` notice, takes the sentence away, but
   a read whose `noticesUnavailable` is not empty does not count as showing the notice gone. "No
   record was waiting to be tried again." stays until the next press. The Tax agency row's detail is
-  "Last accepted {time}" or "None accepted yet", and nothing while `outbox` is `null`.
+  "Last accepted {time}" or "None accepted yet", then "Unsent since {time}" while the
+  `fiscal.records_unsent` notice carries `since`, and nothing while `outbox` is `null`.
 - **Check with this device's time.** On the Clock row, a `secondary` "Check with this device's
   time" button, drawn only for a person with `system.box_admin` and only while the box carries a
   `clock.unusable` notice. It opens a dialog headed with the same words that asks the box for its

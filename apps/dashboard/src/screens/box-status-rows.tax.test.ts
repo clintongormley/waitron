@@ -77,7 +77,7 @@ describe("the Tax agency row's detail", () => {
     ]);
   });
 
-  it("draws nothing about the waiting records", () => {
+  it("draws the same details whatever the number of waiting records", () => {
     const row = taxRow(
       health({
         notices: [UNSENT],
@@ -103,7 +103,7 @@ describe("the Tax agency row's detail", () => {
     setLocale("es");
     expect(taxRow(health({ notices })).details).toEqual([
       es["box_status.tax.last_accepted"].replace("{time}", formatIsoMinute(ACCEPTED)),
-      `Sin enviar desde ${formatIsoMinute(since)}`,
+      es["box_status.tax.unsent_since"].replace("{time}", formatIsoMinute(since)),
     ]);
   });
 
