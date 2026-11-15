@@ -216,7 +216,8 @@ export interface InheritedValues {
   image: string | null;
   unitPrice: string;
   vatClass: VatClass;
-  /** The parent's takeaway class, or its `vatClass` when it has none. */
+  /** The parent's takeaway class, or its `vatClass` when it has none. A variant's own `vatClass`
+   * takes precedence over this when the variant has no takeaway class of its own. */
   takeawayVatClass: VatClass;
   /** The parent's unit, which is always the variant's. */
   unitId: string | null;
