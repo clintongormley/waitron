@@ -59,6 +59,16 @@ export function managementSite(
   return isRemoteStaffRequest(c) ? { rpId: url.hostname, origin: url.origin } : local;
 }
 
+/** {@link managementSite} for verifying a passkey, where a local request may name any of several
+ * origins. */
+export async function passkeyVerifySite(
+  c: Context,
+  local: { rpId: string; origin: string; passkeyOrigins?: () => Promise<readonly string[]> },
+): Promise<{ rpId: string; origin: string | readonly string[] }> {
+  if (isRemoteStaffRequest(c)) return managementSite(c, local);
+  return { rpId: local.rpId, origin: (await local.passkeyOrigins?.()) ?? local.origin };
+}
+
 /** Where taking a request for the box's own only withholds something: a missing socket is local
  * unless the staff listener marked the request remote. */
 export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {

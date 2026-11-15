@@ -23,7 +23,7 @@ export interface FreshSignInDeps {
   throttle: PasswordThrottle & PasswordThrottleProbe;
   keyRing: TotpKeyRing;
   rpId: string;
-  origin: string;
+  origin: string | readonly string[];
 }
 
 type Codes = { totp?: string; recoveryCode?: string };

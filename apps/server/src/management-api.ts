@@ -1,4 +1,4 @@
-import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
+import { isRemoteStaffRequest, managementSite, passkeyVerifySite } from "./request-from-box.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
@@ -155,6 +155,8 @@ export interface ManagementApiDeps {
   /** The exact served origin, scheme and port included, that each ceremony's response is verified
    * against. */
   origin: string;
+  /** The origins a local request's passkey may be verified against, in place of `origin`. */
+  passkeyOrigins?: () => Promise<readonly string[]>;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
@@ -1881,14 +1883,14 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const site = await passkeyVerifySite(c, deps);
       const out = await withTransaction(deps.db, async (tx) => {
         await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
           challengeHandle,
           response: response as never,
-          rpId: passkeySite(c).rpId,
-          origin: passkeySite(c).origin,
+          ...site,
         });
       });
       return c.json(out);
@@ -1917,12 +1919,12 @@ export function mountManagementApi(
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const site = await passkeyVerifySite(c, deps);
       const session = await withTransaction(deps.db, async (tx) => {
         return finishPasskeyAuthentication(tx, {
           challengeHandle,
           response: response as never,
-          rpId: passkeySite(c).rpId,
-          origin: passkeySite(c).origin,
+          ...site,
         });
       });
       setManagementCookie(c, session.token, secureCookie(c));

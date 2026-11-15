@@ -35,7 +35,7 @@ import { SUPPORTED_LOCALES, AppError } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
-import { managementSite } from "./request-from-box.js";
+import { managementSite, passkeyVerifySite } from "./request-from-box.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -71,6 +71,8 @@ export interface MeApiDeps {
   credentialKeyRing: TotpKeyRing;
   rpId?: string;
   origin?: string;
+  /** The origins a local request's passkey may be verified against, in place of `origin`. */
+  passkeyOrigins?: () => Promise<readonly string[]>;
   accountActionCodeKey?: Buffer;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
   assertAccountMailPrimary?: () => Promise<void>;
@@ -153,7 +155,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           db: deps.db,
           throttle: proofThrottle,
           keyRing: credentialKeyRing,
-          ...managementSite(c, proofSite),
+          ...(await passkeyVerifySite(c, { ...proofSite, passkeyOrigins: deps.passkeyOrigins })),
         },
         token,
         await readJsonBody<unknown>(c),

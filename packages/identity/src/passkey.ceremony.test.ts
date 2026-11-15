@@ -2,7 +2,7 @@
  * Each passkey ceremony accepts only a challenge its own begin issued, checked with the real
  * WebAuthn verifier: the responses here are built and signed with `node:crypto`, not mocked.
  */
-import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -22,6 +22,7 @@ import {
   verifyOwnPasskey,
 } from "./passkey.js";
 import { codeOf, openManagementSession, TOTP_KEY_RING } from "../test/fixtures.js";
+import { cbor, newKey, rpIdHash, signingPasskey } from "../test/passkey-signer.js";
 
 const RP_ID = "localhost";
 const ORIGIN = "http://localhost";
@@ -30,56 +31,13 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-function cborHead(major: number, n: number): Buffer {
-  if (n < 24) return Buffer.from([(major << 5) | n]);
-  if (n < 256) return Buffer.from([(major << 5) | 24, n]);
-  const b = Buffer.alloc(3);
-  b[0] = (major << 5) | 25;
-  b.writeUInt16BE(n, 1);
-  return b;
-}
-
-/** The CBOR subset a `none` attestation and a COSE key need. */
-function cbor(value: unknown): Buffer {
-  if (typeof value === "number") return value >= 0 ? cborHead(0, value) : cborHead(1, -1 - value);
-  if (typeof value === "string") {
-    const b = Buffer.from(value);
-    return Buffer.concat([cborHead(3, b.length), b]);
-  }
-  if (Buffer.isBuffer(value)) return Buffer.concat([cborHead(2, value.length), value]);
-  if (value instanceof Map) {
-    return Buffer.concat([
-      cborHead(5, value.size),
-      ...[...value].flatMap(([k, v]) => [cbor(k), cbor(v)]),
-    ]);
-  }
-  throw new Error("unsupported CBOR value");
-}
-
-const rpIdHash = () => createHash("sha256").update(RP_ID).digest();
-
-function newKey(): { cose: Buffer; privateKey: KeyObject } {
-  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-  const jwk = publicKey.export({ format: "jwk" });
-  const cose = cbor(
-    new Map<unknown, unknown>([
-      [1, 2],
-      [3, -7],
-      [-1, 1],
-      [-2, Buffer.from(jwk.x!, "base64url")],
-      [-3, Buffer.from(jwk.y!, "base64url")],
-    ]),
-  );
-  return { cose, privateKey };
-}
-
 /** A `none`-attestation registration response for `challenge`, user present and verified. */
-function registrationResponse(challenge: string) {
+function registrationResponse(challenge: string, origin = ORIGIN) {
   const id = randomBytes(32);
   const idLength = Buffer.alloc(2);
   idLength.writeUInt16BE(id.length);
   const authData = Buffer.concat([
-    rpIdHash(),
+    rpIdHash(RP_ID),
     Buffer.from([0x45]), // user present, user verified, attested credential data
     Buffer.alloc(4),
     Buffer.alloc(16),
@@ -94,7 +52,7 @@ function registrationResponse(challenge: string) {
       ["authData", authData],
     ]),
   );
-  const clientData = { type: "webauthn.create", challenge, origin: ORIGIN, crossOrigin: false };
+  const clientData = { type: "webauthn.create", challenge, origin, crossOrigin: false };
   return {
     id: id.toString("base64url"),
     rawId: id.toString("base64url"),
@@ -110,33 +68,14 @@ function registrationResponse(challenge: string) {
 
 /** Stores a passkey for `personId` and returns a signer of assertions from it. */
 async function seedSigningPasskey(personId: string) {
-  const { cose, privateKey } = newKey();
-  const id = randomBytes(32).toString("base64url");
-  await suite.db
-    .insert(webauthnCredentials)
-    .values({ personId, credentialId: id, publicKey: cose.toString("base64url"), counter: 0 });
-  return (challenge: string) => {
-    const clientData = Buffer.from(
-      JSON.stringify({ type: "webauthn.get", challenge, origin: ORIGIN, crossOrigin: false }),
-    );
-    const authData = Buffer.concat([rpIdHash(), Buffer.from([0x05]), Buffer.from([0, 0, 0, 1])]);
-    const signature = sign(
-      "sha256",
-      Buffer.concat([authData, createHash("sha256").update(clientData).digest()]),
-      privateKey,
-    );
-    return {
-      id,
-      rawId: id,
-      type: "public-key" as const,
-      clientExtensionResults: {},
-      response: {
-        clientDataJSON: clientData.toString("base64url"),
-        authenticatorData: authData.toString("base64url"),
-        signature: signature.toString("base64url"),
-      },
-    };
-  };
+  const passkey = signingPasskey(RP_ID);
+  await suite.db.insert(webauthnCredentials).values({
+    personId,
+    credentialId: passkey.credentialId,
+    publicKey: passkey.publicKey,
+    counter: 0,
+  });
+  return (challenge: string, origin = ORIGIN) => passkey.assert(challenge, origin);
 }
 
 const enrol = (token: string, challengeHandle: string, challenge: string) => {
@@ -283,5 +222,84 @@ describe("signing in and checking a passkey", () => {
       "passkey.verification_failed",
     );
     expect(await sessionCount()).toBe(sessionsBefore);
+  });
+});
+
+describe("a ceremony verified against a list of origins", () => {
+  const VENUE = "https://waitron.local";
+  const BOX = "https://box-abcd.waitron.local";
+  const LISTED = [VENUE, BOX] as const;
+  const UNLISTED = "https://box-ef01.waitron.local";
+
+  const enrolAt = async (origin: string) => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await run((tx) =>
+      beginPasskeyRegistration(tx, { managementSessionId: token, rpId: RP_ID, rpName: "Waitron" }),
+    );
+    return run((tx) =>
+      finishPasskeyRegistration(tx, {
+        managementSessionId: token,
+        challengeHandle: begun.challengeHandle,
+        response: registrationResponse(begun.options.challenge, origin),
+        rpId: RP_ID,
+        origin: LISTED,
+      }),
+    );
+  };
+
+  const signInAt = async (origin: string) => {
+    const { personId } = await openManagementSession(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+    const begun = await run((tx) => beginPasskeyAuthentication(tx, { rpId: RP_ID }));
+    return run((tx) =>
+      finishPasskeyAuthentication(tx, {
+        challengeHandle: begun.challengeHandle,
+        response: assert(begun.options.challenge, origin),
+        rpId: RP_ID,
+        origin: LISTED,
+      }),
+    );
+  };
+
+  const checkOwnAt = async (origin: string) => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+    const begun = await run((tx) =>
+      beginOwnPasskeyCheck(tx, { managementSessionId: token, rpId: RP_ID }),
+    );
+    return run((tx) =>
+      verifyOwnPasskey(tx, {
+        managementSessionId: token,
+        challengeHandle: begun.challengeHandle,
+        response: assert(begun.options.challenge, origin),
+        rpId: RP_ID,
+        origin: LISTED,
+        keyRing: TOTP_KEY_RING,
+      }),
+    );
+  };
+
+  it.each(LISTED)("enrols a passkey made at %s", async (origin) => {
+    expect((await enrolAt(origin)).credentialId).toBeTruthy();
+  });
+
+  it("refuses to enrol a passkey made at an origin the list does not hold", async () => {
+    expect(await codeOf(() => enrolAt(UNLISTED))).toBe("passkey.verification_failed");
+  });
+
+  it.each(LISTED)("signs in with an assertion made at %s", async (origin) => {
+    expect((await signInAt(origin)).token).toBeTruthy();
+  });
+
+  it("refuses a sign-in made at an origin the list does not hold", async () => {
+    expect(await codeOf(() => signInAt(UNLISTED))).toBe("passkey.verification_failed");
+  });
+
+  it.each(LISTED)("accepts the person's own passkey checked at %s", async (origin) => {
+    await expect(checkOwnAt(origin)).resolves.toBeUndefined();
+  });
+
+  it("refuses the person's own passkey checked at an origin the list does not hold", async () => {
+    expect(await codeOf(() => checkOwnAt(UNLISTED))).toBe("passkey.verification_failed");
   });
 });

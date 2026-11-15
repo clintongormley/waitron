@@ -185,6 +185,9 @@ export async function beginPasskeyRegistration(
   return { challengeHandle: row!.id, options };
 }
 
+const expectedOrigin = (origin: string | readonly string[]): string | string[] =>
+  typeof origin === "string" ? origin : [...origin];
+
 export async function finishPasskeyRegistration(
   tx: Transaction,
   input: {
@@ -192,7 +195,7 @@ export async function finishPasskeyRegistration(
     challengeHandle: string;
     response: RegistrationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | readonly string[];
   },
 ): Promise<{ credentialId: string }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
@@ -207,7 +210,7 @@ export async function finishPasskeyRegistration(
     verification = await verifyRegistrationResponse({
       response: input.response,
       expectedChallenge,
-      expectedOrigin: input.origin,
+      expectedOrigin: expectedOrigin(input.origin),
       expectedRPID: input.rpId,
       // Pinned rather than left to the library default, so a default flip cannot weaken enrolment.
       requireUserVerification: true,
@@ -273,7 +276,7 @@ export async function finishPasskeyAuthentication(
     challengeHandle: string;
     response: AuthenticationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | readonly string[];
   },
 ): Promise<ManagementSession> {
   const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, { purpose: "login" });
@@ -306,7 +309,7 @@ export async function finishPasskeyAuthentication(
     verification = await verifyAuthenticationResponse({
       response: input.response,
       expectedChallenge,
-      expectedOrigin: input.origin,
+      expectedOrigin: expectedOrigin(input.origin),
       expectedRPID: input.rpId,
       // Pinned rather than left to the library default, so a default flip cannot weaken this login.
       requireUserVerification: true,
@@ -375,7 +378,7 @@ export async function verifyOwnPasskey(
     challengeHandle: string;
     response: AuthenticationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | readonly string[];
     totp?: string;
     recoveryCode?: string;
     keyRing: TotpKeyRing;
@@ -409,7 +412,7 @@ export async function verifyOwnPasskey(
     verification = await verifyAuthenticationResponse({
       response: input.response,
       expectedChallenge,
-      expectedOrigin: input.origin,
+      expectedOrigin: expectedOrigin(input.origin),
       expectedRPID: input.rpId,
       requireUserVerification: true,
       credential: {
