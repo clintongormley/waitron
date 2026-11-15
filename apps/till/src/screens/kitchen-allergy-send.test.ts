@@ -191,7 +191,11 @@ async function mount(
       {
         kind: screen === "station" ? "station" : "pass",
         available: true,
-        stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+        stations: stations.map(({ id, name }: { id: string; name: string }) => ({
+          id,
+          name,
+          available: true,
+        })),
         zones: null,
       },
     ],
