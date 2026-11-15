@@ -227,7 +227,10 @@ describe("the menu tables carry no taxpayer column", () => {
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
       menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null`,
-      extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
+      extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or ("extra_lists"."max_picks" >= 1 and "extra_lists"."max_picks" >= "extra_lists"."min_picks"))`,
+      extra_lists_name_ck: `trim("extra_lists"."name") <> ''`,
+      option_lists_name_ck: `trim("option_lists"."name") <> ''`,
+      option_labels_name_ck: `trim("option_labels"."name") <> ''`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
       extra_list_items_portion_ck: `"extra_list_items"."portion" > 0`,
@@ -277,6 +280,7 @@ describe("the menu tables carry no taxpayer column", () => {
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
+      option_labels_one_default_uq: { unique: true, columns: "list_id" },
       product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
@@ -663,4 +667,73 @@ describe("a suggestion run total belongs only to its first batch", () => {
       .returning();
     expect(row).toMatchObject({ position, runTotal });
   });
+});
+
+describe("option defaults and list checks", () => {
+  it("refuses a second preselected label in one list", async () => {
+    await db.execute(sql`insert into option_lists(id,name) values ('a','Cooking'),('b','Spice')`);
+    await db.execute(sql`
+      insert into option_labels(id,list_id,name,is_default) values
+      ('one','a','Rare',1),('two','b','Mild',1),('three','a','Medium',0),('four','a','Well',0)
+    `);
+    expect((await db.execute(sql`select count(*) as n from option_labels`)).rows).toEqual([
+      { n: 4 },
+    ]);
+    const error = await captureError(() =>
+      db.execute(sql`
+      insert into option_labels(id,list_id,name,is_default) values ('five','a','Blue',1)
+    `),
+    );
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("option_labels.list_id");
+  });
+
+  it("refuses an extras maximum of 0 and accepts valid bounds", async () => {
+    const error = await captureError(() =>
+      db.insert(extraLists).values({ name: "Sides", minPicks: 0, maxPicks: 0 }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("extra_lists_picks_ck");
+    for (const [minPicks, maxPicks] of [
+      [0, null],
+      [0, 1],
+      [2, 2],
+    ] as const) {
+      const [row] = await db
+        .insert(extraLists)
+        .values({ name: "Sides", minPicks, maxPicks })
+        .returning({ minPicks: extraLists.minPicks, maxPicks: extraLists.maxPicks });
+      expect(row).toEqual({ minPicks, maxPicks });
+    }
+  });
+
+  it.each(["option_lists", "option_labels", "extra_lists"] as const)(
+    "refuses a blank name in %s",
+    async (table) => {
+      await db.execute(sql`insert into option_lists(id,name) values ('list','Cooking')`);
+      for (const name of ["", "  "]) {
+        const error = await captureError(() =>
+          table === "option_labels"
+            ? db.execute(
+                sql`insert into option_labels(id,list_id,name) values ('label','list',${name})`,
+              )
+            : db.execute(sql`insert into ${sql.identifier(table)}(id,name) values ('new',${name})`),
+        );
+        expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+        expect(engineErrorMessage(error)).toContain(`${table}_name_ck`);
+      }
+      await (table === "option_labels"
+        ? db.execute(
+            sql`insert into option_labels(id,list_id,name) values ('label','list','Choice')`,
+          )
+        : db.execute(sql`insert into ${sql.identifier(table)}(id,name) values ('new','Choice')`));
+      expect(
+        (
+          await db.execute(
+            sql`select name from ${sql.identifier(table)} where id = ${table === "option_labels" ? "label" : "new"}`,
+          )
+        ).rows,
+      ).toEqual([{ name: "Choice" }]);
+    },
+  );
 });

@@ -326,3 +326,43 @@ it("folds captured product units into nullable product columns without editing t
   expect(capture).toEqual(before);
   expect(() => documents.madridWithProductUnits(result)).toThrow("missing captured product units");
 });
+
+it("moves captured option defaults onto their own labels without changing the capture", () => {
+  const captured: CanonicalMadridSemantics = {
+    tables: {
+      option_lists: {
+        columns: [{ name: "default_label_id", type: "TEXT", notnull: 0, pk: 0, dflt_value: null }],
+        foreignKeys: [],
+        rows: {
+          list: { id: "list", default_label_id: "b" },
+          other: { id: "other", default_label_id: null },
+        },
+      },
+      option_labels: {
+        columns: [],
+        foreignKeys: [],
+        rows: {
+          a: { id: "a", list_id: "list" },
+          b: { id: "b", list_id: "list" },
+          c: { id: "c", list_id: "other" },
+        },
+      },
+    },
+  };
+  const before = structuredClone(captured);
+  const result = documents.madridWithOptionDefaults(captured);
+  expect(result.tables.option_lists!.columns).toEqual([]);
+  expect(result.tables.option_lists!.rows).toEqual({
+    list: { id: "list" },
+    other: { id: "other" },
+  });
+  expect(result.tables.option_labels!.columns).toEqual([
+    { name: "is_default", type: "INTEGER", notnull: 1, pk: 0, dflt_value: "false" },
+  ]);
+  expect(result.tables.option_labels!.rows).toEqual({
+    a: { id: "a", list_id: "list", is_default: 0 },
+    b: { id: "b", list_id: "list", is_default: 1 },
+    c: { id: "c", list_id: "other", is_default: 0 },
+  });
+  expect(captured).toEqual(before);
+});

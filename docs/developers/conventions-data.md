@@ -6570,7 +6570,16 @@ menu defaults retain `settings.menu`.
 
 ### Product units and configuration format 33 (2026-11-15, A1308 mn4)
 
+> Historical format: superseded by the format-34 note below.
+
 Your export carries the product's unit in `products.unit_id` and uses format 33. A format-32
 export is refused as outdated. The pre-product-unit-column case in
 `apps/server/src/configuration-import.test.ts` checks that refusal; the writer and parser are in
 `packages/provisioning/src/configuration-transfer.ts`.
+
+
+### Option defaults and configuration format 34 (2026-11-15, A1308 mn9)
+
+Your export carries an options list's preference as `option_labels.is_default` and uses format 34.
+The list no longer carries `default_label_id`. A format-33 export is refused as outdated by the
+pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.

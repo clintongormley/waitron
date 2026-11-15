@@ -66,8 +66,11 @@ default still belongs to the list and the submitted default is the effective fal
 the stored or submitted labels, the stored preference is kept. Removing it or choosing another
 available label uses the parser's result. Of what the parser
 returns, only a list with no available label, which only an inactive list may be, has no default.
-Configuration transfer copies rows without going through that parser, so a stored null default is
-still possible, and a reader of `defaultLabelId` has to accept one.
+The stored preference is `option_labels.is_default`; a partial unique index allows at most one
+flagged label per list. Reads return that label's id as `defaultLabelId`, including when it is
+unavailable. Configuration transfer can carry a list with no flagged label, so a reader still
+accepts a null default. Import refuses two flagged labels in one list, blank list or label names,
+and an extras maximum below one; the database also refuses blank names and a maximum of zero.
 
 On dashboard update, `OptionListSaveBody` omits availability flags unchanged from the
 opening draft, matched by choice id. The server fills omitted existing flags from its stored

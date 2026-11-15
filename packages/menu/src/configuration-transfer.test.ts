@@ -459,3 +459,54 @@ describe("explicit unit staff identity on configuration import", () => {
     );
   });
 });
+
+describe("imported option and extras lists", () => {
+  it.each([0, -1, "1"])("refuses an imported maximum of %j", (max_picks) => {
+    expect(() =>
+      validateMenuConfiguration({ extra_lists: [{ name: "Sides", min_picks: 0, max_picks }] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "extra_lists.max_picks" },
+      }),
+    );
+    for (const max_picks of [undefined, null, 1])
+      expect(() =>
+        validateMenuConfiguration({ extra_lists: [{ name: "Sides", min_picks: 0, max_picks }] }),
+      ).not.toThrow();
+  });
+  it.each(["option_lists", "option_labels", "extra_lists"])(
+    "refuses an imported blank name in %s",
+    (table) => {
+      for (const name of ["", "  ", null, 42])
+        expect(() => validateMenuConfiguration({ [table]: [{ name }] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.name` },
+          }),
+        );
+      expect(() => validateMenuConfiguration({ [table]: [{ name: "Choice" }] })).not.toThrow();
+    },
+  );
+  it("refuses two preselected labels in one imported list", () => {
+    const label = { name: "Choice", list_id: "a", is_default: 1 };
+    expect(() =>
+      validateMenuConfiguration({ option_labels: [label, { ...label, name: "Other" }] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "option_labels.is_default" },
+      }),
+    );
+    expect(() =>
+      validateMenuConfiguration({
+        option_labels: [
+          label,
+          { ...label, list_id: "b" },
+          { ...label, is_default: 0 },
+          { name: "No default", list_id: "a" },
+        ],
+      }),
+    ).not.toThrow();
+  });
+});

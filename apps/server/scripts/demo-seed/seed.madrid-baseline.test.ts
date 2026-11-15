@@ -7,6 +7,7 @@ import {
   madridWithDocument,
   madridWithMenuSettings,
   madridWithProductUnits,
+  madridWithOptionDefaults,
 } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
 import {
@@ -459,6 +460,16 @@ for (const locale of ["en", "es"] as const) {
         a.localeCompare(b),
       ),
     );
+    const historicalLabels = historicalSeeded.tables.option_labels!;
+    const historicalLists = historicalSeeded.tables.option_lists!;
+    historicalLists.columns = expected.seeded.tables.option_lists!.columns;
+    historicalLabels.columns = expected.seeded.tables.option_labels!.columns;
+    for (const row of Object.values(historicalLists.rows))
+      row.default_label_id =
+        Object.values(historicalLabels.rows).find(
+          (label) => label.list_id === row.id && label.is_default === 1,
+        )?.id ?? null;
+    for (const row of Object.values(historicalLabels.rows)) delete row.is_default;
     const manifest = JSON.parse(
       await readFile(new URL("madrid-before-move.manifest.json", root), "utf8"),
     ) as {
@@ -1491,6 +1502,7 @@ for (const locale of ["en", "es"] as const) {
         Object.entries(phases[phase]!).sort(([a], [b]) => a.localeCompare(b)),
       );
       expected[phase] = madridWithProductUnits(expected[phase]);
+      expected[phase] = madridWithOptionDefaults(expected[phase]);
       delete phases[phase]!.product_units;
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

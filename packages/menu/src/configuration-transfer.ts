@@ -152,6 +152,20 @@ export function validateMenuConfiguration(
       throw new AppError("setup.request_invalid", { field: "units.precision" });
     }
   }
+  for (const table of ["option_lists", "option_labels", "extra_lists"] as const)
+    for (const row of tables[table] ?? [])
+      if (nameOf(row, table).trim() === "")
+        throw new AppError("setup.request_invalid", { field: `${table}.name` });
+  for (const row of tables.extra_lists ?? [])
+    if (row.max_picks != null && (typeof row.max_picks !== "number" || row.max_picks < 1))
+      throw new AppError("setup.request_invalid", { field: "extra_lists.max_picks" });
+  const defaults = new Set<unknown>();
+  for (const row of tables.option_labels ?? []) {
+    if (row.is_default !== 1) continue;
+    if (defaults.has(row.list_id))
+      throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });
+    defaults.add(row.list_id);
+  }
   checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");
@@ -206,7 +220,7 @@ export const MENU_CONFIGURATION_TRANSFER = {
     { name: "units" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
-    { name: "option_lists", references: ["default_label_id"] },
+    { name: "option_lists" },
     { name: "option_labels" },
     { name: "extra_lists" },
     { name: "extra_list_items" },

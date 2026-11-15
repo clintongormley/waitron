@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 33,
+  version: 34,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -179,6 +179,7 @@ describe("staged configuration import", () => {
     ["pre-menu-document export", { version: 30 }],
     ["pre-menu-rename export", { version: 31 }],
     ["pre-product-unit-column export", { version: 32 }],
+    ["pre-option-default-flag export", { version: 33 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

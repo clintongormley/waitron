@@ -139,7 +139,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 33,
+    version: 34,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -170,7 +170,7 @@ export async function buildConfigurationBundle(
 }
 
 export interface ConfigurationBundle {
-  version: 33;
+  version: 34;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
@@ -564,10 +564,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 33) {
+  if (typeof value.version === "number" && value.version > 34) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 33) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 34) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;

@@ -457,11 +457,6 @@ names; folding them into the one helper was not part of W77a.
 
 ## What #1151 left open (2026-10-03)
 
-- **The database still accepts a maximum of 0.** The CHECK on `extra_lists` allows `max_picks = 0`
-  when `min_picks` is 0, and configuration transfer copies stored lists without the request check,
-  so a stored 0 can still arrive; the form then shows the 0 and refuses to save until it is
-  changed. Refusing it in the database is a table rebuild (CLAUDE.md §3's rebuild rule). OPEN,
-  unqueued: the owner has not asked for it.
 - **A very long number is cut off in the narrower box.** The request check accepts up to
   2147483647, which needs about 82px against the 66px between the buttons (measured by #1151's
   review); three digits need about 26px. Left alone because widening the box would undo the size

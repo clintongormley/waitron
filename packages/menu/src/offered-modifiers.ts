@@ -287,9 +287,6 @@ function offeredFrom(
             name: entry.list.name,
             customerName: entry.list.customerName,
             kitchenName: entry.list.kitchenName,
-            // Dropped when it names no label still on offer: `option_lists.default_label_id` carries
-            // no foreign key, and a till preselecting a withdrawn label would send an answer
-            // `validateOptionSelections` refuses.
             defaultLabelId: labels.some((label) => label.id === entry.list.defaultLabelId)
               ? entry.list.defaultLabelId
               : null,
