@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { isAppError, type ContentLanguages } from "@waitron/shared";
 import { useMenuDb } from "../test/fixtures.js";
@@ -21,6 +22,10 @@ import { PATCH_FIELDS, type MenuPatchChange } from "./menu-patch-types.js";
 import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "@waitron/shared";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const languages: ContentLanguages = { defaultLanguage: "en", languages: ["en", "es"] };
 
 async function liveLunch(

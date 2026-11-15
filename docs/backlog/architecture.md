@@ -986,7 +986,7 @@ also qualifies the historical operation-description references in this section.
   Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
   history share `settings.menu`; translation runs store their total on the first batch only.
   The menu table, identifiers, routes and wording now use menu names; the Products screen uses
-  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. The remaining menu person keys, period assignments and photo folds await the following slices.
+  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Period assignments and photo folds await the following slices.
   Membership reads its term from the signed document, and an alert's handler references a person.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables

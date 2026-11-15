@@ -1,4 +1,5 @@
-import { afterEach, expect, it } from "vitest";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { beforeEach, afterEach, expect, it } from "vitest";
 import { installChangeFeed, subscribeToChanges, withTransaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
@@ -10,6 +11,10 @@ import { updateProduct } from "./operations.js";
 // A file of its own: the triggers `installChangeFeed` puts on the suite's database stay there for
 // every later test in the file.
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+  await seedPerson(fx.db, { id: "manager-ana", displayName: "Test manager-ana" });
+});
 
 let unsubscribe = (): void => {};
 afterEach(() => unsubscribe());

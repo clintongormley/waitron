@@ -1,9 +1,9 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
-import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
@@ -35,6 +35,10 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const AT = new Date("2026-10-09T10:00:00Z");
 

@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { beforeEach, expect, it } from "vitest";
 import { menus, readSettings, saveSettings, withTransaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
@@ -8,6 +9,10 @@ import { GUEST_MENU_SETTINGS } from "./guest-menu-settings.js";
 import { readGuestMenu } from "./guest-menu.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 it("shares only the opted-in active default's publication and follows a default change", async () => {
   const f = await menusFixture(fx.db);
   await withTransaction(fx.db, async (tx) => {

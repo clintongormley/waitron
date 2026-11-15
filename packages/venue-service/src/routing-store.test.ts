@@ -1,8 +1,8 @@
-import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createMenu,
   createCategory,
@@ -79,6 +79,10 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 let db: Database;
 beforeAll(() => {
   db = suite.db;

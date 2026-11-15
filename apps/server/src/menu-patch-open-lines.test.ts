@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -126,6 +127,10 @@ async function stored(workingOrderId: string) {
 /** Patches Beer's price to 3.10 and its class to `general`, from the live version; both ids. */
 async function patchBeer(v: Venue): Promise<{ before: string; after: string }> {
   return withTransaction(suite.db, async (tx) => {
+    await seedPerson(tx, {
+      id: "0000ffff-2222-4000-8000-0000000000cc",
+      displayName: "Test 0000ffff-2222-4000-8000-0000000000cc",
+    });
     const live = await readLiveMenu(tx, v.menuId);
     if (live === null) throw new Error("the counter menu has no live version");
     const menuItemId = Object.keys(live.document.offers).find(

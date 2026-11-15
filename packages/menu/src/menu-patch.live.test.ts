@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -28,6 +29,11 @@ import { updateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "manager-ana", displayName: "Test manager-ana" });
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const NOW = new Date("2026-10-07T08:00:00.000Z");

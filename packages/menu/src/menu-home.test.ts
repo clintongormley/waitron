@@ -1,6 +1,7 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { and, asc, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
   menuItems,
@@ -28,6 +29,10 @@ import { createMenu, deactivateMenu, deactivateProduct, listMenuOffers } from ".
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const MISSING = "00000000-0000-4000-8000-000000000000";
 

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -50,6 +51,7 @@ const stamp = new Date("2026-10-20T08:00:00.000Z");
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
+    await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
     await suite.db
       .insert(mediaImages)
       .values({ id, filename, names: { en: "Bread" }, createdAt: stamp, updatedAt: stamp });
@@ -163,6 +165,7 @@ describe("media backup evidence", () => {
     });
     const name = createHash("sha256").update(data).digest("hex") + "." + extension;
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
       await suite.db.insert(mediaImages).values({
         id: menu,
         filename: name,
@@ -176,6 +179,7 @@ describe("media backup evidence", () => {
   });
   it("current configuration requires a photo identity even when its bytes survive as a blob", async () => {
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
       await suite.db.insert(menus).values({ id: menu, name: "Menu" });
       await suite.db.insert(sections).values({
         id: menu,
@@ -198,6 +202,7 @@ describe("media backup evidence", () => {
     ["[]", "invalid"],
   ] as const)("checks retained folder picture configuration %j", async (value, want) => {
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
       await suite.db.insert(menus).values({ id: menu, name: "Menu" });
       await suite.db
         .insert(sections)
@@ -255,6 +260,7 @@ describe("media backup evidence", () => {
       },
     };
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
       await suite.db.insert(menus).values({ id: menu, name: "Old menu", active: false });
       await suite.db.insert(menuVersions).values({
         id: version,

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -70,6 +71,7 @@ const hash = createHash("sha256").update(documentText).digest("hex");
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
+    await seedPerson(suite.db, { id: person, displayName: `Test ${person}` });
     await suite.db.insert(menus).values({ id: menu, name: "Lunch" });
     await suite.db.insert(menuVersions).values({
       id: version,
@@ -143,6 +145,7 @@ describe("menu backup evidence", () => {
   it("checks a live version belongs to its publication menu", async () => {
     const other = "10000000-0000-4000-8000-000000000099";
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: person, displayName: `Test ${person}` });
       await suite.db.insert(menus).values({ id: other, name: "Other" });
       await suite.db.insert(menuReleases).values({
         menuId: menu,
@@ -219,6 +222,7 @@ describe("menu backup evidence", () => {
   it("keeps an unsupported format inconclusive even beside broken references", async () => {
     const changed = documentText.replace('"format":4', '"format":99');
     for (const suite of [original, restored]) {
+      await seedPerson(suite.db, { id: person, displayName: `Test ${person}` });
       await corrupt(suite, "update menu_version_images set version_id='missing'");
       await corrupt(suite, `update menu_versions set document='${changed}'`);
     }

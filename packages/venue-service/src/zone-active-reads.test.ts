@@ -1,6 +1,6 @@
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -13,7 +13,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FloorDeletion } from "@waitron/module";
 import {
   createDepartment,
@@ -32,6 +32,10 @@ import { readCourseSettingsByZone } from "./release-reminders.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
 import { routingModel } from "./routing-store.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const noFloor: FloorDeletion = {
   removeSets: async () => {},
   readImpact: async () => ({ refusals: [], removes: [] }),

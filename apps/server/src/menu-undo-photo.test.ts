@@ -1,5 +1,6 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -24,6 +25,10 @@ import { mediaImages } from "@waitron/media";
 const PHOTO = `${"a".repeat(64)}.jpg`;
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 /** Dinner holds Mains, which holds Burger; Lunch holds Soup. */

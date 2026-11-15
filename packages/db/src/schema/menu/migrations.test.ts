@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
   menus,
@@ -10,6 +10,7 @@ import {
   extraListItems,
   extraLists,
   FOREIGN_KEY_VIOLATION,
+  restrictRefused,
   isRefusal,
   menuItems,
   menuItemVariantOverrides,
@@ -23,7 +24,7 @@ import {
 } from "../../index.js";
 import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedTaxpayer } from "../../testing/seed.js";
+import { seedPerson, seedTaxpayer } from "../../testing/seed.js";
 
 // One SQLite file with the core set applied, which holds the menu's tables.
 const suite = useVenueDb({
@@ -67,11 +68,15 @@ async function columnsOf(table: string) {
 }
 
 describe("menu releases", () => {
-  async function version(menuId: string, number: number) {
+  beforeEach(async () => {
+    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
+    await seedPerson(db, { id: "canceller", displayName: "Test canceller" });
+  });
+  async function version(menuId: string, number: number, createdBy = "publisher") {
     const id = crypto.randomUUID();
     await db.execute(sql`insert into menu_versions
       (id, menu_id, number, document, content_hash, created_at, created_by)
-      values (${id}, ${menuId}, ${number}, '{}', 'hash', '2026-11-15T08:00:00.000Z', 'publisher')`);
+      values (${id}, ${menuId}, ${number}, '{}', 'hash', '2026-11-15T08:00:00.000Z', ${createdBy})`);
     return id;
   }
   async function menu() {
@@ -87,6 +92,50 @@ describe("menu releases", () => {
   ) =>
     db.execute(sql`insert into menu_releases (version_id, menu_id, state, activates_at, cancelled_at, cancelled_by)
       values (${versionId}, ${menuId}, ${state}, '2026-11-16T08:00:00.000Z', ${cancelledAt}, ${cancelledBy})`);
+
+  it("refuses a version created by nobody and accepts a real publisher", async () => {
+    const id = await menu();
+    const error = await captureError(() => version(id, 1, "nobody"));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
+    const v = await version(id, 1);
+    expect(
+      (await db.execute(sql`select created_by from menu_versions where id = ${v}`)).rows,
+    ).toEqual([{ created_by: "publisher" }]);
+  });
+
+  it("refuses a release cancelled by nobody and accepts a real canceller", async () => {
+    const id = await menu();
+    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
+    const v = await version(id, 1);
+    const at = "2026-11-15T09:00:00.000Z";
+    const error = await captureError(() => release(v, id, "cancelled", at, "nobody"));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await seedPerson(db, { id: "canceller", displayName: "Test canceller" });
+    await release(v, id, "cancelled", at, "canceller");
+    expect(
+      (await db.execute(sql`select cancelled_by from menu_releases where version_id = ${v}`)).rows,
+    ).toEqual([{ cancelled_by: "canceller" }]);
+  });
+
+  it("refuses deleting a publisher or canceller and permits deleting an unused person", async () => {
+    const id = await menu();
+    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
+    await seedPerson(db, { id: "canceller", displayName: "Test canceller" });
+    await seedPerson(db, { id: "unused", displayName: "Test unused" });
+    await release(await version(id, 1), id, "cancelled", "2026-11-15T09:00:00.000Z", "canceller");
+    for (const person of ["publisher", "canceller"]) {
+      const error = await captureError(() =>
+        db.execute(sql`delete from persons where id = ${person}`),
+      );
+      expect(restrictRefused(error)).toBe(true);
+    }
+    await db.execute(sql`delete from persons where id = 'unused'`);
+    expect((await db.execute(sql`select id from persons order by id`)).rows).toEqual([
+      { id: "canceller" },
+      { id: "publisher" },
+    ]);
+  });
 
   it("refuses two live releases for one menu and permits another menu and a superseded release", async () => {
     const first = await menu();
@@ -400,6 +449,8 @@ describe("the menu tables carry no taxpayer column", () => {
       "section_members(product_id)": "products(id) on delete cascade",
       "section_members(section_id)": "sections(id) on delete cascade",
       "sections(owner_menu_id)": "menus(id) on delete no action",
+      "menu_versions(created_by)": "persons(id) on delete restrict",
+      "menu_releases(cancelled_by)": "persons(id) on delete restrict",
       "menu_versions(menu_id)": "menus(id) on delete no action",
       "menu_releases(menu_id)": "menus(id) on delete no action",
       "menu_releases(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",

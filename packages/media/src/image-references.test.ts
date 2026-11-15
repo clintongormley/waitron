@@ -28,7 +28,7 @@ import {
   updateProduct,
   updateSection,
 } from "@waitron/menu";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 /**
@@ -48,6 +48,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
  */
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
+});
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+  await seedPerson(suite.db, { id: "manager-ana", displayName: "Test manager-ana" });
+  await seedPerson(suite.db, { id: "manager-luis", displayName: "Test manager-luis" });
 });
 
 const PRESENT = `${"a".repeat(64)}.jpg`;

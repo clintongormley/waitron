@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, beforeAll, describe, expect, it } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
@@ -12,7 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -29,6 +29,10 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 let db: Database;
 beforeAll(() => {
   db = suite.db;

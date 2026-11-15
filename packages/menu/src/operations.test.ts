@@ -78,6 +78,10 @@ const toPriceable = (p: AvailableProduct): PriceableProduct => ({
 
 // Query behaviour. Each case starts with empty authoring tables.
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 beforeEach(() => seedLibraryImages(fx.db, "x.webp", "y.png"));
 
 describe("menu operations", () => {

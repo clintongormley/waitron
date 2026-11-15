@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
@@ -15,7 +15,7 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
@@ -30,6 +30,10 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 let db: Database;
 beforeAll(() => {
   db = suite.db;
