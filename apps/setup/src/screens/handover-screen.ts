@@ -90,6 +90,8 @@ export class SetupHandoverScreen extends LitElement {
   @property({ attribute: false }) api = new SetupApi();
   @property() operationId = "";
   @property({ type: Boolean }) emergency = false;
+  /** Read once: the page later replaces its address with the operation's. */
+  @property({ attribute: false }) pageUrl = location.href;
   @state() private copyPreview?: EmergencyHandoverPreview;
   @state() private backup?: File;
   @state() private backupKey = "";
@@ -121,6 +123,16 @@ export class SetupHandoverScreen extends LitElement {
   #pendingDeclaration?: Omit<EmergencyHandoverDeclaration, "signIn">;
   get #isEmergency(): boolean {
     return this.emergency || this.status?.scenario === "emergency";
+  }
+  /** A till sends its own address; a box is named `box-<id>.<venue name>` and the till sits at the venue name. */
+  get #leaveHref(): string {
+    if (!this.#isEmergency) return "/";
+    const page = new URL(this.pageUrl);
+    const back = URL.parse(page.searchParams.get("back") ?? "");
+    const venue = page.hostname.slice(page.hostname.indexOf(".") + 1);
+    return back?.protocol === "https:" && page.hostname.includes(".") && back.hostname === venue
+      ? back.href
+      : "/";
   }
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
@@ -883,7 +895,7 @@ export class SetupHandoverScreen extends LitElement {
                   >`
         }
       </wt-form-actions>
-      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink}>${t("handover.emergency.progress")}</a>` : nothing} <a href="/">${t("handover.emergency.stop")}</a></p>` : nothing}`;
+      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink}>${t("handover.emergency.progress")}</a>` : nothing} <a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>` : nothing}`;
   }
   override render() {
     const status = this.status;
@@ -901,7 +913,7 @@ export class SetupHandoverScreen extends LitElement {
       ${
         activated(status)
           ? html`<p role="status">${t("handover.done")}</p>
-              <a href="/">${t("handover.continue")}</a>`
+              <a href=${this.#leaveHref}>${t("handover.continue")}</a>`
           : closed(status)
             ? html`<p role="status">${t("handover.closed")}</p>`
             : this.restarting

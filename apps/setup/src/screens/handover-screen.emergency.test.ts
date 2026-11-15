@@ -113,6 +113,7 @@ async function mount(
     statusState?: string;
     /** The first preview gets no answer. */
     firstPreviewLost?: boolean;
+    pageUrl?: string;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -331,6 +332,7 @@ async function mount(
     {
       api,
       emergency: true,
+      ...(options.pageUrl ? { pageUrl: options.pageUrl } : {}),
     },
     options.theme,
   );
@@ -1376,4 +1378,41 @@ it("after the page was left, Check acts on its answers instead of discarding the
   q(el, "[data-test=emergency-preview]").click();
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
   expect(previews(posts)).toBe(2);
+});
+
+const spareSwitchPage = (back: string) =>
+  `https://box-b.waitron.local/handover/emergency?back=${encodeURIComponent(back)}`;
+
+async function stopAndContinueLinks(pageUrl: string) {
+  const { el } = await mount({ saved: true, pageUrl });
+  const stop = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (link) => link.textContent === t("handover.emergency.stop"),
+  )!;
+  const stopHref = stop.getAttribute("href");
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  const proceed = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (link) => link.textContent === t("handover.continue"),
+  )!;
+  return { stop: stopHref, proceed: proceed.getAttribute("href") };
+}
+
+it("Stop and Continue go back to the till named in back", async () => {
+  expect(await stopAndContinueLinks(spareSwitchPage("https://waitron.local/tabs"))).toEqual({
+    stop: "https://waitron.local/tabs",
+    proceed: "https://waitron.local/tabs",
+  });
+});
+
+it.each([
+  "https://evil.example/",
+  "http://waitron.local/",
+  "https://waitron.local.evil.example/",
+  "https://box-b.waitron.local/",
+  "not a url",
+])("a back on another site, or not https, is ignored: %s", async (back) => {
+  expect(await stopAndContinueLinks(spareSwitchPage(back))).toEqual({ stop: "/", proceed: "/" });
 });
