@@ -1655,9 +1655,9 @@ async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unkno
 }
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
-const HANDOVER_DO =
+const SWITCH_PAGE_DO =
   "Switch from a till or phone on the venue's network, or connect the box to the internet.";
-const HANDOVER_ENDS =
+const SWITCH_PAGE_ENDS =
   "It carries on by itself once the box reaches the internet, while this page stays open.";
 
 it("a handover start shows the details tick and Proceed, sends nothing before Proceed, then carries on by itself to the series", async () => {
@@ -1694,8 +1694,8 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
     expect(el.readOperation()).toBeNull();
     expect(ready).not.toContain(true);
     await proceed(el);
-    await vi.waitFor(() => expect(text(el)).toContain(HANDOVER_DO));
-    expect(text(el)).toContain(HANDOVER_ENDS);
+    await vi.waitFor(() => expect(text(el)).toContain(SWITCH_PAGE_DO));
+    expect(text(el)).toContain(SWITCH_PAGE_ENDS);
     expect(promotionActions(prepare)).not.toContain("select");
     expect(action(el)).toBeUndefined();
     decision = clock;
@@ -1786,7 +1786,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
   decision = noSecondClock;
   check(el, "recovery-details-confirmed");
   await proceed(el);
-  await vi.waitFor(() => expect(text(el)).toContain(HANDOVER_DO));
+  await vi.waitFor(() => expect(text(el)).toContain(SWITCH_PAGE_DO));
   expect(text(el)).not.toContain("has the backup");
   el.clear();
   await el.updateComplete;
@@ -1859,7 +1859,7 @@ it("no handover refusal tells the person to compare clocks again", () => {
   }
 });
 
-it("a Spanish handover start calls the box «servidor», never «equipo»", async () => {
+it("a Spanish switch page calls the box «servidor», never «equipo»", async () => {
   const host = document.createElement("main");
   applyTokens(host);
   document.body.append(host);

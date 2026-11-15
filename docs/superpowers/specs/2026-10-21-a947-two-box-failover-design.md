@@ -1086,6 +1086,9 @@ What to do, by page — each names only a way that works on that page today:
 | Restore page | «Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.» / "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup." | «Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.» / "It carries on by itself once the box reaches the internet, or on the other device if you carry on there." | «Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help." |
 | Switch dialog and switch page (4c, 4d) | «Cambia desde una caja o un móvil del local, o conecta el equipo a internet.» / "Switch from a till or phone on the venue's network, or connect the box to the internet." | «Sigue sola cuando el equipo tenga internet.» / "It carries on by itself once the box reaches the internet." | «Prueba desde otra caja o móvil. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.» / "Try from another till or phone. If they still differ, the box's time may be wrong: ask for help." |
 
+2026-11-15, A947 4c: where the switch page's words differ from this row, and the words of A1018's
+controlled handover page, are in §11 4c.
+
 Why the setup page says "enter the setup password": a browser with no setup of its own that opens
 the setup page is offered the recovery path (`apps/setup/src/setup-app.ts:1190-1204`), and with the
 owner's setup password the server moves the open attempt to it — the claim check of 2026-10-22 ran
@@ -1098,7 +1101,9 @@ backup": a restore from a backup file needs the file on the device doing it.
 Which screens show it, by slice: **4a** the setup page and the restore page (the fiscal module's
 setup screens, which the setup app shows); **4c** the switch dialog on a till, a handheld or the
 dashboard; **4d** the spare's switch page, including on the spare's own screen, where with no
-internet the "no second clock" row applies. The command-line setup has no screen to count down
+internet the "no second clock" row applies. (2026-11-15, A947 4c: the till opens the spare's
+switch page rather than drawing a dialog, and the dashboard's way in moved to 4d; how each page's
+words differ from this table is in §11 4c.) The command-line setup has no screen to count down
 on: it prints the why line and the time it will go ahead. A993's change and its recovery page
 follow the same rule in A940's design. Mock-up 8 draws the restore page waiting, and the setup page
 on the box's own screen with no second clock.
@@ -1875,10 +1880,13 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   Built to [`2026-11-14-a947-4c-devices-follow.md`](../plans/2026-11-14-a947-4c-devices-follow.md)
   (2026-11-15): a till or handheld shows the strip after 20 s and opens the spare's own switch page,
   which links back to it; the till says "server" («servidor»), not «equipo»; no "ask for help" line
-  when the clocks differ. On the till's sign-in screen everyone sees the switch button, and a
-  signed-in person only with `node.manage`; the spare's page asks for a `node.manage` sign-in (plan
-  D2). The switch page's no-second-clock wait also says «servidor» (a check on that page forbids
-  «equipo») and that it carries on by itself "while this page stays open". Moved to 4d (watcher, 2026-11-14 22:01): the dashboard's entry, the
+  when the clocks differ. On the till's sign-in screen everyone sees the switch button; a
+  signed-in person sees it only with `node.manage`. The spare's
+  page asks for a `node.manage` sign-in (plan D2). The switch page's no-second-clock wait also says
+  «servidor» (a test forbids «equipo» there) and that it carries on by itself "while this page
+  stays open"; A1018's controlled handover page keeps "Connect the box to the internet, or open this
+  handover page on another phone or laptop." and "Keep this page open, or continue on the other
+  device." Moved to 4d (watcher, 2026-11-14 22:01): the dashboard's entry, the
   spare's banner, the same-site cookie measurement and the switch's passkey.
 - **4d. Reaching the switch from any device.** The spare's switch page; the spare answering the
   venue's name with only that page while the main box is silent, and stopping when it answers; the
