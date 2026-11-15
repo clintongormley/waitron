@@ -1807,11 +1807,6 @@ export const en = {
   "devices.empty_profile_stations":
     "This profile allows no stations. Choose stations in the profile first.",
   "devices.empty_station_selection": "No stations selected. Choose stations or Every.",
-  "devices.readout_every_station": "every station",
-  "devices.readout_every_zone": "every zone",
-  "devices.readout_gone_one": "({names} no longer available)",
-  "devices.readout_gone_many": "({names} no longer available)",
-  "devices.shows": "Shows",
   "devices.station_disabled_mark": "Disabled",
   "devices.device_profile": "Device profile",
   "devices.profile_deleted": "Profile deleted",
@@ -6153,11 +6148,6 @@ export const es: Record<StringKey, string> = {
   "devices.empty_profile_stations":
     "Este perfil no permite ninguna estación. Elige primero las estaciones en el perfil.",
   "devices.empty_station_selection": "No hay estaciones elegidas. Elige estaciones o Todas.",
-  "devices.readout_every_station": "todas las estaciones",
-  "devices.readout_every_zone": "todas las zonas",
-  "devices.readout_gone_one": "({names} ya no está disponible)",
-  "devices.readout_gone_many": "({names} ya no están disponibles)",
-  "devices.shows": "Muestra",
   "devices.station_disabled_mark": "Deshabilitada",
   "devices.device_profile": "Perfil de dispositivo",
   "devices.profile_deleted": "Perfil eliminado",

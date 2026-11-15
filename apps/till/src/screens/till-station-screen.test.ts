@@ -238,14 +238,12 @@ describe("till-station-screen", () => {
 
   it("an unconfigured profile shows no station picker or queue", async () => {
     const api = stubApi({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          deviceId: "dev-1",
-          formFactor: "till",
-          name: "Till",
-          kitchenScreens: [],
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "till",
+        name: "Till",
+        kitchenScreens: [],
+      }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
@@ -2564,6 +2562,7 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       Promise.reject(Object.assign(new Error("down"), { code: "server.internal" })),
     );
     expect(picks(el)).toEqual([]);
+    expect(el.shadowRoot!.textContent).toContain("The screen could not be read. Trying again…");
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 

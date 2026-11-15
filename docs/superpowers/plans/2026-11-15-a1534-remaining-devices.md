@@ -44,3 +44,5 @@ configured kind: Stations only for Station, Pass only for Pass or Pass display, 
 unconfigured or its capability is off. The existing identity response supplies the kind; the
 menu poll refreshes it. No new table or wire protocol. This resolves the first run-it review's
 navigation finding inside the original one-screen request; it is not owner approval of a design.
+
+Final-read correction, cleared by the watcher on 15 November 10:09: retire the unused till All stations component mode and its getExpoBoard client method. Move retained card, layout and food assertions to configured Pass fixtures. Keep the generic server read: apps/server/scripts/bench/measure.ts measures it, and its independent course, allergy, naming and full-disk route contracts remain. No server access rule changes in this slice. This is watcher clearance, not owner design approval.

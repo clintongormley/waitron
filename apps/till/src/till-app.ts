@@ -10933,7 +10933,10 @@ export class TillApp extends LitElement {
   }
 
   /** Reads the device again; a failed read keeps the profiles last known. */
+  #identityRequest = 0;
+
   async #readIdentity(signal?: AbortSignal): Promise<void> {
+    const request = ++this.#identityRequest;
     let identity: DeviceIdentity;
     try {
       identity =
@@ -10943,7 +10946,7 @@ export class TillApp extends LitElement {
     } catch {
       return;
     }
-    if (!signal?.aborted) this.#holdIdentity(identity);
+    if (!signal?.aborted && request === this.#identityRequest) this.#holdIdentity(identity);
   }
 
   #holdIdentity(identity: DeviceIdentity): void {

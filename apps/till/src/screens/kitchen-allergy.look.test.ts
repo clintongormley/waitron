@@ -48,8 +48,17 @@ describe("A669 kitchen blocks LOOK", () => {
                 display: { showNonPassStations: true },
               });
               const api = {
-                getExpoBoard: vi.fn(async () => ({ board: allergyBoard() })),
-                getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
+                getDeviceIdentity: vi.fn(async () => ({
+                  kitchenScreens: [
+                    {
+                      kind: "pass",
+                      available: true,
+                      stations: [],
+                      zones: null,
+                      showNonPassStations: true,
+                    },
+                  ],
+                })),
                 getDevicePassBoard: vi.fn(async () => board()),
                 getDevicePassMonitorBoard: vi.fn(async () => board()),
               } as unknown as TillApi;

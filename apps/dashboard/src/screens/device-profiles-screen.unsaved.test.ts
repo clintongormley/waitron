@@ -313,7 +313,6 @@ it("A366 reconnect: a departed save does not replace a later screen edit, which 
   finish();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await screen.updateComplete;
-  expect(q(screen, "narrowed-devices")).toBeNull();
   expect((q(screen, "profile-kitchen-screens") as HTMLElement & { value: string }).value).toBe(
     "pass_monitor",
   );
@@ -321,7 +320,6 @@ it("A366 reconnect: a departed save does not replace a later screen edit, which 
   q(screen, "profile-cancel")!.click();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
-  expect(q(screen, "narrowed-devices")).toBeNull();
   expect(unload()).toBe(false);
 });
 

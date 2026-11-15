@@ -33,7 +33,7 @@ import type {
   TillApi,
 } from "../api/client.js";
 
-type BoardId = "all" | "pass" | "monitor";
+type BoardId = "pass" | "monitor";
 
 const emptyBoard = (): PassBoard => ({
   held: [],
@@ -71,9 +71,8 @@ function cardLabel(card: PassCard): string {
 const REFRESH_MS = 15_000;
 const READ_LIMIT_MS = 25_000;
 
-const MODES: Record<BoardId, PassMode> = { all: "all_stations", pass: "pass", monitor: "monitor" };
+const MODES: Record<BoardId, PassMode> = { pass: "pass", monitor: "monitor" };
 const SCOPES: Record<BoardId, ColumnScope["screen"]> = {
-  all: "all_stations",
   pass: "pass",
   monitor: "pass_monitor",
 };
@@ -83,11 +82,6 @@ interface ColumnsWindow {
   opener: HTMLElement;
 }
 
-/**
- * The pass on the pass board. At a till it shows the device's pass screen when the device chose one,
- * else All stations; a kitchen display (`deviceMode`) shows its own pass screen, and a pass monitor
- * (`monitor`) its monitor.
- */
 @customElement("till-pass-screen")
 export class TillPassScreen extends LitElement {
   constructor() {
@@ -180,6 +174,7 @@ export class TillPassScreen extends LitElement {
   @state() private board: PassBoard = emptyBoard();
   @state() private selected: BoardId | null = null;
   @state() private passGone = false;
+  @state() private choiceFailed = false;
   @state() private goneScreen: "pass" | "pass_monitor" | null = null;
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
@@ -224,8 +219,7 @@ export class TillPassScreen extends LitElement {
       const board = this.initialBoard;
       if (board) this.#adoptBoard(board);
       else void this.#reload(undefined, true);
-    } else if (this.embedded) void this.#reload();
-    else void this.#loadChoice();
+    } else void this.#loadChoice();
     this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
     this.#liveRefresh = queuedLiveRefresh(this.live, {
       types: TILL_LIVE_TYPES.pass!,
@@ -255,18 +249,13 @@ export class TillPassScreen extends LitElement {
     }
     if (!this.isConnected || request < this.#appliedChoice) return;
     this.#appliedChoice = request;
+    this.choiceFailed = !read;
     if (read || !this.#choiceRead) {
       this.#choiceRead = read;
       this.passGone = pass === undefined || pass.available === false;
       this.goneScreen =
         pass === undefined ? null : pass.kind === "pass_monitor" ? "pass_monitor" : "pass";
-      const next = this.passGone
-        ? null
-        : pass === undefined
-          ? "all"
-          : pass.kind === "pass"
-            ? "pass"
-            : "monitor";
+      const next = this.passGone ? null : pass!.kind === "pass" ? "pass" : "monitor";
       if (next !== this.selected) {
         this.board = emptyBoard();
         this.lostLines = [];
@@ -297,9 +286,8 @@ export class TillPassScreen extends LitElement {
     }
   }
 
-  /** A till's own Pass screen, which shows what its device chose. */
   #followsChoice(): boolean {
-    return !this.embedded && !this.#onDevice();
+    return !this.#onDevice();
   }
 
   /**
@@ -316,16 +304,9 @@ export class TillPassScreen extends LitElement {
     const request = ++this.#request;
     try {
       const result: DevicePassBoard =
-        boardId === "all"
-          ? {
-              ...(await this.api.getExpoBoard({ signal })),
-              stations: [],
-              zones: null,
-              display: { showNonPassStations: true },
-            }
-          : boardId === "pass"
-            ? await this.api.getDevicePassBoard({ signal })
-            : await this.api.getDevicePassMonitorBoard({ signal });
+        boardId === "pass"
+          ? await this.api.getDevicePassBoard({ signal })
+          : await this.api.getDevicePassMonitorBoard({ signal });
       if (request < this.#appliedRequest || !this.#isCurrent(boardId)) return;
       this.#appliedRequest = request;
       this.#adoptBoard(result);
@@ -494,7 +475,7 @@ export class TillPassScreen extends LitElement {
   }
 
   #boardId(): BoardId | null {
-    return this.embedded && !this.deviceMode && !this.monitor ? "all" : this.selected;
+    return this.selected;
   }
 
   #isCurrent(boardId: BoardId): boolean {
@@ -553,15 +534,18 @@ export class TillPassScreen extends LitElement {
   }
 
   #unavailable(slot?: "status"): TemplateResult[] {
-    const lines = this.passGone
-      ? [
-          kitchenScreenNoticeText(
-            this.goneScreen === null
-              ? { kind: "none" }
-              : { kind: "unavailable", screen: this.goneScreen },
-          ),
-        ]
-      : this.lostLines;
+    const lines =
+      this.choiceFailed && !this.#choiceRead
+        ? [t("kitchen_screen.read_failed")]
+        : this.passGone
+          ? [
+              kitchenScreenNoticeText(
+                this.goneScreen === null
+                  ? { kind: "none" }
+                  : { kind: "unavailable", screen: this.goneScreen },
+              ),
+            ]
+          : this.lostLines;
     return lines.map(
       (line) =>
         html`<p class="unavailable" role="status" data-unavailable slot=${slot ?? nothing}>

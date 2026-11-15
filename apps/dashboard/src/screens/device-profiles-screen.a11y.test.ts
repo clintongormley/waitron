@@ -460,14 +460,12 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       const api = stubApi(venuePrinters, {
         listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
         getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
-        listProfileKitchenScreens: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              profileId: "p2",
-              screens: { [kind]: { stationIds: null, zoneIds: null, showNonPassStations: true } },
-            },
-          ]),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([
+          {
+            profileId: "p2",
+            screens: { [kind]: { stationIds: null, zoneIds: null, showNonPassStations: true } },
+          },
+        ]),
       });
       const { el, host } = await mountWidget<DeviceProfilesScreen>(
         "dashboard-device-profiles-screen",
@@ -542,7 +540,6 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=narrowed-devices]")).toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

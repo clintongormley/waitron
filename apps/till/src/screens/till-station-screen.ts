@@ -516,6 +516,7 @@ export class TillStationScreen extends LitElement {
       }
       const chosen = this.#chosenIds;
       this.allStations = listed;
+      if (screen === null) this.stale = true;
       this.stations = listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
@@ -938,7 +939,9 @@ export class TillStationScreen extends LitElement {
           ? this.#body()
           : this.stationScreenGone || this.lostStations.length > 0
             ? emptiedScreenGuidance(this.stationScreenGone)
-            : this.#noStations()
+            : this.stale && !this.#choiceRead
+              ? html`<p class="empty">${t("kitchen_screen.read_failed")}</p>`
+              : this.#noStations()
       }`,
     });
   }

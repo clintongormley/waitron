@@ -71,7 +71,7 @@ type FakeApi = TillApi &
     | "getDeviceIdentity"
     | "getDevicePassBoard"
     | "getDevicePassMonitorBoard"
-    | "getExpoBoard"
+    | "getDevicePassBoard"
     | "releaseDevicePass",
     Fn
   >;
@@ -81,7 +81,6 @@ function fakeApi(overrides: Record<string, unknown> = {}): FakeApi {
     getDeviceIdentity: vi.fn().mockResolvedValue(identity("pass")),
     getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard()),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: toFireBoard() }),
     releaseDevicePass: vi.fn().mockResolvedValue({ releasedTicketItemIds: ["r-1", "r-2"] }),
     ...overrides,
   } as unknown as FakeApi;
@@ -289,7 +288,6 @@ describe("A773 pass screen: Fire", () => {
 
   for (const [where, props] of [
     ["a pass monitor", { monitor: true, initialBoard: deviceBoard() }],
-    ["an embedded All stations board", { embedded: true }],
   ] as const) {
     it(`never releases from ${where}`, async () => {
       const api = fakeApi({ getDeviceIdentity: vi.fn().mockResolvedValue(identity(null)) });
@@ -399,7 +397,6 @@ describe("A773 pass screen: Fire", () => {
     }
     expect(switched).not.toHaveBeenCalled();
     expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
-    expect(api.getExpoBoard).not.toHaveBeenCalled();
     expect(boardOf(el)).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.none"));
     expect(leverError(el)).toBeNull();
@@ -567,11 +564,9 @@ describe("A773 pass screen: Fire", () => {
       await pressFire(el);
       await refresh(el);
       expect(boardOf(el)).toBeNull();
-      expect(api.getExpoBoard).not.toHaveBeenCalled();
       answer.reject(refused("device.forbidden_action", 403));
       await flush(el);
       expect(leverError(el)).toBeNull();
-      expect(api.getExpoBoard).not.toHaveBeenCalled();
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     }));
 });

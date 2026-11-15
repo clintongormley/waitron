@@ -215,7 +215,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
+    getDevicePassBoard: vi
+      .fn()
+      .mockResolvedValue({
+        board: passBoard(),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
@@ -2560,14 +2567,12 @@ describe("till-app shell navigation", () => {
 
   it("opens Schedule and Expo as overlays over the fixed primary screen", async () => {
     const { el } = await mountApp({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          deviceId: "till-dev",
-          name: "Till 1",
-          formFactor: "till",
-          kitchenScreens: [kitchenScreen("pass")],
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        kitchenScreens: [kitchenScreen("pass")],
+      }),
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till" }),
     });
     await toCounter(el);
@@ -6767,14 +6772,12 @@ describe("A738 counter order views", () => {
     async (onboardingIntent) => {
       history.replaceState(null, "", "/tabs/counter/view/station");
       const { el } = await mountApp({
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({
-            deviceId: "till-dev",
-            name: "Till 1",
-            formFactor: "till",
-            kitchenScreens: [kitchenScreen("station")],
-          }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "till-dev",
+          name: "Till 1",
+          formFactor: "till",
+          kitchenScreens: [kitchenScreen("station")],
+        }),
         getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
       });
       const c = await toCounter(el);

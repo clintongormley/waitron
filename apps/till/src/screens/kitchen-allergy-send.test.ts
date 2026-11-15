@@ -125,6 +125,7 @@ function fixture(kind: "group" | "course", deviceMode = false) {
   });
   const board = kind === "group" ? expoBoard : courseBoard;
   return {
+    getDeviceIdentity: vi.fn().mockResolvedValue({ kitchenScreens: [] }),
     listStations: vi.fn().mockResolvedValue([
       {
         id: "station-1",
@@ -155,7 +156,6 @@ function fixture(kind: "group" | "course", deviceMode = false) {
         },
       ],
     }),
-    getExpoBoard: vi.fn().mockResolvedValue({ board }),
     getDevicePassBoard: vi.fn().mockResolvedValue({ board, stations: [], zones: null }),
     getFindBill: vi.fn().mockResolvedValue({ workingOrderId: "bill-1", partyId: party.id }),
     previewPartyAllergy: vi.fn<TillApi["previewPartyAllergy"]>().mockResolvedValue(view()),
@@ -185,13 +185,23 @@ async function mount(
   api = fixture(kind),
   theme: "light" | "dark" = "light",
 ) {
+  const stations = await api.listStations();
+  api.getDeviceIdentity.mockResolvedValue({
+    kitchenScreens: [
+      {
+        kind: screen === "station" ? "station" : "pass",
+        available: true,
+        stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+        zones: null,
+      },
+    ],
+  });
   const { el } = await mountWidget<Screen>(
     screen === "station" ? "till-station-screen" : "till-pass-screen",
     {
       api: api as unknown as TillApi,
       embedded: true,
       runsPass: true,
-      ...{},
       deviceMode: api.deviceMode,
     },
     theme,
@@ -321,7 +331,7 @@ describe("A773 waiter authority — expo allergy boundary", () => {
           const { el } = await mount("expo", kind, api);
           Object.assign(el, {});
           await el.updateComplete;
-          const reads = deviceMode ? api.getDevicePassBoard : api.getExpoBoard;
+          const reads = api.getDevicePassBoard;
           const count = reads.mock.calls.length;
           for (let press = 0; press < 2; press++) {
             await fire(el, kind);

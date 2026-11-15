@@ -33,11 +33,20 @@ const boardRoot = (el: TillPassScreen) =>
   el.shadowRoot!.querySelector<TillPassBoard>("till-pass-board")!.shadowRoot!;
 
 describe("whole-order instructions on pass boards", () => {
-  it("wraps an unbroken instruction above the pass dishes at phone width, on a till's All stations", async () => {
+  it("wraps an unbroken instruction above the pass dishes at phone width, on a till's configured Pass", async () => {
     await page.viewport(390, 900);
     const api = {
-      getExpoBoard: vi.fn(async () => ({ board: board("instruction".repeat(180)) })),
-      getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
+      getDevicePassBoard: vi.fn(async () => ({
+        board: board("instruction".repeat(180)),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      })),
+      getDeviceIdentity: vi.fn(async () => ({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      })),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillPassScreen>("till-pass-screen", { api, embedded: true });
     await vi.waitFor(() => expect(boardRoot(el).textContent).toContain("Burger"));
@@ -61,12 +70,13 @@ describe("whole-order instructions on pass boards", () => {
         display: { showNonPassStations: true },
       });
       const api = {
-        getExpoBoard: vi.fn(async () => ({ board: board(note) })),
         getDeviceIdentity: vi.fn(async () => ({
           deviceId: "d",
           formFactor: "till",
           name: "Pass",
-          kitchenScreens: [],
+          kitchenScreens: [
+            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+          ],
         })),
         getDevicePassBoard: vi.fn(async () => read()),
         getDevicePassMonitorBoard: vi.fn(async () => read()),

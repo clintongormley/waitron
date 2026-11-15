@@ -118,8 +118,14 @@ function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {
     display: { showNonPassStations: true },
   };
   return {
-    getExpoBoard: vi.fn().mockResolvedValue({ board }),
-    getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity("pass"), kitchenScreens: [] }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({
+        ...identity("pass"),
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
     getDevicePassBoard: vi.fn().mockResolvedValue(read),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
     bumpBillReady: vi.fn().mockResolvedValue(undefined),

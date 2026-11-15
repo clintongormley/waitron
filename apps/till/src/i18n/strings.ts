@@ -755,6 +755,7 @@ export const en = {
   "kitchen_screen.station": "Station screen",
   "kitchen_screen.pass": "Pass",
   "kitchen_screen.pass_monitor": "Pass display (view only)",
+  "kitchen_screen.read_failed": "The screen could not be read. Trying again…",
   "kitchen_screen.none":
     "This screen has nothing to show yet. Choose a screen in its profile in the dashboard, under Device profiles.",
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
@@ -876,10 +877,6 @@ export const en = {
   "pass.station_closed_dish":
     "{station} is closed: move the dish to another station from the till, or open {station} for today",
   "pass.station_closed_extra": "{station} is closed: Fire still sends it there",
-  "pass.other_stations": "Other stations' dishes",
-  "pass.use_profile": "Use the profile's setting",
-  "pass.other_stations_show": "Show",
-  "pass.other_stations_hide": "Hide",
   "expo.open": "Pass",
   "expo.title": "Pass",
   "expo.back": "Back to counter",
@@ -2839,6 +2836,7 @@ export const es: Record<StringKey, string> = {
   "kitchen_screen.station": "Pantalla de estación",
   "kitchen_screen.pass": "Pase",
   "kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
+  "kitchen_screen.read_failed": "No se pudo consultar la pantalla. Reintentando…",
   "kitchen_screen.none":
     "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla en su perfil en el panel, en Perfiles de dispositivo.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",
@@ -2952,10 +2950,6 @@ export const es: Record<StringKey, string> = {
   "pass.station_closed_dish":
     "{station} está cerrada: cambia el plato de estación desde el TPV o abre {station} por hoy",
   "pass.station_closed_extra": "{station} está cerrada: Marchar lo envía allí igualmente",
-  "pass.other_stations": "Platos de otras estaciones",
-  "pass.use_profile": "Usar la configuración del perfil",
-  "pass.other_stations_show": "Mostrar",
-  "pass.other_stations_hide": "Ocultar",
   "expo.open": "Pase",
   "expo.title": "Pase",
   "expo.back": "Volver al mostrador",

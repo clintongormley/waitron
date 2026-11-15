@@ -78,11 +78,10 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
     getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
     getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard()),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: boardA }),
     ...overrides,
   } as unknown as TillApi &
     Record<
-      "getDeviceIdentity" | "getDevicePassBoard" | "getDevicePassMonitorBoard" | "getExpoBoard",
+      "getDeviceIdentity" | "getDevicePassBoard" | "getDevicePassMonitorBoard",
       ReturnType<typeof vi.fn>
     >;
 }
@@ -155,6 +154,11 @@ async function listening(run: (reboot: ReturnType<typeof vi.fn>) => Promise<void
 }
 
 describe("A773 pass screen", () => {
+  it("an embedded screen reads the configured Pass instead of every station", async () => {
+    const api = fakeApi();
+    await mount({ api, embedded: true });
+    expect(api.getDevicePassBoard).toHaveBeenCalled();
+  });
   describe("a kitchen display's pass", () => {
     it("reads its board once on connect when none was handed to it, and draws it as the pass", async () => {
       const api = fakeApi();
@@ -163,7 +167,6 @@ describe("A773 pass screen", () => {
       expect(boardOf(el)!.mode).toBe("pass");
       expect(boardOf(el)!.board).toEqual(boardA);
       expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
-      expect(api.getExpoBoard).not.toHaveBeenCalled();
       expect(api.getDeviceIdentity).not.toHaveBeenCalled();
     });
 
@@ -228,7 +231,6 @@ describe("A773 pass screen", () => {
         await flush(el);
         expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
         expect(cardKeys(el)).toEqual(["bill:b"]);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(api.getDeviceIdentity).not.toHaveBeenCalled();
       }));
   });
@@ -252,7 +254,7 @@ describe("A773 pass screen", () => {
       for (const name of [
         "getDevicePassBoard",
         "getDevicePassMonitorBoard",
-        "getExpoBoard",
+        "getDevicePassBoard",
       ] as const)
         expect(api[name]).toHaveBeenCalledTimes(name === read ? 1 : 0);
       expect(boardOf(el)!.mode).toBe(mode);
@@ -276,7 +278,6 @@ describe("A773 pass screen", () => {
           fakeApi({
             getDeviceIdentity: vi.fn().mockResolvedValue(identity([...screens])),
             getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(board)),
-            getExpoBoard: vi.fn().mockResolvedValue({ board }),
           });
         const ready = "[data-group-ready], [data-ready]";
         const runs = await mount({ api: api() });
@@ -290,7 +291,7 @@ describe("A773 pass screen", () => {
       },
     );
 
-    it("carries the pass's display choice, and All stations' default, from each board read (D70)", () =>
+    it("carries the pass's display choice, and configured Pass' default, from each board read (D70)", () =>
       withFakeTimers(async () => {
         const hidden = { showNonPassStations: false };
         const api = fakeApi({
@@ -303,21 +304,19 @@ describe("A773 pass screen", () => {
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
         expect(boardOf(el)).toBeNull();
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
       }));
 
     it("switches the read and clears the old board when the choice changes between refreshes", () =>
       withFakeTimers(async () => {
         const api = fakeApi({
           getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
-          getExpoBoard: vi.fn(() => new Promise(() => {})),
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardA)),
         });
         const el = await mount({ api });
         expect(cardKeys(el)).toEqual(["bill:a"]);
         api.getDeviceIdentity.mockResolvedValue(identity([]));
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
         expect(boardOf(el)).toBeNull();
       }));
@@ -358,7 +357,6 @@ describe("A773 pass screen", () => {
         await flush(el);
         expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
         expect(unavailableLines(el)).toEqual([goneLine()]);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(boardOf(el)).toBeNull();
       }));
 
@@ -412,7 +410,6 @@ describe("A773 pass screen", () => {
           await flush(el);
           expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
           expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
-          expect(api.getExpoBoard).not.toHaveBeenCalled();
           expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
           expect(cardKeys(el)).toEqual(["bill:a"]);
           expect(reboot).not.toHaveBeenCalled();
@@ -432,11 +429,9 @@ describe("A773 pass screen", () => {
             getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)),
           });
           const el = await mount({ api });
-          expect(api.getExpoBoard).not.toHaveBeenCalled();
           api.getDeviceIdentity.mockResolvedValue(identity([chosen(kind)]));
           await vi.advanceTimersByTimeAsync(15_000);
           await flush(el);
-          expect(api.getExpoBoard).not.toHaveBeenCalled();
           expect(api[read]).toHaveBeenCalledOnce();
           expect(boardOf(el)!.mode).toBe(mode);
           expect(cardKeys(el)).toEqual(["bill:b"]);
@@ -454,17 +449,15 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)).toBeNull();
         await vi.advanceTimersByTimeAsync(15_000);
         expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(api.getDevicePassBoard).not.toHaveBeenCalled();
       }));
   });
 
-  it("an unconfigured profile shows no pass board or implicit All stations", async () => {
+  it("an unconfigured profile shows no pass board or implicit configured Pass", async () => {
     const api = fakeApi({ getDeviceIdentity: vi.fn().mockResolvedValue(identity([])) });
     const el = await mount({ api });
     expect(boardOf(el)).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.none"));
-    expect(api.getExpoBoard).not.toHaveBeenCalled();
     expect(api.getDevicePassBoard).not.toHaveBeenCalled();
     expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
   });
@@ -696,21 +689,20 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)).toBeNull();
         await vi.advanceTimersByTimeAsync(15_000);
         expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(api.getDevicePassBoard).not.toHaveBeenCalled();
       }));
 
-    it("an embedded card reads All stations every fifteen seconds and never the device's choice", () =>
+    it("an embedded card follows the configured Pass every fifteen seconds", () =>
       withFakeTimers(async () => {
         const api = fakeApi();
         const el = await mount({ api, embedded: true });
-        expect(api.getExpoBoard).toHaveBeenCalledOnce();
-        expect(boardOf(el)!.mode).toBe("all_stations");
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.mode).toBe("pass");
         expect(cardKeys(el)).toEqual(["bill:a"]);
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
-        expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
-        expect(api.getDeviceIdentity).not.toHaveBeenCalled();
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
       }));
 
     it("on a kitchen display, re-boots when a refresh is refused device.unauthorized, and not for any other failure", () =>
@@ -748,15 +740,33 @@ describe("A773 pass screen", () => {
       listening((reboot) =>
         withFakeTimers(async () => {
           const api = fakeApi({
-            getExpoBoard: vi
+            getDeviceIdentity: vi
               .fn()
-              .mockResolvedValueOnce({ board: boardA })
+              .mockResolvedValue({
+                kitchenScreens: [
+                  {
+                    kind: "pass",
+                    available: true,
+                    stations: [],
+                    zones: null,
+                    showNonPassStations: true,
+                  },
+                ],
+              }),
+            getDevicePassBoard: vi
+              .fn()
+              .mockResolvedValueOnce({
+                board: boardA,
+                stations: [],
+                zones: null,
+                display: { showNonPassStations: true },
+              })
               .mockRejectedValue({ code: "device.unauthorized" }),
           });
           const el = await mount({ api, embedded: true });
           await vi.advanceTimersByTimeAsync(15_000);
           await flush(el);
-          expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+          expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
           expect(reboot).not.toHaveBeenCalled();
           expect(stale(el)).not.toBeNull();
           expect(cardKeys(el)).toEqual(["bill:a"]);
@@ -851,7 +861,6 @@ describe("A773 pass screen", () => {
       expect(lines(el)).toEqual([kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" })]);
       expect(boardOf(el)).toBeNull();
       expect(api.getDevicePassBoard).not.toHaveBeenCalled();
-      expect(api.getExpoBoard).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -934,7 +943,6 @@ describe("A773 pass screen", () => {
         expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
         expect(api.getDevicePassBoard).not.toHaveBeenCalled();
         expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
       }));
 
     it.each([
@@ -1000,6 +1008,7 @@ describe("A773 pass screen", () => {
           .mockResolvedValue(identity([chosen("pass", false)]));
         const el = await mount({ api });
         expect(boardOf(el)).toBeNull();
+        expect(lines(el)).toEqual(["The screen could not be read. Trying again…"]);
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
         expect(boardOf(el)).toBeNull();
@@ -1008,7 +1017,6 @@ describe("A773 pass screen", () => {
         ]);
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
-        expect(api.getExpoBoard).not.toHaveBeenCalled();
         expect(api.getDevicePassBoard).not.toHaveBeenCalled();
       }));
   });
@@ -1074,10 +1082,10 @@ describe("A773 pass screen", () => {
       expect(storedColumnKeys()).toEqual([columnsKey("pass_monitor")]);
     });
 
-    it("keeps an embedded All stations layout under its own key", async () => {
+    it("keeps an embedded configured Pass layout under its own key", async () => {
       const el = await mount({ embedded: true });
       await changeAll(el);
-      expect(storedColumnKeys()).toEqual([columnsKey("all_stations")]);
+      expect(storedColumnKeys()).toEqual([columnsKey("pass")]);
     });
 
     it("names the pass's columns, and the board, in the Columns window", async () => {
@@ -1299,9 +1307,31 @@ describe("A773 pass screen", () => {
     it.each([
       ["a kitchen display's pass", "expo.watcher_empty", { deviceMode: true, initialBoard: empty }],
       ["a pass monitor", "expo.empty", { monitor: true, initialBoard: empty }],
-      ["an embedded card on All stations", "expo.empty", { embedded: true }],
+      ["an embedded card on configured Pass", "expo.watcher_empty", { embedded: true }],
     ] as const)("%s says %s in the board's status slot", async (_, key, props) => {
-      const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }) });
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({
+            kitchenScreens: [
+              {
+                kind: "pass",
+                available: true,
+                stations: [],
+                zones: null,
+                showNonPassStations: true,
+              },
+            ],
+          }),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({
+            board: passBoard(),
+            stations: [],
+            zones: null,
+            display: { showNonPassStations: true },
+          }),
+      });
       const el = await mount({ api, ...props });
       expect(words(el)).toEqual([t(key)]);
       expect(el.shadowRoot!.querySelector("[data-empty]")!.getAttribute("slot")).toBe("status");
@@ -1354,7 +1384,6 @@ describe("A773 pass screen", () => {
         getDeviceIdentity: vi.fn().mockResolvedValue(identity([...screens])),
         getDevicePassBoard: vi.fn().mockResolvedValue(empty),
         getDevicePassMonitorBoard: vi.fn().mockResolvedValue(empty),
-        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
       });
       const el = await mount({ api });
       expect(words(el)).toEqual([t(key)]);
@@ -1373,7 +1402,14 @@ describe("A773 pass screen", () => {
     it("says nothing while the pass is gone", async () => {
       const api = fakeApi({
         getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
-        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({
+            board: passBoard(),
+            stations: [],
+            zones: null,
+            display: { showNonPassStations: true },
+          }),
       });
       const el = await mount({ api });
       expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
@@ -1381,9 +1417,25 @@ describe("A773 pass screen", () => {
   });
 });
 
-describe("A773 pass screen: a till's All stations", () => {
+describe("A773 pass screen: a till's configured Pass", () => {
   const mountAll = (board: PassBoard, props: Partial<TillPassScreen> = {}) => {
-    const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board }) });
+    const api = fakeApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({
+          kitchenScreens: [
+            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+          ],
+        }),
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue({
+          board,
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
+    });
     return mount({ api, embedded: true, ...props }).then((el) => ({ api, el }));
   };
   const inBoard = (el: TillPassScreen) => boardOf(el)!.shadowRoot!;
@@ -1414,7 +1466,7 @@ describe("A773 pass screen: a till's All stations", () => {
       ],
     });
     const { api, el } = await mountAll(passBoard({ inProgress: [card] }));
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     expect(itemOf(el, "vegan").querySelector("[data-diet='vegan']")).not.toBeNull();
     expect(itemOf(el, "vegan").querySelector("[data-diet='vegetarian']")).not.toBeNull();
     expect(itemOf(el, "vegan").textContent).not.toMatch(/review|revisi/i);
@@ -1505,7 +1557,7 @@ describe("A773 pass screen: a till's All stations", () => {
     el.now = PASS_NOW + 15 * 60_000;
     await flush(el);
     expect(cardOf(el, "card").classList).toContain("age-forgotten");
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
   });
 
   it("says the pass is empty, drawing no card, when its first read fails", async () => {
@@ -1523,11 +1575,27 @@ describe("A773 pass screen: a till's All stations", () => {
   });
 });
 
-describe("A773 pass screen: a till's All stations, its extras and portions", () => {
+describe("A773 pass screen: a till's configured Pass, its extras and portions", () => {
   const mountAll = async (board: PassBoard) => {
-    const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board }) });
+    const api = fakeApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({
+          kitchenScreens: [
+            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+          ],
+        }),
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue({
+          board,
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
+    });
     const el = await mount({ api, embedded: true });
-    expect(boardOf(el)!.mode).toBe("all_stations");
+    expect(boardOf(el)!.mode).toBe("pass");
     return el;
   };
   const inBoard = (el: TillPassScreen) => boardOf(el)!.shadowRoot!;
@@ -1765,7 +1833,6 @@ describe("A773 pass screen: a pass monitor", () => {
     expect(boardOf(el)!.mode).toBe("monitor");
     expect(cardKeys(el)).toEqual(["bill:a"]);
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Pared del pase");
-    expect(api.getExpoBoard).not.toHaveBeenCalled();
     expect(api.getDevicePassBoard).not.toHaveBeenCalled();
     expect(api.getDeviceIdentity).not.toHaveBeenCalled();
   });
@@ -1804,7 +1871,6 @@ describe("A773 pass screen: a pass monitor", () => {
     const api = tillApi(deviceBoard(busyBoard()));
     const el = await mount({ api });
     expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
-    expect(api.getExpoBoard).not.toHaveBeenCalled();
     expect(api.getDevicePassBoard).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
   });
@@ -1912,7 +1978,6 @@ describe("A773 pass screen: a pass monitor", () => {
           await vi.advanceTimersByTimeAsync(15_000);
           expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
           expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
-          expect(api.getExpoBoard).not.toHaveBeenCalled();
         } finally {
           setLocale(previous);
         }

@@ -84,7 +84,7 @@ type FakeApi = TillApi &
     | "bumpDeviceBillReady"
     | "bumpBillReady"
     | "reprintOrder"
-    | "getExpoBoard"
+    | "getDevicePassBoard"
     | "releaseDevicePass",
     Fn
   >;
@@ -94,7 +94,6 @@ function fakeApi(overrides: Record<string, unknown> = {}): FakeApi {
     getDeviceIdentity: vi.fn().mockResolvedValue(identity()),
     getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard()),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: leverBoard() }),
     releaseDevicePass: vi.fn().mockResolvedValue({ releasedTicketItemIds: ["f-a"] }),
     bumpDeviceGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
     bumpGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
@@ -544,7 +543,7 @@ describe("A773 pass screen: levers", () => {
   });
 });
 
-describe("A773 pass screen: levers on a till's All stations", () => {
+describe("A773 pass screen: levers on a till's configured Pass", () => {
   const mountTill = (api: FakeApi) => mount({ api, embedded: true });
   const heldCard = passCard({
     key: "held:h-1",
@@ -553,20 +552,35 @@ describe("A773 pass screen: levers on a till's All stations", () => {
   });
   const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
     fakeApi({
-      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
-      getExpoBoard: vi.fn().mockResolvedValue({ board }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({
+          ...identity(),
+          kitchenScreens: [
+            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+          ],
+        }),
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue({
+          board,
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
       ...overrides,
     });
   const allBoard = () =>
     passBoard({ held: [heldCard], toFire: [fireCard()], inProgress: [groupCard(), passCard()] });
 
-  it("draws a bill card's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
+  it("draws bill Ready and Fire only on the configured Pass To fire card", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
-    expect(boardOf(el)!.mode).toBe("all_stations");
+    expect(boardOf(el)!.mode).toBe("pass");
     expect(inBoard(el, '[data-card="held:h-1"]')).not.toBeNull();
     expect(inBoard(el, '[data-card="group:g-2"]')).not.toBeNull();
-    expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(0);
+    expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(1);
+    expect(inBoard(el, '[data-card="held:h-1"] [data-pass-fire]')).toBeNull();
     expect(text(inBoard(el, '[data-ready="order-1"]'))).toBe(t("expo.ready"));
   });
 
@@ -592,21 +606,6 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     }
   });
 
-  it("sends nothing, and reads nothing more, for a Fire event", async () => {
-    const api = allApi(allBoard());
-    const el = await mountTill(api);
-    boardOf(el)!.dispatchEvent(
-      new CustomEvent("pass-fire", {
-        detail: { key: "group:g-2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.releaseDevicePass).not.toHaveBeenCalled();
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
-  });
-
   it("offers one Ready for the card including a dish with no course", async () => {
     const card = passCard({
       items: [
@@ -630,22 +629,22 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     ).toEqual(["order-1"]);
   });
 
-  it("Bill Ready sends the bill through the till's route, then reads All stations again", async () => {
+  it("Bill Ready sends the bill through the till's route, then reads configured Pass again", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
     await press(el, '[data-ready="order-1"]');
     expect(api.bumpBillReady).toHaveBeenCalledExactlyOnceWith("order-1");
     expect(api.bumpDeviceBillReady).not.toHaveBeenCalled();
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
   });
 
-  it("a refused Bill Ready shows its words and still reads All stations again", async () => {
+  it("a refused Bill Ready shows its words and still reads configured Pass again", async () => {
     const api = allApi(allBoard(), {
       bumpBillReady: vi.fn().mockRejectedValue(refused("working_order.not_found", 404)),
     });
     const el = await mountTill(api);
     await press(el, '[data-ready="order-1"]');
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
     expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("working_order.not_found")}`);
   });
 
@@ -658,7 +657,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     expect(inBoard(el, '[data-card="held:h-1"] [data-reprint]')).toBeNull();
     await press(el, reprintOn("group:g-2", "order-1"));
     expect(api.reprintOrder).toHaveBeenCalledExactlyOnceWith("order-1");
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -678,18 +677,32 @@ describe("A773 pass screen: levers on a till's All stations", () => {
   );
 });
 
-describe("A773 pass screen: a party's group cards on a till's All stations", () => {
+describe("A773 pass screen: a party's group cards on a till's configured Pass", () => {
   const mountTill = (api: FakeApi) => mount({ api, embedded: true });
   const groupNamed = (n: string) => t("table.group_n").replace("{n}", n);
   const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
     fakeApi({
-      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
-      getExpoBoard: vi.fn().mockResolvedValue({ board }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({
+          ...identity(),
+          kitchenScreens: [
+            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+          ],
+        }),
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue({
+          board,
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
       ...overrides,
     });
   const mountAll = async (api: FakeApi) => {
     const el = await mountTill(api);
-    expect(boardOf(el)!.mode).toBe("all_stations");
+    expect(boardOf(el)!.mode).toBe("pass");
     return el;
   };
   const cardOf = (el: TillPassScreen, key: string) =>
@@ -784,8 +797,28 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     const card = groupCard({ items: [passItem({ id: "late", queuedAt: minutesAgo(20) })] });
     const el = await mountTill(
       fakeApi({
-        getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
-        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard({ inProgress: [card] }) }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({
+            ...identity(),
+            kitchenScreens: [
+              {
+                kind: "pass",
+                available: true,
+                stations: [],
+                zones: null,
+                showNonPassStations: true,
+              },
+            ],
+          }),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({
+            board: passBoard({ inProgress: [card] }),
+            stations: [],
+            zones: null,
+            display: { showNonPassStations: true },
+          }),
       }),
     );
     expect(cardOf(el, "group:g-1").classList).toContain("age-forgotten");
@@ -794,7 +827,7 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     ).not.toBeNull();
   });
 
-  it("sends each group Ready press under a fresh submission id and the card's revision, reading All stations after each", async () => {
+  it("sends each group Ready press under a fresh submission id and the card's revision, reading configured Pass after each", async () => {
     const api = allApi(partyBoard());
     const el = await mountAll(api);
     await press(el, '[data-group-ready="g-2"]');
@@ -807,13 +840,13 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     expect(api.bumpGroupReady.mock.calls[0]![2].submissionId).not.toBe(
       api.bumpGroupReady.mock.calls[1]![2].submissionId,
     );
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(3);
     expect(api.bumpDeviceGroupReady).not.toHaveBeenCalled();
     expect(api.bumpBillReady).not.toHaveBeenCalled();
     expect(api.releaseDevicePass).not.toHaveBeenCalled();
   });
 
-  it("on party.out_of_date reads All stations again, names the table that changed, and never sends again on its own", async () => {
+  it("on party.out_of_date reads configured Pass again, names the table that changed, and never sends again on its own", async () => {
     const api = allApi(partyBoard(), {
       bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
     });
@@ -822,7 +855,7 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     await press(el, '[data-group-ready="g-2"]');
     await flush(el);
     expect(api.bumpGroupReady).toHaveBeenCalledOnce();
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
     expect(text(tableChanged(el))).toBe(staleNotice("T7"));
     expect(tableChanged(el)!.getAttribute("role")).toBe("status");
     expect(leverError(el)).toBeNull();
@@ -856,12 +889,12 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     await press(el, '[data-group-ready="g-2"]');
     expect(tableChanged(el)).not.toBeNull();
     await press(el, '[data-group-ready="g-2"]');
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
     expect(tableChanged(el)).toBeNull();
     refuse(refused("group.not_found", 404));
     await flush(el);
     expect(tableChanged(el)).toBeNull();
-    expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the table-changed line through a failed read and clears it at the next good one, a bill Ready press clearing nothing", async () => {
@@ -871,7 +904,7 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     const el = await mountAll(api);
     await press(el, '[data-group-ready="g-1"]');
     expect(tableChanged(el)).not.toBeNull();
-    api.getExpoBoard.mockRejectedValueOnce(new TypeError("offline"));
+    api.getDevicePassBoard.mockRejectedValueOnce(new TypeError("offline"));
     await press(el, '[data-ready="order-1"]');
     expect(tableChanged(el)).not.toBeNull();
     await press(el, '[data-ready="order-1"]');

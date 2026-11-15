@@ -429,6 +429,36 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(shell(el).shadowRoot!.querySelector("wt-button.expo")).toBeNull();
   });
 
+  it("keeps a newer profile read when an older poll answers afterwards", async () => {
+    const info = { ...noCourses, capabilities: ["show-station", "show-expo"] };
+    const identity = (kind: "station" | "pass") => ({
+      deviceId: "till-dev",
+      name: "Till",
+      formFactor: "till",
+      kitchenScreens: [{ kind, available: true, stations: [], zones: null }],
+    });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(info),
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity("pass")),
+    });
+    await openTable(el);
+    let answer!: (value: ReturnType<typeof identity>) => void;
+    const old = new Promise<ReturnType<typeof identity>>((resolve) => {
+      answer = resolve;
+    });
+    const reads = api.getDeviceIdentity.mock.calls.length;
+    api.getDeviceIdentity.mockImplementationOnce(() => old);
+    await poll(el);
+    expect(api.getDeviceIdentity.mock.calls.length).toBe(reads + 1);
+    api.getDeviceIdentity.mockResolvedValue(identity("station"));
+    emit(shell(el), "open-profile", {});
+    await flush(el);
+    expect(shell(el).shadowRoot!.querySelector("wt-button.expo")).toBeNull();
+    answer(identity("pass"));
+    await flush(el);
+    expect(shell(el).shadowRoot!.querySelector("wt-button.expo")).toBeNull();
+  });
+
   it("new courses reach an open table without a reload", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValueOnce(noCourses).mockResolvedValue(moved),
