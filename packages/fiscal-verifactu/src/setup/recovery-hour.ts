@@ -34,6 +34,35 @@ type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotio
 };
 type Context = RecoveryContext | PromotionContext;
 const isPromotion = (context: Context): context is PromotionContext => "mode" in context;
+/** A planned hand-over's main box still answers, so no till there offers the switch. */
+const promotionWords = {
+  emergency: {
+    en: {
+      secondClockDo:
+        "Switch from a till or phone on the venue's network, or connect the box to the internet.",
+      secondClockEnds:
+        "It carries on by itself once the box reaches the internet, while this page stays open.",
+    },
+    es: {
+      secondClockDo:
+        "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
+      secondClockEnds:
+        "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
+    },
+  },
+  controlled: {
+    en: {
+      secondClockDo:
+        "Connect the box to the internet, or open this handover page on another phone or laptop.",
+      secondClockEnds: "Keep this page open, or continue on the other device.",
+    },
+    es: {
+      secondClockDo:
+        "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+      secondClockEnds: "Mantén esta página abierta o continúa en el otro dispositivo.",
+    },
+  },
+} as const;
 interface Draft {
   oldBoxGone: boolean;
   soleRecovery: boolean;
@@ -426,12 +455,7 @@ export class RecoveryHourEntry extends LitElement {
     const words = promote
       ? {
           ...baseWords,
-          secondClockDo: en
-            ? "Connect the box to the internet, or open this handover page on another phone or laptop."
-            : "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
-          secondClockEnds: en
-            ? "Keep this page open, or continue on the other device."
-            : "Mantén esta página abierta o continúa en el otro dispositivo.",
+          ...promotionWords[context.scenario][this.locale],
           inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
         }
       : baseWords;

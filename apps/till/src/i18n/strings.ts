@@ -1998,6 +1998,11 @@ export const en = {
   "server.waiting_promotion": "Local server unreachable — waiting for the standby to be promoted",
   "server.check_again": "Check again",
   "server.switched": "Moved to another server. Enter your PIN.",
+  "server.main_silent": "The main server is not answering",
+  "server.none_answering": "No server is answering. Check this device's network connection.",
+  "server.switch_to_spare": "Switch to the spare server",
+  "server.main_still_answering":
+    "The main server is still answering. To move to the spare, hand over from Servers on the dashboard.",
   "update.message": "Waitron was updated.",
   "update.reload": "Reload",
   "sale.unconfirmed":
@@ -4049,6 +4054,12 @@ export const es: Record<StringKey, string> = {
     "Servidor local sin conexión — esperando a que se promueva el de reserva",
   "server.check_again": "Comprobar de nuevo",
   "server.switched": "Cambiado a otro servidor. Introduce tu PIN.",
+  "server.main_silent": "El servidor principal no responde",
+  "server.none_answering":
+    "Ningún servidor responde. Revisa la conexión de red de este dispositivo.",
+  "server.switch_to_spare": "Cambiar al servidor de reserva",
+  "server.main_still_answering":
+    "El servidor principal todavía responde. Para pasar al de reserva, haz el traspaso desde Servidores en el panel.",
   "update.message": "Waitron se ha actualizado.",
   "update.reload": "Recargar",
   "sale.unconfirmed":

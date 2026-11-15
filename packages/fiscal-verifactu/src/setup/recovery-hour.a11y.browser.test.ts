@@ -267,6 +267,7 @@ for (const theme of ["light", "dark"] as const)
             const instant = Date.parse("2026-10-18T12:30:00Z");
             const el = FISCAL_SETUP.createPromotion!({
               locale,
+              scenario: "emergency",
               binding,
               timeZone: "America/New_York",
               prepare: async (proposal) => {

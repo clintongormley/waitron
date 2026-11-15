@@ -113,6 +113,7 @@ async function mount(
     statusState?: string;
     /** The first preview gets no answer. */
     firstPreviewLost?: boolean;
+    pageUrl?: string;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -331,6 +332,7 @@ async function mount(
     {
       api,
       emergency: true,
+      ...(options.pageUrl ? { pageUrl: options.pageUrl } : {}),
     },
     options.theme,
   );
@@ -565,6 +567,15 @@ it("resumes a saved declaration on another page, prepares and starts without rep
   for (const { body } of posts) expect(body.signIn).toEqual(signIn);
   expect(Reflect.get(el, "password")).toBe("");
   expect(Reflect.get(el, "code")).toBe("");
+});
+
+it("the switch page's clock step is told it is the switch page", async () => {
+  const { el } = await mount({ saved: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  const entry = q<LitElement & { context: { scenario: string } }>(el, "vf-recovery-hour");
+  expect(entry.context.scenario).toBe("emergency");
 });
 
 it("keeps the reason and statements when a code expires, and retries the same declaration with the new code", async () => {
@@ -1376,4 +1387,79 @@ it("after the page was left, Check acts on its answers instead of discarding the
   q(el, "[data-test=emergency-preview]").click();
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
   expect(previews(posts)).toBe(2);
+});
+
+const spareSwitchPage = (back: string) =>
+  `https://box-b.waitron.local/handover/emergency?back=${encodeURIComponent(back)}`;
+
+async function stopAndContinueLinks(pageUrl: string) {
+  const { el } = await mount({ saved: true, pageUrl });
+  const stop = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (link) => link.textContent === t("handover.emergency.stop"),
+  )!;
+  const stopHref = stop.getAttribute("href");
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  const proceed = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (link) => link.textContent === t("handover.continue"),
+  )!;
+  return { stop: stopHref, proceed: proceed.getAttribute("href") };
+}
+
+it("Stop and Continue go back to the till named in back", async () => {
+  expect(await stopAndContinueLinks(spareSwitchPage("https://waitron.local/tabs"))).toEqual({
+    stop: "https://waitron.local/tabs",
+    proceed: "https://waitron.local/tabs",
+  });
+});
+
+it.each([
+  "https://evil.example/",
+  "http://waitron.local/",
+  "https://waitron.local.evil.example/",
+  "https://box-b.waitron.local/",
+  "not a url",
+])("a back on another site, or not https, is ignored: %s", async (back) => {
+  expect(await stopAndContinueLinks(spareSwitchPage(back))).toEqual({ stop: "/", proceed: "/" });
+});
+
+async function declareAndReload(pageUrl: string) {
+  const { el } = await mount({ pageUrl });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  const replaced = new URL(location.pathname + location.search, "https://box-b.waitron.local");
+  const api = el.api;
+  cleanupWidgets();
+  const { el: reloaded } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api,
+    operationId: saved.operationId,
+    pageUrl: replaced.href,
+  });
+  const stop = await vi.waitFor(() => {
+    const link = [...reloaded.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+      (candidate) => candidate.textContent === t("handover.emergency.stop"),
+    );
+    expect(link).toBeDefined();
+    return link!;
+  });
+  return { address: replaced, stop: stop.getAttribute("href") };
+}
+
+it("a reload after declaring keeps the way back to the till", async () => {
+  const { address, stop } = await declareAndReload(spareSwitchPage("https://waitron.local/tabs"));
+  expect(address.pathname).toBe(`/handover/${saved.operationId}`);
+  expect(address.searchParams.get("back")).toBe("https://waitron.local/tabs");
+  expect(stop).toBe("https://waitron.local/tabs");
+});
+
+it("a back that was ignored is not carried into the operation's address", async () => {
+  const { address, stop } = await declareAndReload(spareSwitchPage("https://evil.example/"));
+  expect(address.pathname).toBe(`/handover/${saved.operationId}`);
+  expect(address.search).toBe("");
+  expect(stop).toBe("/");
 });

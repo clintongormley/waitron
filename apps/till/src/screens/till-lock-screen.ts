@@ -17,6 +17,7 @@ import "../widgets/numeric-pad.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
+import "../widgets/main-server-strip.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
@@ -187,6 +188,11 @@ export class TillLockScreen extends LitElement {
   @property({ attribute: false }) serverCurrent = "";
 
   @property({ type: Boolean }) serverWaiting = false;
+
+  /** Set while the till app shows the main-server strip, which takes the waiting line's place. */
+  @property({ type: Boolean }) mainServerSilent = false;
+  @property({ type: Boolean }) spareAnswering = false;
+  @property({ type: Boolean }) mainServerRefused = false;
 
   @property({ attribute: false }) clockNotice?: StaffNotice;
 
@@ -362,6 +368,7 @@ export class TillLockScreen extends LitElement {
 
   override render() {
     return html`
+      ${this.#renderMainServer()}
       <div class="language-corner">
         <till-about-button></till-about-button>
         ${themeChooser()}
@@ -423,6 +430,15 @@ export class TillLockScreen extends LitElement {
       : nothing;
   }
 
+  #renderMainServer() {
+    if (!this.mainServerSilent) return nothing;
+    return html`<till-main-server-strip
+      .spareAnswering=${this.spareAnswering}
+      .showSwitch=${true}
+      .refused=${this.mainServerRefused}
+    ></till-main-server-strip>`;
+  }
+
   /** Shows the operator WHY a till is not selling; a healthy single-primary till shows no line. */
   #renderServers() {
     const known = this.serverStatuses;
@@ -435,7 +451,9 @@ export class TillLockScreen extends LitElement {
     return html`
       <p class="servers status" role="status" data-server-status>
         ${known.map(row).join(" · ")}${
-          this.serverWaiting ? html` — ${t("server.waiting_promotion")}` : nothing
+          this.serverWaiting && !this.mainServerSilent
+            ? html` — ${t("server.waiting_promotion")}`
+            : nothing
         }
         <wt-button
           variant="secondary"

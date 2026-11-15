@@ -54,9 +54,14 @@ Use a spare that has finished joining this venue. Switch off the old main box an
 because two running main boxes could take payments and file separately. This declaration cannot
 be undone.
 
-Open the spare’s HTTPS address with `/handover/emergency` at the end, for example
+On a till or handheld, the red **The main server is not answering** strip offers **Switch to the
+spare server** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
+spare, and **Stop** or **Continue to this box** brings you back to the till. From any other device,
+open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`. Sign in with an administrator account’s password and
-current authenticator code, if set up, then choose **Check this copy**. The spare first brings its
+current authenticator code, if set up, then choose **Check this copy**. Type the password
+carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
+again. The spare first brings its
 copy up to date and restarts; keep the page open. If that takes more than a minute or cannot be done, **Use the copy this spare holds**
 offers the copy already on it, usually the one from when it joined, with nothing newer. Read the copy's latest dated
 activity. Anything newer may be missing; if no date is available, the page says so.

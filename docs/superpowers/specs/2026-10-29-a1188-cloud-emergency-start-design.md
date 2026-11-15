@@ -4,6 +4,10 @@
 > unplanned stop is replaced by a bounded wait of about a minute, then selling; after a deliberate
 > shutdown it still waits for a person. [A1418 design](2026-11-07-a1418-box-stop-intent-design.md) §3
 > and §9.
+>
+> **2026-11-15, A947 4c:** A947 §6.1's strip is built (`apps/till/src/widgets/main-server-strip.ts`),
+> but a till draws it only at a venue with a spare; this design's link also needs it at a venue with
+> one box.
 
 **Approved by the owner, 2026-10-29, with its defaults; nothing is built yet.** Building waits for
 A1018's build approval, A947's strip and Cloud's half (§11). Revised the same day after a fresh

@@ -83,6 +83,7 @@ export interface ModuleRecoveryEntry extends HTMLElement {
 
 export interface ModulePromotionContext {
   locale: "en" | "es";
+  scenario: "controlled" | "emergency";
   binding: RecoveryOperationBinding;
   timeZone: string;
   prepare(proposal: unknown): Promise<unknown>;

@@ -1084,3 +1084,240 @@ describe("withServerTarget", () => {
     expect(r.current).toBe(CLOUD);
   });
 });
+
+describe("ServerRouter — the main box and the spare", () => {
+  const VENUE = "https://deli.test";
+  const A = "https://box-a.deli.test";
+  const B = "https://box-b.deli.test";
+  const T0 = Date.UTC(2026, 10, 14, 21, 0);
+  const chartList = [
+    { nodeId: "a", url: A, standing: "serving-primary" as const },
+    { nodeId: "b", url: B, standing: "serving-secondary" as const },
+  ];
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("mainSilentSince starts at the main box's first failed probe and clears when it answers", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const table: Record<string, Answer> = {
+      [VENUE]: "down",
+      [A]: "down",
+      [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+    };
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers(chartList);
+    expect(r.mainSilentSince).toBeNull();
+    await r.probeNow();
+    expect(r.mainSilentSince).toBe(T0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await r.probeNow();
+    expect(r.mainSilentSince).toBe(T0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    table[A] = { acceptingSales: true, term: 1, nodeId: "a" };
+    await r.probeNow();
+    expect(r.mainSilentSince).toBeNull();
+  });
+
+  it("mainSilentSince reads the chart's serving-primary entry, not the page's origin", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const table: Record<string, Answer> = {
+      [VENUE]: { acceptingSales: true, term: 1 },
+      [A]: "down",
+      [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+    };
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers(chartList);
+    await r.probeNow();
+    expect(r.current).toBe(VENUE);
+    expect(r.mainSilentSince).toBe(T0);
+  });
+
+  it("a main box answering an error status is not silent", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).origin === A) return new Response("", { status: 503 });
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: VENUE, fetchImpl, storage: memoryStorage() });
+    r.setServers(chartList);
+    await r.probeNow();
+    expect(r.statuses().find((s) => s.url === A)?.state).toBe("unreachable");
+    expect(r.mainSilentSince).toBeNull();
+  });
+
+  it("a main box the page's origin answers as is not silent", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const table: Record<string, Answer> = {
+      [VENUE]: { acceptingSales: true, term: 1, nodeId: "a" },
+      [A]: "down",
+      [B]: "down",
+    };
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers(chartList);
+    await r.probeNow();
+    expect(r.mainSilentSince).toBeNull();
+    await r.probeNow();
+    expect(r.mainSilentSince).toBeNull();
+  });
+
+  it("mainSilentSince is null when the list has no serving-primary entry", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch({ [VENUE]: "down", [B]: "down" }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "b", url: B, standing: "serving-secondary" }]);
+    await r.probeNow();
+    expect(r.mainSilentSince).toBeNull();
+  });
+
+  it("spare is the serving-secondary entry and says whether it answers", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const table: Record<string, Answer> = {
+      [VENUE]: "down",
+      [A]: "down",
+      [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+    };
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers(chartList);
+    await r.probeNow();
+    expect(r.spare).toEqual({ url: B, answering: true });
+    table[B] = "down";
+    await r.probeNow();
+    expect(r.spare).toEqual({ url: B, answering: false });
+  });
+
+  it("a saved entry without a standing is neither the main box nor the spare", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const storage = memoryStorage();
+    storage.setItem(
+      SERVERS_STORAGE_KEY,
+      JSON.stringify({
+        servers: [
+          { nodeId: "a", url: A },
+          { nodeId: "b", url: B },
+        ],
+      }),
+    );
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch({ [VENUE]: "down", [A]: "down", [B]: "down" }),
+      storage,
+    });
+    await r.probeNow();
+    expect(r.mainSilentSince).toBeNull();
+    expect(r.spare).toBeUndefined();
+  });
+
+  it("a saved entry keeps its standing across a reload", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const storage = memoryStorage();
+    const fetchImpl = probeFetch({ [VENUE]: "down", [A]: "down", [B]: "down" });
+    new ServerRouter({ origin: VENUE, fetchImpl, storage }).setServers(chartList);
+    const r = new ServerRouter({ origin: VENUE, fetchImpl, storage });
+    await r.probeNow();
+    expect(r.mainSilentSince).toBe(T0);
+    expect(r.spare).toEqual({ url: B, answering: false });
+  });
+
+  it("a change of standing alone repaints", () => {
+    const r = new ServerRouter({
+      origin: VENUE,
+      fetchImpl: probeFetch({}),
+      storage: memoryStorage(),
+    });
+    r.setServers(chartList);
+    const changed = vi.fn();
+    r.addEventListener("state-changed", changed);
+    r.setServers(chartList);
+    expect(changed).not.toHaveBeenCalled();
+    r.setServers([
+      { nodeId: "a", url: A, standing: "serving-secondary" },
+      { nodeId: "b", url: B, standing: "serving-primary" },
+    ]);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(r.spare?.url).toBe(A);
+
+    const C = "https://box-c.deli.test";
+    r.setServers([...chartList, { nodeId: "c", url: C, standing: "sell-only" }]);
+    expect(changed).toHaveBeenCalledTimes(2);
+    const before = { main: r.mainSilentSince, spare: r.spare, statuses: r.statuses() };
+    r.setServers([...chartList, { nodeId: "c", url: C }]);
+    expect({ main: r.mainSilentSince, spare: r.spare, statuses: r.statuses() }).toEqual(before);
+    expect(changed).toHaveBeenCalledTimes(3);
+  });
+
+  it("probeMain answers true for any HTTP answer and false for a timeout or network error", async () => {
+    vi.useFakeTimers({ now: T0 });
+    let mode: "503" | "hang" | "reject" | "ok" = "ok";
+    const fetchImpl = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const origin = new URL(String(input)).origin;
+      if (origin === A && mode === "503") return Promise.resolve(new Response("", { status: 503 }));
+      if (origin === A && mode === "hang")
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        );
+      if (origin === A && mode === "reject")
+        return Promise.reject(new TypeError("Failed to fetch"));
+      if (origin === VENUE) return Promise.reject(new TypeError("Failed to fetch"));
+      return Promise.resolve(
+        new Response(JSON.stringify({ acceptingSales: origin === B, term: 2, nodeId: "x" }), {
+          status: 200,
+        }),
+      );
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: VENUE, fetchImpl, storage: memoryStorage() });
+    r.setServers(chartList);
+    mode = "reject";
+    await r.probeNow();
+    const before = { current: r.current, statuses: r.statuses(), silent: r.mainSilentSince };
+    const changed = vi.fn();
+    r.addEventListener("state-changed", changed);
+    r.addEventListener("server-changed", changed);
+
+    mode = "503";
+    await expect(r.probeMain()).resolves.toBe(true);
+    expect(fetchImpl).toHaveBeenLastCalledWith(`${A}/api/node`, expect.anything());
+
+    mode = "hang";
+    const hung = r.probeMain();
+    await vi.advanceTimersByTimeAsync(3_100);
+    await expect(hung).resolves.toBe(false);
+
+    mode = "reject";
+    await expect(r.probeMain()).resolves.toBe(false);
+
+    expect({ current: r.current, statuses: r.statuses(), silent: r.mainSilentSince }).toEqual(
+      before,
+    );
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it("probeMain is false when the list has no serving-primary entry", async () => {
+    const fetchImpl = probeFetch({});
+    const r = new ServerRouter({ origin: VENUE, fetchImpl, storage: memoryStorage() });
+    await expect(r.probeMain()).resolves.toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});

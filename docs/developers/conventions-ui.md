@@ -2098,8 +2098,9 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   person who has saved no language of their own; a person's saved language wins
   (`resolveActiveLocale`, `packages/shared/src/locales.ts`).
 - `servers`: the till's router follows the primary on its own among the servers it was given at
-  start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). `nodeId` is in the answer
-  but the till does not read it.
+  start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). Each entry's `standing`
+  names the main server and the spare for the main-server strip, so a till shows the strip only for
+  a spare named in its last successful start read.
 - `membership`: the server's signed chart. The router keeps the newest it was given
   (`ServerRouter.offerChart`) and posts it to a server answering an older term or none; a newer
   chart reaches an open till only when it starts again.
