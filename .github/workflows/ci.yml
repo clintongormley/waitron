@@ -2061,7 +2061,6 @@ jobs:
             apps/till/.vitest-attachments/*.png
             apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
           include-hidden-files: true
-          if-no-files-found: error
           retention-days: 7
 
       - name: Retry till failure screenshot upload
@@ -2075,7 +2074,6 @@ jobs:
             apps/till/.vitest-attachments/*.png
             apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
           include-hidden-files: true
-          if-no-files-found: error
           retention-days: 7
           overwrite: true
 
