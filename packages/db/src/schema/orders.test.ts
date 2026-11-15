@@ -80,7 +80,6 @@ async function seed(db: Database): Promise<void> {
   const [prodA] = await db
     .insert(products)
     .values({
-      menuId: catA.id,
       name: "Café solo",
 
       unitPrice: 130,
@@ -763,7 +762,6 @@ describe("working_order_lines — the draft line's links", () => {
     const [spare] = await db
       .insert(products)
       .values({
-        menuId: (await db.select({ id: menus.id }).from(menus))[0]!.id,
         name: "Café solo",
 
         unitPrice: 130,

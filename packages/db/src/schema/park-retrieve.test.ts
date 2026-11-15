@@ -65,7 +65,6 @@ describe("park & retrieve schema", () => {
     const [product] = await admin
       .insert(products)
       .values({
-        menuId: menu.id,
         name: "Café solo",
 
         unitPrice: 100,

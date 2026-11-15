@@ -38,7 +38,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     const [prod] = await db
       .insert(products)
       .values({
-        menuId: cat!.id,
         name: "Espresso",
 
         unitPrice: 100,

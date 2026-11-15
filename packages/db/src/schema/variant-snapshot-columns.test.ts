@@ -40,7 +40,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
     const [prod] = await db
       .insert(products)
       .values({
-        menuId: cat!.id,
         name: "Café solo",
 
         unitPrice: 130,

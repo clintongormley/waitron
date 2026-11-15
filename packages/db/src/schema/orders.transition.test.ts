@@ -133,7 +133,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     const [product] = await db
       .insert(products)
       .values({
-        menuId: menu!.id,
         name: "Café solo",
 
         unitPrice: 100,

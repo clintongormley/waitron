@@ -37,7 +37,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const [prodA] = await db
       .insert(products)
       .values({
-        menuId: catA!.id,
         name: "Black coffee",
 
         unitPrice: 100,

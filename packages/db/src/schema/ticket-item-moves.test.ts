@@ -42,7 +42,6 @@ describe("ticket_item_moves schema", () => {
     const [product] = await db
       .insert(products)
       .values({
-        menuId: menu!.id,
         name: "Food",
 
         unitPrice: 100,
