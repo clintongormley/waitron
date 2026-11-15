@@ -262,11 +262,9 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
     "keeps a shown unconfirmed-change warning while opening the drawer (refused: %s)",
     async (refused) => {
       const openDrawer = refused
-        ? vi
-            .fn()
-            .mockRejectedValue({
-              code: typeof refused === "string" ? refused : "drawer.not_attached",
-            })
+        ? vi.fn().mockRejectedValue({
+            code: typeof refused === "string" ? refused : "drawer.not_attached",
+          })
         : vi.fn().mockResolvedValue(undefined);
       const { el } = await mountEquipmentApp({
         getTill: vi
