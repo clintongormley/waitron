@@ -4,7 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -72,7 +72,7 @@ export class StaffRoleDialog extends LitElement {
   @property({ attribute: false }) staffRoles: readonly RoleColour[] = [];
   @property() createLabel = "";
   @state() private draft: Draft = draftOf(undefined, NO_COLOUR_USERS);
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private busy = false;
   @state() private refusal?: Refusal;
   /** Set when a write of the details succeeded and the holders' write after it did not. */
@@ -122,7 +122,7 @@ export class StaffRoleDialog extends LitElement {
       this.wrote = false;
       this.draft = draftOf(this.staffRole, this.others());
       this.baseline = copy(this.draft);
-      this.attempted = false;
+      this.#feedback.reset();
       this.busy = false;
       this.refusal = undefined;
       this.holdersRefusal = undefined;
@@ -204,7 +204,7 @@ export class StaffRoleDialog extends LitElement {
       const named = this.refused(refusal);
       if (named?.field === field) return named.message;
     }
-    if (field === "name" && this.attempted && this.draft.name.trim() === "")
+    if (field === "name" && this.#feedback.attempted && this.draft.name.trim() === "")
       return t("staffing.role.name_required");
     return "";
   }
@@ -237,11 +237,11 @@ export class StaffRoleDialog extends LitElement {
   private async save() {
     if (!this.open || !this.isConnected || this.busy || saveActionState(this.scope).unchanged)
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = undefined;
     this.holdersRefusal = undefined;
     if (this.failsOwnChecks) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = this.generation;
@@ -371,7 +371,7 @@ export class StaffRoleDialog extends LitElement {
         <wt-button
           data-test="save-staff-role"
           variant=${action.variant}
-          ?disabled=${action.unchanged || this.busy || (this.attempted && this.failsOwnChecks)}
+          ?disabled=${action.unchanged || this.busy || (this.#feedback.attempted && this.failsOwnChecks)}
           ?loading=${this.busy}
           @click=${() => void this.save()}
           >${!this.savedId && this.createLabel ? this.createLabel : t("staffing.role.save")}</wt-button

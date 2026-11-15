@@ -5,7 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   saveActionState,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
@@ -61,7 +61,7 @@ export class ShiftEditDialog extends LitElement {
   @property() staffRoleId = "";
   @state() private draft: Draft = empty();
   @state() private busy = false;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private refusal?: { code: string; field?: string };
   @state() private confirmation?: "delete" | "save";
   private identity?: object;
@@ -93,7 +93,7 @@ export class ShiftEditDialog extends LitElement {
       this.identity = {};
       this.subject = subject;
       this.busy = false;
-      this.attempted = false;
+      this.#feedback.reset();
       this.refusal = undefined;
       this.confirmation = undefined;
       const shift = this.week.shifts.find((s) => s.shiftId === this.shiftId);
@@ -163,7 +163,7 @@ export class ShiftEditDialog extends LitElement {
   }
   private fieldError(field: Field): string {
     if (this.refusal?.field === field) return t(`staffing.shift.invalid_${field}`);
-    return this.attempted ? this.ownError(field) : "";
+    return this.#feedback.attempted ? this.ownError(field) : "";
   }
   private bottom(): string {
     if (fields.some((f) => this.fieldError(f))) return t("staffing.role.fix_fields");
@@ -200,11 +200,10 @@ export class ShiftEditDialog extends LitElement {
       saveActionState(this.scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = undefined;
     if (fields.some((f) => this.ownError(f))) {
-      await this.updateComplete;
-      focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     if (
@@ -281,7 +280,7 @@ export class ShiftEditDialog extends LitElement {
       action.unchanged ||
       this.busy ||
       !!this.confirmation ||
-      (this.attempted && fields.some((f) => !!this.ownError(f)));
+      (this.#feedback.attempted && fields.some((f) => !!this.ownError(f)));
     const choices: Record<
       "personId" | "area" | "staffRoleId",
       { value: string; label: string; disabled?: boolean }[]

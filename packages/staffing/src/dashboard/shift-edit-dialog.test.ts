@@ -137,6 +137,7 @@ it("marks missing fields after an invalid attempt, then lets a server refusal re
   expect(field("area").error).toBeTruthy();
   expect(field("staffRoleId").error).toBeTruthy();
   expect(field("endsAt").error).toBeTruthy();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field("area")));
   expect(button("save").disabled).toBe(true);
   await change("area", "station:kitchen");
   await change("staffRoleId", "sous");
