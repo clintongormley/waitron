@@ -1750,9 +1750,8 @@ export const en = {
   "kitchen.delete_course_products": "{count} products fire earliest.",
   "kitchen.delete_course_products_one": "1 product fires earliest.",
   "kitchen.delete_course_service_steps":
-    "{count} service steps that start from it or their following steps.",
-  "kitchen.delete_course_service_steps_one":
-    "1 service step that starts from it or follows another step.",
+    "{count} service steps that start when it is served or follow those steps.",
+  "kitchen.delete_course_service_steps_one": "1 service step that starts when it is served.",
   "kitchen.reorder_course": "Drag to reorder",
   "devices.title": "Devices",
   "devices.no_devices": "No devices yet.",
@@ -6030,8 +6029,7 @@ export const es: Record<StringKey, string> = {
   "kitchen.delete_course_products_one": "1 producto se prepara primero.",
   "kitchen.delete_course_service_steps":
     "{count} pasos de servicio que empiezan al servirlo o tras esos pasos.",
-  "kitchen.delete_course_service_steps_one":
-    "1 paso de servicio que empieza al servirlo o tras otro paso.",
+  "kitchen.delete_course_service_steps_one": "1 paso de servicio que empieza al servirlo.",
   "kitchen.reorder_course": "Arrastrar para reordenar",
   "devices.title": "Dispositivos",
   "devices.no_devices": "Todavía no hay dispositivos.",

@@ -119,6 +119,28 @@ it("deleting a course removes its named descendants regardless of their position
     ["Bill", "after_step", 2],
     ["Water", "seated", 3],
   ]);
+  const stored = await db.select().from(serviceSteps).where(eq(serviceSteps.departmentId, dining));
+  const byName = new Map(stored.map((row) => [row.name, row.id]));
+  await run((tx) =>
+    saveServiceSteps(
+      tx,
+      dining,
+      stored.map((row) => ({
+        id: row.id,
+        key: row.id,
+        name: row.name,
+        start: row.start,
+        courseId: row.courseId,
+        minutes: row.minutes,
+        afterStepKey:
+          row.name === "Coffee"
+            ? byName.get("Bill")!
+            : row.name === "Bill"
+              ? byName.get("Dessert?")!
+              : row.afterStepId,
+      })),
+    ),
+  );
   expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 3, targets: [] },
   ]);

@@ -4,6 +4,8 @@ import type { Database } from "@waitron/db";
 /** Clears historical untraded fixtures; activation-ledger references can refuse owner deletion. */
 export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
+    // All listed fixture rows are removed together; check their foreign keys at commit.
+    await tx.execute(sql`pragma defer_foreign_keys = on`);
     for (const table of [
       // A season day's range keys its period with no delete rule; the days take their ranges.
       "department_days",

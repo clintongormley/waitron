@@ -61,6 +61,15 @@ describe("stepsEqual", () => {
     edit(list);
     return stepsEqual(drafts(), list);
   };
+  it("detects a different named predecessor without moving the row", () => {
+    const first = [
+      ...drafts(),
+      { ...drafts()[0]!, id: "s3", key: "s3", start: "after_step" as const, afterStepKey: "s1" },
+    ];
+    const changed = structuredClone(first);
+    changed[2]!.afterStepKey = "s2";
+    expect(stepsEqual(first, changed)).toBe(false);
+  });
   it("is true for the same rows", () => {
     expect(stepsEqual(drafts(), drafts())).toBe(true);
   });

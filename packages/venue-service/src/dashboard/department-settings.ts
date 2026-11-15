@@ -694,20 +694,12 @@ export class DepartmentSettings extends LitElement {
     this.draft.serviceSteps.forEach((step) => {
       const row: Partial<Record<ServiceStepField, string>> = {};
       if (!step.name.trim()) row.name = t("venue.field_required");
-      if (step.start === "after_step") {
-        const seen = new Set([step.key]);
-        let key = step.afterStepKey;
-        if (key == null) row.start = t("venue.service_step_start_invalid");
-        while (key != null) {
-          const parent = this.draft!.serviceSteps.find((candidate) => candidate.key === key);
-          if (seen.has(key) || !parent) {
-            row.start = t("venue.service_step_start_invalid");
-            break;
-          }
-          seen.add(key);
-          key = parent.afterStepKey;
-        }
-      } else if (step.start === "course_served" && !courses.has(step.courseId!))
+      if (
+        step.start === "after_step" &&
+        !this.draft!.serviceSteps.some((parent) => parent.key === step.afterStepKey)
+      )
+        row.start = t("venue.service_step_start_invalid");
+      else if (step.start === "course_served" && !courses.has(step.courseId!))
         row.start = t("venue.service_step_course_gone");
       const minutes = step.minutes.trim();
       if (!/^\d+$/.test(minutes) || Number(minutes) > MAX_SERVICE_STEP_MINUTES)
@@ -746,9 +738,7 @@ export class DepartmentSettings extends LitElement {
     const rows: ServiceStepErrors = {};
     let list = "";
     if (code === "management.request_invalid") {
-      const match = /^serviceSteps\.(\d+)\.(name|start|courseId|afterStepKey|key|minutes)$/.exec(
-        named,
-      );
+      const match = /^serviceSteps\.(\d+)\.(name|start|courseId|minutes)$/.exec(named);
       const key = match ? steps[Number(match[1])]?.key : undefined;
       if (key) {
         const field = match![2] === "courseId" ? "start" : (match![2] as ServiceStepField);

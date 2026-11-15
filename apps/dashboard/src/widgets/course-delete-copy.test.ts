@@ -41,13 +41,13 @@ it.each([
 it.each([
   [
     "en-GB",
-    "1 service step that starts from it or follows another step.",
-    "2 service steps that start from it or their following steps.",
+    "1 service step that starts when it is served.",
+    "2 service steps that start when it is served or follow those steps.",
     "1 product fires earliest.",
   ],
   [
     "es-ES",
-    "1 paso de servicio que empieza al servirlo o tras otro paso.",
+    "1 paso de servicio que empieza al servirlo.",
     "2 pasos de servicio que empiezan al servirlo o tras esos pasos.",
     "1 producto se prepara primero.",
   ],

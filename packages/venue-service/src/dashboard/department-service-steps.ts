@@ -109,11 +109,12 @@ export class DepartmentServiceSteps extends LitElement {
   @property({ attribute: false }) listError = "";
   @property({ type: Boolean }) disabled = false;
 
-  #send(steps: ServiceStepDraft[]): void {
-    steps = placeServiceSteps(
-      steps,
-      this.courses.map((course) => course.id),
-    );
+  #send(steps: ServiceStepDraft[], place = false): void {
+    if (place)
+      steps = placeServiceSteps(
+        steps,
+        this.courses.map((course) => course.id),
+      );
     this.steps = steps;
     this.dispatchEvent(
       new CustomEvent("steps-change", { detail: { steps }, bubbles: true, composed: true }),
@@ -121,7 +122,10 @@ export class DepartmentServiceSteps extends LitElement {
   }
 
   #edit(key: string, change: Partial<ServiceStepDraft>): void {
-    this.#send(this.steps.map((step) => (step.key === key ? { ...step, ...change } : step)));
+    this.#send(
+      this.steps.map((step) => (step.key === key ? { ...step, ...change } : step)),
+      change.start !== undefined,
+    );
   }
 
   async #focus(selector: string): Promise<void> {
@@ -176,6 +180,7 @@ export class DepartmentServiceSteps extends LitElement {
         courseId: null,
       });
     else this.#edit(key, { start: value as ServiceStepStart, courseId: null, afterStepKey: null });
+    void this.#focus(`tr[data-step="${key}"] wt-combobox[name="serviceStepStart"]`);
   }
 
   #startOptions(step: ServiceStepDraft) {

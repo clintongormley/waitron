@@ -6727,7 +6727,7 @@ after the department's settings; if that request is refused, the field shows the
 unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
 and the zones that differ, and “Courses and stations”, with the shared reminder and the manager's
 PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
-bill requested and leaving, blue service-step rows with their existing start selectors, drag handles,
+bill requested and leaving, blue service-step rows placed by their named starts,
 Delete and Add step, and amber read-only course rows in course order with their current send/hold
 and reminder values. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
 holds the department's receipt

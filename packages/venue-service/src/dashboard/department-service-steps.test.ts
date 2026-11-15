@@ -257,7 +257,20 @@ it("Add step is disabled at 20 steps", async () => {
 });
 
 it("Delete in the row menu removes the step and moves focus to the next name, or to Add step", async () => {
-  const el = await mount({ steps: copy(STEPS.slice(0, 3)) });
+  const el = await mount({
+    steps: [
+      {
+        ...STEPS[1]!,
+        key: "grandchild",
+        id: "grandchild",
+        name: "Check again",
+        afterStepKey: "s2",
+      },
+      STEPS[1]!,
+      STEPS[0]!,
+      STEPS[2]!,
+    ],
+  });
   const { changes } = record();
   await remove(el, "s1");
   expect(changes.at(-1)!.map((step) => step.key)).toEqual(["s3"]);
@@ -266,6 +279,33 @@ it("Delete in the row menu removes the step and moves focus to the next name, or
   await remove(el, "s3");
   expect(changes.at(-1)).toEqual([]);
   expect(el.shadowRoot!.activeElement).toBe(addButton(el));
+});
+
+it("keeps a delay field and its row in place while typing multiple digits", async () => {
+  const el = await mount({
+    steps: [
+      STEPS[0]!,
+      ...[
+        ["alpha", "Alpha", "5"],
+        ["bravo", "Bravo", "10"],
+        ["charlie", "Charlie", "20"],
+      ].map(([key, name, minutes]) => ({
+        key: key!,
+        id: key!,
+        name: name!,
+        minutes: minutes!,
+        start: "after_step" as const,
+        afterStepKey: "s1",
+        courseId: null,
+      })),
+    ],
+  });
+  const input = minutesInput(el, 3).shadowRoot!.querySelector("input")!;
+  await userEvent.type(input, "{selectall}15");
+  await settle(el);
+  expect(el.steps.find((step) => step.key === "charlie")!.minutes).toBe("15");
+  expect(rows(el).map((row) => row.dataset.step)).toEqual(["s1", "alpha", "bravo", "charlie"]);
+  expect(el.shadowRoot!.activeElement).toBe(minutesInput(el, 3));
 });
 
 it("places a step by its named start and offers no dragging", async () => {
@@ -281,6 +321,7 @@ it("places a step by its named start and offers no dragging", async () => {
     courseId: null,
   });
   expect(q(el, '[data-test^="drag-"]')).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(startBox(el, 3));
 });
 
 it("shows each error under its own field", async () => {

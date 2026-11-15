@@ -2652,9 +2652,20 @@ it("a step list another manager changed while a rename's save is sent is shown a
   expect(sentSteps(sent[1])).toEqual([...SENT_STEPS.slice(0, 2), TEA]);
   finish();
 });
-it("changing a step and changing it back sends no steps", async () => {
-  const { el, writes } = await mount(stepsView());
+it("changing a step and changing it back sends no steps even after courses are reordered", async () => {
+  const view = stepsView();
+  view.serviceSteps.push({
+    id: "coffee",
+    departmentId: "d1",
+    name: "Coffee",
+    start: "course_served",
+    courseId: "c2",
+    afterStepId: null,
+    minutes: 5,
+  });
+  const { el, writes } = await mount(view);
   await selectDepartmentTab(el, "tables");
+  el.model = { ...view, courses: [...view.courses].reverse() };
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   expect(save(el).disabled).toBe(false);
