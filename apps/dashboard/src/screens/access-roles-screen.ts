@@ -4,7 +4,7 @@ import {
   draftScopeFor,
   saveActionState,
   submitOnEnter,
-  focusFirstInvalid,
+  FormFeedback,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
@@ -101,7 +101,7 @@ export class AccessRolesScreen extends LitElement {
   @state() private name = "";
   @state() private permissions: string[] = [];
   @state() private busy = false;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private nameRefusal = "";
   @state() private error = "";
   @state() private confirmation: "copy" | "delete" | null = null;
@@ -177,7 +177,7 @@ export class AccessRolesScreen extends LitElement {
     this.name = role === "new" ? "" : (role.name ?? "");
     this.permissions = role === "new" ? [] : [...role.permissions];
     this.error = this.nameRefusal = "";
-    this.attempted = false;
+    this.#feedback.reset();
     this.#scope?.dispose();
     const draft = draftScopeFor<Draft>(this, {
       id: this,
@@ -230,13 +230,12 @@ export class AccessRolesScreen extends LitElement {
   }
   async #save(): Promise<void> {
     if (this.busy || !this.#scope?.isDirty()) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.error = this.nameRefusal = "";
     const submitted = this.#draft();
     const role = this.#role();
     if ((!role || !role.builtInKey) && !submitted.name) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!.querySelector("form")!);
+      await this.#feedback.focus(this.shadowRoot!.querySelector("form")!);
       return;
     }
     this.busy = true;
@@ -388,7 +387,7 @@ export class AccessRolesScreen extends LitElement {
     const save = saveActionState(this.#scope);
     const nameError =
       this.nameRefusal ||
-      (this.attempted && !this.name.trim() ? t("access_roles.name_required") : "");
+      (this.#feedback.attempted && !this.name.trim() ? t("access_roles.name_required") : "");
     const permissions = this.roles.find((r) => r.builtInKey === "admin")!.permissions;
     const canChange = !role || this.#canChange(role);
     return html`<div class="editor" data-test="editor">
@@ -462,7 +461,7 @@ export class AccessRolesScreen extends LitElement {
           !admin
             ? html`<wt-form-actions
                 data-test="form-actions"
-                error=${[this.error, nameError ? t("access_roles.fix_fields") : ""].filter(Boolean).join(" ")}
+                error=${this.#feedback.message({ request: this.error, name: nameError }, new Set(nameError ? ["name"] : []), t("access_roles.fix_fields"))}
               >
                 <wt-button
                   slot="cancel"
@@ -474,7 +473,7 @@ export class AccessRolesScreen extends LitElement {
                 <wt-button
                   data-test="save"
                   variant=${save.variant}
-                  ?disabled=${save.unchanged || this.busy || !canChange || (this.attempted && !role?.builtInKey && !this.name.trim())}
+                  ?disabled=${save.unchanged || this.busy || !canChange || (this.#feedback.attempted && !role?.builtInKey && !this.name.trim())}
                   @click=${() => void this.#save()}
                   >${t("action.save")}</wt-button
                 >
