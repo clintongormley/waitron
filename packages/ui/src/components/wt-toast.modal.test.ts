@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
 // For its `parkPointer` command type only.
@@ -12,6 +12,7 @@ import "./wt-toast.js";
 registerIcons({ close: "M2 2L14 14M14 2L2 14" });
 
 afterEach(async () => {
+  vi.useRealTimers();
   cleanup();
   // A pointer left resting where a later toast appears would pause that toast's countdown.
   await commands.parkPointer();
@@ -80,6 +81,41 @@ test("a held toast's countdown starts only once the window closes", async () => 
   await toast.updateComplete;
   expect(shown(toast)).toBe(true);
   await expect.poll(() => toast.open, { timeout: 2000 }).toBe(false);
+});
+
+test("a toast the pointer was on when a window opened counts down once the window closes", async () => {
+  // The window takes the toast off the screen from under the pointer, so no mouseleave arrives.
+  const { modal, toast } = await page();
+  toast.show();
+  await toast.updateComplete;
+  await userEvent.hover(toast.shadowRoot!.querySelector<HTMLElement>(".toast")!);
+  await setOpen(modal, true);
+  toast.duration = 150;
+  await toast.updateComplete;
+  await commands.parkPointer();
+  vi.useFakeTimers();
+  await setOpen(modal, false);
+  await toast.updateComplete;
+  expect(shown(toast)).toBe(true);
+  vi.advanceTimersByTime(150);
+  expect(toast.open).toBe(false);
+});
+
+test("a toast keyboard focus was in when a window opened counts down once the window closes", async () => {
+  const { modal, toast } = await page();
+  toast.duration = 150;
+  toast.show();
+  await toast.updateComplete;
+  toast.shadowRoot!.querySelector<HTMLElement>("button.close")!.focus();
+  expect(toast.matches(":focus-within")).toBe(true);
+  await setOpen(modal, true);
+  await toast.updateComplete;
+  vi.useFakeTimers();
+  await setOpen(modal, false);
+  await toast.updateComplete;
+  expect(shown(toast)).toBe(true);
+  vi.advanceTimersByTime(150);
+  expect(toast.open).toBe(false);
 });
 
 test("a toast inside the open window shows at once", async () => {

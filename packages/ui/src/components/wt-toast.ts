@@ -72,6 +72,8 @@ export class WtToast extends LitElement {
     const held = underModal(this);
     if (held === this.#held) return;
     this.#held = held;
+    // Being held removes the hovered element without a mouseleave, so the flag would stay set.
+    if (held) this.#hovered = false;
     this.requestUpdate();
     this.#schedule();
   };
