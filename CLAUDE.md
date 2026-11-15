@@ -1059,7 +1059,8 @@ before treating an implementation as a rule violation.
   `CONFLICTING` or a failed check. Procedure:
   [workflow-guide.md](docs/developers/workflow-guide.md#commits-pull-requests-and-merging).
   Package-level failures caused only by combining branches are checked at the next full run, not at
-  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`**.
+  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
+  merge commit carries no sign-off and fails DCO.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.
   Procedure: [workflow-guide.md](docs/developers/workflow-guide.md).
@@ -1088,7 +1089,9 @@ before treating an implementation as a rule violation.
   `~/workspace/.waitron-dev/claude/<name>`** (owner, 2026-11-14). The owner's demo venue, shared
   by the owner's checkouts, survives moving between them, so a branch's migrations can fail on its
   rows. Claude rebuilds it only from the main checkout (`wa-wt reset demo waitron`, which stops and
-  restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy.
+  restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Cost: a Claude
+  reset on slot 2 rewrote the main checkout's `.env`, and the owner's next start got a dashboard that
+  could not reach its server.
   Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name, and
   `apps/server/scripts/dev-setup.test.ts`,
   `apps/server/scripts/dev-onboard.test.ts` and `apps/server/scripts/dev-server.test.ts` for

@@ -703,14 +703,7 @@ rule of that date, not text from `1d03a7c`.
 These excerpts are from `CLAUDE.md` at `53688274b5`; they are not new measurements. Each heading
 names the root entry the excerpt was cut from; the entry keeps its rule, guard and pointer.
 
-### Every commit needs `git commit -s`
-
-> **Never `gh pr update-branch`** — its merge commit carries no sign-off and fails DCO.
-
 ### The first port slot (5190/5191/8080) is the owner's alone
-
-> Cost: a Claude reset on slot 2 rewrote the main checkout's `.env`, and the owner's next start got
-> a dashboard that could not reach its server.
 
 > Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name (stand-in `pnpm` and
 > `docker`, run by hand)
