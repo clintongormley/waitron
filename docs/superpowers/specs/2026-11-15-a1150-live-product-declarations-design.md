@@ -12,11 +12,11 @@ its kitchen view and newly generated ticket show eggs. Each extra follows its ow
 
 ## Sources and readers
 
-Resolve chosen-product `allergens` and `dietaryDeclarations` through `variant-fallback.ts`.
+Resolve chosen-product `allergens`, `dietOverride` and `dietaryDeclarations` through `variant-fallback.ts`.
 Keep variant inheritance, `null` unreviewed versus `{}` reviewed-empty, and each extra's own
-list. Options carry no declarations. Derive `diet` from direct declarations as `asServedDiet`
-does, using shared expansion; legacy `dietOverride` no longer contributes to live labels or diet
-filters. Check this explicitly with a conflicting override fixture; filter criteria stay unchanged.
+list. Options carry no declarations. Preserve existing derivations: labels expand direct declarations;
+`diet` remains `overlayDietProfile(UNDECLARED_DIET, liveDietOverride)` as in `offerLineValues`
+(`operations.ts:479`). Preserve all four diet filters; changing their policy is outside A1150.
 
 | Reader and source | Required declaration source |
 | --- | --- |
@@ -28,8 +28,10 @@ filters. Check this explicitly with a conflicting override fixture; filter crite
 | Publication warnings and comparisons | Current declarations for warnings; frozen menu content for differences/status |
 
 Product editors already read current values. `listWorkingLineContexts` still returns copied
-nutrition; held retrieval must stop using those fields as declarations. Keep its pricing/name
-facts and existing stored columns, without schema work. Sent displays use their dedicated capture,
+nutrition; held retrieval must instead use batched server-side effective-product resolution,
+keyed by its chosen product ids even outside current offers, including unreviewed null values and
+current diet/override/declarations. Reuse the live-row resolver/query pattern in `line-nutrition.ts`,
+not its filtered `readLineNutrition` result. Keep pricing/name facts and stored columns. Sent displays use their dedicated capture,
 never current declarations when a capture is missing. Preserve capture replay, splitting and
 later-extra behavior; held dishes capture on release.
 
@@ -49,7 +51,7 @@ unsent counter/table drafts, held lines and open information/choice views on suc
 reconciliation, without confirmation or marking a saved order edited. Keep request/in-flight guards.
 
 Guest pages refresh on regeneration/reload; paper already printed cannot change. Cloud's
-`cloud.connection` job sleeps sixty seconds between passes (`cloud-worker.ts:20–21`), and calls
+`cloud.connection` job sleeps sixty seconds between passes (`cloud-worker.ts:19–20`), and calls
 `onGuestMenu` after successful active-installation refresh while primary (`:41–44`);
 `boot.ts:4617` wires reconciliation. Its regenerated page digest drives publication
 (`cloud-guest-menu.ts:143–163`), independently of menu publication events. These are source reads,
@@ -59,21 +61,24 @@ not a delivery guarantee.
 
 Keep the existing single full-document hash. With declarations absent from new frozen content,
 status, preview tokens, schedules, patches, included-menu checks and backup integrity share it.
-Remove declaration comparisons/navigation in `menu-document.ts`/`menu-navigation.ts`; keep
-stale-preview refusal for publishable edits. Warnings hydrate current working offers, retaining
+Remove declaration comparisons/navigation in `menu-document.ts`/`menu-navigation.ts`, their
+`ProductChangeField` variants and dashboard `menu-preview.ts:99–100` labels; keep
+stale-preview refusal for publishable edits. Warnings hydrate current working offers (`menu-publication.ts:532–540`), retaining
 advisory unreviewed-dish/active-variant policy; `{}` never warns. A1151 patches still exclude declarations.
 
 **Proposed transition for watcher settlement:** retain the current document format and untouched
-stored versions/hashes. Existing menus show Changed once until ordinary republishing omits the old
-fields. Current declarations must overlay even those retained versions immediately. No migration,
-second hash, compatibility layer or reset. After that one-time republish, declaration edits alone
-leave status Current and add no change row. A1308 collisions are resolved on rebase.
+stored versions/hashes. A retained old edition can show Changed with no listed change until ordinary
+republishing omits its old fields; an old queued edition activating later can repeat this. Included-menu
+‘also on’ labels can be noisy meanwhile. Current declarations overlay retained editions immediately.
+No migration, second hash, compatibility layer or reset. Once active content has the new shape,
+declaration edits alone leave Current and no change row. Resolve A1308 collisions on rebase.
 
 Update EN/ES Products, Modifiers and Table service guides, retaining anchors. Products EN
 `:266,494–507,526` and ES `:278,521–534,555` contain republish/published-declaration wording.
 Update developer `design-system.md:7027` and `products.md:785` too. Explain saving without
 republishing, inheritance, separate extras, Recorded when sent, live kitchen reads and reopening
-menu/paper previews after edits; document the one-time transition.
+menu/paper previews after edits. Explain transition noise and republishing menus together when
+their drafts are ready; publishing still includes other staged edits and old queued editions need review.
 
 ## Acceptance and limits
 
