@@ -523,9 +523,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   republished.**
   [Detail](backlog/menu.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
 
-- **A885. Say that lines already on an open order keep their VAT class after a republish.**
-  [Detail](backlog/menu.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
-
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
   Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
   Customer names fall back through guest language, venue default, then internal name; never kitchen.
