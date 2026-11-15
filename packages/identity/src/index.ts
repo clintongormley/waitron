@@ -82,6 +82,7 @@ export {
   finishPasskeyRegistration,
   readPasskeySignals,
   verifyOwnPasskey,
+  verifyPasskeyAssertion,
 } from "./passkey.js";
 export { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 export {

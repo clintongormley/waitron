@@ -1,6 +1,6 @@
 import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { inTurn } from "@waitron/provisioning";
 import { readNodeMembership, nowIso, type Database, type NodeDatabase } from "@waitron/db";
@@ -29,7 +29,9 @@ import {
   OPERATION_ID_MAX_LENGTH,
   readOperationReadyToPromote,
   signInCredentials,
+  switchStepFor,
 } from "./handover-preparation.js";
+import { SWITCH_SIGN_IN_STATUS, type SwitchSignIn } from "./handover-switch-proof.js";
 import { advanceHandover, readHandoverEnvelope } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
@@ -50,6 +52,7 @@ export interface HandoverActivationDeps {
   appDb: Database;
   nodePreparation: ReturnType<typeof createNodeOperationPreparation>;
   passwordThrottle?: PasswordThrottle;
+  switchSignIn?: SwitchSignIn;
   emergency?: EmergencyHandover;
   run: (
     attestation: FenceAttestation,
@@ -61,6 +64,7 @@ export interface HandoverActivationDeps {
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.throttled": 429,
+  ...SWITCH_SIGN_IN_STATUS,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
@@ -93,6 +97,7 @@ async function storedEvidence(
 }
 
 async function activate(
+  c: Context,
   deps: HandoverActivationDeps,
   operationId: string,
   body: { moduleOperation?: unknown; signIn?: unknown },
@@ -116,7 +121,11 @@ async function activate(
       throw new AppError("handover.source_no_longer_main", { operationId });
   };
   if (!committed) await assertOldBoxStillMain(deps.appDb);
-  const credentials = await signInCredentials(deps.appDb, body.signIn);
+  const credentials = await signInCredentials(
+    deps.appDb,
+    body.signIn,
+    switchStepFor(c, deps.switchSignIn, operation),
+  );
   const evidence = await storedEvidence(deps, operation);
   const result = await handoverSignInAttempt(throttle, credentials, () =>
     deps.nodePreparation.withPromotion(
@@ -172,8 +181,9 @@ async function activate(
 }
 
 /**
- * `POST /api/node/handover/:operationId/activate`: a fresh sign-in against the placed copy, then
- * this box takes on its own filing identity under the name its preparation selected.
+ * `POST /api/node/handover/:operationId/activate`: a password sign-in, or for an emergency a passkey
+ * or this box's switch proof, checked against the placed copy, then this box takes on its own filing
+ * identity under the name its preparation selected.
  */
 export function mountHandoverActivationApi(
   app: Hono,
@@ -193,9 +203,9 @@ export function mountHandoverActivationApi(
         throw new AppError("handover.request_invalid", { field: "operationId" });
       const body = await readJsonBody<{ moduleOperation?: unknown; signIn?: unknown }>(c);
       // In turn, not sharing the first attempt's answer as a capture does: each caller's own
-      // password decides its own refusal, and the turn behind a success finds it activated.
+      // sign-in decides its own refusal, and the turn behind a success finds it activated.
       return c.json(
-        await inTurn(deps.node, operationId, () => activate(deps, operationId, body, throttle)),
+        await inTurn(deps.node, operationId, () => activate(c, deps, operationId, body, throttle)),
       );
     }),
   );

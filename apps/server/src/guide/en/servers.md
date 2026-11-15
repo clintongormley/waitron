@@ -75,7 +75,8 @@ an update for example, brings a reloading device here too; if you did not mean t
 declare anything, and reload the page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
-current authenticator code, if set up, then choose **Check this copy**. Type the password
+current authenticator code, if set up, or choose **Use your passkey**; then choose **Check this
+copy**, and with a passkey, use it when the page asks. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
 again. The spare first brings its
 copy up to date and restarts; keep the page open. If that takes more than a minute or cannot be done, **Use the copy this spare holds**
@@ -97,7 +98,8 @@ itself. If this box cannot check its time over the internet, the page first show
 and this device's: check that both are right, then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets this box's time from
 the device you are using and the page carries on; after **The server** or **Both times are wrong**,
 correct this device's time and reconnect. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
-current replacement when asked and try the step again. Your reason and statements stay in place.
+current replacement when asked and try the step again. With a passkey, the page asks for it when
+the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
 
 If the copy changes before you declare, review the new activity and tick the three statements
 again.

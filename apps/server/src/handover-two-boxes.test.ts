@@ -449,6 +449,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
         venueDir: bVenue,
         modules,
         origin: "https://box.test",
+        rpId: "box.test",
         credentialKeyRing: TOTP_KEY_RING,
         fetch: async () => {
           throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });

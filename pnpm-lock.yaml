@@ -409,6 +409,9 @@ importers:
 
   apps/setup:
     dependencies:
+      '@simplewebauthn/browser':
+        specifier: ^14.0.0
+        version: 14.0.0
       '@waitron/country':
         specifier: workspace:*
         version: link:../../packages/country

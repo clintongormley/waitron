@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import {
   openVenueDatabase,
   readNodeMembership,
@@ -28,6 +28,7 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
+  personIdForLoginEmail,
   persons,
   pinThrottleIdle,
   pinThrottleRetryAfterSeconds,
@@ -61,7 +62,17 @@ import {
   type SilentReason,
 } from "./boot-peer-check.js";
 import { checkEmergencyCopy, type EmergencyCopy } from "./handover-emergency-check.js";
-import { handoverSignInAttempt, signInCredentials } from "./handover-preparation.js";
+import { handoverSignInAttempt } from "./handover-preparation.js";
+import {
+  createSwitchChallenges,
+  parseSwitchSignIn,
+  SWITCH_SIGN_IN_STATUS,
+  precheckSwitchCredentials,
+  switchCredentials,
+  type SwitchSignIn,
+  type SwitchSignInRequest,
+} from "./handover-switch-proof.js";
+import { managementSite } from "./request-from-box.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandoverTx, beginHandoverTx, readHandoverEnvelope } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -87,7 +98,7 @@ export interface Declaration {
   reason: string;
   lastCopy: EmergencyCopy;
   provider: null;
-  actor: { personId: string; method: "password" | "password+totp" };
+  actor: { personId: string; method: "password" | "password+totp" | "passkey" };
   declaredAtMs: number;
   replaces: string | null;
 }
@@ -101,6 +112,8 @@ interface Deps {
   venueDir: string;
   modules: readonly WaitronModule[];
   origin: string;
+  /** The passkey relying party, `config.managementRpId`. */
+  rpId: string;
   credentialKeyRing: TotpKeyRing;
   passwordThrottle?: PasswordThrottle;
   fetch?: AskPeerStatusDeps["fetch"];
@@ -126,11 +139,14 @@ interface Deps {
 
 export interface EmergencyHandover {
   assertMayActivate(operation: HandoverOperation): Promise<void>;
+  /** The switch's passkey challenges and proof, which preparation and activation take too. */
+  switchSignIn: SwitchSignIn;
 }
 
 const STATUS = {
   "password.invalid": 401,
   "password.throttled": 429,
+  ...SWITCH_SIGN_IN_STATUS,
   "totp.required": 401,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
@@ -215,6 +231,14 @@ export function mountHandoverEmergencyApi(
   const checked = new Set<string>();
   const throttle = deps.passwordThrottle ?? createPasswordThrottle();
   const boundary = createErrorBoundary(STATUS, "handover-emergency.failed");
+  const switchSignIn: SwitchSignIn = {
+    node: deps.node,
+    ring: deps.ring,
+    nodeId: deps.nodeId,
+    rpId: deps.rpId,
+    origin: deps.origin,
+    challenges: createSwitchChallenges(),
+  };
   async function sourceSilent(sourceNodeId: string, activating: boolean) {
     const held = await readNodeMembership(deps.db);
     const source = held?.body.nodes.find((n) => n.nodeId === sourceNodeId);
@@ -245,18 +269,14 @@ export function mountHandoverEmergencyApi(
       sourceServersUrl: new URL("/manage/servers", originOf(source!.contactUrl)).href,
     });
   }
-  async function authenticate(signIn: unknown, db: Database = deps.db) {
-    const credentials = await signInCredentials(db, signIn);
-    if (
-      typeof credentials.password !== "string" ||
-      (credentials.totp !== undefined && typeof credentials.totp !== "string")
-    )
-      throw new AppError("password.invalid", {});
-    const { personId, password, totp } = credentials as {
-      personId: string;
-      password: string;
-      totp: string | undefined;
-    };
+  async function authenticate(c: Context, signIn: SwitchSignInRequest, db: Database = deps.db) {
+    if (signIn.kind !== "password") {
+      const { personId } = await switchCredentials(c, switchSignIn, db, signIn);
+      return { personId, method: "passkey" as const };
+    }
+    const { password, totp } = signIn;
+    const personId = await personIdForLoginEmail(db, signIn.email);
+    const credentials = { personId };
     // End the sign-in transaction before checking the copy or the network. Only a passing check
     // reaches the separate node transaction, so neither slow operation holds a write lock.
     return handoverSignInAttempt(throttle, credentials, () =>
@@ -319,9 +339,9 @@ export function mountHandoverEmergencyApi(
     )
       throw new AppError("handover.controlled_unresolved", { operationId: old.operationId });
   }
-  async function preview(raw: unknown) {
+  async function preview(c: Context, raw: unknown) {
     if (!isRecord(raw)) refuseRequest("body");
-    await authenticate(raw.signIn);
+    await authenticate(c, parseSwitchSignIn(c, raw.signIn));
     const { sourceNodeId, source } = await mirrorSource();
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
     if (
@@ -361,7 +381,7 @@ export function mountHandoverEmergencyApi(
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
       const body = await readJsonBody<unknown>(c);
-      return c.json(await inTurn(deps.node, "handover-emergency", () => preview(body)));
+      return c.json(await inTurn(deps.node, "handover-emergency", () => preview(c, body)));
     }),
   );
   app.post("/api/node/handover/emergency/backup", (c) =>
@@ -376,7 +396,7 @@ export function mountHandoverEmergencyApi(
       if (payload.recoveryKey !== undefined && typeof payload.recoveryKey !== "string")
         refuseRequest("recoveryKey");
       return inTurn(deps.node, "handover-emergency", async () => {
-        await authenticate(payload.signIn);
+        await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
         const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
         if (open !== null)
@@ -428,23 +448,24 @@ export function mountHandoverEmergencyApi(
       log("warn", "handover.take_failure_not_counted", { errorCode: codeOf(written) }),
     );
   }
-  async function signInAgainstFollowed(signIn: unknown, path: string): Promise<void> {
+  async function signInAgainstFollowed(
+    c: Context,
+    signIn: SwitchSignInRequest,
+    path: string,
+  ): Promise<void> {
     const followed = await openVenueDatabase(dirname(path));
     try {
-      await authenticate(signIn, followed.venue);
+      await authenticate(c, signIn, followed.venue);
     } finally {
       await followed.close();
     }
   }
-  async function take(signIn: unknown) {
-    // A malformed sign-in could never pass, so it is refused before anything is stopped.
-    if (
-      !isRecord(signIn) ||
-      typeof signIn.email !== "string" ||
-      typeof signIn.password !== "string" ||
-      (signIn.totp !== undefined && typeof signIn.totp !== "string")
-    )
-      refuseRequest("signIn");
+  async function take(c: Context, raw: unknown) {
+    // A sign-in that could never pass is refused before anything is stopped.
+    const signIn = parseSwitchSignIn(c, raw);
+    if (signIn.kind === "malformed") refuseRequest("signIn");
+    if (signIn.kind === "proof" && !signIn.proof)
+      throw new AppError("password.invalid", {}, { reason: "missing" });
     const { sourceNodeId } = await mirrorSource();
     const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
     if (open !== null)
@@ -476,6 +497,9 @@ export function mountHandoverEmergencyApi(
     )
       return { state: "catching-up" as const };
     await refuseRepeatedFailures();
+    // A passkey challenge this box no longer holds, or a proof that fails a check needing no copy,
+    // is refused here, not after the stop restarts the box.
+    await precheckSwitchCredentials(c, switchSignIn, signIn);
     await sourceSilent(sourceNodeId, false);
     let stopping = true;
     try {
@@ -486,7 +510,7 @@ export function mountHandoverEmergencyApi(
       }
       await stageFollowedAsCopy({ ...deps, migrationsRoot: follow.migrationsRoot }, stopped);
       try {
-        await signInAgainstFollowed(signIn, stopped.path);
+        await signInAgainstFollowed(c, signIn, stopped.path);
       } catch (error) {
         await discardStagedCopy(deps.stateDir);
         throw error;
@@ -513,12 +537,12 @@ export function mountHandoverEmergencyApi(
       requireNodeOperationHttps(c);
       const body = await readJsonBody<unknown>(c);
       if (!isRecord(body)) refuseRequest("body");
-      return c.json(await inTurn(deps.node, "handover-emergency", () => take(body.signIn)));
+      return c.json(await inTurn(deps.node, "handover-emergency", () => take(c, body.signIn)));
     }),
   );
-  async function declare(raw: unknown) {
+  async function declare(c: Context, raw: unknown) {
     const request = parse(raw);
-    const actor = await authenticate(request.signIn);
+    const actor = await authenticate(c, parseSwitchSignIn(c, request.signIn));
     const stored = await readHandoverOperation(deps.node, deps.nodeId, request.operationId);
     if (stored !== null) {
       if (stored.scenario !== "emergency" || stored.role !== "destination")
@@ -605,10 +629,18 @@ export function mountHandoverEmergencyApi(
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
       const body = await readJsonBody<unknown>(c);
-      return c.json(await inTurn(deps.node, "handover-emergency", () => declare(body)));
+      return c.json(await inTurn(deps.node, "handover-emergency", () => declare(c, body)));
+    }),
+  );
+  app.post("/api/node/handover/emergency/passkey-challenge", (c) =>
+    boundary(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
+      return c.json({ options: await switchSignIn.challenges.make(managementSite(c, deps).rpId) });
     }),
   );
   return {
+    switchSignIn,
     async assertMayActivate(operation) {
       if (!checked.has(operation.operationId)) {
         await compareCopy((await declarationFor(operation.operationId)).lastCopy);

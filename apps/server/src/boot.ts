@@ -4257,6 +4257,7 @@ async function bootServer(
       venueDir: config.venueDir,
       modules: enabledModules(ALL_MODULES, moduleConfig),
       origin: config.managementOrigin,
+      rpId: config.managementRpId,
       credentialKeyRing: totpKeyRing,
       passwordThrottle: handoverPasswordThrottle,
       ...(spareFollow === undefined
@@ -4287,6 +4288,7 @@ async function bootServer(
       appDb: db,
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,
+      switchSignIn: emergencyHandover.switchSignIn,
       requestFromBox: seams.requestFromBox,
     },
     log,
@@ -4300,6 +4302,7 @@ async function bootServer(
       appDb: db,
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,
+      switchSignIn: emergencyHandover.switchSignIn,
       run: promoteRun,
       emergency: emergencyHandover,
     },

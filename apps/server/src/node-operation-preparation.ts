@@ -37,6 +37,7 @@ import { AppError } from "@waitron/shared";
 import { requiredNameOf } from "./box-health-api.js";
 import { moduleClockSetAnswer, type clockCorrection } from "./clock-correction.js";
 import {
+  isSwitchSignedIn,
   withAuthenticatedOperation,
   withRecoveryKeyAuthority,
 } from "./operation-authentication.js";
@@ -198,7 +199,10 @@ export function createNodeOperationPreparation(options: {
   ): Promise<T> => {
     const binding = Object.freeze({ ...supplied });
     const heldContext = Object.freeze({ ...context });
-    const heldCredentials = structuredClone(credentials);
+    // Not cloned when the switch signed the person in: a clone would lose that in-memory mark.
+    const heldCredentials = isSwitchSignedIn(credentials)
+      ? credentials
+      : structuredClone(credentials);
     if (!modules.some((module) => module.name === binding.module)) return invalid(binding);
     if (!["reserve", "establish", "promote"].includes(binding.action)) return invalid(binding);
     if (binding.targetNodeId !== node.nodeId) return invalid(binding);
@@ -239,6 +243,13 @@ export function createNodeOperationPreparation(options: {
         },
       );
     if (options.credentialKeyRing === undefined) return invalid(binding);
+    const commit: Commit = (body) => withTransaction(options.db, body);
+    if (isSwitchSignedIn(heldCredentials)) {
+      await afterSignIn?.();
+      return withOperationAuthority({ ...binding }, heldCredentials.personId, (authority) =>
+        authenticated(authority, commit),
+      );
+    }
     return withAuthenticatedOperation(
       { db: options.db, credentialKeyRing: options.credentialKeyRing },
       {
@@ -246,7 +257,7 @@ export function createNodeOperationPreparation(options: {
         permission: "node.manage",
       },
       heldCredentials,
-      (authority) => authenticated(authority, (body) => withTransaction(options.db, body)),
+      (authority) => authenticated(authority, commit),
       afterSignIn,
     );
   };

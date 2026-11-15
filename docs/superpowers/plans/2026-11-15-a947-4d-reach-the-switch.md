@@ -232,7 +232,8 @@ avoided, it is a small addition to PR 4d-1, not a redesign.
   - the label: departure 2's words, the address beneath the QR, and the box's name above it.
   - Servers row action: "Print switch label" / «Imprimir etiqueta de cambio».
   - the switch's sign-in: "Use my passkey" / «Usar mi llave de acceso» beside "Use my password" /
-    «Usar mi contraseña» (§6.6).
+    «Usar mi contraseña» (§6.6). (2026-11-15: built as "Use your passkey" / «Usar tu passkey» beside
+    "Use your password" / «Usar tu contraseña», the dashboard's wording.)
 - CLAUDE.md §3: "A refusal explains what happened and what each choice does"; every colour reads a
   `--wt-*` token; a screen change updates its guide in English and Spanish; a page asserted as a
   string is opened and looked at (CLAUDE.md §4).

@@ -29,6 +29,17 @@ export const handoverEn = {
   "handover.zone": "Times are shown in your device’s time zone.",
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
+  "handover.emergency.sign_in_with": "Sign in with",
+  "handover.emergency.use_password": "Use your password",
+  "handover.emergency.use_passkey": "Use your passkey",
+  "handover.emergency.sign_in_passkey":
+    "Sign in with an administrator's passkey to check this spare and start the venue here.",
+  "handover.emergency.passkey_failed":
+    "Your passkey did not sign you in. Try again, or use your password.",
+  "handover.emergency.passkey_lapsed":
+    "The spare took a while to catch up and your passkey sign-in expired. Choose Check this copy and use your passkey again.",
+  "handover.emergency.held_passkey_refused":
+    "This spare's own copy did not accept your passkey. To use it, choose Use your password and sign in.",
   "handover.emergency.saved":
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
@@ -176,6 +187,17 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo.",
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
+  "handover.emergency.sign_in_with": "Identificarse con",
+  "handover.emergency.use_password": "Usar tu contraseña",
+  "handover.emergency.use_passkey": "Usar tu passkey",
+  "handover.emergency.sign_in_passkey":
+    "Identifícate con la passkey de un administrador para comprobar esta copia e iniciar el local aquí.",
+  "handover.emergency.passkey_failed":
+    "Tu passkey no te ha identificado. Vuelve a intentarlo o usa tu contraseña.",
+  "handover.emergency.passkey_lapsed":
+    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Comprobar esta copia y vuelve a usar tu passkey.",
+  "handover.emergency.held_passkey_refused":
+    "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, elige Usar tu contraseña e identifícate.",
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",

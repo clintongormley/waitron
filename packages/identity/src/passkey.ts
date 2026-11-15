@@ -267,16 +267,18 @@ export async function beginPasskeyAuthentication(
   return { challengeHandle: row!.id, options };
 }
 
-export async function finishPasskeyAuthentication(
+interface AssertionInput {
+  response: AuthenticationResponseJSON;
+  rpId: string;
+  origin: string | string[];
+}
+
+/** The stored passkey that made `response` over `challenge`, once its owner is active. */
+async function verifyAssertion(
   tx: Transaction,
-  input: {
-    challengeHandle: string;
-    response: AuthenticationResponseJSON;
-    rpId: string;
-    origin: string | string[];
-  },
-): Promise<ManagementSession> {
-  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, { purpose: "login" });
+  challenge: string,
+  input: AssertionInput,
+): Promise<{ id: string; personId: string; newCounter: number }> {
   // The credential id is untrusted request input: typed `string`, but at runtime it may be missing or
   // non-string. A non-string names no credential.
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
@@ -305,7 +307,7 @@ export async function finishPasskeyAuthentication(
   try {
     verification = await verifyAuthenticationResponse({
       response: input.response,
-      expectedChallenge,
+      expectedChallenge: challenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
       // Pinned rather than left to the library default, so a default flip cannot weaken this login.
@@ -320,16 +322,45 @@ export async function finishPasskeyAuthentication(
     throw new AppError("passkey.verification_failed", {});
   }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
+  return {
+    id: cred.id,
+    personId: cred.personId,
+    newCounter: verification.authenticationInfo.newCounter,
+  };
+}
+
+export async function finishPasskeyAuthentication(
+  tx: Transaction,
+  input: AssertionInput & { challengeHandle: string },
+): Promise<ManagementSession> {
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, { purpose: "login" });
+  const cred = await verifyAssertion(tx, expectedChallenge, input);
 
   // Never LOWER the counter: a regressed counter would blind the cloned-authenticator check on later
   // assertions. The sign-in time is recorded whether or not the counter moves: an authenticator
   // without a signature counter reports 0 every time.
-  const { newCounter } = verification.authenticationInfo;
   await tx
     .update(webauthnCredentials)
-    .set({ counter: sql`max(${webauthnCredentials.counter}, ${newCounter})`, lastUsedAt: nowIso() })
+    .set({
+      counter: sql`max(${webauthnCredentials.counter}, ${cred.newCounter})`,
+      lastUsedAt: nowIso(),
+    })
     .where(eq(webauthnCredentials.id, cred.id));
   return startManagementSession(tx, { personId: cred.personId });
+}
+
+/**
+ * Verifies a discoverable-login assertion against a challenge the caller holds, and returns whose
+ * passkey made it. Reads only: no challenge row, counter, sign-in time or session is written, as
+ * the caller's database may be a followed copy this box must not write (design §6.3 step 1); so
+ * the counter is checked but not advanced (A947 4d plan D9).
+ */
+export async function verifyPasskeyAssertion(
+  tx: Transaction,
+  input: AssertionInput & { challenge: string },
+): Promise<{ personId: string }> {
+  const { personId } = await verifyAssertion(tx, input.challenge, input);
+  return { personId };
 }
 
 /**
