@@ -1010,6 +1010,33 @@ describe("rescheduleMenuPublication", () => {
     });
   });
 
+  it("keeps a queued edition identifiable after a backward clock correction", async () => {
+    await setSoup("5.50");
+    const edition = await queue(day(12), day(10));
+    const before = await publicationTables();
+    for (const activatesAt of [day(8), day(10)]) {
+      await expect(
+        app((tx) =>
+          rescheduleMenuPublication(tx, f.lunch, edition.versionId, activatesAt, ANA, {
+            at: day(7),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "menu_publication.time_past",
+        params: { activatesAt: activatesAt.toISOString() },
+      });
+      expect(await publicationTables()).toEqual(before);
+    }
+    expect(
+      await app((tx) =>
+        rescheduleMenuPublication(tx, f.lunch, edition.versionId, day(11), ANA, { at: day(7) }),
+      ),
+    ).toEqual({ versionId: edition.versionId, number: 2, activatesAt: day(11).toISOString() });
+    expect((await app((tx) => listMenuPublications(tx, f.lunch, day(7)))).editions).toMatchObject([
+      { versionId: edition.versionId, state: "queued", activatesAt: day(11).toISOString() },
+    ]);
+  });
+
   const TODAY_1500 = new Date("2026-10-07T13:00:00.000Z");
   const THIS_AFTERNOON = new Date("2026-10-07T14:00:00.000Z");
 

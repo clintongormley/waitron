@@ -142,6 +142,7 @@ export async function rescheduleMenuPublication(
       state: menuReleases.state,
       number: menuVersions.number,
       activatesAt: menuReleases.activatesAt,
+      createdAt: menuVersions.createdAt,
     })
     .from(menuReleases)
     .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
@@ -159,7 +160,7 @@ export async function rescheduleMenuPublication(
       versionId,
       state: row.state === "cancelled" ? "cancelled" : "activated",
     });
-  if (activatesAt.getTime() <= at.getTime())
+  if (activatesAt.getTime() <= at.getTime() || activatesAt.getTime() <= row.createdAt.getTime())
     throw new AppError("menu_publication.time_past", { activatesAt: activatesAt.toISOString() });
   refuseOvertaken(menuId, await overtakenBy(tx, menuId, row.number, activatesAt));
   await tx.update(menuReleases).set({ activatesAt }).where(eq(menuReleases.versionId, versionId));

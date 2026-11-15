@@ -461,7 +461,7 @@ describe("a menu's scheduled versions", () => {
     await flush(el);
     await flush(el);
     expect(inShadow(el, "editions-error")?.textContent).toBe(codeMessage("connection.failed"));
-    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
     await flush(el);
     await flush(el);
@@ -504,7 +504,7 @@ describe("a menu's scheduled versions", () => {
     inShadow(el, "cancel-confirm")!.click();
     await flush(el);
     await flush(el);
-    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(api.getMenuPublications).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(dialog(el).open).toBe(true);
@@ -585,7 +585,7 @@ describe("a menu's scheduled versions", () => {
     expect(cell(el, "version-v-lunch-2")).not.toBeNull();
     answer = queue();
     answer.editions[0] = { ...answer.editions[0]!, state: "cancelled" };
-    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     expect(read).toHaveBeenCalledTimes(2);
   });
@@ -1398,7 +1398,7 @@ describe("schedule fix round 1", () => {
     inShadow(el, "cancel-confirm")!.click();
     await flush(el);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     older(queue());
     await flush(el);
@@ -1432,7 +1432,7 @@ describe("schedule fix round 1", () => {
     await enter(el, "time", "08:00");
     submitButton(el).click();
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     older(queue());
     await flush(el);
