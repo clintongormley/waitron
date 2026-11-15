@@ -13,7 +13,8 @@ export type HandoverKind =
   | "return-receipt"
   | "return-clash-acceptance"
   | "health"
-  | "backup-settings";
+  | "backup-settings"
+  | "switch-proof";
 
 export type HandoverPurpose = `waitron.handover.${HandoverKind}.v1`;
 

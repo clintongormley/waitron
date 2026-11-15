@@ -75,6 +75,7 @@ describe("signEnvelope", () => {
       "return-clash-acceptance",
       "health",
       "backup-settings",
+      "switch-proof",
     ]);
   });
 

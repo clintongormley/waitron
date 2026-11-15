@@ -333,6 +333,57 @@ export async function finishPasskeyAuthentication(
 }
 
 /**
+ * Verifies a discoverable-login assertion against a challenge the caller holds, and returns whose
+ * passkey made it. Reads only: no challenge row, counter, sign-in time or session is written.
+ */
+export async function verifyPasskeyAssertion(
+  tx: Transaction,
+  input: {
+    challenge: string;
+    response: AuthenticationResponseJSON;
+    rpId: string;
+    origin: string | readonly string[];
+  },
+): Promise<{ personId: string }> {
+  if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
+  const [cred] = await tx
+    .select({
+      personId: webauthnCredentials.personId,
+      credentialId: webauthnCredentials.credentialId,
+      publicKey: webauthnCredentials.publicKey,
+      counter: webauthnCredentials.counter,
+      status: persons.status,
+    })
+    .from(webauthnCredentials)
+    .innerJoin(persons, eq(persons.id, webauthnCredentials.personId))
+    .where(eq(webauthnCredentials.credentialId, input.response.id));
+  if (cred === undefined) throw new AppError("passkey.not_registered", {});
+  if (cred.status !== "active") throw new AppError("passkey.verification_failed", {});
+
+  let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: input.response,
+      expectedChallenge: input.challenge,
+      expectedOrigin: expectedOrigin(input.origin),
+      expectedRPID: input.rpId,
+      requireUserVerification: true,
+      // The counter is checked but not advanced: the caller's database may be a followed copy this
+      // box must not write (design §6.3 step 1), so this sign-in does not move the copied-key check on (D9).
+      credential: {
+        id: cred.credentialId,
+        publicKey: Buffer.from(cred.publicKey, "base64url"),
+        counter: cred.counter,
+      },
+    });
+  } catch {
+    throw new AppError("passkey.verification_failed", {});
+  }
+  if (!verification.verified) throw new AppError("passkey.verification_failed", {});
+  return { personId: cred.personId };
+}
+
+/**
  * A check of the signed-in person's own passkey, for an action that needs a recent sign-in. The
  * challenge is bound to that person and offers only their passkeys.
  */

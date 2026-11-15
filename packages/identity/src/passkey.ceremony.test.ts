@@ -3,7 +3,7 @@
  * WebAuthn verifier: the responses here are built and signed with `node:crypto`, not mocked.
  */
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   withTransaction,
@@ -19,8 +19,9 @@ import {
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
   verifyOwnPasskey,
+  verifyPasskeyAssertion,
 } from "./passkey.js";
-import { codeOf, openManagementSession, TOTP_KEY_RING } from "../test/fixtures.js";
+import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { signedRegistration, signingPasskey } from "../test/passkey-signer.js";
 
 const RP_ID = "localhost";
@@ -34,13 +35,13 @@ const registrationResponse = (challenge: string, origin = ORIGIN) =>
   signedRegistration(RP_ID, challenge, origin);
 
 /** Stores a passkey for `personId` and returns a signer of assertions from it. */
-async function seedSigningPasskey(personId: string) {
+async function seedSigningPasskey(personId: string, counter = 0) {
   const passkey = signingPasskey(RP_ID);
   await suite.db.insert(webauthnCredentials).values({
     personId,
     credentialId: passkey.credentialId,
     publicKey: passkey.publicKey,
-    counter: 0,
+    counter,
   });
   return (challenge: string, origin = ORIGIN) => passkey.assert(challenge, origin);
 }
@@ -268,5 +269,93 @@ describe("a ceremony verified against a list of origins", () => {
 
   it("refuses the person's own passkey checked at an origin the list does not hold", async () => {
     expect(await codeOf(() => checkOwnAt(UNLISTED))).toBe("passkey.verification_failed");
+  });
+});
+
+describe("an assertion checked against a given challenge, writing nothing", () => {
+  const CHALLENGE = "c3dpdGNoLWNoYWxsZW5nZQ";
+  const VENUE = "https://waitron.local";
+  const BOX = "https://box-abcd.waitron.local";
+
+  const verifyAt = (
+    response: unknown,
+    challenge = CHALLENGE,
+    origin: readonly string[] = [VENUE, BOX],
+  ) =>
+    run((tx) =>
+      verifyPasskeyAssertion(tx, { challenge, response: response as never, rpId: RP_ID, origin }),
+    );
+
+  /** Every row of every table, so a write anywhere shows as a difference. */
+  const everyRow = () => {
+    const tables = suite.db.all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name`,
+    );
+    return Object.fromEntries(
+      tables.map(({ name }) => [name, suite.db.all(sql.raw(`select * from "${name}"`))]),
+    );
+  };
+
+  it("returns the person whose passkey made an assertion over the given challenge", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+
+    expect(await verifyAt(assert(CHALLENGE, BOX))).toEqual({ personId });
+  });
+
+  it("changes no row in any table, so the counter, challenges and sessions stay as they were", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+    const pending = await run((tx) => beginPasskeyAuthentication(tx, { rpId: RP_ID }));
+    const before = everyRow();
+
+    await verifyAt(assert(pending.options.challenge, VENUE), pending.options.challenge);
+
+    expect(everyRow()).toEqual(before);
+  });
+
+  it("refuses an assertion over another challenge", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+
+    expect(await codeOf(() => verifyAt(assert("b3RoZXItY2hhbGxlbmdl", VENUE)))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
+  it("refuses an assertion made at an origin the list does not hold", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId);
+
+    expect(await codeOf(() => verifyAt(assert(CHALLENGE, "https://box-ef01.waitron.local")))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
+  // The signer reports a counter of 1.
+  it.each([1, 2])("refuses an assertion whose counter is not above a stored %i", async (stored) => {
+    const personId = await seedPerson(suite.db, "admin");
+    const assert = await seedSigningPasskey(personId, stored);
+
+    expect(await codeOf(() => verifyAt(assert(CHALLENGE, VENUE)))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
+  it("refuses a passkey whose person is not active", async () => {
+    const personId = await seedPerson(suite.db, "admin", "suspended");
+    const assert = await seedSigningPasskey(personId);
+
+    expect(await codeOf(() => verifyAt(assert(CHALLENGE, VENUE)))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
+  it("refuses a credential no one enrolled", async () => {
+    const stranger = signingPasskey(RP_ID);
+
+    expect(await codeOf(() => verifyAt(stranger.assert(CHALLENGE, VENUE)))).toBe(
+      "passkey.not_registered",
+    );
   });
 });
