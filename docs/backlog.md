@@ -2221,6 +2221,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The device-equipment and device-levers suites use English staff display-name samples.
   Local floor-signal, pairing and till clock-state staff samples use Lucy, Anna and Lewis.
   The attendance-discovery, attendance-obligations, boot.mirror, boot.clock-watch and standalone tab-person suites use Anna and Martha for their main staff sample.
+  Account-invitation and box-alert-email duty staff samples use Anna.
   Local till table, zone-layout, zone-required, split-bill, floor-catch-up and today-names suites use Anna for their staff-role person.
   The device-join suite uses Server and Manager for its local staff-role display samples.
   The main till API and profile-zone suites use Anna, Martha and Beatrice where present; local

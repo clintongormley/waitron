@@ -267,7 +267,7 @@ function step(id: string, stepMs: number): EmailedIncident {
     params: {
       confirmationId: `c-${id}`,
       source: "admin",
-      person: "Ana",
+      person: "Anna",
       deviceId: null,
       device: null,
       before: "2025-03-14T08:12:00.000Z",

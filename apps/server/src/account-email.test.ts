@@ -236,7 +236,7 @@ describe("invitation roles", () => {
   const invitation = {
     purpose: "invitation" as const,
     email: "ana@example.test",
-    displayName: "Ana",
+    displayName: "Anna",
     actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
     expiresAt: "2026-09-09T12:00:00.000Z",
   };
