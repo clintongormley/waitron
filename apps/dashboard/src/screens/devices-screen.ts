@@ -1346,7 +1346,7 @@ export class DevicesScreen extends LitElement {
     role: (typeof PRINTER_ROLES)[number],
     profile: DeviceProfile | undefined,
     held: string | null,
-  ): { value: string; label: string; fixed?: boolean; muted?: true; description?: string }[] {
+  ): { value: string; label: string; fixed?: boolean; muted?: true }[] {
     const ids = profile?.[role.list] ?? [];
     const drawer = role.field === "drawer" || role.field === "invoice";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
@@ -1367,7 +1367,6 @@ export class DevicesScreen extends LitElement {
         value: "",
         label: resolved ?? t("equipment.none"),
         muted: true,
-        description: t("devices.from_profile"),
       },
       ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
@@ -1399,7 +1398,7 @@ export class DevicesScreen extends LitElement {
     return this.#readerLabel(reader);
   }
 
-  #readerOptions(): { value: string; label: string; muted?: true; description?: string }[] {
+  #readerOptions(): { value: string; label: string; muted?: true }[] {
     const list = this.profileReaders.get(this.editForm.profileId);
     const listed = (list?.readerIds ?? []).flatMap((id) => {
       const reader = this.readers.find((r) => r.id === id);
@@ -1416,7 +1415,6 @@ export class DevicesScreen extends LitElement {
         value: "",
         label: resolved ?? t("equipment.none"),
         muted: true,
-        description: t("devices.from_profile"),
       },
       ...listed.map((reader) => ({ value: reader.id, label: this.#readerChoiceLabel(reader) })),
     ];

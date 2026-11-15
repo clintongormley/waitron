@@ -1202,8 +1202,11 @@ describe("the Edit dialog", () => {
 
   it("kitchen rows leave every printer and drawer cell empty", async () => {
     const el = await openEdit(editApi(), "k1");
-    for (const key of ["receipt", "slip", "drawer", "invoice"])
-      expect(dq(el.shadowRoot!, `[data-test=device-${key}-k1]`)!.textContent!.trim()).toBe("");
+    for (const key of ["receipt", "slip", "drawer", "invoice"]) {
+      const cell = dq(el.shadowRoot!, `[data-test=device-${key}-k1]`)!;
+      expect(cell.textContent!.trim()).toBe("");
+      expect(cell.closest("td")!.textContent!.trim()).toBe("");
+    }
   });
 
   function wtChange(el: DevicesScreen, sel: string, value: string): void {
@@ -1374,7 +1377,7 @@ describe("the Edit dialog", () => {
     ]);
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
-      { value: "", muted: true, description: t("devices.from_profile"), label: useDefaultNone() },
+      { value: "", muted: true, label: useDefaultNone() },
       { value: "pr3", label: "Back bar (Deshabilitada)" },
       { value: "pr1", label: "Kitchen" },
       { value: "pr2", label: "Terrace" },
@@ -1386,7 +1389,7 @@ describe("the Edit dialog", () => {
       "pr2",
     ]);
     expect(slip.options).toEqual([
-      { value: "", muted: true, description: t("devices.from_profile"), label: useDefaultNone() },
+      { value: "", muted: true, label: useDefaultNone() },
       { value: "pr2", label: "Terrace" },
     ]);
 
@@ -1412,7 +1415,7 @@ describe("the Edit dialog", () => {
     ]);
     // Only active readers, by name and a friendly provider label, after a leading none option.
     expect(reader.options).toEqual([
-      { value: "", muted: true, description: t("devices.from_profile"), label: useDefaultNone() },
+      { value: "", muted: true, label: useDefaultNone() },
       { value: "r1", label: "Front counter (Acme Pay)" },
       { value: "r2", label: "Bar (Zeta Pay)" },
     ]);
@@ -1544,7 +1547,6 @@ describe("the Edit dialog", () => {
             {
               value: "",
               muted: true,
-              description: t("devices.from_profile"),
               label: useDefaultNone(),
             },
             { value: "pr1", label: "Kitchen" },
@@ -1557,7 +1559,6 @@ describe("the Edit dialog", () => {
             {
               value: "",
               muted: true,
-              description: t("devices.from_profile"),
               label: useDefaultNone(),
             },
             { value: "pr2", label: "Terrace" },
@@ -2934,8 +2935,13 @@ describe("the Edit dialog", () => {
           const cell = dq(el.shadowRoot!, `[data-test=device-${role}-t1]`)!;
           expect(cell.textContent!.trim()).toBe(name);
           const spoken = cell.closest("td")!.textContent!;
-          if (inherited) expect(spoken).toContain("del perfil");
-          else expect(spoken).not.toContain("del perfil");
+          if (inherited) {
+            expect(spoken).toContain(t("devices.from_profile"));
+            const cue = cell.nextElementSibling!;
+            const style = getComputedStyle(cue);
+            expect(style.position).toBe("absolute");
+            expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
+          } else expect(spoken).not.toContain(t("devices.from_profile"));
           expect(getComputedStyle(cell).fontStyle).toBe(inherited ? "italic" : "normal");
           if (inherited) expect(getComputedStyle(cell).color).toBe(muted);
           else expect(getComputedStyle(cell).color).not.toBe(muted);
@@ -2963,8 +2969,9 @@ describe("the Edit dialog", () => {
           await flush(el);
           const rows = [...control.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")];
           expect(rows.length).toBeGreaterThan(1);
-          expect(rows[0]!.textContent).toContain("del perfil");
-          expect(rows[1]!.textContent).not.toContain("del perfil");
+          expect(rows[0]!.textContent!.trim()).toBe(
+            id === "edit-receipt-printer" ? "Kitchen" : t("equipment.none"),
+          );
           expect(getComputedStyle(rows[0]!).color).toBe(muted);
           expect(getComputedStyle(rows[1]!).color).not.toBe(muted);
           await userEvent.keyboard("{Escape}");
@@ -3024,14 +3031,12 @@ describe("the Edit dialog", () => {
       expect(receipt.options[0]).toEqual({
         value: "",
         muted: true,
-        description: t("devices.from_profile"),
         label: "Kitchen",
       });
       // The slip default is carried by another device, so Use default prints no slip here.
       expect(field(el, "edit-slip-printer").options[0]).toEqual({
         value: "",
         muted: true,
-        description: t("devices.from_profile"),
         label: t("equipment.none"),
       });
       const drawer = field(el, "edit-cash-drawer");
@@ -3044,7 +3049,6 @@ describe("the Edit dialog", () => {
         {
           value: "",
           muted: true,
-          description: t("devices.from_profile"),
           label: t("equipment.none"),
         },
         { value: "pr1", label: "Kitchen" },
@@ -3150,7 +3154,7 @@ describe("the Edit dialog", () => {
         ]);
         // Terrace is portable and another device carries it; an invoice printer ignores that.
         expect(invoice.options).toEqual([
-          { value: "", muted: true, description: t("devices.from_profile"), label: "Office · A4" },
+          { value: "", muted: true, label: "Office · A4" },
           { value: "pg1", label: "Office · A4" },
           { value: "pr2", label: "Terrace" },
         ]);
@@ -3325,7 +3329,6 @@ describe("the Edit dialog", () => {
       expect(receipt.options[0]).toEqual({
         value: "",
         muted: true,
-        description: t("devices.from_profile"),
         label: "Kitchen $&",
       });
       expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
@@ -3349,7 +3352,7 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-slip-printer").options).toEqual([
-        { value: "", muted: true, description: t("devices.from_profile"), label: "Terrace" },
+        { value: "", muted: true, label: "Terrace" },
         { value: "pr2", label: "Terrace" },
       ]);
     });
@@ -3374,7 +3377,6 @@ describe("the Edit dialog", () => {
         {
           value: "",
           muted: true,
-          description: t("devices.from_profile"),
           label: t("equipment.none"),
         },
         {
@@ -3460,7 +3462,6 @@ describe("the Edit dialog", () => {
           {
             value: "",
             muted: true,
-            description: t("devices.from_profile"),
             label: t("equipment.none"),
           },
         ]);
@@ -3472,7 +3473,6 @@ describe("the Edit dialog", () => {
           {
             value: "",
             muted: true,
-            description: t("devices.from_profile"),
             label: "Bar (Zeta Pay)",
           },
           { value: "r2", label: "Bar (Zeta Pay)" },
@@ -3539,7 +3539,6 @@ describe("the Edit dialog", () => {
         {
           value: "",
           muted: true,
-          description: t("devices.from_profile"),
           label: t("equipment.none"),
         },
       ]);
