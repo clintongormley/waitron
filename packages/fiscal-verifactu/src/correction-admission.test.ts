@@ -68,7 +68,7 @@ async function file(
   options: {
     figures?: Figures;
     estado?: Estado | null;
-    tipo?: "F1" | "F2" | "R5";
+    tipo?: "F1" | "F2" | "R4" | "R5";
     byReplacement?: true;
     on?: SeededNode;
     sale?: SaleId;
@@ -87,12 +87,12 @@ async function file(
       input: {
         ...pending.input,
         TipoFactura: tipo,
-        ...(tipo === "F1"
+        ...(tipo === "F1" || tipo === "R4"
           ? {
               Destinatarios: { IDDestinatario: [{ NombreRazon: "Customer SL", NIF: "B12345674" }] },
             }
           : {}),
-        ...(tipo === "R5"
+        ...(tipo === "R4" || tipo === "R5"
           ? options.byReplacement
             ? {
                 TipoRectificativa: "S",
@@ -189,6 +189,11 @@ describe("refusals", () => {
 
   it.each(["F1", "R5"] as const)("an %s", async (tipo) => {
     expect(await admission((await file({ tipo })).saleId)).toEqual(refused("not_simplified"));
+  });
+
+  it("an R4 by replacement", async () => {
+    const { saleId } = await file({ tipo: "R4", byReplacement: true });
+    expect(await admission(saleId)).toEqual(refused("not_simplified"));
   });
 
   it("another node's", async () => {

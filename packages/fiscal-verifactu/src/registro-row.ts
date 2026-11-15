@@ -141,7 +141,9 @@ export function toRegistroRow(
     : (["RefExterna", "GeneradoPor", "Generador"] as const);
   // Only a replacement corrective files the sale's real day apart from its own issue date.
   const operationDateRefused =
-    isAlta(record) && (record.TipoFactura !== "R5" || record.TipoRectificativa !== "S");
+    isAlta(record) &&
+    ((record.TipoFactura !== "R4" && record.TipoFactura !== "R5") ||
+      record.TipoRectificativa !== "S");
   const fields = [
     ...unsupported,
     ...(operationDateRefused ? (["FechaOperacion"] as const) : []),

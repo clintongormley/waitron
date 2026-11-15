@@ -310,12 +310,15 @@ declare module "@waitron/shared" {
     "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
 
     /**
-     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the alta being corrected is
-     * neither an `F2` nor an R5 by replacement (`TipoRectificativa` "S"), which stands in for the
-     * `F2` it replaced. Rectifying an `F1` is an `R1`, and filing the wrong rectificativa is
-     * unrepairable, so this refuses rather than mis-types it. Also thrown, with `replaces: true`, for
-     * a replacement unless the original is an `F2` and AEAT refused every record Waitron stored of
-     * it, none with code `3000`. `tipoFactura` is the original's type.
+     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when a correction by differences
+     * names an alta that is neither an `F2` nor an R5 by replacement (`TipoRectificativa` "S"),
+     * which stands in for the `F2` it replaced. A full invoice's corrective type follows the cause:
+     * `R1` for a money change, `R4` for a wrong non-money detail such as the date (AEAT's FAQ,
+     * «Preguntas frecuentes, procedimientos de facturación», «Tipo de facturas»). Filing the wrong
+     * rectificativa is unrepairable, so this refuses rather than mis-types it. Also thrown, with
+     * `replaces: true`, for a replacement unless AEAT refused every record Waitron stored of the
+     * original, none with code `3000`, and the original is an `F1` replaced naming a customer (an
+     * `R4`) or an `F2` replaced naming none (an `R5`). `tipoFactura` is the original's type.
      */
     "fiscal.correction_unsupported": { saleId: string; tipoFactura: string; replaces?: true };
 

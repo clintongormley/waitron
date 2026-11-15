@@ -78,7 +78,7 @@ function altaRowWithOperationDate(
   type: Pick<AltaInput, "TipoFactura" | "TipoRectificativa" | "ImporteRectificacion">,
 ) {
   const pending = altaFor(node, saleId, 1, 1, "preproduction");
-  const corrective = type.TipoFactura === "R5" && {
+  const corrective = type.TipoFactura.startsWith("R") && {
     FacturasRectificadas: [
       {
         IDEmisorFactura: TEST_NIF,
@@ -120,6 +120,35 @@ it.each([
 it("stores the operation date of a replacement corrective (R5 by replacement)", () => {
   const row = altaRowWithOperationDate({
     TipoFactura: "R5",
+    TipoRectificativa: "S",
+    ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+  });
+
+  expect(row.fechaOperacion).toBe("2026-07-18");
+});
+
+it.each([
+  { name: "an R1 by replacement", type: { TipoFactura: "R1", TipoRectificativa: "S" } },
+  { name: "an R2 by replacement", type: { TipoFactura: "R2", TipoRectificativa: "S" } },
+  { name: "an R3 by replacement", type: { TipoFactura: "R3", TipoRectificativa: "S" } },
+  { name: "an R4 by differences", type: { TipoFactura: "R4", TipoRectificativa: "I" } },
+] as const)("refuses to store an operation date on $name", ({ type }) => {
+  expect(() =>
+    altaRowWithOperationDate({
+      ...type,
+      ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "fiscal.record_invalid",
+      params: { fields: ["FechaOperacion"], codes: ["UNSUPPORTED_FIELD"] },
+    }),
+  );
+});
+
+it("stores the operation date of a full invoice's replacement (R4 by replacement)", () => {
+  const row = altaRowWithOperationDate({
+    TipoFactura: "R4",
     TipoRectificativa: "S",
     ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
   });
