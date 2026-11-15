@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
   readNodeMembership,
@@ -19,7 +19,8 @@ import {
 import { signDocumentBody } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { managementSessions, persons } from "@waitron/identity";
+import { managementSessions, persons, webauthnCredentials } from "@waitron/identity";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -35,9 +36,11 @@ import { buildManifest } from "./backup-manifest.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { readNodeIdentityKey } from "./node-identity.js";
+import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import {
+  ADMIN,
   ADMIN_EMAIL,
   PASSWORD,
   OPERATION,
@@ -119,6 +122,7 @@ function service(
       venueDir: dirs().spareVenue,
       modules: fiscalModules,
       origin,
+      rpId: "spare.example",
       credentialKeyRing: TOTP_KEY_RING,
       passwordThrottle: createPasswordThrottle(),
       fetch: async (_url, init) => {
@@ -147,7 +151,12 @@ function service(
     },
     log,
   );
-  const post = async (body: unknown = request, https = true, step = "declare") => {
+  const post = async (
+    body: unknown = request,
+    https = true,
+    step = "declare",
+    headers: Record<string, string> = {},
+  ) => {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
@@ -155,7 +164,9 @@ function service(
       {
         method: "POST",
         headers:
-          body instanceof FormData ? { origin } : { "content-type": "application/json", origin },
+          body instanceof FormData
+            ? { origin, ...headers }
+            : { "content-type": "application/json", origin, ...headers },
         body: body instanceof FormData ? body : JSON.stringify(body),
       },
       https ? { incoming: { socket } } : {},
@@ -163,6 +174,7 @@ function service(
     return {
       status: response.status,
       cache: response.headers.get("cache-control"),
+      setCookie: response.headers.get("set-cookie"),
       body: (response.headers.get("content-type")?.includes("application/json")
         ? await response.json()
         : {}) as {
@@ -171,6 +183,7 @@ function service(
         sourceServersUrl?: string;
         copy?: { identifier: string; lastChangeAtMs: number | null };
         joinedAtMs?: number | null;
+        options?: { challenge: string };
         operation?: { operationId: string; reason: string; declaredAtMs: number } | null;
         declaration?: {
           body: {
@@ -731,4 +744,81 @@ it("refuses a different copy identifier even with the same activity date", async
       .body.error?.code,
   ).toBe("handover.copy_mismatch");
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+describe("the switch's passkey and proof", () => {
+  const proofCookie = async (proof?: string) => ({
+    cookie: `${SWITCH_PROOF_COOKIE}=${
+      proof ??
+      (await makeSwitchProof(
+        { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+        ADMIN,
+      ))
+    }`,
+  });
+  const bodies = {
+    preview: () => ({}),
+    declare: () => ({ ...request, signIn: undefined }),
+    backup: () => upload({}),
+  };
+  async function enrolledPasskey() {
+    const passkey = signingPasskey("spare.example");
+    await placed.venue.insert(webauthnCredentials).values({
+      personId: ADMIN,
+      credentialId: passkey.credentialId,
+      publicKey: passkey.publicKey,
+      counter: 0,
+    });
+    return passkey;
+  }
+  const challenge = async (s: ReturnType<typeof service>) =>
+    (await s.post({}, true, "passkey-challenge")).body.options!.challenge;
+
+  it.each(["preview", "declare", "backup"] as const)(
+    "%s accepts this box's proof in place of a password, and refuses one that fails its check",
+    async (step) => {
+      const s = service();
+      const accepted = await s.post(bodies[step](), true, step, await proofCookie());
+      // A backup step with no backup configured gets past the sign-in to this refusal.
+      expect(accepted.body.error?.code ?? accepted.status).toBe(
+        step === "backup" ? "handover.backup_key_missing" : 200,
+      );
+      const refused = await s.post(bodies[step](), true, step, await proofCookie("not-a-proof"));
+      expect(refused.body.error?.code).toBe("password.invalid");
+    },
+  );
+
+  it("a step passed with a passkey sets the proof cookie, which the body never carries", async () => {
+    const passkey = await enrolledPasskey();
+    const s = service();
+    const assertion = passkey.assert(await challenge(s), "https://spare.example");
+    const answer = await s.post({ signIn: { passkey: assertion } }, true, "preview");
+    expect(answer.status).toBe(200);
+    const [pair, ...attributes] = answer.setCookie!.split("; ");
+    expect(pair!.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
+    expect(attributes.sort()).toEqual(
+      ["HttpOnly", "Max-Age=900", "Path=/api/node/handover", "SameSite=Strict", "Secure"].sort(),
+    );
+    expect(JSON.stringify(answer.body)).not.toContain(pair!.slice(SWITCH_PROOF_COOKIE.length + 1));
+    expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
+  });
+
+  it("a passkey challenge is used once, and refused once older than two minutes", async () => {
+    const passkey = await enrolledPasskey();
+    const s = service();
+    const once = {
+      signIn: { passkey: passkey.assert(await challenge(s), "https://spare.example") },
+    };
+    expect((await s.post(once, true, "preview")).status).toBe(200);
+    expect((await s.post(once, true, "preview")).body.error?.code).toBe(
+      "passkey.challenge_expired",
+    );
+    const late = {
+      signIn: { passkey: passkey.assert(await challenge(s), "https://spare.example") },
+    };
+    vi.setSystemTime(Date.now() + 2 * 60_000);
+    expect((await s.post(late, true, "preview")).body.error?.code).toBe(
+      "passkey.challenge_expired",
+    );
+  });
 });

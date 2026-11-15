@@ -85,28 +85,28 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/:operationId/preparation",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email (`handover-preparation.ts`)",
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email, or for an emergency by passkey or this box's switch proof (`handover-preparation.ts`)",
   },
   {
     method: "POST",
     path: "/api/node/handover/:operationId/activate",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email (`handover-activation.ts`); an operation already activated answers only that",
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email, or for an emergency by passkey or this box's switch proof (`handover-activation.ts`); an operation already activated answers only that",
   },
   {
     method: "POST",
     path: "/api/node/handover/emergency/declare",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS, fresh password and authenticator code when enrolled for `node.manage`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
+      "own-origin HTTPS, a `node.manage` sign-in by fresh password and authenticator code when enrolled, or by passkey or this box's switch proof (`handover-switch-proof.ts`), three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
   },
   {
     method: "POST",
     path: "/api/node/handover/emergency/preview",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS and the sign-in of a person holding `node.manage`, by email, password and authenticator code when enrolled; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
+      "HTTPS and the sign-in of a person holding `node.manage`, by email, password and authenticator code when enrolled, or by passkey or this box's switch proof; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
   },
   {
     method: "POST",
@@ -120,14 +120,21 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/emergency/backup",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS, fresh node.manage sign-in, no open handover, source silence and a checked archive admitting this mirror under its held main box (handover-emergency-api.ts)",
+      "own-origin HTTPS, fresh node.manage sign-in or switch proof, no open handover, source silence and a checked archive admitting this mirror under its held main box (handover-emergency-api.ts)",
   },
   {
     method: "POST",
     path: "/api/node/handover/emergency/followed",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS, no open handover, source silence, wrong sign-ins counted in node.db, then a checked followed copy admitting this mirror under its held main box and a fresh node.manage sign-in against that copy (handover-emergency-api.ts)",
+      "own-origin HTTPS, no open handover, source silence, wrong sign-ins counted in node.db, then a checked followed copy admitting this mirror under its held main box and a fresh node.manage sign-in, password or passkey, against that copy, or this box's switch proof checked there (handover-emergency-api.ts)",
+  },
+  {
+    method: "POST",
+    path: "/api/node/handover/emergency/passkey-challenge",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS only: it writes nothing, and keeps the challenge it answers in this process's memory for two minutes (`handover-switch-proof.ts`)",
   },
 ];
 

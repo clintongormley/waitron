@@ -11,6 +11,7 @@ import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import { HANDOVER_EVENT } from "./handover-store.js";
+import { switchCredentials, type SwitchSignIn } from "./handover-switch-proof.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
@@ -24,6 +25,7 @@ export interface HandoverPreparationDeps {
   appDb: Database;
   nodePreparation: ReturnType<typeof createNodeOperationPreparation>;
   passwordThrottle?: PasswordThrottle;
+  switchSignIn?: SwitchSignIn;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
 }
@@ -31,6 +33,9 @@ export interface HandoverPreparationDeps {
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.throttled": 429,
+  "passkey.not_registered": 401,
+  "passkey.verification_failed": 401,
+  "passkey.challenge_expired": 400,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
@@ -90,15 +95,34 @@ export function assertBindingNamesOperation(
     throw new AppError("module.operation_invalid", { module: binding.module });
 }
 
-/** Only these three fields reach the sign-in, so no break-glass secret or person id can. */
+/**
+ * Only these three fields reach the sign-in, so no break-glass secret or person id can. Given
+ * `emergency`, a sign-in without an email is a passkey or this box's proof (D9).
+ */
 export async function signInCredentials(
   db: Database,
   signIn: unknown,
-): Promise<{ personId: string; password: unknown; totp: unknown }> {
+  emergency?: { c: Context; switchSignIn: SwitchSignIn },
+): Promise<{ personId: string; password?: unknown; totp?: unknown }> {
+  if (emergency !== undefined) {
+    const person = await switchCredentials(emergency.c, emergency.switchSignIn, db, signIn);
+    if (person !== undefined) return person;
+  }
   if (typeof signIn !== "object" || signIn === null) throw new AppError("password.invalid", {});
   const { email, password, totp } = signIn as Record<string, unknown>;
   if (typeof email !== "string") throw new AppError("password.invalid", {});
   return { personId: await personIdForLoginEmail(db, email), password, totp };
+}
+
+/** What `signInCredentials` takes for an operation: the switch's sign-in for an emergency only. */
+export function switchStepFor(
+  c: Context,
+  switchSignIn: SwitchSignIn | undefined,
+  operation: Pick<HandoverOperation, "scenario">,
+): { c: Context; switchSignIn: SwitchSignIn } | undefined {
+  return switchSignIn !== undefined && operation.scenario === "emergency"
+    ? { c, switchSignIn }
+    : undefined;
 }
 
 export async function handoverSignInAttempt<T>(
@@ -150,7 +174,11 @@ export function mountHandoverPreparationApi(
       if (moduleOperation === null)
         throw new AppError("module.operation_invalid", { module: "unknown" });
       assertBindingNamesOperation(moduleOperation.binding, operation, deps.nodeId);
-      const credentials = await signInCredentials(deps.appDb, body.signIn);
+      const credentials = await signInCredentials(
+        deps.appDb,
+        body.signIn,
+        switchStepFor(c, deps.switchSignIn, operation),
+      );
       const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return c.json(
         await handoverSignInAttempt(throttle, credentials, () =>

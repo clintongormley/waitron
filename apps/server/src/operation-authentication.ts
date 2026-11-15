@@ -88,6 +88,22 @@ export async function withRecoveryKeyAuthority<T>(
   );
 }
 
+const switchSignedIn = new WeakSet<object>();
+declare const signedIn: unique symbol;
+export type SwitchSignedIn = { readonly personId: string; readonly [signedIn]: true };
+
+/** Credentials for a person the emergency switch signed in by passkey or proof; a request body
+ * cannot make one. */
+export function switchSignedInAs(personId: string): SwitchSignedIn {
+  const credentials = Object.freeze({ personId });
+  switchSignedIn.add(credentials);
+  return credentials as SwitchSignedIn;
+}
+
+export function isSwitchSignedIn(credentials: unknown): credentials is SwitchSignedIn {
+  return typeof credentials === "object" && credentials !== null && switchSignedIn.has(credentials);
+}
+
 export async function withAuthenticatedOperation<T>(
   deps: { readonly db: Database; readonly credentialKeyRing: TotpKeyRing },
   operation: {
@@ -99,6 +115,10 @@ export async function withAuthenticatedOperation<T>(
   /** Runs inside the sign-in's transaction, so a throw leaves no session row behind. */
   afterSignIn?: () => Promise<void>,
 ): Promise<T> {
+  if (isSwitchSignedIn(credentials)) {
+    await afterSignIn?.();
+    return withOperationAuthority({ ...operation.binding }, credentials.personId, run);
+  }
   if (typeof credentials !== "object" || credentials === null || Array.isArray(credentials))
     throw new AppError("password.invalid", {});
   const { personId, password, totp } = credentials as Record<string, unknown>;

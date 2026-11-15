@@ -40,6 +40,11 @@ import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi, type EmergencyHandover } from "./handover-emergency-api.js";
 import { handoverPromotionContext, mountHandoverPreparationApi } from "./handover-preparation.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import {
+  SWITCH_PROOF_COOKIE,
+  createSwitchChallenges,
+  makeSwitchProof,
+} from "./handover-switch-proof.js";
 import { placeAcceptedCopyAtStart } from "./handover-place-copy.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -181,6 +186,14 @@ function spareOn(
     appDb: store.venue,
     nodePreparation: service,
     passwordThrottle: createPasswordThrottle(),
+    switchSignIn: {
+      node: store.node,
+      ring,
+      nodeId: standby.nodeId,
+      rpId: "box.test",
+      origin: "https://box.test",
+      challenges: createSwitchChallenges(),
+    },
   };
   mountHandoverPreparationApi(app, { ...common, requestFromBox: () => false });
   mountHandoverActivationApi(app, {
@@ -217,13 +230,21 @@ async function request(
 }
 
 /** Through the real preparation route: what `select` answers is what the activation sends. */
-async function selectName(app: Hono): Promise<{ input: unknown; identity: string }> {
+async function selectName(
+  app: Hono,
+  headers?: Record<string, string>,
+): Promise<{ input: unknown; identity: string }> {
   const prepare = async (proposal: unknown) => {
-    const answer = await request(app, "preparation", {
-      moduleOperation: { binding, input: null },
-      signIn,
-      proposal,
-    });
+    const answer = await request(
+      app,
+      "preparation",
+      {
+        moduleOperation: { binding, input: null },
+        ...(headers === undefined ? { signIn } : {}),
+        proposal,
+      },
+      { headers: headers ?? {} },
+    );
     expect(answer.status, JSON.stringify(answer.body)).toBe(200);
     return answer.body as { id: string; input: unknown; identity: string; status: string };
   };
@@ -284,6 +305,7 @@ async function emergencySpare(gate = true) {
     venueDir: dirs().spareVenue,
     modules: fiscalModules,
     origin: "https://box.test",
+    rpId: "box.test",
     credentialKeyRing: TOTP_KEY_RING,
     fetch: exchange,
   };
@@ -389,6 +411,63 @@ afterEach(async () => {
   await placed?.close();
   placed = undefined;
   await rm(root, { recursive: true, force: true });
+});
+
+describe("the switch's proof at preparation and activation", () => {
+  const proofHeaders = async (store: Store, proof?: string) => ({
+    cookie: `${SWITCH_PROOF_COOKIE}=${
+      proof ??
+      (await makeSwitchProof(
+        { db: store.venue, node: store.node, ring, nodeId: standby.nodeId },
+        ADMIN,
+      ))
+    }`,
+  });
+  const withProof = (
+    app: Hono,
+    step: "preparation" | "activate",
+    body: unknown,
+    headers: Record<string, string>,
+  ) => request(app, step, body, { headers });
+
+  it("an emergency prepares and activates on this box's proof, and refuses one that fails its check", async () => {
+    const s = await emergencySpare();
+    const refused = await proofHeaders(s.store, "not-a-proof");
+    const challenge = {
+      moduleOperation: { binding, input: null },
+      proposal: { action: "clock-challenge" },
+    };
+    expect((await withProof(s.app, "preparation", challenge, refused)).body.error?.code).toBe(
+      "password.invalid",
+    );
+    const { input } = await selectName(s.app, await proofHeaders(s.store));
+    const activation = { moduleOperation: { binding, input } };
+    expect((await withProof(s.app, "activate", activation, refused)).body.error?.code).toBe(
+      "password.invalid",
+    );
+    expect(
+      (await withProof(s.app, "activate", activation, await proofHeaders(s.store))).body,
+    ).toEqual({ activated: true, restarting: true });
+  }, 60_000);
+
+  it("a controlled handover refuses a valid proof at preparation and activation", async () => {
+    const store = await placedSpare();
+    const { app } = spareOn(store);
+    const { input } = await selectName(app);
+    const headers = await proofHeaders(store);
+    const challenge = {
+      moduleOperation: { binding, input: null },
+      proposal: { action: "clock-challenge" },
+    };
+    expect((await withProof(app, "preparation", challenge, headers)).body.error?.code).toBe(
+      "password.invalid",
+    );
+    expect(
+      (await withProof(app, "activate", { moduleOperation: { binding, input } }, headers)).body
+        .error?.code,
+    ).toBe("password.invalid");
+    expect(await activations(store)).toEqual([]);
+  }, 60_000);
 });
 
 describe("activating on a real placed copy", () => {

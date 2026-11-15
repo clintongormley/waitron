@@ -1,6 +1,7 @@
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -10,6 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signEnvelope } from "@waitron/handover";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readTakeFailures } from "@waitron/node-db";
 import type { Logger } from "@waitron/server-kit";
@@ -19,10 +21,12 @@ import type { FollowProgress } from "@waitron/stream";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { followedCopyId } from "./handover-copy-from-follow.js";
+import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
 import { beginHandover } from "./handover-store.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import {
+  ADMIN,
   ADMIN_EMAIL,
   PASSWORD,
   OPERATION,
@@ -129,6 +133,7 @@ function service(
       venueDir: dirs().spareVenue,
       modules: fiscalModules,
       origin,
+      rpId: "spare.example",
       credentialKeyRing: TOTP_KEY_RING,
       passwordThrottle: createPasswordThrottle(),
       follow: { stopForSwitch, progress: () => seen, restart, migrationsRoot: null },
@@ -156,26 +161,29 @@ function service(
     },
     options.log,
   );
-  const post = async (body: unknown, step = "followed") => {
+  const post = async (body: unknown, step = "followed", headers: Record<string, string> = {}) => {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
       `${origin}/api/node/handover/emergency/${step}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", origin },
+        headers: { "content-type": "application/json", origin, ...headers },
         body: JSON.stringify(body),
       },
       { incoming: { socket } },
     );
+    const setCookie = response.headers.get("set-cookie");
     return {
       status: response.status,
+      ...(setCookie === null ? {} : { setCookie }),
       body: (await response.json()) as {
         state?: string;
         progress?: FollowProgress | null;
         copy?: { source: string; sourceId?: string };
         declaration?: { body: { lastCopy: unknown } };
         error?: { code: string };
+        options?: { challenge: string };
       },
     };
   };
@@ -225,6 +233,45 @@ it("a refused sign-in leaves nothing staged and restarts", async () => {
     "password.invalid",
   );
   await expect(readFile(readyFile())).rejects.toMatchObject({ code: "ENOENT" });
+  await restarted(s);
+});
+
+it("a passkey take signs in against the staged copy's passkey rows, and writes no challenge row", async () => {
+  const passkey = signingPasskey("spare.example");
+  const followed = new DatabaseSync(followedVenue());
+  followed
+    .prepare(
+      "insert into webauthn_credentials (id, person_id, credential_id, public_key, counter, created_at) values (?, ?, ?, ?, 0, ?)",
+    )
+    .run(randomUUID(), ADMIN, passkey.credentialId, passkey.publicKey, new Date().toISOString());
+  followed.close();
+  const s = service();
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const answer = await s.post({
+    signIn: { passkey: passkey.assert(challenge, "https://spare.example") },
+  });
+  expect(answer.body).toEqual({ state: "restarting" });
+  expect(answer.setCookie).toMatch(new RegExp(`^${SWITCH_PROOF_COOKIE}=`));
+  expect(placed.venue.all(sql`select * from webauthn_challenges`)).toEqual([]);
+  const staged = new DatabaseSync(followedVenue(), { readOnly: true });
+  expect(staged.prepare("select * from webauthn_challenges").all()).toEqual([]);
+  staged.close();
+  await restarted(s);
+});
+
+it.each([
+  ["accepts this box's proof in place of a password", true, { state: "restarting" }],
+  ["refuses a proof that fails its check", false, { error: { code: "password.invalid" } }],
+] as const)("the take %s", async (_name, valid, expected) => {
+  const proof = valid
+    ? await makeSwitchProof(
+        { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+        ADMIN,
+      )
+    : "not-a-proof";
+  const s = service();
+  const answer = await s.post({}, "followed", { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
+  expect(answer.body).toMatchObject(expected);
   await restarted(s);
 });
 
