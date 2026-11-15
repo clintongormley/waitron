@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b4eb2f3a-8344-4141-bcee-155060814643",
+  "id": "27229a1f-6377-4578-b1d3-b6f81d4a8597",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6606,13 +6606,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "menu_id": {
-          "name": "menu_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "parent_id": {
           "name": "parent_id",
           "type": "text",
@@ -6803,13 +6796,6 @@
         }
       },
       "indexes": {
-        "products_menu_id_idx": {
-          "name": "products_menu_id_idx",
-          "columns": [
-            "menu_id"
-          ],
-          "isUnique": false
-        },
         "products_name_key_idx": {
           "name": "products_name_key_idx",
           "columns": [
@@ -6831,14 +6817,6 @@
           ],
           "isUnique": false
         },
-        "products_id_menu_key": {
-          "name": "products_id_menu_key",
-          "columns": [
-            "id",
-            "menu_id"
-          ],
-          "isUnique": true
-        },
         "products_parent_id_key": {
           "name": "products_parent_id_key",
           "columns": [
@@ -6849,19 +6827,6 @@
         }
       },
       "foreignKeys": {
-        "products_menu_id_menus_id_fk": {
-          "name": "products_menu_id_menus_id_fk",
-          "tableFrom": "products",
-          "tableTo": "menus",
-          "columnsFrom": [
-            "menu_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "products_category_id_categories_id_fk": {
           "name": "products_category_id_categories_id_fk",
           "tableFrom": "products",
@@ -6901,17 +6866,15 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "products_parent_id_menu_id_products_id_menu_id_fk": {
-          "name": "products_parent_id_menu_id_products_id_menu_id_fk",
+        "products_parent_id_products_id_fk": {
+          "name": "products_parent_id_products_id_fk",
           "tableFrom": "products",
           "tableTo": "products",
           "columnsFrom": [
-            "parent_id",
-            "menu_id"
+            "parent_id"
           ],
           "columnsTo": [
-            "id",
-            "menu_id"
+            "id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
