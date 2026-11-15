@@ -96,8 +96,6 @@ async function withServer(
   let seen: Hono | undefined;
   const seams: StartServerSeams = {
     boxHostRequests: host,
-    // The listed peer is not running; this fixture tests origin acceptance, not peer liveness.
-    peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     restart,
     requestFromBox: () => false,
     observeApp: (app) => {
@@ -397,11 +395,17 @@ it("protects a real Ready write while accepting own and membership-listed pages"
         });
         expect(states()).toEqual([{ state: "queued" }]);
       }
-      for (const origin of [new URL(url(path)).origin, listed]) {
-        const response = await fetch(url(path), { method: "POST", headers: { cookie, origin } });
-        expect(await answerOf(response)).toEqual({ status: 200, body: "" });
-        expect(states()).toEqual([{ state: "ready" }]);
-      }
+      const listedResponse = await fetch(url(path), {
+        method: "POST",
+        headers: { cookie, origin: listed },
+      });
+      expect(await answerOf(listedResponse)).toEqual({ status: 200, body: "" });
+      expect(states()).toEqual([{ state: "ready" }]);
+      const ownResponse = await fetch(url(path), {
+        method: "POST",
+        headers: { cookie, origin: new URL(url(path)).origin },
+      });
+      expect(await answerOf(ownResponse)).toEqual({ status: 200, body: "" });
     },
     async (venue) => {
       const [profile] = await seedDeviceProfiles(suite.db, {

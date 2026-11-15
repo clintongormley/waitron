@@ -34,7 +34,7 @@ async function sentFromOwnPage(c: Context, trusted: OriginAllowlist): Promise<bo
   return trusted(origin);
 }
 
-/** Cookie presence, not validity, gates page checks: rejected credentials must not bypass them. */
+/** Use the authentication readers so page checks and routes agree on cookie presence. */
 export function requireManagementChangeFromOwnPage(
   trusted: OriginAllowlist,
   log: Logger,

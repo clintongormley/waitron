@@ -1724,8 +1724,8 @@ are tried as a token; a new login table is seen by nothing.
 
 **The rule.** `requireManagementChangeFromOwnPage` (`apps/server/src/own-page.ts`) judges every
 request whose method is not `GET`, `HEAD` or `OPTIONS` and that carries a
-`waitron_management_session`, `waitron_till_session` or `waitron_device` cookie, including an empty
-or malformed value. It takes the request when it came from the box's own page or a trusted one.
+`waitron_management_session`, `waitron_till_session` or `waitron_device` cookie, as read by the authentication cookie readers, including an empty value or a value with
+the wrong credential shape. It takes the request when it came from the box's own page or a trusted one.
 Otherwise it answers 403 `management.origin_refused` when the dashboard cookie is present, or
 `till.origin_refused` for the till/device cookies, and logs a
 warning with the method, `origin` and `site` (the `Sec-Fetch-Site` value), and `lookupFailed: true`
@@ -1785,8 +1785,8 @@ design; `cloud-api.ts`, `content-suggestions-api.ts`, `content-translations-api.
 `venue-zone-repair-api.ts` keep their own stricter checks, which require `Origin` to be exactly
 `managementOrigin`; and a page on another of the venue's servers is trusted through the allow-list
 with a started-server Ready test sending one listed sibling and one unlisted sibling. That fixture
-uses `peerCheck` to let the primary start without a running peer; it proves origin acceptance,
-not cookie delivery between two running servers. Cookie Domain/Strict attributes remain covered
+starts without a running peer; it proves origin acceptance, not cookie delivery between two
+running servers. Cookie Domain/Strict attributes remain covered
 by `device-session.test.ts`.
 
 **Till route survey (2026-11-15):** till-api and its children, schedule-api and device-api use
