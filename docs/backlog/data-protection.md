@@ -248,6 +248,8 @@ by the answers):
 
 ## Decisions and deliberate limits
 
+- **A1543, 2026-11-15:** the owner chose “Keep everything” at 19:32, recorded by the watcher in Lane J’s `questions.md` at 19:55. Do not trim the working records examined in the [proposal](../superpowers/specs/2026-11-15-a1543-working-records-proposal.md); revisit retention with A664 after the advisers. No seven-day cutoff or implementation was accepted. The proposal remains the audit and measurement record.
+
 - **2026-11-09, A1404 Amazon acceptance:** the trial passed key rotation, the production recovery PDF and a fresh-target restore with row and sealed-secret checks; owned-resource cleanup left no bucket or uploads. [Receipt](../receipts/a1404/README.md#amazon-rotation-and-production-pdf-9-november-2026).
 
 - **2026-11-09, A1404 encryption slice:** Litestream and recovery now receive a separate key derived from the backup key. Rotation reloads the stream after resealing. The provider still receives the database and customer key; the box’s local database is unencrypted. Real Amazon recovery-pack qualification after rotation remains in A1404; the A1324 paragraph below records the earlier decision.

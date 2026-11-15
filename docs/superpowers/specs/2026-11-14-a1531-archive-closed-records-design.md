@@ -309,6 +309,11 @@ trim is also the main lever for speed.
 retained evidence from two limited cleanup candidates, with a fresh sample and current link receipts.
 Its proposed periods and the decision to build still await the owner.
 
+**2026-11-15, 19:32 update:** the owner chose “Keep everything”, recorded by the watcher in
+Lane J’s `questions.md` at 19:55. Trim nothing now; revisit retention with A664 after the
+advisers. The preceding pending status and recommendation below record the earlier proposal;
+see [A1543’s decision](2026-11-15-a1543-working-records-proposal.md#owner-decision-2026-11-15).
+
 A short item, shaped like A1532:
 
 1. For the bookkeeping tables (`attendance_source_state`, `attendance_operation_facts`,

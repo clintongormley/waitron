@@ -1,6 +1,14 @@
 # A1543: keep the evidence, bound two kinds of working record
 
-## WATCHER-NEEDED: A1543 proposal for the owner
+## Owner decision, 2026-11-15
+
+The owner chose “Keep everything” at 19:32, as recorded by the watcher in Lane J’s
+`questions.md` at 19:55: “Trim nothing now; revisit with A664 after the advisers. Close A1543
+with the proposal as its record.” No trimming is authorised. The proposed seven-day cutoffs
+and replay tradeoff below were not accepted; the audit and measurements remain as the
+proposal’s historical record. See the [retention decision](../../backlog/data-protection.md#decisions-and-deliberate-limits).
+
+## Proposal as submitted, before the owner’s decision
 
 You can recover a modest amount of reusable database space by keeping seven elapsed days of
 closed-party command replies and narrowly defined terminal whole-payment watches. I recommend
