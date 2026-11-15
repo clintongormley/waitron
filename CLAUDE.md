@@ -166,8 +166,8 @@ hook, or how tests are scheduled. What named guards miss:
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
   gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: the process-tree probe covers pnpm setup only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
-  GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
+  rule. `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  GNU preference and deadline arguments.
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
   and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:
@@ -328,7 +328,7 @@ called weaker than its name, the topic file lists what it does not see.
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
   stable per address, or attempts sent at once finish sooner for an unknown address.
-  Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
+  Guards: identity login and route suites, weaker than the set looks.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
   service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
@@ -383,8 +383,7 @@ called weaker than its name, the topic file lists what it does not see.
   suggesting removal (A1098, A1501). The
   tail's span and the cost of taking that password without HTTPS:
   [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
-  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
-  read the text tables, not the page.
+  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -505,9 +504,9 @@ called weaker than its name, the topic file lists what it does not see.
   in tests. After `storage.disk_full` ends a transaction, later statements in its body must remain
   refused inside the write queue; an intervening outside transaction defeats that protection.
   Guards: `packages/store/src/disk-full.test.ts` and
-  `write-queue.test.ts`, weaker than their names: page limits, not a real disk; at-commit cases are
-  stand-ins. No guard enforces
+  `write-queue.test.ts`, weaker than their names. No guard enforces
   the test catch rule.
+  [Receipt](docs/developers/conventions-data.md#a-statement-this-engine-refuses-backs-out-itself-not-the-transaction-around-it--except-a-full-disk-which-sometimes-ends-the-whole-transaction).
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone (two stated exceptions in bill-request.ts and dish-not-sent-alert.ts, where payment must settle).**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
 - **A full disk is not one error code; code 14 also names a missing folder.**
@@ -564,8 +563,8 @@ called weaker than its name, the topic file lists what it does not see.
   weaker than its name: covers only named duties.
 - **Nothing is scoped by a taxpayer column: the taxpayer is the one row of `taxpayer` (id = 1,
   `taxpayer_singleton_ck`), and a query that wants it reads that row.** Guard:
-  `scripts/no-tenant-column.test.ts`, weaker than its name — it matches the retired `tenant_id`
-  column's spellings and skips test files.
+  `scripts/no-tenant-column.test.ts`, weaker than its name.
+  [Receipt](docs/developers/conventions-data.md#nothing-is-scoped-by-a-taxpayer-column).
 - **Declare table/column types through `packages/db/src/schema/columns.ts`, never direct engine
   builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/registros.ts`. Guard:
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
@@ -664,7 +663,7 @@ called weaker than its name, the topic file lists what it does not see.
   table's own triggers that `DROP TABLE` removed, rewritten for any column the rebuild changed.
   It drops one of the table's own triggers by hand only when that trigger is meant to go**, or
   the box refuses the rename (`no such table`). Guard: `scripts/migration-upgrade.test.ts`,
-  weaker than the rule: a reading trigger dropped and never created again passes it.
+  weaker than the rule.
   [Receipt](docs/developers/conventions-data.md#from-go-live-a-rebuild-drops-and-recreates-every-trigger-whose-body-reads-the-table).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
   time** (`foreign key mismatch`). So a green migrate is no evidence a new key is sound — write
@@ -891,8 +890,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 [data, 2026-11-02](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02),
 [printing](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26),
 [stream tests](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26),
-[data, 2026-11-11](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-11) and
-[data, 2026-11-14](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-14).
+[data, 2026-11-11](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-11),
+[data, 2026-11-14](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-14) and
+[data, 2026-11-15](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
 
 - **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
   jobs; documents contain no drawer commands and connected-card payments open nothing.** Taking cash
@@ -907,8 +907,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **A production start on a bundle built without a release version refuses
   `server.unreleased_build`; a start from source is not refused.** Guards:
   `apps/server/src/release-check.test.ts` and `apps/server/src/unreleased-build.e2e.test.ts`,
-  weaker than the rule: a test bundle, never the image's; image-smoke's `check-release` step reads
-  the image's stamp but starts nothing. [Detail](docs/operations/release.md)
+  weaker than the rule. [Detail](docs/operations/release.md)
 - **A released version's declaration never changes: `v<version>.md` stays byte for byte what its
   tag holds.** Guard: `scripts/released-declarations.test.ts`, weaker than the rule: a version's
   missing tag is caught only once a higher version is declared.
@@ -946,7 +945,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
-  is weaker than its name: stored text only; selected declarations and existing append-only tables of toggleable modules.
+  is weaker than its name. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
 - **Every start of a box that files records writes no fiscal record and moves no money until its
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
@@ -957,16 +956,15 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **While the box's internet time service is synchronised, a till's time, a jump or the latest
   record's time never stops a sale; a box already waiting carries on at the clock watch's first look
-  that reads it synchronised** (owner, 2026-11-11 14:34: "we trust NTP over everything else"). **When it is not synchronised, on a box that files records, payments and
+  that reads it synchronised** (owner, 2026-11-11 14:34). **When it is not synchronised, on a box
+  that files records, payments and
   records also wait after the clock jumps by more than a minute against the box's steady clock,
   until the time is confirmed as at a start** ("We only stop if we have reason to suspect that the time is wrong and we can't talk to
   NTP"). **A refusal by AEAT of a record dated in the future (`1112`) sends a box whose time
   service is not synchronised back to waiting once, if that record was written since the time was
   last confirmed; a box synchronised when the refusal arrives is never sent back, two devices do
   not end that wait, and such refusals never start a hold on later records** (the stop, owner,
-  2026-11-10 14:59: "we should respond appropriately by stopping selling and resetting the clock",
-  and 2026-11-11 14:34: "or AEAT refuses an invoice because of time"; no hold, 2026-11-10 15:31:
-  "We fix the clock we start sending correct invoices … No waiting"; devices, A1420 D9, the
+  2026-11-10 14:59, and 2026-11-11 14:34; no hold, 2026-11-10 15:31; devices, A1420 D9, the
   watcher's, 2026-11-10 17:28, not the owner's). Guards:
   `apps/server/src/clock-watch.start-up.test.ts`, `apps/server/src/clock-correction.test.ts`,
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-watch.future-date.test.ts`,
@@ -976,16 +974,13 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **A record's time is never compared with the latest record's: the start confirms the time, and
   once it is confirmed the box records with its clock however far a later sync moves it** (owner,
-  2026-11-10: "if we successfully sync the clock using ntp then we continue to sell, it doesn't
-  matter how much the clock changes"); a time a person confirms or sets from their own device is
-  never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
-  time on their device, then we trust that time and move forward"). After replay, call the seat's
+  2026-11-10); a time a person confirms or sets from their own device is
+  never compared with the latest record (owner, 2026-11-11 14:34). After replay, call the seat's
   `refuseUntilRecordable` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
-  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
-  only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule ([limits](docs/developers/conventions-data.md#who-may-confirm-or-set-the-clock)). **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
   confirms that start or during start-up; a Box administration holder's while the start waits or
@@ -1092,8 +1087,9 @@ before treating an implementation as a rule violation.
   rows. Claude rebuilds it only from the main checkout (`wa-wt reset demo waitron`, which stops and
   restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Cost: a Claude
   reset on slot 2 rewrote the main checkout's `.env`, and the owner's next start got a dashboard that
-  could not reach its server. Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name (stand-in `pnpm`
-  and `docker`, run by hand), and `apps/server/scripts/dev-setup.test.ts`,
+  could not reach its server.
+  Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name, and
+  `apps/server/scripts/dev-setup.test.ts`,
   `apps/server/scripts/dev-onboard.test.ts` and `apps/server/scripts/dev-server.test.ts` for
   `WAITRON_DEV_ENV_FILE`. [Detail](docs/developers/workflow-guide.md#the-owners-dev-stack-and-claudes).
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
