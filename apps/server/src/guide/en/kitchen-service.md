@@ -333,6 +333,9 @@ counter, the till first lists such dishes and asks you to check with the station
 button reads **Station agreed — save**. The same window opens when the server finds such a dish before
 the till has marked it.
 
+A dish saved before its period ended, on a parked counter order or as a set lunch's later course,
+asks the same when you place, send or fire it after the period; **Don't send them** leaves it unsent.
+
 Adding an extra to a sent dish after its period ended opens the same window:
 **Station agreed — send** adds the extra (from **Lunch choices** it reads **Station agreed — save**),
 and **Don't add them** leaves the dish as it was.

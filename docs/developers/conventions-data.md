@@ -736,13 +736,29 @@ confirmed; the kitchen ticket and the kitchen screen read them through `readLate
 D19–D28. Extras added later to a dish already sent (stamped sent or holding a ticket item, held or
 fired; for a set lunch, one of its courses) whose period ended earlier that day, through either
 order edit (`PUT /api/working-orders/:id` or `/lines/:lineNo`), take the same check and record
-their own confirmation, never the dish's. Extras added to a dish not yet sent, such as a parked
-counter order's, are not checked. Neither is refused `menu_period.not_running` or by a closed zone
-(A1085). The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
+their own confirmation, never the dish's. Extras added to a dish not yet sent are not checked when
+added. Neither is refused `menu_period.not_running` or by a closed zone (A1085).
+A dish stored unsent (a parked counter order's, a set lunch's course) is judged again when it is
+sent, as entry judges it, unless already marked (`lateUnsentDishes`, `apps/server/src/working-order.ts`):
+by the menu it was stored from, the department of the order's zone at the send, and for a lunch
+course the lunch's product. Placing a parked order (`placeOrder`), a table's Send (`sendLines`) and
+Fire course or Fire line (`fireOrderLines`) refuse it `menu_period.ended` unless `lateSend`
+confirms, with `workingOrderLineIds` naming the stored lines; Fire course judges every bill of the
+party in one refusal (`judgeHeldRelease`). Paying a saved counter bill (`fireDishesAtPayment`,
+`apps/server/src/till-sale.ts`), moving a bill to a table (`adoptZone`, `apps/server/src/move-bill.ts`),
+finishing or collecting a party (`releaseHeldWorkOf`) and splitting a table or moving a bill onto
+one (`groupArrivingDishes`, both `apps/server/src/order-groups.ts`) never ask: they mark the dish
+with no confirmer (`late_confirmed_by` null, `recordLateSendMarks`), and since `readLateSendMarks`
+reads only the period, its ticket and station card carry the same "agreed" mark. A no-preparation
+course released from a hold counts as sent on hold and is not judged. A dish parked on an earlier
+business day and placed today is not marked: `endedMenus` lists only periods that ended today.
+The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`).
 For extras added to a sent dish through Change dish, or a set lunch's choices, it opens the window
-from the refusal alone (`#lateExtrasDish`, `apps/till/src/till-app.ts`). It sends `lateSend` only after the waiter chooses Station agreed in its late-send window
+from the refusal alone (`#lateExtrasDish`, `apps/till/src/till-app.ts`). For stored dishes it
+lists the refusal's `workingOrderLineIds`, another bill's from Current orders by name
+(`storedLinesAsked`, `apps/till/src/state/late-send.ts`). It sends `lateSend` only after the waiter chooses Station agreed in its late-send window
 (`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:
 the till gates additions and increases, and the server checks the window when the order is sent. A
 period save changes no time and takes no clock revision. Picking and sending remain separate from the department's actual open
