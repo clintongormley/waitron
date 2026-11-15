@@ -202,7 +202,7 @@ clocks differ, after **Proceed** the page shows the server's time and this devic
 server**, **This device** or **Both times are wrong**. **This device** sets the server's time from
 the device you are using, and the page carries on by itself. After either of the other two, correct
 this device's time, reconnect to the box, then choose **Compare the clocks again**. If the box then shows a page saying it could not make
-its new invoice series, connect it to the internet and press **Retry a normal boot**.
+its new invoice series, let it keep its time over the internet and press **Retry a normal boot**.
 
 If the backup has no active administrator with a password, choose another backup.
 

@@ -221,7 +221,7 @@ pregunta cuál es la correcta: **El servidor**, **Este dispositivo** o **Las dos
 **Este dispositivo** pone la hora del servidor con la del dispositivo que estás usando, y la página
 sigue sola. Después de cualquiera de las otras dos, corrige la hora de este dispositivo, vuelve a
 conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
-página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
+página que dice que no pudo crear sus nuevas series de facturas, deja que se ponga en hora por internet y pulsa
 **Reintentar un arranque normal**.
 
 Si la copia no tiene ningún administrador activo con contraseña, elige otra copia de seguridad.

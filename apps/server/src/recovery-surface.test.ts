@@ -641,14 +641,14 @@ describe("curated operator text", () => {
     expect(english).toContain(escapeHtml("The box could not make its new invoice series."));
     expect(english).toContain(
       escapeHtml(
-        "It checks its time against the internet first. Connect the box to the internet, then press “Retry a normal boot”.",
+        "It checks its time against the internet first. Let the box keep its time over the internet, then press “Retry a normal boot”.",
       ),
     );
     const spanish = await pageFor("sif.allocation_invalid", undefined, SPANISH);
     expect(spanish).toContain(escapeHtml("El equipo no pudo crear sus nuevas series de facturas."));
     expect(spanish).toContain(
       escapeHtml(
-        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal».",
+        "El equipo comprueba primero su hora con internet. Deja que el equipo se ponga en hora por internet y pulsa «Reintentar un arranque normal».",
       ),
     );
   });
