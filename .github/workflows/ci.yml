@@ -2048,6 +2048,37 @@ jobs:
           retention-days: 1
           overwrite: true
 
+      - id: upload_failure_screenshots
+        name: Keep till failure screenshots and test names
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: till-failures-${{ matrix.shard }}
+          path: |
+            apps/till/src/**/__screenshots__/**
+            apps/till/.vitest-attachments/*.png
+            apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Retry till failure screenshot upload
+        if: always() && steps.upload_failure_screenshots.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: till-failures-${{ matrix.shard }}
+          path: |
+            apps/till/src/**/__screenshots__/**
+            apps/till/.vitest-attachments/*.png
+            apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
   # The coverage gate for @waitron/till: merges the test-till blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-till-merge:

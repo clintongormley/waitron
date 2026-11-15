@@ -2022,9 +2022,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Tests copy the dashboard shell's link handler instead of calling it.**
   [Detail](backlog/ci.md#tests-copy-the-dashboard-shells-link-handler-instead-of-calling-it).
 
-- **Retain failure screenshots for long browser test names.**
-  [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
-
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 

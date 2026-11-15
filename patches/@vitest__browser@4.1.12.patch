@@ -1,0 +1,14 @@
+diff --git a/dist/index.js b/dist/index.js
+index 97fc56bd3caebbed6b1a244d7a4b31b4663a800c..9cd2863c97fc19ca3f05ce4a1a4aa538f937d872 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -646,6 +646,9 @@ function resolveScreenshotPath(testPath, name, config, customPath) {
+ 	if (customPath) {
+ 		return resolve(dirname(testPath), customPath);
+ 	}
++	if (name.length > 180) {
++		name = name.slice(0, 80) + "-" + crypto.createHash("sha256").update(name).digest("hex") + ".png";
++	}
+ 	const dir = dirname(testPath);
+ 	const base = basename(testPath);
+ 	if (config.browser.screenshotDirectory) {
