@@ -340,7 +340,11 @@ it.each(["en", "es"])(
       )!;
       expect(link.getAttribute("href")).toBe(`/help/${locale}/servers#emergency`);
       expect(link.textContent).toBe(t("handover.check_help"));
-      vi.spyOn(api, "handoverStatus").mockResolvedValue({ ...status });
+      vi.spyOn(api, "handoverStatus").mockResolvedValue({
+        ...status,
+        role: "destination",
+        scenario: "controlled",
+      });
       window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector('a[href$="/servers#emergency"]')).toBeNull(),
