@@ -1456,6 +1456,31 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(remedyCalls(request)).toHaveLength(1);
   });
 
+  it("says after a sent replacement where to print its original, in English and in Spanish", async () => {
+    for (const [language, words] of [
+      [
+        "en",
+        "Replacement issued. To print its original, open it on a till in Find a bill, on the Transactions tab, and choose Reprint. Later prints are copies.",
+      ],
+      [
+        "es",
+        "Rectificativa emitida. Para imprimir su original, ábrela en una caja en Buscar cuenta, en la pestaña Transacciones, y elige Reimprimir. Las impresiones siguientes son copias.",
+      ],
+    ] as const) {
+      setLocale(language);
+      const request = replacementServer(futureCase("2026-11-03"));
+      const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+      const details = await openDetails(screen);
+      expect(screen.shadowRoot!.querySelector("[data-test=replacement-issued]")).toBeNull();
+      await pick(screen, details, "2026-11-02");
+      action(details).click();
+      await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+      await vi.waitFor(() => expect(text(screen, "[data-test=replacement-issued]")).toBe(words));
+      await openDetails(screen);
+      expect(screen.shadowRoot!.querySelector("[data-test=replacement-issued]")).toBeNull();
+    }
+  });
+
   it("marks the date field when the server refuses the day, keeping Send", async () => {
     const request = replacementServer(futureCase("2026-11-03"), async () => {
       throw refusal("fiscal.operation_date_invalid");

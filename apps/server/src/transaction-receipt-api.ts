@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   printers,
   printJobs,
@@ -19,6 +19,7 @@ import { readInvoiceDeliveryState } from "./invoice-delivery-status.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import {
   confirmReceiptHandover,
+  enqueueOriginalReceipt,
   enqueueReceiptCopy,
   resolveInvoicePrinter,
   resolveReceiptPrinter,
@@ -256,6 +257,11 @@ export function mountTransactionReceiptApi(
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
         if (printer === undefined) return;
+        if (await awaitsOriginalPrint(tx, id)) {
+          // Put this right issues a replacement without printing it, so this print is its original.
+          await enqueueOriginalReceipt(tx, cfg, ticket, id, async () => printer, session.personId);
+          return;
+        }
         const copy = await enqueueReceiptCopy(
           tx,
           cfg,
@@ -273,4 +279,18 @@ export function mountTransactionReceiptApi(
       return c.body(null, 200);
     }),
   );
+}
+
+async function awaitsOriginalPrint(tx: Transaction, saleId: string): Promise<boolean> {
+  const [sale] = await tx
+    .select({ replacesOriginal: sales.replacesOriginal })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  if (sale?.replacesOriginal !== true) return false;
+  const [original] = await tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+    .limit(1);
+  return original === undefined;
 }

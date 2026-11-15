@@ -697,6 +697,7 @@ export class FiscalFilingScreen extends LitElement {
   @state() private sending = false;
   @state() private refusal = "";
   @state() private caseChanged = false;
+  @state() private replacementIssued = false;
 
   #generation = 0;
   #unsubscribeLocale?: () => void;
@@ -728,6 +729,7 @@ export class FiscalFilingScreen extends LitElement {
   #open(row: FilingCaseView): void {
     this.#forget();
     this.caseChanged = false;
+    this.replacementIssued = false;
     this.viewing = row;
     const { kind } = (this.#fix = putRightFor(row, {
       fullInvoiceReplacement: this.fullInvoiceReplacement,
@@ -940,6 +942,7 @@ export class FiscalFilingScreen extends LitElement {
     if (!sameOpening()) return;
     this.#scope?.commit(sent);
     this.#close();
+    this.replacementIssued = replaces;
   }
 
   #replacement(found: FilingCaseView, problem: string): TemplateResult {
@@ -1280,6 +1283,13 @@ export class FiscalFilingScreen extends LitElement {
         this.caseChanged
           ? html`<p class="changed" role="status" data-test="case-changed">
               ${t("fiscal_filing.refused.changed")}
+            </p>`
+          : nothing
+      }
+      ${
+        this.replacementIssued
+          ? html`<p class="changed" role="status" data-test="replacement-issued">
+              ${t("fiscal_filing.put_right.replace.issued")}
             </p>`
           : nothing
       }
