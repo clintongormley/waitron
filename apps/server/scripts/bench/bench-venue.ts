@@ -176,9 +176,11 @@ export async function openBenchVenue(
     const db = store.venue;
     const seeded = await isProvisioned(db);
     if (!seeded) await provision(db);
-    await installChangeFeed(
-      db,
-      MODULES.flatMap((module) => module.changes ?? []),
+    await db.withWriteLock(() =>
+      installChangeFeed(
+        db,
+        MODULES.flatMap((module) => module.changes ?? []),
+      ),
     );
     // A reopened folder carries on its saved scan: starting again rescans the whole history.
     if (!seeded)

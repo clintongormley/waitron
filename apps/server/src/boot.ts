@@ -2708,7 +2708,8 @@ async function bootServer(
       (module.settings ?? []).map((document) => document.module),
     ),
   ]);
-  await installChangeFeed(db, changeSources);
+  // `withWriteLock`, not `withTransaction`: creating triggers writes no `change_log` row to drain.
+  await db.withWriteLock(() => installChangeFeed(db, changeSources));
   mountLiveApi(
     app,
     {

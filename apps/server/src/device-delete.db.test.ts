@@ -706,7 +706,7 @@ describe("the device delete impact", () => {
       expect(heard).toContainEqual(expect.objectContaining({ type: "devices", id: s.barTill }));
     } finally {
       unsubscribe();
-      removeChangeFeed(suite.db);
+      await removeChangeFeed(suite.db);
       await suite.db.execute(sql`delete from change_log`);
     }
   });
