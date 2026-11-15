@@ -1,389 +1,515 @@
 # The tax adviser's answers of 15 November 2026: what they change
 
-Written 15 November 2026 for the owner, to go through before the meeting of Thursday 19 November.
+Written 15 November 2026 for the owner, to go through before the meeting with the adviser on
+Thursday 19 November. Rewritten the same day so that each section can be read on its own.
 
-**What arrived.** Marboré Tax & Legal's draft "Veri\*Factu, invoicing and VAT in the restaurant
-sector: answers to Waitron's questionnaire", dated 15 November 2026, answers the
-[shortened list](asesor-questions.md#the-shortened-list-2026-10-09) sent around 15 October. Its
-numbers map one to one: its 1.1 to 1.16 are our S1 to S16, and its 2.1 to 2.6 are our R1 to R6.
-It does not answer S17 (selling by weight), S18 (a change of legal name) or S19 (keeping a chain's
-later records unsent). The document is marked "DRAFT – Working document subject to review", and its
-Spanish version prevails over the English one we received.
+## About this document
 
-**The PDF is not stored here.** This repository is public, and the document is the adviser's
-draft. What follows restates his answers in our words, with the laws and rulings he cites, so
-they can be searched; the owner keeps the PDF.
+**What arrived.** Marboré Tax & Legal sent a draft, "Veri\*Factu, invoicing and VAT in the
+restaurant sector: answers to Waitron's questionnaire", dated 15 November 2026. It answers the
+[shortened list](asesor-questions.md#the-shortened-list-2026-10-09) of questions we sent around
+15 October. His numbers map onto ours one to one: his 1.1 to 1.16 are our S1 to S16, and his 2.1 to
+2.6 are our R1 to R6. He did not answer S17 (selling by weight), S18 (a change of the company's
+legal name) or S19 (holding back later records in a chain while an earlier one's answer is unknown).
+The draft is marked "subject to review", and he says its Spanish version prevails over the English
+one we received.
 
-**How to use it.** Part A lists where Waitron already does what the adviser says. Part B is each
-difference: his answer, what Waitron does today with an example, what should change, and the
-decision it needs from you. Part C is what to remember for features not built yet. Part D is the
-list of your decisions, numbered, to answer one by one. The follow-up questions for Thursday are in
-the [meeting sheet](2026-11-19-adviser-meeting.md): questions 3 and 4 are rewritten and 15 to 22 are
-new, in English and Spanish.
+**The PDF is not stored in the repository.** The repository is public and the document is his
+draft. What follows restates his answers in our words, with the laws and rulings he cites.
+
+**How it is laid out.**
+
+- Part A lists where Waitron already does what he says.
+- Part B takes each difference in turn. Every section explains the situation, gives his answer,
+  shows what Waitron does today with a worked example, says what should change, and ends with the
+  decision it needs from you.
+- Part C lists what to remember when features not yet built are built.
+- Part D is an index of your decisions.
+- The follow-up questions for Thursday are in the
+  [meeting sheet](2026-11-19-adviser-meeting.md), in English and Spanish.
 
 **How "today" was established.** By reading the code, tests and backlog on `main` at `52aa441257`
-(15 November). Nothing was run. Each claim below has its file and line in the
+(15 November). Nothing was run. The file and line behind each claim are in the
 [evidence table](#evidence) at the end.
 
-## Part A. Where Waitron already matches
+**Words used throughout.**
 
-| Adviser | His answer, in short | Waitron today |
-| --- | --- | --- |
-| 1.1 | The ticket is due when the meal ends, in the same visit. Issuing it earlier is not forbidden, but invites corrections. | Issued at payment, in the same visit. (But see B1: it waits for full payment.) |
-| 1.6 | An unknown customer who walks out: the VAT is lost in practice. A tourist living abroad is "not established", so the VAT can't be recovered either. A debt paid later needs no change to the invoice. | The walkout's ticket is issued for the full amount and stays. |
-| 1.9 | Each diner who orders and pays their own dishes is a separate sale and **must** get their own ticket. A table that ordered together may still split, but need not. | A table can have several bills; each gets its own ticket. |
-| 1.12 | A cancellation in a later quarter may go in the current quarter's return or correct the old one; the venue chooses. | Waitron's VAT report counts a void on the day it is made (owner, 24 September), which is the first option. |
-| 1.14, first half | Full invoices (F1) and full invoices replacing tickets (F3) may share a series. | They share the full-invoice series. |
-| 1.16 | After restoring an old backup: a new installation number and new series, keep everything, cancel nothing automatically. Nothing to tell AEAT. | Exactly that. |
-| 2.1 | The first successful print is the original; a later print says «duplicado». Log failed prints. | Done; each print job keeps its status, attempts and last error. |
-| 2.2 | The card slip is not an invoice. | As we have it. |
-| 2.3 | 0% only for goods donated to non-profits; non-taxable amounts recorded as N1 with the reason. | Confirmed; the "No tax (0%)" entry in the backlog can rest on this. |
-| 2.4 | An F3 or a corrective may come from another server of the same taxpayer. A tourist is identified by passport (type 03); which code AEAT accepts is AEAT's technical rule, not law. | As we have it. |
-| 2.5 | Replacing the hardware with the same database and software keeps the installation number; when in doubt, a new number is always safe. Nothing to tell AEAT when a chain ends. An emailed F3 is an original, not a duplicate; resending an email that failed is still the original. | As we have it. (Email consent: see B2.) |
-| 2.6 (a) | When only part of a purchase's VAT is deductible, declare the full base and apply the percentage to the VAT only. | Done in the purchases report. |
-| 1.5, tips | Change the customer leaves on purpose is a tip, outside the price. | Tips are recorded apart from the invoice. |
-| 1.5, short payment | Accepting less as payment in full, before the ticket, is a discount and must show on the ticket. | Staff apply a bill discount before payment; it is spread over the lines and shows on the ticket. |
+- A **ticket** is a simplified invoice (factura simplificada): the ordinary receipt that does not
+  name the customer.
+- A **full invoice** (factura completa) names the customer. AEAT's code for one is F1; a full
+  invoice issued later in exchange for a ticket is an **F3**.
+- A **corrective invoice** (factura rectificativa) changes an invoice already issued, usually by
+  reducing it. It is a new invoice with its own number. AEAT calls a corrective of a ticket an
+  **R5**, and correctives of full invoices **R1 to R4**.
+- A **cancellation record** (registro de anulación) is not an invoice. It tells AEAT that an
+  invoice should never have been issued.
+- Every invoice also produces a **record** that Waitron sends to AEAT. The records of a venue form a
+  **chain**: each carries a fingerprint of the one before.
+- A **series** is a numbering sequence for invoices.
+
+## Part A. Where Waitron already matches his answers
+
+- **When the ticket is issued (his 1.1).** He says the ticket is due when the meal ends, during the
+  same visit. Issuing it earlier, when the order is taken, is not forbidden but leads to more
+  corrections. Waitron issues it at payment, in the same visit. (Part B1 covers the one problem:
+  Waitron waits for the bill to be paid in full.)
+- **A customer who walks out without paying (his 1.6).** VAT on an unpaid bill can in principle be
+  recovered, but only after a formal demand for payment, which is impossible when the customer is
+  unknown. A tourist living abroad counts as "not established" in Spain, which rules recovery out
+  too. If the customer pays later, the invoice is not changed. Waitron issues the walkout's ticket
+  for the full amount and leaves it as it is.
+- **Separate bills at one table (his 1.9).** When each diner orders and pays for their own dishes,
+  each is a separate sale and **must** get their own ticket; asking for a separate bill is enough. A
+  table that ordered together may split the bill, but need not. Waitron lets a table have several
+  bills, each with its own ticket.
+- **A cancellation recorded in a later quarter (his 1.12).** When an invoice cancelled today
+  belonged to a quarter whose VAT return is already filed, the venue may either take the reduction
+  in the current quarter's return or ask for the old return to be corrected. Waitron's VAT report
+  counts the cancellation on the day it is made (your decision of 24 September), which is the first
+  option.
+- **Full invoices and their exchanges share a series (his 1.14, first half).** Full invoices (F1)
+  and full invoices issued in exchange for tickets (F3) may share a numbering series. In Waitron they
+  do.
+- **Restoring an old backup (his 1.16).** If the venue's server is restored from an old backup, it
+  might reuse invoice numbers already issued. Our approach (a new installation number and new series
+  before trading again, keep every record and AEAT reply, cancel nothing automatically) is
+  reasonable, and nothing needs to be reported to AEAT. Waitron does exactly this. (Part B10 covers
+  one gap: rebuilding the lost invoice copies.)
+- **The original and duplicates of a printed ticket (his 2.1).** If the first print fails, the
+  first print that works is the original; any print after the original was handed over says
+  «duplicado». He adds that failed print attempts should be logged. Waitron does both: each print
+  job keeps its state, number of attempts and last error.
+- **The card payment slip (his 2.2).** The slip the card machine prints is not an invoice. As we
+  have it.
+- **"No tax (0%)" (his 2.3).** The 0% VAT rate exists only for goods donated to non-profits. An
+  amount outside the scope of VAT is recorded with AEAT's code N1 and its reason. This confirms the
+  research behind the "No tax (0%)" backlog entry.
+- **Invoices issued from another server, and foreign customers (his 2.4).** An F3 or a corrective
+  may be issued from another server of the same company. A tourist with no Spanish tax number is
+  identified by passport (AEAT's document type 03); which codes AEAT accepts is set by AEAT's
+  technical rules, not by law. As we have it.
+- **New hardware, same database (his 2.5).** Moving the same database and software to new hardware
+  keeps the installation number; when in doubt, a new number is always safe. Nothing is reported to
+  AEAT when a chain of records ends. A full invoice sent by email in exchange for a ticket is an
+  original, not a duplicate, and resending an email that failed is still the original. As we have
+  it. (Email consent is in Part B2.)
+- **Purchases where only part of the VAT can be reclaimed (his 2.6 (a)).** The VAT return declares
+  the full amount before VAT and applies the percentage to the VAT only. Waitron's purchases report
+  does this.
+- **Tips (his 1.5).** Change the customer leaves on purpose is a tip and is not part of the price.
+  Waitron records tips apart from the invoice.
+- **Accepting less as payment in full (his 1.5).** If, before the ticket is issued, the venue
+  accepts less than the bill as full payment, the difference is a discount and must appear on the
+  ticket. In Waitron staff do this by applying a discount to the bill before payment; it is spread
+  over the lines and shows on the ticket.
 
 ## Part B. Where Waitron differs
 
-### B1. The ticket waits for full payment (adviser 1.3, 1.1, 1.4)
+### B1. A table's ticket waits until the bill is fully paid
 
-**His answer.** Money a guest pays before the table has been fully served is an advance payment:
-VAT is due on it at once and it needs its own ticket (LIVA 75.Dos; RD 1619/2012 art. 2.1). That
-holds when the dishes it pays for are clearly identified (CJEU C-419/02, BUPA). Once the meal is
-over, several payments may go on one ticket, but the ticket is due when the meal ends: "its issue
-cannot be made conditional on the bill being paid in full". A table that leaves with part unpaid
-still gets a ticket for everything served.
+**The situation.** A table often pays in parts: one guest leaves early and pays something, or the
+group splits the bill at the end. The question is when the ticket must be issued, since issuing it
+also sends its record to AEAT.
 
-**What Waitron does today.** A part-payment is held on the bill with no ticket. One ticket is
-issued only by the payment that leaves the bill fully paid. A bill that holds any payment cannot
-be recorded as an unpaid departure.
+**His answer (1.3, with 1.1 and 1.4).** There are two rules.
 
-- *Example 1, a payment mid-meal.* A table of four has €120 on the bill; mains are still to come.
-  At 21:30 Ana pays €30 by card and leaves. Waitron issues nothing. At 23:00 the others pay €90 and
-  Waitron issues one €120 ticket listing both payments. The adviser: Ana's €30 needed its own ticket
-  at 21:30, if it counts as identified (see question 15).
-- *Example 2, part-paid walkout.* After the meal two guests pay €80 of €120; the third leaves
-  without paying. Waitron issues no ticket at all, and refuses to record the departure because the
-  bill holds a payment. The bill stays open. The adviser: a €120 ticket at the end; the €40 is a
-  debt.
-- *Example 3, a dish never served.* The guests pay on Monday for what they ate. A dessert ordered
-  and never served stays on the bill, so the payments fall short and no ticket is issued until
-  staff remove the dessert on Wednesday. The adviser: the meal ended on Monday, so the ticket was
-  due on Monday.
+- Money paid *before the table has been fully served* is, for VAT, an **advance payment**. VAT is
+  due on it the moment it is received (LIVA 75.Dos), so it needs a ticket of its own at that moment
+  (RD 1619/2012 art. 2.1). This applies when what the money pays for is clearly identified (European
+  Court of Justice, C‑419/02, BUPA). Whether "€30 towards the bill" is identified enough is
+  Thursday's question 15.
+- Once the meal is over, several payments may share one ticket, but that ticket is due **when the
+  meal ends**. In his words, "its issue cannot be made conditional on the bill being paid in
+  full". If the table leaves with part unpaid, it still gets a ticket for everything it was served,
+  and the unpaid part is a debt.
+
+**What Waitron does today.** A part-payment is held on the bill with no ticket. The ticket is
+issued only by the payment that leaves the bill fully paid, and only when no dish is still unsent
+to the kitchen. A bill that holds any payment cannot be recorded as an unpaid departure (Waitron's
+"left without paying" action, which issues the ticket for the whole bill).
+
+- *Example 1: a payment during the meal.* A table of four has €120 on its bill and the main
+  courses are still to come. At 21:30 Ana pays €30 by card and leaves. Waitron issues nothing. At
+  23:00 the others pay €90 and Waitron issues one €120 ticket listing both payments. He would say
+  Ana's €30 needed its own ticket at 21:30, if the payment counts as identified.
+- *Example 2: part paid, then a walkout.* After the meal two guests pay €80 of €120, and the third
+  leaves without paying. Waitron issues no ticket at all. It also refuses "left without paying",
+  because the bill holds a payment, so the bill stays open. He would say a €120 ticket was due when
+  the meal ended, with €40 owed.
+- *Example 3: a dish never served.* The guests pay on Monday for what they ate. A dessert they
+  ordered was never served and stays on the bill, so the payments fall short and no ticket is
+  issued. On Wednesday staff remove the dessert, and only then is the ticket issued. He would say
+  the meal ended on Monday, so the ticket was due on Monday.
 
 **What should change.**
 
 1. Issue the ticket when the table's visit ends, for everything served, whether fully paid or not.
-2. Let a part-paid bill be recorded as an unpaid departure, with the ticket for the whole amount.
-3. Leave unserved dishes out of the ticket, or settle them, so they don't hold it back.
-4. If question 15 says a payment towards the bill mid-meal is an advance: give it its own ticket,
-   and have the final ticket deduct it the way a deposit is deducted (C1).
+2. Let a part-paid bill be recorded as "left without paying", with the ticket for the whole amount.
+3. Stop unserved dishes from holding the ticket back: leave them off, or settle them first.
+4. If question 15 confirms that a payment towards the bill during the meal is an advance: give it
+   its own ticket, and have the final ticket deduct it the way a deposit is deducted (Part C).
 
-This is the largest change in the answers. It meets the date-of-sale work now on lane L's
-unpushed branch `feat/later-sale-date`: that branch's example 3 is example 3 above, and it relies on
-the ticket waiting for full payment.
+This is the biggest change in his answers. It also touches the "date of the sale" work (Part B11),
+whose worked example 3 is Example 3 above and relies on the ticket waiting for full payment.
 
-**Your decision (D1).** Design 1 to 3 now, and 4 once question 15 is answered? *Recommended: yes,
-and tell lane L before its branch lands.*
+**Your decision (D1).** Design changes 1 to 3 now, and change 4 once question 15 is answered?
+*Recommended: yes.* (You have already decided, under D10, to tell lane L about the date-of-sale
+points after Thursday.)
 
-### B2. Delivering the ticket (adviser 1.11, 2.5)
+### B2. A ticket can end up never delivered
 
-**His answer.** The duty is to issue *and deliver* the ticket, and the customer cannot waive it
-(DGT V0150-08, V1884-22). Printing only when asked, or never, breaches it. Showing the ticket on a
-screen is not delivery. Email or a download link is electronic delivery, which needs the
-customer's consent (RD 1619/2012 art. 9). The consent may be tacit, but only if the customer was
-told beforehand how the ticket will arrive and that they may have paper. For a link, keep proof
-that the customer downloaded it, and offer paper if they didn't.
+**The situation.** The law requires a ticket to be issued *and delivered* to the customer. Waitron
+lets staff choose, after payment, how the customer gets it.
 
-**What Waitron does today.** After payment the till asks: Receipt, Full invoice, Email or **None**.
-A ticket prints only if staff tap Receipt; None closes the window and records nothing. Email takes
-the address and nothing else: on 9 October you said "just giving us the email address is
-sufficient", recorded as a product decision while the legal question stayed open as A448. A later
-reprint from the receipts list is always marked «DUPLICADO», even when nothing was delivered first.
+**His answer (1.11, 2.5).** The customer cannot waive delivery (DGT rulings V0150-08 and
+V1884-22). So:
 
-- *Example.* A couple pay €42 by card. The waiter taps None. No paper ticket exists and nothing
-  was emailed. The adviser: a breach.
-- *Example.* A guest gives an email address. Nothing tells them the ticket will come by email or
-  that they can ask for paper. The adviser: not informed consent.
+- Printing the ticket only when the customer asks, or never, breaches the rule.
+- Showing it on a screen is not delivery.
+- Email, or a link or QR code to download it, is electronic delivery. That needs the customer's
+  consent (RD 1619/2012 art. 9). The consent can be tacit, but only if the customer was first told
+  how the ticket will arrive and that they can ask for paper instead.
+- For a download link, the venue must also be able to show the customer downloaded it, and offer
+  paper if they didn't.
+
+**What Waitron does today.** After payment the till offers Receipt, Full invoice, Email or
+**None**. A ticket prints only if staff tap Receipt; None closes the window and records nothing.
+Email takes an address and nothing more: on 9 October you decided that "just giving us the email
+address is sufficient", as a product decision, while the legal question stayed open as backlog item
+A448. A reprint made later from the list of past receipts is always marked «DUPLICADO», even when
+the customer never got an original.
+
+- *Example: None.* A couple pay €42 by card and the waiter taps None. No paper ticket exists and
+  nothing was emailed. By his answer, the ticket was never delivered.
+- *Example: email.* A guest gives an email address. Nothing tells them the ticket will come only by
+  email, or that they can have paper. By his answer, that is not informed consent.
+- *Example: reprint.* After None, the customer comes back and asks for the ticket. The reprint says
+  «DUPLICADO», though it is the first copy they receive.
 
 **What should change.**
 
 1. Print every ticket at payment, unless the customer chose email. Remove None.
-2. In the email step, show a sentence like "We'll email your ticket to this address. You can ask
-   for a paper copy at any time." and record that it was shown.
-3. A reprint is the original when no original was delivered before. (Mostly moot once every
-   ticket prints, but a failed print still needs it.)
-4. A QR code or link the customer scans to download the ticket is not built. Build it only if you
-   want it, with the download proof and the paper fallback.
+2. In the email step, show a sentence such as "We'll email your ticket to this address. You can ask
+   for a paper copy at any time.", and record that it was shown.
+3. A reprint counts as the original when no original was delivered before. Once every ticket
+   prints, this matters mainly when the first print failed.
+4. A QR code or link for the customer to download the ticket is not built. Build it only if you
+   want it, with proof of download and a paper fallback.
 
-**Your decision (D2).** Do 1 to 3? This reverses your 9 October decision on email. *Recommended:
-yes.* Question 16 asks the adviser what counts as delivered when a customer leaves the paper on
-the table, and whether the sentence above is enough consent.
+**Your decision (D2).** Make changes 1 to 3? This reverses your 9 October decision on email
+consent. *Recommended: yes.* Thursday's question 16 asks what counts as delivered when a customer
+leaves the paper behind, and whether the sentence above is enough consent.
 
-### B3. Undoing a ticket when nothing was served or paid (adviser 1.7)
+### B3. Undoing a ticket when nothing was served or paid
 
-**His answer.** If a ticket was issued for an order that was neither served nor paid, record its
-cancellation (AEAT's "anulación" record), not a corrective invoice. The cancellation is only for
-invoices issued in error, for a sale that never happened (DGT V0611-11; developer FAQ §17.2.d). A
-real sale that was paid and then refunded gets a corrective (R5) instead, delivered to the
-customer and kept linked to the refund's evidence.
+**The situation.** Sometimes a ticket exists for a sale that should be undone: an order entered on
+the wrong table, a takeaway invoiced and never collected, or a table recorded as "left without
+paying" by mistake. There are two ways to undo a ticket: a corrective invoice (R5) that reduces it
+to nothing, or a cancellation record that tells AEAT it should never have existed.
 
-**What Waitron does today.** Waitron never sends a cancellation record: the code that writes one
-is called only from a test helper. Cancelling an order whose ticket was issued and which holds no
-money credits the whole ticket with a corrective (C126, your decision of 2 October, taken without
-the adviser). Since 11 November the till no longer offers this on the Counter. The server still
-does it for a bill recorded as an unpaid departure and cancelled later.
+**His answer (1.7).** If a ticket was issued for an order that was neither served nor paid, send a
+**cancellation record**, not a corrective. A cancellation is for an invoice issued in error, for a
+sale that never happened (DGT V0611-11; AEAT's developer FAQ §17.2.d). A real sale that was paid
+and then refunded gets a **corrective** instead, given to the customer and kept linked to the
+evidence of the refund.
 
-- *Example.* Table 7 is recorded as "left without paying"; a €56 ticket is issued. Later staff
-  cancel it. Waitron issues a −€56 corrective, which reduces the VAT by €5.09.
-  - If table 7 really ate and left, the adviser says the ticket stands and the VAT cannot be
-    reduced (his 1.6, in Part A). The corrective understates the VAT.
-  - If the order was entered on the wrong table and nobody ate, the adviser says: a cancellation
-    record, not a corrective.
+**What Waitron does today.** Waitron never sends a cancellation record: the code that writes one is
+called only from a test. When an order whose ticket was issued, and which holds no money, is
+cancelled, Waitron issues a corrective for the whole ticket. That was your decision C126 of
+2 October, taken without the adviser. Since 11 November the till's Counter screen no longer offers
+it, but the server still does it when a bill recorded as "left without paying" is cancelled
+afterwards. I did not establish which screen asks for that today.
 
-**What should change.** Undoing a ticket where nothing was served and nothing paid sends a
-cancellation record. A ticket for food that was served and not paid is not undone. A paid-and-
-refunded sale keeps its corrective, as today.
+- *Example.* Table 7 is recorded as "left without paying" and a €56 ticket is issued. Later, staff
+  cancel the bill. Waitron issues a −€56 corrective, which reduces the venue's VAT by €5.09.
+  - If table 7 really ate and walked out, he says the ticket stands and the VAT cannot be
+    recovered (his 1.6, in Part A). The corrective understates the VAT.
+  - If the order had been entered on the wrong table and nobody ate, he says to send a
+    cancellation record, not a corrective.
 
-**Your decision (D3).** Make those changes, replacing C126? *Recommended: yes.*
+**What should change.** When nothing was served and nothing paid, send a cancellation record. When
+food was served and not paid, the ticket is not undone. A sale that was paid and refunded keeps its
+corrective, as today.
 
-### B4. A free item on a bill mixing VAT rates (adviser 1.10; backlog A445)
+**Your decision (D3).** Make that change, replacing decision C126? *Recommended: yes.*
 
-**His answer.** A free item given with a paid sale is a discount on the whole (DGT V0555-17). When
-the items carry different VAT rates, share the price paid across all of them in proportion to their
-value, the free one included; the free item may not be left at zero (LIVA 79.Dos). The menu price
-is a fair measure of value for this.
+### B4. A free item on a bill that mixes VAT rates
 
-**What Waitron does today.** The free item is priced at exactly €0 and its rate files nothing. A
-discount over the whole bill is spread by each line's charged value, so a line already at €0 takes
-no share.
+**The situation.** Staff can give an item free ("on the house") on a bill that is otherwise paid.
+For VAT, the price paid has to be split between the VAT rates on the bill. Restaurants mostly have
+one rate (everything eaten on the premises is 10%), but a deli or a shop mixes 4%, 10% and 21%.
+
+**His answer (1.10).** A free item given with a paid sale is a discount on the whole sale (DGT
+V0555-17). When the items carry different VAT rates, the price paid is shared across all of them,
+the free one included, in proportion to their value (LIVA 79.Dos). The free item may not be left at
+zero. The menu price is a fair measure of value for this.
+
+**What Waitron does today.** The free item is priced at exactly €0, so its VAT rate receives
+nothing. A discount on the whole bill is spread by each line's charged price, so a line already at
+€0 still receives nothing. This is backlog item A445, which waits for this answer.
 
 - *Example (a deli).* A bottle of wine, €12.00 at 21%, and a loaf, €2.00 at 4%, given free. The
   customer pays €12.00.
-  - Today: wine €12.00 (base €9.92, VAT €2.08); bread €0. VAT €2.08.
-  - Should be: shared 12:2 by menu price, wine €10.29 (base €8.50, VAT €1.79) and bread €1.71
-    (base €1.64, VAT €0.07). VAT €1.86.
+  - Today: the wine carries all €12.00 (€9.92 before VAT, €2.08 VAT); the bread carries nothing.
+    Total VAT €2.08.
+  - By his answer: the €12.00 is shared 12 to 2 by menu price. The wine carries €10.29 (€8.50 plus
+    €1.79 VAT) and the bread €1.71 (€1.64 plus €0.07 VAT). Total VAT €1.86.
 
-In a restaurant, where everything eaten on the premises is at 10%, the result is the same either
-way; it matters only where rates mix.
+At a single rate both methods give the same VAT; the difference arises only where rates mix.
 
-**Your decision (D4).** Build A445 now? *Recommended: yes; fiscal, so you land it.*
+**Your decision (D4).** Build A445 now? *Recommended: yes. It is fiscal, so you land it.*
 
-### B5. A whole table, or a staff meal, given free (adviser 1.10)
+### B5. A whole table, or a staff meal, given free
 
-**His answer.** A table given everything free is not a 100% discount. It is a supply for no
-payment. There are two ways to treat it:
+**The situation.** Sometimes the venue charges a table nothing at all: the owner invites friends or
+regulars, or staff eat a meal on the house. Waitron handles this as a 100% discount.
 
-- **Risk-free:** a self-supply ("autoconsumo") valued at **cost**, not at the menu price (DGT
-  V2347-24; LIVA 79.Cuatro). It needs an invoice and a record.
+**His answer (1.10).** A table given everything free is not a 100% discount: nothing is paid, so
+it is a supply for no payment. There are two treatments:
+
+- **Risk-free:** treat it as a **self-supply** (autoconsumo), valued at what it **cost** the
+  venue, not at the menu price (DGT V2347-24; LIVA 79.Cuatro). It needs an invoice and a record.
 - **Defensible:** an invitation made for business reasons (rewarding a regular, promoting the
-  venue) is outside VAT (LIVA 12.3.º; DGT V1496-08, V2330-18, V1443-21). But V2347-24 goes the other
-  way and AEAT can be expected to follow it; and the venue would lose the VAT it reclaimed on what
-  went into the meal. An invitation for personal reasons (the owner's friends) is a self-supply
-  either way.
+  venue) is outside VAT altogether (LIVA 12.3.º; DGT V1496-08, V2330-18 and V1443-21). But ruling
+  V2347-24 goes the other way, and AEAT can be expected to follow it. The venue would also lose the
+  right to reclaim the VAT on what went into the meal. An invitation for personal reasons (the
+  owner's family) is a self-supply either way.
 
-He recommends recording each invitation's reason and who authorised it, and says the venue should
+He recommends recording each invitation's reason and who authorised it, and says each venue should
 choose its treatment with its own adviser.
 
-**What Waitron does today.** A fully comped bill closes as a €0.00 ticket. The reason, who asked
-and who approved are recorded on the discount, not on the ticket. "Staff meal" is one of the
-discount reasons (up to 50% off without approval).
+**What Waitron does today.** A bill discounted 100% closes as a €0.00 ticket. The discount's
+reason, who asked for it and who approved it are recorded, on the discount rather than on the
+ticket. "Staff meal" is one of the standard discount reasons (up to 50% off before approval is
+needed). Waitron holds no figure for what a dish costs: recipes and stock are not built.
 
-- *Example.* The owner invites a table of four regulars; menu value €160, food cost about €48.
-  - Today: a €0 ticket; no VAT.
-  - Risk-free: a ticket with a base of €48 and VAT of €4.80, which the venue pays.
-  - Defensible: no VAT, as today, provided the reason is a business one.
+- *Example.* The owner invites a table of four regulars. On the menu the meal comes to €160; the
+  ingredients cost about €48.
+  - Today: a €0.00 ticket and no VAT.
+  - Risk-free treatment: an invoice with €48 before VAT and €4.80 VAT, which the venue pays.
+  - Defensible treatment: no VAT, as today, as long as the reason is a business one.
 
 **What should change.** Let the venue mark each discount reason as either "self-supply at cost" or
 "business invitation, outside VAT", and issue the matching document. Valuing at cost needs a cost
-figure: Waitron has recipe costs only where recipes are set up. Question 17 asks what "cost" means,
-which document is issued, and how staff meals are treated.
+figure, which Waitron doesn't have. Thursday's question 17 asks what "cost" means, which document is
+issued, and how staff meals are treated.
 
-**Your decision (D5).** The per-reason choice above, built after Thursday? Or one treatment for
-every venue? *Recommended: the per-reason choice, since the adviser leaves it to each venue.*
+**Your decision (D5).** Let each venue choose per discount reason, built after Thursday? Or one
+treatment for every venue? *Recommended: the per-reason choice, since he leaves it to each venue
+and its adviser.*
 
-### B6. A drink sold at the wrong VAT rate (adviser 1.13)
+### B6. A drink sold at the wrong VAT rate
 
-**His answer.** Do not issue correctives to customers: the law forbids charging them the
-difference (LIVA 89.Tres.1.º). The venue pays the difference itself, treating the price charged as
-already including the right rate (DGT V0824-25, V0624-23). Found before the return is filed: put
-it right in that return. Found after: a complementary return for each quarter concerned, with any
-surcharge and interest.
+**The situation.** A product set up with the wrong VAT rate may sell for weeks before anyone
+notices. For example, a cocktail is set up at 10% when it should be 21%.
+
+**His answer (1.13).** Do not issue correctives to customers: the law forbids charging them the
+difference afterwards (LIVA 89.Tres.1.º). The venue pays the difference itself, treating the price
+it charged as already including the right rate (DGT V0824-25 and V0624-23).
+
+- Found before that quarter's VAT return is filed: put it right in that return.
+- Found after: file a complementary return for each quarter concerned, with any surcharge and
+  interest.
 
 **What Waitron does today.** Nothing exists for this. The backlog entry "Correct VAT without
-returning money" is open with no design. The VAT report's figures have no way to include an
-adjustment.
+returning money" is open with no design, and the VAT report cannot include an adjustment.
 
-- *Example.* In the first quarter, 200 cocktails at €8.00 were sold at 10% instead of 21%: €1,600.
-  VAT charged: €1,600 × 10/110 = €145.45. VAT due: €1,600 × 21/121 = €277.69. The venue pays
-  €132.24 more, and the customers' tickets stay as they are.
+- *Example.* In the first quarter, 200 cocktails at €8.00 were sold at 10% instead of 21%, €1,600
+  in all. VAT charged: €1,600 × 10/110 = €145.45. VAT due: €1,600 × 21/121 = €277.69. The venue
+  pays €132.24 more. The customers' tickets stay as they are.
 
-**What should change.** No customer documents. Correct the product's class for future sales.
-Then either Waitron works out the difference per quarter for the accountant, or the accountant does
-it outside Waitron.
+**What should change.** No documents for customers. Correct the product's rate for future sales.
+Then either Waitron works out the difference for each quarter for the accountant, or the
+accountant works it out outside Waitron.
 
-**Your decision (D6).** Which? *Recommended: Waitron lists the affected sales and the difference
-for each quarter, and the accountant files it; nothing is filed by Waitron itself.* This settles the
-"Correct VAT without returning money" entry.
+**Your decision (D6).** Which of the two? *Recommended: Waitron lists the affected sales and the
+difference for each quarter, and the accountant files it; Waitron files nothing itself.* This
+settles the "Correct VAT without returning money" entry.
 
-### B7. Spotting a supplier invoice entered twice (adviser 2.6 (b))
+### B7. Spotting a supplier invoice entered twice
 
-**His answer.** Corrected. Don't check "same number within a year". Use the full identity of an
-invoice: the supplier's tax ID, its series and number, and its date of issue (RD 1619/2012 art.
-6.1.a; developer FAQ §6).
+**The situation.** When staff enter a supplier's invoice into Waitron (for the purchases side of
+the VAT return), Waitron refuses one that looks already entered, so the VAT isn't reclaimed twice.
+The question is what counts as "the same invoice".
 
-**What Waitron does today.** The same supplier and number are refused within one issue year and
-accepted, with a warning, in another (your rule A981, 21 October). There is no separate series
-field; a series can only be typed into the number.
+**His answer (2.6 (b), a correction to our proposal).** Don't use "same number within one year".
+Use an invoice's full identity: the supplier's tax number, its series and number, and its date of
+issue (RD 1619/2012 art. 6.1.a; AEAT's developer FAQ §6).
 
-- *Example, a false refusal.* A supplier with two series it does not print as prefixes sends a "15"
-  dated 3 February and another "15" dated 9 June. Today the second is refused; under the adviser's
-  key it is accepted.
-- *Example, a miss.* The same invoice is entered twice, once dated 3 February and once, mistyped,
-  2 March. Under the adviser's key both are accepted.
+**What Waitron does today.** The same supplier and number are refused within one year of issue and
+accepted, with a warning, in another year. That was your rule A981 of 21 October. There is no
+separate series field, so a series can only be typed as part of the number.
 
-**What should change.** Refuse on supplier, number and exact date of issue; warn, not refuse, when
-the same supplier and number arrive with a different date, which catches the mistyped date.
+- *Example: a wrong refusal.* A supplier has two series but doesn't print them as prefixes. It
+  sends an invoice "15" dated 3 February and another "15" dated 9 June. Today Waitron refuses the
+  second; by his key it is accepted.
+- *Example: a miss.* The same invoice is entered twice, once dated 3 February and once with the
+  date mistyped as 2 March. By his key alone, both are accepted.
 
-**Your decision (D7).** That, replacing A981? *Recommended: yes.*
+**What should change.** Refuse when the supplier, number and date of issue all match. Warn, but
+don't refuse, when the same supplier and number arrive with a different date: that catches a
+mistyped date.
 
-### B8. A series for full-invoice correctives (adviser 1.14, second half)
+**Your decision (D7).** Make that change, replacing rule A981? *Recommended: yes.*
 
-**His answer.** Ticket correctives (R5) and full-invoice correctives (R1 to R4) are different types
-and must use separate series (RD 1619/2012 arts. 6.1.a and 7.1.a).
+### B8. Correctives of full invoices need a series of their own
+
+**The situation.** Correctives get their own numbering series, apart from ordinary invoices. The
+question is whether correctives of tickets (R5) and of full invoices (R1 to R4) may share one.
+
+**His answer (1.14, second half).** No. They are different types and must use separate series (RD
+1619/2012 arts. 6.1.a and 7.1.a).
 
 **What Waitron does today.** Every corrective goes in one corrective series. Correcting a full
-invoice is refused, and the one full-invoice corrective that exists (an R4 for a wrong date) is
-switched off. If it were switched on today, it would share the R5 series. You decided on 15 November
-that they will not share, so this is a fix before switching on, not a decision.
+invoice is refused, except for one case: a corrective for a full invoice whose date was wrong (an
+R4), which is built but switched off. If it were switched on today, it would share the R5 series.
 
-### B9. A venue's own backup bucket outside the EU (adviser 1.15)
+**What should change.** Give full-invoice correctives their own series before that feature is
+switched on. You decided on 15 November that they will not share, so no decision is needed; this is
+recorded so the fix isn't missed. Thursday's question 4 asks a narrower point: whether correctives
+for a wrong date need a series apart from other ticket correctives.
 
-**His answer.** A backup held abroad while the original stays on the box in Spain is not, in
-itself, "storage outside Spain". But whoever holds the copy for the venue is a third party (RD
-1619/2012 art. 19.3). A third party established outside the EU (in a country without an equivalent
-mutual-assistance agreement) must be notified to AEAT before storage starts (art. 19.4), through
-AEAT's procedure GZ05. Because GZ05 still reads as an authorisation, he recommends waiting for
-AEAT's reply. If the box in Spain is lost and the copy abroad becomes the only one, that could
-become storage outside Spain; notifying the copy in advance is a precaution.
+### B9. A venue's own backup copy held outside the EU
 
-**What Waitron does today.** Waitron Cloud is designed, not live: its copies would be with Amazon
-Web Services in Spain plus an encrypted copy in Paris, both in the EU. A venue's own bucket may be
-with any provider in any country; nothing warns about this or mentions GZ05.
+**The situation.** Waitron keeps a continuous copy of the venue's data off the premises, in
+"bucket" storage: either Waitron Cloud's, or a storage provider the venue chooses itself. The rules
+on keeping invoices outside Spain might apply to that copy.
+
+**His answer (1.15).** A copy held abroad, while the original stays on the venue's server in
+Spain, is not in itself "keeping invoices outside Spain". But whoever holds the copy for the venue
+is a **third party** under RD 1619/2012 art. 19.3. A third party established outside the EU (in a
+country without an equivalent mutual-assistance agreement) must be notified to AEAT before storage
+starts (art. 19.4), through AEAT's procedure GZ05. GZ05 still reads like an application for
+permission, so he recommends waiting for AEAT's reply. If the server in Spain were lost and the copy
+abroad became the only one, that could count as keeping invoices outside Spain, so notifying the
+copy in advance is a sensible precaution.
+
+**What Waitron does today.** Waitron Cloud is designed but not live. Its copies would be with
+Amazon Web Services, in Spain plus an encrypted second copy in Paris, both inside the EU. A venue's
+own bucket can be with any provider in any country. Nothing warns about this or mentions GZ05.
 
 **What should change.** For a venue's own bucket, either allow only providers established in the
 EU, or warn that one established outside it must first be notified to AEAT.
 
-**Your decision (D8).** After question 20 (which company is the third party, and does the
-provider's home or the data's location count)? *Recommended: wait for Thursday, then warn rather
-than restrict.*
+**Your decision (D8).** Wait for Thursday's question 20 (which company is the third party, and
+whether the provider's home or the data's location counts), then choose? *Recommended: wait, then
+warn rather than restrict.*
 
-### B10. Rebuilding invoice copies after a restore (adviser 1.16)
+### B10. Rebuilding invoice copies after a restore
 
-**His answer.** If the box lost the copies of invoices issued after the backup, retrieve their
-records from AEAT's query service to rebuild them. Records sent to AEAT need not be kept on the
-box, but **copies of invoices** must be (RD 1619/2012 art. 19; developer FAQ §13.1).
+**The situation.** If the venue's server is restored from an old backup, every invoice issued after
+that backup was taken is missing from the server, although their records reached AEAT.
 
-**What Waitron does today.** A daily check asks AEAT what it holds. For invoices AEAT has and the
-box doesn't, it keeps only the number, state and fingerprint, as conflict evidence. AEAT's reply
-can also carry each invoice's description, customer, VAT breakdown and totals, but not its dishes.
-Waitron discards them.
+**His answer (1.16).** Retrieve those records from AEAT's record query service and use them to
+rebuild the invoice copies. The venue does not have to keep the records it sent to AEAT, since AEAT
+holds them, but it does have to keep **copies of its invoices** (RD 1619/2012 art. 19; AEAT's
+developer FAQ §13.1).
 
-**What should change.** Keep everything AEAT's reply carries for those invoices, so a copy can be
-rebuilt. Question 21 asks whether such a copy, without the dishes, is acceptable.
+**What Waitron does today.** Once a day Waitron asks AEAT which records it holds. For an invoice
+AEAT has and the server doesn't, Waitron keeps only its number, its state and its fingerprint, as
+evidence of a conflict. AEAT's reply can also carry each invoice's description, customer, VAT
+breakdown and totals, but not its dishes. Waitron discards those.
 
-**Your decision (D9).** Build it after Thursday? *Recommended: yes.*
+- *Example.* A backup from Friday is restored on Sunday. Saturday's 140 tickets were sent to AEAT
+  but are not on the server. Today Waitron can show their numbers and nothing more.
 
-### B11. The date of the sale (adviser 1.4) — being built on lane L's branch
+**What should change.** Keep everything AEAT's reply carries for those invoices, so that a copy can
+be rebuilt and shown. Thursday's question 21 asks whether a copy without the dishes is acceptable.
 
-**His answer.** A meal is one service, supplied when it ends, not dish by dish. A dinner past
-midnight is dated the day it ends. If the VAT rate changes, the rate on the day the meal ends
-applies, except to advance payments, which keep the rate of the day they were paid (DGT V0602-10).
-The issue date may stand as the date of the sale when the ticket is issued at the meal's end; an
-invoice issued on a later day (a late close, payment by transfer) must also state the date of the
-sale.
+**Your decision (D9).** Build this after Thursday? *Recommended: yes.*
 
-**What Waitron does today.** On `main`, an invoice shows only its own date (your decision A444, 12
-November), and VAT is priced at the rates of the day the bill is fully paid. Lane L's branch
-`feat/later-sale-date` (unpushed, tasks 1 to 6 under way) adds the date of the sale to a later
-invoice and prices at that day's rates, which matches the adviser.
+### B11. The date of the sale, now being built
 
-Two points to check against his answer:
+**The situation.** An invoice shows the date it was issued. When it is issued on a later day than
+the sale, for example a meal on Monday paid on Thursday, it must also show the date of the sale.
+Lane L (the campaign lane that builds fiscal features) is building this on the branch
+`feat/later-sale-date`, not yet pushed.
 
-- *When the meal ends.* The branch takes the day of the last dish served, when that falls on an
-  earlier trading day than the payment. In a venue whose day turns over at midnight, a table served
-  its last dish at 23:40 and paying at 00:30 gets a date of sale of the day before. The adviser
+**His answer (1.4).** A meal is one service, supplied when it ends, not dish by dish. A dinner that
+runs past midnight is dated the day it ends. If the VAT rate changes, the rate on the day the meal
+ends applies, except to advance payments, which keep the rate of the day they were paid (DGT
+V0602-10). The issue date may stand as the date of the sale when the ticket is issued at the end of
+the meal. An invoice issued on a later day (a late close, payment by bank transfer) must also state
+the date of the sale.
+
+**What Waitron does today.** On `main`, an invoice shows only its own date (your decision A444 of
+12 November), and VAT is charged at the rates of the day the bill is fully paid. Lane L's branch
+adds the date of the sale to a later invoice and charges that day's rates, which matches his
+answer. Two points don't yet:
+
+- *When the meal ends.* The branch takes the day the last dish was served, when that falls on an
+  earlier trading day than the payment. In a venue whose trading day turns over at midnight, a table
+  served its last dish at 23:40 and paying at 00:30 gets the day before as its date of sale. He
   speaks of the day the meal *ends*; if the meal ends when the guests finish and leave, that is the
-  later day. Question 3 asks.
-- *Example 3 of B1* (paid Monday, dessert removed Wednesday) is built on the ticket waiting for full
-  payment, which the adviser rejects.
+  later day. Thursday's question 3 asks which.
+- *Example 3 in Part B1* (paid Monday, dessert removed Wednesday) is the branch's own example 3.
+  It relies on the ticket waiting for full payment, which he rejects.
 
 **Your decision (D10).** *Owner, 15 November: decide after Thursday's meeting; lane L is not told
-before then.* Nothing on the branch can land before that: it is fiscal, so the owner lands it.
+before then.* Nothing on the branch can land before that, since fiscal changes are landed by you.
 
-### B12. Money given back as goodwill after the ticket (adviser 1.5)
+### B12. Money given back as goodwill after the ticket
 
-**His answer.** A price reduction after the ticket is issued "will, where applicable, require" a
-corrective (LIVA 80.Uno.2.º; DGT V1493-26).
+**The situation.** A guest complains after paying and the manager gives some money back. The ticket
+has already been issued for the full price.
 
-**What Waitron does today.** "Refund a payment" can give money back after the ticket with no
-corrective. The design for correcting paid invoices keeps it for exactly this: a goodwill return
-for a served dish.
+**His answer (1.5).** A price reduction made after the ticket is issued "will, where applicable,
+require" a corrective invoice (LIVA 80.Uno.2.º; DGT V1493-26).
 
-- *Example.* A guest complains after paying €62. The manager gives €10 back. No corrective: the
-  venue goes on declaring VAT on €62, about €0.91 more than on €52.
+**What Waitron does today.** "Refund a payment" can give money back after the ticket without any
+corrective. The design for correcting paid invoices keeps it that way on purpose, for a goodwill
+return on a dish that was served.
 
-**Your decision (D11).** None until question 19 asks whether the corrective is required or only
-allowed.
+- *Example.* A guest complains after paying €62, and the manager gives €10 back. With no
+  corrective, the venue goes on declaring VAT on €62: about €0.91 more than on €52.
+
+**Your decision (D11).** None until Thursday's question 19 asks whether the corrective is required
+or only allowed.
 
 ## Part C. To remember when these are built
 
-- **Deposits (adviser 1.8).** A deposit for an identified booking (date, guests, menu or price) is
-  an advance payment with its own ticket. A deposit that identifies nothing is not. The final ticket
-  shows the meal's total, the deposit's base and VAT, and what is left to pay; the record sent to
-  AEAT carries only what is left. *Example:* a €40 deposit (base €36.36, VAT €3.64), meal €160 (base
-  €145.45, VAT €14.55): the final ticket shows €160, minus the deposit, €120 to pay, and its record
-  carries base €109.09 and VAT €10.91. Deposits are not built (no backlog number yet). What happens
-  to the VAT on a deposit kept after a no-show is question 18.
-- **Cash rounding (adviser 1.5).** Not built. Cents added by rounding up are part of the price and
-  of the base (DGT V1919-18). Cents left off by rounding down are a discount and must be on the
-  ticket, so it never shows more than was collected. *Example:* €12.37 rounded down to €12.35 shows
+- **Deposits (his 1.8). Not built; no backlog number yet.** A deposit for an identified booking
+  (date, number of guests, menu or price) is an advance payment and gets its own ticket. A deposit
+  that identifies nothing is not. The final ticket shows the meal's total, the deposit's amount
+  before VAT and its VAT, and what is left to pay; the record sent to AEAT carries only what is
+  left. *Example:* a €40 deposit (€36.36 plus €3.64 VAT) for a meal that comes to €160 (€145.45
+  plus €14.55 VAT). The final ticket shows €160, minus the deposit, €120 to pay, and its record
+  carries €109.09 plus €10.91 VAT. What happens to the deposit's VAT after a no-show is Thursday's
+  question 18.
+- **Cash rounding (his 1.5). Not built.** Cents added by rounding a cash total up are part of the
+  price (DGT V1919-18). Cents left off by rounding down are a discount and must be on the ticket,
+  so the ticket never shows more than was collected. *Example:* €12.37 rounded down to €12.35 shows
   "Rounding −€0.02" and a €12.35 total; rounded up to €12.40, the €0.03 is part of the price.
-- **The pre-bill (adviser 1.2; backlog A446).** The adviser confirms the strict reading the design
-  follows: the pre-bill is a preparatory document, made by the same system, kept and linked to the
-  ticket that follows; every later change to the order is recorded, and the order need not be
-  locked. A line saying it is not an invoice is advisable, not required; the design doesn't have
-  one. His answer to S1 changes nothing in A446, so it can go ahead.
-- **The full invoice replacing a ticket (F3; backlog A556).** Not built. When it is, it shows the
-  date of the sale when that differs from its own date (adviser 1.4), and sent by email it is an
-  original (2.5).
-- **A refund by card without the customer present (adviser 1.7).** Issue the corrective anyway
-  and keep it linked to the refund's evidence; the risk of not delivering it remains. Waitron's
-  "Correct invoice" already does the linking.
+- **The pre-bill (his 1.2; backlog A446).** A pre-bill is the bill printed for the table to check
+  before paying. He confirms the strict reading our design follows: it is a preparatory document,
+  produced by the same system, kept, and linked to the ticket that follows. Every later change to
+  the order must be recorded, but the order need not be locked. A line saying it is not an invoice
+  is advisable, not required; the design doesn't have one yet. His answer on when the ticket is
+  issued (1.1) changes nothing in A446, so it can go ahead.
+- **A full invoice in exchange for a ticket (F3; backlog A556). Not built.** When it is built, it
+  shows the date of the sale when that differs from its own date (his 1.4). Sent by email, it is an
+  original, not a duplicate (his 2.5).
+- **A refund to a card when the customer isn't present (his 1.7).** Issue the corrective anyway and
+  keep it linked to the evidence of the refund; the risk of not having delivered it remains.
+  Waitron's "Correct invoice" already makes the link.
 
-## Part D. Your decisions
+## Part D. Index of your decisions
 
-Answer each with yes, no or a note; the recommendation is first.
+Each is explained in full in its section.
 
-- **D1** (B1). Design now: the ticket is issued when the visit ends, paid or not; a part-paid bill
-  can be recorded as an unpaid departure; unserved dishes don't hold the ticket. Advance tickets
-  after question 15. Tell lane L.
-- **D2** (B2). Print every ticket unless emailed; remove None; add the "you can ask for paper"
-  sentence to email and record it; a reprint is the original when nothing was delivered.
-- **D3** (B3). Nothing served or paid: send a cancellation record instead of a corrective. Served
-  and unpaid: not undone. Replaces C126.
-- **D4** (B4). Build A445: a free item takes its share of the price by menu value.
-- **D5** (B5). Each discount reason is marked "self-supply at cost" or "business invitation"; built
-  after question 17.
-- **D6** (B6). Wrong VAT rate: Waitron lists the sales and the difference per quarter for the
-  accountant; no customer documents.
-- **D7** (B7). Supplier invoices: refuse on supplier, number and date; warn on the same number with
-  another date. Replaces A981.
-- **D8** (B9). Own bucket outside the EU: warn, after question 20.
-- **D9** (B10). Keep what AEAT returns for invoices the box lacks, after question 21.
-- **D10** (B11). Decided: after Thursday's meeting (owner, 15 November).
-- **D11** (B12). Goodwill refunds: wait for question 19.
+| Decision | About | Section | Recommendation |
+| --- | --- | --- | --- |
+| D1 | Issue the ticket when the visit ends, paid or not | B1 | Design now; advance tickets after question 15 |
+| D2 | Print every ticket; consent wording for email | B2 | Yes |
+| D3 | Cancellation record instead of a corrective when nothing was served or paid | B3 | Yes |
+| D4 | A free item takes its share of the price | B4 | Build A445 now |
+| D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 17 |
+| D6 | Wrong VAT rate: who works out the difference | B6 | Waitron lists it, the accountant files it |
+| D7 | Supplier invoice duplicates: number and date | B7 | Yes |
+| D8 | Own backup bucket outside the EU | B9 | Warn, after question 20 |
+| D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 21 |
+| D10 | Date of the sale on lane L's branch | B11 | Decided: after Thursday |
+| D11 | Goodwill refunds without a corrective | B12 | After question 19 |
 
 ## Evidence
 
@@ -393,19 +519,20 @@ Read on `main` at `52aa441257` unless stated. Nothing was run.
 | --- | --- |
 | The ticket waits for full payment, with nothing pending and nothing unsent | `apps/server/src/bill-payments.ts:745-781` (`issueWhenFullyPaid`) |
 | A part-payment leaves the bill open with no invoice | `apps/server/src/bill-payments-api.test.ts:766` |
-| An unpaid departure is refused while the bill holds a payment | `apps/server/src/unpaid-departure.ts:113-114` |
+| "Left without paying" is refused while the bill holds a payment | `apps/server/src/unpaid-departure.ts:113-114` |
 | Example 3 (paid Monday, dessert removed Wednesday) | `docs/superpowers/plans/2026-11-15-later-sale-date.md:110-139` |
-| The branch takes the last dish served on an earlier trading day; P1 states the midnight cost | same plan, lines 83-98 |
+| The branch takes the last dish served on an earlier trading day; the plan states the midnight cost | same plan, lines 83-98 |
 | None closes the window and records nothing | `apps/till/src/widgets/settlement-document-dialog.ts:111-118` |
 | Email has no consent step (owner, 9 October); A448 open | `docs/backlog/printers.md:713-717` |
 | A reprint is always a duplicate | `apps/server/src/transaction-receipt-api.ts:288` and `apps/server/src/orders-reprint.ts:29` call `enqueueReceiptCopy`, which lays the receipt out as a copy unconditionally (`apps/server/src/receipt-print.ts:321`) |
 | No cancellation record is sent; core's `recordVoid` is called from a test helper only (the `recordVoid` in `packages/payments` is a card void, a different function) | `apps/server/src/testing/order-venue.ts:229-234`; `docs/backlog/fiscal.md:147` |
 | Cancelling an issued order credits it with a corrective (C126) | `apps/server/src/working-order.ts:7428-7435`; `docs/backlog/fiscal.md:748-762` |
-| A comp prices the item at €0 and files nothing at its rate | `apps/server/src/adjustments-apply.ts:783-794`; `apps/server/src/full-comp.fiscal-identity.test.ts:263-292` |
+| A free item is priced at €0 and its rate files nothing | `apps/server/src/adjustments-apply.ts:783-794`; `apps/server/src/full-comp.fiscal-identity.test.ts:263-292` |
 | A bill discount is spread by charged value | `packages/adjustments/src/spread.ts:265-275` |
 | A full comp closes as a €0.00 ticket | `apps/server/src/pay-owing-nothing.test.ts:379` |
 | The discount records reason, requester and approver | `packages/db/src/schema/adjustments/adjustments.ts:61-76` |
 | Staff meal is a discount reason, 50% without approval | `apps/server/src/guide/en/table-service.md:34-35` |
+| No dish cost exists: `packages/recipes` holds no tracked file | `git ls-files packages/recipes` prints nothing |
 | The VAT report has no adjustment for a wrong rate | `packages/reporting/src/modelo-303.ts:14-17, 93-95`; `docs/backlog/fiscal.md:915-920` |
 | Partial deduction: full base, scaled VAT | `packages/reporting/src/input-vat.ts:33-36, 66-70`; `input-vat.test.ts:140-153` |
 | Supplier invoices unique by supplier, number and issue year | `packages/db/src/schema/purchase-invoices.ts:51-55`; `packages/purchasing/src/supplier-year.test.ts:26-46` |

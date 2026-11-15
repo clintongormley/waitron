@@ -1,24 +1,27 @@
 # Adviser meeting, Thursday 19 November 2026
 
-Written 15 November 2026 for the owner. Nothing here has been sent.
+Written 15 November 2026 for the owner, and rewritten the same day so that each question can be
+read on its own. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
-tax adviser, and can be printed on its own. Each question says what Waitron does and why, then asks
-for a yes or a correction. The first two need the adviser's judgement; the rest are confirmations,
-ordered by what is filed or signed from the first day of trading.
+tax adviser, and can be printed on its own. Each question explains the situation, says what Waitron
+does or proposes and why, and ends with what we ask, so it can be read without the others. Questions
+1 and 2 need the adviser's judgement. Questions 3 to 14 are confirmations, ordered by what is filed
+or signed from the first day of trading. Questions 15 to 22 follow up his answers of 15 November.
 
 **What the adviser already has.** S1 to S19 and R1 to R6, the
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09), went to him around 15 October
 (the owner's estimate). **He answered S1 to S16 and R1 to R6 on 15 November**, in a draft whose
-numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What they change is in
+numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What his answers change is in
 [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md). Questions 3 and 4 were rewritten
-that day as follow-ups to his answers, and questions 15 to 21 were added; question 22 chases S17 to
+that day as follow-ups to his answers, and questions 15 to 22 were added; question 22 chases S17 to
 S19, which he has not answered.
 
 **Where the questions come from.** The [6 November list](2026-11-06-adviser-questions.md), whose
-T numbers are given in brackets, cut to what is still open on 15 November, plus the questions the
-owner's decisions of 14 and 15 November call for. What was dropped, and why, is at the end. The
-reasoning and the full sources are in the 6 November list and the research files it links.
+T numbers are given in brackets in Part 1, cut to what is still open on 15 November, plus the
+questions the owner's decisions of 14 and 15 November call for, plus the follow-ups to his answers.
+What was dropped, and why, is at the end. The reasoning and the full sources are in the 6 November
+list, the research files it links, and the answers document above.
 
 **How the Spanish quotations were checked.** Each quotation of a law, ruling or FAQ was matched word
 for word, by a script, against text downloaded on 15 November 2026: the BOE's consolidated texts of
@@ -27,239 +30,411 @@ DGT rulings V2884-16, V1665-22, V0902-22, V1924-23 and V2611-24 from the DGT's P
 AEAT's developer FAQ v1.3, the PDF kept in [sources/](sources/). As a control, the date rulings'
 phrase «deberá constar en serie específica de factura» was confirmed absent from V2884-16. The
 downloads are not committed; fetch them again from those sites to re-check. The annex is copied
-from the repository's declaration template, not from a law. The rewrite of 15 November (questions
-3, 4 and 15 to 22) adds no quotation of a law or ruling: the one in question 4 is from the checked
-set, the words in « » in questions 15 and 16 are ours, and the "where applicable" in question 19
-is the adviser's own English.
+from the repository's declaration template, not from a law. The rewrite of 15 November kept those
+quotations unchanged where they remain, and added none: the other words in « » are ours,
+and "where applicable" in question 19 is the adviser's own English.
 
 ## Part 1: English (for the owner)
 
-### Tax and accounting
+### Needs the adviser's judgement
 
-#### Needs the adviser's judgement
+**1. One price for a takeaway set menu (T17).**
 
-**1. One price for a takeaway set menu (T17).** Eaten at the venue and served by its staff, a set
-menu is one restaurant service at 10%, drinks included (LIVA 91.Uno.2.2.º). Taken away or
-delivered, it is a sale of goods and each part takes its own rate: food 10%, a sugared cola 21%
-(LIVA 91.Uno.1.1.º; DGT V2949-16). Example: a €12.00 takeaway menu of a burger (€9.50 on its own)
-and a cola (€3.00 on its own); shared by those prices, the burger carries €9.12 at 10% and the cola
-€2.88 at 21%. Until you answer, the design keeps set menus off takeaway orders.
+*The situation.* A set menu eaten at the venue and served by its staff is one restaurant service,
+taxed at 10% as a whole, drinks included (LIVA 91.Uno.2.2.º). Taken away or delivered, it is a sale
+of goods instead, and each part takes its own rate: food 10%, a sugared soft drink 21% (LIVA
+91.Uno.1.1.º; DGT V2949-16). So a takeaway set menu sold at one price has to be split between the
+two rates.
 
-- May the price be shared by each part's own price? Must the share be exact?
-- If the guest leaves out the cola and still pays €12.00, is it all food at 10%?
-- At a counter in a venue with tables or a bar: does a cola rung up as drunk here (10%) stay at 10%
-  if the customer walks out with it? If the customer says nothing, may it be rung up as drunk here?
+*What Waitron proposes.* Split the price in proportion to what each part sells for on its own.
+Example: a €12.00 takeaway menu of a burger (€9.50 on its own) and a cola (€3.00 on its own).
+Shared by those prices, the burger carries €9.12 at 10% and the cola €2.88 at 21%. Until this is
+answered, Waitron keeps set menus off takeaway orders.
 
-Yes / No / Note: ____________________________________________
+*We ask:*
 
-**2. Keeping a date that nothing shows to be wrong (T2).** After every start, the box records no
-sale until its time is confirmed, by internet time, by two of the venue's devices agreeing, or by a
-person. If that confirmation was itself wrong and the sale was paid in cash, nothing may show the
-real time; a card payment carries the card provider's own time. Our answer: when nothing shows the
-stamped date is wrong, the restaurant keeps it. Is that right, and is anything more needed to rely
-on it?
+- (a) May the price be shared by each part's own price? Must the share be exact?
+- (b) If the customer leaves out the cola and still pays €12.00, is it all food at 10%?
+- (c) At the counter of a venue that also has tables or a bar: a cola rung up as drunk on the
+  premises (10%), which the customer then carries out, does it stay at 10%? If the customer says
+  nothing, may it be rung up as drunk on the premises?
 
 Yes / No / Note: ____________________________________________
 
-#### Confirmations: what is filed or signed from the first day
+**2. Keeping a date that nothing shows to be wrong (T2).**
 
-**3. When the meal ends, and whether the ticket may wait for payment (follows his answers 1.1,
-1.3 and 1.4; rewritten 15 November).** He confirmed that a ticket issued at the end of the meal, in
-the same visit, carries one date, and that one issued on a later day must also show the date of the
-sale, at that day's VAT rates. He also said the ticket is due when the meal ends and cannot wait for
-the bill to be paid in full. Two points remain:
+*The situation.* Waitron runs on a server, a computer in the restaurant or in Waitron Cloud, and
+that server's clock dates every invoice. After every start, the server records no sale until its
+time has been confirmed: by internet time, by two of the venue's devices agreeing with it, or by a
+person. That confirmation could itself be wrong, for example a person confirming a time an hour
+off. For a cash sale nothing outside the server records the real time; a card payment at least
+carries the card provider's own time.
 
-- (a) Does the meal end when the last dish is served, or when the guests finish and leave? Example:
-  the last dish at 23:40, then coffee; the table pays and leaves at 00:30. We would date the ticket
-  00:30, the next day, as its only date.
+*What Waitron proposes.* When nothing shows that the date stamped on an invoice is wrong, the
+restaurant keeps it.
+
+*We ask:* Is that right, and does the restaurant need anything more to rely on it?
+
+Yes / No / Note: ____________________________________________
+
+### Confirmations: what is filed or signed from the first day
+
+**3. When the meal ends, and whether the ticket may wait for payment (follows his 1.1, 1.3 and
+1.4).**
+
+*The situation.* A ticket (a simplified invoice) must be issued when the transaction is carried out
+(RD 1619/2012 art. 11.1), and VAT on a meal falls due when the service is supplied (LIVA
+75.Uno.2.º). In his answers of 15 November he said that a meal is one service, supplied when it
+ends; that a ticket issued at the end of the meal, in the same visit, carries one date; that an
+invoice issued on a later day must also show the date of the meal; and that the ticket is due when
+the meal ends, not held back until the bill is fully paid.
+
+*What Waitron proposes.* The ticket is issued when the table's visit ends: at the last payment, or
+when staff record that the table has left with part unpaid. It carries the date of that moment.
+
+*We ask:*
+
+- (a) Does the meal end when the last dish is served, or when the guests finish and leave?
+  Example: the last dish is served at 23:40 on the 1st; the guests have coffee, then pay and leave
+  at 00:30 on the 2nd. We would date the ticket the 2nd, with no separate date of the meal. Is that
+  right, or is the date of the meal the 1st?
 - (b) A regular eats on Monday and, by arrangement, pays on Thursday. Must the ticket be issued on
-  Monday, unpaid, or may it wait until Thursday and show Monday as the date of the sale? His answer
-  1.4 mentions invoices issued after payment by transfer; his answer 1.3 says issue cannot wait for
-  full payment.
+  Monday, still unpaid, or may it wait until Thursday and show Monday as the date of the meal? His
+  answer 1.4 mentions invoices issued after payment by bank transfer; his answer 1.3 says issuing
+  cannot wait for full payment.
 
 Yes / No / Note: ____________________________________________
 
-**4. A series for correctives of a wrong date (follows his answer 1.14; rewritten 15 November).**
-He confirmed that ticket correctives (R5) need a series apart from full-invoice correctives (R1 to
-R4). Waitron puts every ticket corrective, including one issued because the ticket's date was
-wrong, in one series that holds only ticket correctives. Rulings V1665-22, V0902-22, V1924-23 and
-V2611-24 say a corrective of a wrong issue date must be in a series of its own. Is one series of
-ticket correctives enough, or must date correctives have a series apart from the other ticket
-correctives?
+**4. A series for correctives of a wrong date (follows his 1.14).**
+
+*The situation.* Corrective invoices (facturas rectificativas) are numbered in series of their own.
+He confirmed on 15 November that correctives of tickets (AEAT's type R5) and correctives of full
+invoices (R1 to R4) need separate series. A ticket can also carry the wrong date, for example when
+the server's clock was a day ahead; it is put right with a corrective that states the real date and
+changes no amount.
+
+*What Waitron does.* Every ticket corrective, including one for a wrong date, goes in one series
+that holds only ticket correctives. Ruling V2884-16 would even allow ticket correctives in the
+ticket series. But rulings V1665-22, V0902-22, V1924-23 and V2611-24 say a corrective of a wrong
+issue date must be in a series of its own.
+
+*We ask:* Is one series of ticket correctives enough, or must correctives for a wrong date have a
+series apart from the other ticket correctives?
 
 Yes / No / Note: ____________________________________________
 
-**5. The software declaration: what the system consists of (T14).** The producer must sign a
-declaration for each version (the declaración responsable, Orden HAC/1177/2024 art. 15), and none is
-signed yet. Its item d), as the release template holds it today, is in the
-[annex](#anexo-el-apartado-d-tal-como-está-hoy). It now names the third-party
-components as a present fact, says the producer answers for them, and says which version of the
-Veri\*Factu library is used and what it does. We think it is enough with two additions: what the
-print agent does, and that the terminals ask for invoices and show them. The sentence on a standby
-server stays only in a version that can switch to one.
+**5. The software declaration: what the system consists of (T14).**
+
+*The situation.* The maker of invoicing software must sign, for each version, a declaration that it
+complies with the rules (the declaración responsable, Orden HAC/1177/2024 art. 15). Its item d)
+lists the system's hardware and software components and says briefly what the system does. None has
+been signed yet. The current draft of item d) is copied in the annex at the end of Part 2.
+
+*What Waitron proposes.* The draft names the third-party components (Node.js, SQLite, Litestream,
+Linux and Docker) as part of the system, says the producer answers for them, and names the version
+of the Veri\*Factu library used and what it does. We think it is enough with two additions: what the
+print agent does (the program that sends documents to the venue's printers), and that the
+terminals (tills, order-taking devices, kitchen screens) ask the server for invoices and display
+them without producing invoice records themselves. The sentence about a standby server would appear
+only in a version that can actually switch to one.
+
+*We ask:* With those two additions, is item d) sufficient?
 
 Yes / No / Note: ____________________________________________
 
-**6. The software declaration: several taxpayers (T15).** Waitron answers N to item f): each venue
-has its own installation, database and certificate, on its own box or in Waitron Cloud. The
-Veri\*Factu library, declared separately under the code WV, answers S, because a program using it
-can file for several taxpayers (owner, 14 November). A venue that moves between its own box and
-Cloud keeps Waitron's system code, gets a new installation number and needs no new declaration.
+**6. The software declaration: several taxpayers (T15).**
+
+*The situation.* Item f) of the same declaration asks whether the system can be used to invoice for
+several taxpayers: S (yes) or N (no).
+
+*What Waitron proposes.* Waitron answers N: each venue has its own installation, database and
+certificate, on its own server or in Waitron Cloud. The Veri\*Factu library that Waitron uses is
+declared separately, under its own system code WV, and answers S, because another program using it
+could invoice for several taxpayers (owner, 14 November). A venue that moves between its own server
+and Waitron Cloud keeps Waitron's system code, gets a new installation number and needs no new
+declaration.
+
+*We ask:* Are those answers right?
 
 Yes / No / Note: ____________________________________________
 
-#### Confirmations: when the clock was wrong
+### Confirmations: when the clock was wrong
 
-The box dates each invoice from its own clock, kept right by internet time. After a start, or a
-jump of more than a minute while internet time is unavailable, it takes no payment until its time is
-confirmed, by internet time, two devices or a person. It no longer asks AEAT for the time.
+**7. A wrong date on an invoice (T7, and the owner's answer of 14 November on the VAT period).**
 
-**7. A wrong date on an invoice (T7, and the owner's answer of 14 November on the VAT period).** It
-is put right with a corrective in the series of question 4, dated the day it is issued, stating the
-real date of the sale and changing no amount (DGT V1665-22; V0305-24). VAT counts in the real
-date's period (LIVA 75.Uno.2.º); if that period's return is already filed, a complementary return
-fixes it (LGT art. 122). One corrective may cover several invoices (RD 1619/2012 art. 15.4). Built
-today for a ticket AEAT refused as dated in the future; the full-invoice version is built but
+*The situation.* The server dates every invoice from its own clock, which internet time keeps
+right. If the clock was wrong, an invoice can carry the wrong day. Example: after a power cut the
+clock runs a day ahead, and a ticket for a sale on 3 March is dated 4 March. AEAT refuses a record
+dated in the future, which is one way such an error comes to light.
+
+*What Waitron does.* It puts the error right with a corrective invoice, dated the day it is issued,
+stating the real date of the sale and changing no amount (DGT V1665-22; V0305-24). The corrective is
+numbered in a series that holds only ticket correctives. VAT counts in the period of the real date
+(LIVA 75.Uno.2.º); if that period's return is already filed, a complementary return fixes it (LGT
+art. 122). One corrective may cover several invoices (RD 1619/2012 art. 15.4). This is built for a
+ticket that AEAT refused as dated in the future; the version for full invoices is built but
 switched off.
 
-Yes / No / Note: ____________________________________________
-
-**8. Who receives the corrective (T1).** Most ticket customers are unknown. The restaurant issues the
-corrective, keeps it and sends its record to AEAT; it reaches a customer only when the restaurant
-knows who they are. Tickets are not cancelled and reissued. We found no source on this.
+*We ask:* Is that the right way to correct a wrong date?
 
 Yes / No / Note: ____________________________________________
 
-**9. A record timed earlier than the one before (T5).** If the clock ran fast and is set right, the
-next record carries an earlier time than the last. Waitron allows this and marks nothing: a record
-must carry the exact date and time it was made (Orden HAC/1177/2024 art. 7.e), and art. 3 switches
-off, for Veri\*Factu systems, art. 7.i, which holds the one rule against it. Example: invoices 2, 3
-and 4 are stamped by a clock an hour fast; once it is set right, invoice 5 carries an earlier time
-than invoice 4. Invoices 2 to 4 are corrected only if the wrong hour moved one of them to another
-day (question 7).
+**8. Who receives the corrective (T1).**
+
+*The situation.* A corrective invoice is normally sent to the customer of the invoice it corrects.
+But most ticket customers are unknown: a ticket doesn't name its customer. Example: a ticket must be
+corrected because the server's clock gave it the wrong date, and nobody knows who paid it.
+
+*What Waitron does.* The restaurant issues the corrective, keeps it and sends its record to AEAT.
+The corrective reaches the customer only when the restaurant knows who they are. Tickets are never
+cancelled and issued again instead. We found no source covering this case.
+
+*We ask:* Is that acceptable?
 
 Yes / No / Note: ____________________________________________
 
-**10. Only the hour is wrong (T6).** A ticket stamped 21:10 for a sale at 20:50 the same day needs no
-corrective; the restaurant keeps a note of the incident. An invoice shows its date, not its time
-(RD 1619/2012 arts. 6.1.b and 7.1.b), and the developer FAQ says the time of issue is not part of
-the record. One passage points the other way: the developer FAQ, §17 case 2.b, says an error in an
-internal field needs a correcting record.
+**9. A record timed earlier than the one before (T5).**
+
+*The situation.* Each record sent to AEAT carries the exact date and time it was made (Orden
+HAC/1177/2024 art. 7.e). If the server's clock ran fast and is then set right, the next record
+carries an earlier time than the last one. Example: invoices 2, 3 and 4 are stamped by a clock an
+hour fast; once it is set right, invoice 5 carries an earlier time than invoice 4.
+
+*What Waitron does.* It allows this and marks nothing. The one rule against it, art. 7.i of the
+same Orden, does not apply to Veri\*Factu systems (art. 3). Invoices 2 to 4 are corrected only if
+the wrong hour moved one of them onto another day; they are then corrected as a wrong date (a
+corrective stating the real date).
+
+*We ask:* Is that right?
 
 Yes / No / Note: ____________________________________________
 
-**11. Telling AEAT about a clock incident (T8).** We think there is no duty or channel to report one:
-a text search of the Reglamento, the Orden, both FAQs and AEAT's technical documents found none, and
-the corrective's record reaches AEAT anyway. Orden art. 16.4 covers incidents that stop records
-being sent, which is a different case.
+**10. Only the hour is wrong (T6).**
+
+*The situation.* The server's clock was wrong by less than the time to midnight, so only the hour on
+the ticket is wrong. Example: a ticket stamped 21:10 for a sale at 20:50 the same day.
+
+*What Waitron does.* No corrective; the restaurant keeps a note of the incident. An invoice shows its
+date, not its time (RD 1619/2012 arts. 6.1.b and 7.1.b), and AEAT's developer FAQ says the time of
+issue is not part of the record. One passage points the other way: the developer FAQ, §17 case 2.b,
+says an error in an internal field of a record needs a correcting record.
+
+*We ask:* Is no corrective right?
 
 Yes / No / Note: ____________________________________________
 
-#### Confirmations: keeping records and giving access
+**11. Telling AEAT about a clock incident (T8).**
 
-**12. "Online access" without the internet (T4).** A copy on the venue's own box meets RD 1619/2012
-arts. 21.2 and 23 if, when the tax office asks, it can without unjustified delay see, search, copy or
-download, and print every invoice. No permanent connection or public address is needed (Orden
-EHA/962/2007 art. 5.3; DGT 0289-04). If AEAT asks from its own office, a copy of the period on a USB
-drive or by a temporary download link is enough.
+*The situation.* The server's clock was found to be wrong and the affected invoices were corrected,
+or left as they were because only the hour was wrong.
 
-Yes / No / Note: ____________________________________________
+*What Waitron proposes.* Nothing is reported to AEAT. A text search of the invoicing systems
+regulation (RD 1007/2023), the Orden, both AEAT FAQs and AEAT's technical documents found no duty or
+channel to report one, and any corrective's record reaches AEAT anyway. Orden art. 16.4 covers
+incidents that stop records being sent, which is a different case.
 
-**13. What a restaurant company keeps (T11).** Invoices issued, tickets included, and invoices
-received (RD 1619/2012 art. 19.1); books, correspondence and business papers (Código de Comercio
-art. 30.1); other evidence for its taxes (LGT art. 29.2.e); records of payments and refunds; the
-software declaration of every version used; proof of payment of sales of €1,000 or more, kept five
-years (Ley 7/2012 art. 7.Uno.4); and pro formas that never became invoices. All on one six-year
-schedule. Is anything missing?
+*We ask:* Is that right?
 
 Yes / No / Note: ____________________________________________
 
-**14. Records AEAT does not hold (T12).** A record still waiting to be sent, or one AEAT refused, is
-kept with AEAT's reply until it is settled, then on the common schedule. In the developer FAQ's
-words, such a record would never be in AEAT's systems, so the restaurant's copy is the only one. No
-source sets a period.
+### Confirmations: keeping records and giving access
+
+**12. "Online access" without the internet (T4).**
+
+*The situation.* Invoices kept electronically must be accessible to the tax authorities online (RD
+1619/2012 arts. 21.2 and 23). A venue's Waitron server usually sits in the restaurant, on a private
+network with no public address.
+
+*What Waitron proposes.* That meets the rule if, when the tax office asks, the venue can without
+unjustified delay let it see, search, copy or download, and print every invoice. No permanent
+connection or public address is needed (Orden EHA/962/2007 art. 5.3; DGT 0289-04). If AEAT asks
+from its own office, a copy of the period on a USB drive or through a temporary download link is
+enough.
+
+*We ask:* Is that right?
 
 Yes / No / Note: ____________________________________________
 
-#### Follow-ups on his answers of 15 November
+**13. What a restaurant company keeps (T11).**
 
-Each comes from a gap his answer leaves; the reasoning is in
-[2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md).
+*The situation.* Waitron is designing how long it keeps each kind of record, and wants one list of
+what a restaurant company must keep for tax and commercial law.
 
-**15. A payment on account during the meal (his 1.3).** He said a payment made before the table is
-fully served is an advance payment needing its own ticket, where what it pays for is clearly
-identified (CJEU C-419/02, BUPA). Example: a table of four has €120 on the bill and has not ordered
-desserts. At 21:30 Ana pays €30 "towards the bill" and leaves; the others pay the rest at 23:00.
+*What Waitron proposes.* Invoices issued, tickets included, and invoices received (RD 1619/2012 art.
+19.1); books, correspondence and business papers (Código de Comercio art. 30.1); other evidence for
+its taxes (LGT art. 29.2.e); records of payments and refunds; the software declaration of every
+version used; proof of payment of sales of €1,000 or more, kept five years (Ley 7/2012 art.
+7.Uno.4); and pro formas that never became invoices. All on one six-year schedule.
+
+*We ask:* Is anything missing?
+
+Yes / No / Note: ____________________________________________
+
+**14. Records AEAT does not hold (T12).**
+
+*The situation.* Normally every record reaches AEAT, which then holds it. Some never do: a record
+still waiting to be sent, or one AEAT refused. In the developer FAQ's words, such a record would
+never be in AEAT's systems, so the restaurant's copy is the only one.
+
+*What Waitron proposes.* Keep such a record, with AEAT's reply, until it is settled, then on the
+common six-year schedule for a restaurant's records. No source sets a period.
+
+*We ask:* Is that right?
+
+Yes / No / Note: ____________________________________________
+
+### Follow-ups on his answers of 15 November
+
+**15. A payment on account during the meal (his 1.3).**
+
+*The situation.* At a table, one guest sometimes pays part of the bill before the meal is over and
+leaves. He answered that money paid before the table has been fully served is an advance payment:
+VAT is due on it at once, so it needs its own ticket (LIVA 75.Dos; RD 1619/2012 art. 2.1), provided
+what it pays for is clearly identified (European Court of Justice, C‑419/02, BUPA).
+
+*Example.* A table of four has €120 on its bill and has not ordered desserts. At 21:30 Ana pays
+€30 "towards the bill" and leaves; the others pay the rest at 23:00.
+
+*What Waitron would do, if Ana's €30 is an advance.* Issue Ana a ticket for €30 at 21:30, and show
+on the final ticket the whole bill less Ana's advance, the way a deposit is deducted.
+
+*We ask:*
 
 - (a) Are Ana's €30 an advance payment, when they are an amount rather than particular dishes and
   the table may still order more?
-- (b) If so, may her ticket list the dishes ordered so far as paid on account, and the final
-  ticket show the total less the advance's base and VAT, as with a deposit (his 1.8)?
+- (b) If so, may her ticket list the dishes ordered so far as paid on account, and the final ticket
+  show the total less the advance's amount before VAT and its VAT, as he described for a deposit
+  (his 1.8)?
 
 Yes / No / Note: ____________________________________________
 
-**16. Delivering the ticket in practice (his 1.11).** We will print every ticket at payment unless
-the customer chooses email.
+**16. Delivering the ticket in practice (his 1.11).**
+
+*The situation.* He answered that the ticket must be delivered and the customer cannot waive it.
+Printing it only on request, or never, breaches the rule; showing it on a screen is not delivery;
+email or a download link needs the customer's informed consent (RD 1619/2012 art. 9), given after
+being told how the ticket will arrive and that paper is available.
+
+*What Waitron will do.* Print every ticket at payment unless the customer chooses email. For email,
+staff ask "paper or email?", and the till shows "We'll email your ticket to this address. You can
+ask for a paper copy at any time." and records that it was shown.
+
+*We ask:*
 
 - (a) Is a ticket printed and left with the bill delivered, even if the customer leaves it on the
   table or says they don't want it?
-- (b) For email, staff ask "paper or email?"; the till shows "We'll email your ticket to this
-  address. You can ask for a paper copy at any time." and records that it was shown. Is that
-  informed consent, and is sending the email enough to show delivery, or must the customer open or
-  download it?
+- (b) Is the email step above informed consent, and is sending the email enough to show delivery,
+  or must the customer open or download it?
 
 Yes / No / Note: ____________________________________________
 
-**17. A whole table, or a staff meal, given free (his 1.10).** Example: the venue invites a table of
-four regulars; menu value €160, food cost €48. If it is treated as a self-supply at cost:
+**17. A whole table, or a staff meal, given free (his 1.10).**
 
-- (a) What is the cost of a restaurant meal: the ingredients only, or a share of staff and
-  overheads too? Without recipe costs, may the venue use a standard percentage of the menu price
-  (say 30%)?
-- (b) Which document is issued, to whom (the venue itself, or the table), and what record does it
-  send to AEAT?
-- (c) A meal given free to an employee during their shift: also a self-supply at cost, or outside
-  VAT?
+*The situation.* Sometimes a restaurant charges a table nothing: the owner invites regulars or
+friends, or staff eat a meal on the house. He answered that the risk-free treatment is a
+self-supply (autoconsumo) valued at cost, not at the menu price (DGT V2347-24; LIVA 79.Cuatro), with
+an invoice and a record. The alternative, treating a business invitation as outside VAT, is
+defensible but goes against V2347-24. Each venue chooses with its own adviser.
 
-Yes / No / Note: ____________________________________________
+*Example.* The venue invites a table of four regulars. On the menu the meal comes to €160; the
+ingredients cost €48. As a self-supply at cost, that is €48 before VAT and €4.80 VAT, which the venue
+pays.
 
-**18. A deposit kept after a no-show (his 1.7 and 1.8).** A €40 deposit for a booking has its own
-ticket (base €36.36, VAT €3.64 at 10%). The guests don't come and the venue keeps the €40 as
-compensation, which he says is outside VAT (DGT V0839-20). Does the venue issue a corrective
-removing the €3.64, though it refunds nothing (LIVA 89.Cinco.b asks for a refund to reduce VAT), or
-does the deposit's ticket stand?
+*We ask, for the self-supply treatment:*
 
-Yes / No / Note: ____________________________________________
-
-**19. Money given back as goodwill after the ticket (his 1.5).** A guest complains after paying €62
-and the manager gives €10 back. He said a later price reduction requires a corrective "where
-applicable" (LIVA 80.Uno.2.º). Is the corrective required, or may the venue give the money back
-without one and go on declaring VAT on €62?
+- (a) What is the cost of a restaurant meal: the ingredients only, or a share of staff and overheads
+  too? Without recipe costs, may the venue use a standard percentage of the menu price (say 30%)?
+- (b) Which document is issued, to whom (the venue itself, or the table), and what record is sent
+  to AEAT?
+- (c) A meal given free to an employee during their shift: is it also a self-supply at cost, or
+  outside VAT?
 
 Yes / No / Note: ____________________________________________
 
-**20. Who is the third party for copies outside Spain (his 1.15).** Waitron Cloud plans to keep
-copies with Amazon Web Services, a company with an American parent, in data centres in Spain and
-France. A venue may instead send its continuous copy to a storage provider it chooses.
+**18. A deposit kept after a no-show (his 1.7 and 1.8).**
 
-- (a) Is the third party of art. 19.3 the company the venue contracts with (Waitron), the storage
-  provider, or both?
-- (b) Does art. 19.4 look at where the third party is established or where the data is held? For
+*The situation.* He answered that a deposit for an identified booking is an advance payment with
+its own ticket (his 1.8), and cited DGT V0839-20: money kept as compensation when a booking is
+cancelled is outside VAT. To reduce the VAT already declared, though, LIVA 89.Cinco.b asks for the
+VAT to be refunded to the customer.
+
+*Example.* A €40 deposit for a booking gets its own ticket: €36.36 before VAT and €3.64 VAT at 10%.
+The guests don't come, and the venue keeps the €40 as compensation.
+
+*We ask:* Does the venue issue a corrective removing the €3.64, though it refunds nothing, or does
+the deposit's ticket stand?
+
+Yes / No / Note: ____________________________________________
+
+**19. Money given back as goodwill after the ticket (his 1.5).**
+
+*The situation.* A guest complains after paying, and the manager gives some money back. The ticket
+was already issued for the full price. He answered that a price reduction after the ticket "will,
+where applicable, require" a corrective invoice (LIVA 80.Uno.2.º; DGT V1493-26).
+
+*Example.* A guest complains after paying €62 and the manager gives €10 back. Without a corrective,
+the venue goes on declaring VAT on €62.
+
+*We ask:* Is the corrective required, or may the venue give the money back without one and go on
+declaring VAT on the full €62?
+
+Yes / No / Note: ____________________________________________
+
+**20. Who is the third party for copies held outside Spain (his 1.15).**
+
+*The situation.* Waitron keeps a continuous copy of the venue's data away from the restaurant, as a
+backup. He answered that a copy abroad, while the original stays on the server in Spain, is not in
+itself keeping invoices outside Spain; that whoever holds the copy for the venue is a third party
+(RD 1619/2012 art. 19.3); and that a third party established outside the EU must be notified to
+AEAT beforehand through procedure GZ05 (art. 19.4).
+
+*The two set-ups.* Waitron Cloud plans to keep the copies with Amazon Web Services, a company with
+an American parent, in data centres in Spain and France. Alternatively, a venue may send its copy to
+a storage provider of its own choosing.
+
+*We ask:*
+
+- (a) Is the third party the company the venue contracts with (Waitron), the storage provider, or
+  both?
+- (b) Does art. 19.4 look at where the third party is established or at where the data is held? For
   example, a provider established outside the EU that stores the data in an EU data centre.
 
 Yes / No / Note: ____________________________________________
 
-**21. Copies rebuilt from AEAT's records after a restore (his 1.16).** He suggests rebuilding lost
-invoice copies from AEAT's record query. As AEAT's technical documents describe it, its reply
-carries each record's number, date, description, customer where there is one, VAT breakdown and
-totals, but not the dishes. Is a copy rebuilt from that acceptable under RD 1619/2012 art. 19, or
-must the venue hold the full invoice some other way, such as its continuous copy?
+**21. Invoice copies rebuilt from AEAT's records after a restore (his 1.16).**
+
+*The situation.* If the venue's server has to be restored from an old backup, the invoices issued
+after that backup are missing from it, although their records reached AEAT. He answered that the
+venue should retrieve those records from AEAT's record query service to rebuild the invoice copies,
+which it must keep (RD 1619/2012 art. 19).
+
+*What AEAT returns.* As AEAT's technical documents describe the reply, it carries each record's
+number, date, description, customer where there is one, VAT breakdown and totals, but not the
+dishes.
+
+*We ask:* Is a copy rebuilt from that acceptable, or must the venue hold the full invoice some other
+way, such as its continuous backup copy?
 
 Yes / No / Note: ____________________________________________
 
-**22. Still awaited from October.** S17 (selling by weight: legal metrology, or whom to ask), S18
-(a change of legal name with the same tax ID) and S19 (keeping a chain's later records unsent while
-an earlier one's answer is unknown). When can we expect them?
+**22. Three questions from October still awaited.**
+
+*The situation.* His answers of 15 November did not cover three questions of the October list:
+
+- **S17, selling by weight.** A certified scale weighs the goods; either it sends weight, price per
+  kilo and total to the till, or staff type the weight into the till, which prices it. Does that
+  meet the legal metrology rules, does our software need certification, and who signs the
+  declaration of conformity? If this is outside his field, whom should we ask?
+- **S18, a change of the company's legal name, keeping its tax number.** Which name goes on a
+  record written before the change but sent after it, and on a cancellation, written after the
+  change, of an invoice issued before it?
+- **S19, holding back records.** Each record carries a fingerprint of the one before. While AEAT's
+  answer to an earlier record is unknown, or after three refusals in a row with the same code,
+  Waitron holds back the later records and retries the first one every hour. AEAT's developer FAQ
+  says no record may be left unsent. May Waitron hold them back, for how long, and what must it
+  keep?
+
+*We ask:* When can we expect his answers?
 
 Note: ____________________________________________
 
@@ -281,189 +456,328 @@ from the recovery key.
 
 ## Part 2: Español (para el asesor fiscal)
 
-Preguntas para la reunión del jueves 19 de noviembre de 2026. Cada una describe lo que hace Waitron
-y por qué, y pide un sí o una corrección. Las dos primeras requieren su criterio; las demás son
-confirmaciones, ordenadas según lo que se remite o se firma desde el primer día de actividad.
-Gracias por sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a 1.16 y
-2.1 a 2.6). Las preguntas 3 y 4 y las 15 a 21 parten de ellas; la 22 recuerda las S17 a S19, aún
-pendientes.
+Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un software de punto de
+venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un servidor, un equipo
+en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta explica la
+situación, lo que hace o propone Waitron y por qué, y lo que preguntamos, de modo que puede leerse
+por separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15
+a la 22 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
+1.16 y 2.1 a 2.6), que le agradecemos.
 
 ### Requieren su criterio
 
-**1. Precio único de un menú para llevar.** Consumido en el local y servido por su personal, un menú
-es un único servicio de restauración al 10 %, bebida incluida (LIVA art. 91.Uno.2.2.º). Para llevar o
-a domicilio es una entrega de bienes y cada parte tributa a su tipo: la comida al 10 % y un refresco
-azucarado al 21 % (LIVA art. 91.Uno.1.1.º; DGT V2949-16). Ejemplo: un menú para llevar de 12,00 €,
-IVA incluido, con hamburguesa (9,50 € por separado) y refresco (3,00 € por separado); repartido según
-esos precios, la hamburguesa lleva 9,12 € al 10 % y el refresco 2,88 € al 21 %.
+**1. Precio único de un menú para llevar.**
 
-- ¿Puede repartirse el precio según el precio de cada parte vendida por separado? ¿Debe ser exacto
-  el reparto?
-- Si el cliente prescinde del refresco y paga igualmente 12,00 €, ¿es todo comida al 10 %?
-- En una barra de un local con mesas o barra disponibles: si se cobra un refresco para tomar aquí
+*Situación.* Consumido en el local y servido por su personal, un menú es un único servicio de
+restauración al 10 %, bebida incluida (LIVA art. 91.Uno.2.2.º). Para llevar o a domicilio es una
+entrega de bienes y cada parte tributa a su tipo: la comida al 10 % y un refresco azucarado al 21 %
+(LIVA art. 91.Uno.1.1.º; DGT V2949-16). Un menú para llevar vendido a precio único debe, por tanto,
+repartirse entre los dos tipos.
+
+*Propuesta de Waitron.* Repartir el precio en proporción al precio de cada parte vendida por
+separado. Ejemplo: un menú para llevar de 12,00 €, IVA incluido, con hamburguesa (9,50 € por
+separado) y refresco (3,00 € por separado); repartido según esos precios, la hamburguesa lleva
+9,12 € al 10 % y el refresco 2,88 € al 21 %. Mientras no tengamos su respuesta, Waitron no admite
+menús en los pedidos para llevar.
+
+*Preguntamos:*
+
+- (a) ¿Puede repartirse el precio según el precio de cada parte vendida por separado? ¿Debe ser
+  exacto el reparto?
+- (b) Si el cliente prescinde del refresco y paga igualmente 12,00 €, ¿es todo comida al 10 %?
+- (c) En la barra de un local que también tiene mesas: si se cobra un refresco para tomar aquí
   (10 %) y el cliente se lo lleva, ¿se mantiene el 10 %? Si el cliente no dice nada, ¿puede cobrarse
   como para tomar aquí?
 
 Sí / No / Nota: ____________________________________________
 
-**2. Mantener una fecha que nada indica que sea errónea.** Tras cada arranque, el servidor no registra
+**2. Mantener una fecha que nada indica que sea errónea.**
+
+*Situación.* El reloj del servidor fecha cada factura. Tras cada arranque, el servidor no registra
 ventas hasta confirmar su hora: por la hora de internet, por dos dispositivos del local que
-coinciden o por una persona. Si esa confirmación fuera errónea y la venta se cobrara en efectivo,
-puede no haber prueba de la hora real; un pago con tarjeta lleva la hora del proveedor. Proponemos
-que, si nada indica que la fecha registrada sea errónea, el restaurante la mantenga. ¿Es correcto?
-¿Hace falta algo más para sostenerla?
+coinciden con él o por una persona. Esa confirmación podría ser errónea; por ejemplo, una persona
+que confirma una hora equivocada en una hora. En una venta en efectivo nada fuera del servidor
+registra la hora real; un pago con tarjeta lleva al menos la hora del proveedor de pagos.
+
+*Propuesta de Waitron.* Si nada indica que la fecha de una factura sea errónea, el restaurante la
+mantiene.
+
+*Preguntamos:* ¿Es correcto? ¿Necesita el restaurante algo más para sostenerla?
 
 Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: lo que se remite o se firma desde el primer día
 
 **3. Cuándo termina la comida, y si el tique puede esperar al cobro (a partir de sus respuestas
-1.1, 1.3 y 1.4).** Confirma que el tique expedido al terminar la comida, en la misma visita, lleva una
-sola fecha, y que el expedido un día posterior debe indicar además la fecha de la operación, con los
-tipos de IVA de ese día. Indica también que el tique se expide al terminar el servicio, sin quedar
-condicionado al cobro total. Quedan dos puntos:
+1.1, 1.3 y 1.4).**
+
+*Situación.* La factura simplificada (el tique) se expide en el momento de realizarse la operación
+(RD 1619/2012, art. 11.1), y el IVA de una comida se devenga «cuando se presten, ejecuten o efectúen
+las operaciones gravadas» (LIVA art. 75.Uno.2.º). En sus respuestas del 15 de noviembre indica que
+una comida es un único servicio que se presta al terminar; que el tique expedido al terminar, en la
+misma visita, lleva una sola fecha; que la factura expedida un día posterior debe indicar además la
+fecha de la operación; y que el tique se expide al terminar el servicio, sin quedar condicionado al
+cobro total.
+
+*Propuesta de Waitron.* El tique se expide al terminar la visita de la mesa: con el último pago, o
+cuando el personal registra que la mesa se ha marchado sin pagarlo todo. Lleva la fecha de ese
+momento.
+
+*Preguntamos:*
 
 - (a) ¿Termina la comida al servirse el último plato, o cuando los clientes acaban y se marchan?
-  Ejemplo: último plato a las 23:40 y después café; la mesa paga y se marcha a las 00:30. Fecharíamos
-  el tique a las 00:30 del día siguiente, con esa única fecha.
+  Ejemplo: el último plato se sirve a las 23:40 del día 1; después toman café, y pagan y se marchan
+  a las 00:30 del día 2. Fecharíamos el tique el día 2, sin otra fecha de operación. ¿Es correcto, o
+  la fecha de la operación es el día 1?
 - (b) Un cliente habitual come el lunes y, por acuerdo, paga el jueves. ¿Debe expedirse el tique el
   lunes, aún sin cobrar, o puede esperar al jueves indicando el lunes como fecha de la operación? Su
-  respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la expedición
-  no puede quedar condicionada al cobro total.
+  respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la
+  expedición no puede quedar condicionada al cobro total.
 
 Sí / No / Nota: ____________________________________________
 
-**4. Serie de las rectificativas por fecha errónea (a partir de su respuesta 1.14).** Confirma que
-las rectificativas de tiques (R5) van en una serie distinta de las de facturas completas (R1 a R4).
-Waitron pone todas las R5, también las que se expiden porque la fecha del tique era errónea, en una
-serie que solo contiene R5. Las V1665-22, V0902-22, V1924-23 y V2611-24 dicen que la rectificativa de
-una fecha de expedición errónea «deberá constar en serie específica de factura». ¿Basta una serie
-solo de R5, o deben ir las rectificativas por fecha en una serie aparte de las demás R5?
+**4. Serie de las rectificativas por fecha errónea (a partir de su respuesta 1.14).**
+
+*Situación.* Las facturas rectificativas se numeran en series propias. Confirma que las
+rectificativas de tiques (R5) van en una serie distinta de las de facturas completas (R1 a R4). Un
+tique puede llevar además una fecha errónea, por ejemplo si el reloj del servidor iba un día
+adelantado; se corrige con una rectificativa que indica la fecha real y no cambia ningún importe.
+
+*Lo que hace Waitron.* Pone todas las R5, también las que se expiden porque la fecha del tique era
+errónea, en una serie que solo contiene R5. La V2884-16 permitiría incluso las R5 en la serie de
+tiques: «las facturas simplificadas rectificativa podrán incluirse dentro de la misma serie con el
+resto de facturas simplificadas». Pero las V1665-22, V0902-22, V1924-23 y V2611-24 dicen que la
+rectificativa de una fecha de expedición errónea «deberá constar en serie específica de factura».
+
+*Preguntamos:* ¿Basta una serie solo de R5, o deben ir las rectificativas por fecha en una serie
+aparte de las demás R5?
 
 Sí / No / Nota: ____________________________________________
 
-**5. Declaración responsable: componentes del sistema.** Apartado d) del art. 15 de la Orden
-HAC/1177/2024; aún no se ha firmado ninguna. El texto actual está en el
-[anexo](#anexo-el-apartado-d-tal-como-está-hoy). Creemos que basta con dos añadidos: qué hace el
-agente de impresión, y que los terminales solicitan las facturas y las muestran. La frase sobre el
-servidor de reserva solo figurará en una versión que pueda pasar a él.
+**5. Declaración responsable: componentes del sistema.**
+
+*Situación.* El productor de un sistema informático de facturación firma, para cada versión, una
+declaración responsable de que cumple la norma (Orden HAC/1177/2024, art. 15). Su apartado d) recoge
+los componentes de hardware y software y una breve descripción de lo que hace el sistema. Aún no se
+ha firmado ninguna. El texto actual del apartado d) está en el
+[anexo](#anexo-el-apartado-d-tal-como-está-hoy).
+
+*Propuesta de Waitron.* El texto nombra los componentes de terceros (Node.js, SQLite, Litestream,
+Linux y Docker) como parte del sistema, dice que el productor responde de ellos, e indica la versión
+de la biblioteca Veri\*Factu que se usa y lo que hace. Creemos que basta con dos añadidos: qué hace el
+agente de impresión (el programa que envía los documentos a las impresoras del local), y que los
+terminales (cajas, comanderos y pantallas de cocina) solicitan las facturas al servidor y las
+muestran, sin generar registros de facturación. La frase sobre un servidor de reserva solo figurará
+en una versión que pueda pasar a él.
+
+*Preguntamos:* Con esos dos añadidos, ¿es suficiente el apartado d)?
 
 Sí / No / Nota: ____________________________________________
 
-**6. Declaración responsable: varios obligados tributarios.** Waitron responde N al apartado f): cada
-local tiene su propia instalación, base de datos y certificado, en su propio equipo o en Waitron
-Cloud. La biblioteca Veri\*Factu, con declaración propia y código WV, responde S, porque un programa
-que la use puede facturar para varios obligados. Un local que pasa de su propio equipo a Waitron
-Cloud, o al revés, conserva el código de sistema de Waitron, recibe un nuevo número de instalación y
-no necesita nueva declaración.
+**6. Declaración responsable: varios obligados tributarios.**
+
+*Situación.* El apartado f) de la misma declaración pregunta si el sistema puede usarse para
+facturar por varios obligados tributarios: S (sí) o N (no).
+
+*Propuesta de Waitron.* Waitron responde N: cada local tiene su propia instalación, base de datos y
+certificado, en su propio equipo o en Waitron Cloud. La biblioteca Veri\*Factu que usa Waitron tiene
+declaración propia, con el código de sistema WV, y responde S, porque otro programa que la use
+puede facturar por varios obligados. Un local que pasa de su propio equipo a Waitron Cloud, o al
+revés, conserva el código de sistema de Waitron, recibe un nuevo número de instalación y no necesita
+nueva declaración.
+
+*Preguntamos:* ¿Son correctas esas respuestas?
 
 Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: cuando el reloj estaba mal
 
-El servidor fecha cada factura con su propio reloj, que mantiene en hora mediante internet. Tras un
-arranque, o un salto de más de un minuto sin hora de internet, no admite cobros hasta confirmar su
-hora: por internet, por dos dispositivos o por una persona. Ya no consulta la hora de la AEAT.
+**7. Fecha errónea en una factura.**
 
-**7. Fecha errónea en una factura.** Se corrige con una rectificativa en la serie de la pregunta 4,
-fechada el día en que se expide, que indica la fecha real de la operación y no cambia ningún importe
-(DGT V1665-22: «será necesaria la expedición de una factura rectificativa»; V0305-24). El IVA se
-imputa al periodo de la fecha real (LIVA art. 75.Uno.2.º); si esa declaración ya se presentó, se
-corrige con una complementaria (LGT art. 122). Una rectificativa puede corregir varias facturas
-(RD 1619/2012, art. 15.4). Ya funciona para un tique que la AEAT rechazó por fecha futura; la versión
-para facturas completas está hecha pero desactivada.
+*Situación.* El servidor fecha cada factura con su propio reloj, que mantiene en hora mediante
+internet. Si el reloj estaba mal, una factura puede llevar un día equivocado. Ejemplo: tras un corte
+de luz el reloj va un día adelantado y un tique de una venta del 3 de marzo sale fechado el 4. La
+AEAT rechaza un registro con fecha futura, y así suele descubrirse el error.
 
-Sí / No / Nota: ____________________________________________
+*Lo que hace Waitron.* Lo corrige con una rectificativa fechada el día en que se expide, que indica
+la fecha real de la operación y no cambia ningún importe (DGT V1665-22: «será necesaria la
+expedición de una factura rectificativa»; V0305-24). La rectificativa va en una serie que solo
+contiene rectificativas de tiques. El IVA se imputa al periodo de la fecha real (LIVA art.
+75.Uno.2.º); si esa declaración ya se presentó, se corrige con una complementaria (LGT art. 122).
+Una rectificativa puede corregir varias facturas (RD 1619/2012, art. 15.4). Ya funciona para un tique
+que la AEAT rechazó por fecha futura; la versión para facturas completas está hecha pero
+desactivada.
 
-**8. A quién llega la rectificativa.** La mayoría de los clientes de tique son desconocidos. El
-restaurante expide la rectificativa, la conserva y remite su registro; solo llega al cliente cuando el
-restaurante sabe quién es. No se anulan ni se vuelven a expedir tiques. No hemos encontrado norma
-sobre este caso.
-
-Sí / No / Nota: ____________________________________________
-
-**9. Un registro con hora anterior a la del anterior.** Si el reloj iba adelantado y se corrige, el
-siguiente registro lleva una hora anterior a la del último. Waitron lo permite sin marcarlo: el
-registro debe incorporar «la fecha y hora exactas» de su generación (Orden HAC/1177/2024, art. 7.e), y
-el art. 3 excluye para VERI\*FACTU el art. 7.i), que contiene la única regla en contra. Ejemplo: las
-facturas 2, 3 y 4 se fechan con el reloj una hora adelantado; corregido el reloj, la factura 5 lleva
-una hora anterior a la de la 4. Las facturas 2 a 4 solo se rectifican si la hora errónea pasó alguna
-a otro día (pregunta 7).
+*Preguntamos:* ¿Es esta la forma correcta de corregir una fecha errónea?
 
 Sí / No / Nota: ____________________________________________
 
-**10. Solo la hora es errónea.** Un tique fechado a las 21:10 por una venta de las 20:50 del mismo
-día no necesita rectificativa; el restaurante guarda constancia del incidente. La factura indica la
-fecha, no la hora (RD 1619/2012, arts. 6.1.b y 7.1.b), y las FAQ para desarrolladores dicen: «La hora
-de expedición e impresión material de la factura no forma parte del RF». En sentido contrario, el
-caso 2.b de su apartado 17 pide un registro de subsanación para un error en un campo interno.
+**8. A quién llega la rectificativa.**
+
+*Situación.* La rectificativa se remite normalmente al destinatario de la factura que corrige. Pero
+la mayoría de los clientes de tique son desconocidos: el tique no identifica al cliente. Ejemplo:
+hay que rectificar un tique porque el reloj del servidor le dio una fecha errónea, y nadie sabe quién
+lo pagó.
+
+*Lo que hace Waitron.* El restaurante expide la rectificativa, la conserva y remite su registro a la
+AEAT; solo llega al cliente cuando el restaurante sabe quién es. No se anulan ni se vuelven a expedir
+tiques. No hemos encontrado norma sobre este caso.
+
+*Preguntamos:* ¿Es aceptable?
 
 Sí / No / Nota: ____________________________________________
 
-**11. Comunicar a la AEAT un incidente de reloj.** Creemos que no hay obligación ni cauce: una
-búsqueda en el Reglamento, la Orden, las dos FAQ y los documentos técnicos no encontró ninguno, y el
-registro de la rectificativa llega a la AEAT igualmente. El art. 16.4 de la Orden trata las
-incidencias que impiden la remisión, que es otro caso.
+**9. Un registro con hora anterior a la del anterior.**
+
+*Situación.* Cada registro debe incorporar «la fecha y hora exactas» de su generación (Orden
+HAC/1177/2024, art. 7.e). Si el reloj del servidor iba adelantado y se corrige, el siguiente registro
+lleva una hora anterior a la del último. Ejemplo: las facturas 2, 3 y 4 se fechan con el reloj una
+hora adelantado; corregido el reloj, la factura 5 lleva una hora anterior a la de la 4.
+
+*Lo que hace Waitron.* Lo permite sin marcarlo: el art. 3 de la misma Orden excluye para VERI\*FACTU
+el art. 7.i), que contiene la única regla en contra. Las facturas 2 a 4 solo se rectifican si la hora
+errónea pasó alguna a otro día; entonces se corrigen como fecha errónea, con una rectificativa que
+indica la fecha real.
+
+*Preguntamos:* ¿Es correcto?
+
+Sí / No / Nota: ____________________________________________
+
+**10. Solo la hora es errónea.**
+
+*Situación.* El reloj del servidor estaba mal, pero sin cambiar el día: solo la hora del tique es
+errónea. Ejemplo: un tique fechado a las 21:10 por una venta de las 20:50 del mismo día.
+
+*Lo que hace Waitron.* No expide rectificativa; el restaurante guarda constancia del incidente. La
+factura indica la fecha, no la hora (RD 1619/2012, arts. 6.1.b y 7.1.b), y las FAQ para
+desarrolladores dicen: «La hora de expedición e impresión material de la factura no forma parte del
+RF». En sentido contrario, el caso 2.b de su apartado 17 pide un registro de subsanación para un
+error en un campo interno.
+
+*Preguntamos:* ¿Es correcto no rectificar?
+
+Sí / No / Nota: ____________________________________________
+
+**11. Comunicar a la AEAT un incidente de reloj.**
+
+*Situación.* Se descubre que el reloj del servidor estaba mal, y las facturas afectadas se han
+rectificado, o se han dejado como estaban porque solo era errónea la hora.
+
+*Propuesta de Waitron.* No comunicar nada. Una búsqueda en el Reglamento (RD 1007/2023), la Orden,
+las dos FAQ de la AEAT y sus documentos técnicos no encontró ni obligación ni cauce, y el registro de
+cualquier rectificativa llega a la AEAT igualmente. El art. 16.4 de la Orden trata las incidencias
+que impiden la remisión, que es otro caso.
+
+*Preguntamos:* ¿Es correcto?
 
 Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: conservación y acceso
 
-**12. Acceso en línea sin internet.** Una copia en el propio equipo del local cumple los arts. 21.2 y
-23 del RD 1619/2012 si, cuando la Administración lo pide, permite sin demora injustificada consultar,
-buscar, copiar o descargar e imprimir todas las facturas. No hace falta conexión permanente ni
-dirección pública (Orden EHA/962/2007, art. 5.3; DGT 0289-04). Si la AEAT lo pide desde su oficina,
-basta una copia del periodo en USB o un enlace temporal de descarga.
+**12. Acceso en línea sin internet.**
+
+*Situación.* Las facturas conservadas por medios electrónicos deben permitir el acceso en línea de
+la Administración (RD 1619/2012, arts. 21.2 y 23). El servidor de Waitron suele estar en el propio
+restaurante, en una red privada y sin dirección pública.
+
+*Propuesta de Waitron.* Se cumple si, cuando la Administración lo pide, el local permite sin demora
+injustificada consultar, buscar, copiar o descargar e imprimir todas las facturas. No hace falta
+conexión permanente ni dirección pública (Orden EHA/962/2007, art. 5.3; DGT 0289-04). Si la AEAT lo
+pide desde su oficina, basta una copia del periodo en USB o un enlace temporal de descarga.
+
+*Preguntamos:* ¿Es correcto?
 
 Sí / No / Nota: ____________________________________________
 
-**13. Qué conserva una sociedad de restauración.** Facturas expedidas, tiques incluidos, y recibidas
-(RD 1619/2012, art. 19.1); libros, correspondencia y documentación (Código de Comercio, art. 30.1);
-demás justificantes tributarios (LGT art. 29.2.e); registros de cobros y devoluciones; la declaración
-responsable de cada versión utilizada; justificantes de pago de ventas de 1.000 € o más, cinco años
-(Ley 7/2012, art. 7.Uno.4); y proformas que no llegaron a factura. Todo con un calendario común de
-seis años. ¿Falta algo?
+**13. Qué conserva una sociedad de restauración.**
+
+*Situación.* Waitron está definiendo cuánto tiempo conserva cada tipo de registro, y quiere una
+lista única de lo que una sociedad de restauración debe conservar por normativa fiscal y mercantil.
+
+*Propuesta de Waitron.* Facturas expedidas, tiques incluidos, y recibidas (RD 1619/2012, art. 19.1);
+libros, correspondencia y documentación (Código de Comercio, art. 30.1); demás justificantes
+tributarios (LGT art. 29.2.e); registros de cobros y devoluciones; la declaración responsable de cada
+versión utilizada; justificantes de pago de ventas de 1.000 € o más, cinco años (Ley 7/2012, art.
+7.Uno.4); y proformas que no llegaron a factura. Todo con un calendario común de seis años.
+
+*Preguntamos:* ¿Falta algo?
 
 Sí / No / Nota: ____________________________________________
 
-**14. Registros que la AEAT no tiene.** Un registro pendiente de envío, o rechazado, se conserva con
-la respuesta de la AEAT hasta resolverse y después según el calendario común, porque ese registro «no
-figuraría jamás en los sistemas de la AEAT (aunque constaría un rechazo)» (FAQ para desarrolladores).
-No hemos encontrado plazo.
+**14. Registros que la AEAT no tiene.**
+
+*Situación.* Normalmente todo registro llega a la AEAT, que lo conserva. Algunos no llegan nunca: un
+registro pendiente de envío, o uno rechazado. Ese registro «no figuraría jamás en los sistemas de la
+AEAT (aunque constaría un rechazo)» (FAQ para desarrolladores), de modo que la copia del restaurante
+es la única.
+
+*Propuesta de Waitron.* Conservarlo con la respuesta de la AEAT hasta resolverse, y después según el
+calendario común de seis años. No hemos encontrado plazo.
+
+*Preguntamos:* ¿Es correcto?
 
 Sí / No / Nota: ____________________________________________
 
 ### A partir de sus respuestas del 15 de noviembre
 
-**15. Un pago a cuenta durante la comida (su respuesta 1.3).** Indica que un pago anterior a que la
-mesa esté servida del todo es un pago anticipado con su propia factura, cuando lo que se paga está
-claramente identificado (STJUE C-419/02, BUPA). Ejemplo: una mesa de cuatro lleva 120 € consumidos y
-aún no ha pedido postres. A las 21:30 Ana paga 30 € «a cuenta» y se marcha; los demás pagan el resto
-a las 23:00.
+**15. Un pago a cuenta durante la comida (su respuesta 1.3).**
+
+*Situación.* En una mesa, a veces un comensal paga parte de la cuenta antes de terminar la comida y
+se marcha. Indica que lo pagado antes de que la mesa esté servida del todo es un pago anticipado: el
+IVA se devenga al cobrarlo, y necesita su propia factura (LIVA art. 75.Dos; RD 1619/2012, art. 2.1),
+siempre que lo que se paga esté claramente identificado (STJUE C-419/02, BUPA).
+
+*Ejemplo.* Una mesa de cuatro lleva 120 € consumidos y aún no ha pedido postres. A las 21:30 Ana paga
+30 € «a cuenta» y se marcha; los demás pagan el resto a las 23:00.
+
+*Lo que haría Waitron si los 30 € de Ana son un anticipo.* Expedir a Ana un tique de 30 € a las 21:30,
+y mostrar en el tique final el total de la cuenta menos el anticipo de Ana, como se descuenta una
+señal.
+
+*Preguntamos:*
 
 - (a) ¿Son esos 30 € un pago anticipado, si son un importe y no platos concretos y la mesa aún puede
   pedir más?
 - (b) Si lo son, ¿puede su tique recoger como pagados a cuenta los platos pedidos hasta ese momento,
-  y el tique final mostrar el total menos la base y la cuota del anticipo, como con una señal (su
-  respuesta 1.8)?
+  y el tique final mostrar el total menos la base y la cuota del anticipo, como indica para una señal
+  (su respuesta 1.8)?
 
 Sí / No / Nota: ____________________________________________
 
-**16. La entrega del tique en la práctica (su respuesta 1.11).** Imprimiremos todos los tiques al
-cobrar, salvo que el cliente elija el correo electrónico.
+**16. La entrega del tique en la práctica (su respuesta 1.11).**
+
+*Situación.* Indica que el tique debe entregarse y que el cliente no puede renunciar a ello. Imprimirlo
+solo si se pide, o nunca, lo incumple; mostrarlo en pantalla no es entregarlo; el correo electrónico o
+un enlace de descarga exigen el consentimiento informado del cliente (RD 1619/2012, art. 9), tras
+informarle de cómo lo recibirá y de que puede pedirlo en papel.
+
+*Lo que hará Waitron.* Imprimir todos los tiques al cobrar, salvo que el cliente elija el correo.
+Para el correo, el empleado pregunta «¿en papel o por correo?»; la caja muestra «Le enviaremos el
+tique a esta dirección. Puede pedir una copia en papel en cualquier momento» y registra que se
+mostró.
+
+*Preguntamos:*
 
 - (a) ¿Se considera entregado el tique impreso y dejado con la cuenta, aunque el cliente lo deje en
   la mesa o diga que no lo quiere?
-- (b) Para el correo, el empleado pregunta «¿en papel o por correo?»; la caja muestra «Le enviaremos
-  el tique a esta dirección. Puede pedir una copia en papel en cualquier momento» y registra que se
-  mostró. ¿Es consentimiento informado, y basta el envío del correo como prueba de entrega, o hace
-  falta que el cliente lo abra o lo descargue?
+- (b) ¿Es consentimiento informado el paso del correo descrito, y basta el envío del correo como
+  prueba de entrega, o hace falta que el cliente lo abra o lo descargue?
 
 Sí / No / Nota: ____________________________________________
 
-**17. Una mesa invitada, o una comida de personal (su respuesta 1.10).** Ejemplo: el local invita a
-una mesa de cuatro clientes habituales; valor en carta 160 €, coste de materia prima 48 €. Si se
-trata como autoconsumo a coste:
+**17. Una mesa invitada, o una comida de personal (su respuesta 1.10).**
+
+*Situación.* A veces el restaurante no cobra nada a una mesa: el propietario invita a clientes
+habituales o amigos, o el personal come a cargo de la casa. Indica que el tratamiento sin riesgo es
+el autoconsumo valorado a coste, no al precio de carta (DGT V2347-24; LIVA art. 79.Cuatro), con
+factura y registro. La alternativa, tratar la invitación con fines empresariales como no sujeta, es
+defendible, pero contraria a la V2347-24, y cada local debe decidir con su asesor.
+
+*Ejemplo.* El local invita a una mesa de cuatro clientes habituales. En carta la comida suma 160 €;
+la materia prima cuesta 48 €. Como autoconsumo a coste: 48 € de base y 4,80 € de cuota, que paga el
+local.
+
+*Preguntamos, para el tratamiento como autoconsumo:*
 
 - (a) ¿Qué es el coste de una comida de restaurante: solo la materia prima, o también una parte del
   personal y de los gastos generales? Sin escandallos, ¿puede usarse un porcentaje estándar sobre el
@@ -475,27 +789,50 @@ trata como autoconsumo a coste:
 
 Sí / No / Nota: ____________________________________________
 
-**18. Señal retenida cuando el cliente no se presenta (sus respuestas 1.7 y 1.8).** Una señal de
-40 € por una reserva tiene su propio tique (base 36,36 €, cuota 3,64 € al 10 %). Los clientes no se
-presentan y el local retiene los 40 € como indemnización, que según la V0839-20 no está sujeta.
-¿Expide el local una rectificativa que anule los 3,64 €, aunque no devuelve nada (el art.
-89.Cinco.b LIVA exige reintegrar la cuota para minorarla), o se mantiene el tique de la señal?
+**18. Señal retenida cuando el cliente no se presenta (sus respuestas 1.7 y 1.8).**
+
+*Situación.* Indica que la señal de una reserva identificada es un pago anticipado con su propio
+tique (su respuesta 1.8), y cita la V0839-20: lo que se retiene como indemnización si se cancela la
+reserva no está sujeto. Pero, para minorar el IVA ya repercutido, el art. 89.Cinco.b LIVA exige
+reintegrar la cuota al cliente.
+
+*Ejemplo.* Una señal de 40 € por una reserva tiene su propio tique: 36,36 € de base y 3,64 € de
+cuota al 10 %. Los clientes no se presentan y el local retiene los 40 € como indemnización.
+
+*Preguntamos:* ¿Expide el local una rectificativa que anule los 3,64 €, aunque no devuelve nada, o se
+mantiene el tique de la señal?
 
 Sí / No / Nota: ____________________________________________
 
-**19. Devolución de cortesía tras el tique (su respuesta 1.5).** Un cliente se queja después de
-pagar 62 € y el encargado le devuelve 10 €. Indica que una rebaja posterior requiere, en su caso, una
-rectificativa (art. 80.Uno.2.º LIVA). ¿Es obligatoria, o puede el local devolver el dinero sin
-rectificativa y seguir declarando el IVA sobre los 62 €?
+**19. Devolución de cortesía tras el tique (su respuesta 1.5).**
+
+*Situación.* Un cliente se queja después de pagar y el encargado le devuelve parte del dinero; el
+tique ya se expidió por el precio completo. Indica que una rebaja posterior al tique requiere, en su
+caso, una rectificativa (LIVA art. 80.Uno.2.º; DGT V1493-26).
+
+*Ejemplo.* Un cliente se queja después de pagar 62 € y el encargado le devuelve 10 €. Sin
+rectificativa, el local sigue declarando el IVA sobre los 62 €.
+
+*Preguntamos:* ¿Es obligatoria la rectificativa, o puede el local devolver el dinero sin ella y
+seguir declarando el IVA sobre los 62 €?
 
 Sí / No / Nota: ____________________________________________
 
-**20. Quién es el tercero para las copias fuera de España (su respuesta 1.15).** Waitron Cloud prevé
-guardar las copias en Amazon Web Services, empresa de matriz estadounidense, en centros de datos de
-España y Francia. Un local puede, en cambio, enviar su copia continua a un proveedor de
-almacenamiento de su elección.
+**20. Quién es el tercero para las copias fuera de España (su respuesta 1.15).**
 
-- (a) ¿Es el tercero del art. 19.3 la empresa con la que contrata el local (Waitron), el proveedor de
+*Situación.* Waitron guarda, como copia de seguridad, una copia continua de los datos del local
+fuera del restaurante. Indica que una copia en el extranjero, mientras el original sigue en el
+servidor en España, no es por sí misma conservación fuera de España; que quien guarda la copia por
+cuenta del local es un tercero (RD 1619/2012, art. 19.3); y que un tercero establecido fuera de la UE
+requiere comunicación previa a la AEAT por el procedimiento GZ05 (art. 19.4).
+
+*Las dos modalidades.* Waitron Cloud prevé guardar las copias en Amazon Web Services, empresa de
+matriz estadounidense, en centros de datos de España y Francia. Un local puede, en cambio, enviar su
+copia a un proveedor de almacenamiento de su elección.
+
+*Preguntamos:*
+
+- (a) ¿Es el tercero la empresa con la que contrata el local (Waitron), el proveedor de
   almacenamiento, o ambos?
 - (b) ¿El art. 19.4 atiende al lugar de establecimiento del tercero o al lugar donde están los
   datos? Por ejemplo, un proveedor establecido fuera de la UE que guarda los datos en un centro de
@@ -503,18 +840,41 @@ almacenamiento de su elección.
 
 Sí / No / Nota: ____________________________________________
 
-**21. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta 1.16).**
-Propone reconstruir las copias perdidas a partir de la consulta de registros de la AEAT. Según los
-documentos técnicos de la AEAT, su respuesta incluye de cada registro el número, la fecha, la
-descripción, el destinatario si lo hay, el desglose de IVA y los importes totales, pero no los
-platos. ¿Es aceptable una copia reconstruida así a efectos del art. 19 del RD 1619/2012, o debe el
-local conservar la factura completa por otra vía, como su copia continua?
+**21. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta
+1.16).**
+
+*Situación.* Si el servidor del local se restaura desde una copia antigua, le faltan las facturas
+expedidas después de esa copia, aunque sus registros llegaron a la AEAT. Indica que el local debe
+recuperar esos registros mediante el servicio de consulta de la AEAT para reconstruir las copias de
+las facturas, que debe conservar (RD 1619/2012, art. 19).
+
+*Lo que devuelve la AEAT.* Según sus documentos técnicos, la respuesta incluye de cada registro el
+número, la fecha, la descripción, el destinatario si lo hay, el desglose de IVA y los importes
+totales, pero no los platos.
+
+*Preguntamos:* ¿Es aceptable una copia reconstruida así, o debe el local conservar la factura
+completa por otra vía, como su copia de seguridad continua?
 
 Sí / No / Nota: ____________________________________________
 
-**22. Pendientes desde octubre.** La S17 (venta a peso: metrología legal, o a quién consultar), la
-S18 (cambio de denominación social con el mismo NIF) y la S19 (retener los registros posteriores de
-una cadena mientras se desconoce la respuesta a uno anterior). ¿Cuándo podemos esperar su respuesta?
+**22. Tres preguntas de octubre aún pendientes.**
+
+*Situación.* Sus respuestas del 15 de noviembre no tratan tres preguntas de la lista de octubre:
+
+- **S17, venta a peso.** Una balanza verificada pesa el producto; o envía al TPV el peso, el precio
+  por kilo y el importe, o el empleado teclea el peso en el TPV, que calcula el importe. ¿Cumple la
+  normativa de metrología legal, necesita nuestro software una certificación, y quién firma la
+  declaración de conformidad? Si queda fuera de su ámbito, ¿a quién nos recomienda consultar?
+- **S18, cambio de denominación social con el mismo NIF.** ¿Qué nombre lleva un registro generado
+  antes del cambio pero remitido después, y una anulación, generada después del cambio, de una
+  factura expedida antes?
+- **S19, retener registros.** Cada registro lleva la huella del anterior. Mientras se desconoce la
+  respuesta de la AEAT a un registro anterior, o tras tres rechazos seguidos con el mismo código,
+  Waitron retiene los registros posteriores y reintenta el primero cada hora. Las FAQ para
+  desarrolladores dicen que no pueden quedar registros sin remitir. ¿Puede Waitron retenerlos,
+  hasta cuándo, y qué debe conservar?
+
+*Preguntamos:* ¿Cuándo podemos esperar su respuesta?
 
 Nota: ____________________________________________
 
