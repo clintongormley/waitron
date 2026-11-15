@@ -633,7 +633,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
   The setup-api and setup-api.throwaway suites use Anna Mary and Smith Green for their administrator real-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
-  The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
+  The unpaid-departure suite uses Sophia for its local supervisor sample.
   The device-equipment and device-levers suites use English staff display-name samples.
   Local floor-signal, pairing and till clock-state staff samples use Lucy, Anna and Lewis.
   The attendance-discovery, attendance-obligations, boot.mirror, boot.clock-watch and standalone tab-person suites use Anna and Martha for their main staff sample.
@@ -648,7 +648,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
   Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.
   The own personal-data download (`me-api`) and box-health samples use Martha and Rose; stream-route and cross-person profile administrators use Administrator.
-  Local personal-data export, staff-export, README and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
+  Local personal-data export, staff-export and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
   The adjustment-download worked example uses Martha Lewis, Lewis Green, Paul Gray and Anna Smith;
   local reprint and restore-archive staff samples use Anna.
   The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.

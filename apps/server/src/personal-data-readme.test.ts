@@ -18,7 +18,7 @@ import { timeRecordPersonalData } from "./personal-data-time-record.js";
 const base: PersonalDataReadmeInput = {
   language: "en",
   venue: "Example Bar S.L.",
-  person: "Marta López",
+  person: "Martha Lewis",
   date: "2026-10-05",
   privacyNoticeUrl: "https://examplebar.example/privacy",
   files: ["profile.json", "sign-in.json"],
@@ -50,7 +50,7 @@ const DECIDES = "- Ask the venue how long it keeps your data and why; its privac
 const RIGHTS = `Your rights
 You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.`;
 const HEAD = `Your data held by Example Bar S.L.
-Prepared for Marta López on 2026-10-05.`;
+Prepared for Martha Lewis on 2026-10-05.`;
 const ASK =
   "Contact Example Bar S.L. to ask. Its privacy notice: https://examplebar.example/privacy";
 
@@ -60,7 +60,7 @@ function spanishReadme(files: readonly string[]): string {
   const venue = "Example Bar S.L.";
   const lines = [
     w.title.replace("{venue}", () => venue),
-    w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
+    w.prepared.replace("{name}", () => "Martha Lewis").replace("{date}", () => "2026-10-05"),
     "",
     w.filesHeading,
     ...files.map((name, index) => `- ${name}: ${words[index]!.holds} ${words[index]!.use}`),
@@ -240,7 +240,7 @@ ${ASK}
     void _omitted;
     const text = personalDataReadme({ ...rest, venue: null, files: [] });
     expect(text).toBe(`Your data held by the venue
-Prepared for Marta López on 2026-10-05.
+Prepared for Martha Lewis on 2026-10-05.
 
 ${ORIGIN}
 
