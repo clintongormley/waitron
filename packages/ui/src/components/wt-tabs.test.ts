@@ -815,7 +815,9 @@ test("a marked tab shows a star after its label and is named with what the star 
   const star = marked.querySelector<HTMLElement>(".mark")!;
   expect(star.textContent).toBe("*");
   expect(star.getAttribute("aria-hidden")).toBe("true");
-  expect(marked.textContent!.replace(/\s+/g, " ").trim().startsWith("Menus*")).toBe(true);
+  const shown = marked.cloneNode(true) as HTMLElement;
+  shown.querySelector(".bold-copy")!.remove();
+  expect(shown.textContent!.replace(/\s+/g, " ").trim().startsWith("Menus*")).toBe(true);
   await expect
     .element(page.getByRole("tab", { name: "Menus, unpublished changes", exact: true }))
     .toBeInTheDocument();
@@ -1387,4 +1389,35 @@ test("Tab from the selected tab goes straight to the first control in its panel"
   await userEvent.click(page.elementLocator(buttons(el)[2]!));
   await userEvent.tab();
   expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+});
+
+test("selecting a tab keeps every tab's width and position, though its label turns bold", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><div slot="a">a</div><div slot="b">b</div><div slot="c">c</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [
+    { key: "a", label: "Allergens and dietary" },
+    { key: "b", label: "Availability windows" },
+    { key: "c", label: "Prices", help: { label: "About prices", text: "Prices help." } },
+  ];
+  await el.updateComplete;
+  const strip = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+  const boxes = () =>
+    buttons(el).map((tab) => {
+      const box = tab.getBoundingClientRect();
+      return [box.left + strip.scrollLeft, box.width];
+    });
+  const before = boxes();
+  for (const key of ["b", "c"]) {
+    el.value = key;
+    await el.updateComplete;
+    const selected = el.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!;
+    expect(getComputedStyle(selected).fontWeight).not.toBe(
+      getComputedStyle(buttons(el)[0]!).fontWeight,
+    );
+    expect(boxes()).toEqual(before);
+  }
+  await expect
+    .element(page.elementLocator(buttons(el)[1]!))
+    .toHaveAccessibleName("Availability windows");
 });

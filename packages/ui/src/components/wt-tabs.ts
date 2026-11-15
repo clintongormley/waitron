@@ -115,6 +115,17 @@ export class WtTabs extends LitElement {
         font: inherit;
         cursor: pointer;
       }
+      /* A hidden bold copy sets every label's width, so selecting a tab moves nothing. */
+      .label {
+        display: inline-flex;
+        flex-direction: column;
+      }
+      .bold-copy {
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        font-weight: var(--wt-font-weight-bold);
+      }
       button[aria-selected="true"] {
         color: var(--wt-color-text);
         border-bottom-color: var(--wt-color-primary);
@@ -458,9 +469,10 @@ export class WtTabs extends LitElement {
                 @click=${(event: MouseEvent) => this.#select(event, item.key)}
                 @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
               >
-                ${item.help ? html`<span class="tab-label">${item.label}</span>` : item.label}${
-                  item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing
-                }
+                <span class="label"
+                  ><span class=${item.help ? "tab-label" : nothing}>${item.label}</span
+                  ><span class="bold-copy" aria-hidden="true">${item.label}</span></span
+                >${item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing}
               </button>`,
           )}
         </div>
