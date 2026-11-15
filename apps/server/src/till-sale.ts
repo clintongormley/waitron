@@ -979,7 +979,7 @@ export async function printSaleReceipt(
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
-    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, undefined, personId);
+    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, { personId });
   });
 }
 
