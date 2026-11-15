@@ -3089,6 +3089,17 @@ and "the equipment read answers with the red notice on a full disk with a change
 on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine without
 `WAITRON_FULL_DISK_ROOT` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 
+**2026-11-15 read audit.** The public theme, language, identity and till setup reads, open-bill and
+basket readers, menu/zone reads, kitchen displays, station queues, paid-sale/receipt reads and staff
+schedule reads use write-lock turns without a change-log drain. These are explicit exceptions to the
+usual draining transaction per route. The theme list and logo preview retain ordinary session
+activity on a healthy disk; only after `storage.disk_full` do they repeat their authorization with
+`touch: false` inside a no-drain turn. The floor-state and invoice-delivery status reads keep their
+write-capable transactions; their drains still refuse a pending notification even when no
+reconciliation is due. The real small-filesystem cases in `start-full-disk.e2e.test.ts` check
+pending rows, overdue stamps, permissions, a populated bill, a paid receipt and an actual logo
+image; they do not qualify every GET route.
+
 **The dashboard's full-disk reads (A798-B slice 7).** Measured for the slice
 ([plan](../superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
 small real filesystem: the existing `GET /api/box/status` answered `507 storage.disk_full` on a
@@ -3140,17 +3151,13 @@ has already thrown (inferred, not isolated).
 
 **Still refused.**
 
-- Every other route's own `withTransaction`, read-only or not, while a change waits: its drain is
-  refused. M10 measured it with no stamp due and one waiting change: `GET /api/till`, the
-  session-checked read and PIN sign-in each answered 507, before and after the stamp change (which
-  step refused was not isolated). That was the plan's prototype. On the shipped code,
-  a real-disk probe on macOS (`hdiutil`) with one waiting change and no stamp due answered 507 for
-  both `GET /api/till` and `GET /api/working-orders`. On the second, `requireSession` caught its
-  own drain's refusal and its re-check passed, and the 507 came from the route's own
-  `withTransaction` (`listHeldOrders`, `apps/server/src/working-order.ts`). `GET /api/till` takes
-  no session check and opens its own `withTransaction` around `readTillSetup` (`till-api.ts`), the
-  likely source of its 507 — read, not isolated. The control, with no waiting change, answered 200
-  for both.
+- Other routes that still use a draining `withTransaction` can also answer 507 while a change
+  waits, even if their bodies only read; this audit does not qualify those routes.
+- The floor-state read (`GET /api/tables/state`) and invoice-delivery status
+  (`GET /api/sales/:id/deliveries`) retain write-capable transactions. Their closing change-log
+  drains still answer 507 on a full disk with a pending row, even when no reconciliation is due.
+  The real-disk control in `start-full-disk.e2e.test.ts` answers 200 with no pending row and 507
+  with one for both routes.
 - PIN sign-in, from its own session write: a refused sign-in writes no session.
 - While the disk is full, no device's last-seen time moves, so anything that reads it as a sign of
   life sees the device go quiet.

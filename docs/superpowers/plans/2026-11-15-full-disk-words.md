@@ -23,3 +23,12 @@
 **2026-11-15 02:18 review correction clearance:** the watcher cleared replacing the three-reader failure bridge with a canonical module-notice check on each existing bell read, through `readStaffNoticesInTurns`, with no timer, record or cache. This supersedes PR 1's “without another outbox read per bell poll” limit. Measure the route before/after and a queued sale turn against the equipment read; return to the watcher if the new pass can delay it. The existing post-charge wrapper may classify raw `ENOSPC` to retain charged-card words, with a real-route fault test. Record the existing Retry behavior as the watcher's deliberate limit. These are watcher clearances in Lane K’s `questions.md`, not owner design approval.
 
 **2026-11-15 final watcher dispositions:** at 02:33 the watcher accepted about 0.03 ms more per bell read and 0.02 ms more queued-write wait in the one-venue, empty-outbox Mac fixture, requiring those limits in the PR and no cache. The probe explicitly set filing on; an executed query/no-query control confirms the actual outbox aggregate ran. At 02:44 the watcher cleared storage-only notices on clock/attendance for this cut, with no new Open drawer or Check time action before clock-in. Other notices remain as one line in the same backlog bundle; this cut does not close that remainder of entry 9. No further review of the completed fixes is required by that clearance.
+
+**2026-11-15 cut 2 clearance:** the watcher at 05:41 cleared no-drain turns only for reads
+reproduced on the small filesystem, keeping authorization and reconciliation, with no membership
+writer change or new helper. At 06:10, after the route audit exceeded the original forecast, the
+watcher cleared one PR up to about 650 changed lines, including reproduced kitchen
+display/pass/station, settled-sale/receipt and theme-logo reads. Invoice-delivery status keeps its
+claim-expiry write and its 507; genuine floor reconciliation also stays transactional. Past that
+size, land the completed portion and leave the remainder in the same bundle. These are watcher
+clearances in Lane K’s `questions.md`, not owner design approval.

@@ -5071,7 +5071,8 @@ export interface HeldOrder {
 
 /** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderSummary[]> {
-  return withTransaction(deps.db, async (tx) => {
+  return deps.db.withWriteLock(async () => {
+    const tx = deps.db;
     const rows = await tx
       .select({
         id: workingOrders.id,
@@ -5151,7 +5152,8 @@ export function getPlacedCounterOrder(deps: WorkingOrderDeps, id: string): Promi
 }
 
 async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): Promise<HeldOrder> {
-  return withTransaction(deps.db, async (tx) => {
+  return deps.db.withWriteLock(async () => {
+    const tx = deps.db;
     const [order] = await tx
       .select({
         id: workingOrders.id,
@@ -7615,7 +7617,8 @@ export interface CounterWaitingOrder {
  * handover, oldest first.
  */
 export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<CounterWaitingOrder[]> {
-  return withTransaction(deps.db, async (tx) => {
+  return deps.db.withWriteLock(async () => {
+    const tx = deps.db;
     const firedOrders = tx
       .selectDistinct({ id: workingOrderLines.workingOrderId })
       .from(ticketItems)

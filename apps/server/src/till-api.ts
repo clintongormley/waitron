@@ -1466,12 +1466,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // `everyone`, as a roster of colleagues does: that is the list a request with no device gets.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
-      // Before the transaction: `tryReadDevice` opens one of its own when a sighting is due.
+      // Resolve the device before this turn: a due sighting takes a turn of its own.
       const device =
         c.req.query("everyone") === "true"
           ? null
           : await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const staff = await withTransaction(deps.db, async (tx) => {
+      const staff = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         return device === null
           ? listActiveStaff(tx)
           : listStaffAdmittedTo(tx, device.deviceProfileId);
@@ -1483,12 +1484,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // Unauthenticated boot info the till needs before login; it carries no secrets.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
-      // Resolved before the boot transaction: `tryReadDevice` opens one of its own when a sighting
-      // is due.
+      // Resolve the device before this turn: a due sighting takes a turn of its own.
       const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const held = await readNodeMembership(deps.db);
       const setup = completeTillSetup(
-        await withTransaction(deps.db, (tx) => readTillSetup(tx, deps, device)),
+        await deps.db.withWriteLock(() => readTillSetup(deps.db, deps, device)),
       );
       return c.json({
         ...setup,
@@ -1514,7 +1514,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/default-service-zone/offers", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const result = await withTransaction(deps.db, async (tx) => {
+      const result = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         const device = await currentZoneDevice(tx, session);
         const selection = await VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         const counters = selection.zones.filter(
@@ -1557,7 +1558,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      const result = await withTransaction(deps.db, async (tx) => {
+      const result = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
         // Refuse an incomplete policy before offering its dishes.
@@ -1642,7 +1644,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = session;
       const asked = c.req.query("zoneId");
       const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
-      const { state, setupRead } = await withTransaction(deps.db, async (tx) => {
+      const { state, setupRead } = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         if (zoneId !== undefined) await checkZones(tx, session, [{ zoneId }]);
         const zone =
           zoneId === undefined
@@ -2129,8 +2132,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const printer = await withTransaction(deps.db, (tx) =>
-        resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin),
+      const printer = await deps.db.withWriteLock(() =>
+        resolveInvoicePrinter(deps.db, requestCfg(deps.cfg, session).origin),
       );
       // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
       const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
@@ -2214,7 +2217,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      return c.json(await withTransaction(deps.db, (tx) => listStationsToday(tx)));
+      return c.json(await deps.db.withWriteLock(() => listStationsToday(deps.db)));
     }),
   );
 
@@ -2224,10 +2227,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
-      const queue = await withTransaction(deps.db, async (tx) => ({
-        items: await listStationQueue(tx, id),
-        notices: await VENUE_SERVICE.listStationNotices(tx, id),
-        printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
+      const queue = await deps.db.withWriteLock(async () => ({
+        items: await listStationQueue(deps.db, id),
+        notices: await VENUE_SERVICE.listStationNotices(deps.db, id),
+        printersDown: (await stationPrintersDown(deps.db, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
       }));
@@ -2282,8 +2285,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/expo/board", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const board = await withTransaction(deps.db, (tx) =>
-        readScopedPassBoard(tx, { stationIds: null, zoneIds: null }, { release: false }),
+      const board = await deps.db.withWriteLock(() =>
+        readScopedPassBoard(deps.db, { stationIds: null, zoneIds: null }, { release: false }),
       );
       return c.json({ board });
     }),
@@ -2342,7 +2345,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const ticket = await withTransaction(deps.db, async (tx) => {
+      const ticket = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
@@ -2360,7 +2364,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const status = await withTransaction(deps.db, async (tx) => {
+      const status = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id, recipient: sales.counterpartyTaxId })
@@ -2641,7 +2646,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/drawer/authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const authorizers = await withTransaction(deps.db, async (tx) => {
+      const authorizers = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         return listActivePersonsWithPermission(tx, "cash.drawer");
       });
       return c.json(authorizers);
@@ -2738,7 +2744,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       return c.json(
-        await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.rectify")),
+        await deps.db.withWriteLock(() => listActivePersonsWithPermission(deps.db, "sale.rectify")),
       );
     }),
   );
@@ -2774,7 +2780,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/tables", (c) =>
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
-      const tables = await withTransaction(deps.db, async (tx) => {
+      const tables = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         const scope = await readZoneScope(tx, device.deviceProfileId);
         return (await listTables(tx, deps.clock.now().instant)).filter((table) =>
           inScope(scope, table.zoneId),
@@ -2801,7 +2808,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/zones", (c) =>
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
-      const zones = await withTransaction(deps.db, async (tx) => {
+      const zones = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         const scope = await readZoneScope(tx, device.deviceProfileId);
         const visible = (await listZones(tx)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
@@ -3211,7 +3219,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const bills = await withTransaction(deps.db, async (tx) => {
+      const bills = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
         return readPartyBills(tx, partyId, log);
       });
@@ -3223,7 +3232,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const groups = await withTransaction(deps.db, async (tx) => {
+      const groups = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
         return {
           ...(await listOrderGroups(tx, partyId)),
@@ -3238,7 +3248,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const current = await withTransaction(deps.db, async (tx) => {
+      const current = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
         return readCurrentOrders(tx, partyId);
       });
@@ -3553,7 +3564,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
       const partyId = requireDraftPartyParam(c.req.param("id"));
-      const answer = await withTransaction(deps.db, async (tx) => {
+      const answer = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
         const drafts = await readDrafts(tx, deps.cfg, partyId);
         const family = await partyFamily(tx, partyId);
@@ -3578,7 +3590,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
-      const answer = await withTransaction(deps.db, async (tx) => {
+      const answer = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
         const family = (await readBillsOfParties(tx, [partyId], log)).get(partyId)!;
         const bills = [];
@@ -3964,7 +3977,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const tab = await withTransaction(deps.db, async (tx) => {
+      const tab = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ orderId: id }]);
         return {
           lines: await readTabLines(tx, id),

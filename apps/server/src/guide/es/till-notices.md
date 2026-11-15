@@ -31,11 +31,11 @@ alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún ne
 se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 
 **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
-no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
-encargado tiene que liberar espacio en el servidor, en la
-[página Estado del servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de
-reserva para arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres
-unos 24 MB.
+no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. Evita
+cerrar tu sesión mientras se libera espacio: volver a iniciar sesión también requiere espacio en
+disco. El encargado tiene que liberar espacio en el servidor, en la [página Estado del
+servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de reserva para
+arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres unos 24 MB.
 
 **No se pueden registrar ventas: la hora del servidor es incorrecta · Avisa al encargado** es rojo.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que

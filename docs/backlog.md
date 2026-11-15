@@ -1625,7 +1625,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   judges only changes carrying the dashboard's cookie; a fix needs a till-side list of trusted pages.
   [Detail](backlog/box.md#till-changes-do-not-check-which-page-sent-them)
 
-- **Full disk: the till read that fails, and the words** (remaining connection warnings, reads, refusal words, pre-sign-in notices, kitchen sightings and strip questions, size M). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
+- **Full disk: the till read that fails, and the words** (remaining connection warnings, floor and invoice delivery status reads, refusal words, pre-sign-in notices, kitchen sightings and strip questions, size M). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
 
 - **Migrating a box drops the change-feed triggers one statement at a time, outside a
   transaction.**

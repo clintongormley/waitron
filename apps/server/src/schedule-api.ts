@@ -68,7 +68,8 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
       const { personId } = await requireSession(deps, c);
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
-      const rows = await asStaff(async (tx) => {
+      const rows = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         const shifts = await listShiftsForPerson(tx, { personId, from, to });
         const descriptions = await deps.describeShifts?.(
           tx,
@@ -86,7 +87,7 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
   app.get("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) => listSwapsForPerson(tx, { personId }));
+      const rows = await deps.db.withWriteLock(() => listSwapsForPerson(deps.db, { personId }));
       return c.json(rows);
     }),
   );
@@ -127,7 +128,7 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
   app.get("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) => listAbsencesForPerson(tx, { personId }));
+      const rows = await deps.db.withWriteLock(() => listAbsencesForPerson(deps.db, { personId }));
       return c.json(rows);
     }),
   );

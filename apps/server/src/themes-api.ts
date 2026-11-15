@@ -24,7 +24,7 @@ import {
 } from "@waitron/server-kit";
 import { readCurrentImageMetadata } from "@waitron/media";
 import { safeWidthDots, type MonoRaster } from "@waitron/printing";
-import { AppError, MEDIA_FILENAME } from "@waitron/shared";
+import { AppError, diskFullIn, MEDIA_FILENAME } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
 import {
@@ -158,7 +158,7 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
   // logo's public rendition addresses, and carries no secrets.
   app.get("/api/theme", (c) =>
     run(c, log, async () => {
-      const source = await withTransaction(deps.db, (tx) => readVenueThemeSource(tx));
+      const source = await deps.db.withWriteLock(() => readVenueThemeSource(deps.db));
       return c.json(venueThemeAnswer(source), 200, { "Cache-Control": "no-store" });
     }),
   );
@@ -166,10 +166,23 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
   app.get("/management-api/themes", (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
-      const list = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
-        return listCustomThemes(tx);
-      });
+      let list: Awaited<ReturnType<typeof listCustomThemes>>;
+      try {
+        list = await withTransaction(deps.db, async (tx) => {
+          await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
+          return listCustomThemes(tx);
+        });
+      } catch (error) {
+        if (!diskFullIn(error)) throw error;
+        list = await deps.db.withWriteLock(async () => {
+          await authorizeManager(deps.db, {
+            managementSessionId,
+            permission: "venue.view",
+            touch: false,
+          });
+          return listCustomThemes(deps.db);
+        });
+      }
       return c.json({ themes: list.themes.map(themeAnswerOf), inUse: list.inUse }, 200);
     }),
   );
@@ -178,10 +191,23 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const image = requireImageQuery(c.req.queries());
-      const current = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
-        return readCurrentImageMetadata(tx, image);
-      });
+      let current: Awaited<ReturnType<typeof readCurrentImageMetadata>>;
+      try {
+        current = await withTransaction(deps.db, async (tx) => {
+          await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
+          return readCurrentImageMetadata(tx, image);
+        });
+      } catch (error) {
+        if (!diskFullIn(error)) throw error;
+        current = await deps.db.withWriteLock(async () => {
+          await authorizeManager(deps.db, {
+            managementSessionId,
+            permission: "venue.view",
+            touch: false,
+          });
+          return readCurrentImageMetadata(deps.db, image);
+        });
+      }
       // Drawn outside the transaction: sharp must not run holding the write lock.
       const paper = async (width: "80mm" | "58mm") => {
         const raster =
