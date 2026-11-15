@@ -481,6 +481,97 @@ describe("an extra that is a parent with Active variants", () => {
   });
 });
 
+describe("a variant offered as an extras item", () => {
+  // Taken away, a variant is charged its own takeaway class, else its own served class, else its
+  // parent's takeaway class, else its parent's served class. Each item below stops at a different
+  // step, and the first three are charged something other than their parent's served class.
+  it("carries the takeaway VAT class its variant resolves to, on every path", async () => {
+    const items = await run(async (tx) => {
+      const parent = async (name: string, vatClass: "reduced" | "zero", takeaway?: "general") =>
+        (
+          await createProduct(tx, {
+            menuId,
+            categoryId: null,
+            unitId: null,
+            name,
+            unitPrice: "2.00",
+            vatClass,
+            ...(takeaway ? { takeawayVatClass: takeaway } : {}),
+          })
+        ).id;
+      const cola = await parent("cola staff", "reduced", "general");
+      const juice = await parent("juice staff", "zero");
+      const variant = (
+        parentId: string,
+        name: string,
+        own: Partial<typeof productRows.$inferInsert>,
+      ) =>
+        tx
+          .insert(productRows)
+          .values({
+            menuId,
+            parentId,
+            name,
+            unitPrice: null,
+            vatClass: null,
+            dietaryDeclarations: null,
+            variantOrder: 0,
+            ...own,
+          })
+          .returning({ id: productRows.id })
+          .then(([row]) => row!.id);
+      const variants = {
+        ownTakeaway: await variant(cola, "Jug", {
+          vatClass: "super_reduced",
+          takeawayVatClass: "zero",
+        }),
+        ownServed: await variant(cola, "Bottle", { vatClass: "super_reduced" }),
+        parentsTakeaway: await variant(cola, "Can", {}),
+        parentsServed: await variant(juice, "Carton", {}),
+      };
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Drinks staff",
+          customerName: { en: "Add a drink" },
+          kitchenName: "DRK",
+          minPicks: 0,
+          maxPicks: 1,
+          items: Object.values(variants).map((productId) => ({ productId })),
+        },
+        "en",
+      );
+      await writeProductModifiers(tx, ids.burger, [{ kind: "extras", id: list.id }]);
+      return variants;
+    });
+
+    const offered = await run((tx) =>
+      readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: offerId },
+      ]),
+    );
+    const { products: available } = await run((tx) => listAvailableProducts(tx));
+    const paths = {
+      product: offered.get(ids.burger)!,
+      offer: offered.get(offerId)!,
+      listAvailableProducts: available.find((product) => product.id === ids.burger)!
+        .offeredModifiers,
+    };
+
+    for (const [holder, [list]] of Object.entries(paths)) {
+      const classes = (productId: string) => {
+        const item = list!.kind === "extras" && list!.items.find((i) => i.productId === productId);
+        return item ? [item.vatClass, item.takeawayVatClass] : null;
+      };
+      expect(classes(items.ownTakeaway), holder).toEqual(["super_reduced", "zero"]);
+      expect(classes(items.ownServed), holder).toEqual(["super_reduced", "super_reduced"]);
+      expect(classes(items.parentsTakeaway), holder).toEqual(["reduced", "general"]);
+      expect(classes(items.parentsServed), holder).toEqual(["zero", "zero"]);
+    }
+  });
+});
+
 describe("the extras items' product ids alone", () => {
   // Bacon is Unavailable, which a published document still lists; cheese is Inactive and olives
   // has an Active variant, which it does not.

@@ -941,6 +941,37 @@ describe("menu operations", () => {
     });
   });
 
+  it("listAvailableProducts carries a product's takeaway VAT class, and its served class when it sets none", async () => {
+    await asVenue(async (tx) => {
+      const cat = await createMenu(tx, { name: "Deli" });
+      const soup = await createProduct(tx, {
+        menuId: cat.id,
+        categoryId: null,
+        name: "soup",
+        unitId: eachUnitId,
+        unitPrice: "4.00",
+        vatClass: "reduced",
+        takeawayVatClass: "general",
+      });
+      const bread = await createProduct(tx, {
+        menuId: cat.id,
+        categoryId: null,
+        name: "bread",
+        unitId: eachUnitId,
+        unitPrice: "1.00",
+        vatClass: "super_reduced",
+      });
+      await assignMenuToVenue(tx, cat.id);
+      const available = (await listAvailableProducts(tx)).products;
+      const classes = (id: string) => {
+        const row = available.find((product) => product.id === id)!;
+        return [row.vatClass, row.takeawayVatClass];
+      };
+      expect(classes(soup.id)).toEqual(["reduced", "general"]);
+      expect(classes(bread.id)).toEqual(["super_reduced", "super_reduced"]);
+    });
+  });
+
   it("listAvailableProducts carries a measure unit's switch, and no key for one without it", async () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Bar" });
