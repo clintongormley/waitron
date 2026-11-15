@@ -28,30 +28,34 @@ function issueDay(issuedAt: string, offsetMinutes: number): string {
   return new Date(Date.parse(issuedAt) + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
+function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
+  const { counterpartyTaxId: taxId, counterpartyLegalName: legalName } = sale;
+  const { counterpartyCountryCode: countryCode, counterpartyAddress: address } = sale;
+  if (taxId === null) return {};
+  if (legalName === null || countryCode === null || address === null) {
+    throw new Error("A sale names a customer's tax number without their name, country or address");
+  }
+  return {
+    recipient: {
+      taxId,
+      ...storedRecipientIdentifier(
+        sale.counterpartyIdentifierType,
+        sale.counterpartyIdentifierCountryCode,
+      ),
+      legalName,
+      countryCode,
+      address,
+    },
+  };
+}
+
 /**
  * The one place a stored sale is typed for printing: an ordinary sale is F1 when it names a
  * customer and F2 otherwise; a corrective is R4 when it names a customer (only a replacement of a
  * full invoice does) and R5 otherwise, and names the invoice it corrects.
  */
 export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promise<InvoiceTyping> {
-  const recipient =
-    sale.counterpartyTaxId !== null &&
-    sale.counterpartyLegalName !== null &&
-    sale.counterpartyCountryCode !== null &&
-    sale.counterpartyAddress !== null
-      ? {
-          recipient: {
-            taxId: sale.counterpartyTaxId,
-            ...storedRecipientIdentifier(
-              sale.counterpartyIdentifierType,
-              sale.counterpartyIdentifierCountryCode,
-            ),
-            legalName: sale.counterpartyLegalName,
-            countryCode: sale.counterpartyCountryCode,
-            address: sale.counterpartyAddress,
-          },
-        }
-      : {};
+  const recipient = storedRecipient(sale);
   const full = sale.counterpartyTaxId !== null;
   if (sale.correctsSaleId === null) return { invoiceType: full ? "F1" : "F2", ...recipient };
   const [corrected] = await tx

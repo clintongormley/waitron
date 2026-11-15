@@ -12,7 +12,12 @@ import {
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
+import {
+  receiptDateTime,
+  receiptDateTimeNumeric,
+  receiptDay,
+  receiptDayNumeric,
+} from "./receipt-dates.js";
 import { formatAmount, formatMoney } from "./receipt-money.js";
 
 describe("format-neutral invoice content", () => {
@@ -1655,8 +1660,9 @@ describe("the corrective invoice (R5)", () => {
       const label = receiptLabelsFor(locale);
       const lines = printed({ ...REPLACEMENT, saleDay: SALE_DAY }, paperWidth, locale);
       const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
       expect(joined(lines), lines.join("\n")).toContain(
-        `R/7 ${date(CORRECTIVE.issuedAt, locale, 60)} ${label.saleDate} ${receiptDay(SALE_DAY, locale)} ${label.replacesInvoiceInFull}`,
+        `R/7 ${date(CORRECTIVE.issuedAt, locale, 60)} ${label.saleDate} ${day(SALE_DAY, locale)} ${label.replacesInvoiceInFull}`,
       );
     },
   );
@@ -1704,12 +1710,13 @@ describe("the corrective invoice (R5)", () => {
       const lines = printed({ ...FULL_REPLACEMENT, saleDay: "2026-08-17" }, paperWidth, locale);
       const text = joined(lines);
       const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
       expect(text, lines.join("\n")).toContain(
         [
           label.correctiveInvoice,
           `${label.invoiceHeading} R/8`,
           `${label.date} ${receiptDateTime(FULL_REPLACEMENT.issuedAt, locale, 120)}`,
-          `${label.saleDate} ${receiptDay("2026-08-17", locale)}`,
+          `${label.saleDate} ${day("2026-08-17", locale)}`,
           label.replacesInvoiceInFull,
           `FF/1 ${date(FULL.issuedAt, locale, 120)}`,
           `${label.rectificationAmount} ${formatMoney("0.00", locale)}`,

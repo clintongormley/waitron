@@ -26,6 +26,7 @@ import { printedCommands } from "./testing/decode-ticket.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { deliversAsFullInvoice, deliversAsFullInvoiceSql } from "./invoice-selection.js";
+import { readInvoiceTyping } from "./invoice-typing.js";
 
 const AT = "2026-10-14T23:30:00.000Z";
 let v: BillVenue;
@@ -261,6 +262,45 @@ describe("the invoice a corrective names", () => {
     expect(sameDay).not.toHaveProperty("saleDay");
     expect(plain).not.toHaveProperty("saleDay");
   });
+
+  it("compares the real day of sale with the issue day in the sale's saved offset, not UTC's", async () => {
+    // Issued at 23:30 UTC on the 14th with the venue's +120: 01:30 on the 15th where it was sold.
+    const local = await issue(true);
+    const utc = await issue(true);
+    const [sameLocalDay, sameUtcDay] = await withTransaction(v.db, async (tx) => [
+      await readTransactionReceipt(
+        v.backend,
+        tx,
+        v.cfg,
+        await insertCorrective(tx, local.saleId, { replaces: true, supplyDay: "2026-10-15" }),
+      ),
+      await readTransactionReceipt(
+        v.backend,
+        tx,
+        v.cfg,
+        await insertCorrective(tx, utc.saleId, { replaces: true, supplyDay: "2026-10-14" }),
+      ),
+    ]);
+    expect(sameLocalDay.issuedOffsetMinutes).toBe(120);
+    expect(sameLocalDay).not.toHaveProperty("saleDay");
+    expect(sameUtcDay.saleDay).toBe("2026-10-14");
+  });
+});
+
+describe("a stored customer missing a part", () => {
+  it.each(["counterpartyLegalName", "counterpartyCountryCode", "counterpartyAddress"] as const)(
+    "refuses to type a sale whose tax number has no %s, rather than print it without its customer",
+    async (missing) => {
+      const sale = await issue(false, true);
+      await withTransaction(v.db, async (tx) => {
+        const [row] = await tx.select().from(sales).where(eq(sales.id, sale.saleId));
+        await expect(readInvoiceTyping(tx, row!)).resolves.toMatchObject({ invoiceType: "F1" });
+        await expect(readInvoiceTyping(tx, { ...row!, [missing]: null })).rejects.toThrow(
+          "names a customer's tax number without their name, country or address",
+        );
+      });
+    },
+  );
 });
 
 describe("deliversAsFullInvoice", () => {

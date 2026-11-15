@@ -29,7 +29,12 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
-import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
+import {
+  receiptDateTime,
+  receiptDateTimeNumeric,
+  receiptDay,
+  receiptDayNumeric,
+} from "./receipt-dates.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -256,7 +261,10 @@ export function buildReceiptDocument({
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
     row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
   }
-  if (result.saleDay !== undefined) row(label.saleDate, receiptDay(result.saleDay, locale));
+  if (result.saleDay !== undefined) {
+    const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
+    row(label.saleDate, day(result.saleDay, locale));
+  }
   if (result.corrects) {
     text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
     dated(result.corrects);
