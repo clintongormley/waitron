@@ -1293,20 +1293,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
-- **A1534. The device editor and the devices table made plain, and one profile per kitchen
-  screen (owner, 2026-11-14).** Follows A1529, whose profile editor tabs this changes, and A1535's
-  renames. Changes the venue-service and core schemas: rebuild their starting migrations, no data
-  migration (pre-live). The watcher (15 November 02:58) requires the remaining device/profile work
-  split by area in the next amendment, in pull requests of about 1,000 lines or less.
-  - **An inherited value shows as the value itself in grey italics**, the house style for an
-    inherited default (the shared combobox's empty value, the product editor's inherited
-    nutrition): "Demo printer" in grey italics, never "Use profile default: Demo printer" or "Use
-    the profile's setting". A value set on the device shows in normal text. Same on the Devices
-    table: no "(default)" after an inherited printer or drawer.
-  - **The device editor is split into headed sections, not tabs**: name and profile, then
-    Printers, Card reader and Made here. Keep Approved profiles under Name and profile: the owner allowed nine fields on 15 November 05:25.
-
-
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not
   reactivate a disabled account or replace unavailable email delivery. Design a recovery choice

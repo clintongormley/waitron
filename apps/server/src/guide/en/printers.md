@@ -44,7 +44,7 @@ name and settings. Assign its devices and device profiles again.
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.
 
 In **Devices**, choose **Edit** from the device's row menu. **Name and profile** includes
-**Approved profiles**; **Printers**, **Card reader** and **Made here** group the other settings.
+**Profiles staff can switch to**; **Printers**, **Card reader** and **Made here** group the other settings.
 Grey italic equipment names inherit the profile's default. Choose a named item to set it on this
 device; choose the first entry again to inherit. The Devices table uses the same style.
 

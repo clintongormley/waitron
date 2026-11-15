@@ -2925,6 +2925,7 @@ describe("the Edit dialog", () => {
           expect(cell.textContent!.trim()).toBe(name);
           expect(getComputedStyle(cell).fontStyle).toBe(inherited ? "italic" : "normal");
           if (inherited) expect(getComputedStyle(cell).color).toBe(muted);
+          else expect(getComputedStyle(cell).color).not.toBe(muted);
         }
         dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
         await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
@@ -2949,6 +2950,7 @@ describe("the Edit dialog", () => {
         const explicit = receipt.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
         expect(explicit.textContent!.trim()).toBe("Kitchen");
         expect(getComputedStyle(explicit).fontStyle).toBe("normal");
+        expect(getComputedStyle(explicit).color).not.toBe(muted);
         await chooseOption(receipt, "");
         await flush(el);
         expect(getComputedStyle(explicit).fontStyle).toBe("italic");
@@ -3072,6 +3074,9 @@ describe("the Edit dialog", () => {
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
           `${name}${test.a4 ? " · A4" : ""}`,
         );
+        expect(
+          getComputedStyle(dq(el.shadowRoot!, "[data-test=device-invoice-t1]")!).fontStyle,
+        ).toBe(test.defaulted ? "italic" : "normal");
         const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
         expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
       });

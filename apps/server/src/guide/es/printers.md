@@ -47,7 +47,7 @@ Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perf
 Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
 
 En **Dispositivos**, elige **Editar** en el menú de la fila del dispositivo. **Nombre y perfil**
-incluye **Perfiles aprobados**; **Impresoras**, **Lector de tarjetas** y **Se prepara aquí** agrupan
+incluye **Perfiles a los que el personal puede cambiar**; **Impresoras**, **Lector de tarjetas** y **Se prepara aquí** agrupan
 los demás ajustes. Los nombres de equipos en gris y cursiva heredan el valor del perfil. Elige un
 equipo para fijarlo en este dispositivo; vuelve a elegir la primera opción para heredarlo.
 La tabla de Dispositivos usa el mismo estilo.
