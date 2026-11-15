@@ -18,8 +18,9 @@ import { mountMeApi } from "./me-api.js";
 // Pins the route wiring around the passkey ceremonies — gating, body screening, the login cookie and
 // the credential row — not the crypto, which `@waitron/identity`'s `passkey.test.ts` covers.
 //
-// Only the two verify calls are stubbed: a genuine authenticator response cannot be synthesised in a
-// test. `@simplewebauthn/server` is a devDependency here so the specifier resolves to the same module
+// Only the two verify calls are stubbed, so these cases pin route wiring;
+// management-api.passkey-origins.test.ts runs the real verifier through these routes.
+// `@simplewebauthn/server` is a devDependency here so the specifier resolves to the same module
 // the identity source imports, which is what lets `vi.mock` match across the package boundary.
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),

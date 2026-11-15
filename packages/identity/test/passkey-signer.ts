@@ -10,7 +10,7 @@ function cborHead(major: number, n: number): Buffer {
 }
 
 /** The CBOR subset a `none` attestation and a COSE key need. */
-export function cbor(value: unknown): Buffer {
+function cbor(value: unknown): Buffer {
   if (typeof value === "number") return value >= 0 ? cborHead(0, value) : cborHead(1, -1 - value);
   if (typeof value === "string") {
     const b = Buffer.from(value);
@@ -26,9 +26,9 @@ export function cbor(value: unknown): Buffer {
   throw new Error("unsupported CBOR value");
 }
 
-export const rpIdHash = (rpId: string) => createHash("sha256").update(rpId).digest();
+const rpIdHash = (rpId: string) => createHash("sha256").update(rpId).digest();
 
-export function newKey(): { cose: Buffer; privateKey: KeyObject } {
+function newKey(): { cose: Buffer; privateKey: KeyObject } {
   const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const jwk = publicKey.export({ format: "jwk" });
   const cose = cbor(

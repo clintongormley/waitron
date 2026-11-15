@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { webauthnCredentials } from "@waitron/identity";
@@ -10,8 +10,8 @@ import type { Logger } from "./logger.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
-import { venuePasskeyOrigins } from "./passkey-origins.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 // The WebAuthn verifier is the real one: the assertion is signed with `node:crypto`.
@@ -25,6 +25,8 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const noopLog: Logger = () => {};
 
+const VERIFICATION_FAILED = { error: { code: "passkey.verification_failed", params: {} } };
+
 function mountApp(): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -35,7 +37,6 @@ function mountApp(): Hono {
       secureCookies: true,
       rpId: RP_ID,
       origin: VENUE_ORIGIN,
-      passkeyOrigins: venuePasskeyOrigins(suite.db, VENUE_ORIGIN),
       credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
@@ -49,7 +50,6 @@ function mountApp(): Hono {
       credentialKeyRing: TOTP_KEY_RING,
       rpId: RP_ID,
       origin: VENUE_ORIGIN,
-      passkeyOrigins: venuePasskeyOrigins(suite.db, VENUE_ORIGIN),
     },
     noopLog,
   );
@@ -57,18 +57,16 @@ function mountApp(): Hono {
 }
 
 async function chartListing(nodes: { nodeId: string; contactUrl: string }[]): Promise<void> {
-  await writeNodeMembership(suite.db, {
-    body: {
-      term: 1,
+  await writeNodeMembership(
+    suite.db,
+    signedMembershipDoc(1, {
+      signerNodeId: nodes[0]!.nodeId,
       nodes: nodes.map((n, i) => ({
         ...n,
         standing: i === 0 ? "serving-primary" : "serving-secondary",
       })),
-    },
-    signerNodeId: nodes[0]!.nodeId,
-    signature: "sig",
-    endorsements: [],
-  });
+    }),
+  );
 }
 
 async function seedPasskey(personId: string, rpId = RP_ID) {
@@ -110,10 +108,6 @@ async function signInAt(
 }
 
 describe("a dashboard passkey sign-in made at a box's own name", () => {
-  beforeEach(async () => {
-    await chartListing([{ nodeId: randomUUID(), contactUrl: "https://box-ef01.waitron.local" }]);
-  });
-
   it("signs in when the held chart lists that box", async () => {
     await chartListing([
       { nodeId: randomUUID(), contactUrl: "https://box-ef01.waitron.local" },
@@ -126,19 +120,13 @@ describe("a dashboard passkey sign-in made at a box's own name", () => {
     expect(res.headers.get("set-cookie")).toMatch(/^waitron_management_session=/);
   });
 
-  it("is refused when the held chart does not list that box", async () => {
-    const res = await signInAt(ABCD_ORIGIN);
-
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({
-      error: { code: "passkey.verification_failed", params: {} },
-    });
-  });
-
-  it("reads the chart on each request, so a box listed after the API was mounted counts", async () => {
+  it("is refused while the held chart does not list that box, and accepted once it does, on the same mounted API", async () => {
+    await chartListing([{ nodeId: randomUUID(), contactUrl: "https://box-ef01.waitron.local" }]);
     const app = mountApp();
     const passkey = await seedPasskey(await seedPerson(suite.db, "manager"));
-    expect((await signInAt(ABCD_ORIGIN, app, "", passkey)).status).toBe(401);
+    const refused = await signInAt(ABCD_ORIGIN, app, "", passkey);
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toEqual(VERIFICATION_FAILED);
 
     await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
 
@@ -188,9 +176,7 @@ describe("a fresh sign-in check made at a box's own name", () => {
     const res = await checkAt(ABCD_ORIGIN);
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
-      error: { code: "passkey.verification_failed", params: {} },
-    });
+    expect(await res.json()).toEqual(VERIFICATION_FAILED);
   });
 });
 
@@ -229,10 +215,6 @@ describe("enrolling a passkey made at a box's own name", () => {
 describe("a passkey sign-in through the Cloud remote-staff address", () => {
   const STAFF = "https://staff.example.test";
 
-  beforeEach(async () => {
-    await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
-  });
-
   it("is checked against the request's own address", async () => {
     const passkey = await seedPasskey(await seedPerson(suite.db, "manager"), "staff.example.test");
 
@@ -242,10 +224,12 @@ describe("a passkey sign-in through the Cloud remote-staff address", () => {
   });
 
   it("is refused at a box the chart lists, which only a local request may use", async () => {
-    const passkey = await seedPasskey(await seedPerson(suite.db, "manager"));
+    await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
+    const passkey = await seedPasskey(await seedPerson(suite.db, "manager"), "staff.example.test");
 
     const res = await signInAt(ABCD_ORIGIN, createStaffApp(mountApp(), STAFF), STAFF, passkey);
 
     expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(VERIFICATION_FAILED);
   });
 });

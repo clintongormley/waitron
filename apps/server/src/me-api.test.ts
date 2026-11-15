@@ -3,7 +3,13 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, personRoles, roles, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  personRoles,
+  roles,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -1571,6 +1577,25 @@ describe("session proof routes", () => {
       )
     ).rows;
     expect(row!.proved_at).toEqual(expect.any(String));
+  });
+  it("checks a password without reading the server chart, which only a passkey needs", async () => {
+    const cookie = await cookieFor(manager);
+    await suite.db
+      .update(persons)
+      .set({ passwordHash: hashPassword("fresh password") })
+      .where(eq(persons.id, manager));
+    // A chart with no body: listing its servers throws, as any failed chart read would.
+    await writeNodeMembership(suite.db, { body: null } as never);
+    try {
+      const app = mountApp({ rpId: "waitron.local", origin: "https://waitron.local" });
+      const response = await send(app, "POST", "/management-api/session/me/fresh-sign-in", {
+        cookie,
+        body: { method: "password", password: "fresh password" },
+      });
+      expect(response.status).toBe(204);
+    } finally {
+      await suite.db.execute(sql`delete from node_membership`);
+    }
   });
   it("requires a live session for password and passkey confirmation", async () => {
     for (const suffix of ["", "/passkey-options"]) {

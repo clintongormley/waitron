@@ -1,4 +1,5 @@
-import { isRemoteStaffRequest, managementSite, passkeyVerifySite } from "./request-from-box.js";
+import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
+import { passkeyVerifySite, venuePasskeyOrigins } from "./passkey-origins.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
@@ -152,11 +153,9 @@ export interface ManagementApiDeps {
   secureCookies: boolean;
   /** The WebAuthn Relying Party ID passkeys are bound to (`config.ts`'s `managementRpId`). */
   rpId: string;
-  /** The exact served origin, scheme and port included, that each ceremony's response is verified
-   * against. */
+  /** The exact served origin, scheme and port included; a local ceremony's response is checked
+   * against what `venuePasskeyOrigins` answers for it. */
   origin: string;
-  /** The origins a local request's passkey may be verified against, in place of `origin`. */
-  passkeyOrigins?: () => Promise<readonly string[]>;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
@@ -711,6 +710,7 @@ export function mountManagementApi(
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
   const passkeySite = (c: Context) => managementSite(c, deps);
+  const passkeyOrigins = venuePasskeyOrigins(deps.db, deps.origin);
   const secureCookie = (c: Context) => deps.secureCookies || isRemoteStaffRequest(c);
   const googleRedirect = (c: Context) =>
     isRemoteStaffRequest(c)
@@ -1883,7 +1883,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const site = await passkeyVerifySite(c, deps);
+      const site = await passkeyVerifySite(c, deps, passkeyOrigins);
       const out = await withTransaction(deps.db, async (tx) => {
         await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
@@ -1919,7 +1919,7 @@ export function mountManagementApi(
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const site = await passkeyVerifySite(c, deps);
+      const site = await passkeyVerifySite(c, deps, passkeyOrigins);
       const session = await withTransaction(deps.db, async (tx) => {
         return finishPasskeyAuthentication(tx, {
           challengeHandle,

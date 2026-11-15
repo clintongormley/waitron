@@ -2,23 +2,22 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venuePasskeyOrigins } from "./passkey-origins.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function holdChart(): Promise<void> {
-  await writeNodeMembership(suite.db, {
-    body: {
-      term: 3,
+  await writeNodeMembership(
+    suite.db,
+    signedMembershipDoc(3, {
+      signerNodeId: "a",
       nodes: [
         { nodeId: "a", contactUrl: "https://box-aaaa.waitron.local", standing: "serving-primary" },
         { nodeId: "b", contactUrl: "https://box-bbbb.waitron.local", standing: "evicted" },
         { nodeId: "c", contactUrl: "", standing: "serving-secondary" },
       ],
-    },
-    signerNodeId: "a",
-    signature: "sig",
-    endorsements: [],
-  });
+    }),
+  );
 }
 
 describe("venuePasskeyOrigins", () => {
@@ -32,9 +31,10 @@ describe("venuePasskeyOrigins", () => {
   });
 
   it("lists only an https address under the venue's name, as its origin", async () => {
-    await writeNodeMembership(suite.db, {
-      body: {
-        term: 4,
+    await writeNodeMembership(
+      suite.db,
+      signedMembershipDoc(4, {
+        signerNodeId: "a",
         nodes: [
           {
             nodeId: "a",
@@ -55,11 +55,8 @@ describe("venuePasskeyOrigins", () => {
           { nodeId: "e", contactUrl: "not a url", standing: "sell-only" },
           { nodeId: "f", contactUrl: "https://box-ffff.waitron.local:8443", standing: "sell-only" },
         ],
-      },
-      signerNodeId: "a",
-      signature: "sig",
-      endorsements: [],
-    });
+      }),
+    );
 
     expect(await venuePasskeyOrigins(suite.db, "https://waitron.local")()).toEqual([
       "https://waitron.local",

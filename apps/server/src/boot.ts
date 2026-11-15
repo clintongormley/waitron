@@ -423,7 +423,6 @@ import {
 import { countAsOwnAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses, requestProvenFromBox } from "./request-from-box.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
-import { venuePasskeyOrigins } from "./passkey-origins.js";
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { housekeepingJob } from "./housekeeping.js";
@@ -2589,7 +2588,6 @@ async function bootServer(
         secureCookies,
         rpId: config.managementRpId,
         origin: config.managementOrigin,
-        passkeyOrigins: venuePasskeyOrigins(db, config.managementOrigin),
         googleOidc: config.googleOidc,
         venueLocale,
         credentialKeyRing: totpKeyRing,
@@ -2613,7 +2611,6 @@ async function bootServer(
         credentialKeyRing: totpKeyRing,
         rpId: config.managementRpId,
         origin: config.managementOrigin,
-        passkeyOrigins: venuePasskeyOrigins(db, config.managementOrigin),
         accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
         accountMailMode,
         assertAccountMailPrimary,
@@ -3263,7 +3260,6 @@ async function bootServer(
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
-      passkeyOrigins: venuePasskeyOrigins(db, config.managementOrigin),
       googleOidc: config.googleOidc,
       venueLocale,
       credentialKeyRing: totpKeyRing,
@@ -3492,7 +3488,6 @@ async function bootServer(
       credentialKeyRing: totpKeyRing,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
-      passkeyOrigins: venuePasskeyOrigins(db, config.managementOrigin),
       accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       accountMailMode,
       assertAccountMailPrimary,

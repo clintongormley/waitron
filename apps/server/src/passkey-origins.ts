@@ -1,6 +1,8 @@
+import type { Context } from "hono";
 import { readNodeMembership, type Database } from "@waitron/db";
 import { routableServers } from "@waitron/membership";
 import { BOX_HOSTNAME } from "./box-name.js";
+import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 
 function boxOrigin(contactUrl: string): string | undefined {
   const url = URL.parse(contactUrl);
@@ -10,14 +12,13 @@ function boxOrigin(contactUrl: string): string | undefined {
 }
 
 /**
- * The origins a passkey made on this box's dashboard may come from: the management origin, and,
- * when that is the venue's shared name, each routable box's own name in the held chart, read per
- * call so a box that joins after this start counts at once.
+ * The origins a passkey check accepts: the management origin, and, when its host is the venue's
+ * shared name, the https origin of each routable chart row at or under that name, read per call.
  */
 export function venuePasskeyOrigins(
   db: Database,
   managementOrigin: string,
-): () => Promise<readonly string[]> {
+): () => Promise<string[]> {
   return async () => {
     if (new URL(managementOrigin).hostname !== BOX_HOSTNAME) return [managementOrigin];
     const boxes = routableServers(await readNodeMembership(db)).flatMap((server) => {
@@ -26,4 +27,15 @@ export function venuePasskeyOrigins(
     });
     return [...new Set([managementOrigin, ...boxes])];
   };
+}
+
+/** {@link managementSite} for verifying a passkey, where a local request may name any of the
+ * origins `localOrigins` answers. */
+export async function passkeyVerifySite(
+  c: Context,
+  local: { rpId: string; origin: string },
+  localOrigins: () => Promise<string[]>,
+): Promise<{ rpId: string; origin: string | string[] }> {
+  if (isRemoteStaffRequest(c)) return managementSite(c, local);
+  return { rpId: local.rpId, origin: await localOrigins() };
 }

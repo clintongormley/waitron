@@ -195,7 +195,7 @@ describe("signing in and checking a passkey", () => {
 describe("a ceremony verified against a list of origins", () => {
   const VENUE = "https://waitron.local";
   const BOX = "https://box-abcd.waitron.local";
-  const LISTED = [VENUE, BOX] as const;
+  const LISTED = [VENUE, BOX];
   const UNLISTED = "https://box-ef01.waitron.local";
 
   const enrolAt = async (origin: string) => {
