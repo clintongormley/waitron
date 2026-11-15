@@ -8,7 +8,7 @@ import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import type { DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
+import type { DashboardApi, PersonPage, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
@@ -259,13 +259,20 @@ describe("staff-screen", () => {
     );
   });
 
-  it("pages 1000 users and searches and filters the full roster on the server", async () => {
-    const roster = Array.from({ length: 1000 }, (_, i) => ({
+  it("renders the server page and sends search and role filters with page zero", async () => {
+    const roster = Array.from({ length: 50 }, (_, i) => ({
       ...people[0]!,
       personId: `p${i}`,
       displayName: `User ${i}`,
     }));
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(roster) });
+    const page = (rows: PersonSummary[], total: number): PersonPage => ({
+      rows,
+      page: 0,
+      pageSize: 50,
+      total,
+      anyPeople: true,
+    });
+    const api = stubApi({ listStaffPage: vi.fn().mockResolvedValue(page(roster, 1000)) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
       canAdminister: true,
       api,
@@ -278,6 +285,9 @@ describe("staff-screen", () => {
     const search = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=search]",
     )!;
+    vi.mocked(api.listStaffPage).mockResolvedValue(
+      page([{ ...people[0]!, personId: "p999", displayName: "User 999" }], 1),
+    );
     search.value = "User 999";
     search.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -294,6 +304,7 @@ describe("staff-screen", () => {
     await flush(el);
     expect(await drawn(el)).toEqual(["p999"]);
     const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
+    vi.mocked(api.listStaffPage).mockResolvedValue(page([], 0));
     await chooseOptions(role, ["staff"]);
     await flush(el);
     expect(list(el).people).toEqual([]);
@@ -308,8 +319,8 @@ describe("staff-screen", () => {
     let roster = [person];
     const api = stubApi({
       listStaff: vi.fn(async () => roster),
-      savePerson: vi.fn(async (_id: string, details: PersonEditDetails) => {
-        roster = [{ ...person, ...details }];
+      savePerson: vi.fn(async () => {
+        roster = [];
       }),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
@@ -391,7 +402,7 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(api.listStaff).toHaveBeenCalledTimes(1);
-    expect(list(el).people).toEqual([people[0]]);
+    expect(list(el).people).toEqual(people);
   });
 
   it("opens the create form when the add button is clicked", async () => {
@@ -420,6 +431,13 @@ describe("staff-screen", () => {
       api: stubApi(),
     });
     await flush(el);
+    vi.mocked(el.api.listStaffPage).mockResolvedValue({
+      rows: [],
+      page: 0,
+      pageSize: 50,
+      total: 0,
+      anyPeople: true,
+    });
     el.shadowRoot!.querySelector("[data-test=search]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "zzz" }, bubbles: true, composed: true }),
     );
@@ -1366,32 +1384,20 @@ describe("staff-screen — row actions, filters and edit races", () => {
     expect(api.resetLogin).not.toHaveBeenCalled();
   });
 
-  it("filters by each status, and hides disabled people until asked", async () => {
-    const pending: PersonSummary = {
-      ...people[0]!,
-      personId: "p3",
-      displayName: "Cruz",
-      status: "pending",
-    };
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([...people, pending]) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-      canAdminister: true,
-      api,
-    });
+  it("sends each selected status in a fresh page request", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
     await flush(el);
-    const shown = () => list(el).people.map((person) => person.personId);
-    expect(shown()).toEqual(["p1", "p3"]);
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "current", page: 0 }),
+    );
     const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
-    for (const [value, expected] of [
-      ["active", ["p1"]],
-      ["pending", ["p3"]],
-      ["suspended", ["p2"]],
-      ["all", ["p1", "p2", "p3"]],
-      ["current", ["p1", "p3"]],
-    ] as const) {
+    for (const value of ["active", "pending", "suspended", "all", "current"]) {
       await chooseOption(status, value);
-      await flush(el);
-      expect(shown()).toEqual(expected);
+      await vi.waitFor(() =>
+        expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+          expect.objectContaining({ status: value, page: 0 }),
+        ),
+      );
     }
   });
 
@@ -1562,7 +1568,6 @@ describe("staff-screen filter fields", () => {
   };
   const field = (el: StaffScreen, selector: string) =>
     el.shadowRoot!.querySelector(selector) as Field | null;
-  const shown = (el: StaffScreen) => list(el).people.map((person) => person.personId);
 
   it("searches from a labelled search field", async () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
@@ -1580,20 +1585,12 @@ describe("staff-screen filter fields", () => {
       new CustomEvent("wt-change", { detail: { value: "ada" }, bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(await drawn(el)).toEqual(["p1"]);
-  });
-
-  it("finds nobody by a role or status word, since only names, email and telephone are searched", async () => {
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-      canAdminister: true,
-      api: stubApi(),
-    });
-    await flush(el);
-    expect(await drawn(el)).toEqual(["p1"]);
-    await typeSearch(el, roleName("manager"));
-    expect(await drawn(el)).toEqual([]);
-    await typeSearch(el, statusName("active"));
-    expect(await drawn(el)).toEqual([]);
+    expect(await drawn(el)).toEqual(["p1", "p2"]);
+    await vi.waitFor(() =>
+      expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "ada" }),
+      ),
+    );
   });
 
   it("keeps the same rows and columns while a typed search waits", async () => {
@@ -1614,59 +1611,7 @@ describe("staff-screen filter fields", () => {
     await list(el).updateComplete;
     expect(table().rows).toBe(rows);
     expect(table().columns).toBe(columns);
-    expect(await drawn(el)).toEqual(["p1"]);
-  });
-
-  it("finds a person by every word typed across names, email and telephone, closest first", async () => {
-    const person = (overrides: Partial<PersonSummary>): PersonSummary => ({
-      ...people[0]!,
-      firstNames: null,
-      lastNames: null,
-      email: null,
-      telephone: null,
-      ...overrides,
-    });
-    const roster = [
-      person({ personId: "edgar", displayName: "Ed", email: "edgar@x.com" }),
-      person({
-        personId: "jose",
-        displayName: "Pepe",
-        firstNames: "José",
-        lastNames: "García",
-        email: "jose@example.com",
-      }),
-      person({ personId: "phone", displayName: "Lu", telephone: "+34 600 111 222" }),
-      person({ personId: "legal", displayName: "Max", lastNames: "Garcia" }),
-    ];
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-      canAdminister: true,
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue(roster) }),
-    });
-    await flush(el);
-    await typeSearch(el, "garcia jose");
-    expect(await drawn(el)).toEqual(["jose"]);
-    await typeSearch(el, "GARCÍA pepe");
-    expect(await drawn(el)).toEqual(["jose"]);
-    await typeSearch(el, "jose example");
-    expect(await drawn(el)).toEqual(["jose"]);
-    await typeSearch(el, "600 111");
-    expect(await drawn(el)).toEqual(["phone"]);
-    await typeSearch(el, "&");
-    expect(await drawn(el)).toEqual([]);
-    await typeSearch(el, "pepe ");
-    expect(await drawn(el)).toEqual(["jose"]);
-    await typeSearch(el, "pep ");
-    expect(await drawn(el)).toEqual([]);
-    await typeSearch(el, "gar");
-    expect(await drawn(el)).toEqual(["legal", "jose", "edgar"]);
-
-    const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
-    table
-      .shadowRoot!.querySelector<HTMLElement>('thead th button[data-sort="displayName"]')!
-      .click();
-    expect(await drawn(el)).toEqual(["legal", "jose", "edgar"]);
-    await typeSearch(el, "");
-    expect(await drawn(el)).toEqual(["edgar", "phone", "legal", "jose"]);
+    expect(await drawn(el)).toEqual(["p1", "p2"]);
   });
 
   it("filters by role from a labelled dropdown starting on every role", async () => {
@@ -1683,10 +1628,14 @@ describe("staff-screen filter fields", () => {
     expect((role as unknown as { values: string[] }).values).toEqual([]);
     await chooseOptions(role, ["staff"]);
     await flush(el);
-    expect(shown(el)).toEqual([]);
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["staff"] }),
+    );
     await chooseOptions(role, ["manager"]);
     await flush(el);
-    expect(shown(el)).toEqual(["p1"]);
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["manager"] }),
+    );
   });
 
   it("filters by status from a labelled dropdown starting on current users, its help beside it", async () => {
@@ -1717,7 +1666,9 @@ describe("staff-screen filter fields", () => {
     );
     await chooseOption(status, "suspended");
     await flush(el);
-    expect(shown(el)).toEqual(["p2"]);
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "suspended" }),
+    );
   });
 });
 

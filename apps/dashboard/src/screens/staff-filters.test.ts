@@ -62,7 +62,7 @@ const people: PersonSummary[] = [
 async function screen(): Promise<StaffScreen> {
   const api = withStaffPages({
     listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
-    listStaff: vi.fn().mockResolvedValue(people),
+    listStaff: vi.fn().mockResolvedValue([people[0]!, people[1]!]),
   } as unknown as DashboardApi);
   const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
     canAdminister: true,
@@ -77,18 +77,7 @@ function shown(el: StaffScreen): PersonSummary[] {
   return el.shadowRoot!.querySelector<StaffList>("dashboard-staff-list")!.people;
 }
 
-/** The people the staff table draws, in the order it draws them. */
-async function drawn(el: StaffScreen): Promise<string[]> {
-  const list = el.shadowRoot!.querySelector<StaffList>("dashboard-staff-list")!;
-  await list.updateComplete;
-  const table = list.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  return [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
-    row.getAttribute("data-row-key")!,
-  );
-}
-
-it("searches names, email and phone as the administrator types", async () => {
+it("sends the search text as the administrator types", async () => {
   const el = await screen();
   expect(shown(el).map((person) => person.displayName)).toEqual(["Ada", "Grace"]);
   const search = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
@@ -99,10 +88,14 @@ it("searches names, email and phone as the administrator types", async () => {
     new CustomEvent("wt-change", { detail: { value: "222" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  await vi.waitFor(async () => expect(await drawn(el)).toEqual(["2"]));
+  await vi.waitFor(() =>
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "222", page: 0 }),
+    ),
+  );
 });
 
-it("combines role and status filters and can include inactive users", async () => {
+it("sends combined role and status filters", async () => {
   const el = await screen();
   const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
   await chooseOption(status, "all");
@@ -110,7 +103,9 @@ it("combines role and status filters and can include inactive users", async () =
   await chooseOptions(role, ["staff"]);
   await el.updateComplete;
   await vi.waitFor(() =>
-    expect(shown(el).map((person) => person.displayName)).toEqual(["Inactive Alex"]),
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["staff"], status: "all", page: 0 }),
+    ),
   );
 });
 
@@ -135,7 +130,11 @@ it("marks the chosen role's option selected when the options re-render in a diff
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  await vi.waitFor(() => expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]));
+  await vi.waitFor(() =>
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["manager"], locale: "es-ES" }),
+    ),
+  );
   expect(role.values).toEqual(["manager"]);
   await role.updateComplete;
   expect(role.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe("Encargado");
@@ -159,7 +158,7 @@ it("explains what current users are in a help tooltip beside the status filter",
   expect(label?.textContent?.trim()).toBe("Status");
 });
 
-it("filters any selected access role and includes a two-role person once", async () => {
+it("sends all selected access roles without duplicating the returned rows", async () => {
   const api = withStaffPages({
     listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
     listStaff: vi
@@ -171,8 +170,17 @@ it("filters any selected access role and includes a two-role person once", async
   const roles = el.shadowRoot!.querySelector("[data-test=role-filter]")!;
   roles.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["admin", "manager"] } }));
   await el.updateComplete;
-  await vi.waitFor(() => expect(shown(el).map((person) => person.personId)).toEqual(["1", "2"]));
+  await vi.waitFor(() =>
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["admin", "manager"] }),
+    ),
+  );
+  expect(shown(el).map((person) => person.personId)).toEqual(["1", "2"]);
   roles.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["admin"] } }));
   await el.updateComplete;
-  await vi.waitFor(() => expect(shown(el).map((person) => person.personId)).toEqual(["1"]));
+  await vi.waitFor(() =>
+    expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roleIds: ["admin"] }),
+    ),
+  );
 });

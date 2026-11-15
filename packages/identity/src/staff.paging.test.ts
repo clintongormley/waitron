@@ -88,6 +88,11 @@ it("pages the complete ordered roster, clamps a shrinking page, and searches bey
     ),
   ).toEqual([ids[100]]);
   expect((await read(token, { ...filter, status: "current" })).total).toBe(100);
+  expect((await read(token, { ...filter, status: "active" })).total).toBe(99);
+  expect(
+    (await read(token, { ...filter, status: "suspended" })).rows.map((p) => p.personId),
+  ).toEqual([ids[100]]);
+  expect((await read(token, { roleIds: [manager] })).rows.map((p) => p.personId)).toEqual([ids[0]]);
   expect((await read(token, { ...filter, status: "pending" })).rows.map((p) => p.personId)).toEqual(
     [ids[99]],
   );
@@ -178,4 +183,63 @@ it("keeps decimal and Spanish letter ordering, and refuses a caller without peop
   ).toEqual(["Label 0.25", "Label 0.5", "Label n", "Label \u00f1"]);
   const denied = await openManagementSession(suite.db, "staff");
   await expect(read(denied.token)).rejects.toMatchObject({ code: "authorization.not_permitted" });
+});
+
+it("matches every search word across names, email and telephone, closest first", async () => {
+  const { token } = await openManagementSession(suite.db, "admin");
+  await withTransaction(suite.db, (tx) =>
+    seedPersons(tx, [
+      {
+        displayName: "Ed",
+        firstNames: null,
+        lastNames: null,
+        email: "edgar@x.com",
+        telephone: null,
+        role: "staff",
+      },
+      {
+        displayName: "Pepe",
+        firstNames: "Jos\u00e9",
+        lastNames: "Garc\u00eda",
+        email: "jose@example.com",
+        telephone: null,
+        role: "staff",
+      },
+      {
+        displayName: "Lu",
+        firstNames: null,
+        lastNames: null,
+        email: null,
+        telephone: "+34 600 111 222",
+        role: "staff",
+      },
+      {
+        displayName: "Max",
+        firstNames: null,
+        lastNames: "Garcia",
+        email: null,
+        telephone: null,
+        role: "staff",
+      },
+    ]),
+  );
+  const { staff } = await withTransaction(suite.db, ensureBuiltInRoles);
+  for (const [search, expected] of [
+    ["garcia jose", ["Pepe"]],
+    ["GARC\u00cdA pepe", ["Pepe"]],
+    ["jose example", ["Pepe"]],
+    ["600 111", ["Lu"]],
+    ["&", []],
+    ["pepe ", ["Pepe"]],
+    ["pep ", []],
+    ["gar", ["Max", "Pepe", "Ed"]],
+    ["manager", []],
+    ["active", []],
+  ] as const) {
+    const result = await read(token, { roleIds: [staff], search });
+    expect(
+      result.rows.map((p) => p.displayName),
+      search,
+    ).toEqual(expected);
+  }
 });
