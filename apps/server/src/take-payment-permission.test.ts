@@ -109,7 +109,7 @@ async function paymentAttemptOf(id: string): Promise<string | null> {
 }
 
 /** A counter order of one Tarta (18.00), presented without an invoice. */
-async function presentedTarta(): Promise<string> {
+async function presentedCake(): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
   await parkOrder(deps, venue.cfg, {
@@ -253,7 +253,7 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
   }
 
   it("refuses and leaves the presented order placed, with no invoice and no tender", async () => {
-    const id = await presentedTarta();
+    const id = await presentedCake();
     gate.deny = true;
 
     expectRefused(await collectCash(id));
@@ -266,7 +266,7 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
   });
 
   it("collects the same order when the permission is held", async () => {
-    const id = await presentedTarta();
+    const id = await presentedCake();
 
     const answer = await collectCash(id);
 
