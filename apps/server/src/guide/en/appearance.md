@@ -90,8 +90,7 @@ theme from the Themes card ask you first.
 ## Make text bigger {#text-size}
 
 To make text bigger on just this device, use your browser's zoom or text-size preference.
-The venue's **Text size** setting affects everyone's screens. In Safari and Firefox, use browser
-zoom: Waitron does not follow an iPhone or iPad's system Text Size setting.
+The venue's **Text size** setting affects everyone's screens.
 
 The **Text size** slider makes the text of every dashboard, till, handheld and station screen
 bigger: each of the four text sizes grows by the same percentage. 100% is Waitron's size, and 130%

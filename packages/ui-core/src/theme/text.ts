@@ -131,7 +131,7 @@ export interface TextNote {
 export const isTextWarning = (warning: { readonly mode: Mode | null }): warning is TextWarning =>
   warning.mode === null;
 
-export function ownSize(key: TextSizeKey, defaults: WaitronDefaults): number {
+export function ownSize(key: TextSizeKey, defaults: Pick<WaitronDefaults, "structure">): number {
   const name = `--wt-font-size-${key}`;
   const value = defaults.structure[name] ?? "";
   const pixels = Number(value.slice(0, -3)) * 16;
