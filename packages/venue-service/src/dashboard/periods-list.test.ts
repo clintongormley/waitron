@@ -338,7 +338,7 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
 
 const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
 
-it("a period row opens its dialog; a department row opens nothing; the pinned actions column holds a bin per period", async () => {
+it("a period row opens its page; a department row opens nothing; the pinned actions column holds an Edit/Delete menu per period", async () => {
   const read = answering();
   const el = await mount((async (path: string, ...rest: unknown[]) =>
     path.endsWith("/delete-impact")

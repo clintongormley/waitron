@@ -21,11 +21,11 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     "painted-in-plain",
     "not-painted",
     "add-from-page",
-    "deletable",
     "floor-plan",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<period-dialog></period-dialog>", theme)) as PeriodDialog;
+    el.page = ["add-from-page", "painted-in-links", "refused"].includes(state);
     el.departmentName = "Restaurant";
     el.menus = [
       { id: "lunch", name: "Lunch", active: true, includes: ["Drinks"] },
@@ -66,7 +66,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
               specialDays: [{ id: "sd1", name: "Company dinners" }],
             };
     }
-    if (state === "deletable") el.deletable = true;
     if (state === "floor-plan") {
       el.departmentId = "restaurant";
       el.floorPlans = [
@@ -90,10 +89,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       expect(el.shadowRoot!.querySelectorAll("[data-test=painted-in] .chip")).toHaveLength(5);
     if (state === "not-painted")
       expect(el.shadowRoot!.querySelector("[data-test=not-painted]")).not.toBeNull();
-    if (state === "deletable")
-      expect(
-        el.shadowRoot!.querySelector("[data-test=delete-period]")!.closest("wt-form-actions"),
-      ).not.toBeNull();
     if (state === "add-from-page")
       expect(el.shadowRoot!.querySelector("[name=departmentId]")).not.toBeNull();
     if (state === "floor-plan")

@@ -6889,12 +6889,17 @@ is muted italic without a suffix, and a period of a department without plans sho
 Painted in keeps season and special-day chips, their tints and native modified clicks, and links
 to the painter with `?back=/manage/periods`.
 
+Guard, weaker than the layout contract: the M1 cases in `periods-list.test.ts` check that the
+table and its cells fit at 1280 px in English and Spanish, each again in Verdana. Their data offers
+no floor plan, so those cases do not check fit with the Floor plan column.
+
 The editor has “Periods ›” above its h1. `PeriodEditing` uses `period-dialog`’s page presentation
 without a modal, sharing its fields, validation, submitted baseline and draft scope with the
 painters’ existing dialog presentation. It asks for Department when adding, then Name, Colour,
 Customer menu, Staff-only menus and Floor plan where offered. The default option in that chooser
 still says “(default)”. An edited period shows Painted in. The page’s footer is Cancel and Save;
-Delete stays in the list menu. Save returns to the list before refreshing it. Cancel, parent,
+Delete stays in the list menu. Save returns to the list and refreshes it; a refresh failure is a
+list load error. Cancel, parent,
 sidebar and browser navigation ask before discarding changed input. Invalid and viewer-only edit
 addresses return to the list after loading; a period removed from live data closes its editor.
 The Calendar painters retain their period pop-ups pending the owner’s answer to the watcher’s

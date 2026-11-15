@@ -123,7 +123,6 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) seasons: readonly { id: string; colour: string }[] = [];
   @property() departmentId = "";
   @property({ type: Boolean }) paintedInLinks = false;
-  @property({ type: Boolean }) deletable = false;
   /** Given when adding without a fixed department, so the dialog asks for one. */
   @property({ attribute: false }) departments?: readonly Department[];
   /** The departments that offer a Floor plan field, with their sets; absent draws none. */
@@ -355,23 +354,6 @@ export class PeriodDialog extends LitElement {
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
-  private async requestDelete(periodId: string) {
-    const generation = this.generation;
-    if (this.scope && this.leave) {
-      const outcome = await this.leave.request({
-        scopes: [this.scope.id],
-        reason: "navigation",
-        proceed() {},
-      });
-      if (outcome !== "proceeded") return;
-    }
-    if (!this.isConnected || !this.open || this.busy || generation !== this.generation) return;
-    this.open = false;
-    this.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
-    this.dispatchEvent(
-      new CustomEvent("period-delete", { detail: { periodId }, bubbles: true, composed: true }),
-    );
-  }
   async requestClose(): Promise<boolean> {
     if (!this.page) {
       return this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
@@ -563,20 +545,6 @@ export class PeriodDialog extends LitElement {
           }}
           >${t("menu.cancel")}</wt-button
         >
-        ${
-          this.period && this.deletable
-            ? html`<wt-button
-                slot="cancel"
-                data-test="delete-period"
-                variant="danger"
-                ?disabled=${this.busy}
-                @click=${() => {
-                  if (current()) void this.requestDelete(this.period!.id);
-                }}
-                >${t("period.delete_ellipsis")}</wt-button
-              >`
-            : nothing
-        }
 
         <wt-button
           data-test="save-period"

@@ -860,7 +860,7 @@ it("a model in which the period is gone closes its delete dialog", async () => {
   await expect.poll(() => table(el)!.rows.length).toBe(2);
 });
 
-it("blocks opening a period dialog while a delete dialog is open, and the other way round", async () => {
+it("blocks opening a period page while a delete dialog is open, and the other way round", async () => {
   const el = await mount(fake({ data: () => model([lunch(), dinner()]) }));
   const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!;
   rowButton(el, "edit-period", "p1").click();

@@ -39,8 +39,8 @@ Review public holidays after changing the venue’s city. Choosing another holid
 
 Open **Seasons** under **Venue operations** to change their names, colours and start dates. Each season runs until the next starts. **Save** keeps you on the page; **Cancel** discards your unsaved changes.
 
-## Check where a period is used {#periods}
+## Edit periods and check their hours {#periods}
 
-Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row or **Add period** to open its own editor. **Save** returns you to the list; **Periods ›** and **Cancel** also return there, asking before discarding changes. Use the row’s **⋯** menu to edit or delete it.
+Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
 
-In **Painted in**, choose a season or special day to check its timetable. A floor plan in grey italics follows the department’s default; **—** means the department has no floor plans.
+In **Painted in**, choose a season or special day to check its timetable.

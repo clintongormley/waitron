@@ -39,8 +39,8 @@ Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona
 
 Abre **Temporadas** en **Operaciones del local** para cambiar sus nombres, colores y fechas de inicio. Cada temporada dura hasta que empieza la siguiente. **Guardar** te mantiene en la página; **Cancelar** descarta los cambios sin guardar.
 
-## Consulta dónde se usa un periodo {#periods}
+## Edita los periodos y consulta sus horarios {#periods}
 
-Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila o **Añadir periodo** para abrir su página de edición. **Guardar** vuelve a la lista; **Periodos ›** y **Cancelar** también vuelven allí, preguntando antes de descartar cambios. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
+Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila para editarla, o **Añadir periodo** para crear uno. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
 
-En **Pintado en**, elige una temporada o un día especial para consultar su horario. Un plano de sala en gris y cursiva sigue el predeterminado del departamento; **—** indica que el departamento no tiene planos.
+En **Pintado en**, elige una temporada o un día especial para consultar su horario.

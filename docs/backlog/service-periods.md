@@ -371,6 +371,10 @@ The A719/A721 window decisions below describe their earlier presentation; see
 restores its draft in place; navigation asks before discarding. The page's chooser uses pale season
 tints and full phone labels, and its fields name their row._
 
+_2026-11-15, A1545 Periods slice: the list’s rows now open individual edit pages and its pinned
+row menus offer Edit and Delete. The Calendar painters retain their period dialogs pending the
+owner’s answer; the historical A719 dialog decisions below do not describe the list’s editor._
+
 _2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes;
 the season painter continues saving through the season-week route._
 

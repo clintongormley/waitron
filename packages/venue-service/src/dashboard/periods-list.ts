@@ -1,5 +1,5 @@
 import type { CalendarColour } from "@waitron/shared";
-import { LitElement, css, html, nothing, unsafeCSS } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, pageTitleStyles, UrlStateController, type DataTableColumn } from "@waitron/ui";
@@ -78,6 +78,17 @@ export class PeriodsList extends LitElement {
       }
       h1 {
         margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .toolbar > div {
+        min-width: 0;
+        max-width: 100%;
+      }
+      nav {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-primary-text);
       }
       wt-data-table::part(swatch) {
         display: inline-block;
@@ -143,7 +154,7 @@ export class PeriodsList extends LitElement {
     chose: () => {},
     chooseDepartment: true,
     page: true,
-    onClose: () => this.navigate(null),
+    onClose: () => this.navigate(null, true),
     paintedIn: (periodId) => this.painted?.get(periodId),
     paintedInLinks: true,
     readOnly: () => this.readOnly,
@@ -156,20 +167,24 @@ export class PeriodsList extends LitElement {
     primary: "dashboard",
     children: { periods: { view: "view", period: "period" } },
   });
-  private navigate(id: string | null) {
+  private navigate(id: string | null, replace = false) {
     void Promise.resolve(
-      this.url.write({
-        dashboard: "periods",
-        view: id === "new" ? "new" : null,
-        period: id === "new" ? null : id,
-      }),
+      this.url.write(
+        {
+          dashboard: "periods",
+          view: id === "new" ? "new" : null,
+          period: id === "new" ? null : id,
+        },
+        replace,
+      ),
     ).then(() => this.restoreAddress());
   }
   private restoreAddress() {
     if (this.url.read("dashboard") !== "periods") return;
     const id = this.url.read("period") ?? (this.url.read("view") === "new" ? "new" : null);
     if (!this.model) return;
-    if (id === this.address && (id === null || this.periods.editing)) return;
+    if (id === this.address && (id === null || this.periods.editing) && !(this.readOnly && id))
+      return;
     this.periods.dismiss();
     this.address = id;
     if (id === null) return;
@@ -188,6 +203,9 @@ export class PeriodsList extends LitElement {
   private detach?: () => void;
   private paintedDetach?: () => void;
 
+  protected override willUpdate(changed: PropertyValues<this>) {
+    if (changed.has("readOnly") && this.readOnly) this.restoreAddress();
+  }
   override connectedCallback() {
     super.connectedCallback();
     this.detach = this.api.watchOpeningHours(
@@ -391,16 +409,18 @@ export class PeriodsList extends LitElement {
         <div>
           ${
             this.address
-              ? html`<a
-                  class="parent"
-                  href=${periodsPath}
-                  @click=${(event: MouseEvent) => {
-                    if (nativeLinkClick(event)) return;
-                    event.preventDefault();
-                    void this.shadowRoot!.querySelector("period-dialog")!.requestClose();
-                  }}
-                  >${t("period.title")} <span aria-hidden="true">›</span></a
-                >`
+              ? html`<nav aria-label=${t("period.title")}>
+                  <a
+                    class="parent"
+                    href=${periodsPath}
+                    @click=${(event: MouseEvent) => {
+                      if (nativeLinkClick(event)) return;
+                      event.preventDefault();
+                      void this.shadowRoot!.querySelector("period-dialog")!.requestClose();
+                    }}
+                    >${t("period.title")}</a
+                  ><span aria-hidden="true"> ›</span>
+                </nav>`
               : nothing
           }
           <h1>

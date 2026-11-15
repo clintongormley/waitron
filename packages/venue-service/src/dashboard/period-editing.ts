@@ -43,7 +43,7 @@ export class PeriodEditing implements ReactiveController {
       api: () => OpeningHoursApi;
       model: () => OpeningHoursModel;
       chose: (periodId: string) => void;
-      /** `open(null)` asks for the department in the dialog. */
+      /** `open(null)` asks for the department in the editor. */
       chooseDepartment?: boolean;
       page?: boolean;
       onClose?: () => void;
@@ -52,8 +52,6 @@ export class PeriodEditing implements ReactiveController {
       paintedIn?: (periodId: string) => PaintedIn | undefined;
       paintedInLinks?: boolean;
       readOnly?: () => boolean;
-      /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
-      onDelete?: (department: Department, period: Period) => void;
       draftParent?: () => object | undefined;
       /** Keeps reading the floor plan sets after a dialog closes, once the host has called
        *  `watchFloorPlans`; otherwise they are read only while a dialog is open. */
@@ -286,28 +284,12 @@ export class PeriodEditing implements ReactiveController {
         .menus=${model.menus}
         .floorPlans=${this.#floorPlans?.departments}
         .busy=${this.busy}
-        .deletable=${this.options.onDelete !== undefined}
         .draftParent=${this.options.draftParent?.()}
         .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}
         @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {
           event.stopPropagation();
           if (this.editor === editor && !this.busy) this.close();
-        }}
-        @period-delete=${(event: CustomEvent<{ periodId: string }>) => {
-          event.stopPropagation();
-          const period = editor.period;
-          if (
-            (this.editor !== undefined && this.editor !== editor) ||
-            this.busy ||
-            !department ||
-            event.currentTarget !== this.host.renderRoot.querySelector("period-dialog") ||
-            !period ||
-            period.id !== event.detail.periodId
-          )
-            return;
-          if (this.editor === editor) this.close();
-          this.options.onDelete?.(department, period);
         }}
       ></period-dialog>`,
     );

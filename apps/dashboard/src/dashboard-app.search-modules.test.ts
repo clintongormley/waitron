@@ -515,7 +515,7 @@ it("the Voids and comps page follows its permission rather than every enabled mo
   expect(result(el, "settings:venue-details")).not.toBeNull();
 });
 
-it.each(["parent", "Back", "sidebar"])(
+it.each(["parent", "Back", "sidebar", "Cancel"])(
   "the real shell protects a Periods page draft on %s",
   async (way) => {
     const { el } = await mount({ path: "/manage/periods" });
@@ -538,6 +538,10 @@ it.each(["parent", "Back", "sidebar"])(
     await editor.updateComplete;
     const leave = async () => {
       if (way === "Back") history.back();
+      else if (way === "Cancel")
+        await userEvent.click(
+          editor.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!,
+        );
       else if (way === "parent")
         await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("a.parent")!);
       else
@@ -551,7 +555,12 @@ it.each(["parent", "Back", "sidebar"])(
     await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
     await expect.poll(() => question.open).toBe(false);
     expect(location.pathname).toBe("/manage/periods/period/lunch");
-    expect(input.value).toBe("Late lunch");
+    expect(
+      el
+        .shadowRoot!.querySelector("periods-list")!
+        .shadowRoot!.querySelector("period-dialog")!
+        .shadowRoot!.querySelector<WtInput>("[name=name]")!.value,
+    ).toBe("Late lunch");
     await leave();
     await expect.poll(() => question.open).toBe(true);
     await userEvent.click(
