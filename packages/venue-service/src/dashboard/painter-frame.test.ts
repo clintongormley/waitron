@@ -487,7 +487,8 @@ describe("the band in what the painter edits", () => {
     await frame.updateComplete;
     const special = painted(frame, SPECIAL_DAY_LINE);
     expect(special).toBe(painted(frame, "var(--wt-color-palette-purple)"));
-    expect(getComputedStyle(band(frame)!).backgroundColor).toBe(special);
+    expect(getComputedStyle(band(frame)!).borderTopColor).toBe(special);
+    expect(getComputedStyle(band(frame)!).borderTopStyle).toBe("dashed");
     expect(band(frame)!.getAttribute("aria-hidden")).toBe("true");
   });
 

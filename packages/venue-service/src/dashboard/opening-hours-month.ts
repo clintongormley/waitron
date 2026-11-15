@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
@@ -16,12 +16,12 @@ import {
   type MonthNames,
 } from "./opening-hours-day.js";
 import { dateAroundDay, format, formatMonthName, formatWeekday } from "./hours-view.js";
-import { DayPicker } from "./day-picking.js";
+import { DayPicker, type DayPoint } from "./day-picking.js";
 import { calendarSelection, calendarSelectionStyles } from "./calendar-selection.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
-import { seasonTints, seasonTintStyles } from "./season-tint.js";
+import { SPECIAL_DAY_LINE, seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import { stationIcon } from "./station-icon.js";
 import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
@@ -44,6 +44,7 @@ export interface MonthDepartment {
 export interface CalendarDayOpen {
   date: LocalDate;
   returnTo: () => HTMLElement | null;
+  point?: DayPoint;
 }
 
 /** The trigger date and exact selected dates, sorted without duplicates. */
@@ -147,7 +148,19 @@ export class OpeningHoursMonthView extends LitElement {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .special-run {
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline: 0;
+        border-block-start: var(--wt-space-1) dashed ${unsafeCSS(SPECIAL_DAY_LINE)};
+        z-index: 1;
+        pointer-events: none;
+      }
+      .special-run[data-joins-next] {
+        inset-inline-end: calc(-1 * var(--wt-space-1));
+      }
       td {
+        position: relative;
         /* Without a set height the card's 100% resolves to nothing and stops short of the row. */
         height: 1px;
         padding: 0;
@@ -283,6 +296,9 @@ export class OpeningHoursMonthView extends LitElement {
         background: var(--period-fill, var(--wt-color-primary));
       }
       @container month (width < 560px) {
+        .special-run[data-joins-next] {
+          inset-inline-end: calc(-1 * var(--wt-space-1) / 2);
+        }
         table {
           border-spacing: calc(var(--wt-space-1) / 2);
         }
@@ -331,10 +347,11 @@ export class OpeningHoursMonthView extends LitElement {
     button: (date) => this.#dayButton(date),
     canPick: () => !this.readOnly && !this.station,
     multiple: true,
-    choose: (date) =>
+    choose: (date, _trigger, point) =>
       this.#emit<CalendarDayOpen>("calendar-day-open", {
         date,
         returnTo: () => this.#dayButton(date),
+        point: this.station ? point : undefined,
       }),
     open: (date, _run, _trigger, dates) =>
       this.#emit<CalendarDaysOpen>("calendar-days-open", { date, dates }),
@@ -506,12 +523,16 @@ export class OpeningHoursMonthView extends LitElement {
           ? nothing
           : html`<span class="visually-hidden">${more ? ", " : ""}${unseen}</span>`
       }`;
+    const index = model.days.indexOf(day);
+    const joins = (other: Day | undefined) =>
+      Boolean(day.specialDay && day.specialDay.id === other?.specialDay?.id);
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
       ?data-outside=${!day.inMonth}
       ?data-closed=${day.closedAllDay}
     >
+      ${day.specialDay ? html`<span class="special-run" data-test="special-run" aria-hidden="true" ?data-joins-previous=${index % 7 !== 0 && joins(model.days[index - 1])} ?data-joins-next=${index % 7 !== 6 && joins(model.days[index + 1])}></span>` : nothing}
       <button
         type="button"
         class="day"

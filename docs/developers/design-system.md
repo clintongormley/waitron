@@ -383,9 +383,8 @@ season chips (the Periods page's through `::part(tint-<colour>)` rules over `SEA
 `periods-list.ts`), and the swatches of a viewer's Seasons page take the tint, and the Month's and the Staffing month's days
 take the line as their top border. The band along the top of both season painters' bars takes the
 line too (`band` on `painter-frame.ts`). A special day stores no colour: the band of both
-special-day painters, and the run the Staffing month draws over a special day's dates in place of
-the season's line, are `SPECIAL_DAY_LINE` (`season-tint.ts`), `--wt-color-palette-purple`, the
-colour the Calendar already marks special days with.
+special-day painters and the runs both months draw over special dates use dashed
+`SPECIAL_DAY_LINE` (`season-tint.ts`), `--wt-color-palette-purple`. Season lines remain solid.
 Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
 orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`): the
 colours are the same in every language, and the names are written in the venue's staff language
@@ -396,8 +395,8 @@ The "season paints" cases in `season-tint.test.ts` hold, in both themes and for 
 colour, grey included, that the text is 4.5:1 or more on the tint and that the line is 3:1 or more
 from the tint, from `--wt-color-surface` and from `--wt-color-surface-raised` (a painter's
 background); and that `SPECIAL_DAY_LINE` is 3:1 or more from `--wt-color-surface`,
-`--wt-color-surface-raised` and `--wt-color-bg`. They do not hold that a purple season's line is
-told apart from `SPECIAL_DAY_LINE`: it is not (backlog, "A purple season looks like a special day").
+`--wt-color-surface-raised` and `--wt-color-bg`. They do not compare a purple season's line with `SPECIAL_DAY_LINE`; dashed marks distinguish
+special days from solid season lines.
 
 A prep station's colour (`STATION_COLOURS`, `packages/shared/src/station-colours.ts`) paints its
 Routes cells and its key swatch with `--wt-color-station-<colour>` and its period-line dots with
@@ -3029,7 +3028,7 @@ English/Spanish text and an Opening hours guide link. Fixed paint hints and the 
 paragraph are absent; the paint row's pencils keep a minimum `--wt-tap-min` width.
 
 The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. A band
-in the special-day purple runs along the top of its bar from the moment it opens, a viewer's too.
+in dashed special-day purple runs along the top of its bar from the moment it opens, a viewer's too.
 The bar holds ✕; the heading "<name>: special day, <dates>", or "<name>: special day" while the day
 has no dates, "Add special day" before a new day has a name and "Edit special day" for a stored day
 whose draft has no name, following the draft's name and dates as they are edited; the
@@ -3099,7 +3098,7 @@ The staffing painters (`staffing-season-painter.ts` and `staffing-special-day-pa
 station needs, in the same frame, on a staffing grid (`staffing-grid.ts`) built from the parts
 venue-service exports from `@waitron/venue-service/painter`. Each carries its Opening hours twin's
 band: the season painter's in its season's colour once its read names the season, the special-day
-painter's in the special-day purple from the moment it opens. The season painter's bar holds ✕, the
+painter's dashed in the special-day purple from the moment it opens. The season painter's bar holds ✕, the
 heading "<season>: standard week", ‹ the season chip ›, a department-or-prep-station picker, and
 Cancel and Save, with the line "Every week from <first day> to <last day> needs this staffing,
 except on special days." under it, over a column per weekday. The special-day painter's bar holds
@@ -5449,7 +5448,7 @@ covering a month; each day lists the areas with a bar whose width is the area's 
 month's largest number, and the number. ‹ › step months, its title keeps one width as the Month's
 does, its year is plain text, and a Show picker offers All areas or one area
 (kept in the address as `area`), and a day closed all day reads Closed. Each day's top border takes
-its season's line; on a special day's dates a purple run (`SPECIAL_DAY_LINE`) covers it, bridging
+its season's line; on a special day's dates a dashed purple run (`SPECIAL_DAY_LINE`) covers it, bridging
 the table's gap (`--staffing-month-gap`, halved below 560 px) to the next date of the same special
 day in the same week row, with rounded ends at the run's first and last date and at a week's end.
 Two special days on neighbouring dates are two runs. It has no row of season
@@ -5617,7 +5616,7 @@ Opening hours' Year.
   and unlabelled, and a piece of its own is labelled. Zone closures leave gaps, with their joined
   times kept in the phone and spoken words. A row with no hours is an empty track in
   `--wt-color-track`; only a day closed all day writes "Closed all day", in its departments'
-  tracks. Screen readers read each row's whole text. A day's name or any of its bars opens the
+  tracks. Screen readers read each row's whole text. A day's name or any point on its row, including closed stretches, opens the
   day box, returning focus to the date heading when it closes; bars show no hover or click tip. Nothing is painted in the Week. When the
   Week itself is narrower than 560 px (`PHONE_WIDTH`) it draws the `week` date alone: its special
   day's and public holiday's names over a card holding the same rows, each its name, its times in
@@ -5632,6 +5631,8 @@ Opening hours' Year.
   day none of them sends on reads "Closed" once in place of its rows, and a station-only week whose
   times have not arrived draws no days. Show all retains loaded departments while station times load or fail. All prep stations keeps every station row, including
   Closed rows, without replacing department rows in Show all.
+  Special dates also carry dashed purple runs above their season line, joining only adjacent
+  dates of the same special-day id within one week.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
   A click picks one day and opens its day box; a drag replaces the selection with its run.
   Shift extends the anchored run, keeping separate picks; Cmd-click on Mac or Ctrl-click elsewhere
@@ -5646,38 +5647,31 @@ Opening hours' Year.
   Shift+arrow extends the anchored run, and Space opens the day box. A screen reader's reading-mode
   Enter arrives as a click and opens the day box; focus-mode Enter opens the selection.
   Viewers and station-only Month views keep single-date day boxes and cannot show the selection bar.
-- **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
-  `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
-  (above), and so does the Week, from a day's name or bar. One box at a time floats below the date that
-  opened it, else above it, else beside it, covering it only when none of those fit, kept on
-  screen; it moves nothing on the page.
-  It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
-  resize leaves none of the date inside the window and every box around it that clips its contents.
-  In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;
-  then a line saying which season's standard hours the date follows, or that a special day replaces
-  them; then each department's hours followed by its zones' (in the Month and the Week, with one
-  department picked, that department alone). Each department and zone lists only its merged opening
-  times, separated by commas when there is a gap; no hours reads Closed. A zone that follows its
-  department repeats those times in muted italics, with hidden "as <department>" context. A zone
-  with closures uses the department's bold name style. Opened
-  from the Year, it reads its date's month and says Loading… until that read answers; when its
-  month's read fails it says so, beside any hours it already shows. Make a
-  special day (Edit special day on a special-day date) opens the special-day painter (Forms above,
-  hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is a
-  public holiday, or on the stored day. Edit <season>'s standard week sits beside the season line
-  at the top and opens the season painter. Its named `season-action` slot can show before the line
-  arrives; the default slot keeps special-day and Open this week actions at the bottom, including
-  Staffing's existing footer. A viewer's box has no special-day button and offers Show <season>'s
-  standard week in the top slot, read-only. In
-  the Year and the Month, a viewer's box included, the last button is Open this week: it opens the
-  Week on that date's week, or on a phone on that date alone, and puts focus on the date's name, unless focus has moved elsewhere by
-  then. A box opened from the Week does not offer it. A
-  station-only box lists its sending departments, or each station for All prep stations, with the
-  individual station’s icon and name beside the date. Station-only boxes replace editing actions
-  with the explanation; Show all retains department actions and appends station
-  details and the explanation. The season line and Open this week remain. A
-  button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
-  the date when focus was inside. A special day is deleted from its painter, which asks first.
+- **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host and exported as
+  `@waitron/venue-service/dashboard/calendar-day-box`. Opening hours uses one section per department:
+  bold department name and normal hours, then normal zone names. Inherited zone hours are muted
+  italic, with hidden “as <department>” context; own zone hours use normal text. Department and
+  zone hours merge touching periods. Range entries wrap between entries, each “·” kept with the
+  preceding range by a non-breaking space. The box uses `--wt-modal-standard-width`, constrained
+  to the viewport, and scrolls vertically when needed. Staffing retains its flat rows and slots.
+  Managers then see a bold Prep stations section: the selected station, or all active stations
+  when no station filter is set, in Year, Month and Week. Station names are normal weight; a
+  station fed by several departments has one line per sender, retaining period names and times.
+  These forecasts use the existing passive station batch read, or the selected station's read.
+  Department rows remain visible while station times load or fail; failures are announced in the
+  box. Viewers read no station list or times and keep their read-only season navigation.
+  The box heading is the date, with its special-day name or holiday name. Its season line is a
+  link to that season's standard week, on ordinary and special dates. Managers keep Make a
+  special day or Edit special day at the bottom, including on station views. Open this week is
+  available in Year and Month, to viewers too, and returns focus to the Week's date heading unless
+  focus moved elsewhere. Week leaves out that action. Actions close the box before navigating.
+  A Year date reads its month while the box is open; Loading… lasts until that read answers and
+  a failed read is shown beside retained hours. Station views open beside the clicked point,
+  including clicks on closed stretches. Keyboard openings use the date anchor. Placement flips
+  above or beside the anchor when needed, staying on screen. The point stays relative to the real
+  anchor while scrolling; when that anchor is clipped out of view, the box closes. Escape and
+  outside clicks close it; focus returns to the date if it was inside. A special day is deleted
+  from its painter, which asks first.
 - **Seasons.** The Year's season chips (`season-chips.ts`) are a key: in start order, each is
   written as its season's name and first and last day, in the season's stored colour. A chip's name
   opens the season painter on that season's week, read-only on a read-only page.

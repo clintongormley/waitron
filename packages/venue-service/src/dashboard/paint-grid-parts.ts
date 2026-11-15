@@ -105,9 +105,18 @@ export function placePopover(
   trigger: HTMLElement,
   alignEnd: boolean,
   flipAbove = false,
+  point?: { x: number; y: number },
 ): void {
   if (!popup.matches(":popover-open")) popup.showPopover({ source: trigger });
-  const anchor = trigger.getBoundingClientRect();
+  const rect = trigger.getBoundingClientRect();
+  const anchor = point
+    ? {
+        left: rect.left + point.x,
+        right: rect.left + point.x,
+        top: rect.top + point.y,
+        bottom: rect.top + point.y,
+      }
+    : rect;
   const box = popup.getBoundingClientRect();
   const clampTop = (top: number) =>
     Math.max(POPOVER_MARGIN, Math.min(top, innerHeight - box.height - POPOVER_MARGIN));

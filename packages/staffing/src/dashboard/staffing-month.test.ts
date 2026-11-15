@@ -1353,7 +1353,8 @@ describe("a special day's run", () => {
     for (const date of ["2026-12-15", "2026-12-16", "2026-12-17"]) {
       const [mark] = runs(el, date);
       expect(runs(el, date)).toHaveLength(1);
-      expect(getComputedStyle(mark!).backgroundColor).toBe(purple);
+      expect(getComputedStyle(mark!).borderTopColor).toBe(purple);
+      expect(getComputedStyle(mark!).borderTopStyle).toBe("dashed");
       const box = day(el, date);
       expect(run(el, date).top).toBeCloseTo(box.getBoundingClientRect().top, 1);
       expect(run(el, date).height).toBeGreaterThanOrEqual(

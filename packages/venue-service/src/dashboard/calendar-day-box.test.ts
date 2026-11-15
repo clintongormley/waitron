@@ -476,3 +476,75 @@ it("calendar day fallback layout is positioned, hittable and light dismisses", a
   await expect.poll(() => closes).toBe(1);
   expect(popup().getBoundingClientRect().height).toBe(0);
 });
+
+it("groups departments and prep stations, wraps between ranges and keeps own hours normal", async () => {
+  box.sectioned = true;
+  box.rows = [
+    { name: "Restaurant", text: "08:00–11:00 · 13:00–16:00 · 20:00–23:00", strong: true },
+    { name: "Terrace", text: "09:00–23:00" },
+    { name: "Inside", text: "08:00–11:00", inheritedFrom: "Restaurant" },
+    { name: "Prep stations", text: "", strong: true },
+    { name: "Grill", text: "", station: true },
+    { name: "Restaurant", text: "Lunch 13:00–16:00 · Dinner 20:00–23:00" },
+  ];
+  await box.updateComplete;
+  box.show(anchor);
+  const root = box.shadowRoot!;
+  expect(
+    [...root.querySelectorAll("section")].map((section) => section.getAttribute("aria-label")),
+  ).toEqual(["Restaurant", "Prep stations"]);
+  const terms = [...root.querySelectorAll("dt")];
+  expect(Number(getComputedStyle(terms[0]!).fontWeight)).toBeGreaterThanOrEqual(600);
+  expect(Number(getComputedStyle(terms[1]!).fontWeight)).toBeLessThan(600);
+  expect(Number(getComputedStyle(terms[4]!).fontWeight)).toBeLessThan(600);
+  const details = [...root.querySelectorAll("dd")];
+  expect(getComputedStyle(details[1]!).fontStyle).toBe("normal");
+  expect(getComputedStyle(details[2]!).fontStyle).toBe("italic");
+  const ranges = [...details[0]!.querySelectorAll(".range")];
+  expect(ranges.map((range) => range.textContent)).toEqual([
+    "08:00–11:00\u00a0·",
+    "13:00–16:00\u00a0·",
+    "20:00–23:00",
+  ]);
+  expect(getComputedStyle(ranges[0]!).display).toBe("inline-block");
+  expect(popup().getBoundingClientRect().width).toBeGreaterThan(400);
+});
+
+it("opens at an anchor-relative point, follows it on scroll and keeps keyboard placement", async () => {
+  Object.assign(anchor.style, {
+    marginLeft: "80px",
+    marginTop: "80px",
+    width: "800px",
+    height: "40px",
+  });
+  box.show(anchor, { x: 200, y: 20 });
+  const before = anchor.getBoundingClientRect();
+  expect(popup().getBoundingClientRect().left).toBeCloseTo(before.left + 200, 0);
+  expect(popup().getBoundingClientRect().top).toBeCloseTo(before.top + 20, 0);
+  anchor.style.marginTop = "120px";
+  window.dispatchEvent(new Event("scroll"));
+  expect(popup().getBoundingClientRect().top).toBeCloseTo(
+    anchor.getBoundingClientRect().top + 20,
+    0,
+  );
+  box.show(anchor);
+  expect(popup().getBoundingClientRect().left).toBeCloseTo(before.left, 0);
+  expect(popup().getBoundingClientRect().top).toBeCloseTo(anchor.getBoundingClientRect().bottom, 0);
+});
+
+it("gives sender ranges the row width beneath a long station name on a phone", async () => {
+  await resizeViewport(390, 844);
+  box.sectioned = true;
+  box.rows = [
+    { name: "Prep stations", text: "", strong: true },
+    { name: "Kitchen and pastry preparation", text: "", station: true },
+    { name: "Restaurant", text: "Lunch 13:00–16:00 · Dinner 20:00–23:00" },
+  ];
+  await box.updateComplete;
+  box.show(anchor);
+  const details = box.shadowRoot!.querySelectorAll("dd");
+  expect(details[2]!.getBoundingClientRect().width).toBeGreaterThan(200);
+  const ranges = details[2]!.querySelectorAll<HTMLElement>(".range");
+  expect(ranges[0]!.getBoundingClientRect().height).toBeLessThan(25);
+  expect(ranges[1]!.getBoundingClientRect().left).toBe(ranges[0]!.getBoundingClientRect().left);
+});

@@ -1073,3 +1073,30 @@ it("a real bar swipe changes day without opening, then a wide bar still opens", 
   expect(opened).toHaveLength(1);
   expect(opened[0]!.date).toBe("2026-11-30");
 });
+
+it.each([1280, 390])(
+  "opens from closed row stretches at the clicked point at %i px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const el = await mount();
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+    const closed = root(el).querySelector<HTMLElement>(".row .track")!;
+    const trigger = root(el).querySelector<HTMLElement>('[data-test="day-name"]')!;
+    const rect = closed.getBoundingClientRect();
+    closed.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        detail: 1,
+        clientX: rect.left + 3,
+        clientY: rect.top + 3,
+      }),
+    );
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.returnTo()).toBe(trigger);
+    expect(sent[0]!.point).toEqual({
+      x: rect.left + 3 - trigger.getBoundingClientRect().left,
+      y: rect.top + 3 - trigger.getBoundingClientRect().top,
+    });
+  },
+);

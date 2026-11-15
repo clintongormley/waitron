@@ -4,9 +4,9 @@
 
 Open a date to see when each department and zone is open. The Month and the day pop-up combine periods that touch: **09:00–00:00** means continuous opening. Grey italic times follow the department's hours.
 
-For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or any of its bars to open that day's hours. A gap in a zone's bars means it is closed then.
+For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or anywhere on its row to open that day's hours. A gap in a zone's bars means it is closed then.
 
-To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
+To change the usual timetable, follow the season's **standard hours** link at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
 
 ## Close a department for a special day {#department-closed}
 
@@ -24,7 +24,7 @@ Paint the zone’s whole **Closed** stretch, even past its department’s curren
 
 In Month or Week, choose **All prep stations** in **Show** to compare stations by sending department, or choose one station to see which departments send it orders. Choose **Show all** to see departments followed by stations. The station icon distinguishes them from zones with similar names.
 
-Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. The default station shows the periods that send it orders too.
+Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. The default station shows the periods that send it orders too. Open a date to read the departments and their zones, followed by the selected stations, or all stations when you have no station filter.
 
 ## Select days together {#select-days}
 

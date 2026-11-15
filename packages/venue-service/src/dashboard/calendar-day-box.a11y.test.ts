@@ -13,7 +13,20 @@ async function mount(theme: "light" | "dark", state: string) {
     theme,
   )) as HTMLElement;
   const box = el.querySelector<CalendarDayBox>("calendar-day-box")!;
-  if (state === "a special day with buttons") {
+  if (state === "department and station sections with a season link") {
+    box.sectioned = true;
+    box.linkedLine = true;
+    box.line = "Autumn standard hours";
+    box.rows = [
+      { name: "Restaurant", text: "08:00–11:00 · 13:00–16:00", strong: true },
+      { name: "Terrace", text: "09:00–23:00" },
+      { name: "Inside", text: "08:00–11:00 · 13:00–16:00", inheritedFrom: "Restaurant" },
+      { name: "Prep stations", text: "", strong: true },
+      { name: "Grill", text: "", station: true },
+      { name: "Restaurant", text: "Lunch 13:00–16:00" },
+    ];
+    box.innerHTML = `<a slot="season-action" href="/manage/opening-hours/view/season/season/autumn">Autumn standard hours</a><wt-button>Edit special day</wt-button>`;
+  } else if (state === "a special day with buttons") {
     box.name = "School holidays";
     box.nameKind = "special";
     box.line = "Special day — replaces Autumn's standard hours";
@@ -43,6 +56,7 @@ async function mount(theme: "light" | "dark", state: string) {
 
 describe.each(["light", "dark"] as const)("calendar-day-box in %s", (theme) => {
   test.each([
+    "department and station sections with a season link",
     "a special day with buttons",
     "a plain day with a long name",
     "a loading message",

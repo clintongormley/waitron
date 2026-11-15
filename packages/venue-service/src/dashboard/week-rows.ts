@@ -65,7 +65,6 @@ export interface WeekRow {
   key: string;
   name: string;
   zone: boolean;
-  /** As `DayBoxRow.strong`: a department, or a zone with hours of its own. */
   strong: boolean;
   blocks: WeekBlock[];
   /** The words inside an empty track: "Closed all day" or "". */

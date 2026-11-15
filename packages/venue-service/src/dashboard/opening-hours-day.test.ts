@@ -28,7 +28,7 @@ function terraceClosed(date: LocalDate, closed: { startsAt: string; endsAt: stri
   return model;
 }
 
-const ALL_DAY = "08:00–11:00, 13:00–16:00, 20:00–23:00";
+const ALL_DAY = "08:00–11:00 · 13:00–16:00 · 20:00–23:00";
 
 describe("openingHoursDay", () => {
   it("reads a plain Winter Tuesday for every department, each followed by its zones", () => {
@@ -47,8 +47,7 @@ describe("openingHoursDay", () => {
   it("lists only a zone's opening ranges", () => {
     expect(dayBox("2026-12-01").rows[1]).toEqual({
       name: "Terrace",
-      text: "08:00–11:00, 13:00–16:00, 22:00–23:00",
-      strong: true,
+      text: "08:00–11:00 · 13:00–16:00 · 22:00–23:00",
     });
   });
 
@@ -114,7 +113,7 @@ describe("openingHoursDay", () => {
       inheritedFrom: "Restaurant",
     });
     expect(dayBox("2026-12-25").rows[0]!.text).toBe("Cerrado");
-    expect(dayBox("2026-12-01").rows[1]!.text).toBe("08:00–11:00, 13:00–16:00, 22:00–23:00");
+    expect(dayBox("2026-12-01").rows[1]!.text).toBe("08:00–11:00 · 13:00–16:00 · 22:00–23:00");
   });
 
   it("reads a zone closed through all its department's hours as Closed, with no closed pieces", () => {
@@ -139,7 +138,6 @@ describe("openingHoursDay", () => {
     expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({
       name: "Terrace",
       text: "Closed",
-      strong: true,
     });
   });
 
@@ -147,11 +145,10 @@ describe("openingHoursDay", () => {
     const model = monthModel();
     const day = model.days.find((d) => d.date === "2026-12-01")!;
     expect(openingHoursDay(day, model.seasons, [], "rest").rows).toEqual([
-      { name: "", text: "08:00–11:00, 13:00–16:00, 20:00–23:00", strong: true },
+      { name: "", text: "08:00–11:00 · 13:00–16:00 · 20:00–23:00", strong: true },
       {
         name: "",
-        text: "08:00–11:00, 13:00–16:00, 22:00–23:00",
-        strong: true,
+        text: "08:00–11:00 · 13:00–16:00 · 22:00–23:00",
       },
     ]);
   });
@@ -160,8 +157,7 @@ describe("openingHoursDay", () => {
     const model = terraceClosed("2026-12-15", [{ startsAt: "22:00", endsAt: "04:00" }]);
     expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({
       name: "Terrace",
-      text: "08:00–11:00, 13:00–16:00, 20:00–22:00",
-      strong: true,
+      text: "08:00–11:00 · 13:00–16:00 · 20:00–22:00",
     });
   });
 
@@ -241,14 +237,13 @@ it.each(["en", "es"])("summarises open hours and inherited zones in %s", (locale
   ]);
   for (const [closures, text] of [
     [[{ startsAt: "23:00", endsAt: "00:00" }], "09:00–23:00"],
-    [[{ startsAt: "15:00", endsAt: "17:00" }], "09:00–15:00, 17:00–00:00"],
+    [[{ startsAt: "15:00", endsAt: "17:00" }], "09:00–15:00 · 17:00–00:00"],
     [[{ startsAt: "09:00", endsAt: "00:00" }], locale === "en" ? "Closed" : "Cerrado"],
   ] as const) {
     day.departments[0]!.zones[0]!.closed = [...closures];
     expect(dayBox(day.date, "rest", model).rows[1]).toEqual({
       name: "Terrace",
       text,
-      strong: true,
     });
   }
 });

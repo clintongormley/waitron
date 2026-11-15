@@ -705,6 +705,10 @@ it("draws separate sender rows from one batch and keeps the default bounded on c
   await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")?.shown).toBe(true);
   const box = el.shadowRoot!.querySelector("calendar-day-box")!;
   expect(box.rows.map(({ name }) => name)).toEqual([
+    "Restaurant",
+    "Terrace",
+    "Bar",
+    "Prep stations",
     "Grill",
     "Kitchen",
     "Restaurant",
@@ -713,8 +717,8 @@ it("draws separate sender rows from one batch and keeps the default bounded on c
     "Restaurant",
     "Bar",
   ]);
-  expect(box.querySelector('[data-test="special-add"]')).toBeNull();
-  expect(box.querySelector('[data-test="edit-week"]')).toBeNull();
+  expect(box.querySelector('[data-test="special-add"]')).not.toBeNull();
+  expect(box.querySelector('a[data-test="edit-week"]')).not.toBeNull();
   expect(box.querySelector('a[href="/manage/periods"]')).toBeNull();
 });
 

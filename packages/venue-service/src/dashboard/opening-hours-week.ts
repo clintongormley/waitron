@@ -608,9 +608,15 @@ export class OpeningHoursWeekView extends LitElement {
     });
   }
 
-  #noOrders(rows: readonly WeekRow[], orders: boolean) {
+  #noOrders(rows: readonly WeekRow[], orders: boolean, day: Day) {
     return orders && !this.show && rows.every((row) => !row.blocks.length)
-      ? html`<p class="no-orders" data-test="no-orders">${t("month.no_orders")}</p>`
+      ? html`<p
+          class="no-orders"
+          data-test="no-orders"
+          @click=${(event: MouseEvent) => this.#openBarDay(day.date, event)}
+        >
+          ${t("month.no_orders")}
+        </p>`
       : undefined;
   }
 
@@ -634,7 +640,7 @@ export class OpeningHoursWeekView extends LitElement {
         data-test="day-card"
         @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
       >
-        ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#phoneRow(row, day!, names, orders))}
+        ${this.#noOrders(rows, orders, day!) ?? rows.map((row) => this.#phoneRow(row, day!, names, orders))}
       </div>`;
   }
 
@@ -675,17 +681,27 @@ export class OpeningHoursWeekView extends LitElement {
     window.removeEventListener("pointercancel", this.#swipeEnd);
   }
 
-  #openBarDay(date: LocalDate): void {
+  #openBarDay(date: LocalDate, event: MouseEvent): void {
+    const rect = this.#dayButton(date)!.getBoundingClientRect();
     this.#emit<CalendarDayOpen>("calendar-day-open", {
       date,
       returnTo: () => this.#dayButton(date),
+      point:
+        event.detail > 0
+          ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+          : undefined,
     });
   }
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
     const span = day.endMinute;
     return html`${row.stationHeading ? html`<h3 class="station-heading">${stationIcon()}${row.stationHeading}</h3>` : nothing}
-      <div class="row" data-row=${row.key} ?data-station-child=${row.stationGroup !== undefined}>
+      <div
+        class="row"
+        data-row=${row.key}
+        ?data-station-child=${row.stationGroup !== undefined}
+        @click=${(event: MouseEvent) => this.#openBarDay(day.date, event)}
+      >
         <span class="row-name ${row.strong ? "strong" : ""}"
           >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
         >
@@ -695,7 +711,6 @@ export class OpeningHoursWeekView extends LitElement {
             (block) =>
               html`<span
                 class="block"
-                @click=${() => this.#openBarDay(day.date)}
                 data-colour=${names.period(block.periodId).colour || nothing}
                 ?data-faded=${block.faded}
                 style=${styleMap({
@@ -766,14 +781,19 @@ export class OpeningHoursWeekView extends LitElement {
             >`,
         )}
       </h3>
-      ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#row(row, day, names, longest))}
+      ${this.#noOrders(rows, orders, day) ?? rows.map((row) => this.#row(row, day, names, longest))}
     </section>`;
   }
 
   #row(row: WeekRow, day: Day, names: MonthNames, longest: number) {
     const span = day.endMinute;
     return html`${row.stationHeading ? html`<h4 class="station-heading">${stationIcon()}${row.stationHeading}</h4>` : nothing}
-      <div class="row" data-row=${row.key} ?data-station-child=${row.stationGroup !== undefined}>
+      <div
+        class="row"
+        data-row=${row.key}
+        ?data-station-child=${row.stationGroup !== undefined}
+        @click=${(event: MouseEvent) => this.#openBarDay(day.date, event)}
+      >
         <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
           >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
         >
@@ -794,7 +814,6 @@ export class OpeningHoursWeekView extends LitElement {
                         class="block"
                         data-colour=${names.period(block.periodId).colour || nothing}
                         ?data-faded=${block.faded}
-                        @click=${() => this.#openBarDay(day.date)}
                         style=${styleMap({
                           left: `${(block.start / span) * 100}%`,
                           width: `${((block.end - block.start) / span) * 100}%`,
