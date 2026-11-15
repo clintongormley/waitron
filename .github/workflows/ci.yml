@@ -322,6 +322,7 @@ jobs:
         continue-on-error: true
         env:
           CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
+          CAPACITY_READ_TOKEN: ${{ secrets.DISPOSABLE_CAPACITY_READ_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
         run: |

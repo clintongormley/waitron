@@ -199,7 +199,22 @@ single job. GitHub reports the hosted image job as `image / smoke`.
 expressions locally; these checks do not run a hosted image build. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-The routing job uses its existing read-only Actions token. After a successful server-health
+When configured, the route command first reads `DISPOSABLE_TESTS_CAPACITY` using the repository secret
+`DISPOSABLE_CAPACITY_READ_TOKEN`. Only that bounded read uses this credential; queue and health
+inventories keep the existing workflow token. A missing or empty secret, a failed read or an
+invalid capacity value retains the snapshot supplied when the run was created. When routing consults
+capacity, console and summary
+distinguish `fresh`, `snapshot (no read token)` and `snapshot (fresh read failed)`.
+Create the repository-only token with Variables read access and renew it every 90 days;
+trusted same-repository workflow code can access this credential.
+If the source says `snapshot (fresh read failed)`, inspect the job log and stored capacity value;
+renew an expired token.
+
+| Source | Source words | Use here |
+| --- | --- | --- |
+| [Variable API](https://docs.github.com/en/rest/actions/variables#get-a-repository-variable) | “Variables” repository permissions (read) | Grant the capacity credential this read permission. |
+
+After a successful server-health
 scan and capacity validation, positive server slots with zero running and waiting work select
 the server without reading hosted counts: every hosted count gives the same server-tie result.
 Otherwise, with no stuck server queue,
@@ -217,7 +232,8 @@ For measured decisions, the summary prints snapshot age and the chosen side, inc
 counts when the comparison needs them. This repository snapshot reserves no capacity;
 simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
 Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
-The snapshot has no expiry rule, so inspect the printed age; the decision routes a whole run.
+Inspect the printed age: a fresh read still contains the publisher's last observation. The
+decision routes a whole run. The initial allocation of `changes` still uses its run-creation snapshot.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 Routing limits its queued-run lists to runs created in the last 24 hours, using

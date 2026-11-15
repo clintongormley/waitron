@@ -264,6 +264,7 @@ cat "$FIXTURE_ROUTER"
         { mode: 0o755 },
       );
       const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)[1];
+      expect(step).toContain("CAPACITY_READ_TOKEN: ${{ secrets.DISPOSABLE_CAPACITY_READ_TOKEN }}");
       const token = step.match(/^ {10}GH_TOKEN: \$\{\{ (.+) \}\}$/m)?.[1];
       expect(token).toBeDefined();
       const body =
