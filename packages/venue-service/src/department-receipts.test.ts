@@ -165,7 +165,11 @@ describe("department receipt storage", () => {
       footerMessage: { "es-ES": "Adiós" },
     });
     expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toBeNull();
-    const rows = (await suite.db.execute(sql`select id from departments where id = ${f.id}`)).rows;
+    const rows = (
+      await suite.db.execute(
+        sql`select id from departments where id = ${f.id} and receipt_updated_at is not null`,
+      )
+    ).rows;
     expect(rows).toHaveLength(1);
   });
   it("keeps recorded receipt settings internally while hiding deleted departments from management", async () => {

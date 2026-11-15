@@ -910,6 +910,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   from time to time, not per slice (owner, 2026-11-10;
   [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
+  After vb5 and before vb6, drop the department receipt raster cache and convert at print time,
+  following [vb5’s cache decision](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#what-it-builds).
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled

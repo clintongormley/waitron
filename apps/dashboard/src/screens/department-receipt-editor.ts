@@ -360,7 +360,6 @@ export class DepartmentReceiptEditor extends LitElement {
           key: `department-receipt-editor:${department.id}:${opening}`,
           dependencies: [
             { type: "departments" },
-            { type: "departments" },
             { type: "settings.business_day" },
             { type: "settings.venue" },
           ],
