@@ -3,7 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { flatParent, scrollTargets } from "./flat-tree.js";
 import { format } from "./hours-view.js";
-import { stationIcon } from "./calendar-show.js";
+import { stationIcon } from "./station-icon.js";
 import { placePopover } from "./painter.js";
 
 export interface DayBoxRow {

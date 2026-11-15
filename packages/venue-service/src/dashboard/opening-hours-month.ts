@@ -23,7 +23,8 @@ import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
-import { showPicker, stationIcon, stationExplanation, type CalendarShow } from "./calendar-show.js";
+import { stationIcon } from "./station-icon.js";
+import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
 import type { ShowStation, StationShow } from "./station-show.js";
 
 type Day = OpeningHoursMonth["days"][number];

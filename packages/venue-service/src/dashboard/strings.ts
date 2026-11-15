@@ -1117,7 +1117,7 @@ const es: Record<keyof typeof en, string> = {
   "opening.all_stations": "Todas las estaciones de preparación",
   "opening.prep_station": "Estación de preparación",
   "opening.station_hours":
-    "Una estación de preparación está abierta mientras un periodo le envía pedidos. Cambia sus horarios mediante los periodos, sus menús, las rutas o los cierres de las zonas. La estación predeterminada siempre está abierta.",
+    "Una estación de preparación está abierta mientras un periodo le envía pedidos. Cambia sus horarios mediante los periodos, sus cartas, las rutas o los cierres de las zonas. La estación predeterminada siempre está abierta.",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.closed_invalid": "Estas horas de cierre se solapan o no van de 15 en 15 minutos.",
   "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",

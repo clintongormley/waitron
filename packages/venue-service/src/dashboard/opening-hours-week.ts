@@ -7,7 +7,8 @@ import { clockAt } from "../day-paint.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import { showPicker, stationIcon, stationExplanation, type CalendarShow } from "./calendar-show.js";
+import { stationIcon } from "./station-icon.js";
+import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
 import { formatDayHeading, formatDayTitleParts, formatWeekTitleParts } from "./hours-view.js";
 import {
   chosenDepartment,
