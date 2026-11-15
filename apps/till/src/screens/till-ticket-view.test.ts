@@ -3504,6 +3504,101 @@ describe("a corrective invoice", () => {
     await userEvent.click(toggle);
     expect(el.shadowRoot!.querySelector("[data-test=document-invoice]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=email-invoice]")).toBeNull();
+    // The toggle goes straight to the receipt: no document menu is offered.
+    expect(el.shadowRoot!.querySelector("[data-test=document-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    // The menu is never reached for an R4 through the screen; opened directly, it still has no A4.
+    (el as unknown as { printDocument: null }).printDocument = null;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=document-receipt]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=document-invoice]")).toBeNull();
+  });
+
+  it("treats a replacement of a full invoice's receipt as a receipt's original, not a full invoice's", async () => {
+    // With no print status read yet, a full invoice offers no receipt print; a receipt offers its
+    // original while the till still holds it.
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, ...replacementOfFull },
+      originalReceiptAvailable: true,
+      invoicePrintersEnabled: true,
+    });
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+  });
+
+  it("lays out a replacement of a full invoice's lines, extras and reductions as a full invoice", async () => {
+    const labels = receiptLabelsFor("es-ES");
+    const net = (unitPrice: string, base: string, tax: string) => ({
+      unitPrice,
+      priceQuantity: "1.000",
+      base,
+      rate: "10.00",
+      tax,
+    });
+    const beer = {
+      descriptions: { "es-ES": "Caña" },
+      quantity: "1",
+      gross: "1.50",
+      net: net("1.36", "1.36", "0.14"),
+    };
+    const { el } = await mount({
+      ...replacementOfFull,
+      total: "13.60",
+      vatBreakdown: [{ rate: "10.00", base: "12.36", tax: "1.24" }],
+      lines: [
+        beer,
+        beer,
+        {
+          descriptions: { "es-ES": "Plato" },
+          quantity: "1",
+          gross: "10.80",
+          listGross: "12.00",
+          net: net("9.82", "9.82", "0.98"),
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
+        },
+        {
+          descriptions: { "es-ES": "Extra" },
+          quantity: "2",
+          gross: "1.80",
+          parentLineNo: 3,
+          net: net("0.82", "1.64", "0.16"),
+        },
+      ],
+      billAdjustments: [{ kind: "discount", amount: "0.50" }],
+    });
+    const dishes = [...el.shadowRoot!.querySelectorAll("li.line:has(.line-qty)")];
+    expect(
+      dishes.map((row) => [
+        row.querySelector(".line-name")!.textContent!.trim(),
+        row.querySelector(".line-qty")!.textContent!.trim(),
+      ]),
+    ).toEqual([
+      ["Caña", "1"],
+      ["Caña", "1"],
+      ["Plato", "1"],
+    ]);
+    expect(dishes.map((row) => row.querySelector(".line-gross"))).toEqual([null, null, null]);
+    const extra = el.shadowRoot!.querySelector(".line.option")!;
+    expect(extra.querySelector(".line-name")!.textContent).toContain("Extra 2");
+    expect(extra.querySelector(".line-name")!.textContent).not.toContain("x2");
+    expect(extra.querySelector(".line-gross")).toBeNull();
+    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
+      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+    expect(facts).toHaveLength(4);
+    expect(facts[3]).toContain("IVA 10.00% 0,16 €");
+    expect(el.shadowRoot!.querySelector(".adjustment")!.textContent).toContain(
+      `(${labels.vatIncluded})`,
+    );
+    expect(el.shadowRoot!.querySelector(".bill-adjustment")!.textContent).toContain(
+      `(${labels.vatIncluded})`,
+    );
   });
 
   it.each([
@@ -3541,6 +3636,33 @@ describe("a corrective invoice", () => {
       );
     },
   );
+
+  it.each([
+    ["en-GB", "15 Mar 2026"],
+    ["es-ES", "15 mar 2026"],
+  ])("in %s, shows the day of sale as written on a till west of UTC", async (locale, written) => {
+    // The browser's own zone cannot be set from a test, so a stand-in reads every date format that
+    // names no zone in the Azores (UTC-1), where midnight UTC on 15 March is still 14 March.
+    const Real = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = class extends Real {
+      constructor(locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+        super(locales, { timeZone: "Atlantic/Azores", ...options });
+      }
+    } as typeof Intl.DateTimeFormat;
+    try {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        result: { ...result, ...replacementOfFull, locale, saleDay: "2026-03-15" },
+      });
+      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
+        /\s+/g,
+        " ",
+      );
+      expect(meta).toContain(`${receiptLabelsFor(locale).saleDate} ${written}`);
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
+  });
 
   it("shows no day of sale on a replacement whose sale day is its issue day", async () => {
     const { el } = await mount(replacementOfFull);
