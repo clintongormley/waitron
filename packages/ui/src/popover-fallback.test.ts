@@ -1,3 +1,4 @@
+import { html } from "lit";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mount, host } from "./test-helpers.js";
@@ -71,6 +72,8 @@ for (const width of [390, 1280]) {
       expect(el.shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false).toBe(
         false,
       );
+      const closed = el.shadowRoot!.querySelector<HTMLElement>("[popover]");
+      if (closed) expect(getComputedStyle(closed).display).toBe("none");
       await userEvent.click(trigger);
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[popover]")).not.toBeNull());
       const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -266,3 +269,36 @@ test("an overlay drag queues no scroll of its ancestor; closing it restores ance
     vi.restoreAllMocks();
   }
 });
+
+test.each([false, true])(
+  "a pinned row menu receives clicks over the next row (clickable=%s)",
+  async (clickable) => {
+    const table = (await mount("<wt-data-table></wt-data-table>")) as WtDataTable<{ id: number }>;
+    table.rowKey = (row) => String(row.id);
+    if (clickable) table.rowClick = () => {};
+    const picked: number[] = [];
+    table.columns = [
+      { key: "name", label: "Name", cell: (row) => `Order ${row.id}` },
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: (row) =>
+          html`<wt-row-actions label=${`Actions ${row.id}`}
+            ><button>Edit ${row.id}</button
+            ><button @click=${() => picked.push(row.id)}>Delete ${row.id}</button></wt-row-actions
+          >`,
+      },
+    ];
+    table.rows = Array.from({ length: 6 }, (_, index) => ({ id: index + 1 }));
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("wt-row-actions")!;
+    await menu.updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu.querySelectorAll("button")[1]!);
+    expect(picked).toEqual([1]);
+    await vi.waitFor(() => expect(menu.hasAttribute("data-fallback-popover-open")).toBe(false));
+  },
+);

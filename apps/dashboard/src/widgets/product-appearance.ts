@@ -16,10 +16,6 @@ export class ProductAppearance extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      [popover].\\:popover-open {
-        z-index: 100;
-      }
-
       :host {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);

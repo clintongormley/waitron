@@ -24,3 +24,9 @@ dashboard and till, with the guest menu queued separately. A forced-fallback pho
 run then found sticky headings covering Close. At 17:20 the watcher cleared fallback-only
 stacking rules in the existing overlay styles, with trusted pointer checks; no portal or
 new overlay manager. These are watcher clearances, not owner approval of this design.
+
+**Review correction, 2026-11-15.** The watcher cleared the review corrections at 17:52:
+neutralize native hiding/positioning in the simulation; retain closed hiding in shared styles;
+raise the open fallback row menu's pinned cell; use the polyfill-patched shadow-root lookup
+in the till; trim unproven stacking rules. About 900 added lines, one fresh read of fixes,
+no new plan, portal, protocol or manager. This supersedes the broad stacking clarification above.

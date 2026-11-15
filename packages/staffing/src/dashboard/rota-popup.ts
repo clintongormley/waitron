@@ -30,10 +30,6 @@ export class RotaPopup extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      [popover].\\:popover-open {
-        z-index: 100;
-      }
-
       [popover] {
         position: fixed;
         inset: auto;

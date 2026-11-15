@@ -60,11 +60,13 @@ modern-web guidance review.
 
 Setup, dashboard and till call `startWithPopover` before mounting. It loads the bundled
 `@oddbird/popover-polyfill` only when `HTMLElement.prototype` has no own `popover` property.
-If that chunk fails, startup records `ui.popover_load_failed` and mounts the app; its popovers
-remain unavailable until a successful reload. Keep open-state CSS in the forgiving selector
+If that chunk fails, startup records `ui.popover_load_failed` and attempts to mount the app;
+controls that query the missing API can fail during updates or interaction. Reload to retry it. Keep open-state CSS in the forgiving selector
 `:is(:popover-open, .\:popover-open)`, escaping the backslash in a Lit CSS string.
-The fallback has no native top layer: its open class receives stacking styles in each existing
-overlay. Check real pointer hit-testing, especially beside sticky table headings and inside dialogs.
+Lit replaces the shadow-root styles the polyfill injects, so components keep `popoverVisibilityStyles`
+in their own styles (`baseStyles` includes it). A host that uses neither must include that fragment.
+The fallback has no native top layer. Fullscreen Filters and pinned cells with an open fallback
+row menu have explicit stacking rules. Check real pointer hit-testing in containing tables and dialogs.
 The server-rendered guest menu has its own script-free delivery and is separate from these app entries.
 
 

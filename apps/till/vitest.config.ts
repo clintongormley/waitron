@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
@@ -65,7 +66,20 @@ export default defineConfig({
       enabled: true,
       provider: playwright({}),
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: [
+        { browser: "chromium" },
+        {
+          browser: "chromium",
+          name: "chromium-fallback",
+          include: ["src/screens/till-table-order-screen.move-dishes.test.ts"],
+          testNamePattern: "fallback layout",
+          setupFiles: [
+            fileURLToPath(
+              new URL("../../packages/ui/test/popover-fallback-ready.ts", import.meta.url),
+            ),
+          ],
+        },
+      ],
       commands: {
         probeTillReload,
         holdDraftLine,

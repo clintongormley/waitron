@@ -12,10 +12,6 @@ export class WtRowActions extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      [popover].\\:popover-open {
-        z-index: 100;
-      }
-
       :host {
         display: inline-block;
       }
@@ -115,6 +111,7 @@ export class WtRowActions extends LitElement {
 
   override disconnectedCallback(): void {
     this.expanded = false;
+    this.removeAttribute("data-fallback-popover-open");
     this.#resize.disconnect();
     window.removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
@@ -122,6 +119,10 @@ export class WtRowActions extends LitElement {
 
   private onToggle(): void {
     this.expanded = this.popup.matches(":popover-open");
+    this.toggleAttribute(
+      "data-fallback-popover-open",
+      this.popup.classList.contains(":popover-open"),
+    );
     if (!this.expanded) {
       this.#resize.unobserve(this.popup);
       window.removeEventListener("resize", this.onWindowResize);

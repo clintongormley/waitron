@@ -7,10 +7,6 @@ export interface MenuPopoverParts {
 }
 
 export const menuOptionStyles = css`
-  [popover].\\:popover-open {
-    z-index: 100;
-  }
-
   :where([role="menu"]) > .option {
     display: block;
     width: 100%;

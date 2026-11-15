@@ -1,18 +1,17 @@
 for (const name of ["popover", "showPopover", "hidePopover", "togglePopover"])
   Reflect.deleteProperty(HTMLElement.prototype, name);
 
-// Chromium keeps its closed-popover UA rule after removing the JavaScript API.
-// A low-priority layer restores the display an older engine gives an open div.
-const documentStyle = document.createElement("style");
-documentStyle.textContent =
-  "@layer simulation { [popover]:where(.\\:popover-open) { display: block; } }";
-document.head.prepend(documentStyle);
+// Removing APIs leaves Chromium's UA hiding and positioning rules in place.
+// This low-priority layer restores a plain div; actual component/polyfill styles win.
+const simulation = document.createElement("style");
+simulation.textContent = `@layer simulation { [popover] {
+  display: block; position: static; inset: auto; margin: 0; border: 0; padding: 0;
+  width: auto; height: auto; background: transparent; color: inherit; overflow: visible;
+} }`;
+document.head.prepend(simulation);
 const attach = Element.prototype.attachShadow;
 Element.prototype.attachShadow = function (options) {
   const root = attach.call(this, options);
-  const simulation = document.createElement("style");
-  simulation.textContent =
-    "@layer simulation { [popover]:where(.\\:popover-open) { display: block; } }";
-  root.prepend(simulation);
+  root.prepend(simulation.cloneNode(true));
   return root;
 };
