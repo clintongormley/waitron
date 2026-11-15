@@ -42,6 +42,7 @@ export function storedCounterparty(row: {
   counterpartyIdentifierCountryCode: string | null;
 }): Counterparty | null {
   if (row.counterpartyTaxId === null) return null;
+  // The database does not require a name and country beside a tax number; the writers store them.
   return {
     taxId: row.counterpartyTaxId,
     legalName: row.counterpartyLegalName!,
