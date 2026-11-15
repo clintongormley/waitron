@@ -2059,7 +2059,7 @@ describe("A725 retired Times destinations", () => {
 });
 
 describe("a link naming a station", () => {
-  const withRetiredGrill: PrepStationsView = {
+  const withDeletedGrill: PrepStationsView = {
     ...view,
     stations: [
       ...view.stations,
@@ -2075,13 +2075,16 @@ describe("a link naming a station", () => {
     expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/bar");
     expect(push).not.toHaveBeenCalled();
   });
-  it.each(["ghost", "grill"])(
+  it.each([
+    ["an unknown station", "ghost"],
+    ["a deleted station", "grill"],
+  ])(
     "opens nothing for %s and drops it from the address without a history entry",
-    async (id) => {
+    async (_, id) => {
       history.replaceState(null, "", `/manage/prep-stations/view/stations/station/${id}`);
       const push = vi.spyOn(history, "pushState");
       const replace = vi.spyOn(history, "replaceState");
-      const el = await mount(api({ load: vi.fn().mockResolvedValue(withRetiredGrill) }));
+      const el = await mount(api({ load: vi.fn().mockResolvedValue(withDeletedGrill) }));
       await settleEditor(el);
       expect(stationEditor(el)).toBeNull();
       expect(location.pathname).toBe("/manage/prep-stations/view/stations");
@@ -2097,6 +2100,41 @@ describe("a link naming a station", () => {
     expect(stationEditor(el)).not.toBeNull();
     await cancelEditor(el);
     expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it("closes the editor it opened when the address loses the station, and a re-read of the same address changes nothing", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const el = await mount(api());
+    await settleEditor(el);
+    const opened = stationEditor(el);
+    expect(opened?.station?.id).toBe("bar");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)).toBe(opened);
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    expect(stationEditor(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  });
+  it("leaves an editor opened from its row menu open when the address names another station, then names none", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    const el = await mount(
+      api({ load: vi.fn().mockResolvedValue({ ...view, stations: [...view.stations, upstairs] }) }),
+    );
+    await settle(el);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    const push = vi.spyOn(history, "pushState");
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/upstairs");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
     expect(push).not.toHaveBeenCalled();
   });
 });

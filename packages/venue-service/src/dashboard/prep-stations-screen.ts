@@ -197,12 +197,15 @@ export class PrepStationsScreen extends LitElement {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
       this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
-      this.#linkedStation = requested === "stations" ? this.#url.read("station") : null;
-      this.#url.write(
-        { dashboard: "prep-stations", view: this.tab, station: this.#linkedStation },
-        true,
-      );
-      if (this.view) this.#openLinkedStation();
+      const id = requested === "stations" ? this.#url.read("station") : null;
+      this.#url.write({ dashboard: "prep-stations", view: this.tab, station: id }, true);
+      if (id === this.#addressStation) return;
+      this.#linkedStation = this.#addressStation = id;
+      if (id !== null) {
+        if (this.view) this.#openLinkedStation();
+      } else if (this.#linkedEdit && this.#linkedEdit === this.stationEdit?.token) {
+        this.stationEdit = undefined;
+      }
     },
     {
       basePath: "/manage",
@@ -211,9 +214,14 @@ export class PrepStationsScreen extends LitElement {
     },
   );
   #linkedStation: string | null = null;
+  #addressStation: string | null = null;
   /** The opening a link made, whose closing takes the station back out of the address. */
   #linkedEdit?: object;
-  /** A link to a station that is gone, retired or behind another open editor leaves the address. */
+  #clearStationAddress() {
+    this.#linkedStation = this.#addressStation = null;
+    this.#url.write({ station: null }, true);
+  }
+  /** A link to a station that is unknown, deleted or behind another open editor leaves the address. */
   #openLinkedStation() {
     const id = this.#linkedStation;
     if (id === null) return;
@@ -226,7 +234,7 @@ export class PrepStationsScreen extends LitElement {
     if (station && !this.stationEdit) {
       this.#editStation(station);
       this.#linkedEdit = this.stationEdit!.token;
-    } else this.#url.write({ station: null }, true);
+    } else this.#clearStationAddress();
   }
   /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
@@ -406,7 +414,7 @@ export class PrepStationsScreen extends LitElement {
       this.stationEdit?.token !== this.#linkedEdit
     ) {
       this.#linkedEdit = undefined;
-      this.#url.write({ station: null }, true);
+      this.#clearStationAddress();
     }
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;

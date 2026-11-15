@@ -5153,8 +5153,9 @@ describe("dashboard URL navigation", () => {
     ).toEqual(["stations", "routing"]);
   });
 
-  it("a followed link naming a station opens that station's editor and keeps it in the address", async () => {
-    history.replaceState(null, "", "/manage/printers");
+  /** The dashboard at `path`, whose Prep stations screen loads one active station, Grill. */
+  async function mountWithGrill(path: string) {
+    history.replaceState(null, "", path);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -5208,20 +5209,61 @@ describe("dashboard URL navigation", () => {
             : stubRequest(path, method, body, options),
     });
     await flush(el);
+    return el;
+  }
+  const grillEditor = (el: DashboardApp) =>
+    el
+      .shadowRoot!.querySelector("dashboard-prep-stations-screen")
+      ?.shadowRoot!.querySelector<HTMLElement & { station?: { id: string } }>(
+        "prep-station-editor",
+      ) ?? null;
+
+  it("an address naming a station opens that station's editor and keeps it in the address", async () => {
+    const el = await mountWithGrill("/manage/printers");
     void navigationGuardFor(window)!.write(
       new URL("/manage/prep-stations/view/stations/station/grill", location.href),
     );
-    await expect
-      .poll(
-        () =>
-          el
-            .shadowRoot!.querySelector("dashboard-prep-stations-screen")
-            ?.shadowRoot!.querySelector<HTMLElement & { station?: { id: string } }>(
-              "prep-station-editor",
-            )?.station?.id,
-      )
-      .toBe("grill");
+    await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
     expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/grill");
+  });
+
+  it("Back from an address naming a station closes the editor it opened", async () => {
+    const el = await mountWithGrill("/manage/prep-stations/view/stations");
+    void navigationGuardFor(window)!.write(
+      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+    );
+    await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/stations");
+    await expect.poll(() => grillEditor(el)).toBeNull();
+  });
+
+  it("Back from an address naming a station asks before closing a changed editor: Keep keeps it, Discard closes it", async () => {
+    const el = await mountWithGrill("/manage/prep-stations/view/stations");
+    void navigationGuardFor(window)!.write(
+      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+    );
+    await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
+    const nameField = () =>
+      grillEditor(el)!.shadowRoot!.querySelector<WtInput>("wt-input[name=stationName]")!;
+    nameField().dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Hot grill" } }));
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    for (const decision of ["keep", "discard"] as const) {
+      history.back();
+      await expect.poll(() => question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${decision}"]`)!.click();
+      await expect.poll(() => question.open).toBe(false);
+      await flush(el);
+      if (decision === "keep") {
+        await expect
+          .poll(() => location.pathname)
+          .toBe("/manage/prep-stations/view/stations/station/grill");
+        expect(nameField().value).toBe("Hot grill");
+      }
+    }
+    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/stations");
+    await expect.poll(() => grillEditor(el)).toBeNull();
   });
 
   it("an old tester link opens the Routing tab", async () => {
