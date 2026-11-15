@@ -1546,6 +1546,13 @@ export class DashboardApp extends LitElement {
       else document.addEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
     }
     this.#placeStripPanel();
+    const page = this.#permittedNav()
+      .flatMap(({ pages }) => pages)
+      .find((entry) => entry.screen === this.screen);
+    document.title =
+      page === undefined
+        ? t("nav.document_title_none")
+        : fill("nav.document_title", { page: page.label });
     if (
       (changed.has("contentLanguagesReady") || changed.has("contentLanguageError")) &&
       this.sessionPersonId !== undefined
