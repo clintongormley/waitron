@@ -571,7 +571,6 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const network = `const net=require("node:net"),os=require("node:os");const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>c.write('network.read {"actor":{"source":"server"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>console.log("B3_NETWORK:"+JSON.stringify({reply:JSON.parse(text),interfaces:os.networkInterfaces()})));c.on("error",e=>{throw e});`;
       const networkProbe = `printf %%s ${Buffer.from(network).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
       const networkOperations = `const net=require("node:net");const ask=line=>new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("host deadline"))});c.on("connect",()=>c.write(line+"\\n"));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});(async()=>{const actor={source:"person",person:"rehearsal-owner"};const scan=await ask("network.scan "+JSON.stringify({actor}));const join=await ask("network.join "+JSON.stringify({ssidHex:"41",keyMgmt:"wpa-psk",psk:"rehearsal-password",hidden:false,actor}));const forget=await ask("network.forget "+JSON.stringify({ssidHex:"42",actor}));console.log("B3_NETWORK_OPS:"+JSON.stringify({scan,join,forget}))})().catch(e=>{console.error(e);process.exitCode=1});`;
-      const operationsProbe = `printf %%s ${Buffer.from(networkOperations).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
       const reconcile = `
 const fs=require("node:fs"),cp=require("node:child_process"),net=require("node:net");
 const profile="/etc/NetworkManager/system-connections/b3-rehearsal.nmconnection",copy="/boot/waitron-recovery/wifi.json";
@@ -622,6 +621,7 @@ const reply=await new Promise((resolve,reject)=>{const c=net.connect("/run/waitr
 if(reply.ok!==true)throw Error("saved forget refused");cp.execFileSync("systemctl",["start","waitron-network-change.service"]);
 const state=JSON.parse(fs.readFileSync("/var/lib/waitron-host/network.json"));
 const forgotten=!fs.existsSync(copy)&&!fs.existsSync(profile)&&state.change.kind==="forget"&&state.change.state==="applied"&&state.bootCopy.state==="absent";
+cp.execFileSync("setpriv",["--reuid=10001","--regid=10001","--clear-groups","node","-e",${JSON.stringify(networkOperations)}],{stdio:"inherit"});
 cp.execFileSync("systemctl",["disable","--now","waitron-network-monitor.service"]);
 cp.execFileSync("systemctl",["start","waitron-network-change.service"]);
 load("startup-password");
@@ -629,7 +629,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
 })().catch(e=>{console.error(e);process.exitCode=1});`;
       const reconcileProbe = probe(reconcile);
       const checks =
-        `; ${networkProbe}; ${reconcileProbe}; ${operationsProbe}` +
+        `; ${networkProbe}; ${reconcileProbe}` +
         (caseName === "existing-stick"
           ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayedUpCheck)}` : ""}`
           : "");

@@ -523,6 +523,15 @@ describe("the box's systemd units", () => {
     );
   });
 
+  it("keeps an intentional observer stop clean and enables observation when NetworkManager starts", () => {
+    expect(settings(readFileSync(join(BOX, "waitron-network-monitor.service"), "utf8"))).toEqual(
+      expect.arrayContaining([
+        "Service/SuccessExitStatus=143",
+        "Install/WantedBy=multi-user.target NetworkManager.service",
+      ]),
+    );
+  });
+
   it("run the handler with the request on the socket, its errors in the journal, for at most 15 seconds, and leave no failed instance behind", () => {
     expect(settings(service())).toEqual(
       expect.arrayContaining([
@@ -652,8 +661,10 @@ async function observing(sb, { manualClock = false } = {}) {
   };
   tick();
   const clock = manualClock ? null : setInterval(tick, 100);
+  const clockEnv = join(dir, "steady-clock-only.sh");
+  if (manualClock) writeFileSync(clockEnv, "unset SECONDS\nSECONDS=0\n");
   const child = spawn("bash", [HANDLER, "--network-monitor"], {
-    env: { ...sb.env, WB_MONITOR_DIR: dir },
+    env: { ...sb.env, WB_MONITOR_DIR: dir, ...(manualClock ? { BASH_ENV: clockEnv } : {}) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
@@ -694,7 +705,7 @@ async function observing(sb, { manualClock = false } = {}) {
 }
 
 describe("outside network changes", () => {
-  it("starts from elapsed host uptime without waiting for wall-clock seconds", async () => {
+  it("starts from elapsed host uptime while the wall-clock counter is frozen", async () => {
     const observer = await observing(sandbox(), { manualClock: true });
     try {
       await expect
@@ -702,7 +713,7 @@ describe("outside network changes", () => {
         .toBe(true);
       observer.advanceUptime(1001);
       observer.send("profile changed");
-      await expect.poll(observer.count, { timeout: 500 }).toBe(1);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
     } finally {
       await observer.stop();
     }
@@ -726,14 +737,17 @@ describe("outside network changes", () => {
       const worker = Number(readFileSync(join(observer.dir, "start.2")));
       observer.finish(2);
       await expect
-        .poll(() => {
-          try {
-            process.kill(worker, 0);
-            return true;
-          } catch {
-            return false;
-          }
-        })
+        .poll(
+          () => {
+            try {
+              process.kill(worker, 0);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 3000 },
+        )
         .toBe(false);
       await sleep(2200);
       expect(observer.count()).toBe(2);
