@@ -2969,10 +2969,20 @@ it("keeps a field that shows a range as wide while a price is typed into it at 3
   expect(width()).toBe(empty);
 });
 
-it.each(["en-GB", "es-ES"])(
-  "shows a single stored price whole in the field at 320 px (%s)",
-  async (locale) => {
-    const el = await atPhoneWidth(locale, { rows: [{ ...burger, override: "9999.99" }] }, 320);
+it.each([
+  ["en-GB", ""],
+  ["es-ES", ""],
+  ["en-GB", "Verdana"],
+  ["es-ES", "Verdana"],
+])(
+  "shows a single stored price whole in the field at 320 px (%s, font %s)",
+  async (locale, font) => {
+    const el = await atPhoneWidth(
+      locale,
+      { rows: [{ ...burger, override: "9999.99" }] },
+      320,
+      font,
+    );
     const field = override(el, "mi-burger");
     const fit = textFit(field);
     expect(fit.shown).toBe(locale === "es-ES" ? "9999,99" : "9999.99");

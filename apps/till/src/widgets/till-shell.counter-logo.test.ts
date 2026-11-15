@@ -391,8 +391,8 @@ describe("the cash register's bar measures its room again", () => {
       expect(shown(el)).toBe(true);
       const s = strip(el);
       for (const token of ["--wt-font-size-sm", "--wt-font-size-md", "--wt-font-size-lg"]) {
-        const px = parseFloat(getComputedStyle(s).getPropertyValue(token));
-        s.style.setProperty(token, `${px * 1.3}px`);
+        const size = getComputedStyle(s).getPropertyValue(token);
+        s.style.setProperty(token, `calc(${size} * 1.3)`);
       }
       s.style.fontSize = "calc(var(--wt-font-size-md) * 1.3)";
       await expect.poll(() => shown(el)).toBe(false);

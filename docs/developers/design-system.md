@@ -645,7 +645,7 @@ which draw at 12px, 14px, 18px and 22px with the normal 16px browser root. The o
 Shared typing controls, including dropdown and table searches, use
 `--wt-text-control-font-size: max(1rem, 1em, var(--wt-font-size-md))`: at least 16px at that normal
 root, preserving larger inherited or venue text. Resting and floated labels keep their text roles;
-file controls and buttons keep theirs. Price boxes use 6rem, range boxes 10.5rem and number
+file controls and buttons keep theirs. Price boxes use 6.25rem, range boxes 10.5rem and number
 steppers 5.5rem, so enlarged typing text has room. Standalone server pages and connection-bootstrap
 keep their independent styling. The copied font tokens match the shared rem defaults; the guide,
 legal pages and guest menu convert them back to pixels when rendering, including the printed guest
@@ -3991,7 +3991,10 @@ Two notes on the primitives this pattern uses, both in the table above:
   headless Chromium (Vitest browser mode, Playwright 1.63.0, macOS) in `--wt-font-family`: "9999.99"
   is 55.5px at 14px, against 59.0px at 15px in the same run; the box figures were not re-measured.
   **2026-11-15:** typed fields now use the scalable 16px minimum described under Structure; these
-  earlier measurements describe the former typography.
+  earlier measurements describe the former typography. The price field now has a 6.25rem (100px at
+  the normal root) base width: at 16px, Verdana needs about 74px for "9999.99", while the former 96px
+  field left 72px after padding. The English and Spanish phone-width cases in
+  `menu-prices-table.test.ts` check that amount and the row menu.
 
 Inside Nutritional info, `dashboard-product-nutrition-picker` draws the choices directly, with no
 second summary. Native button chips expose their pressed state and support Enter and Space.

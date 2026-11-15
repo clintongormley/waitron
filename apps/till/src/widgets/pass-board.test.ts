@@ -853,7 +853,7 @@ describe("A773 pass board widget", () => {
     expect(root(till).querySelector(".list")).not.toBeNull();
     const tillOverview = sectionOf(till, "overview").querySelector<HTMLElement>("[data-overview]")!;
     expect(tillOverview.getBoundingClientRect().width).toBeLessThanOrEqual(
-      CARD_COLUMN_TEXT_WIDTHS * tokenPx(till, "--wt-font-size-md") + 0.5,
+      CARD_COLUMN_TEXT_WIDTHS * parseFloat(getComputedStyle(till).fontSize) + 0.5,
     );
     cleanupWidgets();
 
