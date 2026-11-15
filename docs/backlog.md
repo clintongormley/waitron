@@ -2159,6 +2159,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Other private person and dish bindings remain.
   Protected fiscal and receipt helpers still need their boundary audit.
+  Counter-group display text in `today-names.test.ts` and station display samples in
+  `former-numbers.test.ts` stay with A976.
   Other split-suite comments and file names remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
   identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
