@@ -108,7 +108,7 @@ it("uses the explicit English working language for module starters while keeping
     );
   expect
     .soft(suite.db.all(sql`select name from service_steps order by position`))
-    .toEqual(["Set up", "Take order", "Anything else?"].map((name) => ({ name })));
+    .toEqual(["Set up", "Take order", "Dessert?", "Coffee or bill?"].map((name) => ({ name })));
   expect
     .soft(suite.db.all(sql`select name from kitchen_courses order by display_order`))
     .toEqual(["Sharing plates", "Starters", "Mains", "Desserts"].map((name) => ({ name })));

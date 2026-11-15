@@ -6764,7 +6764,10 @@ bill requested and leaving, blue service-step rows placed by their named starts,
 Delete and Add step, and amber course rows in course order with Fire now / Hold for later
 and, while held, each course’s own reminder delay, including At once and Off. These choices join
 the department’s shared Save. Courses keeps shared names and ordering. New courses default to held
-with a ten-minute reminder; new departments copy the default department’s saved overrides. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
+with a ten-minute reminder; new departments copy the default department’s saved overrides. Fresh venues
+start with Set up at seating, Take order two minutes after Set up, Dessert? five minutes after Mains,
+and Coffee or bill? five minutes after Desserts. New departments reuse the preset course links,
+including renamed courses; if either link is missing or inactive they start with the first two steps. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
 holds the department's receipt
 editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are

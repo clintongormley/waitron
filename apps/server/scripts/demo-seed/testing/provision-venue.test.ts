@@ -17,7 +17,7 @@ describe("the demo scripts' test venue", () => {
       staffLanguage: "en",
     })();
     expect(suite.db.all(sql`select name from service_steps order by position`)).toEqual(
-      ["Set up", "Take order", "Anything else?"].map((name) => ({ name })),
+      ["Set up", "Take order", "Dessert?", "Coffee or bill?"].map((name) => ({ name })),
     );
     expect(
       suite.db.all(

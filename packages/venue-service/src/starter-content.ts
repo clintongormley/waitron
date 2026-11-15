@@ -7,7 +7,8 @@ type StaffNames = StarterTranslations<Exclude<StarterStaffLanguage, "en">>;
 export const STARTER_STEP_NAMES = {
   "Set up": { es: "Montar mesa" },
   "Take order": { es: "Tomar nota" },
-  "Anything else?": { es: "¿Algo más?" },
+  "Dessert?": { es: "¿Postre?" },
+  "Coffee or bill?": { es: "¿Café o la cuenta?" },
 } as const satisfies StaffNames;
 
 /** The default seasons' names, keyed by their English names in `season-rules.ts`. */

@@ -355,6 +355,8 @@ person sending is not a manager, the till asks for a manager's PIN after **Stati
 For a new venue in Spain, Sharing plates and Starters start without a hold; Mains and Desserts
 start held for later. Choose the course on each product, then arrange the table’s dishes in **New order** before
 sending them. At the counter, sending fires all the dishes together.
+The **Dessert?** service step reminds you to visit the table; you can fire preordered desserts
+without marking that step Done.
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by

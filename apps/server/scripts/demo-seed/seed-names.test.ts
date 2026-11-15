@@ -1,3 +1,4 @@
+import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { afterEach, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { sql } from "drizzle-orm";
@@ -57,8 +58,13 @@ for (const locale of ["en", "es"] as const) {
       `),
     ).toEqual(
       (locale === "en"
-        ? ["Set up", "Take order", "Anything else?"]
-        : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+        ? ["Set up", "Take order", "Dessert?", "Coffee or bill?"]
+        : [
+            STARTER_STEP_NAMES["Set up"].es,
+            STARTER_STEP_NAMES["Take order"].es,
+            STARTER_STEP_NAMES["Dessert?"].es,
+            STARTER_STEP_NAMES["Coffee or bill?"].es,
+          ]
       ).map((name) => ({ name })),
     );
     const rows = suite.db.all<{ name: string; kitchen_name: string | null; customer_name: string }>(

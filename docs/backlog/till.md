@@ -1091,7 +1091,7 @@ excludes open drafts; Parked orders can include them.
 
 For the owner, a candidate question to batch: the words the pictures do not draw — the fifth
 start's label ("Repeats after the last order" / "Se repite tras el último pedido"), the Spanish
-starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish labels, the minutes
+starter names ("Montar mesa", "Tomar nota", "¿Postre?", "¿Café o la cuenta?"), the Spanish labels, the minutes
 field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
 "Starts" column heads. Deleting a course removes the steps that start from it and, since A1526’s named starts,
 their dependent steps too.

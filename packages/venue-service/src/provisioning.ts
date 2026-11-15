@@ -60,7 +60,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             })
             .returning({ id: departments.id });
           departmentId = inserted!.id;
-          await addStarterServiceSteps(tx, departmentId, staffLanguage);
           const taxpayer = await readTaxpayer(tx);
           const courses =
             taxpayer === null ? [] : (getCountryPack(taxpayer.country)?.starterCourses ?? []);
@@ -82,6 +81,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             );
             if (exceptions.length > 0) await tx.insert(departmentCourses).values(exceptions);
           }
+          await addStarterServiceSteps(tx, departmentId, staffLanguage);
         }
         await tx
           .update(departments)

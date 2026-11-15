@@ -366,8 +366,11 @@ La primera petición puede haberse completado.
 ## Marcar un paso de servicio como hecho {#service-steps}
 
 Un paso de servicio te recuerda volver a una mesa en el momento adecuado, como **Tomar nota** un par
-de minutos después de marcar **Montar mesa** como hecho, o **¿Algo más?** cuando ya se han servido
-todos los platos. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
+de minutos después de marcar **Montar mesa** como hecho, o **¿Postre?** cinco minutos después de servir
+los Platos principales. Un local nuevo empieza con **Montar mesa**, **Tomar nota**, **¿Postre?** y
+**¿Café o la cuenta?**, que vence cinco minutos después de servir los Postres. Si falta cualquiera
+de esos cursos iniciales, un departamento nuevo empieza con los dos primeros pasos; añade tus
+propias visitas ligadas a cursos en Mesas. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
 configura en **Pasos de servicio**, en la pestaña **Mesas** del departamento, en el panel. Allí puedes
 leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fijos, pasos y cursos.
 Elige **Marchar ya** o **Dejar para después** en cada fila de curso. Un curso retenido ofrece su

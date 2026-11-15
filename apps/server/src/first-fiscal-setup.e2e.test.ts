@@ -620,7 +620,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
   const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
   try {
     expect(db.prepare("select name from service_steps order by position").all()).toEqual(
-      ["Set up", "Take order", "Anything else?"].map((name) => ({ name })),
+      ["Set up", "Take order", "Dessert?", "Coffee or bill?"].map((name) => ({ name })),
     );
     expect(
       db
