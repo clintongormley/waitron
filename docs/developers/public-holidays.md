@@ -174,14 +174,19 @@ These steps assume Spain; another country follows the same shape with its own of
    `packages/country-es/src/holidays.ts`; in `holidays.test.ts`, add its resolution to the source
    artifacts' `files` map and the title-and-address `it.each`, add the year to the annex
    comparison's `describe.each` list and the one-name check's pinned year list, and move the "not
-   yet published" case to the next year. Read every difference the comparison reports against the page.
+   yet published" case to the next year. Move the "not available yet" case in
+   `packages/venue-service/src/opening-hours-calendar.test.ts` on a year too: it reads Spain's real
+   data. Keep its "now" read on the newest shipped year, so it checks the new list, and its "next"
+   read on the year after, which has none; its Easter-week date is that year's Good Friday, taken
+   from the new data.
+   Read every difference the comparison reports against the page.
 5. **Verify.** Run the three country suites, then the venue-service holiday suites:
 
    ```sh
    pnpm --filter @waitron/country exec vitest run src/country.test.ts
    pnpm --filter @waitron/country-es exec vitest run src/holidays.test.ts
    pnpm --filter @waitron/country-packs exec vitest run src/registry.test.ts
-   pnpm --filter @waitron/venue-service exec vitest run --project node src/holidays.test.ts src/holiday-naming.test.ts
+   pnpm --filter @waitron/venue-service exec vitest run --project node src/holidays.test.ts src/holiday-naming.test.ts src/opening-hours-calendar.test.ts
    ```
 
    Read each `Tests` count. Check that the ordinary-working-day case still reads `complete` with no
