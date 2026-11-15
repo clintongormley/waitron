@@ -553,9 +553,10 @@ declare module "@waitron/shared" {
      */
     "order.set_lunch_takeaway": { canSwitch: boolean };
     /**
-     * Declared by `@waitron/venue-service` too, with the same params: a request, when an order opens
-     * or by a switch, for a way of selling its department or region does not offer. `dining`: the
-     * way it does offer.
+     * Declared by `@waitron/venue-service` too, with the same params. When an order opens: a request
+     * for a way its department or region does not offer, `dining` being the way they fix. On a
+     * switch: an order whose own department does not leave the way to the till, or in a region
+     * without takeaway VAT, `dining` being the order's way.
      */
     "order.dining_fixed": { dining: Dining };
     /** The order's way of selling can no longer be switched: its kitchen has it, or a payment has started. */

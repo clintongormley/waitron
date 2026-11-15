@@ -164,15 +164,16 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed line
 (sales classification spec §3). Neither table has a `variant_id` column.
 
-**A line's VAT class is the one its published menu froze, fixed when its price is; its rate is the
-one in force on the day the invoice is issued.** Each published menu version records the VAT class
-of each dish, variant and extras item, and no rate (`buildMenuDocument`,
-`packages/menu/src/menu-document.ts`), and a till is served that class rather than the
-product's current one. A line added to a held order or a tab stores that
+**A line's VAT classes are the ones its published menu froze, fixed when its price is; the rate of
+the one its order's way picks is the one in force on the day the invoice is issued.** Each published
+menu version records the two VAT classes of each dish, variant and extras item, and no rate (`buildMenuDocument`,
+`packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
+product's current ones. A line added to a held order or a tab stores that
 class (`working_order_lines.vat_class`) and its takeaway class (`takeaway_vat_class`, the served
 class again where the product has none) with its gross price, which is the same either way. The
 order's `working_orders.dining` picks which class a bill, payment or filing rates the line at; it is
-fixed once the kitchen has any of the order or a payment has started (`working_orders_dining_fixed`); a walk-up sale is priced at payment,
+fixed once the kitchen has any of the order, a payment has started or the order is no longer open
+(`working_orders_dining_fixed`); a walk-up sale is priced at payment,
 from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
 no class of its own was frozen at its parent's class, and an extras line takes the classes frozen for
 its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line

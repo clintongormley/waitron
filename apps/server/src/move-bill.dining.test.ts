@@ -117,7 +117,7 @@ describe("a bill moved within its own department keeps its way", () => {
       operatorId: venue.operatorId,
       dining: "takeaway",
     });
-    const seated = await seatedWith(venue, "Caña");
+    const seated = await seatedWith(venue, "Croquettes");
 
     const moved = await moveTo(id, seated.tableId);
 

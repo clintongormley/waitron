@@ -84,7 +84,7 @@ describe("a whole table moved into another department", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: revisionOf(seated.partyId),
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }], release: "fire" },
         ],
       },
     );
