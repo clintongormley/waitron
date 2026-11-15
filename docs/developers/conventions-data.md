@@ -5156,7 +5156,8 @@ The receipt-print field and its controls are retired.
 
 A department keeps its sale rules and receipt trading-name choice on its own row. Its
 `transfer_desk_profile_id` names the receiving device profile; deleting that profile clears the
-choice and keeps the department. Configuration format 36 carries these columns with the
+choice and keeps the department. Delete also clears the choice when a disabled device keeps
+the profile row and the action retires it. Configuration format 36 carries these columns with the
 department. Earlier exports are refused as outdated because their two side tables are gone.
 
 `resolveZoneContext` and the order-context writers in

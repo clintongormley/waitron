@@ -7,6 +7,7 @@ import {
   captureError,
   deviceProfilePrinters,
   deviceProfiles,
+  departments,
   devices,
   pagePrinters,
   printers,
@@ -445,8 +446,43 @@ describe("device-profile store against a real migrated database", () => {
       }),
     );
     const deviceId = await seedBoundDevice(created.id, false);
+    const other = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Other receiver",
+        formFactor: "till",
+        capabilities: [],
+      }),
+    );
+    const [department, otherDepartment] = await suite.db
+      .insert(departments)
+      .values([
+        {
+          name: "Receiving department",
+          tradingName: "Receiving department",
+          transferDeskProfileId: created.id,
+        },
+        {
+          name: "Other department",
+          tradingName: "Other department",
+          transferDeskProfileId: other.id,
+        },
+      ])
+      .returning({ id: departments.id });
     await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
-    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([]);
+    expect(
+      await suite.db
+        .select({ profileId: departments.transferDeskProfileId })
+        .from(departments)
+        .where(eq(departments.id, department!.id)),
+    ).toEqual([{ profileId: null }]);
+    expect(
+      await suite.db
+        .select({ profileId: departments.transferDeskProfileId })
+        .from(departments)
+        .where(eq(departments.id, otherDepartment!.id)),
+    ).toEqual([{ profileId: other.id }]);
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([other]);
     expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toBeUndefined();
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toBeUndefined();
     const held = await suite.db

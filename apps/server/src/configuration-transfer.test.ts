@@ -4428,13 +4428,27 @@ async function retireProfile(profileId: string): Promise<void> {
   expect(row?.retiredAt).not.toBeNull();
 }
 
-it("leaves behind a retired profile that no row uses, and the bundle still imports", async () => {
-  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
-    db: suite.db,
-    modules: ALL_MODULES,
-  });
+it("leaves a retired receiving profile behind while its department and zone still import", async () => {
+  const source = await applyVenue(
+    planVenue({ ...venue("B24681357"), name: "Transfer venue" }, ALL_MODULES),
+    {
+      db: suite.db,
+      modules: ALL_MODULES,
+    },
+  );
 
   const [retired] = await seedDeviceProfiles(suite.db, { name: "Old till", formFactor: "till" });
+  const [department] = await suite.db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(eq(departments.isDefault, true));
+  await withTransaction(suite.db, async (tx) => {
+    await createServiceZone(tx, { name: "Receiving zone", departmentId: department!.id });
+    await tx
+      .update(departments)
+      .set({ transferDeskProfileId: retired!.id })
+      .where(eq(departments.id, department!.id));
+  });
   await retireProfile(retired!.id);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -4445,6 +4459,19 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     versions,
   );
   expect(transferred.tables.device_profiles!.map((row) => row.name)).not.toContain("Old till");
+  expect(transferred.tables.departments).toContainEqual(
+    expect.objectContaining({
+      id: department!.id,
+      name: "Transfer venue",
+      transfer_desk_profile_id: null,
+    }),
+  );
+  expect(transferred.tables.floor_zones).toContainEqual(
+    expect.objectContaining({
+      name: "Receiving zone",
+      department_id: department!.id,
+    }),
+  );
   await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -4452,6 +4479,18 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
   });
   const names = await targetSuite.db.select({ name: deviceProfiles.name }).from(deviceProfiles);
   expect(names.map((row) => row.name)).not.toContain("Old till");
+  expect(
+    await targetSuite.db
+      .select({ profileId: departments.transferDeskProfileId })
+      .from(departments)
+      .where(eq(departments.name, "Transfer venue")),
+  ).toEqual([{ profileId: null }]);
+  expect(
+    await targetSuite.db
+      .select({ name: floorZones.name })
+      .from(floorZones)
+      .where(eq(floorZones.name, "Receiving zone")),
+  ).toEqual([{ name: "Receiving zone" }]);
 });
 
 it("leaves a retired profile's printer lists behind with it, while a live profile's rows travel", async () => {
