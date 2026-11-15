@@ -490,6 +490,23 @@ export interface PersonSummary {
   email: string | null;
 }
 
+export interface PersonPageQuery {
+  page: number;
+  search: string;
+  roleIds: string[];
+  status: "current" | "all" | PersonSummary["status"];
+  sortKey: "" | "displayName" | "legalName" | "role" | "email" | "telephone" | "status";
+  sortDirection: "ascending" | "descending";
+  locale: string;
+}
+export interface PersonPage {
+  rows: PersonSummary[];
+  page: number;
+  pageSize: 50;
+  total: number;
+  anyPeople: boolean;
+}
+
 export interface PersonEditDetails {
   displayName: string;
   firstNames: string;
@@ -3035,6 +3052,15 @@ export class DashboardApi {
       "PUT",
       { roleIds, expectedRoleIds },
     );
+  }
+
+  listStaffPage(query: PersonPageQuery): Promise<PersonPage> {
+    const { roleIds, ...values } = query;
+    const params = new URLSearchParams(
+      Object.entries(values).map(([key, value]) => [key, String(value)]),
+    );
+    for (const id of roleIds) params.append("roleId", id);
+    return this.#request<PersonPage>(`/management-api/staff/page?${params}`, "GET");
   }
 
   listStaff(): Promise<PersonSummary[]> {

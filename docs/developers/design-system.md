@@ -2079,6 +2079,24 @@ the requested page; the table neither changes it optimistically nor remembers it
 `pageRangeLabel(from, to, total)`, `previousPageLabel` and `nextPageLabel` supply localized words.
 Both buttons wait while `loading`; the first and last page disable their unavailable direction.
 
+`TableRequestController` from `@waitron/ui` owns a list's request state. Give it an injected
+page-read callback; call `setQuery` for changed search/filter/sort/locale values and `move` for a
+page event. It waits 200 ms after typing, resets changed queries to page zero and ignores equal
+queries. `reload` retains the query/page for an action refresh. It cancels its timer on disconnect.
+Keep observation and error recovery in the query layer: the next watch replaces the old one.
+Do not release the old observation during the typing delay, or a read's recovery can lose its
+failure history. Keep existing rows while a request is pending.
+
+The callback owns how the whole dataset is searched and sorted. Users filters and ranks in SQL,
+sorts matching scalar keys with the shared locale/decimal comparator on the server, then projects
+at most 50 people. Its text keys use translated role/status labels, including empty/no-role values;
+role labels and returned role ids share role-id order. Search uses names, email and telephone in
+that fixed order, independent of the column layout. Equal sort keys keep the incoming SQL
+name/id order. The returned page includes the matching count and whether any person exists, so an
+empty venue and an empty filtered result retain their different actions.
+A large table, such as bills or orders, must sort in SQL or be measured before adopting this
+in-memory key sort. The shared request controller makes no assumption about the callback's sort.
+
 Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
 `toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also
 offers Filters when no column has a filter. Clear all emits `wt-filters-clear` with an empty detail

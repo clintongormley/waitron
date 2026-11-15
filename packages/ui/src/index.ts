@@ -248,3 +248,5 @@ export {
 } from "./document-printer-form.js";
 
 export { ChangeObserver } from "./change-observer.js";
+
+export { TableRequestController } from "./components/table-request-controller.js";

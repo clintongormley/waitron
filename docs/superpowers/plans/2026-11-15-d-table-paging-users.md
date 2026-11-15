@@ -1,6 +1,6 @@
 # Users: database-backed table requests
 
-**Finish:** Users pages 50 rows, searching/sorting everyone, with live refresh, six sorts, filters and row actions. One PR; estimated three build hours, subject to the runbook's stop. Separate Sol-high draft, two Claude reads; watcher clearance pending. No owner design approval claimed.
+**Finish:** Users pages 50 rows, searching/sorting everyone, with live refresh, six sorts, filters and row actions. One PR; estimated three build hours, subject to the runbook's stop. Separate Sol-high draft, two Claude reads; cleared by the watcher on 2026-11-15 at 17:59, not owner-approved. The injected page-read seam owns Users sorting; shared docs require SQL sorting or prior measurement for large tables.
 
 1. **Shared requests.** Add UI `components/TableRequestController`, exported beside `wt-data-table`, with an injected watch callback and no dashboard imports. Own only 200 ms search debounce, duplicate suppression, zero-based page/reset and timer cleanup. Existing dashboard queries own replaced replies, errors and passive refresh. Release observations only on disconnect, preserving error recovery; retain rows while reading.
 

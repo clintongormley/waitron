@@ -1,3 +1,4 @@
+import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setHelpMode } from "@waitron/ui";
@@ -28,11 +29,11 @@ const people: PersonSummary[] = [
 ];
 
 function stubApi(): DashboardApi {
-  return {
+  return withStaffPages({
     listAccessRoles: async () => accessRoleChoices,
     listStaff: vi.fn().mockResolvedValue(people),
     createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
-  } as unknown as DashboardApi;
+  } as unknown as DashboardApi);
 }
 
 async function flush(el: StaffScreen): Promise<void> {

@@ -5,7 +5,7 @@ import { type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { accessRoleName, statusName } from "../i18n/domain.js";
 import type { AccessRole, PersonSummary } from "../api/client.js";
 
@@ -15,14 +15,13 @@ const personKey = (person: PersonSummary): string => person.personId;
 export class StaffList extends LitElement {
   @property({ attribute: false }) accessRoles: AccessRole[] = [];
   @property({ attribute: false }) people: PersonSummary[] = [];
+  @property({ attribute: false }) serverPaging?: { page: number; pageSize: number; total: number };
 
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
   @property({ type: Boolean }) canExportPersonalData = false;
   @property({ attribute: false }) downloadingPersonId: string | null = null;
   @property() searchTerm = "";
-  /** What the table says with no rows; the screen filters by role and status before the table, so
-   * it names its own. */
   @property() emptyMessage?: string;
 
   #edit(event: Event, personId: string): void {
@@ -183,6 +182,10 @@ export class StaffList extends LitElement {
         alwaysShownColumnLabel=${t("table.column_always_shown")}
         lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
+        .serverPaging=${this.serverPaging}
+        previousPageLabel=${t("table.previous_page")}
+        nextPageLabel=${t("table.next_page")}
+        .pageRangeLabel=${(from: number, to: number, total: number) => fill("table.page_range", { from: from.toLocaleString(currentLocale()), to: to.toLocaleString(currentLocale()), total: total.toLocaleString(currentLocale()) })}
         .rows=${this.people}
         .searchTerm=${this.searchTerm}
         .columns=${this.#columns()}

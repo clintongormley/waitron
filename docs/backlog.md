@@ -1332,10 +1332,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)**
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
-- **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
-  first). 50 per page with a server-enforced maximum; search and sort over the whole dataset;
-  debounce, reset on filter change, ignore superseded responses, keep passive live refreshes.
-  [Detail](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
+- **Move remaining dashboard tables onto shared database-backed requests.** Users now has 50-row
+  server pages with whole-dataset search/sort and passive refresh. Orders and the handover screen's
+  returned invoices are next, one PR per table.
+  [Detail and decision](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
 
 - **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
   passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login

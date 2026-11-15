@@ -6,6 +6,10 @@ que admiten ese puesto.
 
 Para encontrar un ajuste, escribe su etiqueta en **Buscar páginas** y elige la ventana que quieres abrir; si varias filas lo ofrecen, elige la que necesitas.
 
+Usa **Buscar usuarios** para encontrar un nombre, correo o teléfono. Elige **Roles de acceso** o **Estado** para acotar la lista; **Cualquier estado** incluye las cuentas deshabilitadas.
+
+La búsqueda y la ordenación por columnas abarcan a todas las personas que coinciden con los filtros. Usa **Página anterior** y **Página siguiente** para recorrer los resultados, de 50 en 50.
+
 ## Nombres y datos de contacto {#staff-details}
 
 Como gerente, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.

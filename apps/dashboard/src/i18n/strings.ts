@@ -1,3 +1,4 @@
+import { NO_ACCESS_ROLE_NAMES } from "@waitron/shared";
 export const en = {
   "access_roles.job_roles":
     "Job roles put people on the rota and on devices; they grant no permissions.",
@@ -2468,7 +2469,10 @@ export const en = {
   "person.save_job_roles": "Save job roles",
   "person.access_roles_selected": "{count} selected",
   "person.access_roles": "Access roles — what they may do",
-  "person.no_access_role": "No access role",
+  "person.no_access_role": NO_ACCESS_ROLE_NAMES.en,
+  "table.previous_page": "Previous page",
+  "table.next_page": "Next page",
+  "table.page_range": "{from}–{to} of {total}",
   "person.save_access_roles": "Save access roles",
   "person.reload_access_roles": "Reload",
   "person.pin": "PIN",
@@ -6837,7 +6841,10 @@ export const es: Record<StringKey, string> = {
   "person.save_job_roles": "Guardar puestos",
   "person.access_roles_selected": "{count} seleccionados",
   "person.access_roles": "Roles de acceso — lo que puede hacer",
-  "person.no_access_role": "Sin rol de acceso",
+  "person.no_access_role": NO_ACCESS_ROLE_NAMES.es,
+  "table.previous_page": "Página anterior",
+  "table.next_page": "Página siguiente",
+  "table.page_range": "{from}–{to} de {total}",
   "person.save_access_roles": "Guardar roles de acceso",
   "person.reload_access_roles": "Recargar",
   "person.pin": "PIN",

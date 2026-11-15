@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   recordActivity,
   indexViolated,
@@ -20,7 +20,15 @@ import {
   totpEnrollments,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
+import {
+  AppError,
+  assertSupportedLocale,
+  isValidTelephone,
+  createLabelComparator,
+  BUILT_IN_ROLE_NAMES,
+  PERSON_STATUS_NAMES,
+  NO_ACCESS_ROLE_NAMES,
+} from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
@@ -545,6 +553,10 @@ export async function listPersons(
     managementSessionId: args.managementSessionId,
     permission: "person.manage",
   });
+  return readPersonSummaries(tx);
+}
+
+async function readPersonSummaries(tx: Transaction, ids?: string[]): Promise<PersonSummary[]> {
   const rows = await tx
     .select({
       personId: persons.id,
@@ -558,8 +570,13 @@ export async function listPersons(
       totpSecret: persons.totpSecret,
     })
     .from(persons)
+    .where(ids === undefined ? undefined : inArray(persons.id, ids))
     .orderBy(persons.displayName);
-  const memberships = await tx.select().from(personRoles);
+  const memberships = await tx
+    .select()
+    .from(personRoles)
+    .where(ids === undefined ? undefined : inArray(personRoles.personId, ids))
+    .orderBy(personRoles.roleId);
   const roleIds = new Map<string, string[]>();
   for (const membership of memberships) {
     const held = roleIds.get(membership.personId) ?? [];
@@ -581,4 +598,87 @@ export async function listPersons(
       hasTotp: r.totpSecret !== null,
     });
   return result;
+}
+
+export interface PersonPageQuery {
+  page: number;
+  search: string;
+  roleIds: string[];
+  status: "current" | "all" | PersonSummary["status"];
+  sortKey: "" | "displayName" | "legalName" | "role" | "email" | "telephone" | "status";
+  sortDirection: "ascending" | "descending";
+  locale: string;
+}
+export interface PersonPage {
+  rows: PersonSummary[];
+  total: number;
+  page: number;
+  pageSize: 50;
+  anyPeople: boolean;
+}
+
+export async function listPersonsPage(
+  tx: Transaction,
+  args: PersonPageQuery & { managementSessionId: string },
+): Promise<PersonPage> {
+  await authorizeManager(tx, {
+    managementSessionId: args.managementSessionId,
+    permission: "person.manage",
+  });
+  const language = args.locale.startsWith("es") ? "es" : "en";
+  const roleText = sql<string>`coalesce((select group_concat(role_label, ', ') from (
+    select case r.built_in_key ${sql.join(
+      Object.entries(BUILT_IN_ROLE_NAMES).map(
+        ([key, labels]) => sql`when ${key} then ${labels[language]}`,
+      ),
+      sql` `,
+    )} else r.name end as role_label
+    from person_roles pr join roles r on r.id = pr.role_id
+    where pr.person_id = persons.id order by pr.role_id
+  )), ${NO_ACCESS_ROLE_NAMES[language]})`;
+  const sortTexts = {
+    displayName: persons.displayName,
+    legalName: sql<string>`coalesce(${persons.lastNames}, '') || ', ' || coalesce(${persons.firstNames}, '')`,
+    email: sql<string>`coalesce(${persons.email}, '')`,
+    telephone: sql<string>`coalesce(${persons.telephone}, '')`,
+    status: sql<string>`case ${persons.status} ${sql.join(
+      Object.entries(PERSON_STATUS_NAMES).map(
+        ([key, labels]) => sql`when ${key} then ${labels[language]}`,
+      ),
+      sql` `,
+    )} end`,
+    role: roleText,
+  };
+  const names = sql`${persons.displayName} || case when coalesce(${persons.firstNames}, '') <> '' then ' ' || ${persons.firstNames} else '' end || case when coalesce(${persons.lastNames}, '') <> '' then ' ' || ${persons.lastNames} else '' end`;
+  const rank = sql<number>`waitron_search_rank(${args.search}, ${names}, coalesce(${persons.email}, ''), coalesce(${persons.telephone}, ''))`;
+  const where = and(
+    args.status === "all"
+      ? undefined
+      : args.status === "current"
+        ? ne(persons.status, "suspended")
+        : eq(persons.status, args.status),
+    args.roleIds.length === 0
+      ? undefined
+      : sql`exists (select 1 from person_roles pr where pr.person_id = persons.id and ${inArray(sql`pr.role_id`, args.roleIds)})`,
+    sql`${rank} is not null`,
+  );
+  const [counts] = await tx.select({ total: count() }).from(persons).where(where);
+  const total = counts!.total;
+  const anyPeople =
+    total > 0 || (await tx.select({ id: persons.id }).from(persons).limit(1)).length > 0;
+  const page = Math.min(args.page, Math.max(0, Math.ceil(total / 50) - 1));
+  // Users keep the UI's locale/decimal comparator; large-table reads must sort in SQL or measure first.
+  const keysQuery = tx
+    .select({ personId: persons.id, rank, text: sortTexts[args.sortKey || "displayName"] })
+    .from(persons)
+    .where(where)
+    .orderBy(persons.displayName, persons.id);
+  const keys = await keysQuery;
+  const compare = createLabelComparator(args.locale);
+  const direction = args.sortDirection === "ascending" ? 1 : -1;
+  keys.sort((a, b) => a.rank - b.rank || compare(a.text, b.text) * direction);
+  const ids = keys.slice(page * 50, (page + 1) * 50).map((row) => row.personId);
+  const rows = ids.length === 0 ? [] : await readPersonSummaries(tx, ids);
+  const byId = new Map(rows.map((row) => [row.personId, row]));
+  return { rows: ids.map((id) => byId.get(id)!), total, page, pageSize: 50, anyPeople };
 }

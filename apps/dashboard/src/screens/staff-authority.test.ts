@@ -1,3 +1,4 @@
+import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
@@ -31,7 +32,7 @@ it.each([false, true])(
       listStaff: vi.fn().mockResolvedValue(people),
     } as unknown as DashboardApi;
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-      api,
+      api: withStaffPages(api),
       currentPersonId: "manager",
       canAdminister,
       canChangeEmail: canAdminister,
