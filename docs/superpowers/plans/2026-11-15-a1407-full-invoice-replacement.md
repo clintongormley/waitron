@@ -36,6 +36,95 @@ date 15 March. The owner lands this PR and sees the type there (watcher, 2026-11
 on `main` at `1adccc8468` (#3235, Q37-FIX PR 3, landed). No product code was written. **(run)**
 marks what was run in this session; **(read)** marks what was only read.
 
+## Corrections at build start, 2026-11-15 (these win over the text below where they differ)
+
+Sources: the Fable second read F6 (`~/waitron-campaign-m/reports/a1407-step2-plan.md`: Critical 0,
+Important 3), the watcher's rulings on it (lane L questions.md, 2026-11-15 01:52) and the owner's two
+answers relayed at 01:58 and 01:59. The watcher let the build start on the plan's defaults (01:29);
+the owner has not approved this plan as a whole.
+
+1. **The full-invoice half lands switched off** (F6 finding 2; watcher 01:52 point 2). A new remedy
+   policy token, `FULL_INVOICE_REPLACEMENT` (`"full-invoice-replacement"`, beside
+   `ACCEPTED_WITH_ERRORS_CORRECTION` in `record-remedy.ts`), is NOT in the server's
+   `ENABLED_REMEDIES` (`record-remedy-routes.ts:32`). Without it the replacement remedy admits an F2
+   only, as today, and an F1 case keeps answering 400 `fiscal.remedy_invalid`. The page agrees:
+   `putRightFor` takes the same switch as an option whose default is one exported constant
+   (`FULL_INVOICE_REPLACEMENT_ON = false`, in browser-safe `put-right.ts`), and the server adds the
+   token to `ENABLED_REMEDIES` when that constant is true, so turning it on is one line. While it is
+   off an F1 `1112` case still says Waitron cannot put it right yet (`put_right.none.full-invoice`
+   stays). Tests turn it on through `mountRecordRemedies`'s `enabledRemedies` argument and the
+   option; one route test and one `put-right` case pin that it is OFF by default. Turning it on waits
+   for adviser question S14 (one corrective series for R4 and R5?) and the R4 "S" probe on AEAT's
+   test service; the backlog's probe entry says so. **So no R4 is numbered from the shared series
+   until then; Still open 1 is settled for now.** The guide says nothing about full invoices.
+2. **The replacement corrective prints once as an original when it is issued** (F6 finding 1;
+   watcher 01:52 point 1). It applies to the R5 replacement too: one remedy path serves both. The
+   remedy is a dashboard action with no till behind it, so the Put this right dialog asks which
+   receipt printer to print on (the active receipt printers, first one chosen, as the dashboard's
+   order reprint asks for a `printerId`); the request carries an optional `printerId`. After the
+   corrective is issued, in the same transaction, the server enqueues it once with
+   `enqueueOriginalReceipt` (as the refund's credit note does, `apps/server/src/invoice-corrections.ts`),
+   through a new optional hook on the module route context, wired by `apps/server`. No printer
+   chosen or none active: nothing prints, the corrective is still issued. Every later print stays a
+   copy. Still no email and no A4. This is a design call the watcher did not make: it is posted as a
+   DEVIATION with this default. Task 2b below.
+3. **A refused corrective has no fix on the page** (F6 finding 3; watcher point 3). Scope: a
+   refused R4 (and, today, a refused R5) has no fix on the page, and a refusal about the customer
+   block (AEAT `1193`, `2001`) has no writer at all, because a replacement cannot be replaced and a
+   correction record refuses changed recipients. Task 2 writes this into A1089's backlog entry.
+4. **The real day is printed** (owner, 2026-11-15 01:58, relayed by the watcher): a replacement
+   corrective, R4 and the landed R5 alike, prints "Date of the sale: 15 March" when its stored
+   `sales.supply_day` differs from its own issue date. One row in `receipt-document.ts` (so the A4
+   document carries it too) with a new label in every receipt language
+   (`packages/country-es/src/receipt-labels.ts`), and the same row in the till's ticket view. No
+   filing change. Still open 2 is answered. Task 2 amends A444's entry in `docs/backlog/fiscal.md`
+   with a dated note quoting the owner: "the operation date is when the table closes, which normally
+   coincides with the invoice date", and "where an invoice is issued days after the meal finished
+   … the operation date and the invoice date should be distinct".
+5. **Any real day is accepted, as now** (owner, 01:59, on F6 finding 5). No change.
+6. **Tests the read found weak** (F6 findings 4, 6, 7 and test item 3):
+   - Task 1 adds to `record-payload-admission.test.ts`, beside `:108-118`: an R1, R2 and R3 "S"
+     carrying an operation date are refused `UNSUPPORTED_FIELD`; an R4 by differences carrying one
+     is refused; an R4 "S" stores it. Task 1's command list adds that file.
+   - Task 1 folds `backend.test.ts:846` ("refuses a replacement of a refused original that is not a
+     simplified invoice…", which uses an F1) into the new "refuses an F1 replacement handed no
+     customer…" case, keeping its "records nothing" assertion; with the token rule above the
+     backend itself still refuses an F1 handed no customer.
+   - Task 2's rewritten route test also asserts the R4's number is the series' next, the series
+     moved by one, the real day, rectified amounts 0.00 / 0.00, the invoice named, and that
+     `verifyChain` reports nothing, as the R5 case at `record-remedy-replacement.test.ts:174-226`
+     does.
+   - The alert site (`alert-sources.ts`) keeps its `isNull(sales.correctsSaleId)` lines: after
+     correction 2 an original print of a corrective exists, so its test issues a replacement through
+     the real route with a printer, fails that original job, and asserts no undelivered-invoice
+     alert; it fails if the lines are removed.
+7. **One typing helper** (F6 "Duplication"): the helper Task 3a adds is the one place that types a
+   sale for printing; `receipt-issuer.ts` calls it instead of being overridden by spread order in
+   `transaction-receipt.ts`. `deliversAsFullInvoice` stays one function; where a query needs its SQL
+   form, one test holds the two to the same answer.
+8. **Line drift** (F6 "Plan-versus-code facts"): `recordCorrection` ends at `backend.ts:626`; the
+   backlog's A1407 entry and probe entry moved; RD 1619/2012 art. 6.1.d is not quoted in the A663
+   plan (6.1.e is). The FAQ's operation-date sentence sits under R1 to R3, not R4: Decision 2 rests
+   on AEAT's "Rx" worked example.
+9. **Order:** Task 1, Task 2 (remedy behind the switch, words, docs), Task 2b (print the original
+   at issue), Task 3a (server typing, layout, real-day row, delivery sites), Task 3b (till view),
+   Task 4 (export pin).
+
+**Task 2b — print the issued replacement once as an original.** Files: `packages/module/src/module.ts`
+(an optional `printIssuedCorrective?(tx, saleId, printerId): Promise<void>` on the route context);
+`apps/server` where the module context is built (wire it to `readTransactionReceipt` +
+`enqueueOriginalReceipt` with that printer, refusing a printer that is not an active receipt
+printer as `management.request_invalid` `field: "printerId"`); `record-remedy-replacement.ts` (read
+an optional `printerId`, a UUID when present, and call the hook after the corrective is issued);
+`dashboard/fiscal-filing-screen.ts` (a printer field in the replace form, from
+`GET /management-api/orders/printers` or a receipt-printer list the screen already reads; none:
+the field is hidden); guide EN/ES one sentence ("Waitron prints the new invoice on the printer you
+choose; later prints are copies"). Failing tests first: the route with a printer leaves one
+`print_jobs` row for the corrective with `receiptCopy` false; a later
+`POST /api/transactions/:saleId/reprint` adds a copy; without a printer no job and the case is still
+resolved; an unknown printer id refuses and issues nothing (no number used). The screen posts the
+chosen `printerId`. Size: about 60 production lines, 180 test lines.
+
 ## Words used in this plan
 
 - **Full invoice (F1)**: an invoice that names the customer (tax number, name, address). The
