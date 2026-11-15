@@ -2553,8 +2553,8 @@ export class TillApp extends LitElement {
     this.#decideReload();
   };
 
-  /** Opens a page in this tab. */
-  navigate: (url: string) => void = (url) => location.assign(url);
+  /** Injectable so a test can assert the navigation without navigating the runner. */
+  @property({ attribute: false }) navigate: (url: string) => void = (url) => location.assign(url);
 
   @state() private mainServerRefused = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
