@@ -155,6 +155,10 @@ it("marks missing fields after an invalid attempt, then lets a server refusal re
   button("save").click();
   await vi.waitFor(() => expect(el.open).toBe(false));
   expect(api.addRotaShift).toHaveBeenCalledTimes(2);
+  el.open = true;
+  await el.updateComplete;
+  expect(field("area").error).toBe("");
+  expect(field("endsAt").error).toBe("");
 });
 it("asks before deletion and before changing an open swap's person or time", async () => {
   const api = await mount(true, true);
