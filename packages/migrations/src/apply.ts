@@ -77,7 +77,7 @@ async function migrateEverySet(
 ): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
-    removeChangeFeed(store.venue);
+    await removeChangeFeed(store.venue);
     // Sets apply in the order the caller passes. Boot derives it from each module's declared
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.

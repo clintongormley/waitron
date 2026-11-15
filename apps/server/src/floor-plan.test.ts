@@ -813,7 +813,7 @@ describe("saveLayout", () => {
         expect(tx.all(sql`select payload from change_log`).length).toBeGreaterThan(0);
       });
     } finally {
-      removeChangeFeed(v.db);
+      await removeChangeFeed(v.db);
     }
   });
 

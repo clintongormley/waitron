@@ -876,7 +876,7 @@ describe("deleting a printer", () => {
       expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
     } finally {
       unsubscribe();
-      removeChangeFeed(suite.db);
+      await removeChangeFeed(suite.db);
       await suite.db.execute(sql`delete from change_log`);
     }
   });

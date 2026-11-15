@@ -1602,14 +1602,6 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   [Detail](box.md#resolvesafeentrypath-appsserversrcstate-secretsts-is-unchanged-and-nothing-chmods-the-staging-folder)
 - **A950 is go-live work, and A799 is folded into it (owner, 2026-11-09; supersedes the 2026-11-06 decision that both come after the first venue).** Owner: "it's required for go live and needs to be bullet proof. i don't want to lose this one. the first live venue is going to be remote so it will be difficult for me to fix. i need upgrades to be solid." A799's trial of the new release's database changes on a copy of the live data is A950's step 4, now; testing against real older releases is kept from go-live onwards. After the first venue, as points under A950: the Cloud release check, the password-checked go-back button, proof-of-close, and the backup-stream handoff.
 
-## Migrating a box drops the change-feed triggers one statement at a time, outside a transaction
-
-`removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
-`applyMigrations`) drops each `waitron_change_*` trigger on its own. A751's probe on the full
-schema: 561 drops took 85–180 ms that way and 43–48 ms inside one transaction; A736 measured
-53–56 ms against 23–25 ms. Boot migrates at every start (`apps/server/src/boot.ts`), and the
-removal is about a quarter of the upgrade walk's processor profile.
-
 ## The Amazon S3 delete and archive rehearsal's open edges (A538-9)
 
 Left open by #1668, in

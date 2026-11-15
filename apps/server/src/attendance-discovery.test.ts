@@ -399,7 +399,7 @@ describe("durable attendance discovery", () => {
     const schemaVersionBeforeMigrations = suite.db.execute<{ schema_version: number }>(
       sql`pragma schema_version`,
     ).rows[0]!.schema_version;
-    removeChangeFeed(suite.db);
+    await removeChangeFeed(suite.db);
     await installChangeFeed(suite.db, sources);
     const current = suite.db.execute<{ schema_version: number }>(sql`pragma schema_version`)
       .rows[0]!.schema_version;

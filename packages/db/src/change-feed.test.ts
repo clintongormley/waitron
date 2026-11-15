@@ -4,8 +4,9 @@
 // A table with no `id` column and a row whose `id` is null both produce an identity with no `id`
 // key. `new."id"` is a PREPARE error on a table with no such column, so the keyless case is one of
 // its own.
-import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { sql, type SQL } from "drizzle-orm";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
+import { describe, expect, it, vi } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { installChangeFeed, removeChangeFeed } from "./change-feed.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -329,13 +330,44 @@ describe("removing the change feed", () => {
   // setup, and a drop of one that is gone fails it.
   it("stops recording changes and leaves a trigger it did not install in place", async () => {
     try {
-      removeChangeFeed(suite.db);
+      await removeChangeFeed(suite.db);
       suite.db.run(sql.raw(`insert into live_probe values ('p1')`));
       expect(suite.db.execute(sql`select * from change_log`).rows).toEqual([]);
       expect(
         suite.db.execute<{ id: string }>(sql`select id from other_probe`).rows.map((r) => r.id),
       ).toEqual(["p1"]);
     } finally {
+      await installChangeFeed(suite.db, [{ table: "live_probe", type: "probe" }]);
+    }
+  });
+
+  it("keeps every feed trigger when a later drop fails", async () => {
+    const feedTriggers = () =>
+      suite.db
+        .execute<{ name: string }>(
+          sql`select name from sqlite_master where type = 'trigger' and name glob 'waitron_change_*' order by name`,
+        )
+        .rows.map((row) => row.name);
+    const before = feedTriggers();
+    expect(before.length).toBeGreaterThan(1);
+    const dialect = new SQLiteSyncDialect();
+    const execute = suite.db.execute.bind(suite.db);
+    let drops = 0;
+    const spy = vi.spyOn(suite.db, "execute").mockImplementation(((query: SQL) => {
+      if (dialect.sqlToQuery(query).sql.startsWith("drop trigger") && ++drops === 2) {
+        throw new Error("second drop refused");
+      }
+      return execute(query);
+    }) as typeof suite.db.execute);
+    try {
+      await expect(Promise.resolve().then(() => removeChangeFeed(suite.db))).rejects.toThrow(
+        "second drop refused",
+      );
+      spy.mockRestore();
+      expect(drops).toBe(2);
+      expect(feedTriggers()).toEqual(before);
+    } finally {
+      spy.mockRestore();
       await installChangeFeed(suite.db, [{ table: "live_probe", type: "probe" }]);
     }
   });
