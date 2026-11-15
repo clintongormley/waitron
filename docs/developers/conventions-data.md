@@ -4650,13 +4650,14 @@ status reading `off` asks `clock.sync-on` and waits for its answer, logs `time_s
 or, once per distinct failure, `time_service.switch_on_failed`, and answers the reading as it was.
 The wait is there because a clock set reads the status and then asks the host to set the clock, and
 the host refuses that set `busy` while a switch-on holds its lock. After a failed switch-on, other
-than a `busy` refusal, it asks no more for an hour (`SWITCH_ON_BACK_OFF_MS`) unless a reading in
-between finds the service not `off`, so a host where `timedatectl set-ntp true` keeps failing is
-asked about once an hour rather than at every reading. In trading mode the clock watch also reads the shared reading at the end of every look,
-every 15 seconds, whatever the start's state (`readTimeService` in `createClockWatch`), so a service
+than a `busy` refusal, it asks no more for a minute (`SWITCH_ON_FIRST_WAIT_MS`), and each further
+failure in a row doubles that wait, up to an hour (`SWITCH_ON_LONGEST_WAIT_MS`). A success, or a
+reading that finds the service not `off`, starts the wait again at a minute. So a host where
+`timedatectl set-ntp true` keeps failing is asked about once an hour rather than at every reading.
+In trading mode the clock watch also reads the shared reading at the end of every look, every 15
+seconds, whatever the start's state (`readTimeService` in `createClockWatch`), so a service
 switched off is found with no request from a screen; the cache keeps that to about one host request
-a minute. It reads outside the correction's turn, so the watch does not hold that turn while a
-switch-on runs.
+a minute. It reads outside the correction's turn.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the

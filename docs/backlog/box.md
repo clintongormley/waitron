@@ -315,8 +315,8 @@ qualify power loss during placement; A1415's process-kill tests establish restar
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
   set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
   right, and the running server asks the host to switch it back on whenever it reads it switched
-  off, waiting an hour after a failed try (`apps/server/src/time-service-kept-on.ts`); the image
-  makes it standing.
+  off, waiting from a minute up to an hour after failed tries
+  (`apps/server/src/time-service-kept-on.ts`); the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Kiosk options, none built: Chromium in the box image, every box (the owner's decision in B3's
@@ -853,8 +853,8 @@ its request writer and reply reader; PR 9's routes call that client): what the s
 host service and what the host may answer, as a pure module with no socket, root or NetworkManager.
 
 - Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to the installed
-  first-start service); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`, which
-  gained `clock.sync-on` on 2026-11-15), and this module answers them `unknown_request`.
+  first-start service); `clock.status`, `clock.set` and `clock.sync-on` stay slice 9b's shell
+  handler's (`SHELL_VERBS`), and this module answers them `unknown_request`.
 - A request is one line: the verb, one space and one JSON object of the request's fields and then
   `actor`, printable ASCII only, at most 4096 characters, and accepted only in the exact form
   `formatHostRequest` writes, so a duplicate key, another key order, extra spaces or an upper-case

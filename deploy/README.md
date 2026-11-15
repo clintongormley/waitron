@@ -135,8 +135,9 @@ network. `install` switches synchronisation back on even where someone switched 
 running server: whenever it reads the box's clock service and finds synchronisation switched off, it
 asks the clock service to switch it back on. While the server trades it reads the clock service about
 once a minute, so a test box whose clock is set wrong on purpose cannot keep synchronisation switched
-off for long. After a try that fails, the server does not try again for an hour, unless it reads
-synchronisation switched on in between. `reset` does not touch it.
+off for long. After a try that fails, the server waits a minute before trying again, and twice as
+long after each further failure in a row, up to an hour. A try that works, or a reading of
+synchronisation switched on, starts that wait again at a minute. `reset` does not touch it.
 
 On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
 set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it
