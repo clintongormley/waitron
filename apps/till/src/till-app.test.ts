@@ -16534,6 +16534,22 @@ describe("the main-server strip", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("a till whose router moves to another server during the final probe does not navigate", async () => {
+    const { el, router, fetchImpl } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    press(lockStrip(el)!);
+    router.dispatchEvent(
+      new CustomEvent("server-changed", { detail: { from: ORIGIN, to: router.spare!.url } }),
+    );
+    await settle(el);
+    failProbe();
+    await settle(el);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("a till that reaches no server shows no switch", async () => {
     answering.spare = false;
     const { el, router } = await mount();

@@ -2532,6 +2532,7 @@ export class TillApp extends LitElement {
     const { from, to } = (event as CustomEvent<{ from: string; to: string }>).detail;
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
+    this.#switchGeneration++;
     this.operatorPersonId = "";
     this.#tabPerson = null;
     this.operatorName = "";
@@ -2558,7 +2559,7 @@ export class TillApp extends LitElement {
 
   @state() private mainServerRefused = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Moves on when the till leaves the page or its router, voiding a switch still probing. */
+  /** Moves on when the till leaves the page, its router or its server; voids a pending switch. */
   #switchGeneration = 0;
 
   /** Present once the main server has been silent for `MAIN_SILENT_MS` at a venue with a spare. */
