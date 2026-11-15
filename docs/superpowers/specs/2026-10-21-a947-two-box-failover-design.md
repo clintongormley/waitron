@@ -1994,6 +1994,11 @@ the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verif
 - Whether the router or the name carries a till across the switch, in each browser (§6.3, item 4).
 - Whether every till platform resolves a two-part `.local` name, and how long a device keeps the
   dead main box's address (§6.6; slice 4d measures both).
+  > **Pointer, 2026-11-15 (4d Task 8).** The lane's browser measurements (the device cookie and a
+  > passkey across `waitron.local` and a server's own name) and the owner's checklist for the
+  > tills and phones: [2026-11-15-a947-4d-measurements.md](../../research/2026-11-15-a947-4d-measurements.md).
+  > The cookie reaches a server's own name only when it names the venue's domain, which by reading
+  > a box does not set today.
 - The card payment in flight at the moment of the switch (A764).
 - The clock check's 30 seconds is a starting value: how far tills and boxes drift with the internet
   down is not measured, and the rehearsal measures it (§6.5).
