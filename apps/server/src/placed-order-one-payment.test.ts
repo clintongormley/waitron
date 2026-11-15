@@ -29,7 +29,7 @@ import "./errors.js";
 
 let venue: BillVenue;
 const zoneOf = {} as Record<Kind, { zoneId: string; offerFor: (productId: string) => string }>;
-let canaId: string;
+let beerId: string;
 
 type Kind = "invoiced" | "uninvoiced";
 const KINDS: { kind: Kind; label: string }[] = [
@@ -43,7 +43,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    canaId = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`)[0]!.id;
+    beerId = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`)[0]!.id;
     zoneOf.invoiced = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
@@ -61,7 +61,7 @@ async function placed(kind: Kind): Promise<string> {
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
     id,
     zoneId: zone.zoneId,
-    lines: [{ menuItemId: zone.offerFor(canaId), quantity: "1" }],
+    lines: [{ menuItemId: zone.offerFor(beerId), quantity: "1" }],
   });
   expect(parked.status).toBe(200);
   if (kind === "invoiced") {
