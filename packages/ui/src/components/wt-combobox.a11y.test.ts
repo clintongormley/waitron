@@ -181,6 +181,40 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await mountThemed('<wt-combobox label="Dietary tags" required></wt-combobox>', theme);
     await expectNoA11yViolations(host);
   });
+
+  test.each(["never", "always"] as const)(
+    "a required combobox trigger, closed and then open with search=%s",
+    async (search) => {
+      const el = (await mountThemed(
+        `<wt-combobox label="Dietary tags" required search="${search}"></wt-combobox>`,
+        theme,
+      )) as WtCombobox;
+      el.options = TAGS;
+      await el.updateComplete;
+      const trigger = el.shadowRoot!.querySelector(".trigger")!;
+      expect(trigger.getAttribute("role")).toBe("combobox");
+      expect(trigger.getAttribute("aria-required")).toBe("true");
+      await expectNoA11yViolations(host);
+      await userEvent.click(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  test("a required link trigger, closed and open", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Category" appearance="link" required></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = TAGS;
+    await el.updateComplete;
+    const trigger = el.shadowRoot!.querySelector(".trigger")!;
+    expect(trigger.getAttribute("role")).toBe("combobox");
+    expect(trigger.getAttribute("aria-required")).toBe("true");
+    await expectNoA11yViolations(host);
+    await userEvent.click(trigger);
+    await expectNoA11yViolations(host);
+  });
   test("closed, with a value chosen", async () => {
     const el = (await mountThemed(
       '<wt-combobox label="Tags" value="vegan"></wt-combobox>',

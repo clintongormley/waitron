@@ -169,6 +169,7 @@ export class WtColourChooser extends LitElement {
   @query("[popover]") private popup!: HTMLElement | null;
 
   private readonly labelId = uniqueId("wt-colour-chooser-label");
+  private readonly valueId = uniqueId("wt-colour-chooser-value");
   private readonly generatedTriggerId = uniqueId("wt-colour-chooser-trigger");
   private readonly panelId = uniqueId("wt-colour-chooser-panel");
   private readonly errorId = uniqueId("wt-colour-chooser-error");
@@ -355,9 +356,12 @@ export class WtColourChooser extends LitElement {
           id=${triggerId}
           name=${this.name || nothing}
           class="field-control trigger"
+          role="combobox"
+          aria-haspopup="dialog"
           aria-expanded=${this.expanded ? "true" : "false"}
           aria-controls=${this.panelId}
-          aria-labelledby=${`${this.labelId} ${triggerId}`}
+          aria-required=${this.required ? "true" : nothing}
+          aria-labelledby=${`${this.labelId} ${this.valueId}`}
           aria-invalid=${hasError ? "true" : nothing}
           aria-describedby=${hasError ? this.errorId : nothing}
           popovertarget=${this.panelId}
@@ -366,7 +370,7 @@ export class WtColourChooser extends LitElement {
           @keydown=${this.onTriggerKeydown}
         >
           ${chosen ? this.renderSwatch(chosen.fill) : nothing}
-          <span class="value">${chosen?.label ?? ""}</span>
+          <span id=${this.valueId} class="value">${chosen?.label ?? ""}</span>
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>
@@ -375,6 +379,8 @@ export class WtColourChooser extends LitElement {
         id=${this.panelId}
         popover
         part="panel"
+        role="dialog"
+        aria-labelledby=${this.labelId}
         @toggle=${this.onToggle}
         @keydown=${this.onPanelKeydown}
       >

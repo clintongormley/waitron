@@ -141,10 +141,11 @@ describe("the field", () => {
     const swatch = trigger.querySelector<HTMLElement>('[part="swatch"]')!;
     expect(swatch).not.toBeNull();
     expect(swatch.style.getPropertyValue("--swatch-fill")).toBe("var(--wt-color-palette-blue)");
-    expect(trigger.getAttribute("aria-labelledby")).toBe(`${label.id} ${trigger.id}`);
+    const value = trigger.querySelector<HTMLElement>(".value")!;
+    expect(trigger.getAttribute("aria-labelledby")).toBe(`${label.id} ${value.id}`);
     expect(trigger.hasAttribute("for")).toBe(false);
     expect(label.hasAttribute("for")).toBe(false);
-    const named = page.getByRole("button", { name: "Colour Blue", exact: true });
+    const named = page.getByRole("combobox", { name: "Colour Blue", exact: true });
     await expect.element(named).toBeInTheDocument();
     expect(named.element()).toBe(trigger);
   });
@@ -152,12 +153,14 @@ describe("the field", () => {
   test("a named chooser uses its name as the trigger's id; an unnamed one gets a generated id", async () => {
     const named = await mountChooser('name="colour" label="Colour" value="blue"');
     expect(named.trigger.id).toBe("colour");
-    expect(named.trigger.getAttribute("aria-labelledby")).toBe(`${named.label.id} colour`);
+    expect(named.trigger.getAttribute("aria-labelledby")).toBe(
+      `${named.label.id} ${named.trigger.querySelector(".value")!.id}`,
+    );
     const unnamed = await mountChooser('label="Colour" value="blue"');
     expect(unnamed.trigger.id).toMatch(/^wt-colour-chooser-trigger-\d+$/);
     expect(unnamed.trigger.hasAttribute("name")).toBe(false);
     expect(unnamed.trigger.getAttribute("aria-labelledby")).toBe(
-      `${unnamed.label.id} ${unnamed.trigger.id}`,
+      `${unnamed.label.id} ${unnamed.trigger.querySelector(".value")!.id}`,
     );
   });
 
@@ -168,6 +171,18 @@ describe("the field", () => {
     expect(star.getAttribute("aria-hidden")).toBe("true");
     const plain = await mountChooser('label="Colour" value="blue"');
     expect(plain.label.querySelector("[data-required]")).toBeNull();
+  });
+
+  test("the trigger is a combobox that says it is required only when it is, and opens a dialog", async () => {
+    const required = await mountChooser('label="Colour" value="blue" required');
+    expect(required.trigger.getAttribute("role")).toBe("combobox");
+    expect(required.trigger.getAttribute("aria-required")).toBe("true");
+    expect(required.trigger.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(required.panel.getAttribute("role")).toBe("dialog");
+    expect(required.panel.getAttribute("aria-labelledby")).toBe(required.label.id);
+    required.el.required = false;
+    await required.el.updateComplete;
+    expect(required.trigger.hasAttribute("aria-required")).toBe(false);
   });
 
   test("hide-label draws no label and no asterisk, keeps the trigger named by its label and colour, and makes the field compact", async () => {
@@ -187,7 +202,7 @@ describe("the field", () => {
       .split(" ")
       .map((id) => root.getElementById(id)!.textContent!.trim());
     expect(names).toEqual(["Colour", "Blue"]);
-    const named = page.getByRole("button", { name: "Colour Blue", exact: true });
+    const named = page.getByRole("combobox", { name: "Colour Blue", exact: true });
     expect(named.element()).toBe(trigger);
     expect(field.getBoundingClientRect().height).toBeLessThan(shownHeight);
     const changes: unknown[] = [];

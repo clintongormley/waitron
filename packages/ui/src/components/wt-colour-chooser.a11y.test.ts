@@ -78,6 +78,19 @@ describe.each(["light", "dark"] as const)("wt-colour-chooser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  test("a required combobox trigger, closed and then open", async () => {
+    const el = await mountChooser('value="blue" required', theme);
+    const trigger = el.shadowRoot!.querySelector("button.trigger")!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(trigger.getAttribute("role")).toBe("combobox");
+    expect(trigger.getAttribute("aria-required")).toBe("true");
+    await expectNoA11yViolations(host);
+    await userEvent.click(trigger);
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    await expectNoA11yViolations(host);
+  });
+
   test("hide-label, required", async () => {
     await mountChooser('value="blue" hide-label required', theme);
     await expectNoA11yViolations(host);

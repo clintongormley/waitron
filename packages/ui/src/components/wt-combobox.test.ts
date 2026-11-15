@@ -1071,6 +1071,47 @@ describe("the closed trigger's accessible name is its label, then its own text",
   });
 });
 
+describe("the closed trigger is a select-only combobox", () => {
+  test.each(["field", "link"])(
+    "a %s trigger is found by role combobox with its name, and controls the listbox",
+    async (appearance) => {
+      const el = await mountWith(
+        `<wt-combobox label="Dietary tags" appearance="${appearance}" value="vegan"></wt-combobox>`,
+      );
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+      const name = appearance === "field" ? "Dietary tags Vegan" : "Dietary tags: Vegan";
+      await expect.element(page.getByRole("combobox", { name, exact: true })).toBe(trigger);
+      const listbox = el.shadowRoot!.querySelector('[role="listbox"]')!;
+      expect(trigger.getAttribute("aria-controls")).toBe(listbox.id);
+      expect(trigger.getAttribute("aria-haspopup")).toBe("listbox");
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    },
+  );
+
+  test.each(["field", "link"])(
+    "a %s trigger says it is required only when it is",
+    async (appearance) => {
+      const el = await mountWith(
+        `<wt-combobox label="Dietary tags" appearance="${appearance}" required></wt-combobox>`,
+      );
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+      expect(trigger.getAttribute("aria-required")).toBe("true");
+      el.required = false;
+      await el.updateComplete;
+      expect(trigger.hasAttribute("aria-required")).toBe(false);
+    },
+  );
+
+  test("open with a search box, the trigger stays expanded on the listbox the search box drives", async () => {
+    const el = await mountWith('<wt-combobox label="Dietary tags" search="always"></wt-combobox>');
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+    await userEvent.click(trigger);
+    const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(trigger.getAttribute("aria-controls")).toBe(search.getAttribute("aria-controls"));
+  });
+});
+
 test("counts a multiple selection with its default wording", async () => {
   const { el } = await mountCombobox('<wt-combobox label="Dietary tags" multiple></wt-combobox>');
   el.options = TAGS;
@@ -3658,10 +3699,12 @@ test("the appearance property is reflected to its attribute, and defaults to the
 test("a link trigger is named by its label and its visible words, with no aria-label replacing them", async () => {
   const { trigger } = await mountLink();
   expect(trigger.hasAttribute("aria-label")).toBe(false);
-  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  expect(trigger.getAttribute("aria-labelledby")).toBe(trigger.querySelector(".link-text")!.id);
   await expect
     .element(
-      page.getByRole("button", { name: "Category: Drinks › Alcoholic drinks › Cocktails Change" }),
+      page.getByRole("combobox", {
+        name: "Category: Drinks › Alcoholic drinks › Cocktails Change",
+      }),
     )
     .toBe(trigger);
 });
