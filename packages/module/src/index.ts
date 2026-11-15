@@ -77,7 +77,6 @@ export type {
   ScreenSlot,
   ResolvedKitchenScreen,
   Named,
-  NarrowedDevice,
 } from "./module.js";
 export {
   migrationSetOf,

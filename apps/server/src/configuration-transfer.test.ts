@@ -4629,7 +4629,6 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       { name: "Old till", formFactor: "till" },
     ]);
     await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
-      station: { stationIds: [grill!.id], zoneIds: null },
       pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
     });
     await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
@@ -4654,11 +4653,9 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       (row) => `${String(row.device_profile_id)}:${String(row.screen)}`,
     ).sort();
   expect(exported("device_profile_kitchen_screens")).toEqual(
-    [`${original.till}:pass`, `${original.till}:station`, `${original.wall}:pass_monitor`].sort(),
+    [`${original.till}:pass`, `${original.wall}:pass_monitor`].sort(),
   );
-  expect(exported("device_profile_kitchen_screen_stations")).toEqual(
-    [`${original.till}:pass`, `${original.till}:station`].sort(),
-  );
+  expect(exported("device_profile_kitchen_screen_stations")).toEqual([`${original.till}:pass`]);
   expect(exported("device_profile_kitchen_screen_zones")).toEqual([`${original.till}:pass`]);
   await applyVenue(planVenue(venue("B46802357"), ALL_MODULES), {
     db: targetSuite.db,
@@ -4697,7 +4694,6 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     {
       profile: "Pass till",
       screens: {
-        station: { stations: ["Grill"], zones: null },
         pass: { stations: ["Grill"], zones: ["Terrace"] },
       },
     },
@@ -8009,32 +8005,13 @@ describe("A773 pass display policy", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const deviceId = await withTransaction(suite.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, { name: "Hidden pass", formFactor: "till" });
       await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
-        pass_monitor: { stationIds: null, zoneIds: null },
       });
-      const { deviceId } = await seedDevice(tx, {
-        profileId: profile!.id,
-      });
-      await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-        deviceId,
-        profileId: profile!.id,
-        screens: [{ kind: "pass", stationIds: null, zoneIds: null }],
-      });
-      await tx.execute(
-        sql`update device_kitchen_screens set show_non_pass_stations = 1 where device_id = ${deviceId}`,
-      );
-      return deviceId;
+      await seedDevice(tx, { profileId: profile!.id });
     });
-    expect(
-      (
-        await suite.db.execute(
-          sql`select count(*) as n from device_kitchen_screens where device_id = ${deviceId}`,
-        )
-      ).rows,
-    ).toEqual([{ n: 1 }]);
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -8070,13 +8047,10 @@ describe("A773 pass display policy", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    expect(await importedPassValues()).toEqual([
-      { screen: "pass", shown: 0 },
-      { screen: "pass_monitor", shown: 1 },
+    expect(await importedPassValues()).toEqual([{ screen: "pass", shown: 0 }]);
+    expect((await targetSuite.db.execute(sql`select count(*) as n from devices`)).rows).toEqual([
+      { n: 0 },
     ]);
-    expect(
-      (await targetSuite.db.execute(sql`select count(*) as n from device_kitchen_screens`)).rows,
-    ).toEqual([{ n: 0 }]);
   });
 
   it("imports a profile row exported before the choice existed as showing other stations", async () => {
@@ -8099,10 +8073,7 @@ describe("A773 pass display policy", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, older, ALL_MODULES, versions),
     });
-    expect(await importedPassValues()).toEqual([
-      { screen: "pass", shown: 1 },
-      { screen: "pass_monitor", shown: 1 },
-    ]);
+    expect(await importedPassValues()).toEqual([{ screen: "pass", shown: 1 }]);
   });
 });
 

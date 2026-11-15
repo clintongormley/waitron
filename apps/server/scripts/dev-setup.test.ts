@@ -316,6 +316,26 @@ describe("devSetup against a real venue directory", () => {
         ],
       },
       {
+        name: "Demo pass",
+        capabilities: [
+          "act-as-kds",
+          "prepare-orders",
+          "take-orders",
+          "hand-over-orders",
+          "run-the-pass",
+        ],
+      },
+      {
+        name: "Demo pass display",
+        capabilities: [
+          "act-as-kds",
+          "prepare-orders",
+          "take-orders",
+          "hand-over-orders",
+          "run-the-pass",
+        ],
+      },
+      {
         name: "Handheld",
         capabilities: [
           "take-orders",
@@ -353,14 +373,14 @@ describe("devSetup against a real venue directory", () => {
       }>(
         sql`select d.label, dp.form_factor, dks.screen, dks.every_station,
                    (select group_concat(name, ',') from (
-                      select ks.name from device_kitchen_screen_stations s
+                      select ks.name from device_profile_kitchen_screen_stations s
                       join kitchen_stations ks on ks.id = s.station_id
-                      where s.device_id = d.id and s.screen = dks.screen
+                      where s.device_profile_id = d.device_profile_id and s.screen = dks.screen
                       order by ks.name)) as station_names,
                    dks.every_zone
             from devices d
             join device_profiles dp on dp.id = d.device_profile_id
-            left join device_kitchen_screens dks on dks.device_id = d.id
+            left join device_profile_kitchen_screens dks on dks.device_profile_id = d.device_profile_id
             order by d.label`,
       );
       return result.rows;

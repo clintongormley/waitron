@@ -100,7 +100,7 @@ async function mount(mode: Mode, board: PassBoard) {
     board,
     stations: [],
     zones: null,
-    display: { showNonPassStations: true, nonPassStationsOverride: null },
+    display: { showNonPassStations: true },
   };
   const api = {
     getExpoBoard: vi.fn().mockResolvedValue({ board }),

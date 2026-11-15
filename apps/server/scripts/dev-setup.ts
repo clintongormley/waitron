@@ -1,3 +1,4 @@
+import { deviceProfiles } from "@waitron/db";
 import { tableExists } from "@waitron/db";
 import { venueDirOf } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS } from "@waitron/country-packs/demo";
@@ -305,15 +306,23 @@ async function seedDemoDevices(
     profileId: profileFor("kds"),
     stationId: kitchen.id,
   });
+  const source = profiles.find((profile) => profile.id === profileFor("kds"))!;
+  const [passProfile, monitorProfile] = await db
+    .insert(deviceProfiles)
+    .values([
+      { name: "Demo pass", formFactor: "kds", capabilities: source.capabilities },
+      { name: "Demo pass display", formFactor: "kds", capabilities: source.capabilities },
+    ])
+    .returning({ id: deviceProfiles.id });
   const { kitchen: passKitchen, deli } = seeded.passStationIds;
   await enrolDeviceForTest(db, cfg, {
     name: "Pass",
-    profileId: profileFor("kds"),
+    profileId: passProfile!.id,
     kitchenScreen: { kind: "pass", stationIds: [passKitchen, deli], zoneIds: null },
   });
   await enrolDeviceForTest(db, cfg, {
     name: "Pass display (view only)",
-    profileId: profileFor("kds"),
+    profileId: monitorProfile!.id,
     kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
   });
 }

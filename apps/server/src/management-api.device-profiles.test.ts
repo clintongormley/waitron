@@ -311,7 +311,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       allowedZoneIds: null,
       startingZoneId: null,
       admittedStaffRoleIds: await visibleJobs(),
-      narrowedDevices: [],
     });
 
     // DELETE → 204, then GET → 404 device_profile.not_found.
@@ -1474,7 +1473,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       ...extra,
     });
 
-    it("removing a station a device shows saves, narrows the device and names it with the station", async () => {
+    it("saving a smaller profile scope immediately changes its devices without a narrowing notice", async () => {
       const app = mountApp();
       const { grill, cold } = await kitchenChoices();
       const name = uniqueName("Kitchen");
@@ -1492,11 +1491,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const deviceName = uniqueName("Grill screen");
       const deviceId = await withTransaction(suite.db, async (tx) => {
         const { deviceId } = await seedDevice(tx, { profileId: id, label: deviceName });
-        await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-          deviceId,
-          profileId: id,
-          screens: [{ kind: "station", stationIds: [grill, cold], zoneIds: null }],
-        });
         return deviceId;
       });
       const renamed = uniqueName("Renamed");
@@ -1516,23 +1510,16 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           (slot) => slot.id === grill,
         ),
       );
-      expect(grillName).toMatchObject({ id: grill, available: false });
-      expect(body.narrowedDevices).toEqual([
-        {
-          deviceId,
-          deviceName,
-          lost: { screens: [], stations: [{ id: grill, name: grillName!.name }], zones: [] },
-        },
-      ]);
+      expect(grillName).toBeUndefined();
+      expect(body).not.toHaveProperty("narrowedDevices");
       expect(await screensOf(app, id)).toEqual({ station: { stationIds: [cold], zoneIds: null } });
     });
 
     it("lists every live profile's kitchen screens, replaces them on a PUT naming them and keeps them on one without", async () => {
       const app = mountApp();
-      const { grill, cold } = await kitchenChoices();
+      const { cold } = await kitchenChoices();
       const name = uniqueName("Kitchen");
       const offered = {
-        station: { stationIds: [grill], zoneIds: null },
         pass: { stationIds: null, zoneIds: null },
       };
       const created = await app.request("/management-api/device-profiles", {
@@ -1562,7 +1549,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify(kitchen(name)),
       });
       expect(kept.status).toBe(200);
-      expect(((await kept.json()) as { narrowedDevices: unknown }).narrowedDevices).toEqual([]);
+      expect(await kept.json()).not.toHaveProperty("narrowedDevices");
       expect(await screensOf(app, id)).toEqual({
         ...offered,
         pass: { ...offered.pass, showNonPassStations: true },
@@ -1858,9 +1845,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
     it("profile copy validates the live source and keeps nonempty zone and station bounds", async () => {
       const app = mountApp();
-      const { grill, cold } = await kitchenChoices();
+      const { grill } = await kitchenChoices();
       const screens = {
-        station: { stationIds: [cold], zoneIds: null },
         pass: { stationIds: [grill], zoneIds: [ordering.startingZoneId] },
       };
       const created = await app.request("/management-api/device-profiles", {
@@ -1922,55 +1908,36 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     describe("A773 pass display policy", () => {
       const every = { stationIds: null, zoneIds: null };
 
-      it("stores each pass kind's showNonPassStations on POST and PUT, and a station entry carries none", async () => {
-        const app = mountApp();
-        const name = uniqueName("Display");
-        const created = await app.request("/management-api/device-profiles", {
-          method: "POST",
-          headers: { ...JSON_HEADERS, cookie: managerCookie },
-          body: JSON.stringify(
-            kitchen(name, {
-              kitchenScreens: {
-                station: every,
-                pass: { ...every, showNonPassStations: false },
-                pass_monitor: { ...every, showNonPassStations: true },
-              },
-            }),
-          ),
-        });
-        expect(created.status).toBe(201);
-        const { id } = (await created.json()) as ProfileRow;
-        expect(await screensOf(app, id)).toEqual({
-          station: every,
-          pass: { ...every, showNonPassStations: false },
-          pass_monitor: { ...every, showNonPassStations: true },
-        });
-
-        const updated = await app.request(`/management-api/device-profiles/${id}`, {
-          method: "PUT",
-          headers: { ...JSON_HEADERS, cookie: managerCookie },
-          body: JSON.stringify(
-            kitchen(name, {
-              kitchenScreens: {
-                station: every,
-                pass: { ...every, showNonPassStations: true },
-                pass_monitor: { ...every, showNonPassStations: false },
-              },
-            }),
-          ),
-        });
-        expect(updated.status).toBe(200);
-        expect(await screensOf(app, id)).toEqual({
-          station: every,
-          pass: { ...every, showNonPassStations: true },
-          pass_monitor: { ...every, showNonPassStations: false },
-        });
-      });
+      it.each(["station", "pass", "pass_monitor"] as const)(
+        "stores %s display policy on POST and PUT",
+        async (kind) => {
+          const app = mountApp();
+          const name = uniqueName("Display");
+          const screens = (show: boolean) => ({
+            [kind]: kind === "station" ? every : { ...every, showNonPassStations: show },
+          });
+          const created = await app.request("/management-api/device-profiles", {
+            method: "POST",
+            headers: { ...JSON_HEADERS, cookie: managerCookie },
+            body: JSON.stringify(kitchen(name, { kitchenScreens: screens(false) })),
+          });
+          expect(created.status).toBe(201);
+          const { id } = (await created.json()) as ProfileRow;
+          expect(await screensOf(app, id)).toEqual(screens(false));
+          const updated = await app.request(`/management-api/device-profiles/${id}`, {
+            method: "PUT",
+            headers: { ...JSON_HEADERS, cookie: managerCookie },
+            body: JSON.stringify(kitchen(name, { kitchenScreens: screens(true) })),
+          });
+          expect(updated.status).toBe(200);
+          expect(await screensOf(app, id)).toEqual(screens(true));
+        },
+      );
 
       it("refuses showNonPassStations on a station entry, as a string or as null, writing nothing", async () => {
         const app = mountApp();
         const name = uniqueName("Display kept");
-        const stored = { pass: { ...every, showNonPassStations: false }, station: every };
+        const stored = { pass: { ...every, showNonPassStations: false } };
         const created = await app.request("/management-api/device-profiles", {
           method: "POST",
           headers: { ...JSON_HEADERS, cookie: managerCookie },

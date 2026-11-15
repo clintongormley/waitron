@@ -235,15 +235,11 @@ export class TillStationScreen extends LitElement {
   @property({ type: Boolean }) canMoveStation = false;
 
   @state() private stations: Station[] = [];
-  /** The device's chosen stations a narrowing took away, shown above the picker. */
   @state() private lostStations: ScreenSlot[] = [];
-  /** A narrowing took the device's station screen itself. */
   @state() private stationScreenGone = false;
-  /** A read of the device's choice has answered; until one does, every station shows. */
   #choiceRead = false;
   #choiceRequest = 0;
   #appliedChoice = 0;
-  /** The stations the device chose, or null when it shows every station. */
   #chosenIds: ReadonlySet<string> | null = null;
   /** Every station, chosen or not, so a closed station names where its dishes go. */
   @state() private allStations: Station[] = [];
@@ -503,11 +499,6 @@ export class TillStationScreen extends LitElement {
     return notices.filter((notice) => !this.#acknowledged.has(notice.id));
   }
 
-  /**
-   * The picker lists the device's chosen stations, or every station when it has no choice; a choice
-   * a narrowing emptied lists none. Run again at each refresh, keeping the open station when it is
-   * still listed. Once a read has answered, a failed one keeps what it said.
-   */
   async #load(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     const choice = this.#readStationChoice(signal);
@@ -671,8 +662,6 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  /** On a kitchen display, a press refused because the device no longer has this screen asks the
-   * app to re-read the device's choice now. */
   #switched(error: unknown): boolean {
     if (!this.deviceMode || (error as { code?: unknown } | null)?.code !== "device.unauthorized")
       return false;

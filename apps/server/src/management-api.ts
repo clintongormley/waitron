@@ -106,7 +106,7 @@ import {
   updateStation,
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
-import type { NarrowedDevice, TableRemoval } from "@waitron/module";
+import type { TableRemoval } from "@waitron/module";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import type { TradingContext } from "./trading-context.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
@@ -1414,12 +1414,10 @@ export function mountManagementApi(
           printerLists,
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, id, scope);
-        const narrowedDevices: NarrowedDevice[] =
-          kitchenScreens === undefined
-            ? []
-            : await VENUE_SERVICE.setProfileKitchenScreens(tx, id, kitchenScreens);
+        if (kitchenScreens !== undefined)
+          await VENUE_SERVICE.setProfileKitchenScreens(tx, id, kitchenScreens);
         await setProfileAdmission(tx, id, admission);
-        return { ...(await withProfileAccess(tx, [updated]))[0]!, narrowedDevices };
+        return (await withProfileAccess(tx, [updated]))[0]!;
       });
       return c.json(result);
     }),

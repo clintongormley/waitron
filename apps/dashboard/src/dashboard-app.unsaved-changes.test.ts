@@ -1022,7 +1022,6 @@ it.each([
                   profileEveryStation: true,
                   stations: [{ id: "bar", name: "Bar", available: true }],
                   zones: null,
-                  nonPassStationsOverride: null,
                   showNonPassStations: true,
                 },
               ],

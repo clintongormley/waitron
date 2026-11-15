@@ -5043,8 +5043,6 @@ export class TillApp extends LitElement {
           show = await this.#readKitchenScreen(identity.kitchenScreens);
         } catch (error) {
           if ((error as { code?: string }).code !== "device.unauthorized") throw error;
-          // A narrowing that lands between the two reads refuses the screen it took, from a device
-          // still enrolled: the identity, read again, says what it shows now.
           const again = await this.api.getDeviceIdentity();
           show = await this.#readKitchenScreen(again.kitchenScreens);
         }

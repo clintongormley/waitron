@@ -2937,7 +2937,8 @@ export const en = {
   "device_profiles.payment_slip_printers": "Payment slip printers",
   "device_profiles.no_printers": "Add a printer first.",
   "device_profiles.printers_loading": "Loading printers…",
-  "device_profiles.kitchen_screens": "Station screens its devices may run",
+  "device_profiles.kitchen_screens": "Kitchen screen",
+  "device_profiles.kitchen_screen.none": "No screen",
   "device_profiles.kitchen_screen.station": "Station screen",
   "device_profiles.kitchen_screen.pass": "Pass",
   "device_profiles.kitchen_screen.pass_monitor": "Pass display (view only)",
@@ -2987,8 +2988,7 @@ export const en = {
   "device_profiles.department_disabled_mark": "Deleted",
   "device_profiles.department_help_label": "Help with the department",
   "device_profiles.starting_zone_help_label": "Help with the starting zone",
-  "device_profiles.kitchen_screens_hint":
-    "Each prep station display on this profile runs one of these. Choose which on Devices.",
+  "device_profiles.kitchen_screens_hint": "Every device with this profile uses this screen.",
   "device_profiles.err_department_required": "Choose the department this profile orders for",
   "device_profiles.err_department":
     "Check the department: it may have been switched off. Choose another.",
@@ -7302,7 +7302,8 @@ export const es: Record<StringKey, string> = {
   "device_profiles.payment_slip_printers": "Impresoras de justificantes de pago",
   "device_profiles.no_printers": "Añade primero una impresora.",
   "device_profiles.printers_loading": "Cargando impresoras…",
-  "device_profiles.kitchen_screens": "Pantallas de estación que pueden usar sus dispositivos",
+  "device_profiles.kitchen_screens": "Pantalla de cocina",
+  "device_profiles.kitchen_screen.none": "Sin pantalla",
   "device_profiles.kitchen_screen.station": "Pantalla de estación",
   "device_profiles.kitchen_screen.pass": "Pase",
   "device_profiles.kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
@@ -7353,7 +7354,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.department_help_label": "Ayuda sobre el departamento",
   "device_profiles.starting_zone_help_label": "Ayuda sobre la zona inicial",
   "device_profiles.kitchen_screens_hint":
-    "Cada pantalla de estación con este perfil usa una de estas. Elige cuál en Dispositivos.",
+    "Todos los dispositivos con este perfil usan esta pantalla.",
   "device_profiles.err_department_required": "Elige el departamento para el que pide este perfil",
   "device_profiles.err_department":
     "Revisa el departamento: puede que se haya desactivado. Elige otro.",

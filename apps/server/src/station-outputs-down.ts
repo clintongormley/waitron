@@ -134,7 +134,7 @@ export async function stationsWithWaitingDishes(
 
 export async function stationScreensDark(tx: Transaction, now: Date): Promise<DarkScreen[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
-  const screens = await VENUE_SERVICE.readStationScreens(tx, { withSwitchedOff: true });
+  const screens = await VENUE_SERVICE.readStationScreens(tx);
   if (screens.length === 0) return [];
   const seen = new Map(
     (

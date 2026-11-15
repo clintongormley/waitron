@@ -744,25 +744,15 @@ the server checks each at the route, never trusting the till's copy:
   Public hierarchy Delete refuses removal of its last usable zone and replaces a removed starting
   zone with a permitted survivor. The reader fallback above still handles moved or invalid stored
   scope; it does not offer Enable for a deleted zone.
-- **A profile's kitchen screens are its manager's choices, not its routing.** A profile of any form
-  factor may offer a station screen, a pass screen and a pass monitor (a view-only pass board),
-  each with its stations and, for the pass kinds, its zones, as "Every station" or a list. Each
-  device on it chooses within those (Devices → edit; `setDeviceKitchenScreens`,
-  `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
-  (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
-  and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
-  pass screen draws Fire and Ready only when its profile has "Runs the pass"
-  (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
-  Move to station on each waiting dish only when its profile has `take-orders`; a till's own
-  Station screen draws none (A439). What reaches a station still comes from the
-  venue's routing. Saving a profile that no longer offers a screen, station or zone a device
-  shows is allowed: the save names the devices it changed (`narrowedDevices`), each device records
-  what it lost and shows it as no longer available until someone picks again, and adding it back
-  to the profile gives it back to a device nobody has re-picked on since. Permanent station Delete
-  refuses explicit effective KDS bindings, including off devices, and unfinished food. Removing
-  the last station from a profile or device scope keeps its parent with an empty station list;
-  removing the whole screen kind records a different no-longer-available state. The former pass
-  Done/Undo route is retired.
+- **A profile owns one kitchen screen, inherited by every device using it.** Any form factor may
+  choose Station, Pass or Pass display, or leave it unconfigured. Station and zone bounds and the
+  Pass display policy belong to the profile (`setProfileKitchenScreens`,
+  `packages/venue-service/src/kitchen-screens.ts`); Devices and pairing choose only the profile.
+  An explicit empty bound stays empty. Pass display contributes no Fire coverage. The live Columns
+  dialog keeps local layout choices and takes the other-stations policy from the profile.
+  Profile bounds and coverage are checked in `packages/venue-service/src/kitchen-screens.test.ts`;
+  device route admission is checked in `apps/server/src/device-api.test.ts` and
+  `device-api.pass.test.ts`.
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks

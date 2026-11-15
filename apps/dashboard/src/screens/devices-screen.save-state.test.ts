@@ -190,7 +190,6 @@ const onOffStation: DeviceRow = {
         { id: "s-off", name: "Old", available: false, switchedOff: true },
       ],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     },
   ],
@@ -214,39 +213,10 @@ const screenTaken: DeviceRow = {
       profileEveryStation: false,
       stations: [],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     },
   ],
 };
-
-/** A kitchen display holding a station switched off on its own page and one a narrowing took. */
-const heldAndGone: DeviceRow = {
-  ...onOffStation,
-  id: "k3",
-  label: "Cold station display",
-  kitchenScreens: [
-    {
-      kind: "station",
-      available: true,
-      everyStation: false,
-      everyZone: true,
-      profileEveryStation: false,
-      stations: [
-        { id: "s1", name: "Kitchen", available: true, switchedOff: false },
-        { id: "s-gone", name: "Deli", available: false, switchedOff: false },
-        { id: "s-off", name: "Old", available: false, switchedOff: true },
-      ],
-      zones: null,
-      nonPassStationsOverride: null,
-      showNonPassStations: true,
-    },
-  ],
-};
-const withHeldAndGone = () =>
-  stubApi({
-    listDevices: vi.fn().mockResolvedValue([till, onOffStation, screenTaken, heldAndGone]),
-  });
 
 const returning: JoinRequestRow = {
   id: "j1",
@@ -429,13 +399,9 @@ describe("the Edit dialog's Save", () => {
     await noComplaint(el);
   });
 
-  it.each([
-    ["a deleted station", "k1", "station", "[data-test=edit-screen-every-station]"],
-    ["a screen its profile took", "k2", "", "[data-test=edit-gone]"],
-  ])("opens quiet on a kitchen display holding %s", async (_, id, screen, listed) => {
+  it.each(["k1", "k2"])("opens quiet on kitchen display %s without screen choices", async (id) => {
     const { el, api } = await openEdit(id);
-    expect(value(el, "edit-screen")).toBe(screen);
-    expect(q(el, listed)).not.toBeNull();
+    expect(q(el, "[data-test=edit-screen]")).toBeNull();
     expect(value(el, "edit-receipt-printer")).toBe("pr1");
     expect(checked(el, "edit-approved-profiles")).toEqual([["pl", true]]);
     expect(await state(el, "edit-save")).toEqual(quiet);
@@ -470,20 +436,6 @@ describe("the Edit dialog's Save", () => {
     expect(await state(el, "edit-save")).toEqual(quiet);
   });
 
-  it("a kitchen display's Screen wakes Save", async () => {
-    const { el } = await openEdit("k2");
-    await choose(el, "edit-screen", "station");
-    expect(await state(el, "edit-save")).toEqual(ready);
-  });
-
-  it("a station switched on in a kitchen display's list wakes Save, and switching it off quiets it", async () => {
-    const { el } = await openEdit("k1");
-    await tick(el, "[data-test=edit-screen-station-s2]");
-    expect(await state(el, "edit-save")).toEqual(ready);
-    await tick(el, "[data-test=edit-screen-station-s2]");
-    expect(await state(el, "edit-save")).toEqual(quiet);
-  });
-
   it.each([
     ["a made-here station", '[data-test=edit-made-here] input[value="s1"]'],
     ["an approved profile", '[data-test=edit-approved-profiles] input[value="pc"]'],
@@ -493,43 +445,6 @@ describe("the Edit dialog's Save", () => {
     expect(await state(el, "edit-save")).toEqual(ready);
     await tick(el, selector);
     expect(await state(el, "edit-save")).toEqual(quiet);
-  });
-
-  it("the choice for other stations' dishes wakes Save, choosing it back quiets it, and a save sends it alone", async () => {
-    const passDisplay: DeviceRow = {
-      ...onOffStation,
-      id: "k5",
-      label: "Pass display",
-      kitchenScreens: [
-        {
-          kind: "pass",
-          available: true,
-          everyStation: true,
-          everyZone: true,
-          profileEveryStation: true,
-          stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
-          zones: null,
-          nonPassStationsOverride: null,
-          showNonPassStations: true,
-        },
-      ],
-    };
-    const { el, api } = await openEdit(
-      "k5",
-      stubApi({ listDevices: vi.fn().mockResolvedValue([till, passDisplay]) }),
-    );
-    expect(value(el, "edit-other-stations")).toBe("profile");
-    expect(await state(el, "edit-save")).toEqual(quiet);
-    await choose(el, "edit-other-stations", "hide");
-    expect(await state(el, "edit-save")).toEqual(ready);
-    await choose(el, "edit-other-stations", "profile");
-    expect(await state(el, "edit-save")).toEqual(quiet);
-    await choose(el, "edit-other-stations", "show");
-    await press(el, "edit-save");
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    const body = vi.mocked(api.updateDevice).mock.calls[0]![1];
-    expect(body.kitchenScreenDisplay).toEqual({ pass: true });
-    expect(body).not.toHaveProperty("kitchenScreens");
   });
 
   it("another profile wakes Save", async () => {
@@ -562,154 +477,6 @@ describe("the Edit dialog's Save", () => {
       madeHereStationIds: ["s2"],
     });
     expect(api.setDeviceReader).not.toHaveBeenCalled();
-  });
-
-  it("a kitchen screen's held switched-off station is kept once another field changes: the choice is not sent, so the server keeps it", async () => {
-    const { el, api } = await openEdit("k1");
-    await typeName(el, "Display 2");
-    await press(el, "edit-save");
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
-    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k1", {
-      name: "Display 2",
-      profileId: "pk",
-      receiptPrinterId: "pr1",
-      paymentSlipPrinterId: "pr2",
-    });
-  });
-
-  it("permanent delete keeps the empty-bound explanation within a phone dialog with long names", async () => {
-    await page.viewport(390, 900);
-    try {
-      const long = "Covered terrace preparation display and kitchen station for the dining room";
-      const row: DeviceRow = {
-        ...onOffStation,
-        label: long,
-        kitchenScreens: [{ ...onOffStation.kitchenScreens[0]!, stations: [], everyStation: true }],
-      };
-      const { el } = await openEdit(
-        "k1",
-        stubApi({
-          listDevices: vi.fn().mockResolvedValue([row]),
-          listDeviceProfiles: vi
-            .fn()
-            .mockResolvedValue(profiles.map((p) => (p.id === "pk" ? { ...p, name: long } : p))),
-          listProfileKitchenScreens: vi
-            .fn()
-            .mockResolvedValue([
-              { profileId: "pk", screens: { station: { stationIds: [], zoneIds: null } } },
-            ]),
-        }),
-      );
-      const hint = q(el, '[data-test="empty-profile-stations"]')!;
-      await frame();
-      const dialog = q(el, '[data-test="edit-device-modal"]')!.shadowRoot!.querySelector("dialog")!;
-      expect(hint.getBoundingClientRect().right).toBeLessThanOrEqual(
-        dialog.getBoundingClientRect().right,
-      );
-      expect(hint.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-        dialog.getBoundingClientRect().left,
-      );
-      expect(hint.clientWidth).toBeGreaterThan(0);
-    } finally {
-      await page.viewport(1280, 900);
-    }
-  });
-
-  it("permanent delete explains an empty profile bound while native Every stays within that profile", async () => {
-    const row: DeviceRow = {
-      ...onOffStation,
-      kitchenScreens: [
-        { ...onOffStation.kitchenScreens[0]!, available: true, stations: [], everyStation: true },
-      ],
-    };
-    const { el, api } = await openEdit(
-      "k1",
-      stubApi({
-        listDevices: vi.fn().mockResolvedValue([row]),
-        listProfileKitchenScreens: vi
-          .fn()
-          .mockResolvedValue([
-            { profileId: "pk", screens: { station: { stationIds: [], zoneIds: null } } },
-          ]),
-      }),
-    );
-    const every = q<HTMLElement & { shadowRoot: ShadowRoot }>(
-      el,
-      "[data-test=edit-screen-every-station]",
-    )!;
-    expect(every.shadowRoot.querySelector<HTMLInputElement>("input")!.checked).toBe(true);
-    expect(el.shadowRoot!.querySelector('[data-test="empty-profile-stations"]')).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelector('[data-test="empty-profile-stations"]')!.textContent?.trim(),
-    ).toBe(t("devices.empty_profile_stations"));
-    await press(el, "edit-save");
-    await settle(el);
-    expect(api.updateDevice).not.toHaveBeenCalled();
-  });
-
-  it("permanent delete keeps an empty explicit device bound in native controls and rename", async () => {
-    const row: DeviceRow = {
-      ...onOffStation,
-      kitchenScreens: [
-        { ...onOffStation.kitchenScreens[0]!, available: true, stations: [], everyStation: false },
-      ],
-    };
-    const { el, api } = await openEdit(
-      "k1",
-      stubApi({ listDevices: vi.fn().mockResolvedValue([row]) }),
-    );
-    const every = q<HTMLElement & { checked: boolean; shadowRoot: ShadowRoot }>(
-      el,
-      "[data-test=edit-screen-every-station]",
-    )!;
-    expect(every).not.toBeNull();
-    expect(every.shadowRoot.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
-    await typeName(el, "Renamed empty screen");
-    await press(el, "edit-save");
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
-    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k1", {
-      name: "Renamed empty screen",
-      profileId: "pk",
-      receiptPrinterId: "pr1",
-      paymentSlipPrinterId: "pr2",
-    });
-  });
-
-  it("a rename of a device holding a switched-off station and a removal sends no kitchen screens, so the removal stays recorded", async () => {
-    const { el, api } = await openEdit("k3", withHeldAndGone());
-    expect(await state(el, "edit-save")).toEqual(quiet);
-    expect(q(el, "[data-test=edit-screen-station-s-off]")).toBeNull();
-    expect(
-      [...el.shadowRoot!.querySelectorAll("[data-test=edit-gone-item]")].map((item) =>
-        item.textContent!.trim(),
-      ),
-    ).toEqual([
-      `${t("device_profiles.kitchen_screen.station")}: Deli (${t("devices.no_longer_available")})`,
-    ]);
-    await typeName(el, "Display 3");
-    await press(el, "edit-save");
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
-    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k3", {
-      name: "Display 3",
-      profileId: "pk",
-      receiptPrinterId: "pr1",
-      paymentSlipPrinterId: "pr2",
-    });
-  });
-
-  it("a changed station choice sends only live stations and excludes narrowed ones", async () => {
-    const { el, api } = await openEdit("k3", withHeldAndGone());
-    await tick(el, "[data-test=edit-screen-station-s2]");
-    expect(await state(el, "edit-save")).toEqual(ready);
-    await press(el, "edit-save");
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
-    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k3", {
-      name: "Cold station display",
-      profileId: "pk",
-      kitchenScreens: [{ kind: "station", stationIds: ["s1", "s2"], zoneIds: null }],
-      receiptPrinterId: "pr1",
-      paymentSlipPrinterId: "pr2",
-    });
   });
 
   it("a reader change alone is saved", async () => {

@@ -51,75 +51,23 @@ import { a4Choices, a4PrinterName, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
   DashboardApi,
-  DeviceKitchenScreen,
   DeviceProfile,
   DeviceRow,
   EquipmentRole,
-  FloorZone,
   FormFactor,
   JoinRequestRow,
-  KitchenScreenKind,
-  KitchenScreenScope,
-  PassKind,
   PairingModeState,
   PagePrinterRow,
   Printer,
-  ProfileKitchenScreens,
   ProfileReaderList,
   ReaderHolderRow,
   ReaderRow,
-  ResolvedKitchenScreen,
-  ScreenSlot,
   Station,
 } from "../api/client.js";
-import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
-import { sameValue } from "../widgets/product-editor-model.js";
-
-/** `screen` is a kitchen display's Screen, or a till's Pass choice; `stations` and `zones` are that
- * screen's lists; `kitchenStations` is a till's Kitchen screen list. */
-type KitchenField = "screen" | "stations" | "zones" | "kitchenStations";
-type PairField = "name" | "profile" | KitchenField;
+type PairField = "name" | "profile";
 type EditField = PairField | "receipt" | "slip" | "drawer" | "invoice" | "reader" | "approved";
 type IdentityErrors = Record<PairField, string>;
-const NO_KITCHEN_ERRORS: Record<KitchenField, string> = {
-  screen: "",
-  stations: "",
-  zones: "",
-  kitchenStations: "",
-};
-
-/** A device's kitchen screen choice by kind: a kitchen display holds one; a till or handheld may
- * hold a station screen and one of the pass screen and the pass monitor. */
-type KitchenDraft = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
-const PASS_KINDS = ["pass", "pass_monitor"] as const;
 const SHARED_DISPLAY: FormFactor = "kds";
-const EVERY: KitchenScreenScope = { stationIds: null, zoneIds: null };
-
-/** A gone entry the Edit dialog lists: a station or zone, or with no name the whole kind. */
-interface GoneEntry {
-  kind: KitchenScreenKind;
-  name: string | null;
-}
-
-/** What a narrowing took, as the read marks it, each kind's after it, a kind taken whole alone.
- * An off zone is not among them: it stays in the choice. */
-function goneFromRead(read: readonly ResolvedKitchenScreen[]): GoneEntry[] {
-  return read.flatMap((screen): GoneEntry[] =>
-    screen.available
-      ? [...screen.stations, ...(screen.zones ?? [])]
-          .filter((slot) => !slot.available && !slot.switchedOff)
-          .map((slot) => ({ kind: screen.kind, name: slot.name }))
-      : [{ kind: screen.kind, name: null }],
-  );
-}
-
-/** `ids` in the venue's order, so two drafts holding the same entries compare equal. */
-function ordered(
-  ids: readonly string[] | null,
-  places: readonly { id: string }[],
-): string[] | null {
-  return ids === null ? null : places.filter((place) => ids.includes(place.id)).map((p) => p.id);
-}
 /** A printer an equipment choice may offer. */
 type RolePrinter = Pick<Printer, "id" | "name" | "active" | "portable" | "holder">;
 
@@ -164,131 +112,6 @@ const PRINTER_ROLES = [
 
 interface DeviceSettingData {
   deviceProfiles: DeviceProfile[];
-  kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[];
-  stations: Station[];
-  zones: FloorZone[];
-}
-class DeviceKitchenChoices {
-  constructor(private readonly data: DeviceSettingData) {}
-  sharedDisplay(profileId: string): boolean {
-    return this.data.deviceProfiles.find((p) => p.id === profileId)?.formFactor === SHARED_DISPLAY;
-  }
-
-  /**
-   * The lists a profile lets its devices choose within for `kind`, as the server bounds them;
-   * undefined when it does not offer the kind. On a till or handheld a station or pass screen with
-   * no row bounds nothing, while a pass monitor needs a row.
-   */
-  bound(profileId: string, kind: KitchenScreenKind): KitchenScreenScope | undefined {
-    const row = this.data.kitchenScreens.find((entry) => entry.profileId === profileId)?.screens[
-      kind
-    ];
-    if (row !== undefined) return row;
-    return this.sharedDisplay(profileId) || kind === "pass_monitor" ? undefined : EVERY;
-  }
-
-  /** A kitchen display's profile rows; on a till or handheld, the kinds of screen its profile shows. */
-  offeredKinds(profileId: string): KitchenScreenKind[] {
-    const profile = this.data.deviceProfiles.find((p) => p.id === profileId);
-    if (profile === undefined) return [];
-    return KITCHEN_SCREEN_KINDS.filter(
-      (kind) =>
-        this.bound(profileId, kind) !== undefined &&
-        (profile.formFactor === SHARED_DISPLAY ||
-          profile.capabilities.includes(kind === "station" ? "show-station" : "show-expo")),
-    );
-  }
-
-  allowedStations(profileId: string, kind: KitchenScreenKind): Station[] {
-    const ids = this.bound(profileId, kind)?.stationIds ?? null;
-    return this.data.stations.filter((s) => s.active && (ids === null || ids.includes(s.id)));
-  }
-
-  allowedZones(profileId: string, kind: KitchenScreenKind): FloorZone[] {
-    const ids = this.bound(profileId, kind)?.zoneIds ?? null;
-    return this.data.zones.filter((z) => z.active && (ids === null || ids.includes(z.id)));
-  }
-
-  /** The kind the `screen` field holds: a kitchen display's one, or a till's pass kind. */
-  mainKind(screens: KitchenDraft, profileId: string): KitchenScreenKind | "" {
-    const kinds = this.sharedDisplay(profileId) ? KITCHEN_SCREEN_KINDS : PASS_KINDS;
-    return kinds.find((kind) => screens[kind] !== undefined) ?? "";
-  }
-
-  /**
-   * A surviving explicit station bound stays explicit when its last station disappears. A missing
-   * screen parent stays a removal marker.
-   */
-  draftFromRead(
-    read: readonly ResolvedKitchenScreen[],
-    profileId: string,
-    keepSwitchedOff = false,
-  ): KitchenDraft {
-    const draft: KitchenDraft = {};
-    const kept = (slots: readonly ScreenSlot[]) =>
-      slots
-        .filter((slot) => slot.available || (keepSwitchedOff && slot.switchedOff))
-        .map((slot) => slot.id);
-    for (const screen of read) {
-      if (!screen.available) continue;
-      const stationIds = screen.everyStation
-        ? null
-        : screen.stations
-            .filter(
-              (slot) =>
-                slot.available &&
-                this.data.stations.some((station) => station.active && station.id === slot.id),
-            )
-            .map((slot) => slot.id);
-      const zoneIds =
-        screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
-      draft[screen.kind] = { stationIds, zoneIds };
-    }
-    return this.fitted(draft, profileId);
-  }
-
-  /**
-   * Empty station bounds retain their kind so fitting to a profile cannot widen them to Every.
-   */
-  fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
-    const shared = this.sharedDisplay(profileId);
-    const out: KitchenDraft = {};
-    for (const kind of this.offeredKinds(profileId)) {
-      const scope = screens[kind];
-      if (scope === undefined) continue;
-      if (shared ? Object.keys(out).length > 0 : kind === "pass_monitor" && out.pass) continue;
-      const bound = this.bound(profileId, kind)!;
-      const within = (
-        ids: readonly string[] | null,
-        places: readonly { id: string }[],
-        allowed: readonly string[] | null,
-      ) =>
-        ids === null
-          ? null
-          : ids.filter(
-              (id) =>
-                places.some((place) => place.id === id) &&
-                (allowed === null || allowed.includes(id)),
-            );
-      const stationIds = within(
-        scope.stationIds,
-        this.data.stations.filter((station) => station.active),
-        bound.stationIds,
-      );
-      const zoneIds = within(
-        scope.zoneIds,
-        this.data.zones.filter((zone) => zone.active),
-        bound.zoneIds,
-      );
-      out[kind] = { stationIds, zoneIds };
-    }
-    return out;
-  }
-}
-function displayKind(screens: KitchenDraft): PassKind | undefined {
-  const kind = PASS_KINDS.find((kind) => screens[kind] !== undefined);
-  const scope = kind === undefined ? undefined : screens[kind];
-  return scope?.stationIds?.length !== 0 && scope?.zoneIds?.length !== 0 ? kind : undefined;
 }
 export const deviceSettingFields = [
   { name: "name", labelKey: "devices.name" },
@@ -300,12 +123,6 @@ export const deviceSettingFields = [
   },
   { name: "approvedProfileIds", labelKey: "devices.approved_profiles" },
   { name: "madeHereStationIds", labelKey: "devices.made_here" },
-  { name: "kitchenScreen", labelKey: "devices.kitchen_screen" },
-  { name: "passScreen", labelKey: "devices.pass_screen_shows" },
-  { name: "kitchenStations", labelKey: "devices.station_screen_shows" },
-  { name: "screenStations", labelKey: "device_profiles.kitchen_stations" },
-  { name: "screenZones", labelKey: "device_profiles.kitchen_zones" },
-  { name: "showNonPassStations", labelKey: "device_profiles.show_other_stations" },
 ] as const satisfies readonly { name: string; labelKey: StringKey }[];
 export function deviceSettingIsOffered(
   name: string,
@@ -314,8 +131,7 @@ export function deviceSettingIsOffered(
 ): boolean {
   const profileId = device.deviceProfileId ?? "";
   const profile = data.deviceProfiles.find((p) => p.id === profileId);
-  const choices = new DeviceKitchenChoices(data);
-  const shared = choices.sharedDisplay(profileId);
+  const shared = profile?.formFactor === SHARED_DISPLAY;
   switch (name) {
     case "approvedProfileIds":
       return (
@@ -324,21 +140,6 @@ export function deviceSettingIsOffered(
       );
     case "madeHereStationIds":
       return !shared;
-    case "kitchenScreen":
-      return shared;
-    case "passScreen":
-      return !shared && choices.offeredKinds(profileId).some((kind) => kind !== "station");
-    case "kitchenStations":
-      return !shared && choices.offeredKinds(profileId).includes("station");
-    case "screenStations":
-    case "screenZones":
-    case "showNonPassStations": {
-      const screens = choices.draftFromRead(device.kitchenScreens, profileId, true);
-      const main = choices.mainKind(screens, profileId);
-      return name === "showNonPassStations"
-        ? displayKind(screens) !== undefined
-        : main !== "" && (name === "screenStations" || main !== "station");
-    }
     default:
       return true;
   }
@@ -359,8 +160,6 @@ function equipmentSentence(error: unknown, field: EditField): string | undefined
 /** Refusals of a Pair or Edit save about one field, by code alone; others read their params first. */
 const FIELD_BY_CODE: Record<string, EditField> = {
   "device.name_taken": "name",
-  "kitchen_screen.required": "screen",
-  "kitchen_screen.zone_not_allowed": "zones",
   "device_profile.not_found": "profile",
   "device_profile.incompatible": "approved",
 };
@@ -376,21 +175,11 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   approvedProfileIds: "approved",
 };
 
-const CHOICE_FIELD: Record<string, KitchenField> = {
-  screens: "screen",
-  stationIds: "stations",
-  zoneIds: "zones",
-};
-
 /**
  * The field a refusal is about, when it is one of `shown` (CLAUDE.md §3: by what the error carries).
  * A till's choice may hold two station lists; a refusal about stations names its screen.
  */
-function refusedField(
-  error: unknown,
-  sharedDisplay: boolean,
-  shown: readonly EditField[],
-): EditField | null {
+function refusedField(error: unknown, shown: readonly EditField[]): EditField | null {
   const code = codeOf(error);
   const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
   let field: EditField | undefined;
@@ -403,14 +192,6 @@ function refusedField(
     named
   )
     field = typeof params.field === "string" ? FIELD_BY_PARAM[params.field] : undefined;
-  else if (code === "kitchen_screen.not_allowed")
-    field = !sharedDisplay && params.screen === "station" ? "kitchenStations" : "screen";
-  else if (code === "kitchen_screen.invalid") {
-    field = typeof params.field === "string" ? CHOICE_FIELD[params.field] : undefined;
-    if (field === "stations" && !sharedDisplay && params.screen === "station")
-      field = "kitchenStations";
-  } else if (code === "station.not_allowed")
-    field = !sharedDisplay && params.screen === "station" ? "kitchenStations" : "stations";
   else field = FIELD_BY_CODE[code];
   return field !== undefined && shown.includes(field) ? field : null;
 }
@@ -434,7 +215,6 @@ function clearedRefusal(refused: FieldRefusal, ...fields: EditField[]): FieldRef
 interface EditForm {
   name: string;
   profileId: string;
-  screens: KitchenDraft;
   /** Empty for Use default. */
   receiptPrinterId: string;
   paymentSlipPrinterId: string;
@@ -444,7 +224,6 @@ interface EditForm {
   /** Ticked profiles staff may switch to; only those {@link DevicesScreen} offers are sent. */
   approved: string[];
   /** Whether each pass kind shows other stations' dishes; null is the profile's setting. */
-  display: Partial<Record<PassKind, boolean | null>>;
 }
 
 function waitingName(request: JoinRequestRow): string {
@@ -645,8 +424,6 @@ export class DevicesScreen extends LitElement {
 
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
-  @state() private zones: FloorZone[] = [];
-  @state() private kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
@@ -696,7 +473,6 @@ export class DevicesScreen extends LitElement {
   @state() private pairError: string | null = null;
   @state() private pairName = "";
   @state() private chosenProfileId = "";
-  @state() private chosenScreens: KitchenDraft = {};
   readonly #pairFeedback = new FormFeedback(this);
   @state() private fieldRefusal: FieldRefusal = null;
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
@@ -717,7 +493,6 @@ export class DevicesScreen extends LitElement {
     return {
       name: this.pairName.trim(),
       profileId: this.chosenProfileId,
-      kitchenScreens: this.#screensPayload(this.chosenScreens),
     };
   }
 
@@ -728,10 +503,7 @@ export class DevicesScreen extends LitElement {
       id: {},
       current: () => this.#pairPayload(),
       snapshot: (value) => structuredClone(value),
-      equal: (a, b) =>
-        a.name === b.name &&
-        a.profileId === b.profileId &&
-        sameValue(a.kitchenScreens, b.kitchenScreens),
+      equal: (a, b) => a.name === b.name && a.profileId === b.profileId,
       restore: () => {},
     });
   }
@@ -793,24 +565,15 @@ export class DevicesScreen extends LitElement {
   @state() private editForm: EditForm = {
     name: "",
     profileId: "",
-    screens: {},
     receiptPrinterId: "",
     paymentSlipPrinterId: "",
     cashDrawerPrinterId: "",
     invoicePrinterId: "",
     madeHere: [],
     approved: [],
-    display: {},
   };
   /** The open device's stored invoice choice, which its row carries only in `equipment`. */
   #editInvoiceId: string | null = null;
-  /** What the read marks no longer available, listed outside the draft until a save clears it. */
-  @state() private editGone: GoneEntry[] = [];
-  /** The kitchen screens the dialog opened with or last saved, as a request carries them. */
-  #editSavedScreens = "[]";
-  /** Each pass kind's stored choice of other stations' dishes, as opened or last saved. */
-  #editSavedDisplay: Partial<Record<PassKind, boolean | null>> = {};
-  #editOpenProfileId = "";
   readonly #editFeedback = new FormFeedback(this);
   @state() private editRefusal: FieldRefusal = null;
   @state() private editError: string | null = null;
@@ -849,8 +612,6 @@ export class DevicesScreen extends LitElement {
     return {
       name: form.name.trim(),
       profileId: form.profileId,
-      ...(this.#sendScreens() ? { kitchenScreens: this.#screensPayload(form.screens) } : {}),
-      ...this.#displayToSend(),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       // Absent leaves the stored drawer and invoice choices alone, so only a changed one is sent.
@@ -876,8 +637,6 @@ export class DevicesScreen extends LitElement {
     const invoice = this.editForm.invoicePrinterId;
     return {
       ...this.#editPayload(),
-      kitchenScreens: this.#screensPayload(this.editForm.screens),
-      kitchenScreenDisplay: this.#displayDraft(),
       cashDrawerPrinterId: drawer === "" ? null : drawer,
       invoicePrinterId: invoice === "" ? null : invoice,
       approvedProfileIds: this.#approvedOf(this.editForm.approved),
@@ -892,8 +651,6 @@ export class DevicesScreen extends LitElement {
       equal: (a, b) =>
         a.name === b.name &&
         a.profileId === b.profileId &&
-        sameValue(a.kitchenScreens, b.kitchenScreens) &&
-        sameValue(a.kitchenScreenDisplay, b.kitchenScreenDisplay) &&
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
         a.cashDrawerPrinterId === b.cashDrawerPrinterId &&
@@ -909,28 +666,6 @@ export class DevicesScreen extends LitElement {
     });
     this.#editLeave = coordinator;
     this.#editScope = scope;
-  }
-
-  /** The pass kind the draft holds, whose choice of other stations' dishes the dialog shows. None
-   * when its station or zone list is empty: the server refuses the choice for a kind a narrowing
-   * emptied. A list whose every entry is switched off also reads empty here, and hides it too. */
-  #displayKind(): PassKind | undefined {
-    return displayKind(this.editForm.screens);
-  }
-
-  #displayDraft(): Partial<Record<PassKind, boolean | null>> {
-    const kind = this.#displayKind();
-    return kind === undefined ? {} : { [kind]: this.editForm.display[kind] ?? null };
-  }
-
-  /** Sent apart from the kitchen screens, and only when changed: absent keeps what is stored. */
-  #displayToSend(): { kitchenScreenDisplay?: Partial<Record<PassKind, boolean | null>> } {
-    const kind = this.#displayKind();
-    if (kind === undefined) return {};
-    const value = this.editForm.display[kind] ?? null;
-    return value === (this.#editSavedDisplay[kind] ?? null)
-      ? {}
-      : { kitchenScreenDisplay: { [kind]: value } };
   }
 
   /** One Save covers the device and, once it has loaded, its card reader. */
@@ -959,14 +694,8 @@ export class DevicesScreen extends LitElement {
       this.#queries.watch("listStations", [], (value) => {
         this.stations = value;
       }),
-      this.#queries.watch("listZones", [], (value) => {
-        this.zones = value;
-      }),
       this.#queries.watch("listDeviceProfiles", [], (value) => {
         this.deviceProfiles = value;
-      }),
-      this.#queries.watch("listProfileKitchenScreens", [], (value) => {
-        this.kitchenScreens = value;
       }),
       this.#queries.watch("listPrinters", [], (value) => {
         this.printers = value;
@@ -1190,8 +919,6 @@ export class DevicesScreen extends LitElement {
     this.pairStep = "settings";
     this.pairName = waitingName(request);
     this.chosenProfileId = profileId;
-    this.chosenScreens =
-      back === null || profileId === "" ? {} : this.#draftFromRead(back.kitchenScreens, profileId);
     this.#pairFeedback.reset();
     this.fieldRefusal = null;
     this.pairError = null;
@@ -1236,23 +963,10 @@ export class DevicesScreen extends LitElement {
   }
 
   /** The checks Pair and Edit share, which hold the action disabled once a submission was tried. */
-  #identityErrors(
-    attempted: boolean,
-    values: { name: string; profileId: string; screens: KitchenDraft },
-  ): IdentityErrors {
-    if (!attempted) return { name: "", profile: "", ...NO_KITCHEN_ERRORS };
-    const { profileId, screens } = values;
-    const shared = this.#sharedDisplay(profileId);
-    const main = this.#mainKind(screens, profileId);
-    const scope = main === "" ? undefined : screens[main];
-    const empty = t("device_profiles.err_list_empty");
+  #identityErrors(attempted: boolean, values: { name: string; profileId: string }): IdentityErrors {
     return {
-      name: values.name.trim() === "" ? t("form.name_required") : "",
-      profile: profileId === "" ? t("devices.join_pick_profile") : "",
-      screen: shared && main === "" ? codeMessage("kitchen_screen.required") : "",
-      stations: scope?.stationIds?.length === 0 ? empty : "",
-      zones: scope?.zoneIds?.length === 0 ? empty : "",
-      kitchenStations: !shared && screens.station?.stationIds?.length === 0 ? empty : "",
+      name: attempted && values.name.trim() === "" ? t("form.name_required") : "",
+      profile: attempted && values.profileId === "" ? t("devices.join_pick_profile") : "",
     };
   }
 
@@ -1260,7 +974,6 @@ export class DevicesScreen extends LitElement {
     return this.#identityErrors(this.#pairFeedback.attempted, {
       name: this.pairName,
       profileId: this.chosenProfileId,
-      screens: this.chosenScreens,
     });
   }
 
@@ -1289,12 +1002,7 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
-      const profileId = this.chosenProfileId;
-      const field = refusedField(error, this.#sharedDisplay(profileId), [
-        "name",
-        "profile",
-        ...this.#kitchenShown(profileId, this.chosenScreens),
-      ]);
+      const field = refusedField(error, ["name", "profile"]);
       if (field === null) this.pairError = codeOf(error);
       else this.fieldRefusal = { field, code: codeOf(error) };
       return;
@@ -1337,55 +1045,6 @@ export class DevicesScreen extends LitElement {
     return this.deviceProfiles.find((p) => p.id === deviceProfileId)?.name ?? "";
   }
 
-  #screenLine(screen: ResolvedKitchenScreen): string {
-    const kind = t(`device_profiles.kitchen_screen.${screen.kind}`);
-    const gone = (names: string[]) =>
-      fill(names.length === 1 ? "devices.readout_gone_one" : "devices.readout_gone_many", {
-        names: names.join(", "),
-      });
-    if (!screen.available) return `${kind} ${gone([kind])}`;
-    const named = (slots: readonly ScreenSlot[], every: boolean, label: string) =>
-      every
-        ? label
-        : slots
-            .filter((slot) => slot.available)
-            .map((slot) => slot.name)
-            .join(", ");
-    const lost = [...screen.stations, ...(screen.zones ?? [])]
-      .filter((slot) => !slot.available)
-      .map((slot) => slot.name);
-    const tail = lost.length === 0 ? "" : ` ${gone(lost)}`;
-    if (!screen.stations.some((slot) => slot.available)) return `${kind}${tail}`;
-    const stations = named(
-      screen.stations,
-      screen.everyStation,
-      t("devices.readout_every_station"),
-    );
-    if (screen.kind === "station") return `${kind}: ${stations}${tail}`;
-    const zones =
-      screen.zones === null
-        ? t("devices.readout_every_zone")
-        : named(screen.zones, screen.everyZone, t("devices.readout_every_zone"));
-    return `${kind}: ${stations} · ${zones}${tail}`;
-  }
-
-  #renderScreens(device: DeviceRow): TemplateResult {
-    const lines = device.kitchenScreens;
-    return html`<span data-test=${`device-screens-${device.id}`}
-      >${
-        lines.length === 0 && device.kind === "kds_station"
-          ? t("devices.no_kitchen_screen")
-          : lines.map(
-              (screen, index) =>
-                html`${index === 0 ? nothing : html`<br />`}<span
-                    data-test=${`device-screen-${device.id}-${screen.kind}`}
-                    >${this.#screenLine(screen)}</span
-                  >`,
-            )
-      }</span
-    >`;
-  }
-
   #lastSeen(iso: string | null): string {
     if (iso === null) return t("devices.last_seen_never");
     return formatIsoMinute(iso);
@@ -1425,28 +1084,17 @@ export class DevicesScreen extends LitElement {
     const epoch = ++this.#editEpoch;
     this.editing = device;
     const profileId = device.deviceProfileId ?? "";
-    const screens = this.#draftFromRead(device.kitchenScreens, profileId, true);
-    this.editGone = goneFromRead(device.kitchenScreens);
-    this.#editSavedScreens = JSON.stringify(this.#screensPayload(screens));
-    this.#editSavedDisplay = Object.fromEntries(
-      device.kitchenScreens
-        .filter((screen) => screen.available && screen.kind !== "station")
-        .map((screen) => [screen.kind, screen.nonPassStationsOverride]),
-    );
-    this.#editOpenProfileId = profileId;
     this.#editInvoiceId =
       device.equipment.find((entry) => entry.role === "invoice")?.chosenId ?? null;
     this.editForm = {
       name: device.label,
       profileId,
-      screens,
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
       cashDrawerPrinterId: device.cashDrawerPrinterId ?? "",
       invoicePrinterId: this.#editInvoiceId ?? "",
       madeHere: device.madeHereStationIds,
       approved: device.approvedProfileIds,
-      display: { ...this.#editSavedDisplay },
     };
     this.#editFeedback.reset();
     this.editRefusal = null;
@@ -1543,20 +1191,8 @@ export class DevicesScreen extends LitElement {
     if (clearAddress) this.#clearDeviceAddress();
   }
 
-  /** Sent only when the choice or the profile changed: the server replaces the whole stored choice
-   * and forgets the device's removals, which only a pick may do (decision 21). */
-  #sendScreens(): boolean {
-    return (
-      this.editForm.profileId !== this.#editOpenProfileId ||
-      JSON.stringify(this.#screensPayload(this.editForm.screens)) !== this.#editSavedScreens
-    );
-  }
-
   #editOwnErrors(): IdentityErrors {
-    const errors = this.#identityErrors(this.#editFeedback.attempted, this.editForm);
-    return !this.#sendScreens()
-      ? { ...errors, stations: "", kitchenStations: "", zones: "" }
-      : errors;
+    return this.#identityErrors(this.#editFeedback.attempted, this.editForm);
   }
 
   #editErrors(): Record<EditField, string> {
@@ -1585,17 +1221,12 @@ export class DevicesScreen extends LitElement {
     this.#setEdit(
       {
         profileId,
-        screens: this.#fitted(this.editForm.screens, profileId),
         receiptPrinterId: "",
         paymentSlipPrinterId: "",
         cashDrawerPrinterId: "",
         invoicePrinterId: "",
       },
       "profile",
-      "screen",
-      "stations",
-      "zones",
-      "kitchenStations",
       "receipt",
       "slip",
       "drawer",
@@ -1781,7 +1412,6 @@ export class DevicesScreen extends LitElement {
       if (modal) void this.#editFeedback.focus(modal);
       return;
     }
-    const form = this.editForm;
     const epoch = this.#editEpoch;
     const turn = ++this.#saveTurn;
     this.editSaving = true;
@@ -1797,10 +1427,9 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#editEpoch) return;
       this.editSaving = false;
-      const field = refusedField(error, this.#sharedDisplay(form.profileId), [
+      const field = refusedField(error, [
         "name",
         "profile",
-        ...this.#kitchenShown(form.profileId, form.screens),
         "receipt",
         "slip",
         "drawer",
@@ -1821,12 +1450,6 @@ export class DevicesScreen extends LitElement {
       this.#editInvoiceId = sent.invoicePrinterId;
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
-    if (sent.kitchenScreens !== undefined) {
-      this.editGone = [];
-      this.#editSavedScreens = JSON.stringify(sent.kitchenScreens);
-    }
-    if (sent.kitchenScreenDisplay !== undefined)
-      this.#editSavedDisplay = { ...this.#editSavedDisplay, ...sent.kitchenScreenDisplay };
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, approvedProfileIds } = sent;
     this.editing = {
@@ -2080,12 +1703,6 @@ export class DevicesScreen extends LitElement {
             }</span
           >`,
       },
-      {
-        key: "shows",
-        choosable: "shown",
-        label: t("devices.shows"),
-        cell: (d) => this.#renderScreens(d),
-      },
       ...EQUIPMENT_COLUMNS.filter(
         (column) => column.role !== "card_terminal" || this.canManageReaders,
       ).map((column): DataTableColumn<DeviceRow> => ({
@@ -2335,12 +1952,11 @@ export class DevicesScreen extends LitElement {
   /** The name, profile and kitchen screen fields that Pair's settings step and the Edit dialog share. */
   #renderIdentityFields(
     prefix: "pair" | "edit",
-    values: { name: string; profileId: string; screens: KitchenDraft },
+    values: { name: string; profileId: string },
     errors: IdentityErrors,
     on: {
       name(value: string): void;
       profile(value: string): void;
-      screens(next: KitchenDraft, ...fields: KitchenField[]): void;
     },
     disabled = false,
   ): TemplateResult {
@@ -2380,372 +1996,15 @@ export class DevicesScreen extends LitElement {
         .error=${errors.profile}
         .invalid=${errors.profile !== ""}
         @wt-change=${(e: CustomEvent<{ value: string }>) => on.profile(e.detail.value)}
-      ></wt-combobox>
-      ${this.#renderKitchenFields(prefix, values, errors, on.screens, disabled)}`;
+      ></wt-combobox>`;
   }
 
   // ── Kitchen screens ──────────────────────────────────────────────────────────────────────────────
 
   #sharedDisplay(profileId: string): boolean {
-    return new DeviceKitchenChoices(this.#settingData()).sharedDisplay(profileId);
-  }
-
-  #bound(profileId: string, kind: KitchenScreenKind): KitchenScreenScope | undefined {
-    return new DeviceKitchenChoices(this.#settingData()).bound(profileId, kind);
-  }
-
-  #offeredKinds(profileId: string): KitchenScreenKind[] {
-    return new DeviceKitchenChoices(this.#settingData()).offeredKinds(profileId);
-  }
-
-  #allowedStations(profileId: string, kind: KitchenScreenKind): Station[] {
-    return new DeviceKitchenChoices(this.#settingData()).allowedStations(profileId, kind);
-  }
-
-  #allowedZones(profileId: string, kind: KitchenScreenKind): FloorZone[] {
-    return new DeviceKitchenChoices(this.#settingData()).allowedZones(profileId, kind);
-  }
-
-  #mainKind(screens: KitchenDraft, profileId: string): KitchenScreenKind | "" {
-    return new DeviceKitchenChoices(this.#settingData()).mainKind(screens, profileId);
-  }
-
-  #draftFromRead(
-    read: readonly ResolvedKitchenScreen[],
-    profileId: string,
-    keepSwitchedOff = false,
-  ): KitchenDraft {
-    return new DeviceKitchenChoices(this.#settingData()).draftFromRead(
-      read,
-      profileId,
-      keepSwitchedOff,
+    return (
+      this.deviceProfiles.find((profile) => profile.id === profileId)?.formFactor === SHARED_DISPLAY
     );
-  }
-
-  #fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
-    return new DeviceKitchenChoices(this.#settingData()).fitted(screens, profileId);
-  }
-
-  #settingData(): DeviceSettingData {
-    return {
-      deviceProfiles: this.deviceProfiles,
-      kitchenScreens: this.kitchenScreens,
-      stations: this.stations,
-      zones: this.zones,
-    };
-  }
-
-  #screensPayload(screens: KitchenDraft): DeviceKitchenScreen[] {
-    return KITCHEN_SCREEN_KINDS.flatMap((kind) => {
-      const scope = screens[kind];
-      return scope === undefined
-        ? []
-        : [
-            {
-              kind,
-              stationIds: ordered(scope.stationIds, this.stations),
-              zoneIds: ordered(scope.zoneIds, this.zones),
-            },
-          ];
-    });
-  }
-
-  /** The kitchen screen fields drawn for this profile and choice, which a refusal may mark. */
-  #kitchenShown(profileId: string, screens: KitchenDraft): KitchenField[] {
-    const offered = this.#offeredKinds(profileId);
-    const shared = this.#sharedDisplay(profileId);
-    const main = this.#mainKind(screens, profileId);
-    const fields: KitchenField[] = [];
-    if (shared || offered.some((kind) => kind !== "station")) fields.push("screen");
-    if (main !== "") fields.push("stations");
-    if (main !== "" && main !== "station") fields.push("zones");
-    if (!shared && offered.includes("station")) fields.push("kitchenStations");
-    return fields;
-  }
-
-  /**
-   * "Every …", then, once it is off, a switch for each entry the profile allows, and each entry
-   * the list keeps that is switched off on its own page, marked and fixed.
-   */
-  #choiceList(list: {
-    test: string;
-    heading: string;
-    error: string;
-    name: string;
-    everyTest: string;
-    everyLabel: string;
-    itemTest: string;
-    ids: readonly string[] | null;
-    allowed: readonly { id: string; name: string }[];
-    all: readonly { id: string; name: string; active: boolean }[];
-    /** What a switched-off entry's label adds, as the profile editor marks it. */
-    mark: string;
-    disabled: boolean;
-    emptyProfile?: boolean;
-    set(ids: string[] | null): void;
-  }): TemplateResult {
-    const { ids } = list;
-    const switchedOff =
-      ids === null ||
-      list.name === "screenStations" ||
-      list.name === "kitchenStations" ||
-      list.name === "screenZones"
-        ? []
-        : list.all.filter((place) => !place.active && ids.includes(place.id));
-    return this.#switchGroup(list.test, list.heading, list.error, [
-      html`<wt-switch
-        data-test=${list.everyTest}
-        name=${list.name}
-        label=${list.everyLabel}
-        .checked=${ids === null}
-        ?disabled=${list.disabled}
-        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-          e.stopPropagation();
-          list.set(e.detail.checked ? null : list.allowed.map((place) => place.id));
-        }}
-      ></wt-switch>`,
-      ...(list.emptyProfile
-        ? [
-            html`<p class="hint" data-test="empty-profile-stations">
-              ${t("devices.empty_profile_stations")}
-            </p>`,
-          ]
-        : ids?.length === 0 && (list.name === "screenStations" || list.name === "kitchenStations")
-          ? [
-              html`<p class="hint" data-test="empty-station-selection">
-                ${t("devices.empty_station_selection")}
-              </p>`,
-            ]
-          : []),
-      ...(ids === null
-        ? []
-        : list.allowed.map(
-            (place) =>
-              html`<wt-switch
-                data-test=${`${list.itemTest}-${place.id}`}
-                name=${list.name}
-                label=${place.name}
-                .checked=${ids.includes(place.id)}
-                ?disabled=${list.disabled}
-                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-                  e.stopPropagation();
-                  const rest = ids.filter((id) => id !== place.id);
-                  list.set(e.detail.checked ? [...rest, place.id] : rest);
-                }}
-              ></wt-switch>`,
-          )),
-      ...switchedOff.map(
-        (place) =>
-          html`<wt-switch
-            data-test=${`${list.itemTest}-${place.id}`}
-            name=${list.name}
-            label=${`${place.name} (${list.mark})`}
-            .checked=${true}
-            disabled
-          ></wt-switch>`,
-      ),
-    ]);
-  }
-
-  /** A titled group of switches, described by its error once marked. */
-  #switchGroup(test: string, heading: string, error: string, switches: TemplateResult[]) {
-    return html`<div
-      class="choice-group"
-      role="group"
-      aria-labelledby="${test}-heading"
-      aria-describedby=${error === "" ? nothing : `${test}-error`}
-      data-test=${test}
-    >
-      <span class="group-heading" id="${test}-heading">${heading}</span>
-      <div class="toggles">${switches}</div>
-      ${
-        error === ""
-          ? nothing
-          : html`<p class="field-error" id="${test}-error" data-test="${test}-error">${error}</p>`
-      }
-    </div>`;
-  }
-
-  /**
-   * A kitchen display's Screen and its lists; a till's or handheld's Kitchen screen list and Pass
-   * choice, each shown when its profile shows that screen.
-   */
-  #renderKitchenFields(
-    prefix: "pair" | "edit",
-    values: { profileId: string; screens: KitchenDraft },
-    errors: IdentityErrors,
-    set: (next: KitchenDraft, ...fields: KitchenField[]) => void,
-    disabled: boolean,
-  ): TemplateResult {
-    const { profileId, screens } = values;
-    const shared = this.#sharedDisplay(profileId);
-    const offered = this.#offeredKinds(profileId);
-    const main = this.#mainKind(screens, profileId);
-    const kindLabel = (kind: KitchenScreenKind) => t(`device_profiles.kitchen_screen.${kind}`);
-    const choose = (kind: string, keep: KitchenDraft) =>
-      set(kind === "" ? keep : { ...keep, [kind]: EVERY }, "screen", "stations", "zones");
-    const passKinds = offered.filter((kind) => kind !== "station");
-    const common = {
-      search: "auto",
-      searchPlaceholder: t("categories.combobox_search"),
-      noResultsLabel: t("categories.combobox_no_results"),
-    };
-    const choice = shared
-      ? html`<wt-combobox
-          data-test=${`${prefix}-screen`}
-          name="kitchenScreen"
-          required
-          label=${t("devices.kitchen_screen")}
-          search=${common.search}
-          placeholder=${
-            offered.length === 0
-              ? t("devices.kitchen_screen_none_offered")
-              : t("devices.kitchen_screen_pick")
-          }
-          searchPlaceholder=${common.searchPlaceholder}
-          noResultsLabel=${common.noResultsLabel}
-          .options=${offered.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
-          .value=${main}
-          ?disabled=${disabled}
-          .error=${errors.screen}
-          .invalid=${errors.screen !== ""}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => choose(e.detail.value, {})}
-        ></wt-combobox>`
-      : passKinds.length === 0
-        ? nothing
-        : html`<wt-combobox
-            data-test=${`${prefix}-pass`}
-            name="passScreen"
-            show-empty-option
-            label=${t("devices.pass_screen_shows")}
-            search=${common.search}
-            searchPlaceholder=${common.searchPlaceholder}
-            noResultsLabel=${common.noResultsLabel}
-            .options=${[
-              { value: "", label: t("device_profiles.every_station") },
-              ...passKinds.map((kind) => ({ value: kind, label: kindLabel(kind) })),
-            ]}
-            .value=${main}
-            ?disabled=${disabled}
-            .error=${errors.screen}
-            .invalid=${errors.screen !== ""}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              choose(e.detail.value, { ...(screens.station ? { station: screens.station } : {}) })}
-          ></wt-combobox>`;
-    const tillStations =
-      shared || !offered.includes("station")
-        ? nothing
-        : this.#choiceList({
-            test: `${prefix}-station-shows`,
-            heading: t("devices.station_screen_shows"),
-            error: errors.kitchenStations,
-            name: "kitchenStations",
-            emptyProfile: this.#bound(profileId, "station")?.stationIds?.length === 0,
-            everyTest: `${prefix}-station-every`,
-            // With no choice a till's Station screen lists all `/api/stations` returns, which reads
-            // no profile.
-            everyLabel:
-              screens.station?.stationIds === null
-                ? t("devices.every_station_profile")
-                : t("device_profiles.every_station"),
-            itemTest: `${prefix}-station-station`,
-            ids: screens.station?.stationIds ?? null,
-            allowed: this.#allowedStations(profileId, "station"),
-            all: this.stations,
-            mark: t("devices.station_disabled_mark"),
-            disabled,
-            set: (stationIds) =>
-              set(
-                {
-                  ...(stationIds === null ? {} : { station: { stationIds, zoneIds: null } }),
-                  ...(screens.pass ? { pass: screens.pass } : {}),
-                  ...(screens.pass_monitor ? { pass_monitor: screens.pass_monitor } : {}),
-                },
-                "kitchenStations",
-              ),
-          });
-    const scope = main === "" ? undefined : screens[main];
-    const lists =
-      main === "" || scope === undefined
-        ? nothing
-        : html`<div class="nested">
-            ${this.#choiceList({
-              test: `${prefix}-screen-stations`,
-              heading: t("device_profiles.kitchen_stations"),
-              error: errors.stations,
-              name: "screenStations",
-              emptyProfile: this.#bound(profileId, main)?.stationIds?.length === 0,
-              everyTest: `${prefix}-screen-every-station`,
-              everyLabel: t("device_profiles.every_station"),
-              itemTest: `${prefix}-screen-station`,
-              ids: scope.stationIds,
-              allowed: this.#allowedStations(profileId, main),
-              all: this.stations,
-              mark: t("devices.station_disabled_mark"),
-              disabled,
-              set: (stationIds) =>
-                set({ ...screens, [main]: { ...scope, stationIds } }, "stations"),
-            })}
-            ${
-              main === "station"
-                ? nothing
-                : this.#choiceList({
-                    test: `${prefix}-screen-zones`,
-                    heading: t("device_profiles.kitchen_zones"),
-                    error: errors.zones,
-                    name: "screenZones",
-                    everyTest: `${prefix}-screen-every-zone`,
-                    everyLabel: t("device_profiles.every_zone_venue"),
-                    itemTest: `${prefix}-screen-zone`,
-                    ids: scope.zoneIds,
-                    allowed: this.#allowedZones(profileId, main),
-                    all: this.zones,
-                    mark: t("device_profiles.zone_disabled_mark"),
-                    disabled,
-                    set: (zoneIds) => set({ ...screens, [main]: { ...scope, zoneIds } }, "zones"),
-                  })
-            }
-          </div>`;
-    return html`${tillStations}${choice}${lists}`;
-  }
-
-  /** The Edit dialog's choice for the draft's pass screen; joins cannot set it (D83). */
-  #renderOtherStations(): TemplateResult | typeof nothing {
-    const kind = this.#displayKind();
-    if (kind === undefined) return nothing;
-    const stored = this.editForm.display[kind] ?? null;
-    const epoch = this.#editEpoch;
-    return html`<wt-combobox
-      data-test="edit-other-stations"
-      name="showNonPassStations"
-      label=${t("device_profiles.show_other_stations")}
-      .options=${[
-        { value: "profile", fixed: true, label: t("devices.use_profile_setting") },
-        { value: "show", label: t("devices.other_stations_show") },
-        { value: "hide", label: t("devices.other_stations_hide") },
-      ]}
-      .value=${stored === null ? "profile" : stored ? "show" : "hide"}
-      ?disabled=${this.editSaving}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => {
-        if (!this.isConnected || epoch !== this.#editEpoch) return;
-        const value = e.detail.value === "profile" ? null : e.detail.value === "show";
-        this.#setEdit({ display: { ...this.editForm.display, [kind]: value } });
-      }}
-    ></wt-combobox>`;
-  }
-
-  /** Each entry the read marks no longer available, outside the draft. */
-  #renderGone(): TemplateResult | typeof nothing {
-    if (this.editGone.length === 0) return nothing;
-    const mark = t("devices.no_longer_available");
-    return html`<ul class="gone" data-test="edit-gone" aria-label=${mark}>
-      ${this.editGone.map(({ kind, name }) => {
-        const label = t(`device_profiles.kitchen_screen.${kind}`);
-        return html`<li data-test="edit-gone-item">
-          ${name === null ? `${label} (${mark})` : `${label}: ${name} (${mark})`}
-        </li>`;
-      })}
-    </ul>`;
   }
 
   #renderSettingsStep(errors: IdentityErrors): TemplateResult {
@@ -2753,7 +2012,7 @@ export class DevicesScreen extends LitElement {
     return html`<div class="pair-fields">
       ${this.#renderIdentityFields(
         "pair",
-        { name: this.pairName, profileId: this.chosenProfileId, screens: this.chosenScreens },
+        { name: this.pairName, profileId: this.chosenProfileId },
         errors,
         {
           name: (value) => {
@@ -2765,21 +2024,7 @@ export class DevicesScreen extends LitElement {
           profile: (value) => {
             if (!this.isConnected || epoch !== this.#pairEpoch) return;
             this.chosenProfileId = value;
-            this.chosenScreens = this.#fitted(this.chosenScreens, value);
-            this.fieldRefusal = clearedRefusal(
-              this.fieldRefusal,
-              "profile",
-              "screen",
-              "stations",
-              "zones",
-              "kitchenStations",
-            );
-            this.#pairScope?.changed();
-          },
-          screens: (next, ...fields) => {
-            if (!this.isConnected || epoch !== this.#pairEpoch) return;
-            this.chosenScreens = next;
-            this.fieldRefusal = clearedRefusal(this.fieldRefusal, ...fields);
+            this.fieldRefusal = clearedRefusal(this.fieldRefusal, "profile");
             this.#pairScope?.changed();
           },
         },
@@ -2793,7 +2038,7 @@ export class DevicesScreen extends LitElement {
     if (request === null) return nothing;
     const epoch = this.#pairEpoch;
     const settings = this.pairStep === "settings";
-    const errors = settings ? this.#pairErrors() : { name: "", profile: "", ...NO_KITCHEN_ERRORS };
+    const errors = settings ? this.#pairErrors() : { name: "", profile: "" };
     const marked = Object.values(errors).some((error) => error !== "");
     const own = this.#ownErrors();
     const blocked = Object.values(own).some((error) => error !== "");
@@ -2876,14 +2121,9 @@ export class DevicesScreen extends LitElement {
             profile: (value) => {
               if (this.isConnected && epoch === this.#editEpoch) this.#onEditProfile(value);
             },
-            screens: (next, ...fields) => {
-              if (this.isConnected && epoch === this.#editEpoch)
-                this.#setEdit({ screens: next }, ...fields);
-            },
           },
           this.editSaving,
         )}
-        ${this.#renderOtherStations()} ${this.#renderGone()}
         ${PRINTER_ROLES.map((role) => {
           const loading = this.printerListsRead.size < 2;
           return html`<wt-combobox

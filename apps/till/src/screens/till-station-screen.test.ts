@@ -2122,7 +2122,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     available: true,
     stations: slots,
     zones: null,
-    nonPassStationsOverride: null,
     showNonPassStations: true,
   });
 
@@ -2206,7 +2205,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
             available: true,
             stations: [],
             zones: null,
-            nonPassStationsOverride: null,
             showNonPassStations: true,
           },
         ]),
@@ -2240,7 +2238,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
               available: false,
               stations: [],
               zones: null,
-              nonPassStationsOverride: null,
               showNonPassStations: true,
             },
           ]),
@@ -2266,7 +2263,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       available: false,
       stations: [],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     };
 
@@ -2434,7 +2430,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
         available: false,
         stations: [],
         zones: null,
-        nonPassStationsOverride: null,
         showNonPassStations: true,
       },
     ]);

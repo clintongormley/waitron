@@ -1,5 +1,9 @@
 # A797 — The fixed screens for the handheld, the kitchen screen and the pass (A182 part 1)
 
+> **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
+> devices. Device screen choices, narrowing history and the four device-screen tables are retired.
+> See [the remaining-device plan](../plans/2026-11-15-a1534-remaining-devices.md).
+
 Status: **design REVISED 2026-10-21 for the owner's answer to Q42** (2026-10-18 ~22:55: parts
 (a)–(f) approved with changes, (g) approved; lane C's questions file, "OWNER NOTES on Q42 (A797)"
 and "OWNER ANSWER to Q42 … COMPLETE"). Every owner note is folded in below; §10 records the answer

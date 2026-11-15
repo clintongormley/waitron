@@ -88,7 +88,6 @@ function kitchenScreen(kind: KitchenScreenKind, available = true): ResolvedKitch
     available,
     stations: [],
     zones: null,
-    nonPassStationsOverride: null,
     showNonPassStations: true,
   };
 }

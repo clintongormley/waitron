@@ -55,7 +55,6 @@ export interface PrepStationsView {
   devices: {
     id: string;
     label: string;
-    /** As the server resolves them: the device's choice less what profile narrowings took. */
     kitchenScreens: readonly ResolvedKitchenScreen[];
     kind: string;
     active: boolean;

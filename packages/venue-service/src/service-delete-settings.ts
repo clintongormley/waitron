@@ -8,8 +8,6 @@ import {
   departmentCourses,
   departmentTransferDesks,
   departmentTransferDestinations,
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreenZones,
   deviceProfileKitchenScreenZones,
   deviceProfiles,
   deviceProfileServiceAccess,
@@ -124,11 +122,6 @@ async function settings(
         ? []
         : [{ profile: row.device_profiles, zoneId: permitted.id }];
     });
-  const screenDevices = await tx
-    .select()
-    .from(deviceKitchenScreenZones)
-    .innerJoin(devices, eq(devices.id, deviceKitchenScreenZones.deviceId))
-    .where(inArray(deviceKitchenScreenZones.zoneId, zoneIds));
   const screenProfiles = await tx
     .select()
     .from(deviceProfileKitchenScreenZones)
@@ -137,11 +130,6 @@ async function settings(
       eq(deviceProfiles.id, deviceProfileKitchenScreenZones.deviceProfileId),
     )
     .where(inArray(deviceProfileKitchenScreenZones.zoneId, zoneIds));
-  const notices = await tx
-    .select()
-    .from(deviceKitchenScreenRemovals)
-    .innerJoin(devices, eq(devices.id, deviceKitchenScreenRemovals.deviceId))
-    .where(inArray(deviceKitchenScreenRemovals.zoneId, zoneIds));
   const sets = await tx
     .select()
     .from(floorPlanSets)
@@ -249,7 +237,7 @@ async function settings(
     },
     {
       key: "screen_zones",
-      count: screenDevices.length + screenProfiles.length + deviceZoneReferences.length,
+      count: screenProfiles.length + deviceZoneReferences.length,
       targets: targets([
         ...deviceZoneReferences
           .filter((row) => row.deletedAt === null)
@@ -258,30 +246,10 @@ async function settings(
             name: row.name,
             ...(row.active ? {} : { deleted: true }),
           })),
-        ...screenDevices
-          .filter((row) => row.devices.deletedAt === null)
-          .map((row) => ({
-            id: row.devices.id,
-            name: row.devices.label,
-            ...(row.devices.active ? {} : { deleted: true }),
-          })),
         ...screenProfiles
           .filter((row) => row.device_profiles.retiredAt === null)
           .map((row) => row.device_profiles),
       ]),
-    },
-    {
-      key: "screen_notices",
-      count: notices.length,
-      targets: targets(
-        notices
-          .filter((row) => row.devices.deletedAt === null)
-          .map((row) => ({
-            id: row.devices.id,
-            name: row.devices.label,
-            ...(row.devices.active ? {} : { deleted: true }),
-          })),
-      ),
     },
     { key: "floor_plan_sets", count: sets.length, targets: [] },
     {
@@ -363,14 +331,8 @@ export async function clearServiceDeleteSettings(
     .where(inArray(deviceZoneSelections.startingZoneId, selected.zoneIds));
   // Keep explicit parents: zero zone memberships must continue to mean no zones.
   await tx
-    .delete(deviceKitchenScreenZones)
-    .where(inArray(deviceKitchenScreenZones.zoneId, selected.zoneIds));
-  await tx
     .delete(deviceProfileKitchenScreenZones)
     .where(inArray(deviceProfileKitchenScreenZones.zoneId, selected.zoneIds));
-  await tx
-    .delete(deviceKitchenScreenRemovals)
-    .where(inArray(deviceKitchenScreenRemovals.zoneId, selected.zoneIds));
   await tx
     .update(floorZones)
     .set({

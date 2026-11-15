@@ -1,9 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreens,
-  deviceKitchenScreenStations,
-  deviceKitchenScreenZones,
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
@@ -18,7 +14,6 @@ import type {
   DeviceKitchenScreen,
   KitchenScreenKind,
   KitchenScreenScope,
-  NarrowedDevice,
   ProfileKitchenScreen,
   ProfileKitchenScreens,
   ResolvedKitchenScreen,
@@ -142,7 +137,7 @@ export async function setProfileKitchenScreens(
   tx: Transaction,
   profileId: string,
   screens: ProfileKitchenScreens,
-): Promise<NarrowedDevice[]> {
+): Promise<void> {
   const stored = (await readStored(tx, [profileId])).get(profileId) ?? {};
   return replaceProfileKitchenScreens(tx, profileId, screens, stored, stored);
 }
@@ -164,8 +159,8 @@ async function replaceProfileKitchenScreens(
   stored: MutableScreens,
   /** The target's own stored screens, whose display values a screen omitting one keeps. */
   kept: MutableScreens,
-): Promise<NarrowedDevice[]> {
-  const formFactor = await liveFormFactor(tx, profileId);
+): Promise<void> {
+  await liveFormFactor(tx, profileId);
   for (const kind of KITCHEN_SCREEN_KINDS) {
     if (stored[kind]?.stationIds?.length === 0 && screens[kind] === undefined)
       refuse(LIST_FIELDS[kind].stations, "empty");
@@ -174,6 +169,7 @@ async function replaceProfileKitchenScreens(
       refuse(zoneField, "empty");
   }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
+  if (kinds.length > 1) refuse("kitchenScreens", "one_only");
   const checked: { kind: KitchenScreenKind; scope: ProfileKitchenScreen }[] = [];
   for (const kind of kinds) {
     const scope = screens[kind]!;
@@ -187,34 +183,10 @@ async function replaceProfileKitchenScreens(
     checked.push({ kind, scope: { stationIds, zoneIds, showNonPassStations } });
   }
 
-  const onProfile = await tx
-    .select({ id: devices.id, label: devices.label })
-    .from(devices)
-    .where(
-      and(
-        eq(devices.deviceProfileId, profileId),
-        eq(devices.active, true),
-        isNull(devices.deletedAt),
-      ),
-    )
-    .orderBy(asc(devices.label), asc(devices.id));
-  const before =
-    onProfile.length === 0
-      ? undefined
-      : { formFactor, screens: await profileScreens(tx, profileId) };
-
   await tx
     .delete(deviceProfileKitchenScreens)
     .where(eq(deviceProfileKitchenScreens.deviceProfileId, profileId));
   for (const { kind, scope } of checked) await insertScreen(tx, profileId, kind, scope);
-
-  if (before === undefined) return [];
-  const after = { formFactor, screens: await profileScreens(tx, profileId) };
-  return narrowDevices(tx, onProfile, before, after);
-}
-
-async function profileScreens(tx: Transaction, profileId: string): Promise<MutableScreens> {
-  return (await readStored(tx, [profileId])).get(profileId) ?? {};
 }
 
 async function checkedStations(
@@ -305,7 +277,11 @@ export async function addProfileKitchenScreen(
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
-  const current = (await readStored(tx, [profileId])).get(profileId)?.[screen.kind];
+  const screens = (await readStored(tx, [profileId])).get(profileId) ?? {};
+  if (KITCHEN_SCREEN_KINDS.some((kind) => kind !== screen.kind && screens[kind] !== undefined)) {
+    refuse("kitchenScreens", "one_only");
+  }
+  const current = screens[screen.kind];
   if (current === undefined) {
     await insertScreen(tx, profileId, screen.kind, screen);
     return;
@@ -345,17 +321,6 @@ export async function addProfileKitchenScreen(
   );
 }
 
-type ChoiceField = ErrorParams["kitchen_screen.invalid"]["field"];
-type ChoiceReason = ErrorParams["kitchen_screen.invalid"]["reason"];
-
-function refuseChoice(field: ChoiceField, reason: ChoiceReason, screen?: KitchenScreenKind): never {
-  throw new AppError("kitchen_screen.invalid", {
-    field,
-    reason,
-    ...(screen === undefined ? {} : { screen }),
-  });
-}
-
 interface Place {
   readonly id: string;
   readonly name: string;
@@ -377,264 +342,6 @@ async function placesHere(tx: Transaction): Promise<{ stations: Place[]; zones: 
   return { stations, zones };
 }
 
-/** A device's stored choice of one kind, with its stored display value (null: the profile's). */
-interface StoredChoice extends KitchenScreenScope {
-  readonly showNonPassStations: boolean | null;
-}
-
-async function readChoices(
-  tx: Transaction,
-  deviceIds: readonly string[],
-): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
-  const rows = await tx
-    .select()
-    .from(deviceKitchenScreens)
-    .where(inArray(deviceKitchenScreens.deviceId, deviceIds));
-  const stations = await tx
-    .select()
-    .from(deviceKitchenScreenStations)
-    .where(inArray(deviceKitchenScreenStations.deviceId, deviceIds));
-  const zones = await tx
-    .select()
-    .from(deviceKitchenScreenZones)
-    .where(inArray(deviceKitchenScreenZones.deviceId, deviceIds));
-  const of = <T extends { deviceId: string; screen: KitchenScreenKind }>(
-    list: readonly T[],
-    row: { deviceId: string; screen: KitchenScreenKind },
-  ) => list.filter((entry) => entry.deviceId === row.deviceId && entry.screen === row.screen);
-  const choices = new Map<string, Map<KitchenScreenKind, StoredChoice>>(
-    deviceIds.map((id) => [id, new Map()]),
-  );
-  for (const row of rows) {
-    choices.get(row.deviceId)!.set(row.screen, {
-      stationIds: row.everyStation ? null : of(stations, row).map((entry) => entry.stationId),
-      zoneIds:
-        row.screen === "station" || row.everyZone
-          ? null
-          : of(zones, row).map((entry) => entry.zoneId),
-      showNonPassStations: row.showNonPassStations,
-    });
-  }
-  return choices;
-}
-
-type Removal = typeof deviceKitchenScreenRemovals.$inferSelect;
-
-async function readRemovals(tx: Transaction, deviceIds: readonly string[]): Promise<Removal[]> {
-  return tx
-    .select()
-    .from(deviceKitchenScreenRemovals)
-    .where(inArray(deviceKitchenScreenRemovals.deviceId, [...deviceIds]));
-}
-
-/**
- * Each device's stored choice less its removal rows: a kind recorded as removed, or whose explicit
- * station or zone list has nothing left, is left out. A narrowing keeps the stored choice so a
- * restore can give back exactly what the device had.
- */
-async function readEffectiveChoices(
-  tx: Transaction,
-  deviceIds: readonly string[],
-  removals?: readonly Removal[],
-): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
-  return lessRemovals(
-    await readChoices(tx, deviceIds),
-    removals ?? (await readRemovals(tx, deviceIds)),
-  );
-}
-
-function lessRemovals(
-  choices: Map<string, Map<KitchenScreenKind, StoredChoice>>,
-  removals: readonly Removal[],
-): Map<string, Map<KitchenScreenKind, StoredChoice>> {
-  for (const [deviceId, choice] of choices) {
-    for (const [kind, scope] of choice) {
-      const ofKind = removals.filter((row) => row.deviceId === deviceId && row.screen === kind);
-      if (ofKind.some((row) => row.stationId === null && row.zoneId === null)) {
-        choice.delete(kind);
-        continue;
-      }
-      const less = (ids: readonly string[] | null, removed: readonly (string | null)[]) =>
-        ids === null ? null : ids.filter((id) => !removed.includes(id));
-      const stationIds = less(
-        scope.stationIds,
-        ofKind.map((row) => row.stationId),
-      );
-      const zoneIds = less(
-        scope.zoneIds,
-        ofKind.map((row) => row.zoneId),
-      );
-      if (stationIds?.length === 0 || zoneIds?.length === 0) choice.delete(kind);
-      else choice.set(kind, { ...scope, stationIds, zoneIds });
-    }
-  }
-  return choices;
-}
-
-async function checkChoice(
-  tx: Transaction,
-  profileId: string,
-  screens: readonly DeviceKitchenScreen[],
-  stored: ReadonlyMap<KitchenScreenKind, KitchenScreenScope>,
-): Promise<void> {
-  const sharedDisplay = (await liveFormFactor(tx, profileId)) === SHARED_DISPLAY;
-  if (sharedDisplay && screens.length === 0) throw new AppError("kitchen_screen.required", {});
-  const kinds = new Set(screens.map((screen) => screen.kind));
-  const bothPassKinds = kinds.has("pass") && kinds.has("pass_monitor");
-  if (kinds.size !== screens.length || (sharedDisplay && screens.length > 1) || bothPassKinds) {
-    refuseChoice("screens", "one_only");
-  }
-  const offered = (await readStored(tx, [profileId])).get(profileId) ?? {};
-  const places = await placesHere(tx);
-  for (const screen of screens) {
-    const bound = offered[screen.kind];
-    if (bound === undefined && (sharedDisplay || screen.kind === "pass_monitor")) {
-      throw new AppError("kitchen_screen.not_allowed", { screen: screen.kind });
-    }
-    if (screen.kind === "station" && screen.zoneIds !== null) {
-      refuseChoice("zoneIds", "not_for_screen", screen.kind);
-    }
-    const kept = stored.get(screen.kind);
-    for (const id of checkedChoice(
-      screen.stationIds,
-      places.stations,
-      kept?.stationIds,
-      "stationIds",
-      screen.kind,
-    )) {
-      if (bound?.stationIds && !bound.stationIds.includes(id)) {
-        throw new AppError("station.not_allowed", { stationId: id, screen: screen.kind });
-      }
-    }
-    for (const id of checkedChoice(
-      screen.zoneIds,
-      places.zones,
-      kept?.zoneIds,
-      "zoneIds",
-      screen.kind,
-    )) {
-      if (bound?.zoneIds && !bound.zoneIds.includes(id)) {
-        throw new AppError("kitchen_screen.zone_not_allowed", { zoneId: id });
-      }
-    }
-  }
-}
-
-function checkedChoice(
-  ids: readonly string[] | null,
-  places: readonly Place[],
-  kept: readonly string[] | null | undefined,
-  field: ChoiceField,
-  kind: KitchenScreenKind,
-): readonly string[] {
-  if (ids === null) return [];
-  if (ids.length === 0) {
-    if (field === "zoneIds" && kept?.length === 0) return [];
-    refuseChoice(field, "empty", kind);
-  }
-  for (const id of ids) {
-    const place = places.find((entry) => entry.id === id);
-    if (place === undefined || !(place.active || (field === "stationIds" && kept?.includes(id)))) {
-      refuseChoice(field, "not_found", kind);
-    }
-  }
-  return ids;
-}
-
-export async function assertDeviceKitchenScreens(
-  tx: Transaction,
-  profileId: string,
-  screens: readonly DeviceKitchenScreen[],
-  deviceId?: string,
-): Promise<void> {
-  const stored =
-    deviceId === undefined ? new Map() : (await readChoices(tx, [deviceId])).get(deviceId)!;
-  await checkChoice(tx, profileId, screens, stored);
-}
-
-/** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it, and
- *  keeps each kept kind's display value. */
-export async function setDeviceKitchenScreens(
-  tx: Transaction,
-  input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
-): Promise<void> {
-  const { deviceId, profileId, screens } = input;
-  const stored = (await readChoices(tx, [deviceId])).get(deviceId)!;
-  await checkChoice(tx, profileId, screens, stored);
-  await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
-  await tx
-    .delete(deviceKitchenScreenRemovals)
-    .where(eq(deviceKitchenScreenRemovals.deviceId, deviceId));
-  for (const screen of screens) {
-    const stationIds = [...new Set(screen.stationIds ?? [])];
-    const zoneIds = screen.kind === "station" ? [] : [...new Set(screen.zoneIds ?? [])];
-    await tx.insert(deviceKitchenScreens).values({
-      deviceId,
-      screen: screen.kind,
-      everyStation: screen.stationIds === null,
-      everyZone: screen.kind !== "station" && screen.zoneIds === null,
-      showNonPassStations: stored.get(screen.kind)?.showNonPassStations ?? null,
-    });
-    if (stationIds.length > 0) {
-      await tx
-        .insert(deviceKitchenScreenStations)
-        .values(stationIds.map((stationId) => ({ deviceId, screen: screen.kind, stationId })));
-    }
-    if (zoneIds.length > 0) {
-      await tx
-        .insert(deviceKitchenScreenZones)
-        .values(zoneIds.map((zoneId) => ({ deviceId, screen: screen.kind, zoneId })));
-    }
-  }
-}
-
-/** Sets the device's own choice of showing other stations' dishes on its screen of `kind` (null:
- *  the profile's), changing nothing else. Refused `device.unauthorized` for a kind other than a
- *  pass or a pass monitor, and when the device's effective choice has no screen of `kind`: none
- *  chosen, or a narrowing took the kind or all its stations or zones (the stored value stays, and
- *  its override reads null). */
-export async function setDeviceKitchenScreenDisplay(
-  tx: Transaction,
-  deviceId: string,
-  kind: "pass" | "pass_monitor",
-  value: boolean | null,
-): Promise<void> {
-  if (kind !== "pass" && kind !== "pass_monitor") throw new AppError("device.unauthorized", {});
-  const effective = (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!;
-  if (!effective.has(kind)) throw new AppError("device.unauthorized", {});
-  await tx
-    .update(deviceKitchenScreens)
-    .set({ showNonPassStations: value })
-    .where(and(eq(deviceKitchenScreens.deviceId, deviceId), eq(deviceKitchenScreens.screen, kind)));
-}
-
-/**
- * The slots a list shows: the device's explicit list, or else the profile's (no row or "every"
- * meaning every switched-on one) less what narrowings took; what they took shows too, as
- * no longer available. Deleted places are absent.
- */
-function slots(
-  places: readonly Place[],
-  chosen: readonly string[] | null,
-  bound: readonly string[] | null,
-  removed: ReadonlySet<string>,
-): ScreenSlot[] {
-  const base =
-    chosen ??
-    bound?.filter((id) => !removed.has(id)) ??
-    places.filter((place) => place.active && !removed.has(place.id)).map((place) => place.id);
-  const shown = new Set([...base, ...removed]);
-  return places
-    .filter((place) => shown.has(place.id))
-    .map((place) => ({
-      id: place.id,
-      name: place.name,
-      available: place.active && !removed.has(place.id),
-      switchedOff: !place.active && !removed.has(place.id),
-    }));
-}
-
-/** The device's stored kitchen screens, then the kinds a narrowing took from it. */
 export async function readDeviceKitchenScreens(
   tx: Transaction,
   deviceId: string,
@@ -656,272 +363,53 @@ export async function readDevicesKitchenScreens(
   return new Map(deviceIds.map((id) => [id, resolved.get(id) ?? []]));
 }
 
-/** The targets' removal rows and effective choices, as a caller that already read them passes on. */
-interface DeviceReads {
-  readonly removals: readonly Removal[];
-  readonly choices: Map<string, Map<KitchenScreenKind, StoredChoice>>;
-}
-
-async function readDeviceState(
-  tx: Transaction,
-  deviceIds: readonly string[],
-): Promise<DeviceReads> {
-  const removals = await readRemovals(tx, deviceIds);
-  return { removals, choices: await readEffectiveChoices(tx, deviceIds, removals) };
-}
-
 /** Each device's resolved kitchen screens, read in a fixed number of queries. */
 async function resolveDevices(
   tx: Transaction,
   targets: readonly { id: string; profileId: string }[],
-  read?: DeviceReads,
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
   if (targets.length === 0) return new Map();
-  const { removals: allRemovals, choices } =
-    read ??
-    (await readDeviceState(
-      tx,
-      targets.map((device) => device.id),
-    ));
-  const profileIds = [...new Set(targets.map((device) => device.profileId))];
-  const offeredByProfile = await readStored(tx, profileIds);
+  const offeredByProfile = await readStored(tx, [
+    ...new Set(targets.map((device) => device.profileId)),
+  ]);
   const places = await placesHere(tx);
-
-  const resolved = new Map<string, ResolvedKitchenScreen[]>();
-  for (const device of targets) {
-    const choice = choices.get(device.id)!;
-    const removals = allRemovals.filter((row) => row.deviceId === device.id);
-    const offered = offeredByProfile.get(device.profileId) ?? {};
-    const resolve = (kind: KitchenScreenKind): ResolvedKitchenScreen => {
-      const ofKind = removals.filter((row) => row.screen === kind);
-      const removedStations = new Set(ofKind.flatMap((row) => row.stationId ?? []));
-      const removedZones = new Set(ofKind.flatMap((row) => row.zoneId ?? []));
-      const chosen = choice.get(kind);
-      const bound = offered[kind];
-      const nonPassStationsOverride =
-        chosen === undefined || !hasDisplay(kind) ? null : chosen.showNonPassStations;
-      const display = {
-        nonPassStationsOverride,
-        showNonPassStations: nonPassStationsOverride ?? bound?.showNonPassStations ?? true,
-      };
-      if (chosen === undefined) {
-        return {
-          kind,
-          available: !ofKind.some((row) => row.stationId === null && row.zoneId === null),
-          everyStation: false,
-          everyZone: false,
-          profileEveryStation: false,
-          stations: slots(places.stations, [], null, removedStations),
-          zones: removedZones.size === 0 ? null : slots(places.zones, [], null, removedZones),
-          ...display,
-        };
-      }
-      const everyZone =
-        chosen.zoneIds === null && (bound?.zoneIds ?? null) === null && removedZones.size === 0;
-      return {
-        kind,
-        available: true,
-        everyStation: chosen.stationIds === null,
-        everyZone: chosen.zoneIds === null,
-        profileEveryStation: (bound?.stationIds ?? null) === null,
-        stations: slots(
-          places.stations,
-          chosen.stationIds,
-          bound?.stationIds ?? null,
-          removedStations,
-        ),
-        zones:
-          kind === "station" || everyZone
-            ? null
-            : slots(places.zones, chosen.zoneIds, bound?.zoneIds ?? null, removedZones),
-        ...display,
-      };
-    };
-    resolved.set(
-      device.id,
-      [
-        ...KITCHEN_SCREEN_KINDS.filter((kind) => choice.has(kind)),
-        ...KITCHEN_SCREEN_KINDS.filter(
-          (kind) => !choice.has(kind) && removals.some((row) => row.screen === kind),
-        ),
-      ].map(resolve),
-    );
-  }
-  return resolved;
-}
-
-/** What a profile offers: its form factor and its stored kitchen screens. */
-interface Offer {
-  readonly formFactor: string;
-  readonly screens: MutableScreens;
-}
-
-/**
- * The bound a profile puts on a device's screen of this kind; undefined when it does not offer the
- * kind. A till or handheld profile with no row for a kind bounds nothing.
- */
-function boundOf(offer: Offer, kind: KitchenScreenKind): KitchenScreenScope | undefined {
-  const row = offer.screens[kind];
-  if (row !== undefined) return row;
-  if (offer.formFactor === SHARED_DISPLAY || kind === "pass_monitor") return undefined;
-  return { stationIds: null, zoneIds: null };
-}
-
-/** Station and zone ids are both generated ids, so one key space holds either, or the kind. */
-const removalKey = (deviceId: string, kind: KitchenScreenKind, id: string | null) =>
-  `${deviceId}|${kind}|${id ?? ""}`;
-
-/**
- * First deletes each removal row of a target device that `after` allows again, so the device shows
- * it once more from the choice it kept; then records once each station, zone or kind a device
- * showed under `before` and `after` takes away. The device's stored choice is never changed, and
- * nothing is refused, so a kitchen display may be left with no screen.
- */
-async function narrowDevices(
-  tx: Transaction,
-  targets: readonly { id: string; label: string }[],
-  before: Offer,
-  after: Offer,
-): Promise<NarrowedDevice[]> {
-  const ids = targets.map((device) => device.id);
-  const allowed = (row: Removal) => {
-    const bound = boundOf(after, row.screen);
-    if (bound === undefined) return false;
-    if (row.stationId !== null) return bound.stationIds?.includes(row.stationId) ?? true;
-    if (row.zoneId !== null) return bound.zoneIds?.includes(row.zoneId) ?? true;
-    return true;
-  };
-  const recorded = await readRemovals(tx, ids);
-  const restored = recorded.filter(allowed).map((row) => row.id);
-  if (restored.length > 0) {
-    await tx
-      .delete(deviceKitchenScreenRemovals)
-      .where(inArray(deviceKitchenScreenRemovals.id, restored));
-  }
-  const remaining = recorded.filter((row) => !restored.includes(row.id));
-  const choices = await readEffectiveChoices(tx, ids, remaining);
-  const recordedKeys = new Set(
-    remaining.map((row) => removalKey(row.deviceId, row.screen, row.stationId ?? row.zoneId)),
-  );
-  const places = await placesHere(tx);
-  const active = (list: readonly Place[]) =>
-    list.filter((place) => place.active).map((place) => place.id);
-
-  const removals: (typeof deviceKitchenScreenRemovals.$inferInsert)[] = [];
-  const narrowed: NarrowedDevice[] = [];
-  for (const device of targets) {
-    const screens: KitchenScreenKind[] = [];
-    const stations = new Set<string>();
-    const zones = new Set<string>();
-    for (const [kind, chosen] of choices.get(device.id)!) {
-      const already = (id: string | null) => recordedKeys.has(removalKey(device.id, kind, id));
-      const bound = boundOf(after, kind);
-      if (bound === undefined) {
-        screens.push(kind);
-        removals.push({ deviceId: device.id, screen: kind });
-        continue;
-      }
-      // A kind `before` did not offer showed the device nothing, so an every list loses nothing;
-      // an explicit list still records what `after` leaves out, because the read shows that list.
-      const boundBefore = boundOf(before, kind);
-      const lose = (
-        chosenIds: readonly string[] | null,
-        beforeIds: readonly string[] | null | undefined,
-        afterIds: readonly string[] | null,
-        all: readonly Place[],
-      ) => {
-        if (afterIds === null) return [];
-        const shown = chosenIds ?? (boundBefore === undefined ? [] : (beforeIds ?? active(all)));
-        return shown.filter((id) => !afterIds.includes(id) && !already(id));
-      };
-      for (const stationId of lose(
-        chosen.stationIds,
-        boundBefore?.stationIds,
-        bound.stationIds,
-        places.stations,
-      )) {
-        stations.add(stationId);
-        removals.push({ deviceId: device.id, screen: kind, stationId });
-      }
-      if (kind === "station") continue;
-      for (const zoneId of lose(
-        chosen.zoneIds,
-        boundBefore?.zoneIds,
-        bound.zoneIds,
-        places.zones,
-      )) {
-        zones.add(zoneId);
-        removals.push({ deviceId: device.id, screen: kind, zoneId });
-      }
-    }
-    if (screens.length + stations.size + zones.size > 0) {
-      const named = (list: readonly Place[], set: ReadonlySet<string>) =>
-        list.filter((place) => set.has(place.id)).map(({ id, name }) => ({ id, name }));
-      narrowed.push({
-        deviceId: device.id,
-        deviceName: device.label,
-        lost: {
-          screens: KITCHEN_SCREEN_KINDS.filter((kind) => screens.includes(kind)),
-          stations: named(places.stations, stations),
-          zones: named(places.zones, zones),
-        },
+  const slotsOf = (places: readonly Place[], ids: readonly string[] | null): ScreenSlot[] =>
+    places
+      .filter((place) => ids === null || ids.includes(place.id))
+      .map((place) => ({
+        id: place.id,
+        name: place.name,
+        available: place.active,
+        switchedOff: !place.active,
+      }));
+  return new Map(
+    targets.map((device) => {
+      const offered = offeredByProfile.get(device.profileId) ?? {};
+      const screens = KITCHEN_SCREEN_KINDS.flatMap((kind): ResolvedKitchenScreen[] => {
+        const scope = offered[kind];
+        if (scope === undefined) return [];
+        return [
+          {
+            kind,
+            available: true,
+            everyStation: scope.stationIds === null,
+            everyZone: scope.zoneIds === null,
+            profileEveryStation: scope.stationIds === null,
+            stations: slotsOf(places.stations, scope.stationIds),
+            zones:
+              kind === "station" || scope.zoneIds === null
+                ? null
+                : slotsOf(places.zones, scope.zoneIds),
+            showNonPassStations: scope.showNonPassStations ?? true,
+          },
+        ];
       });
-    }
-  }
-  if (removals.length > 0) await tx.insert(deviceKitchenScreenRemovals).values(removals);
-  return narrowed;
+      return [device.id, screens];
+    }),
+  );
 }
 
-/**
- * Narrows the device from its current profile to `profileId`, before a switch writes it, and gives
- * back what `profileId` allows again; null when it loses nothing, or is unknown.
- */
-export async function narrowDeviceKitchenScreens(
-  tx: Transaction,
-  deviceId: string,
-  profileId: string,
-): Promise<NarrowedDevice | null> {
-  const [device] = await tx
-    .select({
-      id: devices.id,
-      label: devices.label,
-      profileId: devices.deviceProfileId,
-      formFactor: deviceProfiles.formFactor,
-    })
-    .from(devices)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(eq(devices.id, deviceId));
-  if (device === undefined) return null;
-  const after = {
-    formFactor: await liveFormFactor(tx, profileId),
-    screens: await profileScreens(tx, profileId),
-  };
-  const before = {
-    formFactor: device.formFactor,
-    screens: await profileScreens(tx, device.profileId),
-  };
-  const [narrowed] = await narrowDevices(tx, [device], before, after);
-  return narrowed ?? null;
-}
-
-/** Refuses `kitchen_screen.required` when `profileId` is a kitchen display's and the device's
- *  choice, less what narrowings took, holds no kitchen screen. */
-export async function assertKitchenDisplayHasScreen(
-  tx: Transaction,
-  deviceId: string,
-  profileId: string,
-): Promise<void> {
-  if ((await liveFormFactor(tx, profileId)) !== SHARED_DISPLAY) return;
-  if ((await readEffectiveChoices(tx, [deviceId])).get(deviceId)!.size === 0) {
-    throw new AppError("kitchen_screen.required", {});
-  }
-}
-
-/**
- * Refuses an order's zone (null: in no zone) that the device's pass screen does not show, and any
- * order on a device with no pass screen once narrowings' removals are taken out: with the stored
- * row kept, an emptied pass would otherwise read as every zone.
- */
+/** An explicit empty zone bound must never become unrestricted access. */
 export async function assertPassScreenZone(
   tx: Transaction,
   deviceId: string,
@@ -932,13 +420,10 @@ export async function assertPassScreenZone(
     .from(devices)
     .where(eq(devices.id, deviceId));
   if (device === undefined) throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
-  const read = await readDeviceState(tx, [deviceId]);
-  if (!read.choices.get(deviceId)!.has("pass")) {
-    throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
-  }
-  const pass = (await resolveDevices(tx, [device], read))
+  const pass = (await resolveDevices(tx, [device]))
     .get(deviceId)!
-    .find((screen) => screen.kind === "pass")!;
+    .find((screen) => screen.kind === "pass");
+  if (pass === undefined) throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
   if (pass.zones === null) return;
   if (!pass.zones.some((zone) => zone.available && zone.id === zoneId)) {
     throw new AppError("kitchen_screen.zone_not_allowed", { zoneId });
@@ -947,39 +432,27 @@ export async function assertPassScreenZone(
 
 export async function readStationScreens(
   tx: Transaction,
-  options: { withSwitchedOff?: boolean } = {},
 ): Promise<{ deviceId: string; stationIds: string[] }[]> {
   const displays = await tx
     .select({ id: devices.id, profileId: devices.deviceProfileId })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .innerJoin(
-      deviceKitchenScreens,
+      deviceProfileKitchenScreens,
       and(
-        eq(deviceKitchenScreens.deviceId, devices.id),
-        eq(deviceKitchenScreens.screen, "station"),
+        eq(deviceProfileKitchenScreens.deviceProfileId, devices.deviceProfileId),
+        eq(deviceProfileKitchenScreens.screen, "station"),
       ),
     )
     .where(and(eq(devices.active, true), eq(deviceProfiles.formFactor, SHARED_DISPLAY)))
     .orderBy(asc(devices.id));
-  const read = await readDeviceState(
-    tx,
-    displays.map((display) => display.id),
-  );
-  const { choices } = read;
-  const running = displays.filter((display) => choices.get(display.id)!.has("station"));
-  const resolved = await resolveDevices(tx, running, read);
-  return running.map(({ id }) => {
-    const explicit = new Set(
-      options.withSwitchedOff === true ? (choices.get(id)!.get("station")!.stationIds ?? []) : [],
-    );
-    return {
-      deviceId: id,
-      stationIds: resolved
-        .get(id)!
-        .find((screen) => screen.kind === "station")!
-        .stations.filter((slot) => slot.available || explicit.has(slot.id))
-        .map((slot) => slot.id),
-    };
-  });
+  const resolved = await resolveDevices(tx, displays);
+  return displays.map(({ id }) => ({
+    deviceId: id,
+    stationIds: resolved
+      .get(id)!
+      .find((screen) => screen.kind === "station")!
+      .stations.filter((slot) => slot.available)
+      .map((slot) => slot.id),
+  }));
 }

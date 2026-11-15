@@ -45,7 +45,7 @@ describe("A669 kitchen blocks LOOK", () => {
                 board: allergyBoard(),
                 stations: [],
                 zones: null,
-                display: { showNonPassStations: true, nonPassStationsOverride: null },
+                display: { showNonPassStations: true },
               });
               const api = {
                 getExpoBoard: vi.fn(async () => ({ board: allergyBoard() })),

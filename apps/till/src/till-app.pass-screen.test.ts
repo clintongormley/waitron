@@ -69,7 +69,7 @@ const deviceBoard = (): DevicePassBoard => ({
   board: passBoard({ toFire: [fireCard] }),
   stations: [],
   zones: null,
-  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  display: { showNonPassStations: true },
 });
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {

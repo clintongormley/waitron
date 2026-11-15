@@ -1793,23 +1793,21 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     ).rejects.toMatchObject({ code: "device.join_mismatch" });
   });
 
-  it("acceptDeviceJoinRequest POSTs the typed name with the profile and kitchen screens", async () => {
+  it("acceptDeviceJoinRequest POSTs the typed name and profile", async () => {
     const accepted = { deviceId: "j1", name: "Pass screen", formFactor: "kds" };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(accepted));
     const api = new DashboardApi("", fetchImpl);
-    const kitchenScreens = [{ kind: "pass_monitor" as const, stationIds: null, zoneIds: ["z1"] }];
     expect(
       await api.acceptDeviceJoinRequest("j1", {
         name: "Pass screen",
         profileId: "dp1",
-        kitchenScreens,
       }),
     ).toEqual(accepted);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pass screen", profileId: "dp1", kitchenScreens }),
+      body: JSON.stringify({ name: "Pass screen", profileId: "dp1" }),
     });
   });
 
@@ -1819,7 +1817,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       .mockResolvedValue(jsonResponse({ error: { code: "join_request.unclaimed" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1", kitchenScreens: [] }),
+      api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1" }),
     ).rejects.toMatchObject({ code: "join_request.unclaimed" });
   });
 

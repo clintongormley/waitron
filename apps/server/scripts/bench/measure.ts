@@ -21,9 +21,8 @@ import { PERSON_HEADER } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { readBillEditState, readPartyBillIds } from "../../src/bill-editing.js";
 import { deploymentEnvironment } from "../../src/config.js";
-import { VENUE_SERVICE } from "../../src/modules.js";
 import { partyFamily } from "../../src/parties.js";
-import { offerOnProfile } from "../../src/testing/enrol.js";
+import { VENUE_SERVICE } from "../../src/modules.js";
 import { SESSION_COOKIE } from "../../src/till-session.js";
 import { installBenchClock, type BenchClock } from "./bench-clock.js";
 import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
@@ -543,12 +542,7 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
               .update(deviceProfiles)
               .set({ capabilities: [...capabilities, "run-the-pass"] })
               .where(eq(deviceProfiles.id, device!.profileId!));
-          await offerOnProfile(tx, device!.profileId!, pass);
-          await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-            deviceId: passScreen.id,
-            profileId: device!.profileId!,
-            screens: [pass],
-          });
+          await VENUE_SERVICE.setProfileKitchenScreens(tx, device!.profileId!, { pass });
         });
       },
       cases: [

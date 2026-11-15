@@ -14,11 +14,10 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { insertDevice, resolveDeviceKitchenScreens } from "./device.js";
+import { insertDevice, requireDeviceProfile } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { DeviceKitchenScreen } from "@waitron/module";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -152,256 +151,51 @@ describe("device join-and-accept binds the device by its profile's form factor",
     ).toMatchObject([{ kind: "station", stations: [{ id: stationId, available: true }] }]);
   });
 
-  it("accepting a kds device refuses a station its profile does not list, and the request survives", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const profileId = await seedProfile("kds", "KDS profile");
-    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
-    await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
-        station: { stationIds: [grill.id], zoneIds: null },
-      }),
-    );
-    const window = createPairingMode();
-    window.open();
-    const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "Screen" }),
-    );
-    const accept = (kitchenScreens: readonly DeviceKitchenScreen[]) =>
-      withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-          label: "Screen",
-          profileId,
-          kitchenScreens,
-        }),
-      );
-
-    await expect(
-      accept([{ kind: "station", stationIds: [stationId], zoneIds: null }]),
-    ).rejects.toMatchObject({
-      code: "station.not_allowed",
-      params: { stationId },
-    });
-    expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
-  });
-
-  it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
+  it("accepts an unconfigured kitchen profile and shows no screen", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("kds", "KDS profile");
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Screen", profileId }),
-    ).rejects.toMatchObject({ code: "kitchen_screen.required" });
+    const { deviceId } = await enrolDeviceForTest(suite.db, cfg, { name: "Screen", profileId });
+    expect(
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId)),
+    ).toEqual([]);
   });
 });
 
-describe("accepting a device writes its kitchen screens", () => {
-  async function offering(formFactor: FormFactor, name: string) {
-    const profileId = await seedProfile(formFactor, name);
-    await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
-        station: { stationIds: null, zoneIds: null },
-        pass: { stationIds: null, zoneIds: null },
-      }),
-    );
-    return profileId;
-  }
-
-  async function accept(
-    cfg: TradingContext,
-    profileId: string,
-    kitchenScreens: readonly DeviceKitchenScreen[],
-  ) {
-    const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "Screen" }),
-    );
-    return withTransaction(suite.db, (tx) =>
-      acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-        label: "Screen",
-        profileId,
-        kitchenScreens,
-      }),
-    );
-  }
-
-  const shown = (deviceId: string) =>
-    withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId));
-
-  it("a kitchen display's station screen on two stations is stored", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, { name: "Rotisserie" }),
-    );
-    const profileId = await offering("kds", "KDS profile");
-    const { deviceId } = await accept(cfg, profileId, [
-      { kind: "station", stationIds: [stationId, grill.id], zoneIds: null },
-    ]);
-    expect(await shown(deviceId)).toEqual([
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: true,
-        showNonPassStations: true,
-        nonPassStationsOverride: null,
-        stations: [
-          { id: stationId, name: "Kitchen", available: true, switchedOff: false },
-          { id: grill.id, name: "Rotisserie", available: true, switchedOff: false },
-        ],
-        zones: null,
-      },
-    ]);
-  });
-
-  it("a kitchen display's station screen on one station is stored", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const profileId = await offering("kds", "KDS profile");
-    const { deviceId } = await accept(cfg, profileId, [
-      { kind: "station", stationIds: [stationId], zoneIds: null },
-    ]);
-    expect(await shown(deviceId)).toMatchObject([
-      { kind: "station", stations: [{ id: stationId, available: true }] },
-    ]);
-  });
-
-  it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await offering("kds", "KDS profile");
-    await expect(accept(cfg, profileId, [])).rejects.toMatchObject({
-      code: "kitchen_screen.required",
-    });
-  });
-
-  it("a till accepted with a station screen and a pass screen stores both", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const profileId = await offering("till", "Till profile");
-    const { deviceId } = await accept(cfg, profileId, [
-      { kind: "station", stationIds: [stationId], zoneIds: null },
-      { kind: "pass", stationIds: null, zoneIds: null },
-    ]);
-    expect((await shown(deviceId)).map((screen) => screen.kind)).toEqual(["station", "pass"]);
-  });
-
-  it("the enrol helper adds each station it is given to the profile's station screen, and the device shows it", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, { name: "Rotisserie" }),
-    );
-    const profileId = await seedProfile("kds", "KDS profile");
-    const first = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Kitchen 1",
-      profileId,
-      stationId,
-    });
-    const second = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Rotisserie 1",
-      profileId,
-      stationId: grill.id,
-    });
-    const offered = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readProfileKitchenScreens(tx),
-    );
-    expect(offered.find((row) => row.profileId === profileId)?.screens).toEqual({
-      station: { stationIds: [stationId, grill.id], zoneIds: null },
-    });
-    expect(await shown(first.deviceId)).toEqual([
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: false,
-        showNonPassStations: true,
-        nonPassStationsOverride: null,
-        stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
-        zones: null,
-      },
-    ]);
-    expect((await shown(second.deviceId))[0]?.stations).toEqual([
-      { id: grill.id, name: "Rotisserie", available: true, switchedOff: false },
-    ]);
-  });
-
-  it("the enrol helper gives a kitchen screen it is handed, offered on the profile first", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Till profile");
-    const { deviceId } = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Till",
-      profileId,
-      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
-    });
-    expect(await shown(deviceId)).toEqual([
-      {
-        kind: "pass",
-        available: true,
-        everyStation: true,
-        everyZone: true,
-        profileEveryStation: true,
-        showNonPassStations: true,
-        nonPassStationsOverride: null,
-        stations: [
-          { id: expect.any(String), name: "Kitchen", available: true, switchedOff: false },
-        ],
-        zones: null,
-      },
-    ]);
-  });
-
-  async function offeringMonitor() {
-    const profileId = await seedProfile("till", "Till profile");
-    await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
-        pass: { stationIds: null, zoneIds: null },
-        pass_monitor: { stationIds: null, zoneIds: null },
-      }),
-    );
-    return profileId;
-  }
-
-  it("a till whose profile offers a pass monitor is accepted with one, and stores it", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const profileId = await offeringMonitor();
-    const { deviceId } = await accept(cfg, profileId, [
-      { kind: "pass_monitor", stationIds: [stationId], zoneIds: null },
-    ]);
-    expect(await shown(deviceId)).toEqual([
-      {
-        kind: "pass_monitor",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: true,
-        showNonPassStations: true,
-        nonPassStationsOverride: null,
-        stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
-        zones: null,
-      },
-    ]);
-  });
-
-  it("a till whose profile has no pass monitor row, accepted with a pass monitor, is kitchen_screen.not_allowed", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await offering("till", "Till profile");
-    await expect(
-      accept(cfg, profileId, [{ kind: "pass_monitor", stationIds: null, zoneIds: null }]),
-    ).rejects.toMatchObject({
-      code: "kitchen_screen.not_allowed",
-      params: { screen: "pass_monitor" },
-    });
-  });
-
-  it("a till accepted with both a pass screen and a pass monitor is kitchen_screen.invalid one_only", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await offeringMonitor();
-    await expect(
-      accept(cfg, profileId, [
-        { kind: "pass", stationIds: null, zoneIds: null },
-        { kind: "pass_monitor", stationIds: null, zoneIds: null },
-      ]),
-    ).rejects.toMatchObject({
-      code: "kitchen_screen.invalid",
-      params: { field: "screens", reason: "one_only" },
-    });
-  });
+describe("accepting a device inherits its profile's screen", () => {
+  it.each(["kds", "till", "phone-portrait"] as const)(
+    "%s devices inherit the same saved scope",
+    async (formFactor) => {
+      const { cfg, stationId } = await setupVenue();
+      const profileId = await seedProfile(formFactor, "Profile");
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
+          pass: { stationIds: [stationId], zoneIds: null, showNonPassStations: false },
+        }),
+      );
+      const before = await rowCounts();
+      const first = await enrolDeviceForTest(suite.db, cfg, { name: "First", profileId });
+      const second = await enrolDeviceForTest(suite.db, cfg, { name: "Second", profileId });
+      expect(changedCounts(before, await rowCounts())).toEqual({ devices: 2 });
+      for (const device of [first, second]) {
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId),
+          ),
+        ).toEqual([
+          {
+            kind: "pass",
+            available: true,
+            everyStation: false,
+            everyZone: true,
+            profileEveryStation: false,
+            stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
+            zones: null,
+            showNonPassStations: false,
+          },
+        ]);
+      }
+    },
+  );
 });
 
 describe("device names among a venue's active devices", () => {
@@ -439,13 +233,11 @@ describe("device names among a venue's active devices", () => {
   });
 });
 
-describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => {
+describe("requireDeviceProfile and insertDevice, called directly", () => {
   it("refuses a profile id that names no profile as device_profile.not_found", async () => {
     await setupVenue();
     await expect(
-      withTransaction(suite.db, (tx) =>
-        resolveDeviceKitchenScreens(tx, { profileId: randomUUID() }),
-      ),
+      withTransaction(suite.db, (tx) => requireDeviceProfile(tx, randomUUID())),
     ).rejects.toMatchObject({ code: "device_profile.not_found" });
   });
 

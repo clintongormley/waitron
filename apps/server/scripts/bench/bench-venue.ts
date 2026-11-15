@@ -448,11 +448,7 @@ async function seed(
       });
       tillProfiles.push({ profileId: profile!.id, departmentId });
     }
-    const [kds] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Bench kitchen screen", formFactor: "kds", capabilities: ["prepare-orders"] })
-      .returning({ id: deviceProfiles.id });
-    return { tillProfiles, kdsProfileId: kds!.id, stations, receiptPrinterId: printerIds[0]! };
+    return { tillProfiles, stations, receiptPrinterId: printerIds[0]! };
   });
 
   for (let t = 0; t < BENCH_PROFILE.tills; t++) {
@@ -470,9 +466,17 @@ async function seed(
   }
   const screens = [profiles.stations.kitchen, profiles.stations.bar];
   for (let k = 0; k < BENCH_PROFILE.kitchenScreens; k++) {
+    const [profile] = await db
+      .insert(deviceProfiles)
+      .values({
+        name: `Bench kitchen screen ${k + 1}`,
+        formFactor: "kds",
+        capabilities: ["prepare-orders"],
+      })
+      .returning({ id: deviceProfiles.id });
     const device = await enrolDeviceForTest(db, cfg, {
       name: `${KDS_PREFIX}${k + 1}`,
-      profileId: profiles.kdsProfileId,
+      profileId: profile!.id,
       kitchenScreen: { kind: "station", stationIds: [screens[k % screens.length]!], zoneIds: null },
     });
     enrolled[device.deviceId] = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
@@ -532,7 +536,7 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
       departmentId: access.find((scope) => scope.profileId === row.profileId)!.departmentId,
     }));
   const screens = db.all<{ deviceId: string; stationId: string }>(
-    sql`select device_id as deviceId, station_id as stationId from device_kitchen_screen_stations`,
+    sql`select d.id as deviceId, s.station_id as stationId from devices d join device_profile_kitchen_screen_stations s on s.device_profile_id = d.device_profile_id`,
   );
   const kitchenScreens: BenchKitchenScreen[] = deviceRows
     .filter((row) => row.name.startsWith(KDS_PREFIX))

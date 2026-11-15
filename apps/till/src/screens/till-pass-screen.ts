@@ -43,7 +43,6 @@ const emptyBoard = (): PassBoard => ({
   overview: [],
 });
 
-/** A narrowing took every station, or every zone, the screen had: it shows nothing but its lines. */
 function nothingLeft(screen: Pick<DevicePassBoard, "stations" | "zones">): boolean {
   const allTaken = (slots: readonly { available: boolean }[] | null) =>
     slots !== null && slots.length > 0 && !slots.some((slot) => slot.available);
@@ -180,30 +179,11 @@ export class TillPassScreen extends LitElement {
 
   @state() private board: PassBoard = emptyBoard();
   @state() private selected: BoardId | null = null;
-  /** A narrowing took the device's pass screen or pass monitor itself. */
   @state() private passGone = false;
   @state() private goneScreen: "pass" | "pass_monitor" = "pass";
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
-  /**
-   * The choice sent on the board shown, until the send is refused, a board read begun after its
-   * acceptance answers, or that follow-up read ends; the window shows it, disabled.
-   */
-  @state() private otherStationsSending?: boolean | null;
-  /**
-   * Moves on with each choice sent and each change of board. An older send's answer frees no newer
-   * choice, its success is not taken as the newest answer, and its failure is not acted on.
-   */
-  #otherStationsSend = 0;
-  /**
-   * The send the server accepted; a board read begun after it ends its sending when it answers,
-   * unless a newer send is out.
-   */
-  #acceptedSend = 0;
-  /** A refusal of that choice, shown in the window until the next choice or a change of board. */
-  @state() private otherStationsError?: string;
-  /** A read of the device's choice has answered; until one does, All stations shows. */
   #choiceRead = false;
   #choiceRequest = 0;
   #appliedChoice = 0;
@@ -228,8 +208,6 @@ export class TillPassScreen extends LitElement {
   readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
   /** Unset until a read of the board shown answers; the window offers no choice until then. */
   #display?: DevicePassBoard["display"];
-  /** A choice the server accepted, shown until a read begun after it answers. */
-  #acceptedChoice?: boolean | null;
 
   /** The last board read's choice of showing other stations' dishes. */
   get display(): DevicePassBoard["display"] | undefined {
@@ -263,11 +241,6 @@ export class TillPassScreen extends LitElement {
     this.#refreshReads.clear();
   }
 
-  /**
-   * At a till the device's choice is read before each refresh's board read, so the board follows a
-   * change made while the screen is open. Until a read answers, All stations shows; after that a
-   * failed read keeps what the last one said.
-   */
   async #loadChoice(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     let pass;
@@ -299,10 +272,6 @@ export class TillPassScreen extends LitElement {
         this.nothingLeft = false;
         this.columnsWindow = null;
         this.#display = undefined;
-        this.#acceptedChoice = undefined;
-        this.otherStationsSending = undefined;
-        this.#otherStationsSend++;
-        this.otherStationsError = undefined;
       }
       this.selected = next;
     }
@@ -351,7 +320,7 @@ export class TillPassScreen extends LitElement {
               ...(await this.api.getExpoBoard({ signal })),
               stations: [],
               zones: null,
-              display: { showNonPassStations: true, nonPassStationsOverride: null },
+              display: { showNonPassStations: true },
             }
           : boardId === "pass"
             ? await this.api.getDevicePassBoard({ signal })
@@ -379,8 +348,7 @@ export class TillPassScreen extends LitElement {
   #adoptBoard(read: DevicePassBoard): void {
     this.board = read.board;
     this.#display = read.display;
-    this.#acceptedChoice = undefined;
-    if (this.#acceptedSend === this.#otherStationsSend) this.otherStationsSending = undefined;
+
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
@@ -484,45 +452,6 @@ export class TillPassScreen extends LitElement {
     if (this.#isCurrent(boardId)) await this.#reload();
   }
 
-  /**
-   * The device's own choice of showing other stations' dishes on the board it shows. A refusal
-   * meaning the board itself has gone follows Fire's (D74, D92); any other keeps the previous choice.
-   */
-  async #chooseOtherStations(boardId: BoardId, value: boolean | null): Promise<void> {
-    if (boardId === "all" || this.otherStationsSending !== undefined) return;
-    this.otherStationsError = undefined;
-    this.otherStationsSending = value;
-    const send = ++this.#otherStationsSend;
-    let reload: "board" | "choice" | null = "board";
-    try {
-      await this.api.setDeviceKitchenScreenDisplay(
-        boardId === "pass" ? "pass" : "pass_monitor",
-        value,
-      );
-      if (send === this.#otherStationsSend && this.#isCurrent(boardId)) {
-        this.#acceptedChoice = value;
-        this.#acceptedSend = send;
-        // Counts as an answer newer than any board read already out, so none of those can undo it.
-        this.#appliedRequest = ++this.#request;
-      }
-    } catch (error) {
-      reload = null;
-      if (send === this.#otherStationsSend) {
-        const code = (error as { code?: string } | null)?.code ?? "server.internal";
-        if (this.#switched(error)) this.columnsWindow = null;
-        else if (code === "device.unauthorized" && this.#followsChoice()) {
-          this.columnsWindow = null;
-          this.#tableChangedNext = {};
-          reload = "choice";
-        } else this.otherStationsError = code;
-      }
-    }
-    if (reload === "board" && this.#isCurrent(boardId))
-      await this.#bounded((signal) => this.#reload(signal));
-    if (send === this.#otherStationsSend) this.otherStationsSending = undefined;
-    if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
-  }
-
   /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */
   #refusalSentence(code: string): string {
     return code === "service_zone.not_allowed" ? t("expo.zone_not_allowed") : codeMessage(code);
@@ -545,11 +474,6 @@ export class TillPassScreen extends LitElement {
     }
   }
 
-  /**
-   * On a kitchen display, a press refused because the device no longer has this screen asks the app
-   * to re-read the device's choice now. A release names a lost pass screen `device.unauthorized`, a
-   * lever `kitchen_screen.not_allowed`.
-   */
   #switched(error: unknown): boolean {
     const code = (error as { code?: string } | null)?.code;
     if (
@@ -744,25 +668,6 @@ export class TillPassScreen extends LitElement {
       .names=${passColumnNames()}
       .boardName=${this.#title()}
       .opener=${open.opener}
-      .otherStations=${
-        boardId === "all" || !this.#shows() || this.#display === undefined
-          ? null
-          : {
-              value:
-                this.otherStationsSending !== undefined
-                  ? this.otherStationsSending
-                  : this.#acceptedChoice !== undefined
-                    ? this.#acceptedChoice
-                    : this.#display.nonPassStationsOverride,
-              sending: this.otherStationsSending !== undefined,
-              errorCode: this.otherStationsError,
-            }
-      }
-      @other-stations-choose=${(event: Event) => {
-        event.stopPropagation();
-        const { value } = (event as CustomEvent<{ value: boolean | null }>).detail;
-        void this.#chooseOtherStations(boardId, value);
-      }}
       @column-move=${(event: Event) => {
         event.stopPropagation();
         this.#layouts.applyMove(this.#columnScope(boardId), boardId, event);

@@ -152,8 +152,7 @@ roles before choosing again.
 In **Hardware**, open **Device profiles**. Search for the profile you need, then select its row to
 edit. Use its **⋮** menu to duplicate or delete it.
 
-Choose **What it can do** for actions and screens. Use **Station screens** to choose which screens a
-station display may run. Open a marked tab to fix its field, then choose **Save**.
+Choose **What it can do** for actions and screens. Choose one kitchen screen and its stations and zones; every device using the profile inherits it. Open a marked tab to fix its field, then choose **Save**.
 
 ## Who can sign in on a device {#device-profile-sign-in}
 

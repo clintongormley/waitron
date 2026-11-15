@@ -840,7 +840,6 @@ describe("A841 the till follows the theme in use", () => {
             available: true,
             stations: [],
             zones: null,
-            nonPassStationsOverride: null,
             showNonPassStations: true,
           },
         ],

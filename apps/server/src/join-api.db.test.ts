@@ -30,7 +30,6 @@ import type { Logger } from "./logger.js";
 import { enrolDeviceForTest, offerOnProfile } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
-import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 
@@ -610,7 +609,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 });
 
 describe("POST /management-api/device-join-requests/:id/accept", () => {
-  it("accepts a kitchen display's pass screen and validates its kitchenScreens field", async () => {
+  it("accepts a kitchen display with its profile's pass screen", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
@@ -619,7 +618,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const made = await knock(venue, { kind: "device", label: "Pass screen" });
     await claimFor(app, venue, made, holdId);
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
-    const body = { name: "Pass screen", profileId, kitchenScreens: [pass] };
+    const body = { name: "Pass screen", profileId };
     const accepted = await send(app, "POST", path, { cookie: venue.managerCookie, body });
     expect(accepted.status).toBe(200);
     expect(
@@ -627,46 +626,6 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
       ),
     ).toMatchObject([{ kind: "pass", available: true }]);
-    const malformed = await knock(venue, { kind: "device", label: "Bad screen" });
-    await claimFor(app, venue, malformed, holdId);
-    const invalid = await send(
-      app,
-      "POST",
-      `/management-api/device-join-requests/${malformed.joinId}/accept`,
-      {
-        cookie: venue.managerCookie,
-        body: {
-          name: "Bad screen",
-          profileId,
-          kitchenScreens: [{ kind: "pass", stationIds: ["bad"], zoneIds: null }],
-        },
-      },
-    );
-    expect(invalid.status).toBe(400);
-    expect(await errorOf(invalid)).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "kitchenScreens" },
-    });
-    const unknown = await knock(venue, { kind: "device", label: "Unknown screen" });
-    await claimFor(app, venue, unknown, holdId);
-    const refused = await send(
-      app,
-      "POST",
-      `/management-api/device-join-requests/${unknown.joinId}/accept`,
-      {
-        cookie: venue.managerCookie,
-        body: {
-          name: "Unknown screen",
-          profileId,
-          kitchenScreens: [{ kind: "pass", stationIds: [randomUUID()], zoneIds: null }],
-        },
-      },
-    );
-    expect(refused.status).toBe(400);
-    expect(await errorOf(refused)).toMatchObject({
-      code: "kitchen_screen.invalid",
-      params: { field: "stationIds", reason: "not_found" },
-    });
   });
   it("enrols the device once its number is matched, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
@@ -816,7 +775,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(1);
   });
 
-  it("a kds profile with no kitchen screen is 400, and the request survives for a genuine retry", async () => {
+  it("an unconfigured kitchen profile can pair without a screen", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
@@ -831,43 +790,13 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: { name: "Kitchen screen", profileId },
       },
     );
-    expect(res.status).toBe(400);
-    expect((await errorOf(res)).code).toBe("kitchen_screen.required");
-    // The consuming delete rolled back with the throw: only a success consumes the request here.
-    expect(await pendingCount()).toBe(1);
-  });
-
-  it("a station the kds profile does not list is 400, and the request survives", async () => {
-    const venue = await setupVenue(suite.db);
-    const { app, holdId } = openApp(venue.cfg);
-    const profileId = await seedProfile("kds");
-    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
-    await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, profileId, {
-        kind: "station",
-        stationIds: [grill.id],
-        zoneIds: null,
-      }),
-    );
-    const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
-    await claimFor(app, venue, made, holdId);
-    const res = await send(
-      app,
-      "POST",
-      `/management-api/device-join-requests/${made.joinId}/accept`,
-      {
-        cookie: venue.managerCookie,
-        body: { name: "Kitchen screen", profileId, kitchenScreens: [stationScreen(venue)] },
-      },
-    );
-    expect(res.status).toBe(400);
-    expect((await errorOf(res)).code).toBe("station.not_allowed");
-    expect(await pendingCount()).toBe(1);
-    const [enrolled] = await suite.db
-      .select({ id: devices.id })
-      .from(devices)
-      .where(eq(devices.id, made.joinId));
-    expect(enrolled).toBeUndefined();
+    expect(res.status).toBe(200);
+    expect(await pendingCount()).toBe(0);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
+      ),
+    ).toEqual([]);
   });
 
   it("screens the body, and refuses the request before any of it is acted on", async () => {
@@ -893,16 +822,6 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       body: { name: "Bar till", profileId: "not-a-uuid" },
     });
     expect((await errorOf(badProfile)).params).toEqual({ field: "profileId" });
-
-    const badStation = await send(app, "POST", path, {
-      cookie,
-      body: {
-        name: "Bar till",
-        profileId: randomUUID(),
-        kitchenScreens: [{ kind: "station", stationIds: ["nope"], zoneIds: null }],
-      },
-    });
-    expect((await errorOf(badStation)).params).toEqual({ field: "kitchenScreens" });
 
     expect(await pendingCount()).toBe(1);
   });

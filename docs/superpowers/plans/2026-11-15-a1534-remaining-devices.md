@@ -21,3 +21,13 @@ The existing Approved profiles control makes nine fields against the owner's eig
 **Schema and assertions:** every schema-changing PR says **Every venue resets**, changes TypeScript/triggers and runs `migration-baseline rebuild --set core`; no hand edits or conversion. Two behavior-owned rebuilds (PR3/PR5) are proposed instead of retaining dead tables to combine them. Venue-service tables are hosted in core: `B/classification.ts:301,344-366` and `packages/composition/src/composition.test.ts:148-178`; there is no separate venue-service migration set. Recount generated output before the size stop. B `schema/venue-service/migrations.test.ts`, `configuration-transfer.test.ts`; V `configuration-transfer.test.ts`; S `configuration-transfer.floor-kitchen.test.ts`, `configuration-transfer.test.ts` retain import ID rewriting and deletion protections. Replace subset assertions with profile/empty-bound assertions in their existing owner; no weaker rewrites. Exact deletion suites are selected by the table-reference trace before code, not an invented new suite. Madrid `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` reuses REMOVED_TABLES and updates key metadata only; frozen captures stay untouched. No normalization machinery.
 
 Run named behavioral files with RED/GREEN, existing live-query/consumer guards, schema-constraints, append-only-triggers, behavioural-triggers, starting-migrations, classification/reference guards and fiscal `inmutabilidad.test.ts` for rebuilds; normal hook, finish-branch, exact-head CI. No tests/rebuild executed for this forecast. Update EN/ES guides and delivered backlog portions; LOOK in both themes at phone/desktop width. Add dated pointers to stations §9.4, a797 and a366 history. Docs-only publication and the first four remaining builds are cleared; the final editor layout waits for the owner’s field-count answer. No third review is required.
+
+## Cutover clearance, 15 November 2026
+
+The watcher cleared combining PR2 and PR3 at 07:42: one usable step in which every device inherits
+its profile's one screen, with no compatibility stage. The remaining total is five PRs. At 08:02
+the watcher cleared the deletion-heavy cutover with production, test and support additions held
+within 3,000 lines, generated files counted separately; retired choices and their tests do not count
+against that additions limit. These are watcher clearances, not owner approval of a design. The
+three-working-hour stop starts at 07:37, excluding waits. The owner's 05:25 answer, "Allow nine",
+keeps Approved profiles in the device editor.

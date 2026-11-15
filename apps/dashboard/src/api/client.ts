@@ -802,7 +802,6 @@ export interface DeviceRow {
   /** The profiles staff may switch the device to: its active profile first, then the others. */
   approvedProfileIds: string[];
   kind: string;
-  /** Its kitchen screens as the server resolves them, a kind a narrowing took listed after them. */
   kitchenScreens: ResolvedKitchenScreen[];
   label: string;
   active: boolean;
@@ -941,9 +940,7 @@ export interface ScreenSlot {
 /** A device's kitchen screen as the server reads it back. */
 export interface ResolvedKitchenScreen {
   kind: KitchenScreenKind;
-  /** False when a profile narrowing took this kind from the device. */
   available: boolean;
-  /** The device's own station list is "every"; false on a kind it no longer holds. */
   everyStation: boolean;
   /** As `everyStation`, for zones; a station screen's is true. */
   everyZone: boolean;
@@ -953,22 +950,7 @@ export interface ResolvedKitchenScreen {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
-  /** The device's own stored choice of showing other stations' dishes; null when it holds none
-   *  (or no choice of this kind), and always null on a station screen. */
-  nonPassStationsOverride: boolean | null;
-  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
   showNonPassStations: boolean;
-}
-
-/** A device a profile save narrowed, and what it lost. */
-export interface NarrowedDevice {
-  deviceId: string;
-  deviceName: string;
-  lost: {
-    screens: KitchenScreenKind[];
-    stations: { id: string; name: string }[];
-    zones: { id: string; name: string }[];
-  };
 }
 
 /** In the order the device's equipment choices offer them. */
@@ -4096,7 +4078,6 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      kitchenScreens: DeviceKitchenScreen[];
     },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
@@ -4185,20 +4166,16 @@ export class DashboardApi {
     printerLists: ProfilePrinterLists,
     /** A part left out stays as stored. */
     extras?: ProfileSaveExtras,
-  ): Promise<DeviceProfile & { narrowedDevices?: NarrowedDevice[] }> {
-    return this.#request<DeviceProfile & { narrowedDevices?: NarrowedDevice[] }>(
-      `/management-api/device-profiles/${id}`,
-      "PUT",
-      {
-        name,
-        capabilities,
-        formFactor,
-        inactivityTimeoutSeconds,
-        receiptPrinterIds: printerLists.receiptPrinterIds,
-        paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
-        ...extras,
-      },
-    );
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
+      name,
+      capabilities,
+      formFactor,
+      inactivityTimeoutSeconds,
+      receiptPrinterIds: printerLists.receiptPrinterIds,
+      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+      ...extras,
+    });
   }
 
   deleteDeviceProfile(id: string): Promise<void> {
@@ -4219,11 +4196,6 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      /** Replaces the device's kitchen screens and clears what narrowings took; absent leaves them. */
-      kitchenScreens?: DeviceKitchenScreen[];
-      /** Whether each pass kind shows other stations' dishes; null is the profile's setting, an
-       *  absent kind keeps what is stored. */
-      kitchenScreenDisplay?: Partial<Record<PassKind, boolean | null>>;
       /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

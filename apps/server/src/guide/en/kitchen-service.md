@@ -264,16 +264,10 @@ dish from a station or service zone this pass does not cover shows only on a car
 dish this pass covers, and is dimmed when drawn; while it waits for its own pass it says **Bar: waiting
 for its pass**. Dimmed dishes are there for information only.
 
-On a pass view or a pass display (view only), **Columns** also offers **Other stations' dishes**: **Use the
-profile's setting**, **Show** or **Hide**. **Hide** takes the dimmed dishes off the cards; while
-nothing this pass covers is dimmed, that is only dishes from stations and service zones it does not
-cover. A card stays in its column with its buttons even when **Hide** leaves it no dish. **Hide**
-changes only which dishes are drawn: a card's colour and the overdue count are the same as with
-**Show**. The choice is this device's own and replaces the one a manager chose for the device in the
-dashboard. There, under **Device profiles**, a profile's pass view and pass display (view only) each have
-**Show other stations' dishes on the pass**, on at first; under **Devices**, a device's **Edit**
-window has the same setting for its pass view or pass display (view only), with **Use the profile's setting**,
-**Show** and **Hide**.
+In **Device profiles**, choose one screen and its stations and zones. Every device using that
+profile inherits these choices. For a pass view or pass display (view only), turn **Show other
+stations' dishes on the pass** off to hide dimmed dishes. Use **Columns** on the pass to choose
+and arrange its columns.
 
 On each card **In progress**, tap **Ready** to mark its sent dishes ready at every station,
 including dishes this pass hides. This covers the whole card, including counter orders and dishes
@@ -399,15 +393,11 @@ ticket never says it. A ticket says it as things stand when it prints; a reprint
 Only a pass view whose device can press **Fire** releases the dishes. For a station's dishes in a
 service zone, that takes both of these:
 
-- Under **Device profiles**, the device's profile offers a pass view with the station and the zone
-  in its lists: **Pass** in **Station screens its devices may run** on a prep station display,
-  **Pass button** in **Screens it shows** on a till or handheld. It also has **Prepares orders** on
-  in **What it can do**, and **Runs the pass** on in **Screens it shows**. On a till or handheld
-  profile with a department, the zone must also be one it serves, under **Where it serves**.
-- Under **Devices**, the device is enabled and its **Edit** window chooses the pass view
-  (**Screen** on a prep station display, **Pass shows** on a till or handheld), with the station
-  and the zone in its lists. A dish whose order has no service zone needs a pass view on every
-  zone.
+- Under **Device profiles**, choose **Pass** and include the station and zone in its lists.
+  Turn on **Prepares orders** and **Runs the pass**. On a till or handheld profile with a
+  department, include the zone under **Where it serves** too.
+- Under **Devices**, enable the device and choose that profile. The device inherits the profile's
+  screen, stations and zones. A dish whose order has no service zone needs a pass view on every zone.
 
 You can save a station that waits even when no pass covers it. Until one does, **Prep
 stations** says so above its tabs, zone by zone, for example: **Nothing fires dishes from Grill in

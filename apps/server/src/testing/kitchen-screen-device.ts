@@ -19,11 +19,6 @@ export async function kitchenScreenDevice(
   const [device] = await db.insert(devices).values(row).returning({ id: devices.id });
   await withTransaction(db, async (tx) => {
     await VENUE_SERVICE.addProfileKitchenScreen(tx, row.deviceProfileId, screen);
-    await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-      deviceId: device!.id,
-      profileId: row.deviceProfileId,
-      screens: [screen],
-    });
   });
   return device!.id;
 }

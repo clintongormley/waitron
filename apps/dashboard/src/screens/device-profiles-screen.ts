@@ -54,7 +54,6 @@ import type {
   DashboardApi,
   KitchenScreenKind,
   KitchenScreenScope,
-  NarrowedDevice,
   PagePrinterRow,
   JobRole,
   Printer,
@@ -206,32 +205,15 @@ const KITCHEN_LIST_FIELDS: readonly EditorField[] = KITCHEN_SCREEN_KINDS.flatMap
   return zones === null ? [stations] : [stations, zones];
 });
 
-/**
- * The screens as compared for "changed": ids in any order, other stations' dishes shown left out
- * since an entry without the value shows them, and on a till or handheld a station or pass screen
- * on every station and every zone showing them left out, since having no row means the same there.
- */
-function comparableScreens(
-  screens: ProfileKitchenScreens,
-  ordering: boolean,
-): ProfileKitchenScreens {
+function comparableScreens(screens: ProfileKitchenScreens): ProfileKitchenScreens {
   const out: ProfileKitchenScreens = {};
   for (const kind of KITCHEN_SCREEN_KINDS) {
     const scope = screens[kind];
     if (scope === undefined) continue;
-    const hides = scope.showNonPassStations === false;
-    if (
-      ordering &&
-      kind !== "pass_monitor" &&
-      scope.stationIds === null &&
-      scope.zoneIds === null &&
-      !hides
-    )
-      continue;
     out[kind] = {
       stationIds: scope.stationIds === null ? null : [...scope.stationIds].sort(),
       zoneIds: scope.zoneIds === null ? null : [...scope.zoneIds].sort(),
-      ...(hides ? { showNonPassStations: false } : {}),
+      ...(scope.showNonPassStations === false ? { showNonPassStations: false } : {}),
     };
   }
   return out;
@@ -344,15 +326,9 @@ export function profileSettingTab(field: EditorField, formFactor: FormFactor): E
 }
 export function profileKindListsShown(
   kind: KitchenScreenKind,
-  formFactor: FormFactor,
-  capabilities: readonly string[],
   screens: ProfileKitchenScreens,
 ): boolean {
-  if (isSharedDisplay(formFactor)) return screens[kind] !== undefined;
-  if (kind === "station") return capabilities.includes("show-station");
-  return (
-    capabilities.includes("show-expo") && (kind === "pass" || screens.pass_monitor !== undefined)
-  );
+  return screens[kind] !== undefined;
 }
 export function profileReadersShown(
   ready: boolean,
@@ -434,22 +410,14 @@ export const profileSettingFields: readonly ProfileSetting[] = [
     key: `capability.${flag}`,
   })),
   ...(["kitchen", "capabilities"] as const).flatMap((tab): ProfileSetting[] => [
-    profileField(
-      "kitchenScreens",
-      tab === "kitchen"
-        ? "device_profiles.kitchen_screens"
-        : "device_profiles.kitchen_screen.pass_monitor",
-      tab,
-      (p) =>
-        tab === "kitchen"
-          ? !orderingProfile(p)
-          : orderingProfile(p) && p.capabilities.includes("show-expo"),
+    profileField("kitchenScreens", "device_profiles.kitchen_screens", tab, (p) =>
+      tab === "kitchen" ? !orderingProfile(p) : orderingProfile(p),
     ),
     ...KITCHEN_SCREEN_KINDS.flatMap((kind) => {
       const fields = KIND_FIELDS[kind];
       const offered: ProfileSetting["offered"] = (p, screens) =>
         profileSettingTab(fields.stations, p.formFactor) === tab &&
-        profileKindListsShown(kind, p.formFactor, p.capabilities, screens);
+        profileKindListsShown(kind, screens);
       return [
         ...[
           [fields.stations, "device_profiles.kitchen_stations", "device_profiles.every_station"],
@@ -470,9 +438,7 @@ export const profileSettingFields: readonly ProfileSetting[] = [
       tab,
       (p, screens) =>
         profileSettingTab("passScreenStations", p.formFactor) === tab &&
-        (["pass", "pass_monitor"] as const).some((kind) =>
-          profileKindListsShown(kind, p.formFactor, p.capabilities, screens),
-        ),
+        (["pass", "pass_monitor"] as const).some((kind) => profileKindListsShown(kind, screens)),
     ),
   ]),
   ...PRINTER_LISTS.flatMap((list) => [
@@ -505,7 +471,7 @@ const FIELD_TARGET: Record<EditorField, string> = {
   roles: "[data-test=profile-roles] wt-switch",
   actions: "[data-test=profile-actions] wt-switch",
   startingScreen: "[data-test=profile-starting-screen]",
-  kitchenScreens: "[data-test=profile-kitchen-screens] wt-switch",
+  kitchenScreens: "[data-test=profile-kitchen-screens]",
   stationScreenStations: "[data-test=profile-station-screen-stations] wt-switch",
   passScreenStations: "[data-test=profile-pass-screen-stations] wt-switch",
   passScreenZones: "[data-test=profile-pass-screen-zones] wt-switch",
@@ -787,9 +753,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[] = [];
 
-  /** The devices the last save narrowed, said under the list until the next action. */
-  @state() private narrowed: NarrowedDevice[] = [];
-
   @state() private scopeChoices: ProfileScopeChoices = { departments: [], zones: [] };
 
   @state() private jobRoles: JobRole[] = [];
@@ -857,7 +820,7 @@ export class DeviceProfilesScreen extends LitElement {
       inactivityMinutes: ordering ? this.draftInactivityMinutes : null,
       invalidInactivityText: ordering ? this.invalidInactivityText : null,
       printerLists: structuredClone(this.draftPrinterLists),
-      kitchenScreens: comparableScreens(this.draftKitchenScreens, ordering),
+      kitchenScreens: comparableScreens(this.draftKitchenScreens),
       departmentId: ordering ? this.draftDepartmentId : "",
       everyZone: ordering ? this.draftEveryZone : true,
       zoneIds: ordering && !this.draftEveryZone ? [...this.draftZoneIds].sort() : [],
@@ -909,7 +872,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#clearDraft();
-    this.narrowed = [];
     this.mode = "list";
     this.#profilesRead = false;
     super.disconnectedCallback();
@@ -995,7 +957,6 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #clearErrorOnOpen(): void {
-    this.narrowed = [];
     this.#showError(null);
     if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
   }
@@ -1012,7 +973,6 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   async #mutate(action: () => Promise<unknown>): Promise<void> {
-    this.narrowed = [];
     this.#showError(null);
     let written = false;
     try {
@@ -1177,10 +1137,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#changeEditorTab(this.#fieldTab(field));
     await this.updateComplete;
     await this.renderRoot.querySelector("wt-tabs")?.updateComplete;
-    const target =
-      field === "kitchenScreens" && this.#ordering()
-        ? "[data-test=profile-screens] wt-switch"
-        : FIELD_TARGET[field];
+    const target = FIELD_TARGET[field];
     this.renderRoot.querySelector<HTMLElement>(target)?.focus();
   }
 
@@ -1624,7 +1581,6 @@ export class DeviceProfilesScreen extends LitElement {
     return sent;
   }
 
-  /** A kind with no row reads as every station and every zone, which is what it means on a till. */
   #scopeOf(kind: KitchenScreenKind): ProfileKitchenScreen {
     return this.draftKitchenScreens[kind] ?? EVERY;
   }
@@ -1637,15 +1593,6 @@ export class DeviceProfilesScreen extends LitElement {
     const { stations, zones } = KIND_FIELDS[kind];
     this.#clearRefusal("kitchenScreens", stations, ...(zones === null ? [] : [zones]));
     this.#draftScope?.changed();
-  }
-
-  /** Switched back on, a kind takes back the lists it was opened with. */
-  #onKind(event: CustomEvent<{ checked: boolean }>, kind: KitchenScreenKind): void {
-    event.stopPropagation();
-    this.#setScreen(
-      kind,
-      event.detail.checked ? structuredClone(this.#loadedKitchenScreens[kind] ?? EVERY) : undefined,
-    );
   }
 
   /** Every station, or each switched-on station listed. */
@@ -1686,12 +1633,11 @@ export class DeviceProfilesScreen extends LitElement {
    * The kitchen screens, when this save should send them: only when they changed, so a save that
    * leaves them alone cannot be refused over a list it does not touch.
    */
-  #kitchenScreensToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
-    const ordering = !isSharedDisplay(formFactor);
+  #kitchenScreensToSend(): ProfileSaveExtras | undefined {
     if (
       sameValue(
-        comparableScreens(this.draftKitchenScreens, ordering),
-        comparableScreens(this.#loadedKitchenScreens, ordering),
+        comparableScreens(this.draftKitchenScreens),
+        comparableScreens(this.#loadedKitchenScreens),
       )
     )
       return undefined;
@@ -1708,7 +1654,7 @@ export class DeviceProfilesScreen extends LitElement {
   #extrasToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
     const loaded = this.#loaded;
     const extras: ProfileSaveExtras = {
-      ...this.#kitchenScreensToSend(formFactor),
+      ...this.#kitchenScreensToSend(),
       ...this.#equipmentToSend(),
     };
     if (isSharedDisplay(formFactor)) {
@@ -1818,7 +1764,6 @@ export class DeviceProfilesScreen extends LitElement {
   async #save(): Promise<void> {
     const state = this.#saveState();
     if (this.saving || state.unchanged || state.awaitingJobs) return;
-    this.narrowed = [];
     this.attempted = true;
     this.fieldRefusal = null;
     this.#showError(null);
@@ -1877,7 +1822,6 @@ export class DeviceProfilesScreen extends LitElement {
             );
       written = true;
       if (!active()) return;
-      this.narrowed = (saved as { narrowedDevices?: NarrowedDevice[] }).narrowedDevices ?? [];
       scope?.commit(submitted);
       if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active, turn))) return;
       if (scope?.isDirty() || readerScope?.isDirty()) this.#keepEditing(saved, submitted);
@@ -2120,7 +2064,6 @@ export class DeviceProfilesScreen extends LitElement {
           >${t("device_profiles.create")}</wt-button
         >
       </div>
-      ${this.#renderNarrowed()}
       <wt-data-table
         aria-label=${t("device_profiles.title")}
         searchable
@@ -2340,15 +2283,8 @@ export class DeviceProfilesScreen extends LitElement {
       ></wt-combobox>`;
   }
 
-  /** Whether the kind's station and zone lists are drawn: on a kitchen display while the kind is
-   * offered; on a till or handheld under its Kitchen or Pass switch, the monitor only once on. */
   #kindListsShown(kind: KitchenScreenKind): boolean {
-    return profileKindListsShown(
-      kind,
-      this.draftFormFactor,
-      this.draftCapabilities,
-      this.draftKitchenScreens,
-    );
+    return profileKindListsShown(kind, this.draftKitchenScreens);
   }
 
   #listChoices(
@@ -2362,16 +2298,6 @@ export class DeviceProfilesScreen extends LitElement {
         label: entry.name,
         on: listed.includes(entry.id),
       }));
-  }
-
-  #kindSwitch(kind: KitchenScreenKind): TemplateResult {
-    return html`<wt-switch
-      data-test="profile-${KIND_SLUG[kind]}"
-      name="kitchenScreens"
-      label=${t(`device_profiles.kitchen_screen.${kind}`)}
-      .checked=${this.draftKitchenScreens[kind] !== undefined}
-      @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onKind(e, kind)}
-    ></wt-switch>`;
   }
 
   /** "Every station", or a switch per station; for a pass screen or monitor the same for zones. */
@@ -2472,33 +2398,42 @@ export class DeviceProfilesScreen extends LitElement {
     </div>`;
   }
 
-  /** A kitchen display's screens: the kinds its devices may run, each with its lists. */
   #renderKitchenScreens(errors: FieldErrors): TemplateResult {
-    return this.#switchGroup(
-      "profile-kitchen-screens",
-      t("device_profiles.kitchen_screens"),
-      errors.kitchenScreens,
-      KITCHEN_SCREEN_KINDS.map(
-        (kind) => html`${this.#kindSwitch(kind)} ${this.#renderKindLists(kind, errors)}`,
-      ),
-      { test: "kitchen-screens-hint", text: t("device_profiles.kitchen_screens_hint") },
+    const selected = KITCHEN_SCREEN_KINDS.find(
+      (kind) => this.draftKitchenScreens[kind] !== undefined,
     );
-  }
-
-  /** "Saved." and each device the save narrowed with what it lost. */
-  #renderNarrowed(): TemplateResult | typeof nothing {
-    if (this.narrowed.length === 0) return nothing;
-    const sentences = this.narrowed.map((device) => {
-      const lost = [
-        ...device.lost.screens.map((kind) => t(`device_profiles.kitchen_screen.${kind}`)),
-        ...device.lost.stations.map((station) => station.name),
-        ...device.lost.zones.map((zone) => zone.name),
-      ].join(", ");
-      return fill("device_profiles.narrowed_device", { device: device.deviceName, lost });
-    });
-    return html`<p class="status" role="status" data-test="narrowed-devices">
-      ${[t("device_profiles.saved"), ...sentences].join(" ")}
-    </p>`;
+    return html`<p class="hint" data-test="kitchen-screens-hint">
+        ${t("device_profiles.kitchen_screens_hint")}
+      </p>
+      <wt-combobox
+        class="field"
+        data-test="profile-kitchen-screens"
+        name="kitchenScreens"
+        label=${t("device_profiles.kitchen_screens")}
+        search="never"
+        show-empty-option
+        .options=${[
+          { value: "", label: t("device_profiles.kitchen_screen.none") },
+          ...KITCHEN_SCREEN_KINDS.map((kind) => ({
+            value: kind,
+            label: t(`device_profiles.kitchen_screen.${kind}`),
+          })),
+        ]}
+        .value=${selected ?? ""}
+        .error=${errors.kitchenScreens ?? ""}
+        .invalid=${Boolean(errors.kitchenScreens)}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          const kind = KITCHEN_SCREEN_KINDS.find((kind) => kind === event.detail.value);
+          this.draftKitchenScreens =
+            kind === undefined
+              ? {}
+              : { [kind]: structuredClone(this.#loadedKitchenScreens[kind] ?? EVERY) };
+          this.#clearRefusal("kitchenScreens", ...KITCHEN_LIST_FIELDS);
+          this.#draftScope?.changed();
+        }}
+      ></wt-combobox>
+      ${selected === undefined ? nothing : this.#renderKindLists(selected, errors)}`;
   }
 
   #groupError(test: string, error: string | null | undefined): TemplateResult | typeof nothing {
@@ -2698,25 +2633,10 @@ export class DeviceProfilesScreen extends LitElement {
       ${this.#switchGroup(
         "profile-screens",
         t("device_profiles.screens"),
-        kds ? undefined : errors.kitchenScreens,
-        PROFILE_SCREENS.map((flag) =>
-          kds
-            ? this.#capabilitySwitch(flag)
-            : flag === "show-station"
-              ? html`${this.#capabilitySwitch(flag)} ${this.#renderKindLists("station", errors)}`
-              : flag === "show-expo"
-                ? html`${this.#capabilitySwitch(flag)} ${this.#renderKindLists("pass", errors)}
-                  ${
-                    this.draftCapabilities.includes("show-expo")
-                      ? html`<div class="nested">
-                          ${this.#kindSwitch("pass_monitor")}
-                          ${this.#renderKindLists("pass_monitor", errors)}
-                        </div>`
-                      : nothing
-                  }`
-                : this.#capabilitySwitch(flag),
-        ),
+        undefined,
+        PROFILE_SCREENS.map((flag) => this.#capabilitySwitch(flag)),
       )}
+      ${kds ? nothing : this.#renderKitchenScreens(errors)}
     </div>`;
   }
 
@@ -2835,7 +2755,6 @@ export class DeviceProfilesScreen extends LitElement {
             ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
           </section>
         </wt-tabs>
-        ${this.#renderNarrowed()}
         <wt-form-actions .error=${message}>
           <wt-button
             slot="cancel"

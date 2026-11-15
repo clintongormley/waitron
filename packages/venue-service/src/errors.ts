@@ -140,11 +140,11 @@ declare module "@waitron/shared" {
         | "required"
         | "department_required"
         | "shared_display"
+        | "one_only"
         | "not_for_screen";
     };
     /** A device was given a station its profile does not offer. */
     "station.not_allowed": { stationId: string; screen: "station" | "pass" | "pass_monitor" };
-    "kitchen_screen.required": Record<string, never>;
     "kitchen_screen.not_allowed": { screen: "station" | "pass" | "pass_monitor" };
     /** null: an order in no zone. */
     "kitchen_screen.zone_not_allowed": { zoneId: string | null };

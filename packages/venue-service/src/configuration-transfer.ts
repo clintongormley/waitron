@@ -646,6 +646,11 @@ function validateVenueServiceConfiguration(
     readonly holidayArea?: Readonly<Record<string, unknown>> | null;
   },
 ): void {
+  const screenProfiles = new Set<unknown>();
+  for (const row of tables.device_profile_kitchen_screens ?? []) {
+    if (screenProfiles.has(row.device_profile_id)) refuse("device_profile_kitchen_screens.screen");
+    screenProfiles.add(row.device_profile_id);
+  }
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
   validateServiceSteps(tables);

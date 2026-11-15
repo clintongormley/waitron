@@ -102,7 +102,6 @@ const BLIND: readonly { route: string; class: Class; reason: string }[] = [
 const BODIES: Readonly<Record<string, () => unknown>> = {
   // A fresh person each time, so no two sign-in attempts share a PIN throttle entry.
   "POST /api/session": () => ({ personId: randomUUID(), pin: "1234" }),
-  "PUT /api/device/kitchen-screen-display": () => ({ kind: "pass", showNonPassStations: null }),
 };
 
 /** The owner's named routes, and the kitchen screens, that must be among the refused. */
@@ -119,7 +118,6 @@ const NAMED_REFUSED = [
   "GET /api/device/pass-board",
   "POST /api/device/pass-screen/release",
   "GET /api/device/pass-monitor-board",
-  "PUT /api/device/kitchen-screen-display",
   "DELETE /api/session",
 ];
 
@@ -141,15 +139,17 @@ async function person(name: string, role: "staff" | "admin"): Promise<string> {
 
 /** A till whose profile lists every capability flag and shows a station screen and `pass`, so each
  * kitchen route reaches its person check on one of them. */
-async function kitchenTill(stationId: string, pass: "pass" | "pass_monitor"): Promise<string> {
+async function kitchenTill(
+  stationId: string,
+  pass: "station" | "pass" | "pass_monitor",
+): Promise<string> {
   const [profile] = await seedDeviceProfiles(suite.db, {
     name: `Profile ${randomUUID()}`,
     formFactor: "till",
     capabilities: [...CAPABILITY_FLAGS],
   });
   const kitchenScreens: DeviceKitchenScreen[] = [
-    { kind: "station", stationIds: [stationId], zoneIds: null },
-    { kind: pass, stationIds: null, zoneIds: null },
+    { kind: pass, stationIds: pass === "station" ? [stationId] : null, zoneIds: null },
   ];
   const label = `Till ${randomUUID()}`;
   const device = await withTransaction(suite.db, async (tx) => {
@@ -158,7 +158,6 @@ async function kitchenTill(stationId: string, pass: "pass" | "pass_monitor"): Pr
     const accepted = await acceptDeviceJoinRequest(tx, v.cfg, made.joinId, {
       label,
       profileId: profile!.id,
-      kitchenScreens,
     });
     return { deviceId: accepted.deviceId, token: made.token };
   });
@@ -301,7 +300,11 @@ beforeAll(async () => {
     .insert(kitchenStations)
     .values({ name: `Grill ${randomUUID()}` })
     .returning({ id: kitchenStations.id });
-  tills = [await kitchenTill(station!.id, "pass"), await kitchenTill(station!.id, "pass_monitor")];
+  tills = [
+    await kitchenTill(station!.id, "station"),
+    await kitchenTill(station!.id, "pass"),
+    await kitchenTill(station!.id, "pass_monitor"),
+  ];
 }, 120_000);
 
 describe("every till, device and schedule route checks the person a request names", () => {

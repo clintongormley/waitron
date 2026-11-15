@@ -60,7 +60,6 @@ const devices: DeviceRow[] = [
         profileEveryStation: true,
         stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
         zones: null,
-        nonPassStationsOverride: null,
         showNonPassStations: true,
       },
     ],
@@ -466,7 +465,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             profileEveryStation: true,
             stations: [slot("s1", "Kitchen"), slot("s9", "Deli", false)],
             zones: [slot("z1", "Terrace"), { ...slot("z3", "Patio", false), switchedOff: true }],
-            nonPassStationsOverride: null,
             showNonPassStations: true,
           },
         ],
@@ -494,10 +492,10 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await flush(el);
       deep(el.shadowRoot!, "[data-test=edit-device-monitor]")!.click();
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("[data-test=edit-gone]")).not.toBeNull(),
+        expect(el.shadowRoot!.querySelector("[data-test=edit-name]")).not.toBeNull(),
       );
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z2]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z2]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z3]")).toBeNull();
       const dialog = el
         .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
@@ -505,54 +503,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       const body = dialog.querySelector<HTMLElement>(".body")!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
-      await expectNoA11yViolations(host);
-      await page.viewport(1280, 900);
-    },
-  );
-
-  it.each([390, 1280])(
-    "renders a pass display's choice for other stations' dishes, stored and changed, accessibly at %ipx",
-    async (width) => {
-      await page.viewport(width, 900);
-      const pass: DeviceRow = {
-        ...devices[0]!,
-        id: "passdisplay",
-        kind: "kds_station",
-        deviceProfileId: "dp3",
-        kitchenScreens: [
-          {
-            kind: "pass",
-            available: true,
-            everyStation: true,
-            everyZone: true,
-            profileEveryStation: true,
-            stations: [],
-            zones: null,
-            nonPassStationsOverride: false,
-            showNonPassStations: false,
-          },
-        ],
-      };
-      const { el, host } = await mountWidget<DevicesScreen>(
-        "dashboard-devices-screen",
-        { api: stubApi({ listDevices: vi.fn().mockResolvedValue([pass]) }) },
-        theme,
-      );
-      await flush(el);
-      deep(el.shadowRoot!, "[data-test=edit-device-passdisplay]")!.click();
-      await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("[data-test=edit-other-stations]")).not.toBeNull(),
-      );
-      await flush(el);
-      const choice = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-        "[data-test=edit-other-stations]",
-      )!;
-      expect(choice.value).toBe("hide");
-      await expectNoA11yViolations(host);
-      await chooseOption(choice, "show");
-      await flush(el);
-      expect(choice.value).toBe("show");
-      expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },
@@ -773,13 +723,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
       await flush(el);
-      expect(
-        (
-          el.shadowRoot!.querySelector("[data-test=pair-screen]") as HTMLElement & {
-            placeholder: string;
-          }
-        ).placeholder,
-      ).toBe(t("devices.kitchen_screen_none_offered"));
+      expect(el.shadowRoot!.querySelector("[data-test=pair-screen]")).toBeNull();
       const pairDialog = el
         .shadowRoot!.querySelector("[data-test=pair-modal]")!
         .shadowRoot!.querySelector("dialog")!;
@@ -813,7 +757,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
               profileEveryStation: true,
               stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
               zones: null,
-              nonPassStationsOverride: null,
               showNonPassStations: true,
             },
           ],
@@ -843,7 +786,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-choice]")).not.toBeNull());
       el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("[data-test=pair-screen]")).not.toBeNull(),
+        expect(el.shadowRoot!.querySelector("[data-test=pair-profile]")).not.toBeNull(),
       );
       await flush(el);
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
@@ -983,13 +926,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
       await el.updateComplete;
-      const screen = el.shadowRoot!.querySelector("[data-test=pair-screen]")!;
-      await chooseOption(screen, "station");
-      await el.updateComplete;
-      el.shadowRoot!.querySelector("[data-test=pair-screen-every-station]")!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: false } }),
-      );
-      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=pair-submit]")!.click();
       await vi.waitFor(() =>
         expect(
@@ -997,16 +933,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             .error,
         ).not.toBe(""),
       );
-      await flush(el);
-      expect(
-        Array.from(
-          el.shadowRoot!.querySelectorAll<HTMLElement & { label: string }>(
-            "[data-test=pair-screen-stations] wt-switch",
-          ),
-        ).map((toggle) => toggle.label),
-      ).toEqual(["Todas las estaciones", "Kitchen", "Back bar"]);
-      await userEvent.click(screen.shadowRoot!.querySelector(".trigger")!);
-      await userEvent.keyboard("{Escape}");
       await flush(el);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
@@ -1110,7 +1036,6 @@ describe("devices-screen a11y — the numeric match", () => {
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
         name: "Pass display",
         profileId: "dp1",
-        kitchenScreens: [],
       }),
     );
   });

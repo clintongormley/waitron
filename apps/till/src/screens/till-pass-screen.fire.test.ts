@@ -42,7 +42,7 @@ const deviceBoard = (board: PassBoard = toFireBoard()): DevicePassBoard => ({
   board,
   stations: [],
   zones: null,
-  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  display: { showNonPassStations: true },
 });
 
 function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
@@ -59,7 +59,6 @@ function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
               available: true,
               stations: [],
               zones: null,
-              nonPassStationsOverride: null,
               showNonPassStations: true,
             },
           ],

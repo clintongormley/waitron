@@ -1,5 +1,9 @@
 # A366 slice 6A: legacy screen case map
 
+> **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
+> devices. Device screen choices, narrowing history and the four device-screen tables are retired.
+> See [the remaining-device plan](2026-11-15-a1534-remaining-devices.md).
+
 > **2026-10-11 supersession.** A435 step 6 retires hierarchy Enable/Disable and disabled-name offers under a separate changed-check inventory. This preservation map and its receipts remain historical. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

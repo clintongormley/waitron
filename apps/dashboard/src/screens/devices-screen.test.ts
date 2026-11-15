@@ -97,7 +97,6 @@ const devices: DeviceRow[] = [
         profileEveryStation: true,
         stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
         zones: null,
-        nonPassStationsOverride: null,
         showNonPassStations: true,
       },
     ],
@@ -402,6 +401,36 @@ const devicesTable = (el: DevicesScreen) =>
   q(el, "[data-test=devices-table]") as HTMLElementTagNameMap["wt-data-table"];
 
 describe("devices-screen", () => {
+  it("inherits the profile without device screen controls or a Shows column", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    await devicesTable(el).updateComplete;
+    expect(devicesTable(el).columns.map((column) => column.key)).not.toContain("shows");
+    devicesTable(el)
+      .shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="d1"] .row-activate')!
+      .click();
+    await flush(el);
+    expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    expect(q(el, "[data-test=edit-screen]")).toBeNull();
+    expect(q(el, "[data-test=edit-kitchen-stations]")).toBeNull();
+    const name = q(el, "[data-test=edit-name]")!;
+    name.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Renamed display" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    q(el, "[data-test=edit-save]")!.click();
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalled());
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+      "kitchenScreenDisplay",
+    );
+  });
+
   it("offers one Add a device action when empty and keeps the heading action with rows", async () => {
     for (const rows of [[], devices]) {
       const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
@@ -504,10 +533,7 @@ describe("devices-screen", () => {
     expect(deepText(el, "[data-test=device-label-d1]")).toBe("Grill display");
     // The deviceProfileId resolves to the profile's display name, not the raw id.
     expect(deepText(el, "[data-test=device-profile-d1]")).toBe("Counter till");
-    // What a device shows reads out its kitchen screens by name, not by id.
-    expect(deepText(el, "[data-test=device-screen-d1-station]")).toBe(
-      `${t("device_profiles.kitchen_screen.station", "es-ES")}: Hot line`,
-    );
+    expect(dq(el.shadowRoot!, "[data-test=device-screen-d1-station]")).toBeNull();
     expect(dq(el.shadowRoot!, "[data-test=device-status-d1]")).toBeNull();
     // Last-seen is the timestamp formatted to the minute, not the raw ISO string.
     expect(deepText(el, "[data-test=device-last-seen-d1]")).toBe("2026-08-25 14:30");
@@ -519,9 +545,7 @@ describe("devices-screen", () => {
     await flush(el);
 
     expect(deepText(el, "[data-test=device-profile-d2]")).toBe("");
-    expect(deepText(el, "[data-test=device-screens-d2]")).toBe(
-      t("devices.no_kitchen_screen", "es-ES"),
-    );
+    expect(dq(el.shadowRoot!, "[data-test=device-screens-d2]")).toBeNull();
     expect(deepText(el, "[data-test=device-last-seen-d2]")).toBe(
       t("devices.last_seen_never", "es-ES"),
     );
@@ -649,7 +673,6 @@ describe("the device table", () => {
     expect(table.columns.map((c) => [c.key, c.label])).toEqual([
       ["name", t("devices.name")],
       ["profile", t("devices.device_profile")],
-      ["shows", t("devices.shows")],
       ["receipt", t("devices.receipt_printer_now")],
       ["slip", t("devices.slip_printer_now")],
       ["drawer", t("devices.cash_drawer_now")],
@@ -662,7 +685,7 @@ describe("the device table", () => {
     expect(table.columns.at(-1)!.pinned).toBe("end");
     expect(table.rows.map((row) => (row as DeviceRow).id)).toEqual(["d1", "d2", "t1"]);
     // What a device shows is a kitchen screen's; a till's cell is empty.
-    expect(deepText(el, "[data-test=device-screens-t1]")).toBe("");
+    expect(dq(el.shadowRoot!, "[data-test=device-screens-t1]")).toBeNull();
     expect(deepText(el, "[data-test=device-label-t1]")).toBe("Cash till 1");
   });
 
@@ -1054,7 +1077,6 @@ describe("the device table", () => {
       expect(headers).toEqual([
         t("devices.name"),
         t("devices.device_profile"),
-        t("devices.shows"),
         t("devices.receipt_printer_now"),
         t("devices.slip_printer_now"),
         t("devices.cash_drawer_now"),
@@ -1365,33 +1387,6 @@ describe("the Edit dialog", () => {
     ]);
   });
 
-  it("pre-fills a kitchen display's Screen and its stations, required, and draws no Made here", async () => {
-    const api = editApi();
-    const el = await openEdit(api, "k1");
-    const screen = field(el, "edit-screen");
-    expect([screen.name, screen.required, screen.label, screen.value]).toEqual([
-      "kitchenScreen",
-      true,
-      t("devices.kitchen_screen"),
-      "station",
-    ]);
-    expect(screen.options).toEqual([
-      { value: "station", label: t("device_profiles.kitchen_screen.station") },
-      { value: "pass", label: t("device_profiles.kitchen_screen.pass") },
-    ]);
-    const switches = [
-      ...q(el, "[data-test=edit-screen-stations]")!.querySelectorAll<
-        HTMLElement & { checked: boolean }
-      >("wt-switch"),
-    ].map((s) => [s.dataset.test, s.checked]);
-    expect(switches).toEqual([
-      ["edit-screen-every-station", false],
-      ["edit-screen-station-s1", true],
-      ["edit-screen-station-s2", false],
-    ]);
-    expect(q(el, "[data-test=edit-made-here]")).toBeNull();
-  });
-
   it("says the printers are loading, not Use default (None) alone, while the printer list loads", async () => {
     let answer!: (rows: Printer[]) => void;
     const el = await openEdit(
@@ -1612,23 +1607,6 @@ describe("the Edit dialog", () => {
     // The reader did not change, so its own route is not called.
     expect(api.setDeviceReader).not.toHaveBeenCalled();
     expect(api.listDevices).toHaveBeenCalledTimes(2);
-  });
-
-  it("sends a kitchen display's chosen screen, and no made-here stations, which it does not show", async () => {
-    const api = editApi();
-    const el = await openEdit(api, "k1");
-    await chooseOption(q(el, "[data-test=edit-screen]")!, "pass");
-    await flush(el);
-    await save(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(api.updateDevice).toHaveBeenCalledWith("k1", {
-      name: "Grill display",
-      profileId: "pk",
-      kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
-    });
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
   });
 
   it("saves a kitchen screen whose stored made-here station was switched off after this screen read its stations", async () => {
@@ -2175,17 +2153,6 @@ describe("the Edit dialog", () => {
     expect(await bottom(el)).toBe("");
   });
 
-  it("a kitchen profile asks for what it shows before saving", async () => {
-    const api = editApi();
-    const el = await openEdit(api);
-    await chooseOption(q(el, "[data-test=edit-profile]")!, "pk");
-    await flush(el);
-    expect(q(el, "[data-test=edit-made-here]")).toBeNull();
-    await save(el);
-    expect(api.updateDevice).not.toHaveBeenCalled();
-    expect(field(el, "edit-screen").error).toBe(codeMessage("kitchen_screen.required"));
-  });
-
   it("a name clash shows under Name, and editing the name clears it", async () => {
     const api = editApi({
       updateDevice: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
@@ -2231,7 +2198,6 @@ describe("the Edit dialog", () => {
 
   it.each([
     { code: "device_profile.not_found", params: {}, under: "edit-profile" },
-    { code: "kitchen_screen.required", params: {}, under: "edit-screen" },
     {
       code: "management.request_invalid",
       params: { field: "profileId" },
@@ -2620,10 +2586,10 @@ describe("the Edit dialog", () => {
         device: "t1",
         shown: ["name", "profile", "receipt", "slip", "reader", "madeHere:s1", "madeHere:s2"],
       },
-      { device: "k1", shown: ["name", "profile", "screen", "receipt", "slip", "reader"] },
+      { device: "k1", shown: ["name", "profile", "receipt", "slip", "reader"] },
       {
         device: "k2",
-        shown: ["name", "profile", "screen", "receipt", "slip", "reader", "otherStations"],
+        shown: ["name", "profile", "receipt", "slip", "reader"],
         rows: [
           till,
           {
@@ -2639,7 +2605,6 @@ describe("the Edit dialog", () => {
                 profileEveryStation: true,
                 stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
                 zones: null,
-                nonPassStationsOverride: null,
                 showNonPassStations: true,
               },
             ],
@@ -4111,7 +4076,6 @@ describe("add a device", () => {
 
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
     await el.updateComplete;
-    await chooseOption(q(el, "[data-test=pair-screen]")!, "station");
     typeField(el, "[data-test=pair-name]", "Bar 2");
     await el.updateComplete;
     q(el, "[data-test=pair-submit]")!.click();
@@ -4120,7 +4084,6 @@ describe("add a device", () => {
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
       name: "Bar 2",
       profileId: "dp3",
-      kitchenScreens: [{ kind: "station", stationIds: null, zoneIds: null }],
     });
     expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
       t("devices.added").replace("{name}", "Bar 2"),
@@ -4129,73 +4092,6 @@ describe("add a device", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2);
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
     expect(q(el, "[data-test=add-device-modal]")).toBeNull();
-  });
-
-  it("sends a kitchen display's pass screen, and no kitchen screens for a till", async () => {
-    const api = stubApi({
-      listStations: vi
-        .fn()
-        .mockResolvedValue([...stations, { ...stations[0]!, id: "retired", active: false }]),
-    });
-    const el = await openAdd(api);
-    await toSettings(el);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
-    await el.updateComplete;
-    const screen = q(el, "[data-test=pair-screen]") as HTMLElement & {
-      name: string;
-      label: string;
-      required: boolean;
-      placeholder: string;
-      options: unknown[];
-    };
-    expect(screen.name).toBe("kitchenScreen");
-    expect(screen.label).toBe(t("devices.kitchen_screen"));
-    expect(screen.required).toBe(true);
-    expect(screen.placeholder).toBe(t("devices.kitchen_screen_pick"));
-    expect(screen.options).toEqual([
-      { value: "station", label: t("device_profiles.kitchen_screen.station") },
-      { value: "pass", label: t("device_profiles.kitchen_screen.pass") },
-    ]);
-    await chooseOption(screen, "station");
-    await el.updateComplete;
-    (q(el, "[data-test=pair-screen-every-station]") as HTMLElement).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false } }),
-    );
-    await el.updateComplete;
-    // The retired station is left out.
-    expect(
-      [...q(el, "[data-test=pair-screen-stations]")!.querySelectorAll("wt-switch")].map(
-        (toggle) => toggle.dataset.test,
-      ),
-    ).toEqual(["pair-screen-every-station", "pair-screen-station-s1", "pair-screen-station-s2"]);
-    await chooseOption(screen, "pass");
-    await el.updateComplete;
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "dp3",
-      kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
-    });
-
-    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    q(el, "[data-test=add-another-device]")!.click();
-    await vi.waitFor(() => expect(d(el, "[data-test=pair-r2]")).not.toBeNull());
-    await openPair(el, "r2");
-    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pair-profile]")).not.toBeNull());
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
-    await el.updateComplete;
-    expect(q(el, "[data-test=pair-screen]")).toBeNull();
-    expect(q(el, "[data-test=pair-pass]")).toBeNull();
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(2));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenLastCalledWith("r2", {
-      name: "Pass monitor",
-      profileId: "dp1",
-      kitchenScreens: [],
-    });
   });
 
   it("names the settings fields and marks each required", async () => {
@@ -4286,87 +4182,7 @@ describe("add a device", () => {
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
     await el.updateComplete;
     expect((q(el, "[data-test=pair-profile]") as Field).error).toBe("");
-    expect((q(el, "[data-test=pair-screen]") as Field).error).toBe(
-      codeMessage("kitchen_screen.required"),
-    );
-    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
-    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { code: "kitchen_screen.invalid", params: { field: "stationIds", reason: "not_found" } },
-    { code: "station.not_allowed", params: { stationId: "s1" } },
-  ])("a $code refusal naming a station goes under the screen's stations", async (error) => {
-    const api = stubApi({ acceptDeviceJoinRequest: vi.fn().mockRejectedValue(error) });
-    const el = await openAdd(api);
-    await toSettings(el);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
-    await el.updateComplete;
-    await chooseOption(q(el, "[data-test=pair-screen]")!, "station");
-    await el.updateComplete;
-    (q(el, "[data-test=pair-screen-every-station]") as HTMLElement).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false } }),
-    );
-    await el.updateComplete;
-
-    q(el, "[data-test=pair-submit]")!.click();
-
-    await vi.waitFor(() =>
-      expect(q(el, "[data-test=pair-screen-stations-error]")?.textContent?.trim()).toBe(
-        codeMessage(error.code),
-      ),
-    );
-    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
-  });
-
-  it("offers a kitchen profile only the screens and stations it lists, and says when it lists none", async () => {
-    const api = stubApi({
-      listDeviceProfiles: vi
-        .fn()
-        .mockResolvedValue([
-          ...deviceProfiles,
-          { ...deviceProfiles[2]!, id: "dp4", name: "Empty" },
-        ]),
-      listProfileKitchenScreens: vi.fn().mockResolvedValue([
-        {
-          profileId: "dp3",
-          screens: {
-            station: { stationIds: ["s2"], zoneIds: null },
-            pass: { stationIds: null, zoneIds: null },
-          },
-        },
-      ]),
-    });
-    const el = await openAdd(api);
-    await toSettings(el);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
-    await el.updateComplete;
-    const screen = () =>
-      q(el, "[data-test=pair-screen]") as HTMLElement & {
-        options: unknown[];
-        placeholder: string;
-      };
-    expect(screen().options).toEqual([
-      { value: "station", label: t("device_profiles.kitchen_screen.station") },
-      { value: "pass", label: t("device_profiles.kitchen_screen.pass") },
-    ]);
-    expect(screen().placeholder).toBe(t("devices.kitchen_screen_pick"));
-    await chooseOption(screen(), "station");
-    await el.updateComplete;
-    (q(el, "[data-test=pair-screen-every-station]") as HTMLElement).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false } }),
-    );
-    await el.updateComplete;
-    expect(
-      [...q(el, "[data-test=pair-screen-stations]")!.querySelectorAll("wt-switch")].map(
-        (toggle) => toggle.dataset.test,
-      ),
-    ).toEqual(["pair-screen-every-station", "pair-screen-station-s2"]);
-
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp4");
-    await el.updateComplete;
-    expect(screen().options).toEqual([]);
-    expect(screen().placeholder).toBe(t("devices.kitchen_screen_none_offered"));
+    expect(q(el, "[data-test=pair-screen]")).toBeNull();
   });
 
   it("puts a request-invalid refusal under the field its params name", async () => {
@@ -4472,7 +4288,6 @@ describe("add a device", () => {
     return {
       name: native("pair-name"),
       profile: native("pair-profile"),
-      screen: native("pair-screen"),
     };
   }
 
@@ -4480,11 +4295,10 @@ describe("add a device", () => {
     await toSettings(el);
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
     await el.updateComplete;
-    await chooseOption(q(el, "[data-test=pair-screen]")!, "station");
     await flush(el);
   }
 
-  const enabled = { name: false, profile: false, screen: false };
+  const enabled = { name: false, profile: false };
 
   it("takes no new value in any settings field while Pair is unanswered", async () => {
     let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
@@ -4498,7 +4312,7 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await flush(el);
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
-    expect(pairFieldsDisabled(el)).toEqual({ name: true, profile: true, screen: true });
+    expect(pairFieldsDisabled(el)).toEqual({ name: true, profile: true });
 
     answer({ deviceId: "d9", name: "Bar 1", formFactor: "kds" });
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
@@ -4829,7 +4643,6 @@ describe("add a device", () => {
             profileEveryStation: false,
             stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
             zones: null,
-            nonPassStationsOverride: null,
             showNonPassStations: true,
           },
         ],
@@ -4944,10 +4757,7 @@ describe("add a device", () => {
       });
       expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Revoked pass");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
-      expect(
-        (q(el, "[data-test=pair-screen-station-s1]") as HTMLElement & { checked: boolean }).checked,
-      ).toBe(true);
+      expect(q(el, "[data-test=pair-screen]")).toBeNull();
       vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
         deviceId: "d2",
         name: "Revoked pass",
@@ -4959,53 +4769,11 @@ describe("add a device", () => {
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
         name: "Revoked pass",
         profileId: "dp3",
-        kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
       });
       expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
         t("devices.added").replace("{name}", "Revoked pass"),
       );
       expect(api.denyJoinRequest).not.toHaveBeenCalled();
-    });
-
-    it("fills in a kitchen display's pass screen", async () => {
-      const slot = (id: string, name: string) => ({
-        id,
-        name,
-        available: true,
-        switchedOff: false,
-      });
-      const api = waiting({
-        ...returning,
-        returning: {
-          name: "Revoked pass",
-          profileId: "dp3",
-          kitchenScreens: [
-            {
-              kind: "pass",
-              available: true,
-              everyStation: true,
-              everyZone: true,
-              profileEveryStation: true,
-              stations: [slot("s1", "Kitchen"), slot("s2", "Back bar")],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ],
-          profileRetired: false,
-        },
-      });
-      const el = await openAdd(api);
-      await toReturnSettings(el);
-
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("pass");
-      q(el, "[data-test=pair-submit]")!.click();
-      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
-        name: "Revoked pass",
-        profileId: "dp3",
-        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
-      });
     });
 
     it("whose profile is gone opens with the profile empty, and Add waits until one is chosen", async () => {
@@ -5039,7 +4807,6 @@ describe("add a device", () => {
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
         name: "Old cash till",
         profileId: "dp1",
-        kitchenScreens: [],
       });
     });
 
@@ -5056,59 +4823,6 @@ describe("add a device", () => {
       };
       expect(profile.options.map((o) => o.value)).toContain("dp3");
       expect(profile.value).toBe("");
-    });
-
-    it("whose deleted station leaves an explicit empty station choice", async () => {
-      const api = waiting({
-        ...returning,
-        returning: {
-          ...returning.returning!,
-          kitchenScreens: [
-            {
-              kind: "station",
-              available: true,
-              everyStation: false,
-              everyZone: true,
-              profileEveryStation: false,
-              stations: [{ id: "s1", name: "Kitchen", available: false, switchedOff: true }],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ],
-        },
-      });
-      vi.mocked(api.listStations).mockResolvedValue([
-        { ...stations[0]!, active: false },
-        stations[1]!,
-      ]);
-      const el = await openAdd(api);
-      await toReturnSettings(el);
-
-      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
-      const every = q(el, "[data-test=pair-screen-every-station]")!;
-      expect(every.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
-      expect(q(el, '[data-test="empty-station-selection"]')!.textContent?.trim()).toBe(
-        t("devices.empty_station_selection"),
-      );
-    });
-
-    it("whose station its profile no longer lists keeps an explicit empty choice", async () => {
-      const api = waiting();
-      vi.mocked(api.listProfileKitchenScreens).mockResolvedValue([
-        { profileId: "dp3", screens: { station: { stationIds: ["s2"], zoneIds: null } } },
-      ]);
-      const el = await openAdd(api);
-      await toReturnSettings(el);
-
-      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
-      const every = q(el, "[data-test=pair-screen-every-station]")!;
-      expect(every.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
-      expect(q(el, '[data-test="empty-station-selection"]')!.textContent?.trim()).toBe(
-        t("devices.empty_station_selection"),
-      );
     });
 
     describe("while its Add dialog is open", () => {
@@ -5237,1168 +4951,6 @@ describe("add a device", () => {
       expect(api.joinChallenge).not.toHaveBeenCalled();
       expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Revoked pass");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-    });
-  });
-});
-
-describe("a device's kitchen screens", () => {
-  type Field = HTMLElement & {
-    value: string;
-    error: string;
-    label: string;
-    name: string;
-    required: boolean;
-    options: { value: string; label: string }[];
-  };
-  type Switch = HTMLElement & { checked: boolean; label: string };
-
-  const deli: Station = { ...stations[0]!, id: "s3", name: "Deli" };
-  const ksStations = [...stations, deli];
-  const zones = [
-    { id: "z1", name: "Terrace", displayOrder: 0, active: true },
-    { id: "z2", name: "Room", displayOrder: 1, active: true },
-  ];
-  const kdsProfile: DeviceProfile = { ...deviceProfiles[2]!, id: "pk", name: "Kitchen KDS" };
-  const tillProfile: DeviceProfile = {
-    ...deviceProfiles[0]!,
-    id: "pa",
-    name: "Cash till",
-    capabilities: ["show-station", "show-expo"],
-  };
-  const handheldProfile: DeviceProfile = {
-    ...deviceProfiles[1]!,
-    id: "pb",
-    name: "Comandera",
-    capabilities: ["show-expo"],
-  };
-  const offered = [
-    {
-      profileId: "pk",
-      screens: {
-        station: { stationIds: ["s1", "s2"], zoneIds: null },
-        pass_monitor: { stationIds: null, zoneIds: ["z1", "z2"] },
-      },
-    },
-    { profileId: "pa", screens: { pass_monitor: { stationIds: null, zoneIds: null } } },
-    { profileId: "pb", screens: {} },
-  ];
-
-  const slot = (id: string, available = true) => ({
-    id,
-    name: [...ksStations, ...zones].find((entry) => entry.id === id)!.name,
-    available,
-    switchedOff: false,
-  });
-  const base: DeviceRow = {
-    ...devices[0]!,
-    madeHereStationIds: [],
-    approvedProfileIds: [],
-    receiptPrinterId: null,
-    paymentSlipPrinterId: null,
-    kitchenScreens: [],
-  };
-  const kds = (id: string, kitchenScreens: DeviceRow["kitchenScreens"]): DeviceRow => ({
-    ...base,
-    id,
-    label: `Pantalla ${id}`,
-    kind: "kds_station",
-    deviceProfileId: "pk",
-    approvedProfileIds: ["pk"],
-    kitchenScreens,
-  });
-  const tillRow = (id: string, kitchenScreens: DeviceRow["kitchenScreens"]): DeviceRow => ({
-    ...base,
-    id,
-    label: `Cash till ${id}`,
-    kind: "till",
-    deviceProfileId: "pa",
-    approvedProfileIds: ["pa"],
-    kitchenScreens,
-  });
-
-  function ksApi(rows: DeviceRow[], overrides: Partial<DashboardApi> = {}): DashboardApi {
-    return stubApi({
-      listDevices: vi.fn().mockResolvedValue(rows),
-      listStations: vi.fn().mockResolvedValue(ksStations),
-      listZones: vi.fn().mockResolvedValue(zones),
-      listDeviceProfiles: vi.fn().mockResolvedValue([kdsProfile, tillProfile, handheldProfile]),
-      listProfileKitchenScreens: vi.fn().mockResolvedValue(offered),
-      joinRequests: vi
-        .fn()
-        .mockResolvedValue([{ ...pending[0]!, pairingBy: { name: "Me", mine: true } }]),
-      ...overrides,
-    });
-  }
-
-  const field = (el: DevicesScreen, id: string) => q(el, `[data-test=${id}]`) as Field;
-  const sw = (el: DevicesScreen, id: string) => q(el, `[data-test=${id}]`) as Switch;
-  function toggle(el: DevicesScreen, id: string, checked: boolean): void {
-    sw(el, id).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
-    );
-  }
-  const switchesIn = (el: DevicesScreen, group: string) =>
-    [...q(el, `[data-test=${group}]`)!.querySelectorAll<Switch>("wt-switch")].map((s) => [
-      s.dataset.test,
-      s.checked,
-    ]);
-  const groupError = (el: DevicesScreen, group: string) =>
-    q(el, `[data-test=${group}-error]`)?.textContent?.trim() ?? "";
-
-  async function openEdit(api: DashboardApi, id: string): Promise<DevicesScreen> {
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-      api,
-      panels: PANELS,
-    });
-    await flush(el);
-    dq(el.shadowRoot!, `[data-test=edit-device-${id}]`)!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
-    await flush(el);
-    await flush(el);
-    return el;
-  }
-
-  async function openPair(api: DashboardApi): Promise<DevicesScreen> {
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-      api,
-      qrFor: vi.fn().mockResolvedValue("data:image/png;base64,FAKE"),
-    });
-    await flush(el);
-    q(el, "[data-test=open-add-device]")!.click();
-    await vi.waitFor(() => expect(dq(el.shadowRoot!, "[data-test=pair-r1]")).not.toBeNull());
-    await vi.waitFor(() =>
-      expect(
-        (dq(el.shadowRoot!, "[data-test=pair-r1]") as Field & { disabled: boolean }).disabled,
-      ).toBe(false),
-    );
-    dq(el.shadowRoot!, "[data-test=pair-r1]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
-    await flush(el);
-    return el;
-  }
-
-  async function saveEdit(el: DevicesScreen): Promise<void> {
-    q(el, "[data-test=edit-save]")!.click();
-    await flush(el);
-  }
-
-  it("service deletion keeps an empty native device zone bound through an unrelated save", async () => {
-    const api = ksApi(
-      [
-        kds("k1", [
-          {
-            kind: "pass_monitor",
-            available: true,
-            everyStation: true,
-            everyZone: false,
-            profileEveryStation: true,
-            stations: [],
-            zones: [],
-            nonPassStationsOverride: null,
-            showNonPassStations: true,
-          },
-        ]),
-      ],
-      {
-        listProfileKitchenScreens: vi
-          .fn()
-          .mockResolvedValue([
-            { profileId: "pk", screens: { pass_monitor: { stationIds: null, zoneIds: [] } } },
-          ]),
-      },
-    );
-    const el = await openEdit(api, "k1");
-    const every = q(el, "[data-test=edit-screen-every-zone]") as
-      HTMLElementTagNameMap["wt-switch"] | null;
-    expect(every).not.toBeNull();
-    await every!.updateComplete;
-    expect(every!.shadowRoot!.querySelector("input")!.checked).toBe(false);
-    const name = q(el, "[data-test=edit-name]") as HTMLElementTagNameMap["wt-input"];
-    await name.updateComplete;
-    await userEvent.fill(
-      page.elementLocator(name.shadowRoot!.querySelector("input")!),
-      "Retained empty bounds",
-    );
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
-  });
-  it("service deletion removes a deleted zone from live native device choices", async () => {
-    const api = ksApi(
-      [
-        kds("k1", [
-          {
-            kind: "pass_monitor",
-            available: true,
-            everyStation: true,
-            everyZone: false,
-            profileEveryStation: true,
-            stations: [],
-            zones: [slot("z1"), slot("z2")],
-            nonPassStationsOverride: null,
-            showNonPassStations: true,
-          },
-        ]),
-      ],
-      { liveData: new LiveData() },
-    );
-    const el = await openEdit(api, "k1");
-    expect(q(el, "[data-test=edit-screen-zone-z1]")).not.toBeNull();
-    vi.mocked(api.listZones).mockResolvedValue(zones.slice(1));
-    api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-screen-zone-z1]")).toBeNull());
-    const survivor = q(el, "[data-test=edit-screen-zone-z2]") as HTMLElementTagNameMap["wt-switch"];
-    await survivor.updateComplete;
-    expect(survivor.shadowRoot!.querySelector("input")!.checked).toBe(true);
-  });
-
-  it("a kitchen display chooses its Screen from the kinds its profile offers, then stations within the profile's", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pk");
-    await flush(el);
-    const screen = field(el, "pair-screen");
-    expect([screen.name, screen.required, screen.label, screen.value]).toEqual([
-      "kitchenScreen",
-      true,
-      t("devices.kitchen_screen"),
-      "",
-    ]);
-    expect(screen.options).toEqual([
-      { value: "station", label: t("device_profiles.kitchen_screen.station") },
-      { value: "pass_monitor", label: t("device_profiles.kitchen_screen.pass_monitor") },
-    ]);
-    expect(q(el, "[data-test=pair-pass]")).toBeNull();
-    await chooseOption(screen, "station");
-    await flush(el);
-    expect(switchesIn(el, "pair-screen-stations")).toEqual([["pair-screen-every-station", true]]);
-    expect(q(el, "[data-test=pair-screen-zones]")).toBeNull();
-    toggle(el, "pair-screen-every-station", false);
-    await flush(el);
-    expect(switchesIn(el, "pair-screen-stations")).toEqual([
-      ["pair-screen-every-station", false],
-      ["pair-screen-station-s1", true],
-      ["pair-screen-station-s2", true],
-    ]);
-    toggle(el, "pair-screen-station-s2", false);
-    await flush(el);
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "pk",
-      kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
-    });
-  });
-
-  it("a kitchen display on a pass monitor chooses zones within the profile's", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pk");
-    await flush(el);
-    await chooseOption(q(el, "[data-test=pair-screen]")!, "pass_monitor");
-    await flush(el);
-    expect(switchesIn(el, "pair-screen-zones")).toEqual([["pair-screen-every-zone", true]]);
-    toggle(el, "pair-screen-every-zone", false);
-    await flush(el);
-    expect(switchesIn(el, "pair-screen-zones")).toEqual([
-      ["pair-screen-every-zone", false],
-      ["pair-screen-zone-z1", true],
-      ["pair-screen-zone-z2", true],
-    ]);
-    toggle(el, "pair-screen-zone-z2", false);
-    await flush(el);
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "pk",
-      kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: ["z1"] }],
-    });
-  });
-
-  it("a kitchen display with no Screen is refused under Screen, and Pair keeps its action coloured at open", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    const submit = q(el, "[data-test=pair-submit]") as HTMLElementTagNameMap["wt-button"];
-    await submit.updateComplete;
-    expect(submit.variant).toBe("primary");
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pk");
-    await flush(el);
-    submit.click();
-    await flush(el);
-    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
-    expect(field(el, "pair-screen").error).toBe(codeMessage("kitchen_screen.required"));
-  });
-
-  it("a till is paired with a pass monitor its profile offers", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pa");
-    await flush(el);
-    expect(q(el, "[data-test=pair-screen]")).toBeNull();
-    expect(switchesIn(el, "pair-station-shows")).toEqual([["pair-station-every", true]]);
-    const pass = field(el, "pair-pass");
-    expect([pass.label, pass.value]).toEqual([t("devices.pass_screen_shows"), ""]);
-    expect(pass.options).toEqual([
-      { value: "", label: t("device_profiles.every_station") },
-      { value: "pass", label: t("device_profiles.kitchen_screen.pass") },
-      { value: "pass_monitor", label: t("device_profiles.kitchen_screen.pass_monitor") },
-    ]);
-    await chooseOption(pass, "pass_monitor");
-    await flush(el);
-    expect(switchesIn(el, "pair-screen-stations")).toEqual([["pair-screen-every-station", true]]);
-    expect(switchesIn(el, "pair-screen-zones")).toEqual([["pair-screen-every-zone", true]]);
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "pa",
-      kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: null }],
-    });
-  });
-
-  it("a till's Kitchen screen choice narrows to chosen stations, and a till sends none when it chooses nothing", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pa");
-    await flush(el);
-    toggle(el, "pair-station-every", false);
-    await flush(el);
-    expect(switchesIn(el, "pair-station-shows")).toEqual([
-      ["pair-station-every", false],
-      ["pair-station-station-s1", true],
-      ["pair-station-station-s2", true],
-      ["pair-station-station-s3", true],
-    ]);
-    toggle(el, "pair-station-station-s1", false);
-    await flush(el);
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "pa",
-      kitchenScreens: [{ kind: "station", stationIds: ["s2", "s3"], zoneIds: null }],
-    });
-  });
-
-  it("a handheld whose profile offers no monitor is offered only the pass screen, and no Kitchen screen it does not show", async () => {
-    const api = ksApi([]);
-    const el = await openPair(api);
-    await chooseOption(q(el, "[data-test=pair-profile]")!, "pb");
-    await flush(el);
-    expect(q(el, "[data-test=pair-station-shows]")).toBeNull();
-    expect(field(el, "pair-pass").options.map((o) => o.value)).toEqual(["", "pass"]);
-    q(el, "[data-test=pair-submit]")!.click();
-    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Bar 1",
-      profileId: "pb",
-      kitchenScreens: [],
-    });
-  });
-
-  it("changing the profile clears a choice the new profile does not offer", async () => {
-    const row = tillRow("t1", [
-      {
-        kind: "pass_monitor",
-        available: true,
-        everyStation: true,
-        everyZone: true,
-        profileEveryStation: true,
-        stations: [slot("s1"), slot("s2"), slot("s3")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "t1");
-    expect(field(el, "edit-pass").value).toBe("pass_monitor");
-    await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
-    await flush(el);
-    expect(field(el, "edit-pass").value).toBe("");
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-      profileId: "pb",
-      kitchenScreens: [],
-    });
-  });
-
-  it("Edit lists a removal as no longer available, outside the draft: it opens quiet and its save does not send it back", async () => {
-    const row = kds("k1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1"), slot("s3", false)],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "k1");
-    expect(field(el, "edit-screen").value).toBe("station");
-    expect(switchesIn(el, "edit-screen-stations")).toEqual([
-      ["edit-screen-every-station", false],
-      ["edit-screen-station-s1", true],
-      ["edit-screen-station-s2", false],
-    ]);
-    expect(
-      [...q(el, "[data-test=edit-gone]")!.querySelectorAll("[data-test=edit-gone-item]")].map(
-        (item) => item.textContent!.trim(),
-      ),
-    ).toEqual([
-      `${t("device_profiles.kitchen_screen.station")}: Deli (${t("devices.no_longer_available")})`,
-    ]);
-    const button = q(el, "[data-test=edit-save]") as HTMLElementTagNameMap["wt-button"];
-    await button.updateComplete;
-    expect([button.variant, button.disabled]).toEqual(["secondary", true]);
-    q(el, "[data-test=edit-name]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Display 2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({ name: "Display 2" });
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
-  });
-
-  it("Edit lists a screen kind the profile took as no longer available, and opens with no Pass choice", async () => {
-    const row = tillRow("t1", [
-      {
-        kind: "pass_monitor",
-        available: false,
-        everyStation: false,
-        everyZone: false,
-        profileEveryStation: false,
-        stations: [],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const el = await openEdit(ksApi([row]), "t1");
-    expect(field(el, "edit-pass").value).toBe("");
-    expect(
-      [...q(el, "[data-test=edit-gone]")!.querySelectorAll("[data-test=edit-gone-item]")].map(
-        (item) => item.textContent!.trim(),
-      ),
-    ).toEqual([
-      `${t("device_profiles.kitchen_screen.pass_monitor")} (${t("devices.no_longer_available")})`,
-    ]);
-    const button = q(el, "[data-test=edit-save]") as HTMLElementTagNameMap["wt-button"];
-    await button.updateComplete;
-    expect(button.variant).toBe("secondary");
-  });
-
-  it("Edit reads a list the read calls every as Every, and a rename leaves the stored choice alone", async () => {
-    const row = kds("k1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: true,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1"), slot("s2")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "k1");
-    expect(switchesIn(el, "edit-screen-stations")).toEqual([["edit-screen-every-station", true]]);
-    expect(q(el, "[data-test=edit-gone]")).toBeNull();
-    q(el, "[data-test=edit-name]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Display 2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
-  });
-
-  it("Edit sends a changed choice, and a changed choice turns Save on", async () => {
-    const row = kds("k1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: true,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1"), slot("s2")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "k1");
-    await chooseOption(q(el, "[data-test=edit-screen]")!, "pass_monitor");
-    await flush(el);
-    const button = q(el, "[data-test=edit-save]") as HTMLElementTagNameMap["wt-button"];
-    await button.updateComplete;
-    expect(button.variant).toBe("primary");
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-      kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: null }],
-    });
-  });
-
-  it("Edit keeps an explicit list holding all its profile allows as that list, and a rename sends no kitchen screens", async () => {
-    const row = kds("k1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1"), slot("s2"), slot("s3", false)],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "k1");
-    expect(switchesIn(el, "edit-screen-stations")).toEqual([
-      ["edit-screen-every-station", false],
-      ["edit-screen-station-s1", true],
-      ["edit-screen-station-s2", true],
-    ]);
-    q(el, "[data-test=edit-name]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Display 2" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
-  });
-
-  describe("a till whose profile bounds its Kitchen screen", () => {
-    const bounded = [
-      ...offered.filter((entry) => entry.profileId !== "pa"),
-      {
-        profileId: "pa",
-        screens: {
-          station: { stationIds: ["s1", "s2"], zoneIds: null },
-          pass_monitor: { stationIds: null, zoneIds: null },
-        },
-      },
-    ];
-    const tillWith = (everyStation: boolean) =>
-      tillRow("t1", [
-        {
-          kind: "station",
-          available: true,
-          everyStation,
-          everyZone: true,
-          profileEveryStation: false,
-          stations: [slot("s1"), slot("s2")],
-          zones: null,
-          nonPassStationsOverride: null,
-          showNonPassStations: true,
-        },
-      ]);
-
-    it.each([
-      ["an explicit list holding all it allows", false, ["s1", "s2"]],
-      ["every station the profile allows", true, null],
-    ])(
-      "keeps %s in what it sends when only the Pass choice changes",
-      async (_, everyStation, stationIds) => {
-        const api = ksApi([tillWith(everyStation)], {
-          listProfileKitchenScreens: vi.fn().mockResolvedValue(bounded),
-        });
-        const el = await openEdit(api, "t1");
-        expect(sw(el, "edit-station-every").checked).toBe(everyStation);
-        await chooseOption(q(el, "[data-test=edit-pass]")!, "pass_monitor");
-        await flush(el);
-        await saveEdit(el);
-        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-          kitchenScreens: [
-            { kind: "station", stationIds, zoneIds: null },
-            { kind: "pass_monitor", stationIds: null, zoneIds: null },
-          ],
-        });
-      },
-    );
-
-    it("labels an explicit every as the profile's stations, and no choice as every station", async () => {
-      const api = ksApi([tillWith(true), tillRow("t2", [])], {
-        listProfileKitchenScreens: vi.fn().mockResolvedValue(bounded),
-      });
-      const chosen = await openEdit(api, "t1");
-      expect(sw(chosen, "edit-station-every").label).toBe(t("devices.every_station_profile"));
-      const none = await openEdit(api, "t2");
-      expect(sw(none, "edit-station-every").label).toBe(t("device_profiles.every_station"));
-      expect(field(none, "edit-pass").options[0]).toEqual({
-        value: "",
-        label: t("device_profiles.every_station"),
-      });
-    });
-  });
-
-  it.each([
-    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "pass_monitor" } }, "pass"],
-    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "station" } }, "station"],
-    [
-      {
-        code: "kitchen_screen.invalid",
-        params: { field: "stationIds", reason: "not_found", screen: "station" },
-      },
-      "station",
-    ],
-    [
-      {
-        code: "kitchen_screen.invalid",
-        params: { field: "stationIds", reason: "not_found", screen: "pass_monitor" },
-      },
-      "pass",
-    ],
-  ])(
-    "a till holding two station lists places %o under the %s list it names",
-    async (error, under) => {
-      const list = (kind: "station" | "pass_monitor") => ({
-        kind,
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: true,
-        stations: [slot("s1"), slot("s2")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      });
-      const api = ksApi([tillRow("t1", [list("station"), list("pass_monitor")])], {
-        updateDevice: vi.fn().mockRejectedValue(error),
-      });
-      const el = await openEdit(api, "t1");
-      toggle(el, "edit-station-station-s3", true);
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-      await flush(el);
-      const message = codeMessage(error.code);
-      const other = under === "pass" ? "edit-station-shows" : "edit-screen-stations";
-      expect(groupError(el, under === "pass" ? "edit-screen-stations" : "edit-station-shows")).toBe(
-        message,
-      );
-      expect(groupError(el, other)).toBe("");
-    },
-  );
-
-  it.each([
-    [{ code: "kitchen_screen.required", params: {} }, "screen"],
-    [{ code: "kitchen_screen.not_allowed", params: { screen: "station" } }, "screen"],
-    [
-      { code: "kitchen_screen.invalid", params: { field: "screens", reason: "one_only" } },
-      "screen",
-    ],
-    [
-      { code: "kitchen_screen.invalid", params: { field: "stationIds", reason: "empty" } },
-      "stations",
-    ],
-    [{ code: "station.not_allowed", params: { stationId: "s2" } }, "stations"],
-    [
-      { code: "kitchen_screen.invalid", params: { field: "zoneIds", reason: "not_found" } },
-      "zones",
-    ],
-    [{ code: "kitchen_screen.zone_not_allowed", params: { zoneId: "z2" } }, "zones"],
-  ])("a kitchen display's refusal %o shows under its %s", async (error, under) => {
-    const row = kds("k1", [
-      {
-        kind: "pass_monitor",
-        available: true,
-        everyStation: false,
-        everyZone: false,
-        profileEveryStation: true,
-        stations: [slot("s1"), slot("s2")],
-        zones: [slot("z1")],
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row], { updateDevice: vi.fn().mockRejectedValue(error) });
-    const el = await openEdit(api, "k1");
-    toggle(el, "edit-screen-zone-z2", true);
-    await flush(el);
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    await flush(el);
-    const message = codeMessage(error.code);
-    if (under === "screen") expect(field(el, "edit-screen").error).toBe(message);
-    else expect(groupError(el, `edit-screen-${under}`)).toBe(message);
-  });
-
-  it.each([
-    [{ code: "kitchen_screen.not_allowed", params: { screen: "pass_monitor" } }, "pass"],
-    [{ code: "kitchen_screen.not_allowed", params: { screen: "station" } }, "station"],
-    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "station" } }, "station"],
-  ])("a till's refusal %o shows under its %s choice", async (error, under) => {
-    const row = tillRow("t1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: true,
-        stations: [slot("s1"), slot("s2")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-      {
-        kind: "pass_monitor",
-        available: true,
-        everyStation: true,
-        everyZone: true,
-        profileEveryStation: true,
-        stations: [slot("s1"), slot("s2"), slot("s3")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row], { updateDevice: vi.fn().mockRejectedValue(error) });
-    const el = await openEdit(api, "t1");
-    toggle(el, "edit-station-station-s3", true);
-    await flush(el);
-    await saveEdit(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    await flush(el);
-    const message = codeMessage(error.code);
-    if (under === "pass") expect(field(el, "edit-pass").error).toBe(message);
-    else expect(groupError(el, "edit-station-shows")).toBe(message);
-  });
-
-  it("an explicit list emptied is marked under it and holds Save", async () => {
-    const row = kds("k1", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1")],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const api = ksApi([row]);
-    const el = await openEdit(api, "k1");
-    toggle(el, "edit-screen-station-s1", false);
-    await flush(el);
-    await saveEdit(el);
-    expect(api.updateDevice).not.toHaveBeenCalled();
-    expect(groupError(el, "edit-screen-stations")).toBe(t("device_profiles.err_list_empty"));
-  });
-
-  for (const [locale, every, everyZone, gone] of [
-    ["en", "every station", "every zone", "(Deli no longer available)"],
-    ["es-ES", "todas las estaciones", "todas las zonas", "(Deli ya no está disponible)"],
-  ] as const) {
-    it(`the device list reads out each device's kitchen screens in ${locale}`, async () => {
-      const before = currentLocale();
-      setLocale(locale);
-      try {
-        const liveData = new LiveData();
-        const rows = [
-          kds("k1", [
-            {
-              kind: "station",
-              available: true,
-              everyStation: false,
-              everyZone: true,
-              profileEveryStation: false,
-              stations: [slot("s1"), slot("s2")],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ]),
-          tillRow("t1", [
-            {
-              kind: "pass",
-              available: true,
-              everyStation: true,
-              everyZone: false,
-              profileEveryStation: true,
-              stations: [slot("s1"), slot("s2"), slot("s3")],
-              zones: [slot("z1")],
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ]),
-          tillRow("t2", [
-            {
-              kind: "pass_monitor",
-              available: true,
-              everyStation: true,
-              everyZone: true,
-              profileEveryStation: true,
-              stations: [slot("s1"), slot("s2"), slot("s3")],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ]),
-          kds("k2", [
-            {
-              kind: "station",
-              available: true,
-              everyStation: false,
-              everyZone: true,
-              profileEveryStation: false,
-              stations: [slot("s1"), slot("s3", false)],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ]),
-        ];
-        const api = Object.assign(
-          ksApi(rows, {
-            listProfileKitchenScreens: vi.fn().mockResolvedValue([
-              {
-                profileId: "pk",
-                screens: { station: { stationIds: ["s1", "s2", "s3"], zoneIds: null } },
-              },
-              { profileId: "pa", screens: { pass_monitor: { stationIds: null, zoneIds: null } } },
-            ]),
-          }),
-          { liveData },
-        );
-        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-        await flush(el);
-        const kind = (k: "station" | "pass" | "pass_monitor") =>
-          t(`device_profiles.kitchen_screen.${k}`);
-        expect(deepText(el, "[data-test=device-screen-k1-station]")).toBe(
-          `${kind("station")}: Hot line, Drinks`,
-        );
-        expect(deepText(el, "[data-test=device-screen-t1-pass]")).toBe(
-          `${kind("pass")}: ${every} · Terrace`,
-        );
-        expect(deepText(el, "[data-test=device-screen-t2-pass_monitor]")).toBe(
-          `${kind("pass_monitor")}: ${every} · ${everyZone}`,
-        );
-        expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-          `${kind("station")}: Hot line ${gone}`,
-        );
-
-        vi.mocked(api.listDevices).mockResolvedValue([
-          kds("k2", [
-            {
-              kind: "station",
-              available: true,
-              everyStation: false,
-              everyZone: true,
-              profileEveryStation: false,
-              stations: [slot("s1"), slot("s3")],
-              zones: null,
-              nonPassStationsOverride: null,
-              showNonPassStations: true,
-            },
-          ]),
-        ]);
-        liveData.invalidate([{ type: "devices", id: "k2" }]);
-        await vi.waitFor(() =>
-          expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-            `${kind("station")}: Hot line, Deli`,
-          ),
-        );
-      } finally {
-        setLocale(before);
-      }
-    });
-  }
-
-  it("the device list names a station no longer available holding a replacement pattern as written", async () => {
-    const row = kds("k2", [
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: true,
-        profileEveryStation: false,
-        stations: [slot("s1"), { ...slot("s3", false), name: "Deli $&" }],
-        zones: null,
-        nonPassStationsOverride: null,
-        showNonPassStations: true,
-      },
-    ]);
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-      api: ksApi([row]),
-    });
-    await flush(el);
-    expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-      `${t("device_profiles.kitchen_screen.station")}: Hot line ${t("devices.readout_gone_one").split("{names}").join("Deli $&")}`,
-    );
-  });
-
-  describe("the device's choice for other stations' dishes on the pass", () => {
-    const passScreen = (
-      kind: "pass" | "pass_monitor" | "station",
-      nonPassStationsOverride: boolean | null,
-      available = true,
-    ): DeviceRow["kitchenScreens"][number] => ({
-      kind,
-      available,
-      everyStation: true,
-      everyZone: true,
-      profileEveryStation: true,
-      stations: available ? [slot("s1"), slot("s2"), slot("s3")] : [],
-      zones: null,
-      nonPassStationsOverride,
-      showNonPassStations: nonPassStationsOverride ?? true,
-    });
-
-    it.each([
-      [null, "profile"],
-      [true, "show"],
-      [false, "hide"],
-    ] as const)(
-      "under a till's pass shows a stored %s as %s, with the three choices",
-      async (stored, value) => {
-        const el = await openEdit(ksApi([tillRow("t1", [passScreen("pass", stored)])]), "t1");
-        const choice = field(el, "edit-other-stations");
-        expect(choice.tagName).toBe("WT-COMBOBOX");
-        expect(choice.label).toBe(t("device_profiles.show_other_stations"));
-        expect(choice.name).toBe("showNonPassStations");
-        expect(choice.options).toEqual([
-          { value: "profile", label: t("devices.use_profile_setting"), fixed: true },
-          { value: "show", label: t("devices.other_stations_show") },
-          { value: "hide", label: t("devices.other_stations_hide") },
-        ]);
-        expect(choice.value).toBe(value);
-      },
-    );
-
-    it.each([
-      ["hide", false],
-      ["show", true],
-    ] as const)(
-      "choosing %s on a monitor alone sends kitchenScreenDisplay and no kitchen screens",
-      async (choice, sent) => {
-        const api = ksApi([kds("k1", [passScreen("pass_monitor", null)])]);
-        const el = await openEdit(api, "k1");
-        await chooseOption(q(el, "[data-test=edit-other-stations]")!, choice);
-        await flush(el);
-        await saveEdit(el);
-        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-        const body = vi.mocked(api.updateDevice).mock.calls[0]![1];
-        expect(body.kitchenScreenDisplay).toEqual({ pass_monitor: sent });
-        expect(body).not.toHaveProperty("kitchenScreens");
-      },
-    );
-
-    it("choosing Use the profile's setting sends null for that kind", async () => {
-      const api = ksApi([tillRow("t1", [passScreen("pass", false)])]);
-      const el = await openEdit(api, "t1");
-      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "profile");
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-      const body = vi.mocked(api.updateDevice).mock.calls[0]![1];
-      expect(body.kitchenScreenDisplay).toEqual({ pass: null });
-      expect(body).not.toHaveProperty("kitchenScreens");
-    });
-
-    it("a save that leaves the choice alone sends no kitchenScreenDisplay", async () => {
-      const api = ksApi([tillRow("t1", [passScreen("pass", true)])]);
-      const el = await openEdit(api, "t1");
-      q(el, "[data-test=edit-name]")!.dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "Cash till 2" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
-        "kitchenScreenDisplay",
-      );
-    });
-
-    it("follows the Pass choice: a monitor picked in the draft starts on the profile's setting", async () => {
-      const api = ksApi([tillRow("t1", [passScreen("pass", false)])]);
-      const el = await openEdit(api, "t1");
-      await chooseOption(q(el, "[data-test=edit-pass]")!, "pass_monitor");
-      await flush(el);
-      expect(field(el, "edit-other-stations").value).toBe("profile");
-      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "hide");
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-        kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: null }],
-        kitchenScreenDisplay: { pass_monitor: false },
-      });
-    });
-
-    it("draws no choice for a station-only device, nor for a kind a narrowing took", async () => {
-      const api = ksApi([
-        kds("k1", [passScreen("station", null)]),
-        tillRow("t1", [passScreen("pass_monitor", false, false)]),
-        tillRow("t2", []),
-      ]);
-      expect(q(await openEdit(api, "k1"), "[data-test=edit-other-stations]")).toBeNull();
-      expect(q(await openEdit(api, "t1"), "[data-test=edit-other-stations]")).toBeNull();
-      expect(q(await openEdit(api, "t2"), "[data-test=edit-other-stations]")).toBeNull();
-    });
-
-    it.each([
-      [
-        "every chosen station",
-        { everyStation: false, stations: [slot("s1", false), slot("s2", false)] },
-      ],
-      [
-        "every chosen zone",
-        {
-          everyStation: false,
-          stations: [slot("s1")],
-          everyZone: false,
-          zones: [slot("z1", false)],
-        },
-      ],
-      [
-        "every chosen station, read as the server reads a kind the narrowing emptied",
-        {
-          everyStation: false,
-          everyZone: false,
-          stations: [slot("s1", false), slot("s2", false)],
-        },
-      ],
-    ] as [string, Partial<DeviceRow["kitchenScreens"][number]>][])(
-      "draws and sends no choice for a pass that a narrowing took %s from",
-      async (_, lists) => {
-        const api = ksApi([tillRow("t1", [{ ...passScreen("pass", null), ...lists }])]);
-        const el = await openEdit(api, "t1");
-        expect(q(el, "[data-test=edit-other-stations]")).toBeNull();
-        q(el, "[data-test=edit-name]")!.dispatchEvent(
-          new CustomEvent("wt-change", {
-            detail: { value: "Cash till 2" },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        await flush(el);
-        await saveEdit(el);
-        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
-          "kitchenScreenDisplay",
-        );
-      },
-    );
-
-    it("after a save whose reader was refused, choosing Use the profile's setting sends null", async () => {
-      const api = ksApi([tillRow("t1", [passScreen("pass", null)])], {
-        setDeviceReader: vi
-          .fn()
-          .mockRejectedValueOnce({ code: "reader.not_found" })
-          .mockResolvedValue(undefined),
-      });
-      const el = await openEdit(api, "t1");
-      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "hide");
-      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() =>
-        expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
-      );
-      expect(vi.mocked(api.updateDevice).mock.calls[0]![1].kitchenScreenDisplay).toEqual({
-        pass: false,
-      });
-
-      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "profile");
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(2));
-      expect(vi.mocked(api.updateDevice).mock.calls[1]![1].kitchenScreenDisplay).toEqual({
-        pass: null,
-      });
-    });
-
-    it("the pair dialog draws no choice and its accept body carries none", async () => {
-      const api = ksApi([]);
-      const el = await openPair(api);
-      await chooseOption(q(el, "[data-test=pair-profile]")!, "pa");
-      await flush(el);
-      await chooseOption(q(el, "[data-test=pair-pass]")!, "pass");
-      await flush(el);
-      expect(q(el, "[data-test=pair-other-stations]")).toBeNull();
-      q(el, "[data-test=pair-submit]")!.click();
-      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
-      expect(vi.mocked(api.acceptDeviceJoinRequest).mock.calls[0]![1]).toEqual({
-        name: "Bar 1",
-        profileId: "pa",
-        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
-      });
-    });
-
-    it("shows a refusal of the choice as the form's request line, not beside the field", async () => {
-      const api = ksApi([tillRow("t1", [passScreen("pass", null)])], {
-        updateDevice: vi.fn().mockRejectedValue({
-          code: "management.request_invalid",
-          params: { field: "kitchenScreenDisplay" },
-        }),
-      });
-      const el = await openEdit(api, "t1");
-      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "hide");
-      await flush(el);
-      await saveEdit(el);
-      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-      await flush(el);
-      expect(field(el, "edit-other-stations").error).toBe("");
-      const row = q(el, "[data-test=edit-actions]") as HTMLElementTagNameMap["wt-form-actions"];
-      expect((await formMessageOf(row))?.textContent?.trim()).toBe(
-        codeMessage("management.request_invalid"),
-      );
-    });
-
-    it.each([
-      [
-        "en",
-        "Show other stations' dishes on the pass",
-        ["Use the profile's setting", "Show", "Hide"],
-      ],
-      [
-        "es",
-        "Mostrar en el pase los platos de otras estaciones",
-        ["Usar la configuración del perfil", "Mostrar", "Ocultar"],
-      ],
-    ] as const)("words the choice in %s", async (locale, label, options) => {
-      const previous = currentLocale();
-      setLocale(locale);
-      try {
-        const el = await openEdit(ksApi([tillRow("t1", [passScreen("pass", null)])]), "t1");
-        expect(field(el, "edit-other-stations").label).toBe(label);
-        expect(field(el, "edit-other-stations").options.map((o) => o.label)).toEqual(options);
-      } finally {
-        setLocale(previous);
-      }
     });
   });
 });

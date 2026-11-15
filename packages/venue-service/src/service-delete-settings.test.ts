@@ -13,10 +13,6 @@ import {
   departmentSalePolicies,
   departmentTransferDesks,
   departmentTransferDestinations,
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreens,
-  deviceKitchenScreenStations,
-  deviceKitchenScreenZones,
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
@@ -190,98 +186,42 @@ it("delete starting zone advances only within allowed surviving zones and Every 
   });
 });
 
-it("delete last screen zone leaves an explicit empty parent on disabled devices and profiles", async () => {
+it("deleting the last profile screen zone leaves its explicit empty bound on disabled devices", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
     const { deviceId } = await seedDevice(tx, { profileId: f.explicit, label: "Off screen" });
-    const [d] = await tx
-      .update(devices)
-      .set({ active: false })
-      .where(eq(devices.id, deviceId))
-      .returning();
-    await tx.insert(deviceProfileKitchenScreens).values({
-      deviceProfileId: f.explicit,
-      screen: "pass",
-      everyStation: true,
-      everyZone: false,
-    });
-    await tx
-      .insert(deviceProfileKitchenScreenZones)
-      .values({ deviceProfileId: f.explicit, screen: "pass", zoneId: f.gone });
-    await tx
-      .insert(deviceKitchenScreens)
-      .values({ deviceId: d!.id, screen: "pass", everyStation: true, everyZone: false });
-    await tx
-      .insert(deviceKitchenScreenZones)
-      .values({ deviceId: d!.id, screen: "pass", zoneId: f.gone });
-    await tx
-      .insert(deviceKitchenScreenRemovals)
-      .values({ deviceId: d!.id, screen: "pass", zoneId: f.gone });
+    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     const [station] = await tx
       .insert(kitchenStations)
       .values({ ...f.cfg, name: "Surviving station" })
       .returning();
-    await tx.insert(deviceProfileKitchenScreens).values({
-      deviceProfileId: f.kitchen,
-      screen: "pass_monitor",
-      everyStation: true,
-      everyZone: false,
-    });
+    await tx.insert(deviceProfileKitchenScreens).values([
+      { deviceProfileId: f.explicit, screen: "pass", everyStation: false, everyZone: false },
+      { deviceProfileId: f.kitchen, screen: "pass_monitor", everyStation: true, everyZone: false },
+    ]);
     await tx
-      .update(deviceProfileKitchenScreens)
-      .set({ everyStation: false })
-      .where(eq(deviceProfileKitchenScreens.deviceProfileId, f.explicit));
-    await tx
-      .update(deviceKitchenScreens)
-      .set({ everyStation: false })
-      .where(eq(deviceKitchenScreens.deviceId, d!.id));
+      .insert(deviceProfileKitchenScreenZones)
+      .values({ deviceProfileId: f.explicit, screen: "pass", zoneId: f.gone });
     await tx
       .insert(deviceProfileKitchenScreenStations)
       .values({ deviceProfileId: f.explicit, screen: "pass", stationId: station!.id });
-    await tx
-      .insert(deviceKitchenScreenStations)
-      .values({ deviceId: d!.id, screen: "pass", stationId: station!.id });
-    const stationBounds = {
-      profiles: await tx.select().from(deviceProfileKitchenScreenStations),
-      devices: await tx.select().from(deviceKitchenScreenStations),
-    };
-    const parents = {
-      profiles: await tx.select().from(deviceProfileKitchenScreens),
-      devices: await tx.select().from(deviceKitchenScreens),
-    };
+    const parents = await tx.select().from(deviceProfileKitchenScreens);
+    const stationBounds = await tx.select().from(deviceProfileKitchenScreenStations);
     const impact = await readServiceDeleteSettings(tx, [f.gone], null);
     expect(impact.filter((row) => row.key.startsWith("screen_"))).toEqual([
-      {
-        key: "screen_zones",
-        count: 2,
-        targets: [
-          { id: f.explicit, name: "Explicit" },
-          { id: d!.id, name: "Off screen", deleted: true },
-        ],
-      },
-      {
-        key: "screen_notices",
-        count: 1,
-        targets: [{ id: d!.id, name: "Off screen", deleted: true }],
-      },
+      { key: "screen_zones", count: 1, targets: [{ id: f.explicit, name: "Explicit" }] },
     ]);
     await clearServiceDeleteSettings(tx, [f.gone], null);
-    expect(await tx.select().from(deviceProfileKitchenScreens)).toEqual(parents.profiles);
-    expect(await tx.select().from(deviceKitchenScreens)).toEqual(parents.devices);
-    expect(await tx.select().from(deviceProfileKitchenScreenStations)).toEqual(
-      stationBounds.profiles,
-    );
-    expect(await tx.select().from(deviceKitchenScreenStations)).toEqual(stationBounds.devices);
+    expect(await tx.select().from(deviceProfileKitchenScreens)).toEqual(parents);
+    expect(await tx.select().from(deviceProfileKitchenScreenStations)).toEqual(stationBounds);
     expect(
       (await readProfileKitchenScreens(tx)).find((row) => row.profileId === f.explicit)?.screens,
-    ).toEqual({ pass: { stationIds: [station!.id], zoneIds: [], showNonPassStations: true } });
-    expect(await readDeviceKitchenScreens(tx, d!.id)).toEqual([]);
-    expect(
-      await tx
-        .select()
-        .from(deviceKitchenScreenRemovals)
-        .where(eq(deviceKitchenScreenRemovals.deviceId, d!.id)),
-    ).toEqual([]);
+    ).toEqual({
+      pass: { stationIds: [station!.id], zoneIds: [], showNonPassStations: true },
+    });
+    const [screen] = await readDeviceKitchenScreens(tx, deviceId);
+    expect(screen!.zones).toEqual([]);
+    expect(screen!.stations.map((row) => row.id)).toEqual([station!.id]);
   });
 });
 

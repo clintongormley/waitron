@@ -1548,6 +1548,8 @@ describe("device-profiles-screen kitchen screens", () => {
    * station but two zones, one switched off since. */
   const stored: ProfileKitchenScreens = {
     station: { stationIds: ["s1", "s-off"], zoneIds: null },
+  };
+  const monitorStored: ProfileKitchenScreens = {
     pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
   };
 
@@ -1589,21 +1591,40 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
   }
 
-  it("shows a kitchen display's three kinds and live stations without deleted zones", async () => {
+  it.each([kitchen, till, { ...till, formFactor: "phone-portrait" as const }])(
+    "selects one screen on a $formFactor profile and replaces the previous kind",
+    async (profile) => {
+      const { api, el } = await edit(profile, {
+        station: { stationIds: ["s1"], zoneIds: null },
+      });
+      const choice = el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens]");
+      expect(choice?.tagName).toBe("WT-COMBOBOX");
+      await chooseOption(choice!, "pass");
+      await flush(el);
+      expect(sw(el, "profile-station-screen-every-station")).toBeNull();
+      expect(sw(el, "profile-pass-screen-every-station")!.checked).toBe(true);
+      await save(el);
+      expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
+        kitchenScreens: { pass: { stationIds: null, zoneIds: null } },
+      });
+    },
+  );
+
+  it("can leave a profile without a kitchen screen", async () => {
+    const { api, el } = await edit(kitchen, {
+      station: { stationIds: ["s1"], zoneIds: null },
+    });
+    const choice = el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens]");
+    expect(choice?.tagName).toBe("WT-COMBOBOX");
+    await chooseOption(choice!, "");
+    await flush(el);
+    expect(sw(el, "profile-station-screen-every-station")).toBeNull();
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({ kitchenScreens: {} });
+  });
+
+  it("shows the chosen screen's live stations without deleted choices", async () => {
     const { el } = await edit(kitchen, stored);
-    expect(
-      shown(el, "profile-kitchen-screens").filter(([label]) =>
-        [
-          t("device_profiles.kitchen_screen.station"),
-          t("device_profiles.kitchen_screen.pass"),
-          t("device_profiles.kitchen_screen.pass_monitor"),
-        ].includes(label as string),
-      ),
-    ).toEqual([
-      [t("device_profiles.kitchen_screen.station"), true],
-      [t("device_profiles.kitchen_screen.pass"), false],
-      [t("device_profiles.kitchen_screen.pass_monitor"), true],
-    ]);
     expect(shown(el, "profile-station-screen-stations")).toEqual([
       [t("device_profiles.every_station"), false],
       ["Grill", true],
@@ -1612,59 +1633,37 @@ describe("device-profiles-screen kitchen screens", () => {
     ]);
     expect(sw(el, "profile-station-screen-every-zone")).toBeNull();
     expect(sw(el, "profile-pass-screen-every-station")).toBeNull();
-    expect(shown(el, "profile-pass-monitor-stations")).toEqual([
-      [t("device_profiles.every_station"), true],
-    ]);
-    expect(shown(el, "profile-pass-monitor-zones")).toEqual([
-      [t("device_profiles.every_zone_venue"), false],
-      ["Dining room", false],
-      ["Terrace", true],
-    ]);
-  });
-
-  it("shows a till's Kitchen and Pass lists as every station when it has no row, and its pass monitor off", async () => {
-    const { el } = await edit(till, {});
-    expect(shown(el, "profile-station-screen-stations")).toEqual([
-      [t("device_profiles.every_station"), true],
-    ]);
-    expect(shown(el, "profile-pass-screen-stations")).toEqual([
-      [t("device_profiles.every_station"), true],
-    ]);
-    expect(shown(el, "profile-pass-screen-zones")).toEqual([
-      [t("device_profiles.every_zone_venue"), true],
-    ]);
-    expect(sw(el, "profile-pass-monitor")!.checked).toBe(false);
     expect(sw(el, "profile-pass-monitor-every-station")).toBeNull();
-    expect(sw(el, "profile-station-screen")).toBeNull();
-    expect(sw(el, "profile-pass-screen")).toBeNull();
   });
 
-  it("draws the other-stations switch under a chosen pass and pass monitor, on for a new profile, and none under a station screen", async () => {
-    const api = stubApi({ listStations: vi.fn().mockResolvedValue(venueStations) });
-    const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
-    await flush(el);
-    selectFormFactor(el, "kds");
+  it("leaves a till with no configured screen unconfigured", async () => {
+    const { el } = await edit(till, {});
+    expect(shown(el, "profile-station-screen-stations")).toEqual([]);
+    expect(shown(el, "profile-pass-screen-stations")).toEqual([]);
+    expect(sw(el, "profile-pass-monitor-every-station")).toBeNull();
+  });
+
+  it("draws the display policy only for the selected Pass kind, defaulting to shown", async () => {
+    const { el } = await edit(kitchen, {});
+    for (const [kind, slug] of [
+      ["pass", "pass-screen"],
+      ["pass_monitor", "pass-monitor"],
+    ]) {
+      change(el, "profile-kitchen-screens", kind!);
+      await flush(el);
+      const control = sw(el, `profile-${slug}-other-stations`)!;
+      expect(control.label).toBe(t("device_profiles.show_other_stations"));
+      expect(control.checked).toBe(true);
+      expect(control.getAttribute("name")).toBe("showNonPassStations");
+    }
+    change(el, "profile-kitchen-screens", "station");
     await flush(el);
     expect(sw(el, "profile-pass-screen-other-stations")).toBeNull();
-    toggle(el, "profile-station-screen", true);
-    toggle(el, "profile-pass-screen", true);
-    toggle(el, "profile-pass-monitor", true);
-    await flush(el);
-    expect(sw(el, "profile-station-screen-other-stations")).toBeNull();
-    for (const test of [
-      "profile-pass-screen-other-stations",
-      "profile-pass-monitor-other-stations",
-    ]) {
-      expect(sw(el, test)!.label).toBe(t("device_profiles.show_other_stations"));
-      expect(sw(el, test)!.checked).toBe(true);
-      expect(sw(el, test)!.getAttribute("name")).toBe("showNonPassStations");
-    }
+    expect(sw(el, "profile-pass-monitor-other-stations")).toBeNull();
   });
 
   it("shows a stored Hide as off, and sends the switch back on inside that kind's entry", async () => {
     const { api, el } = await edit(kitchen, {
-      ...stored,
       pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"], showNonPassStations: false },
     });
     expect(sw(el, "profile-pass-monitor-other-stations")!.checked).toBe(false);
@@ -1674,14 +1673,13 @@ describe("device-profiles-screen kitchen screens", () => {
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
-        station: { stationIds: ["s1"], zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"], showNonPassStations: true },
       },
     });
   });
 
   it("draws the switch under a till's Pass list and sends it switched off", async () => {
-    const { api, el } = await edit(till, {});
+    const { api, el } = await edit(till, { pass: { stationIds: null, zoneIds: null } });
     toggle(el, "profile-pass-screen-other-stations", false);
     await flush(el);
     await save(el);
@@ -1693,7 +1691,7 @@ describe("device-profiles-screen kitchen screens", () => {
   });
 
   it("shows a refusal of the kitchen screens' request as the form's request line, not beside the switch", async () => {
-    const { el } = await edit(kitchen, stored, {
+    const { el } = await edit(kitchen, monitorStored, {
       updateDeviceProfile: vi.fn().mockRejectedValue({
         code: "management.request_invalid",
         params: { field: "kitchenScreens" },
@@ -1716,26 +1714,25 @@ describe("device-profiles-screen kitchen screens", () => {
     const previous = currentLocale();
     setLocale(locale);
     try {
-      const { el } = await edit(kitchen, stored);
+      const { el } = await edit(kitchen, monitorStored);
       expect(sw(el, "profile-pass-monitor-other-stations")!.label).toBe(label);
     } finally {
       setLocale(previous);
     }
   });
 
-  it("hides a till's lists while its Kitchen and Pass switches are off", async () => {
+  it("keeps an unconfigured screen empty when another capability changes", async () => {
     const { el } = await edit({ ...till, capabilities: [] }, {});
-    expect(sw(el, "profile-station-screen-every-station")).toBeNull();
-    expect(sw(el, "profile-pass-screen-every-station")).toBeNull();
-    expect(sw(el, "profile-pass-monitor")).toBeNull();
     toggle(el, "cap-show-expo", true);
     await flush(el);
-    expect(sw(el, "profile-pass-monitor")!.checked).toBe(false);
+    expect(sw(el, "profile-station-screen-every-station")).toBeNull();
+    expect(sw(el, "profile-pass-screen-every-station")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens]")).not.toBeNull();
   });
 
   it("saves a till's pass monitor on one zone", async () => {
     const { api, el } = await edit(till, {});
-    toggle(el, "profile-pass-monitor", true);
+    change(el, "profile-kitchen-screens", "pass_monitor");
     await flush(el);
     expect(shown(el, "profile-pass-monitor-zones")).toEqual([
       [t("device_profiles.every_zone_venue"), true],
@@ -1758,28 +1755,26 @@ describe("device-profiles-screen kitchen screens", () => {
   it("saves a kitchen display's changed lists whole, excluding deleted stations and keeping disabled zones", async () => {
     const { api, el } = await edit(kitchen, stored);
     toggle(el, "profile-station-screen-station-s2", true);
-    toggle(el, "profile-pass-screen", true);
     await flush(el);
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1", "s2"], zoneIds: null },
-        pass: { stationIds: null, zoneIds: null },
-        pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
       },
     });
   });
 
   it("switching Every zone and Every station back on sends every one again", async () => {
-    const { api, el } = await edit(kitchen, stored);
+    const { api, el } = await edit(kitchen, {
+      pass_monitor: { stationIds: ["s1"], zoneIds: ["z2", "z4"] },
+    });
     toggle(el, "profile-pass-monitor-every-zone", true);
-    toggle(el, "profile-station-screen-every-station", true);
+    toggle(el, "profile-pass-monitor-every-station", true);
     await flush(el);
     expect(sw(el, "profile-pass-monitor-zone-z2")).toBeNull();
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
-        station: { stationIds: null, zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: null },
       },
     });
@@ -1787,12 +1782,12 @@ describe("device-profiles-screen kitchen screens", () => {
 
   it("switching a kind off drops it from what is sent", async () => {
     const { api, el } = await edit(kitchen, stored);
-    toggle(el, "profile-station-screen", false);
+    change(el, "profile-kitchen-screens", "");
     await flush(el);
     expect(sw(el, "profile-station-screen-every-station")).toBeNull();
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
-      kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] } },
+      kitchenScreens: {},
     });
   });
 
@@ -1816,7 +1811,6 @@ describe("device-profiles-screen kitchen screens", () => {
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1", "s2"], zoneIds: null },
-        pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
       },
     });
   });
@@ -1829,14 +1823,20 @@ describe("device-profiles-screen kitchen screens", () => {
     change(el, "profile-name", "Pass board");
     selectFormFactor(el, "kds");
     await flush(el);
-    toggle(el, "profile-pass-monitor", true);
+    change(el, "profile-kitchen-screens", "pass_monitor");
     await flush(el);
     selectFormFactor(el, "till");
     await flush(el);
     expect(sw(el, "profile-pass-monitor")).toBeNull();
     toggle(el, "cap-show-expo", true);
     await flush(el);
-    expect(sw(el, "profile-pass-monitor")!.checked).toBe(true);
+    expect(
+      (
+        el.shadowRoot!.querySelector(
+          "[data-test=profile-kitchen-screens]",
+        ) as HTMLElementTagNameMap["wt-combobox"]
+      ).value,
+    ).toBe("pass_monitor");
     toggle(el, "cap-show-expo", false);
     await flush(el);
     await save(el);
@@ -1854,7 +1854,7 @@ describe("device-profiles-screen kitchen screens", () => {
     change(el, "profile-name", "Kitchen 2");
     selectFormFactor(el, "kds");
     await flush(el);
-    toggle(el, "profile-station-screen", true);
+    change(el, "profile-kitchen-screens", "station");
     await flush(el);
     toggle(el, "profile-station-screen-every-station", false);
     await flush(el);
@@ -1882,12 +1882,8 @@ describe("device-profiles-screen kitchen screens", () => {
       await save(el);
       const tab = formFactor === "till" ? "capabilities" : "kitchen";
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe(tab));
-      const group = el.shadowRoot!.querySelector(
-        formFactor === "till"
-          ? "[data-test=profile-screens]"
-          : "[data-test=profile-kitchen-screens]",
-      )!;
-      expect(group.contains(el.shadowRoot!.activeElement)).toBe(true);
+      const group = el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens]")!;
+      expect(el.shadowRoot!.activeElement).toBe(group);
     },
   );
 
@@ -1900,7 +1896,9 @@ describe("device-profiles-screen kitchen screens", () => {
     async (field, reason, group, sentence) => {
       const { el } = await edit(
         kitchen,
-        { ...stored, pass_monitor: { stationIds: null, zoneIds: ["z2"] } },
+        field === "passMonitorZones"
+          ? { pass_monitor: { stationIds: null, zoneIds: ["z2"] } }
+          : stored,
         {
           updateDeviceProfile: vi.fn().mockRejectedValue({
             code: "device_profile.access_invalid",
@@ -1908,7 +1906,7 @@ describe("device-profiles-screen kitchen screens", () => {
           }),
         },
       );
-      toggle(el, "profile-station-screen-station-s2", true);
+      rename(el);
       await flush(el);
       await save(el);
       await vi.waitFor(() =>
@@ -1918,103 +1916,18 @@ describe("device-profiles-screen kitchen screens", () => {
         el.shadowRoot!.querySelector("wt-tabs")!.items.find((item) => item.key === "kitchen")!
           .marked,
       ).toBe(t("form.fix_fields"));
-      expect(text(el, `${group}-error`)).toBe(
-        sentence === null ? codeMessage("device_profile.access_invalid") : t(sentence),
-      );
+      expect(
+        group === "profile-kitchen-screens"
+          ? (
+              el.shadowRoot!.querySelector(
+                "[data-test=profile-kitchen-screens]",
+              ) as HTMLElementTagNameMap["wt-combobox"]
+            ).error
+          : text(el, `${group}-error`),
+      ).toBe(sentence === null ? codeMessage("device_profile.access_invalid") : t(sentence));
       expect(inScreenOrRow(el, ".form-message")?.textContent?.trim()).toBe(t("form.fix_fields"));
     },
   );
-
-  it.each([
-    ["en", "Saved. Serving hatch no longer shows Deli. Bar display no longer shows Pass, Terrace."],
-    ["es", "Guardado. Serving hatch ya no muestra Deli. Bar display ya no muestra Pase, Terrace."],
-  ] as const)("names the devices a save narrowed, in %s", async (locale, expected) => {
-    const previous = currentLocale();
-    setLocale(locale);
-    try {
-      const { el } = await edit(kitchen, stored, {
-        updateDeviceProfile: vi.fn().mockResolvedValue({
-          ...kitchen,
-          narrowedDevices: [
-            {
-              deviceId: "dv1",
-              deviceName: "Serving hatch",
-              lost: { screens: [], stations: [{ id: "s9", name: "Deli" }], zones: [] },
-            },
-            {
-              deviceId: "dv2",
-              deviceName: "Bar display",
-              lost: { screens: ["pass"], stations: [], zones: [{ id: "z2", name: "Terrace" }] },
-            },
-          ],
-        }),
-      });
-      toggle(el, "profile-station-screen-station-s1", false);
-      await flush(el);
-      await save(el);
-      await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-      expect(text(el, "narrowed-devices")).toBe(expected);
-      expect(
-        el.shadowRoot!.querySelector("[data-test=narrowed-devices]")!.getAttribute("role"),
-      ).toBe("status");
-    } finally {
-      setLocale(previous);
-    }
-  });
-
-  it("names a narrowed device whose name holds the lost placeholder as written", async () => {
-    const previous = currentLocale();
-    setLocale("en");
-    try {
-      const { el } = await edit(kitchen, stored, {
-        updateDeviceProfile: vi.fn().mockResolvedValue({
-          ...kitchen,
-          narrowedDevices: [
-            {
-              deviceId: "dv1",
-              deviceName: "Display {lost}",
-              lost: { screens: [], stations: [{ id: "s9", name: "Deli" }], zones: [] },
-            },
-          ],
-        }),
-      });
-      toggle(el, "profile-station-screen-station-s1", false);
-      await flush(el);
-      await save(el);
-      await flush(el);
-      expect(text(el, "narrowed-devices")).toBe("Saved. Display {lost} no longer shows Deli.");
-    } finally {
-      setLocale(previous);
-    }
-  });
-
-  it("shows no status line when a save narrowed nothing, and clears one when the editor opens again", async () => {
-    const narrowing = vi.fn().mockResolvedValueOnce({
-      ...kitchen,
-      narrowedDevices: [
-        {
-          deviceId: "dv1",
-          deviceName: "Serving hatch",
-          lost: { screens: [], stations: [{ id: "s1", name: "Grill" }], zones: [] },
-        },
-      ],
-    });
-    narrowing.mockResolvedValue({ ...kitchen, narrowedDevices: [] });
-    const { el } = await edit(kitchen, stored, { updateDeviceProfile: narrowing });
-    toggle(el, "profile-station-screen-station-s1", false);
-    await flush(el);
-    await save(el);
-    await flush(el);
-    expect(text(el, "narrowed-devices")).not.toBeNull();
-    await profileAction(el, "edit-p2");
-    await flush(el);
-    expect(text(el, "narrowed-devices")).toBeNull();
-    rename(el);
-    await save(el);
-    await flush(el);
-    expect(text(el, "narrowed-devices")).toBeNull();
-  });
 
   it("permanent delete keeps station choices within a phone profile editor with long names", async () => {
     await page.viewport(390, 900);
@@ -2621,7 +2534,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(extras(api)).toEqual({ startingScreen: null });
   });
 
-  it("says a kitchen display's kitchen screens are what each of its devices picks from on Devices", async () => {
+  it("says every device inherits its profile's chosen screen", async () => {
     const grill: Station = {
       id: "s1",
       name: "Grill",

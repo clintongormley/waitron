@@ -38,12 +38,10 @@ export function kitchenScreenNoticeText(notice: KitchenScreenNotice): string {
   }
 }
 
-/** "Now showing: Station screen", after a refused press re-read the device's choice. */
 export function kitchenScreenSwitchedText(kind: KitchenScreenKind): string {
   return t("kitchen_screen.switched").replace("{screen}", t(SCREEN_NAME[kind]));
 }
 
-/** "This station is no longer available: Deli", for a station or zone a narrowing took. */
 export function lostSlotLine(slot: "station" | "zone", name: string): string {
   return t(slot === "station" ? "station.unavailable" : "zone.unavailable").replace(
     "{name}",
@@ -71,12 +69,6 @@ export const unavailableStyles = css`
 
 const REFRESH_MS = 15_000;
 
-/**
- * A kitchen display's notice in place of a queue. It reads the device's choice at the screens'
- * refresh pace and emits `kitchen-screen-changed` when the choice gives it something else to show,
- * so the app re-boots to it, or `device-unauthorized` when the device is refused. While it is still
- * on the page after emitting, as when that re-boot failed, a later read emits again.
- */
 @customElement("till-kitchen-screen-notice")
 export class TillKitchenScreenNotice extends LitElement {
   @property({ attribute: false }) api?: Pick<TillApi, "getDeviceIdentity">;

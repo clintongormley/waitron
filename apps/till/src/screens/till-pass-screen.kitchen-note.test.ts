@@ -58,7 +58,7 @@ describe("whole-order instructions on pass boards", () => {
         board: board(note),
         stations: [],
         zones: null,
-        display: { showNonPassStations: true, nonPassStationsOverride: null },
+        display: { showNonPassStations: true },
       });
       const api = {
         getExpoBoard: vi.fn(async () => ({ board: board(note) })),

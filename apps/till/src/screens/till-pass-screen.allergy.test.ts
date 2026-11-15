@@ -22,7 +22,7 @@ async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "li
     board,
     stations: [],
     zones: null,
-    display: { showNonPassStations: true, nonPassStationsOverride: null },
+    display: { showNonPassStations: true },
   };
   const api = {
     getExpoBoard: vi.fn(async () => ({ board })),

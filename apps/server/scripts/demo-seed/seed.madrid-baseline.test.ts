@@ -239,6 +239,10 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "device_kitchen_screens",
+  "device_kitchen_screen_stations",
+  "device_kitchen_screen_zones",
+  "device_kitchen_screen_removals",
   "device_profile_admission_persons",
   "floor_plan_table_parts",
   "floor_plan_table_sizes",
@@ -996,11 +1000,6 @@ for (const locale of ["en", "es"] as const) {
           1,
         ],
         [
-          "device_kitchen_screens",
-          { name: "show_non_pass_stations", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
-          null,
-        ],
-        [
           "payments",
           { name: "requested_amount", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
           null,
@@ -1599,6 +1598,11 @@ for (const locale of ["en", "es"] as const) {
       expected[phase] = madridWithProductUnits(expected[phase]);
       expected[phase] = madridWithOptionDefaults(expected[phase]);
       delete phases[phase]!.product_units;
+      const screenKind = expected[phase].tables.device_profile_kitchen_screens!.columns.find(
+        (column) => column.name === "screen",
+      )!;
+      expect(screenKind.pk).toBe(2);
+      screenKind.pk = 0;
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {
