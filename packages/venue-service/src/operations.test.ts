@@ -312,7 +312,7 @@ describe("order flow from sale policies", () => {
           departmentId: department.id,
         });
         await tx.execute(
-          sql`update department_sale_policies set order_start = ${start}, paid_when = ${paid} where department_id = ${department.id}`,
+          sql`update departments set order_start = ${start}, paid_when = ${paid} where id = ${department.id}`,
         );
         await tx.execute(
           sql`update floor_zones set order_start = ${zoneStart}, paid_when = ${zonePaid} where id = ${zone.id}`,
@@ -325,17 +325,14 @@ describe("order flow from sale policies", () => {
     },
   );
 
-  it("a department without a sale-policy row starts counter orders with default prepayment", async () => {
-    await seedFixtureVenue(`Missing policy ${randomUUID()}`);
+  it("a bare department starts counter orders with default prepayment", async () => {
+    await seedFixtureVenue(`Default policy ${randomUUID()}`);
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, {
-        name: "Dining",
-        orderStart: "table",
-      });
-      const zone = await createServiceZone(tx, { name: "Flow", departmentId: department.id });
-      await tx.execute(
-        sql`delete from department_sale_policies where department_id = ${department.id}`,
-      );
+      const [department] = await tx
+        .insert(departments)
+        .values({ name: "Dining", tradingName: "Dining" })
+        .returning();
+      const zone = await createServiceZone(tx, { name: "Flow", departmentId: department!.id });
       expect(await resolveZoneContext(tx, zone.id)).toMatchObject({ serviceMode: "prepay" });
       const listed = await listServiceZones(tx);
       expect(listed).toMatchObject([{ id: zone.id, serviceMode: "prepay" }]);
@@ -1435,8 +1432,7 @@ describe("departments", () => {
       createDepartment(tx, { name: "Restaurant", orderStart: "table" }),
     );
     const readDepartment = () =>
-      db.all(sql`select p.order_start from departments d
-      join department_sale_policies p on p.department_id=d.id where d.id=${row.id}`);
+      db.all(sql`select order_start from departments where id=${row.id}`);
     expect(readDepartment()).toEqual([{ order_start: "table" }]);
     const zone = await scoped((tx) =>
       createServiceZone(tx, { name: "Terrace", departmentId: row.id }),
@@ -1517,11 +1513,9 @@ describe("departments", () => {
       const created = await scoped((tx) =>
         createDepartment(tx, { name: `Created ${style}`, orderStart: start }),
       );
-      expect(
-        db.all(
-          sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${created.id}`,
-        ),
-      ).toEqual([{ order_start: start }]);
+      expect(db.all(sql`select order_start from departments where id=${created.id}`)).toEqual([
+        { order_start: start },
+      ]);
     }
     await scoped((tx) =>
       configureZone(tx, {
@@ -1533,11 +1527,9 @@ describe("departments", () => {
     await scoped((tx) => setZoneSalePolicyOverride(tx, zone.id, "orderStart", "counter"));
     expect(readZone()).toEqual([{ order_start: "counter" }]);
     const defaulted = await scoped((tx) => createDepartment(tx, { name: "Default counter" }));
-    expect(
-      db.all(
-        sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${defaulted.id}`,
-      ),
-    ).toEqual([{ order_start: "counter" }]);
+    expect(db.all(sql`select order_start from departments where id=${defaulted.id}`)).toEqual([
+      { order_start: "counter" },
+    ]);
   });
 
   it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
@@ -1598,10 +1590,10 @@ describe("departments", () => {
       return row;
     });
     await db.execute(sql`
-      update department_sale_policies
+      update departments
       set paid_when = 'ticket_then_pay', collection_number = 'numbered',
           print_trading_name = 0
-      where department_id = ${department.id}`);
+      where id = ${department.id}`);
 
     await scoped(async (tx) => {
       await expect(resolveSalePolicy(tx, zoneId)).resolves.toEqual({
@@ -1649,7 +1641,7 @@ describe("departments", () => {
       print_trading_name: number;
     }>(sql`
       select paid_when, collection_number, print_trading_name
-      from department_sale_policies where department_id = ${department.id}`);
+      from departments where id = ${department.id}`);
     expect(policies.rows).toEqual([
       {
         paid_when: "prepay",
@@ -1962,6 +1954,17 @@ it("refuses an unknown sale-policy zone with the domain error", async () => {
   await expect(scoped((tx) => resolveSalePolicy(tx, zoneId))).rejects.toMatchObject({
     code: "service_zone.not_found",
     params: { zoneId },
+  });
+});
+
+it("refuses a sale policy for an inactive department even while its stored rules remain", async () => {
+  const venue = await seedSellingVenue();
+  await scoped(async (tx) => {
+    await tx.update(departments).set({ active: false }).where(eq(departments.id, venue.barId));
+    await expect(resolveSalePolicy(tx, venue.barZone)).rejects.toMatchObject({
+      code: "service_zone.not_found",
+      params: { zoneId: venue.barZone },
+    });
   });
 });
 
@@ -3315,8 +3318,8 @@ describe("orderInZones", () => {
 
 for (const { statement, constraint } of [
   {
-    statement: sql`update department_sale_policies set order_start = 'invoice_first'`,
-    constraint: "department_sale_policies_order_start_ck",
+    statement: sql`update departments set order_start = 'invoice_first'`,
+    constraint: "departments_order_start_ck",
   },
   {
     statement: sql`update floor_zones set order_start = 'invoice_first'`,
@@ -3479,13 +3482,16 @@ describe("combined settings operations", () => {
     });
   });
 
-  it("lists missing policy rows with the settings form's defaults for repair", async () => {
-    await seedFixtureVenue("Read missing policies");
+  it("lists a bare department with its stored default policies", async () => {
+    await seedFixtureVenue("Read default policies");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const [department] = await tx
+        .insert(departments)
+        .values({ name: "Dining", tradingName: "Dining" })
+        .returning();
       const zone = await createServiceZone(tx, {
         name: "Terrace",
-        departmentId: department.id,
+        departmentId: department!.id,
       });
       await tx
         .update(floorZones)
@@ -3498,18 +3504,23 @@ describe("combined settings operations", () => {
           paidWhen: null,
           collectionNumber: null,
           effective: {
-            orderStart: "table",
+            orderStart: "counter",
             paidWhen: "prepay",
             collectionNumber: "none",
             printTradingName: true,
           },
         },
       ]);
-      await tx.execute(
-        sql`delete from department_sale_policies where department_id = ${department.id}`,
-      );
       expect(await listSalePolicies(tx)).toEqual({
-        departments: [],
+        departments: [
+          {
+            departmentId: department!.id,
+            orderStart: "counter",
+            paidWhen: "prepay",
+            collectionNumber: "none",
+            printTradingName: true,
+          },
+        ],
         zones: [
           {
             zoneId: zone.id,
@@ -3520,7 +3531,7 @@ describe("combined settings operations", () => {
               orderStart: "counter",
               paidWhen: "prepay",
               collectionNumber: "none",
-              printTradingName: false,
+              printTradingName: true,
             },
           },
         ],

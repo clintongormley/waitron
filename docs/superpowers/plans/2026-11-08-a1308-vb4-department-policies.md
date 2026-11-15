@@ -1,5 +1,12 @@
 # A1308 venue and box, PR vb4: a department's sale rules and transfer desk are columns of the department — implementation plan
 
+> **2026-11-15 preflight correction, watcher cleared at 08:11 in Lane H's `questions.md`:**
+> main retired `receipt_print_mode` in #2804 (`5635f69850`). Omit that column,
+> `departments_receipt_mode_ck`, its validation and their predicted protection lines below;
+> keep the existing refusals of that retired request field. Reuse the enum builders now
+> declared in `packages/db/src/schema/sale-rule-types.ts`. The rest of this plan applies.
+> This is the watcher's clearance, not an owner review of this implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every rule in
 > [the slice rules](2026-11-08-a1308-slice-rules.md) applies ("rules §n"). Implementers are
