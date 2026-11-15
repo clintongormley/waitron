@@ -4148,7 +4148,7 @@ Ordering and shared-display profiles offer their own controls; kitchen bounds ap
 **What it can do** or **Kitchen screens** respectively. Explicit addresses open that tab; ordinary
 Edit opens General. Tab clicks retain the draft and replace the address. Searching another tab
 uses Keep editing/Discard, including for the same profile, and does not reload that profile after
-accepted navigation. An unavailable explicit tab explains why and offers Cancel to return to the list.
+accepted navigation. An unavailable explicit tab says it is not offered and gives you Cancel to return to the list.
 Mounted EN/ES checks compare named controls, labels and tabs with declarations in both directions.
 
 When nothing matches, the nav says **No pages

@@ -716,8 +716,8 @@ export class DeviceProfilesScreen extends LitElement {
    * none, so only the word going away closes an editor. */
   #addressProfile: string | null = null;
 
-  #writeProfileWord(profile: string | null): void {
-    void this.#url.write({ profile, view: profile === null ? null : this.#url.read("view") }, true);
+  #writeProfileWord(profile: string | null, view = this.#url.read("view")): void {
+    void this.#url.write({ profile, view: profile === null ? null : view }, true);
     if (this.#url.read("dashboard") === "device-profiles")
       this.#addressProfile = this.#url.read("profile");
   }
@@ -735,12 +735,26 @@ export class DeviceProfilesScreen extends LitElement {
       this.#selectTargetTab();
       return;
     }
-    if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
+    if (this.profiles.some((profile) => profile.id === id))
+      void this.#openEditor(id, this.#url.read("view"));
     else this.#writeProfileWord(null);
   }
 
-  #selectTargetTab(): void {
-    const target = this.#url.read("view") ?? "general";
+  #changeEditorTab(tab: EditorTab): void {
+    this.editorTab = tab;
+    if (this.editingId === null) return;
+    const guard = navigationGuardFor(window);
+    if (!guard) {
+      void this.#url.write({ view: tab }, true);
+      return;
+    }
+    const url = new URL(guard.href);
+    url.pathname = `${dashboardPath.basePath}/device-profiles/profile/${encodePathSegment(this.editingId)}/view/${tab}`;
+    guard.rewrite(url);
+  }
+
+  #selectTargetTab(view = this.#url.read("view")): void {
+    const target = view ?? "general";
     this.targetUnavailable = !this.#editorTabs({}).some((tab) => tab.key === target);
     if (!this.targetUnavailable) this.editorTab = target as EditorTab;
   }
@@ -1160,7 +1174,7 @@ export class DeviceProfilesScreen extends LitElement {
     await this.updateComplete;
     const field = FIELDS.find((name) => errors[name]);
     if (field === undefined) return;
-    this.editorTab = this.#fieldTab(field);
+    this.#changeEditorTab(this.#fieldTab(field));
     await this.updateComplete;
     await this.renderRoot.querySelector("wt-tabs")?.updateComplete;
     const target =
@@ -1371,7 +1385,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** Fetches the profile and its kitchen screens fresh, rather than reusing rows a read may not have
    * delivered yet. */
-  async #openEditor(id: string): Promise<void> {
+  async #openEditor(id: string, view: string | null = null): Promise<void> {
     this.#clearErrorOnOpen();
     this.#clearDraft();
     const opened = this.#opened;
@@ -1419,8 +1433,8 @@ export class DeviceProfilesScreen extends LitElement {
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
-      this.#selectTargetTab();
-      this.#writeProfileWord(id);
+      this.#selectTargetTab(view);
+      this.#writeProfileWord(id, view);
       void this.#loadReaders(id, this.#opened);
     } catch (error) {
       if (opened === this.#opened) {
@@ -2765,8 +2779,7 @@ export class DeviceProfilesScreen extends LitElement {
           .items=${this.#editorTabs(errors)}
           .value=${this.editorTab}
           @wt-tab-change=${(event: CustomEvent<{ value: EditorTab }>) => {
-            this.editorTab = event.detail.value;
-            if (this.editingId !== null) void this.#url.write({ view: event.detail.value }, true);
+            this.#changeEditorTab(event.detail.value);
           }}
         >
           <section slot="general">

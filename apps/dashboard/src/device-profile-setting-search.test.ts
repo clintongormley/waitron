@@ -7,10 +7,14 @@ it("resolves offered profile settings passively", async () => {
   const profiles = [
     { ...deviceProfile, id: "p/+", name: "Counter", capabilities: ["show-expo"] },
     { ...deviceProfile, id: "kds", name: "Kitchen", formFactor: "kds" as const },
+    { ...deviceProfile, id: "monitor", name: "Monitor", formFactor: "kds" as const },
   ];
   const answers = deviceResponses({
     profiles,
-    kitchen: [{ profileId: "kds", screens: { station: { stationIds: null, zoneIds: null } } }],
+    kitchen: [
+      { profileId: "kds", screens: { station: { stationIds: null, zoneIds: null } } },
+      { profileId: "monitor", screens: { pass_monitor: { stationIds: null, zoneIds: null } } },
+    ],
   });
   answers["/management-api/page-printers"] = [{ id: "a4", name: "Office", active: true }];
   answers["/management-api/payments/device-profiles/p/+/readers"] = {
@@ -31,6 +35,7 @@ it("resolves offered profile settings passively", async () => {
   ] as const)
     vi.spyOn(api, method).mockRejectedValue(new Error("foreground read"));
   const entries = deviceProfileSettingSearchDestinations(api);
+  expect(entries).toHaveLength(new Set(entries.map((e) => `${e.locationKey}:${e.labelKey}`)).size);
   const entry = (key: string, tab: string) =>
     entries.find((e) => e.id === `dashboard:device-profile:${key}:${tab}`)!;
   const resolve = (key: string, tab: string) =>
@@ -43,13 +48,22 @@ it("resolves offered profile settings passively", async () => {
   expect(await resolve("inactivityTimeout", "general")).toEqual([
     { id: "p/+", label: "Counter", path: "/manage/device-profiles/profile/p%2F%2B/view/general" },
   ]);
-  expect((await resolve("stationScreenStations", "kitchen")).map((r) => r.id)).toEqual(["kds"]);
+  expect((await resolve("stationScreenStations", "kitchen")).map((r) => r.id)).toEqual([
+    "kds",
+    "monitor",
+  ]);
   expect((await resolve("passScreenZones", "capabilities")).map((r) => r.id)).toEqual(["p/+"]);
-  expect(await resolve("passMonitorZones", "capabilities")).toEqual([]);
+  expect((await resolve("passScreenZones", "kitchen")).map((r) => r.id)).toEqual(["monitor"]);
   expect((await resolve("invoicePrinterIds", "equipment")).map((r) => r.id)).toEqual([
     "p/+",
     "kds",
+    "monitor",
   ]);
+  answers["/management-api/page-printers"] = [];
+  expect(await resolve("invoicePrinterIds", "equipment")).toEqual([]);
+  expect(
+    fetchImpl.mock.calls.filter(([path]) => path === "/management-api/payments/readers"),
+  ).toHaveLength(0);
   expect((await resolve("defaultReaderId", "equipment")).map((r) => r.id)).toEqual(["p/+"]);
   const fallback = fetchImpl.mock.calls.filter(
     ([path]) => path.includes("/readers") && path.includes("device-profiles"),

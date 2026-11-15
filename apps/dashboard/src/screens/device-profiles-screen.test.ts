@@ -4176,6 +4176,26 @@ describe("a device profile's address", () => {
     el.shadowRoot!.querySelector("[data-test=editor-form]")?.getAttribute("data-editing-id") ??
     null;
 
+  it("ordinary Edit ignores a tab on the list address", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/view/equipment");
+    const el = await mount(stubApi());
+    await profileAction(el, "edit-p1");
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general");
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+  });
+  it("a field error writes the tab it opens", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/where");
+    const el = await mount(stubApi());
+    change(el, "profile-name", "");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general"),
+    );
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1/view/general");
+  });
+
   it("opens an explicit tab and follows same-profile addresses without reloading", async () => {
     history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/equipment");
     const api = stubApi();

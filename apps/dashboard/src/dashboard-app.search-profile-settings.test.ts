@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, t } from "./i18n/t.js";
+import { reader } from "./testing/reader-settings-fixture.js";
+import { selectProfileTab } from "./testing/profile-table.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import {
   deviceProfile,
@@ -25,7 +27,12 @@ afterEach(async () => {
   await page.viewport(...viewport);
 });
 it("settings land on their tab without writes", async () => {
-  const { app, fetchImpl } = await mountProfileApp();
+  const { app, fetchImpl } = await mountProfileApp({
+    respond: (path) =>
+      path === "/management-api/payments/readers"
+        ? Promise.resolve(Response.json([reader]))
+        : undefined,
+  });
   const start = fetchImpl.mock.calls.length;
   await searchSettings(app, t("device_profiles.inactivity_timeout_label"));
   const result = searchResult(app, "dashboard:device-profile:inactivityTimeout:general");
@@ -35,6 +42,9 @@ it("settings land on their tab without writes", async () => {
     .poll(() => profileScreen(app).shadowRoot!.querySelector("[name=inactivityTimeout]"))
     .toBeTruthy();
   expect(location.pathname).toBe("/manage/device-profiles/profile/dp1/view/general");
+  await expect
+    .poll(() => profileScreen(app).shadowRoot!.querySelector("[name=defaultReaderId]"))
+    .toBeTruthy();
   await expect
     .poll(() => fetchImpl.mock.calls.some(([path]) => path.endsWith("/dp1/readers")))
     .toBe(true);
@@ -71,18 +81,26 @@ it("chooser selects a profile and Cancel stays put", async () => {
     .poll(() => profileScreen(app).shadowRoot!.querySelector("[name=name]"))
     .toHaveProperty("value", "Bar");
 });
-it.each([["venue.view"], ["venue.view", "venue.configure"], ["venue.view", "hardware.manage"]])(
-  "profile and equipment gates match their reads: %j",
-  async (...permissions: string[]) => {
-    const { app } = await mountProfileApp({ permissions, path: "/manage/overview" });
-    await searchSettings(app, t("device_profiles.name"));
-    expect(!!searchResult(app, "dashboard:device-profile:name:general")).toBe(
-      permissions.includes("venue.configure"),
-    );
-    await searchSettings(app, t("device_profiles.reader_default"));
-    expect(searchResult(app, "dashboard:device-profile:defaultReaderId:equipment")).toBeNull();
-  },
-);
+it.each([
+  ["venue.view"],
+  ["venue.view", "venue.configure"],
+  ["venue.view", "hardware.manage"],
+  ["venue.view", "venue.configure", "hardware.manage"],
+])("profile and equipment gates match their reads: %j", async (...permissions: string[]) => {
+  const { app } = await mountProfileApp({ permissions, path: "/manage/overview" });
+  await searchSettings(app, t("device_profiles.name"));
+  expect(!!searchResult(app, "dashboard:device-profile:name:general")).toBe(
+    permissions.includes("venue.configure"),
+  );
+  await searchSettings(app, t("device_profiles.reader_default"));
+  expect(!!searchResult(app, "dashboard:device-profile:defaultReaderId:equipment")).toBe(
+    permissions.includes("venue.configure") && permissions.includes("hardware.manage"),
+  );
+  await searchSettings(app, t("device_profiles.receipt_default"));
+  expect(!!searchResult(app, "dashboard:device-profile:receiptPrinterDefaultId:equipment")).toBe(
+    permissions.includes("venue.configure") && permissions.includes("hardware.manage"),
+  );
+});
 
 it("same-profile search asks Keep/Discard and retains the editor without reloading", async () => {
   const { app, fetchImpl } = await mountProfileApp({ path: "/manage/device-profiles/profile/dp1" });
@@ -91,6 +109,11 @@ it("same-profile search asks Keep/Discard and retains the editor without reloadi
   screen
     .shadowRoot!.querySelector("[name=name]")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft" } }));
+  await selectProfileTab(screen, "who");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(location.pathname).toBe("/manage/device-profiles/profile/dp1/view/who");
+  expect(screen.shadowRoot!.querySelector("[name=name]")).toHaveProperty("value", "Draft");
+  await selectProfileTab(screen, "general");
   const open = async () => {
     await searchSettings(app, t("device_profiles.capability.take-cash"));
     await userEvent.click(
