@@ -162,6 +162,188 @@ const PRINTER_ROLES = [
   },
 ] as const;
 
+interface DeviceSettingData {
+  deviceProfiles: DeviceProfile[];
+  kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[];
+  stations: Station[];
+  zones: FloorZone[];
+}
+class DeviceKitchenChoices {
+  constructor(private readonly data: DeviceSettingData) {}
+  sharedDisplay(profileId: string): boolean {
+    return this.data.deviceProfiles.find((p) => p.id === profileId)?.formFactor === SHARED_DISPLAY;
+  }
+
+  /**
+   * The lists a profile lets its devices choose within for `kind`, as the server bounds them;
+   * undefined when it does not offer the kind. On a till or handheld a station or pass screen with
+   * no row bounds nothing, while a pass monitor needs a row.
+   */
+  bound(profileId: string, kind: KitchenScreenKind): KitchenScreenScope | undefined {
+    const row = this.data.kitchenScreens.find((entry) => entry.profileId === profileId)?.screens[
+      kind
+    ];
+    if (row !== undefined) return row;
+    return this.sharedDisplay(profileId) || kind === "pass_monitor" ? undefined : EVERY;
+  }
+
+  /** A kitchen display's profile rows; on a till or handheld, the kinds of screen its profile shows. */
+  offeredKinds(profileId: string): KitchenScreenKind[] {
+    const profile = this.data.deviceProfiles.find((p) => p.id === profileId);
+    if (profile === undefined) return [];
+    return KITCHEN_SCREEN_KINDS.filter(
+      (kind) =>
+        this.bound(profileId, kind) !== undefined &&
+        (profile.formFactor === SHARED_DISPLAY ||
+          profile.capabilities.includes(kind === "station" ? "show-station" : "show-expo")),
+    );
+  }
+
+  allowedStations(profileId: string, kind: KitchenScreenKind): Station[] {
+    const ids = this.bound(profileId, kind)?.stationIds ?? null;
+    return this.data.stations.filter((s) => s.active && (ids === null || ids.includes(s.id)));
+  }
+
+  allowedZones(profileId: string, kind: KitchenScreenKind): FloorZone[] {
+    const ids = this.bound(profileId, kind)?.zoneIds ?? null;
+    return this.data.zones.filter((z) => z.active && (ids === null || ids.includes(z.id)));
+  }
+
+  /** The kind the `screen` field holds: a kitchen display's one, or a till's pass kind. */
+  mainKind(screens: KitchenDraft, profileId: string): KitchenScreenKind | "" {
+    const kinds = this.sharedDisplay(profileId) ? KITCHEN_SCREEN_KINDS : PASS_KINDS;
+    return kinds.find((kind) => screens[kind] !== undefined) ?? "";
+  }
+
+  /**
+   * A surviving explicit station bound stays explicit when its last station disappears. A missing
+   * screen parent stays a removal marker.
+   */
+  draftFromRead(
+    read: readonly ResolvedKitchenScreen[],
+    profileId: string,
+    keepSwitchedOff = false,
+  ): KitchenDraft {
+    const draft: KitchenDraft = {};
+    const kept = (slots: readonly ScreenSlot[]) =>
+      slots
+        .filter((slot) => slot.available || (keepSwitchedOff && slot.switchedOff))
+        .map((slot) => slot.id);
+    for (const screen of read) {
+      if (!screen.available) continue;
+      const stationIds = screen.everyStation
+        ? null
+        : screen.stations
+            .filter(
+              (slot) =>
+                slot.available &&
+                this.data.stations.some((station) => station.active && station.id === slot.id),
+            )
+            .map((slot) => slot.id);
+      const zoneIds =
+        screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
+      draft[screen.kind] = { stationIds, zoneIds };
+    }
+    return this.fitted(draft, profileId);
+  }
+
+  /**
+   * Empty station bounds retain their kind so fitting to a profile cannot widen them to Every.
+   */
+  fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
+    const shared = this.sharedDisplay(profileId);
+    const out: KitchenDraft = {};
+    for (const kind of this.offeredKinds(profileId)) {
+      const scope = screens[kind];
+      if (scope === undefined) continue;
+      if (shared ? Object.keys(out).length > 0 : kind === "pass_monitor" && out.pass) continue;
+      const bound = this.bound(profileId, kind)!;
+      const within = (
+        ids: readonly string[] | null,
+        places: readonly { id: string }[],
+        allowed: readonly string[] | null,
+      ) =>
+        ids === null
+          ? null
+          : ids.filter(
+              (id) =>
+                places.some((place) => place.id === id) &&
+                (allowed === null || allowed.includes(id)),
+            );
+      const stationIds = within(
+        scope.stationIds,
+        this.data.stations.filter((station) => station.active),
+        bound.stationIds,
+      );
+      const zoneIds = within(
+        scope.zoneIds,
+        this.data.zones.filter((zone) => zone.active),
+        bound.zoneIds,
+      );
+      out[kind] = { stationIds, zoneIds };
+    }
+    return out;
+  }
+}
+function displayKind(screens: KitchenDraft): PassKind | undefined {
+  const kind = PASS_KINDS.find((kind) => screens[kind] !== undefined);
+  const scope = kind === undefined ? undefined : screens[kind];
+  return scope?.stationIds?.length !== 0 && scope?.zoneIds?.length !== 0 ? kind : undefined;
+}
+export const deviceSettingFields = [
+  { name: "name", labelKey: "devices.name" },
+  { name: "profileId", labelKey: "devices.device_profile" },
+  ...PRINTER_ROLES.map((role) => ({ name: role.form, labelKey: role.label })),
+  {
+    name: "defaultReaderId",
+    labelKey: "devices.default_reader",
+  },
+  { name: "approvedProfileIds", labelKey: "devices.approved_profiles" },
+  { name: "madeHereStationIds", labelKey: "devices.made_here" },
+  { name: "kitchenScreen", labelKey: "devices.kitchen_screen" },
+  { name: "passScreen", labelKey: "devices.pass_screen_shows" },
+  { name: "kitchenStations", labelKey: "devices.station_screen_shows" },
+  { name: "screenStations", labelKey: "device_profiles.kitchen_stations" },
+  { name: "screenZones", labelKey: "device_profiles.kitchen_zones" },
+  { name: "showNonPassStations", labelKey: "device_profiles.show_other_stations" },
+] as const satisfies readonly { name: string; labelKey: StringKey }[];
+export function deviceSettingIsOffered(
+  name: string,
+  device: DeviceRow,
+  data: DeviceSettingData,
+): boolean {
+  const profileId = device.deviceProfileId ?? "";
+  const profile = data.deviceProfiles.find((p) => p.id === profileId);
+  const choices = new DeviceKitchenChoices(data);
+  const shared = choices.sharedDisplay(profileId);
+  switch (name) {
+    case "approvedProfileIds":
+      return (
+        profile !== undefined &&
+        data.deviceProfiles.some((p) => p.id !== profile.id && p.formFactor === profile.formFactor)
+      );
+    case "madeHereStationIds":
+      return !shared;
+    case "kitchenScreen":
+      return shared;
+    case "passScreen":
+      return !shared && choices.offeredKinds(profileId).some((kind) => kind !== "station");
+    case "kitchenStations":
+      return !shared && choices.offeredKinds(profileId).includes("station");
+    case "screenStations":
+    case "screenZones":
+    case "showNonPassStations": {
+      const screens = choices.draftFromRead(device.kitchenScreens, profileId, true);
+      const main = choices.mainKind(screens, profileId);
+      return name === "showNonPassStations"
+        ? displayKind(screens) !== undefined
+        : main !== "" && (name === "screenStations" || main !== "station");
+    }
+    default:
+      return true;
+  }
+}
+
 /** What a refusal about equipment says under its field, when the code's own message is too vague. */
 function equipmentSentence(error: unknown, field: EditField): string | undefined {
   const code = codeOf(error);
@@ -733,9 +915,7 @@ export class DevicesScreen extends LitElement {
    * when its station or zone list is empty: the server refuses the choice for a kind a narrowing
    * emptied. A list whose every entry is switched off also reads empty here, and hides it too. */
   #displayKind(): PassKind | undefined {
-    const kind = PASS_KINDS.find((kind) => this.editForm.screens[kind] !== undefined);
-    const scope = kind === undefined ? undefined : this.editForm.screens[kind];
-    return scope?.stationIds?.length !== 0 && scope?.zoneIds?.length !== 0 ? kind : undefined;
+    return displayKind(this.editForm.screens);
   }
 
   #displayDraft(): Partial<Record<PassKind, boolean | null>> {
@@ -2211,116 +2391,52 @@ export class DevicesScreen extends LitElement {
   // ── Kitchen screens ──────────────────────────────────────────────────────────────────────────────
 
   #sharedDisplay(profileId: string): boolean {
-    return this.deviceProfiles.find((p) => p.id === profileId)?.formFactor === SHARED_DISPLAY;
+    return new DeviceKitchenChoices(this.#settingData()).sharedDisplay(profileId);
   }
 
-  /**
-   * The lists a profile lets its devices choose within for `kind`, as the server bounds them;
-   * undefined when it does not offer the kind. On a till or handheld a station or pass screen with
-   * no row bounds nothing, while a pass monitor needs a row.
-   */
   #bound(profileId: string, kind: KitchenScreenKind): KitchenScreenScope | undefined {
-    const row = this.kitchenScreens.find((entry) => entry.profileId === profileId)?.screens[kind];
-    if (row !== undefined) return row;
-    return this.#sharedDisplay(profileId) || kind === "pass_monitor" ? undefined : EVERY;
+    return new DeviceKitchenChoices(this.#settingData()).bound(profileId, kind);
   }
 
-  /** A kitchen display's profile rows; on a till or handheld, the kinds of screen its profile shows. */
   #offeredKinds(profileId: string): KitchenScreenKind[] {
-    const profile = this.deviceProfiles.find((p) => p.id === profileId);
-    if (profile === undefined) return [];
-    return KITCHEN_SCREEN_KINDS.filter(
-      (kind) =>
-        this.#bound(profileId, kind) !== undefined &&
-        (profile.formFactor === SHARED_DISPLAY ||
-          profile.capabilities.includes(kind === "station" ? "show-station" : "show-expo")),
-    );
+    return new DeviceKitchenChoices(this.#settingData()).offeredKinds(profileId);
   }
 
   #allowedStations(profileId: string, kind: KitchenScreenKind): Station[] {
-    const ids = this.#bound(profileId, kind)?.stationIds ?? null;
-    return this.stations.filter((s) => s.active && (ids === null || ids.includes(s.id)));
+    return new DeviceKitchenChoices(this.#settingData()).allowedStations(profileId, kind);
   }
 
   #allowedZones(profileId: string, kind: KitchenScreenKind): FloorZone[] {
-    const ids = this.#bound(profileId, kind)?.zoneIds ?? null;
-    return this.zones.filter((z) => z.active && (ids === null || ids.includes(z.id)));
+    return new DeviceKitchenChoices(this.#settingData()).allowedZones(profileId, kind);
   }
 
-  /** The kind the `screen` field holds: a kitchen display's one, or a till's pass kind. */
   #mainKind(screens: KitchenDraft, profileId: string): KitchenScreenKind | "" {
-    const kinds = this.#sharedDisplay(profileId) ? KITCHEN_SCREEN_KINDS : PASS_KINDS;
-    return kinds.find((kind) => screens[kind] !== undefined) ?? "";
+    return new DeviceKitchenChoices(this.#settingData()).mainKind(screens, profileId);
   }
 
-  /**
-   * A surviving explicit station bound stays explicit when its last station disappears. A missing
-   * screen parent stays a removal marker.
-   */
   #draftFromRead(
     read: readonly ResolvedKitchenScreen[],
     profileId: string,
     keepSwitchedOff = false,
   ): KitchenDraft {
-    const draft: KitchenDraft = {};
-    const kept = (slots: readonly ScreenSlot[]) =>
-      slots
-        .filter((slot) => slot.available || (keepSwitchedOff && slot.switchedOff))
-        .map((slot) => slot.id);
-    for (const screen of read) {
-      if (!screen.available) continue;
-      const stationIds = screen.everyStation
-        ? null
-        : screen.stations
-            .filter(
-              (slot) =>
-                slot.available &&
-                this.stations.some((station) => station.active && station.id === slot.id),
-            )
-            .map((slot) => slot.id);
-      const zoneIds =
-        screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
-      draft[screen.kind] = { stationIds, zoneIds };
-    }
-    return this.#fitted(draft, profileId);
+    return new DeviceKitchenChoices(this.#settingData()).draftFromRead(
+      read,
+      profileId,
+      keepSwitchedOff,
+    );
   }
 
-  /**
-   * Empty station bounds retain their kind so fitting to a profile cannot widen them to Every.
-   */
   #fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
-    const shared = this.#sharedDisplay(profileId);
-    const out: KitchenDraft = {};
-    for (const kind of this.#offeredKinds(profileId)) {
-      const scope = screens[kind];
-      if (scope === undefined) continue;
-      if (shared ? Object.keys(out).length > 0 : kind === "pass_monitor" && out.pass) continue;
-      const bound = this.#bound(profileId, kind)!;
-      const within = (
-        ids: readonly string[] | null,
-        places: readonly { id: string }[],
-        allowed: readonly string[] | null,
-      ) =>
-        ids === null
-          ? null
-          : ids.filter(
-              (id) =>
-                places.some((place) => place.id === id) &&
-                (allowed === null || allowed.includes(id)),
-            );
-      const stationIds = within(
-        scope.stationIds,
-        this.stations.filter((station) => station.active),
-        bound.stationIds,
-      );
-      const zoneIds = within(
-        scope.zoneIds,
-        this.zones.filter((zone) => zone.active),
-        bound.zoneIds,
-      );
-      out[kind] = { stationIds, zoneIds };
-    }
-    return out;
+    return new DeviceKitchenChoices(this.#settingData()).fitted(screens, profileId);
+  }
+
+  #settingData(): DeviceSettingData {
+    return {
+      deviceProfiles: this.deviceProfiles,
+      kitchenScreens: this.kitchenScreens,
+      stations: this.stations,
+      zones: this.zones,
+    };
   }
 
   #screensPayload(screens: KitchenDraft): DeviceKitchenScreen[] {
