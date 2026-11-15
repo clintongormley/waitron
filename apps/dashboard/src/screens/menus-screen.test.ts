@@ -427,7 +427,7 @@ function lunchPreview(): MenuPreview {
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
-        fields: ["allergens"],
+        fields: ["color"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -9357,10 +9357,6 @@ describe("publishing", () => {
       unit: offer.unit,
       vatClass: offer.vatClass,
       takeawayVatClass: offer.vatClass,
-      allergens: offer.allergens,
-      diet: offer.diet,
-      dietOverride: offer.dietOverride,
-      dietaryDeclarations: offer.dietaryDeclarations,
     };
     offer.variants = [
       {
@@ -10021,7 +10017,7 @@ describe("publishing", () => {
         [...panel(el).shadowRoot!.querySelectorAll('[data-test="changes"] li')].map(text),
       ).toEqual([
         "Chips added under Drinks Hide",
-        "Lemonade: allergens — shared product, also on Dinner Menu Edit product Hide",
+        "Lemonade: colour — shared product, also on Dinner Menu Edit product Hide",
       ]),
     );
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");

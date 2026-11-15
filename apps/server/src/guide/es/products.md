@@ -275,7 +275,7 @@ fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
 y tamaños sin revisar. Revisa los alérgenos de cada tamaño que vendes, o elige **No contiene
-ninguno de los 14**, y vuelve a publicar cada carta en la que esté.
+ninguno de los 14**, y guarda. No necesitas publicar la carta.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
@@ -518,20 +518,21 @@ Esto también se aplica a una lista deshabilitada en el panel que siga en tu car
 ## Revisa la carta como cliente {#guest-preview}
 
 Abre una carta en **Cartas**, entra en **Vista previa** y elige **Vista previa para clientes**. Verás sus platos,
-precios, tamaños, extras y declaraciones publicados. Elige el idioma del cliente para revisar
+precios, tamaños y extras publicados, con los alérgenos y etiquetas dietéticas actuales de los productos. Elige el idioma del cliente para revisar
 los nombres y las descripciones; los nombres que falten usan el idioma predeterminado y después
-el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte
+el nombre interno. Publica los cambios de nombres y precios antes de revisarlos aquí.
+Tras cambiar las declaraciones, abre de nuevo la vista previa. Esta vista previa no comparte
 la carta con los clientes.
 
 ## Comparte la carta predeterminada en este servidor {#guest-sharing}
 
 En **Vista previa para clientes**, elige **Compartir carta** para compartir la versión publicada
 de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
-**Abrir la carta compartida en este servidor** para comprobarla. Publica los cambios antes de revisarlos ahí.
+**Abrir la carta compartida en este servidor** para comprobarla. Publica los cambios de nombres y precios antes de revisarlos ahí. Recarga la página tras cambiar las declaraciones.
 Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
 La elección se conserva en este servidor al importar una configuración; un servidor nuevo empieza sin compartir.
 Cuando este servidor está conectado a Cloud, la vista previa indica si Cloud tiene la publicación actual
-o queda una actualización pendiente. Publica los cambios y espera la confirmación. Si el servidor está
+o queda una actualización pendiente. Guarda las declaraciones, o publica otros cambios de la carta, y espera la confirmación. Si el servidor está
 sin conexión, Cloud conserva la última copia enviada. Al dejar de compartir, esa copia se retira
 cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras el servidor
 está sin conexión; vuelve a activarlo allí para reanudar los envíos. Si Cloud rechaza la publicación,
@@ -552,5 +553,6 @@ el diseño, la tipografía, el espaciado, los colores y la leyenda aquí; otro s
 
 Elige **Vista previa A4**, revisa todas las páginas y pulsa **Imprimir / Guardar como PDF**.
 Selecciona A4 vertical en el navegador y desactiva sus encabezados y pies de página. Abre de nuevo
-la vista previa para clientes tras publicar otra versión. La impresión usa la publicación que
-abriste y no activa el uso compartido.
+la vista previa para clientes tras publicar otra versión o guardar declaraciones. La impresión conserva
+los platos y precios de la publicación abierta, con los alérgenos y etiquetas dietéticas actuales.
+Imprime una copia nueva tras corregir las declaraciones; imprimir no activa el uso compartido.

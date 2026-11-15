@@ -109,6 +109,62 @@ it("renders the publication, keeping later draft names and prices out", async ()
   expect(unpublished.status).toBe(200);
   expect(await unpublished.json()).toBeNull();
 });
+it("serves live declarations in Cloud, preview, earlier-edition paper and public pages without publishing", async () => {
+  const f = await fixture();
+  const headers = { cookie: f.cookies.manager };
+  const captured = await (
+    await f.app.request(`/management-api/menus/${f.lunch}/guest-preview`, { headers })
+  ).json();
+  await withTransaction(suite.db, async (tx) => {
+    await setVenueDefaultMenu(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+    await updateProduct(tx, f.lager, { unitPrice: "9.00" });
+    await publishMenu(tx, f.lunch, (await previewMenu(tx, f.lunch)).hash, f.cookies.managerId);
+    await updateProduct(tx, f.soup, { allergens: { milk: {} }, dietaryDeclarations: ["vegan"] });
+  });
+  const cloud = await guestMenuApi.readGuestMenuPages(suite.db, "en");
+  const preview = await (
+    await f.app.request(`/management-api/menus/${f.lunch}/guest-preview`, { headers })
+  ).json();
+  const paper = await f.app.request(`/management-api/menus/${f.lunch}/guest-paper`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({
+      versionId: captured.versionId,
+      language: "en",
+      paper: {
+        preset: "bistro",
+        font: "serif",
+        spacing: "compact",
+        key: "end",
+        ink: "#123456",
+        accent: "#654321",
+      },
+      order: [0, 1],
+      breaks: [],
+      logo: null,
+    }),
+  });
+  expect(paper.status, await paper.clone().text()).toBe(200);
+  const publicPage = await f.app.request("/public/menu?language=en");
+  expect(publicPage.status).toBe(200);
+  for (const html of [
+    cloud!.pages.en,
+    preview.html,
+    (await paper.json()).html,
+    await publicPage.text(),
+  ]) {
+    expect(html).toContain("Milk");
+    expect(html).toContain("Vegan");
+    expect(html).toContain("Soup for guests");
+  }
+  expect(preview.versionId).not.toBe(captured.versionId);
+});
+
 it("requires a signed-in manager with menu permission", async () => {
   const f = await fixture();
   for (const [cookie, status, code] of [

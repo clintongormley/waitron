@@ -13,7 +13,13 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
-import { createOpenOrder, readTabLines, splitLinesWithinOrder } from "./working-order.js";
+import {
+  createOpenOrder,
+  readTabLines,
+  splitLinesWithinOrder,
+  getPlacedCounterOrder,
+  getHeldOrder,
+} from "./working-order.js";
 import { placeOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { fireAll } from "./testing/serve-line.js";
@@ -152,13 +158,42 @@ it("records the current counter declaration when placed and leaves a replay unch
       creditedTo: OPERATOR,
     }),
   );
-  await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } }));
+  await inTx(v, (tx) =>
+    updateProduct(tx, v.productId("Burger"), {
+      allergens: { milk: {} },
+      dietaryDeclarations: ["vegetarian"],
+    }),
+  );
   await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
-  await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } }));
+  await inTx(v, (tx) =>
+    updateProduct(tx, v.productId("Burger"), {
+      allergens: { eggs: {} },
+      dietaryDeclarations: ["vegan"],
+      dietOverride: { vegan: "yes" },
+    }),
+  );
   await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
   expect((await inTx(v, (tx) => readTabLines(tx, id)))[0]!.nutrition).toEqual({
     allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian"],
+  });
+  expect((await getPlacedCounterOrder({ db: suite.db }, id)).lines[0]!.product).toMatchObject({
+    allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian"],
+    dietOverride: null,
+  });
+  const [line] = await inTx(v, (tx) => readTabLines(tx, id));
+  await inTx(v, (tx) =>
+    tx
+      .update(workingLineContexts)
+      .set({ sentNutrition: null })
+      .where(eq(workingLineContexts.workingOrderLineId, line!.id)),
+  );
+  expect((await getPlacedCounterOrder({ db: suite.db }, id)).lines[0]!.product).toMatchObject({
+    allergens: null,
     dietaryDeclarations: [],
+    dietOverride: null,
+    diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
   });
 });
 
@@ -249,6 +284,14 @@ it("captures inherited variant declarations and keeps each extra's own facts, in
   expect(lines.map((line) => line.nutrition)).toEqual([
     { allergens: { milk: {} }, dietaryDeclarations: ["vegetarian"] },
     { allergens: { eggs: {} }, dietaryDeclarations: ["halal"] },
+  ]);
+  const held = await getHeldOrder({ db: suite.db }, party.tabId);
+  expect(held.lines[0]!.product).toMatchObject({
+    allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian"],
+  });
+  expect(held.lines[0]!.extras).toMatchObject([
+    { addAllergens: { eggs: {} }, suitableFor: ["halal"] },
   ]);
 });
 

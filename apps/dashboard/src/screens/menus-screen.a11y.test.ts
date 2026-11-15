@@ -186,7 +186,7 @@ function api(state: State): DashboardApi {
           kind: "product_changed",
           productId: "p-lager",
           name: "Lager",
-          fields: ["allergens"],
+          fields: ["color"],
           source: "shared_product",
           alsoOn: ["Dinner Menu"],
         },

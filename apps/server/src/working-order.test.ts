@@ -1949,6 +1949,8 @@ describe("getHeldOrder", () => {
           price: "0.75",
           quantity: 2,
           listId: extra.listId,
+          addAllergens: null,
+          suitableFor: [],
         },
       ],
     });
@@ -2015,15 +2017,14 @@ describe("getHeldOrder", () => {
           unitPrice: "3.25",
           vatClass: "general",
           category: "ES drinks",
-          allergens: null,
+          allergens: { milk: {} },
           menuName: "Premium menu",
         }),
       }),
     ]);
   });
 
-  it("shows the allergens a retrieved line was added with, not the product's current ones", async () => {
-    // Spec §11.1: a saved order keeps its facts; only a new line reads the live product.
+  it("shows the current product allergens when retrieving a held line", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
     await db.execute(sql`
       update products set allergens = ${JSON.stringify({ gluten: { kinds: ["wheat" as const] } })}
@@ -2046,7 +2047,7 @@ describe("getHeldOrder", () => {
     const order = await getHeldOrder({ db }, id);
 
     expect(order.lines.map((line) => line.product?.allergens)).toEqual([
-      { gluten: { kinds: ["wheat" as const] } },
+      { milk: {}, sulphites: {} },
     ]);
   });
 

@@ -192,6 +192,14 @@ it("reconciles changed publications on later passes and withdraws missing public
   expect(
     f.calls.filter((v) => (v as { action: string }).action === "guest-menu-publish"),
   ).toHaveLength(1);
+  pages = { defaultLanguage: "en", pages: { en: "<h1>Lunch</h1><p>Milk</p>" } };
+  await delivery.reconcile(signal);
+  expect(
+    f.calls.filter((v) => (v as { action: string }).action === "guest-menu-publish"),
+  ).toHaveLength(2);
+  expect((f.calls.at(-1) as { text: string }).text).toBe(
+    '{"defaultLanguage":"en","pages":{"en":"<h1>Lunch</h1><p>Milk</p>"}}',
+  );
   pages = { defaultLanguage: "fr", pages: { fr: "<h1>Dinner</h1>" } };
   expect((await delivery.status()).state).toBe("pending");
   await delivery.reconcile(signal);

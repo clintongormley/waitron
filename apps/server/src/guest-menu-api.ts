@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import {
   GUEST_MENU_SETTINGS,
+  hydrateDeclarationDocument,
   readContentLanguages,
   readLiveMenu,
   readGuestMenu,
@@ -49,6 +50,7 @@ async function sharingStatus(tx: Transaction, serving: () => boolean) {
 export async function readGuestMenuPages(db: Database, venueLocale: string) {
   const live = await readGuestMenu(db);
   if (live === null) return null;
+  const document = await hydrateDeclarationDocument(db, live.document);
   const languages = await readContentLanguages(db, venueLocale);
   const venue = await readVenue(db);
   const zone = classifySavedTimeZone(venue.timeZone);
@@ -58,7 +60,7 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
       languages.languages.map((language) => [
         language,
         renderGuestMenuPage(
-          publicGuestMenu(live.document, languages, language),
+          publicGuestMenu(document, languages, language),
           venue.name,
           languages.defaultLanguage,
           true,
@@ -146,7 +148,7 @@ export function mountGuestMenuApi(
         if (live === null) return null;
         const languages = await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE);
         const menu = publicGuestMenu(
-          live.document,
+          await hydrateDeclarationDocument(tx, live.document),
           languages,
           c.req.query("language") ?? languages.defaultLanguage,
         );
@@ -191,7 +193,7 @@ export function mountGuestMenuApi(
           throw new AppError("management.request_invalid", { field: "logo" });
         const languages = await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE);
         const menu = publicGuestMenu(
-          document,
+          await hydrateDeclarationDocument(tx, document),
           languages,
           typeof body.language === "string" ? body.language : languages.defaultLanguage,
         );
@@ -249,7 +251,7 @@ export function mountPublicGuestMenu(
       if (live === null) return c.body(null, 404);
       const languages = await readContentLanguages(deps.db, locale);
       const menu = publicGuestMenu(
-        live.document,
+        await hydrateDeclarationDocument(deps.db, live.document),
         languages,
         c.req.query("language") ?? languages.defaultLanguage,
       );

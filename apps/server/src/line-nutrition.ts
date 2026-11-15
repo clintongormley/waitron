@@ -2,6 +2,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { inArray, eq } from "drizzle-orm";
 import { workingOrderLines, products, type Transaction } from "@waitron/db";
 import {
+  productDeclarationValues,
   effectiveProductColumns,
   parentJoin,
   parentProducts,
@@ -77,4 +78,23 @@ async function currentLineDeclarations(
       },
     ]),
   );
+}
+
+export async function readProductDeclarations(tx: Transaction, productIds: readonly string[]) {
+  const result = new Map<string, ReturnType<typeof productDeclarationValues>>();
+  const ids = [...new Set(productIds)];
+  for (let offset = 0; offset < ids.length; offset += 1000) {
+    const rows = await tx
+      .select({
+        id: products.id,
+        allergens: effectiveProductColumns.allergens,
+        dietOverride: effectiveProductColumns.dietOverride,
+        dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(inArray(products.id, ids.slice(offset, offset + 1000)));
+    for (const row of rows) result.set(row.id, productDeclarationValues(row));
+  }
+  return result;
 }

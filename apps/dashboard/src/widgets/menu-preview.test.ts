@@ -191,7 +191,7 @@ it("words every kind of change, each with where it came from", async () => {
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
-        fields: ["allergens"],
+        fields: ["color"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -239,7 +239,16 @@ it("words every kind of change, each with where it came from", async () => {
         kind: "product_changed",
         productId: "p-cola",
         name: "Cola",
-        fields: ["names", "description", "image", "unit", "diet", "variants", "extras", "options"],
+        fields: [
+          "names",
+          "description",
+          "image",
+          "unit",
+          "ordering",
+          "variants",
+          "extras",
+          "options",
+        ],
         source: "shared_product",
       },
       {
@@ -333,12 +342,12 @@ it("words every kind of change, each with where it came from", async () => {
     [
       "Lemonade added under Drinks",
       "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
-      "Lemonade: allergens — shared product, also on Dinner Menu",
+      "Lemonade: colour — shared product, also on Dinner Menu",
       "Drinks renamed — included menu",
       "Lager removed from Drinks › Beer — included menu, also on Dinner Menu and Terrace Menu",
       "Chips added at the top level",
       "Soup moved from Starters to the top level and Mains › Hot",
-      "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
+      "Cola: names, description, photo, unit, how it is sold, variants, extras, options — shared product",
       "Section Desserts added at the top level",
       "Bread removed from the top level",
       "Section Specials removed from the top level",
@@ -576,7 +585,7 @@ const VAT_CHANGES: MenuChange[] = [
     kind: "product_changed",
     productId: "p-burger",
     name: "Burger",
-    fields: ["allergens", "vat", "variants"],
+    fields: ["color", "vat", "variants"],
     source: "shared_product",
   },
   {
@@ -595,7 +604,7 @@ it("names a VAT change among a product's changed facts", async () => {
   expect(items(el, "changes")).toEqual(
     [
       "Lemonade: VAT — shared product, also on Dinner Menu",
-      "Burger: allergens, VAT, variants — shared product",
+      "Burger: colour, VAT, variants — shared product",
       "Cheese: VAT — shared product",
     ].sort(),
   );
@@ -607,7 +616,7 @@ it("names a VAT change in Spanish", async () => {
   expect(items(el, "changes")).toEqual(
     [
       "Lemonade: IVA — producto compartido, también en Dinner Menu",
-      "Burger: alérgenos, IVA, variantes — producto compartido",
+      "Burger: color, IVA, variantes — producto compartido",
       "Cheese: IVA — producto compartido",
     ].sort(),
   );

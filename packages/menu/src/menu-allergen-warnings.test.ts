@@ -126,7 +126,7 @@ describe("unreviewed offered allergens", () => {
                 { at: new Date("2030-01-01T10:00:00Z") },
               ),
         );
-      await app((tx) => updateProduct(tx, f.soup, { allergens: {} }));
+      await app((tx) => updateProduct(tx, f.soup, { allergens: {}, unitPrice: "8.00" }));
       const rows = () =>
         app(async (tx) => ({
           versions: await tx.select().from(menuVersions),

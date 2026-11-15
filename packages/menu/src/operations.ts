@@ -1,3 +1,4 @@
+import { productDeclarationValues } from "./product-declarations.js";
 import { nameOf } from "./section-members.js";
 import { combineOffer } from "./menu-combine.js";
 import { includedMenus, placesOf } from "./menu-inclusion.js";
@@ -475,10 +476,7 @@ function offerLineValues(row: OfferLineRow) {
     vatClass: row.vatClass as VatClass,
     takeawayVatClass: row.takeawayVatClass,
     category: row.category,
-    allergens: row.allergens,
-    diet: overlayDietProfile(UNDECLARED_DIET, row.dietOverride as DietOverride | null),
-    dietOverride: row.dietOverride as DietOverride | null,
-    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
+    ...productDeclarationValues(row),
     courseId: row.courseId,
   };
 }
@@ -1262,10 +1260,7 @@ export async function listAvailableProducts(
     vatClass: row.vatClass as VatClass,
     takeawayVatClass: row.takeawayVatClass,
     category: row.category,
-    allergens: row.allergens,
-    diet: overlayDietProfile(UNDECLARED_DIET, row.dietOverride as DietOverride | null),
-    dietOverride: row.dietOverride as DietOverride | null,
-    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
+    ...productDeclarationValues(row),
     courseId: row.courseId,
     offeredModifiers: offeredByProduct.get(row.id) ?? [],
   }));

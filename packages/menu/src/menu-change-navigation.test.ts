@@ -98,10 +98,6 @@ function offer(id = "soup"): FrozenOffer {
     unit,
     vatClass: "general",
     takeawayVatClass: "general",
-    allergens: null,
-    diet: null,
-    dietOverride: null,
-    dietaryDeclarations: [],
     ordering: "public",
     placements: [["drinks"], ["favourites", "drinks"]],
     variants: [],
@@ -352,20 +348,6 @@ describe("navigateMenuChanges", () => {
       [{ kind: "unit" }],
     ],
     [
-      "allergens",
-      (o: FrozenOffer) => {
-        o.allergens = { milk: {} };
-      },
-      [{ kind: "allergens" }],
-    ],
-    [
-      "diet",
-      (o: FrozenOffer) => {
-        o.dietaryDeclarations = ["vegan"];
-      },
-      [{ kind: "diet" }],
-    ],
-    [
       "vat",
       (o: FrozenOffer) => {
         o.vatClass = "reduced";
@@ -438,10 +420,6 @@ function variant(id: string): FrozenOfferVariant {
     pricingUnit: "each",
     vatClass: "general",
     takeawayVatClass: "general",
-    allergens: null,
-    diet: null,
-    dietOverride: null,
-    dietaryDeclarations: [],
   };
 }
 function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> {
@@ -475,8 +453,6 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
         takeawayVatClass: "general",
         maxQuantity: null,
         preselected: false,
-        addAllergens: null,
-        suitableFor: [],
       },
     ],
   };

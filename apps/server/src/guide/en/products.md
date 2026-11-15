@@ -263,7 +263,7 @@ the publication. Cancelling the scheduled confirmation keeps the date and time y
 
 While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
 hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
-and publish each menu it is on again.
+then save. You do not need to publish the menu.
 
 Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
@@ -492,19 +492,19 @@ even if the list has been disabled on the dashboard but is still on your menu.
 ## Check the menu as a guest {#guest-preview}
 
 Open a menu in **Menus**, go to **Preview** and choose **Guest menu preview**. You see its published dishes,
-prices, sizes, extras and declarations. Choose a guest language to check the names and descriptions;
-missing names use your default language, then the internal name. Publish your changes before
-checking them here. This preview does not share the menu with guests.
+prices, sizes and extras, with the products’ current allergens and diet labels. Choose a guest language to check the names and descriptions;
+missing names use your default language, then the internal name. Publish name and price changes before
+checking them here. After changing declarations, reopen the preview. This preview does not share the menu with guests.
 
 ## Share the default menu on this box {#guest-sharing}
 
 In **Guest menu preview**, choose **Turn sharing on** to share the default menu’s published
 version. This may be a different menu from the one you are previewing. Choose
-**Open the shared menu on this box** to check it. Publish changes before checking them there.
+**Open the shared menu on this box** to check it. Publish name and price changes before checking them there. Reload the page after changing declarations.
 Only an active, published default menu is shown. Choose **Turn sharing off** to stop sharing.
 The choice stays on this box when you import a configuration; a new box starts with sharing Off.
 When this box is connected to Cloud, the preview shows whether Cloud has the current publication
-or an update is pending. Publish your changes, then wait for confirmation. If the box is offline,
+or an update is pending. Save declarations, or publish other menu changes, then wait for confirmation. If the box is offline,
 Cloud keeps its last delivered copy. Turning sharing off also waits for delivery before that copy
 is removed. You can stop sharing in the Cloud portal while the box is offline; enable it there to
 resume delivery. If Cloud refuses a publication, check the menu and its content languages; the box
@@ -524,4 +524,5 @@ spacing, colours and key here; another box needs its own choices.
 
 Choose **Preview A4**, check all pages, then **Print / Save as PDF**. Select A4 portrait in your
 browser and turn off its headers and footers. Reopen the guest preview after publishing a new
-version. Printing uses the publication you opened and does not turn on sharing.
+version or saving declarations. Printing keeps the opened publication’s dishes and prices, with current
+allergens and diet labels. Print a fresh copy after correcting declarations; printing does not turn on sharing.

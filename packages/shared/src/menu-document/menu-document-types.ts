@@ -15,11 +15,14 @@ import type { IncludeFolderOverrides } from "./section-types.js";
  * type definitions only. The guard is `scripts/dashboard-browser-purity.test.ts`.
  */
 
-/** Stripped from the document (D6): availability, and the two fields that are not menu content. */
-export type OverlayOfferField = "available" | "courseId" | "category";
+/** Supplied from current products when the document is served. */
+export type DeclarationField = "allergens" | "diet" | "dietOverride" | "dietaryDeclarations";
+export type OverlayOfferField = "available" | "courseId" | "category" | DeclarationField;
 
 /** `image` is the product's effective photo, which `OfferedExtraItem` does not carry. */
-export type FrozenExtraItem = OfferedExtraItem & { image: string | null };
+export type FrozenExtraItem = Omit<OfferedExtraItem, "addAllergens" | "suitableFor"> & {
+  image: string | null;
+};
 export type FrozenOptionLabel = Omit<OptionLabel, "available">;
 
 /** Every option label, and every extras item whose product is Active and has no Active variant,
@@ -106,8 +109,23 @@ export interface MenuDocument {
   home: DeviceHome;
 }
 
+export type DeclarationOffer = Omit<FrozenOffer, "variants" | "offeredModifiers"> &
+  Pick<MenuOffer, DeclarationField> & {
+    variants: (FrozenOfferVariant & Pick<MenuOfferVariant, DeclarationField>)[];
+    offeredModifiers: (
+      | Extract<FrozenOfferedModifier, { kind: "options" }>
+      | (Omit<Extract<FrozenOfferedModifier, { kind: "extras" }>, "items"> & {
+          items: (FrozenExtraItem & Pick<OfferedExtraItem, "addAllergens" | "suitableFor">)[];
+        })
+    )[];
+  };
+export type DeclarationDocument = Omit<MenuDocument, "offers"> & {
+  offers: Record<string, DeclarationOffer>;
+};
+
 /** An extras item as a served offer carries it: the frozen item with its current availability. */
-export type LiveExtraItem = FrozenExtraItem & { available: boolean };
+export type LiveExtraItem = FrozenExtraItem &
+  Pick<OfferedExtraItem, "addAllergens" | "suitableFor"> & { available: boolean };
 
 /**
  * An options list as a served offer carries it. Unlike `OfferedOptionsList`, whose labels are the
@@ -279,8 +297,6 @@ export type ProductChangeField =
   | "image"
   | "color"
   | "unit"
-  | "allergens"
-  | "diet"
   | "vat"
   | "ordering"
   | "set_lunch"

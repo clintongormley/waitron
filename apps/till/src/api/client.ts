@@ -382,7 +382,7 @@ export interface TillProduct {
   offeredModifiers?: OfferedModifier[];
   /** Includes sold-out rows so dish information can put them back on sale. */
   modifierAvailability?: TillMenuOffer["offeredModifiers"];
-  /** The PUBLISHED diet profile. Null/absent reads as an unreviewed dish (never vegan/vegetarian), so
+  /** The current product diet profile. Null/absent reads as an unreviewed dish (never vegan/vegetarian), so
    * the diet filters exclude it. */
   diet?: DietProfile | null;
 

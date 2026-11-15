@@ -133,7 +133,8 @@ quítala de la sección Modificadores de ese producto concreto.
 ## Alérgenos e información dietética {#allergens}
 
 Un elemento de extras declara sus alérgenos y su aptitud dietética a través del producto que nombra, así
-que los mantienes en ese producto, en **Productos**, no aquí. Una opción no declara ninguno de los dos,
+que los mantienes en ese producto, en **Productos**, no aquí. Guarda el producto para corregir sus
+declaraciones sin publicar. Abre de nuevo una vista previa para clientes para comprobar las declaraciones guardadas. Una opción no declara ninguno de los dos,
 porque es texto, no algo que se come.
 
 ## Qué hace la caja con una lista {#till}

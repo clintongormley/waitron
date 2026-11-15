@@ -1374,24 +1374,31 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
     });
 
-    it("flags both for Lemonade's allergens, each naming the shared product", async () => {
+    it("keeps both menus current for declaration-only changes and preserves recorded versions", async () => {
       const f = await published();
-      await app((tx) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }));
-      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
-      for (const [menuId, other] of [
-        [f.lunch, "Dinner Menu"],
-        [f.dinner, "Lunch Menu"],
-      ] as const)
-        expect(changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)).toEqual([
-          {
-            kind: "product_changed",
-            productId: f.lemonade,
-            name: "Lemonade",
-            fields: ["allergens"],
-            source: "shared_product",
-            alsoOn: [other],
-          },
-        ]);
+      const recorded = (
+        await fx.db.execute<{ document: string; content_hash: string }>(
+          sql`select document, content_hash from menu_versions order by id`,
+        )
+      ).rows;
+      expect(typeof recorded[0]!.document).toBe("string");
+      await app(async (tx) => {
+        await updateProduct(tx, f.lemonade, {
+          allergens: { sulphites: {} },
+          dietaryDeclarations: ["vegan"],
+        });
+        await updateProduct(tx, f.extraLemon, {
+          allergens: null,
+          dietaryDeclarations: ["vegetarian"],
+        });
+      });
+      expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+      for (const menuId of [f.lunch, f.dinner])
+        expect((await app((tx) => previewMenu(tx, menuId))).changes).toEqual([]);
+      expect(
+        (await fx.db.execute(sql`select document, content_hash from menu_versions order by id`))
+          .rows,
+      ).toEqual(recorded);
     });
 
     // The published menu carries the setting (spec §9): a change flags the menu, and what is live
@@ -2069,7 +2076,7 @@ describe("previewMenu", () => {
     });
   });
 
-  it("names sulphites on Lemonade and on its extra as shared product changes (Review Focus 1)", async () => {
+  it("names VAT on Lemonade and its extra while declarations stay live", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
@@ -2089,7 +2096,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["allergens", "vat"],
+        fields: ["vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -2097,7 +2104,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Extra lemon",
-        fields: ["allergens", "vat"],
+        fields: ["vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -2255,7 +2262,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     await app((tx) => createMenu(tx, { name: "Brunch Menu" }));
-    await app((tx) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }));
+    await app((tx) => updateProduct(tx, f.lemonade, { name: "New lemonade" }));
     const graphs = vi.spyOn(sectionGraph, "loadSectionGraph");
     const offers = vi.spyOn(operations, "listMenuOffers");
     const preview = await app((tx) => previewMenu(tx, f.lunch));

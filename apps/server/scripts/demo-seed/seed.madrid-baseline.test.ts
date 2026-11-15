@@ -11,7 +11,7 @@ import {
   madridWithOptionDefaults,
   madridWithSectionColumns,
 } from "./testing/madrid-documents.js";
-import { stable } from "./testing/madrid-semantics.js";
+import { stable, recomputeMadridHashes } from "./testing/madrid-semantics.js";
 import {
   madridWithDroppedColumns,
   type MadridColumnDrops,
@@ -1777,6 +1777,17 @@ for (const locale of ["en", "es"] as const) {
         );
         phases[phase]!.activity_log! += 1;
       }
+      recomputeMadridHashes(expected[phase], {
+        editDocumentRow(row) {
+          if (typeof row.productId === "string" && Array.isArray(row.variants))
+            for (const product of [row, ...row.variants] as Record<string, unknown>[])
+              for (const field of ["allergens", "diet", "dietOverride", "dietaryDeclarations"])
+                delete product[field];
+          if (row.kind === "extras" && Array.isArray(row.items))
+            for (const item of row.items as Record<string, unknown>[])
+              for (const field of ["addAllergens", "suitableFor"]) delete item[field];
+        },
+      });
       if (phase === "seeded") {
         const periods = madridWithPeriodChanges(expected.seeded, PERIOD_CHANGES[locale]);
         expected.seeded = periods.semantics;
