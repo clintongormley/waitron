@@ -24,7 +24,9 @@ and Cloud screens remain separate release work.
 `oklch()`/`color()`/`color-mix()` colours, no named colours (`red`, `blue`, …), no font sizes, no radii, no
 px spacing above `1`, and no `rem`/`em` sizing at all (not even inside `min()`/`max()`/`clamp()`)
 in any component or view. Every such value reads a token instead. `transparent`, `currentColor`,
-and `inherit` are legitimate escape hatches, not chrome.
+and `inherit` are legitimate escape hatches, not chrome, and so are the system colours inside
+`@media (forced-colors: active)` (see "Forced colours", below); no guard checks where a system
+colour is used.
 `packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
 styles`, and fails on violations. It covers a new primitive automatically.
@@ -2578,16 +2580,24 @@ colour. So a primitive that draws an edge, a focus mark or a state with a box-sh
 or a transparent border also draws it inside `@media (forced-colors: active)`, with an ordinary
 border or outline in system colours (`CanvasText`, `Canvas`, `Highlight`, `HighlightText`,
 `GrayText`). It uses `forced-color-adjust: none` only where the browser would otherwise repaint a
-colour it needs. Three do so today:
+colour it needs, and then also sets any focus ring on that element, which the theme would otherwise
+leave in the brand colour. Three do so today:
 
-- the shared field box (`fieldStyles`) shows its bottom line as a border, an outline in `Highlight`
-  while focused, and a single dashed `GrayText` line when disabled;
+- the shared field box (`fieldStyles`) draws its bottom line in `CanvasText` on a `::after` laid
+  over the box, so the box keeps its height; the line is twice as thick when the field is invalid,
+  an outline in `Highlight` marks focus, and a disabled field has a single dashed `GrayText` line;
 - `wt-switch` outlines its track and fills its thumb; ON fills the track in `Highlight` with a
-  `HighlightText` thumb at the far end, and a disabled switch is drawn in `GrayText`;
+  `HighlightText` thumb at the far end, a disabled switch is drawn in `GrayText` without being
+  dimmed, and a keyboard-focused switch is ringed in `Highlight`;
 - `wt-tabs` underlines only the selected tab, in `Highlight`.
 
-Their tests turn the theme on with the Chrome DevTools Protocol's `forced-colors` media emulation,
-check it took, and read pixels from a real screenshot:
+The others do not yet, among them `wt-combobox`, `wt-colour-chooser`, `wt-data-table`,
+`wt-floor-map` and the floor plan's rings (`floor-ring.ts`); see
+[the backlog](../backlog/dashboard.md#bundle-other-browser-check).
+
+Their tests turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
+which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks
+the theme took, and reads pixels from a real screenshot with `elementPixels`:
 `packages/ui-core/src/components/wt-input.forced-colors.test.ts`,
 `packages/ui/src/components/wt-switch.forced-colors.test.ts` and
 `packages/ui/src/components/wt-tabs.forced-colors.test.ts`.
@@ -5105,7 +5115,10 @@ test pins `pre-wrap`, so replacing the shorthand keeps whitespace preservation c
    on the `host` and asserts the field's width follows it
    (`packages/ui-core/src/components/wt-input.test.ts` does). Nothing else checks that a new field
    reads it, or that it uses `fieldStyles`.
-7. Add it to the workbench and to the table above.
+7. If it draws an edge, a focus mark or a state with a box-shadow, a background or a transparent
+   border, add a `@media (forced-colors: active)` block and a
+   `src/components/<name>.forced-colors.test.ts` (see "Forced colours (Windows contrast themes)").
+8. Add it to the workbench and to the table above.
 
 ## Workbench
 

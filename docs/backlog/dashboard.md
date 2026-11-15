@@ -350,7 +350,8 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
 
 ## Bundle: Other browser check
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size S. The first four's text is unchanged from the index they came from (backlog review,
+2026-11-06).
 
 - **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
   [Detail](dashboard.md#the-colour-fields-custom-square-appsdashboardsrcwidgetscolor-fieldts-left-by-c25)
@@ -363,6 +364,12 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
 - **A password manager filling the profile's current-password field** — the owner tried Chrome's
   password manager on 2026-10-08 and reported that it works well; other password managers are
   untried. Left open by A331 batch 3a (#1401).
+- **Under a Windows contrast theme, most primitives that draw an edge or a state with a shadow lose
+  it** — among them `wt-combobox`'s open-list line, `wt-colour-chooser`'s checked ring,
+  `wt-data-table`, `wt-floor-map` and the floor plan's overdue and forgotten rings
+  (`packages/ui/src/floor-ring.ts`). The field box, `wt-switch` and `wt-tabs` were fixed on
+  2026-11-15; the rule and how to test it are in
+  [design-system.md](../developers/design-system.md#forced-colours-windows-contrast-themes).
 
 ## Decisions and deliberate limits
 

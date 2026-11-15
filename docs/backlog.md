@@ -1356,7 +1356,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   `wt-data-table` cell callbacks looks feasible; nobody has tried to write it. Left open by product
   categories (#340).
 
-- **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
+- **Other browser check** (bundle of 5, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 
 - **The new key and passkey icons draw lines at width 2** while the change-account icon beside them
   uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing

@@ -1065,7 +1065,10 @@ Every colour, spacing, radius, and font value in a `packages/ui/src/components/*
 `static styles` must read a `--wt-*` custom property: no hex, no
 `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()`/`color()`/`color-mix()`, no named colours,
 no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp()`). `transparent`,
-`currentColor`, and `inherit` are legitimate escape hatches, not chrome.
+`currentColor`, and `inherit` are legitimate escape hatches, not chrome, and so are the system
+colours inside `@media (forced-colors: active)` (see
+[design-system.md](design-system.md#forced-colours-windows-contrast-themes)); no guard checks where
+a system colour is used.
 
 This is enforced automatically by `packages/ui/src/no-hardcoded-chrome.test.ts`, which discovers
 every component via `import.meta.glob("./components/*.ts", ...)` — a new component is covered the
