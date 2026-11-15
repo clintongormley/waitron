@@ -7,6 +7,7 @@ import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-he
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
+const MAIN = "https://box-aaaa.waitron.local";
 const signIn = { email: "owner@example.com", password: "correct horse", totp: "123456" };
 const saved = {
   operationId: "emergency-one",
@@ -114,9 +115,16 @@ async function mount(
     /** The first preview gets no answer. */
     firstPreviewLost?: boolean;
     pageUrl?: string;
+    /** What `GET /api/node/main` answers; a string mounts without waiting for the first step. */
+    mainUrl?: string | null;
+    /** Replaces the answer to `GET /api/node/main`. */
+    mainRead?: () => Promise<Response>;
+    /** How `${MAIN}/api/node` answers the page's own check, by call from 0. */
+    mainAnswers?: (call: number) => Promise<Response>;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
+  const probes: (RequestInit | undefined)[] = [];
   let recorded = options.saved ?? false;
   let activated = false;
   let rejected = false;
@@ -132,6 +140,14 @@ async function mount(
   const later = [...(options.later ?? [])];
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
+    if (path === "/api/node/main")
+      return (
+        options.mainRead?.() ?? new Response(JSON.stringify({ mainUrl: options.mainUrl ?? null }))
+      );
+    if (path === `${MAIN}/api/node`) {
+      probes.push(init);
+      return options.mainAnswers!(probes.length - 1);
+    }
     if (init?.method === "GET" && options.statusUnavailable)
       throw new TypeError("progress unavailable");
     if (init?.method === "GET")
@@ -336,8 +352,9 @@ async function mount(
     },
     options.theme,
   );
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
-  return { el, host, posts };
+  if (typeof options.mainUrl !== "string")
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  return { el, host, posts, probes };
 }
 async function authenticate(el: SetupHandoverScreen) {
   await edit(el, "handover-email", signIn.email);
@@ -1462,4 +1479,116 @@ it("a back that was ignored is not carried into the operation's address", async 
   expect(address.pathname).toBe(`/handover/${saved.operationId}`);
   expect(address.search).toBe("");
   expect(stop).toBe("/");
+});
+
+async function mainAnsweringRefusal(el: SetupHandoverScreen) {
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_answering")),
+  );
+  const link = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (candidate) => candidate.getAttribute("href") === `${MAIN}/manage/servers`,
+  );
+  expect(link?.textContent).toBe(`${MAIN}/manage/servers`);
+  expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+}
+const answers = () => Promise.resolve(new Response(null));
+const silent = () => Promise.reject(new TypeError("no answer"));
+
+it("when the main server answers, the page refuses and links to its Servers page", async () => {
+  const { el, probes } = await mount({ mainUrl: MAIN, mainAnswers: answers });
+  await mainAnsweringRefusal(el);
+  expect(probes).toHaveLength(1);
+  expect(probes[0]).toMatchObject({ mode: "no-cors", cache: "no-store" });
+  expect(probes[0]!.signal).toBeInstanceOf(AbortSignal);
+  expect(q(el, "[data-test=main-check-again]").textContent).toContain(
+    t("handover.emergency.main_check_again"),
+  );
+});
+
+it("Check again lets the switch go on once the main server is silent, and Check this copy asks it again", async () => {
+  let answering = true;
+  const { el, posts } = await mount({
+    mainUrl: MAIN,
+    mainAnswers: () => (answering ? answers() : silent()),
+  });
+  await mainAnsweringRefusal(el);
+  answering = false;
+  q(el, "[data-test=main-check-again]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
+  answering = true;
+  await edit(el, "handover-email", signIn.email);
+  await edit(el, "handover-password", signIn.password);
+  q(el, "[data-test=emergency-preview]").click();
+  await mainAnsweringRefusal(el);
+  expect(posts).toEqual([]);
+});
+
+it("a main server that comes back before Declare stops the switch there, sending nothing", async () => {
+  let answering = false;
+  const { el, posts } = await mount({
+    mainUrl: MAIN,
+    mainAnswers: () => (answering ? answers() : silent()),
+  });
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  await authenticate(el);
+  await declarationFields(el);
+  answering = true;
+  q(el, "[data-test=emergency-declare]").click();
+  await mainAnsweringRefusal(el);
+  expect(posts.filter(({ path }) => path.endsWith("/declare"))).toEqual([]);
+});
+
+it("a page restored from the back-forward cache asks the main server again, and a slower earlier check does not overrule it", async () => {
+  let silenceFirst: ((reason: unknown) => void) | undefined;
+  const { el } = await mount({
+    mainUrl: MAIN,
+    mainAnswers: (call) =>
+      call === 0
+        ? new Promise((_resolve, reject) => {
+            silenceFirst = reject;
+          })
+        : answers(),
+  });
+  await vi.waitFor(() => expect(silenceFirst).toBeDefined());
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  await mainAnsweringRefusal(el);
+  silenceFirst!(new TypeError("no answer"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  await mainAnsweringRefusal(el);
+});
+
+it.each(["the address read", "the main server's answer"])(
+  "a check that waits over 3 seconds for %s lets the switch go on",
+  async (stage) => {
+    // vi.waitFor moves fake time on, so the wait for the request uses the real clock.
+    const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let asked = false;
+    const never = () => {
+      asked = true;
+      return new Promise<Response>(() => {});
+    };
+    const { el } = await mount({
+      mainUrl: MAIN,
+      ...(stage === "the address read" ? { mainRead: never } : { mainAnswers: never }),
+    });
+    for (let turn = 0; turn < 100 && !asked; turn += 1)
+      await new Promise((resolve) => realSetTimeout(resolve, 20));
+    expect(asked).toBe(true);
+    await vi.advanceTimersByTimeAsync(2999);
+    await el.updateComplete;
+    expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_checking"));
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
+  },
+);
+
+it("no mainUrl lets the switch go on", async () => {
+  const { el, probes } = await mount({ mainUrl: null });
+  expect(q(el, "[data-test=emergency-preview]")).not.toBeNull();
+  expect(probes).toEqual([]);
 });

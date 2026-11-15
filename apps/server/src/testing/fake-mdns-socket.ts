@@ -8,7 +8,10 @@ export function fakeMdnsSocket() {
     on: ((event: string, handler: never) => {
       if (event === "query") onQuery = handler;
     }) as MdnsSocket["on"],
-    respond: (response) => responses.push(response),
+    respond: (response, sent) => {
+      responses.push(response);
+      sent?.();
+    },
     destroy: (cb) => cb?.(),
   };
   return {

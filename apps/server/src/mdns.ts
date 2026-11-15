@@ -19,11 +19,17 @@ export interface MdnsSocket {
   ): void;
   /** A bind failure (EADDRINUSE/EACCES) arrives here; unhandled, it would throw and kill the process. */
   on(event: "error", handler: (err: Error) => void): void;
-  respond(response: { answers: MdnsAnswer[] }): void;
+  /** `sent` is called once the send has finished, or failed. */
+  respond(response: { answers: MdnsAnswer[] }, sent?: (err?: Error | null) => void): void;
   destroy(cb?: () => void): void;
 }
 
 export interface MdnsResponder {
+  /** Tells every device now, unasked, that `name` is at this box's addresses. */
+  announce(name: string): void;
+  /** Tells every device to drop each answer for `name` this box gave since `announce(name)`. */
+  withdraw(name: string): void;
+  /** Withdraws every announced name, as `withdraw` does, before closing the socket. */
   stop(): Promise<void>;
 }
 
@@ -42,8 +48,15 @@ export interface MdnsDeps {
   makeSocket?: () => MdnsSocket;
 }
 
-export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAnswer[] {
-  return addresses.map((data) => ({ name: hostname, type: "A", ttl: MDNS_TTL_SECONDS, data }));
+/** How long `stop()` waits for its goodbyes to be sent before closing the socket regardless. */
+export const MDNS_GOODBYE_WAIT_MS = 1_000;
+
+export function buildMdnsAnswers(
+  hostname: string,
+  addresses: string[],
+  ttl: number = MDNS_TTL_SECONDS,
+): MdnsAnswer[] {
+  return addresses.map((data) => ({ name: hostname, type: "A", ttl, data }));
 }
 
 function respondsOnLan(deps: { devMode: boolean; httpHost: string }): boolean {
@@ -55,13 +68,22 @@ function respondsOnLan(deps: { devMode: boolean; httpHost: string }): boolean {
 /** Outside development, answer mDNS A queries for a non-loopback HTTP listener. */
 export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   if (!respondsOnLan(deps)) {
-    return { stop: () => Promise.resolve() };
+    return { announce: () => {}, withdraw: () => {}, stop: () => Promise.resolve() };
   }
   const { names, getAddresses, log } = deps;
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 
+  // Every address each announced name was given at, so its goodbye reaches a device holding an
+  // address this box no longer has.
+  const givenAt = new Map<string, Set<string>>();
+  // Goodbyes `withdraw` started, which `stop()` waits for before closing the socket.
+  const sending = new Set<Promise<void>>();
+  let stopped = false;
+
   socket.on("query", (query) => {
+    // A stopping responder's answer would re-cache a name its goodbye has just withdrawn.
+    if (stopped) return;
     const ours = names();
     // Every query on the network arrives here, so one asking for none of ours allocates nothing.
     let asked: Set<string> | undefined;
@@ -74,6 +96,7 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     const addresses = getAddresses();
     const answers = [...asked].flatMap((name) => buildMdnsAnswers(name, addresses));
     if (answers.length === 0) return;
+    for (const name of asked) for (const a of addresses) givenAt.get(name)?.add(a);
     socket.respond({ answers });
   });
 
@@ -84,17 +107,42 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
 
   log("info", "mdns.responding", { hostnames: [...names()] });
 
-  let stopped = false;
+  const goodbye = (name: string): Promise<void> => {
+    const addresses = givenAt.get(name);
+    givenAt.delete(name);
+    if (addresses === undefined) return Promise.resolve();
+    return new Promise((resolve) => {
+      socket.respond({ answers: buildMdnsAnswers(name, [...addresses], 0) }, () => resolve());
+    });
+  };
+  let stopping: Promise<void> | undefined;
   return {
+    announce(name) {
+      const addresses = getAddresses();
+      if (stopped || addresses.length === 0) return;
+      const held = givenAt.get(name) ?? new Set();
+      for (const a of addresses) held.add(a);
+      givenAt.set(name, held);
+      socket.respond({ answers: buildMdnsAnswers(name, addresses) });
+    },
+    withdraw(name) {
+      if (stopped) return;
+      const sent = goodbye(name).finally(() => sending.delete(sent));
+      sending.add(sent);
+    },
     stop() {
-      if (stopped) return Promise.resolve();
-      stopped = true;
-      return new Promise<void>((resolve) => {
-        socket.destroy(() => {
-          log("info", "mdns.stopped", {});
-          resolve();
-        });
-      });
+      stopping ??= (async () => {
+        stopped = true;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.all([...sending, ...[...givenAt.keys()].map(goodbye)]),
+          new Promise((resolve) => (timer = setTimeout(resolve, MDNS_GOODBYE_WAIT_MS))),
+        ]);
+        clearTimeout(timer);
+        await new Promise<void>((resolve) => socket.destroy(() => resolve()));
+        log("info", "mdns.stopped", {});
+      })();
+      return stopping;
     },
   };
 }

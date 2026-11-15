@@ -2,8 +2,10 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { MDNS_TTL_SECONDS, type MdnsQuerySocket } from "./box-lookup.js";
 import {
   buildMdnsAnswers,
+  MDNS_GOODBYE_WAIT_MS,
   startMdnsResponder,
   watchVenueNameInSetup,
+  type MdnsAnswer,
   type MdnsSocket,
 } from "./mdns.js";
 
@@ -279,6 +281,165 @@ describe("mdns", () => {
       event: "mdns.socket_error",
       fields: { message: "bind EADDRINUSE 0.0.0.0:5353" },
     });
+  });
+
+  it("announce sends the name's answers with their lifetime; withdraw sends them with a lifetime of 0", () => {
+    const f = fakeSocket();
+    const r = startMdnsResponder({
+      names: () => ["box-3333.waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5", "10.0.0.9"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(f.respond.mock.calls.map(([response]) => response)).toEqual([
+      {
+        answers: [
+          { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+          { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "10.0.0.9" },
+        ],
+      },
+      {
+        answers: [
+          { name: "waitron.local", type: "A", ttl: 0, data: "192.168.1.5" },
+          { name: "waitron.local", type: "A", ttl: 0, data: "10.0.0.9" },
+        ],
+      },
+    ]);
+  });
+
+  it("announce sends nothing without an address, nor once stopped", async () => {
+    const f = fakeSocket();
+    let addresses: string[] = [];
+    const r = startMdnsResponder({
+      names: () => ["waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => addresses,
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    r.announce("waitron.local");
+    addresses = ["192.168.1.5"];
+    await r.stop();
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(f.respond).not.toHaveBeenCalled();
+  });
+
+  it("announce and withdraw send nothing in development mode", () => {
+    const f = fakeSocket();
+    const makeSocket = vi.fn(() => f.socket);
+    const r = startMdnsResponder({
+      names: () => ["waitron.local"],
+      devMode: true,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket,
+    });
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(makeSocket).not.toHaveBeenCalled();
+    expect(f.respond).not.toHaveBeenCalled();
+  });
+
+  /** A responder for the box's own name, whose addresses the test moves through `at.addresses`. */
+  function venueResponder(f: ReturnType<typeof fakeSocket>, at: { addresses: string[] }) {
+    return startMdnsResponder({
+      names: () => ["box-3333.waitron.local", "waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => at.addresses,
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+  }
+  const sent = (f: ReturnType<typeof fakeSocket>) =>
+    f.respond.mock.calls.flatMap(([r]) =>
+      (r as { answers: MdnsAnswer[] }).answers.map((a) => `${a.data}/${a.ttl}`),
+    );
+
+  it("withdraw says goodbye at every address the name was given at, not at the current ones", () => {
+    const f = fakeSocket();
+    const at = { addresses: ["192.168.1.5"] };
+    const r = venueResponder(f, at);
+    r.announce("waitron.local");
+    at.addresses = ["192.168.1.6"];
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    at.addresses = ["192.168.1.7"];
+    f.respond.mockClear();
+    r.withdraw("waitron.local");
+    expect(sent(f)).toEqual(["192.168.1.5/0", "192.168.1.6/0"]);
+    f.respond.mockClear();
+    r.withdraw("waitron.local");
+    expect(f.respond).not.toHaveBeenCalled();
+  });
+
+  it("stop says goodbye for an announced name and closes only once the goodbye is sent", async () => {
+    const f = fakeSocket();
+    const r = venueResponder(f, { addresses: ["192.168.1.5"] });
+    r.announce("waitron.local");
+    f.query({ questions: [{ name: "box-3333.waitron.local", type: "A" }] });
+    f.respond.mockClear();
+    let stopped = false;
+    const stopping = r.stop().then(() => {
+      stopped = true;
+    });
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    expect(sent(f)).toEqual(["192.168.1.5/0"]);
+    await Promise.resolve();
+    expect([stopped, f.destroy.mock.calls.length]).toEqual([false, 0]);
+    (f.respond.mock.calls[0]![1] as () => void)();
+    await stopping;
+    expect(f.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("stop waits for a goodbye withdraw has started before closing the socket", async () => {
+    const f = fakeSocket();
+    const r = venueResponder(f, { addresses: ["192.168.1.5"] });
+    r.announce("waitron.local");
+    f.respond.mockClear();
+    r.withdraw("waitron.local");
+    const stopping = r.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(f.destroy).not.toHaveBeenCalled();
+    (f.respond.mock.calls[0]![1] as () => void)();
+    await stopping;
+    expect(sent(f)).toEqual(["192.168.1.5/0"]);
+    expect(f.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("stop says nothing for the box's own name or a name already withdrawn", async () => {
+    const f = fakeSocket();
+    const r = venueResponder(f, { addresses: ["192.168.1.5"] });
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    f.query({ questions: [{ name: "box-3333.waitron.local", type: "A" }] });
+    f.respond.mockClear();
+    await r.stop();
+    expect(f.respond).not.toHaveBeenCalled();
+    expect(f.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("stop closes the socket after a bounded wait when the goodbye's send never finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fakeSocket();
+      const r = venueResponder(f, { addresses: ["192.168.1.5"] });
+      r.announce("waitron.local");
+      const stopping = r.stop();
+      await vi.advanceTimersByTimeAsync(MDNS_GOODBYE_WAIT_MS - 1);
+      expect(f.destroy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await stopping;
+      expect(f.destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

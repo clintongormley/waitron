@@ -40,6 +40,7 @@ const FOLLOWED_REFUSALS: Partial<Record<string, StringKey>> = {
   "handover.copy_check_failed": "handover.emergency.followed_failed",
 };
 const HELD_OFFER_AFTER_MS = 60_000;
+const MAIN_CHECK_MS = 3000;
 /** Refusals the copy the take signs in against may answer differently: it can be newer. */
 const HELD_SIGN_IN_REFUSALS = new Set([
   "password.invalid",
@@ -120,9 +121,15 @@ export class SetupHandoverScreen extends LitElement {
   @state() private refusalLink = "";
   @state() private copyRefused = false;
   @state() private declarationSaved = false;
+  /** The device's own check of the main server, before the switch is offered (4d plan, D5). */
+  @state() private mainCheck: "checking" | { serversUrl: string } | "clear" = "clear";
+  #mainCheckController?: AbortController;
   #pendingDeclaration?: Omit<EmergencyHandoverDeclaration, "signIn">;
   get #isEmergency(): boolean {
     return this.emergency || this.status?.scenario === "emergency";
+  }
+  get #checksMain(): boolean {
+    return this.emergency && !this.operationId;
   }
   /** A till sends its own address; a box is named `box-<id>.<venue name>` and the till sits at the venue name. */
   get #back(): string | undefined {
@@ -157,7 +164,9 @@ export class SetupHandoverScreen extends LitElement {
   @state() private entry?: ModulePromotionEntry;
   #signInChecked = false;
   #restorePage = (event: PageTransitionEvent): void => {
-    if (event.persisted) this.#restartPolling();
+    if (!event.persisted) return;
+    this.#restartPolling();
+    if (this.#checksMain) this.#startMainCheck();
   };
   #controller?: AbortController;
   #timer?: ReturnType<typeof setTimeout>;
@@ -168,6 +177,7 @@ export class SetupHandoverScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#restartPolling();
+    if (this.#checksMain) this.#startMainCheck();
     window.addEventListener("pagehide", this.#leavePage);
     window.addEventListener("pageshow", this.#restorePage);
   }
@@ -226,6 +236,60 @@ export class SetupHandoverScreen extends LitElement {
     if (!controller.signal.aborted && !activated(this.status) && !closed(this.status)) {
       this.#timer = setTimeout(() => void this.#poll(controller), 2000);
     }
+  }
+  #startMainCheck(): void {
+    this.mainCheck = "checking";
+    void this.#checkMain();
+  }
+  /**
+   * True when the main server stayed silent and no later check replaced this one. Any answer at all
+   * means the main server is up; a failure or the deadline lets the page go on: a device that cannot
+   * trust or resolve the main server always lands here, and the spare's own check still guards every
+   * step.
+   */
+  async #checkMain(): Promise<boolean> {
+    this.#mainCheckController?.abort();
+    const controller = new AbortController();
+    this.#mainCheckController = controller;
+    let limit: ReturnType<typeof setTimeout> | undefined;
+    const serversUrl = await Promise.race([
+      this.#askMain(controller.signal),
+      new Promise<undefined>((resolve) => {
+        limit = setTimeout(() => resolve(undefined), MAIN_CHECK_MS);
+      }),
+    ]);
+    clearTimeout(limit);
+    controller.abort();
+    if (this.#mainCheckController !== controller) return false;
+    this.mainCheck = serversUrl === undefined ? "clear" : { serversUrl };
+    return serversUrl === undefined;
+  }
+  /** The main server's Servers page when it answers; never rejects. */
+  async #askMain(signal: AbortSignal): Promise<string | undefined> {
+    try {
+      const { mainUrl } = await this.api.mainServer(signal);
+      if (typeof mainUrl !== "string" || mainUrl === "") return undefined;
+      const serversUrl = new URL("/manage/servers", mainUrl).href;
+      await this.api.probeMain(mainUrl, signal);
+      return serversUrl;
+    } catch {
+      return undefined;
+    }
+  }
+  #mainCheckContent(check: "checking" | { serversUrl: string }) {
+    if (check === "checking")
+      return html`<p role="status">${t("handover.emergency.main_checking")}</p>`;
+    return html`<p role="alert">${t("handover.emergency.main_answering")}</p>
+      <p><a href=${check.serversUrl}>${check.serversUrl}</a></p>
+      <wt-form-actions>
+        <wt-button
+          data-test="main-check-again"
+          variant="primary"
+          @click=${() => this.#startMainCheck()}
+          >${t("handover.emergency.main_check_again")}</wt-button
+        >
+      </wt-form-actions>
+      <p><a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>`;
   }
   #resetSelection(): void {
     this.entry?.clear();
@@ -457,6 +521,7 @@ export class SetupHandoverScreen extends LitElement {
     this.actionError = "";
     this.heldOffered = this.heldChosen = false;
     try {
+      if (this.#checksMain && !(await this.#checkMain())) return;
       let preview: EmergencyHandoverPreview | undefined;
       try {
         preview = await this.api.previewEmergencyHandover(this.#signIn());
@@ -633,6 +698,7 @@ export class SetupHandoverScreen extends LitElement {
     this.busy = true;
     this.actionError = "";
     try {
+      if (this.#checksMain && !(await this.#checkMain())) return;
       if (this.#pendingDeclaration && (await this.#readPreview())) {
         this.#prepareClock();
         return;
@@ -905,6 +971,24 @@ export class SetupHandoverScreen extends LitElement {
       </wt-form-actions>
       ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink}>${t("handover.emergency.progress")}</a>` : nothing} <a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>` : nothing}`;
   }
+  #content() {
+    const status = this.status;
+    if (activated(status))
+      return html`<p role="status">${t("handover.done")}</p>
+        <a href=${this.#leaveHref}>${t("handover.continue")}</a>`;
+    if (closed(status)) return html`<p role="status">${t("handover.closed")}</p>`;
+    if (this.restarting)
+      return html`<p role="status">
+        ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
+      </p>`;
+    if (this.mainCheck !== "clear") return this.#mainCheckContent(this.mainCheck);
+    if (
+      this.#isEmergency ||
+      (status?.role === "destination" && status.copyPlaced && status.scenario === "controlled")
+    )
+      return this.#fields();
+    return html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`;
+  }
   override render() {
     const status = this.status;
     return html`<main
@@ -918,23 +1002,7 @@ export class SetupHandoverScreen extends LitElement {
       }}
     >
       <h1>${t("handover.heading")}</h1>
-      ${
-        activated(status)
-          ? html`<p role="status">${t("handover.done")}</p>
-              <a href=${this.#leaveHref}>${t("handover.continue")}</a>`
-          : closed(status)
-            ? html`<p role="status">${t("handover.closed")}</p>`
-            : this.restarting
-              ? html`<p role="status">
-                  ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
-                </p>`
-              : this.#isEmergency ||
-                  (status?.role === "destination" &&
-                    status.copyPlaced &&
-                    status.scenario === "controlled")
-                ? this.#fields()
-                : html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`
-      }
+      ${this.#content()}
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : "handover.wait")}</p>` : nothing}
       ${this.readFailed && !this.restarting ? html`<p role="status">${t("handover.read_failed")}</p>` : nothing}
     </main>`;

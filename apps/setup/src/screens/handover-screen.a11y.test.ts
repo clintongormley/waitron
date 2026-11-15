@@ -53,14 +53,25 @@ describe.each(["en-GB", "es-ES"])("handover page %s", (locale) => {
 
 describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
   it.each(["light", "dark"] as const)(
-    "is accessible during declaration, resume, refusal, clock check and the take's waits in %s",
+    "is accessible while the main server answers, during declaration, resume, refusal, clock check and the take's waits in %s",
     async (theme) => {
       const { page } = await import("vitest/browser");
       setLocale(locale);
       try {
         await page.viewport(390, 2000);
-        for (const stage of ["declaration", "resume", "refusal", "clock", "waiting", "held"]) {
+        for (const stage of [
+          "main-answering",
+          "declaration",
+          "resume",
+          "refusal",
+          "clock",
+          "waiting",
+          "held",
+        ]) {
           const api = new SetupApi("", async (input, init) => {
+            if (stage === "main-answering" && String(input) === "/api/node/main")
+              return new Response(JSON.stringify({ mainUrl: "https://main.example" }));
+            if (String(input) === "https://main.example/api/node") return new Response(null);
             if (init?.method === "GET")
               return new Response(
                 JSON.stringify({
@@ -115,6 +126,17 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             "setup-handover-screen",
             { api, emergency: true },
             theme,
+          );
+          if (stage === "main-answering") {
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector("[data-test=main-check-again]")).not.toBeNull(),
+            );
+            await expectNoA11yViolations(host);
+            host.remove();
+            continue;
+          }
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
           );
           for (const [name, value] of [
             ["email", "owner@example.com"],

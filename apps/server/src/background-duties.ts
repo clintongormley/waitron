@@ -57,6 +57,7 @@ export interface BackgroundDutyHandles {
   spareJoin?: Stopper;
   spareSettings: Stopper | undefined;
   spareFollow?: Stopper;
+  mainSilence?: Stopper;
 }
 
 /** The first call's result, or its synchronous failure, is what every later call gets. */
@@ -147,6 +148,15 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       ? []
       : [{ name: "spareFollow", close: () => h.spareFollow!.stop(), atStepdown: true as const }]),
     { name: "spareSettings", close: () => h.spareSettings?.stop(), atStepdown: true },
+    ...(h.mainSilence === undefined
+      ? []
+      : [
+          {
+            name: "mainSilence",
+            close: () => h.mainSilence!.stop(),
+            reason: "only asks the main box whether it answers; it writes nothing in venue.db",
+          },
+        ]),
     {
       name: "liveEvents",
       close: () => h.liveEvents.close(),

@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { standingOf, type NodeStanding, type SignedMembershipDocument } from "@waitron/membership";
+import {
+  servingPrimaryNodeId,
+  standingOf,
+  type NodeStanding,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import type { DeploymentEnvironment } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -56,6 +61,28 @@ export function mountNodeApi(app: Hono, deps: NodeApiDeps, log: Logger): void {
       };
       c.header("cache-control", "no-store");
       return c.json(body);
+    }),
+  );
+}
+
+/**
+ * `GET /api/node/main` — mounted on a spare only: the address its switch page tries before offering
+ * the switch, so a main server the spare cannot reach but the person's device can is not switched
+ * away from.
+ */
+export function mountMainServerApi(
+  app: Hono,
+  deps: Pick<NodeApiDeps, "readMembership">,
+  log: Logger,
+): void {
+  const run = createErrorBoundary(STATUS, "node.failed");
+  app.get("/api/node/main", (c) =>
+    run(c, log, async () => {
+      c.header("cache-control", "no-store");
+      const held = await deps.readMembership();
+      const mainId = held === null ? undefined : servingPrimaryNodeId(held);
+      const main = held?.body.nodes.find((n) => n.nodeId === mainId);
+      return c.json({ mainUrl: main?.contactUrl || null });
     }),
   );
 }

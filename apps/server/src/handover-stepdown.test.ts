@@ -75,6 +75,7 @@ const STOPPERS = [
   "handoverDestinationDuty",
   "chartPost",
   "spareStore",
+  "mainSilence",
 ] as const;
 const AT_STEPDOWN = [
   "certificateDiagnosis",

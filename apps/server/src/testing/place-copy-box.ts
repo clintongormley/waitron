@@ -144,6 +144,8 @@ const makeSeams = (restart: () => void = () => {}) => ({
   // Beside a real chart whose other box is not running.
   peerCheck: async () => ({ result: "proceed" as const, successorNodeId: null }),
   restart,
+  // The old box stands in for acceptance posts only, not the spare's status asks.
+  mainSilence: { ask: async () => "answered" as const },
 });
 
 interface BoxOptions {

@@ -5,6 +5,11 @@
 If you see **This box is the spare**, open the main box’s address to use the restaurant screens
 and data. The spare’s page shows its status; it takes no sales and offers no dashboard sign-in.
 
+The spare’s page also tells you how the main box looks from the spare. If the main box has stopped
+answering, it says for how long and links to the [switch page](servers.md#emergency). If it says the spare
+cannot reach the main server, check the network cable of each box: until the spare can reach the
+main box, it could not take over if the main box failed.
+
 ## Add a spare box {#adding-a-spare}
 
 While a joined spare is switched off, the main box waits at each start until an administrator
@@ -56,7 +61,11 @@ be undone.
 
 On a till or handheld, the red **The main server is not answering** strip offers **Switch to the
 spare server** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
-spare, and **Stop** or **Continue to this box** brings you back to the till. From any other device,
+spare, and **Stop** or **Continue to this box** brings you back to the till. Once the main box has
+been silent for about half a minute, a till, phone or dashboard that reloads the venue’s usual
+address also lands on this page. A main box that restarts for longer than about 20 seconds, during
+an update for example, brings a reloading device here too; if you did not mean to switch, do not
+declare anything, and reload the page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`. Sign in with an administrator account’s password and
 current authenticator code, if set up, then choose **Check this copy**. Type the password

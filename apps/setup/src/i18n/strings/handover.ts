@@ -107,6 +107,10 @@ export const handoverEn = {
     "The old main box’s identity or address could not be checked. Check its connection and address in Servers before trying again.",
   "handover.emergency.failed":
     "This step could not finish. Check this copy again before trying to continue.",
+  "handover.emergency.main_checking": "Checking whether the main server is answering…",
+  "handover.emergency.main_answering":
+    "The main server is still answering. Open its Servers page to hand over, or switch it off and check again.",
+  "handover.emergency.main_check_again": "Check again",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
@@ -219,4 +223,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
+  "handover.emergency.main_checking": "Comprobando si el servidor principal responde…",
+  "handover.emergency.main_answering":
+    "El servidor principal todavía responde. Abre su página Servidores para hacer el traspaso, o apágalo y vuelve a comprobarlo.",
+  "handover.emergency.main_check_again": "Comprobar otra vez",
 };

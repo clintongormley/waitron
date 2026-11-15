@@ -6,6 +6,11 @@ Si ves **Este es el servidor de reserva**, abre la dirección del servidor princ
 pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
 ofrece acceso al panel de gestión.
 
+La página de reserva también te dice cómo ve el servidor de reserva al principal. Si el principal ha
+dejado de responder, indica desde hace cuánto y enlaza a la [página de cambio](servers.md#emergency). Si dice
+que el servidor de reserva no llega al principal, revisa el cable de red de cada servidor: mientras
+no llegue, no podría sustituir al principal si fallara.
+
 ## Añadir un servidor de reserva {#adding-a-spare}
 
 Mientras un servidor de reserva que ha terminado de unirse está apagado, el servidor principal espera
@@ -61,7 +66,11 @@ registros por separado. Esta declaración no se puede deshacer.
 En una caja o un terminal de camarero, la franja roja **El servidor principal no responde** ofrece
 **Cambiar al servidor de reserva** en la pantalla de inicio de sesión, y a quien tenga **Gestionar
 servidores**. Abre esta página en el servidor de reserva, y **Parar** o **Continuar en este
-servidor** te devuelve a la caja. Desde cualquier otro dispositivo, abre la dirección HTTPS del
+servidor** te devuelve a la caja. Cuando el servidor principal lleva cerca de medio minuto sin responder,
+una caja, un móvil o el panel que recargue la dirección habitual del local también llega a esta
+página. Un reinicio del servidor principal de más de unos 20 segundos, por ejemplo durante una
+actualización, también trae aquí a un dispositivo que recargue; si no querías cambiar, no declares
+nada y recarga la página cuando el servidor principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`. Identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta

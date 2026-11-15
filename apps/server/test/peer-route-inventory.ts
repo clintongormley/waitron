@@ -1,6 +1,7 @@
 // A null budget names a route that reads no body, is local-only, or uses the existing upload reader.
 export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] = [
   ["GET", "/api/node", null],
+  ["GET", "/api/node/main", null],
   ["POST", "/api/node/enrol-self", null],
   ["POST", "/api/node/peer-status", 65536],
   ["POST", "/api/node/membership", 262144],

@@ -131,6 +131,7 @@ async function startAndTryToActivate() {
   started = await startServer(await spareEnv(), undefined, {
     timings: { minTickMs: 200, maxTickMs: 600_000 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+    mainSilence: { ask: async () => "answered" },
     restart: () => restarts.push("restart"),
   });
 
@@ -290,6 +291,7 @@ describe("a real restart after activating, then the same request again", () => {
       started = await startServer(await spareEnv(), undefined, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
         peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+        mainSilence: { ask: async () => "answered" },
         restart: () => restarts.push("restart"),
       });
       const retry = await post("activate", sentActivation);
@@ -355,6 +357,7 @@ describe("the emergency routes through a real spare start", () => {
     started = await startServer(env, undefined, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      mainSilence: { ask: async () => "answered" },
       restart: () => {},
     });
     const probe = await openVenueDatabase(dirs().spareVenue, { exclusive: false });
@@ -413,6 +416,7 @@ describe("the emergency routes through a real spare start", () => {
     started = await startServer(env, undefined, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      mainSilence: { ask: async () => "answered" },
     });
     expect(await post("activate", activationBody)).toEqual({
       status: 200,

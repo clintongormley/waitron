@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
-import { mountNodeApi } from "./node-api.js";
+import { mountMainServerApi, mountNodeApi } from "./node-api.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
@@ -91,5 +91,45 @@ describe("GET /api/node", () => {
   it("sends no-store so a probe is never cached", async () => {
     const res = await mount().request("/api/node");
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("GET /api/node/main", () => {
+  function mountMain(held: SignedMembershipDocument | null): Hono {
+    const app = new Hono();
+    mountMainServerApi(app, { readMembership: () => Promise.resolve(held) }, collect([]));
+    return app;
+  }
+
+  it("answers the held chart's serving primary's contact address", async () => {
+    const res = await mountMain(
+      doc([
+        {
+          nodeId: NODE,
+          contactUrl: "https://box-3333.waitron.local",
+          standing: "serving-secondary",
+        },
+        {
+          nodeId: OTHER,
+          contactUrl: "https://box-aaaa.waitron.local",
+          standing: "serving-primary",
+        },
+      ]),
+    ).request("/api/node/main");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ mainUrl: "https://box-aaaa.waitron.local" });
+  });
+
+  it("answers null with no chart, or a chart naming no serving primary", async () => {
+    expect(await (await mountMain(null).request("/api/node/main")).json()).toEqual({
+      mainUrl: null,
+    });
+    const none = doc([
+      { nodeId: NODE, contactUrl: "https://box-3333.waitron.local", standing: "serving-secondary" },
+    ]);
+    expect(await (await mountMain(none).request("/api/node/main")).json()).toEqual({
+      mainUrl: null,
+    });
   });
 });
