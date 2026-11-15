@@ -59,7 +59,7 @@ When nothing is wrong, each row says:
   card provider reports as offline shows here, as **“Bar” is offline.** While the bell or this page
   is open, the box asks the provider at most every five minutes, so it can show a few minutes late.
   This row is not there when card payments are turned off.
-- **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. If a device or spare disagrees, compare both clocks before choosing which to correct. When it
+- **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. If the spare disagrees, or a device does while the box is not keeping time over the internet, compare both clocks before choosing which to correct. When it
   has no usable comparison, for example just after the box starts, it says **Not yet compared with
   the tax agency**.
 - **Disk space**: how much space is free out of the total, and how much the database, the backups
@@ -343,8 +343,9 @@ them or while they show the sign-in screen. Station screens do not send theirs. 
 running on the box itself does not count, and devices at one network address count as one.
 
 While the box's time service keeps its clock right over the internet, the box trusts its own clock:
-a till or handheld more than a minute away from it shows **This device's time is wrong. Correct it in
-this device's settings.**, and the bell says nothing.
+a till or handheld where someone is signed in, more than a minute away from it, shows **This
+device's time is wrong · Correct it in this device's settings**, and the bell does not warn about
+the devices' clocks.
 
 Otherwise, when two or more devices agree with each other that the box's clock is more than a minute
 off, the bell warns the people who can manage the system: **2 devices

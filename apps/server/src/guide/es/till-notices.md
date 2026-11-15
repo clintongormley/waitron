@@ -90,7 +90,7 @@ diálogo abierto, y internet ha confirmado la hora del servidor, un empleado ya 
 ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
 la hora desde la misma caja.
 
-**La hora de este dispositivo es incorrecta. Corrígela en los ajustes del dispositivo.** es ámbar: el
+**La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo** es ámbar: el
 servidor mantiene su hora por internet, y el reloj de este terminal se aleja de ella más de un minuto.
 
 **Queda poco espacio en el servidor · Avisa al encargado** es ámbar. El trabajo se sigue guardando,

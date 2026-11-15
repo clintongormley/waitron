@@ -4582,9 +4582,11 @@ the app mounts the socket's folder only once `.env` names it (`WAITRON_BOX_SOCKE
 `setClock()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
 throw: `missing` (no connection was made), `lost` (the connection broke, or closed with no answer,
 after the request was sent, so the clock may have moved), `refused`, `timeout` or `malformed`.
-Time health and the `clock.sync_off` warning (`apps/server/src/clock-sync-alert.ts`: `off`,
-`stopped`, `unsynchronised`, and `unreachable` in production only) read the status through one
-60-second cache, which a set clears.
+The start check, the clock watch, time health, the `clock.sync_off` warning
+(`apps/server/src/clock-sync-alert.ts`: `off`, `stopped`, `unsynchronised`, and `unreachable` in
+production only), the `clock.disagrees` and `clock.peer_disagrees` warnings and the till's
+`clock.device_wrong` notice read the status through one 60-second cache
+(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the

@@ -68,7 +68,7 @@ Cuando no pasa nada, cada fila dice:
   conexión.** Mientras la campana o esta página están abiertas, el servidor pregunta al proveedor como
   mucho cada cinco minutos, así que puede aparecer con unos minutos de retraso. Esta fila no aparece
   cuando los pagos con tarjeta están desactivados.
-- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez. Si un dispositivo o equipo de reserva discrepa, compara ambos relojes antes de elegir cuál corregir.
+- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez. Si el equipo de reserva discrepa, o un dispositivo mientras el servidor no mantiene su hora por internet, compara ambos relojes antes de elegir cuál corregir.
   Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el servidor, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
@@ -375,8 +375,9 @@ funciona en el propio servidor no cuenta, y los dispositivos con una misma direc
 como uno.
 
 Mientras el servicio de hora del servidor mantiene su reloj en hora por internet, el servidor se fía
-de su propio reloj: una caja o un terminal que se aleja de él más de un minuto muestra **La hora de
-este dispositivo es incorrecta. Corrígela en los ajustes del dispositivo.**, y la campana no dice nada.
+de su propio reloj: una caja o un terminal con la sesión iniciada que se aleja de él más de un minuto
+muestra **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo**, y la
+campana no avisa por la hora de los dispositivos.
 
 Si no, cuando dos o más dispositivos coinciden entre sí en que el reloj del servidor va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el servidor marca 2026-10-23
