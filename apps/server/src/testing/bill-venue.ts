@@ -173,11 +173,11 @@ export async function provisionBillVenue(
     await seedDepartmentReceipt(db, department.id, { operationDescription: "Restaurante" });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createMenu(tx, { name: `Bill menu ${cfg.nodeId}` });
-    const platos = await createCategory(tx, { name: "Platos" });
+    const category = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        categoryId: platos.id,
+        categoryId: category.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
         kitchenName: item.kitchen,

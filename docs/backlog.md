@@ -2060,7 +2060,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   A private person binding (`marta`, shown as Martha) remains in the protected
   `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.
-  The published-menu sale fixture uses English private preparation and section names.
   Other split-suite comments and file names remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
   identity and served-at-huella fixtures. Keep accented search fixtures unchanged.

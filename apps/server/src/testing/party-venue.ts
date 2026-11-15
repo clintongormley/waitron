@@ -151,10 +151,10 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
       .insert(personStaffRoles)
       .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     const cat = await createMenu(tx, { name: `Party menu ${venue.nodeId}` });
-    const platos = await createCategory(tx, { name: "Platos" });
+    const category = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {
-        categoryId: platos.id,
+        categoryId: category.id,
         name: product.name,
         customerName: { [LOCALE]: product.customer },
         kitchenName: product.kitchen,
