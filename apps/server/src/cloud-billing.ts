@@ -142,7 +142,7 @@ function readBilling(v: unknown, today: string): BillingFacts {
   return { status: "ready", level, state, period: p };
 }
 
-export function readPrices(v: unknown, today: string): BillingPrices {
+export function readPrices(v: unknown, today?: string): BillingPrices {
   if (object(v) && v.status === "unavailable") {
     exactKeys(v, ["status", "reason"]);
     if (v.reason !== "not_published") unavailable();
@@ -164,8 +164,8 @@ export function readPrices(v: unknown, today: string): BillingPrices {
     v.status !== "published" ||
     !whole(v.revision) ||
     !civilDate(v.effectiveFrom) ||
-    // Contract: the published revision "effective on/before today's country calendar day".
-    v.effectiveFrom > today ||
+    // Billing supplies its country calendar day; emergency display carries no calendar zone.
+    (today !== undefined && v.effectiveFrom > today) ||
     v.currency !== "EUR" ||
     v.taxExclusive !== true ||
     !whole(v.vatRateBasisPoints) ||

@@ -36,6 +36,30 @@ it("reads open facts and each closed shape without treating unavailable prices a
   const unavailable = { ...value, emergency: { status: "unavailable", reason: "state_not_ready" } };
   expect(readEmergencyDisplay(unavailable, expected)).toEqual(unavailable);
 });
+it("validates published prices without inventing their calendar day", () => {
+  const value = {
+    ...reply(),
+    prices: {
+      status: "published",
+      revision: 1,
+      effectiveFrom: "2026-11-12",
+      currency: "EUR",
+      taxExclusive: true,
+      vatRateBasisPoints: 2100,
+      registeredMonthlyCents: 0,
+      connectedMonthlyCents: 3000,
+      hostedMonthlyCents: 9000,
+      hostedDayDivisor: 30,
+    },
+  };
+  expect(readEmergencyDisplay(value, expected).prices).toEqual(value.prices);
+  expect(() =>
+    readEmergencyDisplay(
+      { ...value, prices: { ...value.prices, effectiveFrom: "2026-02-30" } },
+      expected,
+    ),
+  ).toThrowError(expect.objectContaining({ code: "cloud.unavailable" }));
+});
 it.each([
   { version: 2 },
   { installationId: "another" },

@@ -1,6 +1,5 @@
 import { isIP } from "node:net";
 import {
-  dayIn,
   exactKeys,
   fetchCloudDisplay,
   object,
@@ -100,7 +99,7 @@ export function readEmergencyDisplay(
   }
   return {
     ...value,
-    prices: readPrices(value.prices, dayIn(value.asOf, "Europe/Madrid")),
+    prices: readPrices(value.prices),
   } as unknown as EmergencyDisplay;
 }
 export function fetchEmergencyDisplay(
