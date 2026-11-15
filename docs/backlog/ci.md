@@ -157,6 +157,19 @@ does not touch the diagnosis code: the child was sent SIGTERM about 1.65 s after
 the case again got `fiscal.certificate_diagnosis_unavailable`. That log is kept at
 `~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`.
 
+
+15 November 2026: PR #3309's unchanged restore integrity test, “keeps the main thread's timers
+turning while it checks a copy that takes the main thread over one timer period”, failed at
+`restore-stream.test.ts:989` with zero timer ticks after returning the expected intact result.
+[Run 43689826000, server shard 17](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327)
+passed 1,872 other cases. `git blame` dates this test to #2540; #3309 changes no restore/integrity
+runtime or test. Sixty recent failed CI runs were inspected; none of the earlier failed server shard logs
+read from non-Dependabot runs held this same assertion. A separate Linux Node 26.13.0 probe of the same worker
+and 15,000-row fixture passed twenty samples, without reproducing zero ticks. This is one retained
+sighting, not a diagnosed cause or a repair. Preserve the timing and event-loop state on recurrence;
+a clean rerun of unrelated work does not close it. Receipts: `~/waitron-campaign-k/receipts/b3-wifi-controls/ci-server17.log`,
+`server-failure-history.json` and `timer-probe-linux.jsonl`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
