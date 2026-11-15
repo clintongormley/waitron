@@ -96,12 +96,12 @@ async function effectsOf(orderId: string): Promise<{ sales: number; ticketItems:
   });
 }
 
-const cana = () => [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }];
+const croquettes = () => [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }];
 
 function park(body: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", "/api/working-orders", {
     id: randomUUID(),
-    lines: cana(),
+    lines: croquettes(),
     zoneId: counterZoneId,
     ...body,
   });
@@ -112,7 +112,7 @@ async function parkedTakeaway(): Promise<string> {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
-    lines: cana(),
+    lines: croquettes(),
     zoneId: counterZoneId,
     operatorId: venue.operatorId,
   });
@@ -159,9 +159,9 @@ describe("a new order's way of selling", () => {
       const workingOrderId = randomUUID();
       const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
         workingOrderId,
-        lines: cana(),
+        lines: croquettes(),
         zoneId: counterZoneId,
-        tender: { method: "cash", amount: "3.00" },
+        tender: { method: "cash", amount: "10.00" },
         ...(dining === undefined ? {} : { dining }),
       });
       expect(sold.status).toBe(200);
@@ -174,9 +174,9 @@ describe("a new order's way of selling", () => {
     const workingOrderId = randomUUID();
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
       workingOrderId,
-      lines: cana(),
+      lines: croquettes(),
       zoneId: counterZoneId,
-      tender: { method: "cash", amount: "3.00" },
+      tender: { method: "cash", amount: "10.00" },
       dining: "eat_in",
     });
     expect(sold.status).toBe(200);
@@ -205,10 +205,10 @@ describe("a new order's way of selling", () => {
     const workingOrderId = randomUUID();
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
       workingOrderId,
-      lines: cana(),
+      lines: croquettes(),
       zoneId: counterZoneId,
       deliveryTableId: tableId,
-      tender: { method: "cash", amount: "3.00" },
+      tender: { method: "cash", amount: "10.00" },
     });
     expect(sold.status).toBe(200);
     expect(await diningOf(workingOrderId)).toBe("eat_in");
@@ -216,7 +216,7 @@ describe("a new order's way of selling", () => {
 
   it("gives a bill split off a takeaway bill the same way", async () => {
     await departmentsSell("till_choice");
-    const tabId = await tabWith(venue, "Caña", "Tarta");
+    const tabId = await tabWith(venue, "Croquettes", "Tarta");
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, tabId)),
     );
@@ -275,7 +275,7 @@ describe("a request naming a way an existing order does not have", () => {
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
       workingOrderId: id,
       lines: [],
-      tender: { method: "cash", amount: "3.00" },
+      tender: { method: "cash", amount: "10.00" },
       dining: "eat_in",
     });
     expect(sold.status).toBe(409);
@@ -307,7 +307,7 @@ describe("a request naming a way an existing order does not have", () => {
     const id = await parkedTakeaway();
     const revision = await revisionOf(id);
     const saved = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
-      lines: [...cana(), ...cana()],
+      lines: [...croquettes(), ...croquettes()],
       revision,
       dining: "eat_in",
     });
@@ -328,7 +328,7 @@ describe("a request naming a way an existing order does not have", () => {
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
       workingOrderId: id,
       lines: [],
-      tender: { method: "cash", amount: "3.00" },
+      tender: { method: "cash", amount: "10.00" },
       dining: "takeaway",
     });
     expect(sold.status).toBe(200);
@@ -350,7 +350,7 @@ describe("a request naming a way an existing order does not have", () => {
         billId: tabId,
         draftId: null,
         revision: 0,
-        lines: cana(),
+        lines: croquettes(),
       }),
     );
     expect(saved.status).toBe(200);
@@ -458,7 +458,7 @@ describe("a set lunch on a takeaway order", () => {
     await departmentsSell("till_choice");
     const id = await parkedTakeaway();
     const saved = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
-      lines: [...cana(), ...lunchAt(counter)],
+      lines: [...croquettes(), ...lunchAt(counter)],
       revision: await revisionOf(id),
     });
     expect(saved.status).toBe(409);
