@@ -144,7 +144,7 @@ export async function serverHealth(options, unavailable) {
         unavailable,
       );
     } catch (error) {
-      if (!excluded && !options.plannerSkipReason) throw error;
+      if (!options.plannerSkipReason) throw error;
       options.report?.(
         `Planner diagnostics unavailable: run=${run.id} attempt=${run.run_attempt}; ${error.message}`,
       );
@@ -176,7 +176,7 @@ export async function serverHealth(options, unavailable) {
         }
         if (reason) plannerSkip(options, run, [job], reason);
       }
-      if (excluded || options.plannerSkipReason) continue;
+      if (options.plannerSkipReason) continue;
       jobs = jobs.filter((job) =>
         serverLabel(job, repositoryId, options.prefix || "dt", run.id, run.run_attempt),
       );
@@ -505,10 +505,6 @@ export async function recoverServer(options) {
       );
       const reason = run.run_attempt !== 1 ? "retry run" : "run marked for hosted recovery";
       plannerSkip(options, run, jobs, reason);
-      if (!jobs.length && run.run_attempt !== 1)
-        options.report?.(
-          `Planner rescue skipped: run=${run.id} attempt=${run.run_attempt}; retry run has no old queued unassigned server planning job.`,
-        );
     } catch (error) {
       options.report?.(
         `Planner diagnostics unavailable: run=${run.id} attempt=${run.run_attempt}; ${error.message}`,

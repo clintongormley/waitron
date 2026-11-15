@@ -1718,20 +1718,14 @@ describe("scheduled PR planner recovery", () => {
   it.each(["marked", "retry"])("rescues before reading %s diagnostics", async (kind) => {
     const { f, request } = pair(),
       reports = [],
-      writes = [];
+      events = [];
     if (kind === "retry") {
       f.run.run_attempt = f.job.run_attempt = 2;
-      Object.assign(f.job, {
-        status: "completed",
-        conclusion: "success",
-        runner_id: 8,
-        labels: ["ubuntu-latest"],
-      });
+      f.job.labels = ["self-hosted", "dt-42-12-2-changes-1"];
     }
     const read = (path, options) => {
-      if (path.includes("/runs/12/") && path.includes("/jobs?"))
-        expect(writes).toContain("/repos/fixture/waitron/actions/runs/13/rerun");
-      if (options?.method) writes.push(path);
+      if (path.includes("/runs/12/") && path.includes("/jobs?")) events.push("diagnostic job read");
+      if (options?.method) events.push(path);
       return request(path, options);
     };
     await health.healthCommand(
@@ -1739,12 +1733,14 @@ describe("scheduled PR planner recovery", () => {
       { ...f.options, hostedAttempts: kind === "marked" ? { 12: 2 } : {}, request: read },
       { report: (line) => reports.push(line) },
     );
-    expect(reports.indexOf("Retried PR run 13 on GitHub.")).toBeLessThan(
-      reports.findIndex((line) => line.includes("run=12")),
-    );
+    expect(events).toEqual([
+      "/repos/fixture/waitron/actions/runs/13/force-cancel",
+      "/repos/fixture/waitron/actions/runs/13/rerun",
+      "diagnostic job read",
+    ]);
     expect(reports).toContain(
       kind === "retry"
-        ? "Planner rescue skipped: run=12 attempt=2; retry run has no old queued unassigned server planning job."
+        ? "Planner rescue skipped: run=12 attempt=2 job=123; retry run."
         : "Planner rescue skipped: run=12 attempt=1 job=123; run marked for hosted recovery.",
     );
   });

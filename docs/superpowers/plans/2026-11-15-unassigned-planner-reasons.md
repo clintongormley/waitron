@@ -66,7 +66,7 @@ bundle; keep the historical diagnosis and qualification work open.
 - [ ] Update current docs from measured cases, then finish-branch, current-head CI
   and land-branch. No live cancellation, dispatch, deployment or recurrence wait.
 
-**Size and exclusions:** About +80/-20 production lines, +120/-0 test lines,
+**Initial size estimate and exclusions:** About +80/-20 production lines, +120/-0 test lines,
 +12/-3 current documentation lines, plus this plan. No new recovery policy,
 transport, credential, storage, workflow, timer or dependency. Other commands
 retain their current reads and output. No fiscal, UI or Cloud changes.
@@ -75,3 +75,6 @@ The watcher cleared the review correction on 2026-11-15 at 12:21: eligible rescu
 precede excluded-run diagnostic job reads, using the existing run inventory once;
 log a retry even when it has no old unassigned server planner. At 12:27 the watcher
 cleared the size growth with duplicate excluded-read failure checks merged.
+
+The watcher clarified at 12:35 that only per-job retry reasons are in scope;
+there is no run-level line for a retry without an old unassigned planner.

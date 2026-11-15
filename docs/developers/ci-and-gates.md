@@ -307,13 +307,13 @@ A full server is reported before diagnostic reads; every old unassigned planning
 seen there gets only `server full`, including marked runs and retries. Failed diagnostic
 reads on these skipped paths are reported without enabling recovery or failing the pass.
 Excluded-run diagnostic reads follow the eligible rescue loop, using the same run inventory.
-A retry with no old queued unassigned server planner gets a run-level reason.
-Skip lines describe decisions before cancellation.
+An eligible run's check after cancellation adds no skip line.
 
 An absent line does not establish that a job could be recovered. Only owned PR runs in
 the queued/running CI inventory and queued unassigned self-hosted `changes` jobs are
 examined; fork and non-PR planning stays hosted. Unreadable inventories, an earlier
 error, the step deadline or a pass that never starts can leave a job unseen or unreached.
+A failure in the rescue loop also leaves later excluded-run diagnostics unreported.
 The pass attempts eligible planners in order; its five-minute step limit can end a busy pass
 before every planner is reached. Later passes reconsider work that is still queued.
 After cancellation, an interrupted retry is reported for intervention; later passes do not
