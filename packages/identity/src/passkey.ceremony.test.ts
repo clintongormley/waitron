@@ -277,11 +277,7 @@ describe("an assertion checked against a given challenge, writing nothing", () =
   const VENUE = "https://waitron.local";
   const BOX = "https://box-abcd.waitron.local";
 
-  const verifyAt = (
-    response: unknown,
-    challenge = CHALLENGE,
-    origin: readonly string[] = [VENUE, BOX],
-  ) =>
+  const verifyAt = (response: unknown, challenge = CHALLENGE, origin: string[] = [VENUE, BOX]) =>
     run((tx) =>
       verifyPasskeyAssertion(tx, { challenge, response: response as never, rpId: RP_ID, origin }),
     );

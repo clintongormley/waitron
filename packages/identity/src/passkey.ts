@@ -342,7 +342,7 @@ export async function verifyPasskeyAssertion(
     challenge: string;
     response: AuthenticationResponseJSON;
     rpId: string;
-    origin: string | readonly string[];
+    origin: string | string[];
   },
 ): Promise<{ personId: string }> {
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
@@ -365,7 +365,7 @@ export async function verifyPasskeyAssertion(
     verification = await verifyAuthenticationResponse({
       response: input.response,
       expectedChallenge: input.challenge,
-      expectedOrigin: expectedOrigin(input.origin),
+      expectedOrigin: input.origin,
       expectedRPID: input.rpId,
       requireUserVerification: true,
       // The counter is checked but not advanced: the caller's database may be a followed copy this
