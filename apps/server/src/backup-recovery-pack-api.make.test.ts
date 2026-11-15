@@ -1261,7 +1261,7 @@ it.each(["en", "es"] as const)(
     const text = await pdfText(bytes);
     expect(text).toContain(EMERGENCY.address);
     expect(text.replace(/\s+/g, "")).toContain(EMERGENCY.code);
-    expect(text).toContain(locale === "en" ? "password" : "contraseña");
+    expect(text).toContain(PART_WORDS[locale].emergency.intro);
     const [record] = await packs();
     expect(record!.parts[0]).toEqual({
       part: "emergency",

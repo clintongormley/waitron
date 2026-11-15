@@ -678,6 +678,8 @@ it("keeps both authenticator groups and reserves server-key hints for backups", 
     file: {},
   };
   const parts = withServerKeyPageNumber([emergency, serverKey], "en");
-  expect(parts[0]!.part.page!.intro).toBe(PART_WORDS.en.emergency.intro);
+  expect(parts[0]!.part.page!.intro).toBe(
+    "This code starts a locked copy of the venue. Sign in with your password and your authenticator or a recovery code. Passkeys do not work there.",
+  );
   expect(parts[1]!.part.page!.intro).toBeUndefined();
 });

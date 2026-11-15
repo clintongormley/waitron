@@ -842,7 +842,11 @@ it.each(["en", "es"] as const)(
     );
     const pages = await rendered(bytes);
     expect(pages).toHaveLength(5);
-    expect(pages[0]!.text).toContain(locale === "en" ? "locked copy" : "copia bloqueada");
+    expect(pages[0]!.text).toContain(PACK_WORDS[locale].emergencyWarning);
+    if (locale === "en")
+      expect(pages[0]!.text).toContain(
+        "You also need your password and your authenticator or a recovery code.",
+      );
     expect(pages[1]!.text).toContain("https://rescue.venue.example/");
     expect(squash(pages[1]!.text)).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
     expect(await readRecoveryPackPdf(bytes)).toEqual(file);

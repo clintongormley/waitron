@@ -2015,8 +2015,7 @@ Part 1 of the recovery pack (design: [A1187](../superpowers/specs/2026-10-29-a11
 landed in pull requests from #2250 to setup's first pack (PR E). What their reviews left, by the
 pull request that left it:
 
-- Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-
+- **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
 - **#2250 (the pack format and its readers).** `waitron-restore`'s usage line still says
   `<pack-file>` for `--from-archive`, which a test pins. The restore command's refusals for a file
   holding no kit or no archive pack still name the kit file and the archive recovery pack file,
