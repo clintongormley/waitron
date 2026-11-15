@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { painterModel } from "../testing/season-painter-fixture.js";
@@ -32,6 +33,15 @@ it("lists seasons in January-first order with dates and Edit/Delete row menus", 
   expect(table.rows.map((row) => (row as { name: string }).name)).toEqual(["Winter", "Spring"]);
   expect(table.columns.map((c) => c.key)).toEqual(["name", "startsOn", "runsUntil", "actions"]);
   expect(table.columns.at(-1)!.pinned).toBe("end");
+  expect(
+    [...table.shadowRoot!.querySelectorAll('[role="img"]')].map((swatch) => [
+      swatch.getAttribute("aria-label"),
+      swatch.getAttribute("title"),
+    ]),
+  ).toEqual([
+    ["Blue", "Blue"],
+    ["Green", "Green"],
+  ]);
   expect(screen.shadowRoot!.querySelector("[data-test=save-seasons]")).toBeNull();
   expect(table.shadowRoot!.querySelectorAll("wt-row-actions")).toHaveLength(2);
   table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!.click();
@@ -66,6 +76,32 @@ it("Delete reads lost hours and confirms only that season under the opening revi
     .poll(() => writes)
     .toEqual([{ save: [], delete: ["spring"], expectedClockRevision: 4 }]);
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+});
+
+it("leaves keyboard focus on Add after a confirmed deletion refreshes the list", async () => {
+  const data = painterModel();
+  const table = await mount((async (path, method) => {
+    if (path.endsWith("/delete-impact")) return { departments: [] };
+    if (method !== "GET") {
+      data.seasons = data.seasons.filter((row) => row.id !== "winter");
+      return data.seasons;
+    }
+    return data;
+  }) as DashboardRequest);
+  const menu = table.shadowRoot!.querySelector("wt-row-actions")!;
+  await menu.updateComplete;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await userEvent.click(menu.querySelector<HTMLElement>("[data-test=delete-season]")!);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=confirm-delete]"))
+    .not.toBeNull();
+  await userEvent.click(
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!,
+  );
+  await expect.poll(() => table.rows).toHaveLength(1);
+  const add = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!;
+  await expect.poll(() => screen.shadowRoot!.activeElement).toBe(add);
+  expect(add.shadowRoot!.activeElement).toBe(add.shadowRoot!.querySelector("button"));
 });
 
 it.each(["new", "winter", "missing"])(

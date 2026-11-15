@@ -148,7 +148,11 @@ export class SeasonsScreen extends LitElement {
       deletion.busy = false;
       this.requestUpdate();
     }
-    if (this.deleting === deletion) this.deleting = undefined;
+    if (this.deleting === deletion) {
+      this.deleting = undefined;
+      await this.updateComplete;
+      this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")?.focus();
+    }
     this.api.rereadWatches();
   }
   private renderDeletion() {
@@ -260,7 +264,14 @@ export class SeasonsScreen extends LitElement {
       {
         key: "name",
         label: t("season.column_name"),
-        cell: (row) => html`<span part=${`swatch colour-${row.colour}`}></span>${row.name}`,
+        cell: (row) =>
+          html`<span
+              part=${`swatch colour-${row.colour}`}
+              role="img"
+              aria-label=${t(`hours.colour.${row.colour}`)}
+              title=${t(`hours.colour.${row.colour}`)}
+            ></span
+            >${row.name}`,
       },
       {
         key: "startsOn",

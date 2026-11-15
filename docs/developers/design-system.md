@@ -6943,7 +6943,8 @@ and Periods. The menu, page search and the Year's Seasons link open it. `seasons
 passive opening-hours reads and renders a list or the selected `seasons-window.ts` form with an h1.
 
 The page lists seasons in January-first order (`draftOf`), with a tinted name swatch, Starts on,
-Runs until and pinned `wt-row-actions` offering Edit and Delete. The only season’s Delete is
+Runs until and pinned `wt-row-actions` offering Edit and Delete. Each swatch names its colour
+for assistive technology and on hover. The only season’s Delete is
 disabled. Viewers see no editing actions. Add opens `/manage/seasons/view/new`; a row or Edit
 opens `/manage/seasons/season/<id>`, with “Seasons ›” above its h1. The selected-season form
 (`seasons-window.ts`) shows Name, Colour, Day and Month, visibly required. It retains the full
@@ -6963,10 +6964,10 @@ and the departments losing hours, read through `readSeasonDeleteImpact`. Loading
 say so; a failed read still permits deletion. Confirmation sends only that id and the clock
 revision captured on opening. A refusal stays beside Delete with retry available; Cancel and
 reopen capture a fresh revision. A missing-season refusal uses the existing wording and rereads
-the list. Delete is a confirmation without a draft scope.
+the list. After a confirmed deletion, focus goes to Add season. Delete is a confirmation without a draft scope.
 
-Tests live in `seasons-screen*.test.ts`, `seasons-window*.test.ts`, `season-draft.test.ts`,
-`periods-list*.test.ts`, `period-dialog*.test.ts` and the real shell’s
+Tests live in `seasons-screen*.test.ts`, `seasons-window*.test.ts`, `season-draft.test.ts`
+and the real shell’s
 `dashboard-app.search-modules.test.ts`.
 
 ### Permanent department and zone Delete
