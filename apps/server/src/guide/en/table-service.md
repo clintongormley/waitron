@@ -348,7 +348,10 @@ already have succeeded.
 ## Clear a service step {#service-steps}
 
 A service step reminds you to go back to a table at the right moment, such as **Take order** a
-couple of minutes after **Set up** is done, or **Anything else?** once every dish has been served.
+couple of minutes after **Set up** is done, or **Dessert?** five minutes after Mains are served.
+A new venue starts with **Set up**, **Take order**, **Dessert?** and **Coffee or bill?**, which is
+due five minutes after Desserts are served. If either preset course is missing, a new department
+starts with the first two steps; add your own course-linked visits in Tables.
 Each step starts at a moment like that and falls due a set number of minutes later. Your venue sets
 them up under **Service steps** on the department's **Tables** tab in the dashboard. There you can
 read the meal from seating to leaving, with its fixed moments, steps and courses. Choose **Fire now** or **Hold for later** on each course row there. A held course offers its

@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
+  kitchenCourses,
   diningTables,
   orderGroupEvents,
   parties,
@@ -475,6 +476,54 @@ describe("readTableSteps", () => {
       },
     ]);
   });
+
+  it.each([false, true])(
+    "starter course visits follow servings without gating preordered dessert: %s",
+    async (preordered) => {
+      const v = await setupPartyVenue(suite.db);
+      const department = await tablesDepartment(v);
+      const { mains, desserts, visits } = await inTx(v, async (tx) => {
+        const courses = await tx.select().from(kitchenCourses);
+        const mains = courses.find((row) => row.starterKey === "mains")!;
+        const desserts = courses.find((row) => row.starterKey === "desserts")!;
+        await addStarterServiceSteps(tx, department, "en");
+        const visits = await tx
+          .select()
+          .from(serviceSteps)
+          .where(eq(serviceSteps.departmentId, department))
+          .orderBy(serviceSteps.position);
+        return { mains, desserts, visits };
+      });
+      const tableId = await v.table("Table 1");
+      const { partyId } = await seat(v, tableId);
+      const { tabId } = await orderForParty(v, partyId, ["Burger"]);
+      await setCourse(v, mains.id, [await lineIdOf(v, tabId, "Burger")]);
+      const held = preordered ? await holdGroup(v, partyId, "Flan") : null;
+      if (preordered) await setCourse(v, desserts.id, [await lineIdOf(v, tabId, "Flan")]);
+      expect(await liveAt(v, partyId, tableId)).toEqual([]);
+      const servedAt = await serve(v, tabId, "Burger");
+      expect(await liveAt(v, partyId, tableId)).toEqual([
+        {
+          stepId: visits[2]!.id,
+          name: "Dessert?",
+          triggeredAt: servedAt,
+          dueAt: servedAt + 5 * MINUTE,
+        },
+      ]);
+      if (held !== null) {
+        const fire = { submissionId: randomUUID(), ...(await commandFor(v, partyId)) };
+        await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, held, fire));
+        const dessertServedAt = await serve(v, tabId, "Flan");
+        const live = await liveAt(v, partyId, tableId);
+        expect(live).toContainEqual({
+          stepId: visits[3]!.id,
+          name: "Coffee or bill?",
+          triggeredAt: dessertServedAt,
+          dueAt: dessertServedAt + 5 * MINUTE,
+        });
+      }
+    },
+  );
 
   it("a party at two tables of one department gets the same steps on both", async () => {
     const v = await setupPartyVenue(suite.db);

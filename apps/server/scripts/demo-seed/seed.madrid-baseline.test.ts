@@ -15,7 +15,7 @@ import {
   type MadridColumnDrops,
 } from "./testing/madrid-dropped-columns.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { STARTER_COURSE_NAMES } from "@waitron/venue-service";
+import { STARTER_COURSE_NAMES, STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { createHash } from "node:crypto";
 import {
   canonicalMadridSemantics,
@@ -1424,6 +1424,35 @@ for (const locale of ["en", "es"] as const) {
               )!.id!
             : null;
         if (row.start === "after_previous") row.start = "after_step";
+      }
+      if (phase !== "before") {
+        const departments = Object.values(expected[phase].tables.departments!.rows);
+        for (const department of departments) {
+          const visits = Object.values(stepsNow.rows).filter(
+            (row) => row.department_id === department.id,
+          );
+          const old = visits.find((row) => row.position === 2)!;
+          expect(old.start).toBe("all_served");
+          expect(old.minutes).toBe(10);
+          const english =
+            locale === "en" && phase === "seeded" && department.id === '@departments:["Deli"]';
+          old.name = english ? "Dessert?" : STARTER_STEP_NAMES["Dessert?"].es;
+          old.start = "course_served";
+          old.minutes = 5;
+          old.course_id = Object.values(coursesNow.rows).find(
+            (row) => row.starter_key === "mains",
+          )!.id;
+          const id = `@service_steps:${JSON.stringify([department.id, 3])}`;
+          stepsNow.rows[id] = {
+            ...old,
+            id,
+            position: 3,
+            name: english ? "Coffee or bill?" : STARTER_STEP_NAMES["Coffee or bill?"].es,
+            course_id: Object.values(coursesNow.rows).find((row) => row.starter_key === "desserts")!
+              .id,
+          };
+        }
+        phases[phase]!.service_steps += departments.length;
       }
       const admissions = expected[phase].tables.device_profile_admission_roles!;
       admissions.columns = [

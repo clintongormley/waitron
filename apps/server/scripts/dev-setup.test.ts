@@ -1,3 +1,4 @@
+import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { readModuleConfig } from "../src/module-config.js";
 import { readSettings } from "@waitron/db";
 import { MODULES_SETTINGS } from "../src/modules.js";
@@ -774,8 +775,13 @@ describe("developer demo regions", () => {
               ),
             ).toEqual(
               (staff === "en"
-                ? ["Set up", "Take order", "Anything else?"]
-                : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+                ? ["Set up", "Take order", "Dessert?", "Coffee or bill?"]
+                : [
+                    STARTER_STEP_NAMES["Set up"].es,
+                    STARTER_STEP_NAMES["Take order"].es,
+                    STARTER_STEP_NAMES["Dessert?"].es,
+                    STARTER_STEP_NAMES["Coffee or bill?"].es,
+                  ]
               ).map((name) => ({ name })),
             );
             const rows = store.venue.all<{ name: string }>(sql`select name from products`);
@@ -843,8 +849,13 @@ describe("Valencian developer demo", () => {
             ),
           ).toEqual(
             (locale === "en-GB"
-              ? ["Set up", "Take order", "Anything else?"]
-              : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+              ? ["Set up", "Take order", "Dessert?", "Coffee or bill?"]
+              : [
+                  STARTER_STEP_NAMES["Set up"].es,
+                  STARTER_STEP_NAMES["Take order"].es,
+                  STARTER_STEP_NAMES["Dessert?"].es,
+                  STARTER_STEP_NAMES["Coffee or bill?"].es,
+                ]
             ).map((name) => ({ name })),
           );
           const staffName = locale === "en-GB" ? "Eel and potato stew" : "All i pebre";
@@ -917,8 +928,13 @@ describe("Galician developer demo", () => {
             ),
           ).toEqual(
             (locale === "en-GB"
-              ? ["Set up", "Take order", "Anything else?"]
-              : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+              ? ["Set up", "Take order", "Dessert?", "Coffee or bill?"]
+              : [
+                  STARTER_STEP_NAMES["Set up"].es,
+                  STARTER_STEP_NAMES["Take order"].es,
+                  STARTER_STEP_NAMES["Dessert?"].es,
+                  STARTER_STEP_NAMES["Coffee or bill?"].es,
+                ]
             ).map((name) => ({ name })),
           );
           const staffName = locale === "en-GB" ? "Galician savoury pie" : "Empanada gallega";

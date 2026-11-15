@@ -178,7 +178,8 @@ export async function saveServiceSteps(
 export const STARTER_STEPS = [
   { name: "Set up", start: "seated", minutes: 0 },
   { name: "Take order", start: "after_step", minutes: 2 },
-  { name: "Anything else?", start: "all_served", minutes: 10 },
+  { name: "Dessert?", start: "course_served", minutes: 5, courseKey: "mains" },
+  { name: "Coffee or bill?", start: "course_served", minutes: 5, courseKey: "desserts" },
 ] as const;
 
 export async function addStarterServiceSteps(
@@ -187,8 +188,20 @@ export async function addStarterServiceSteps(
   staffLanguage?: StarterStaffLanguage,
 ): Promise<void> {
   const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
+  const courses = await tx
+    .select({ id: kitchenCourses.id, key: kitchenCourses.starterKey })
+    .from(kitchenCourses)
+    .where(
+      and(
+        eq(kitchenCourses.active, true),
+        inArray(kitchenCourses.starterKey, ["mains", "desserts"]),
+      ),
+    );
+  const courseIds = new Map(courses.map((course) => [course.key, course.id]));
+  const steps =
+    courseIds.has("mains") && courseIds.has("desserts") ? STARTER_STEPS : STARTER_STEPS.slice(0, 2);
   let previous: string | null = null;
-  for (const [position, step] of STARTER_STEPS.entries()) {
+  for (const [position, step] of steps.entries()) {
     const id = newId();
     await tx.insert(serviceSteps).values({
       id,
@@ -196,7 +209,7 @@ export async function addStarterServiceSteps(
       position,
       name: starterName(STARTER_STEP_NAMES, step.name, language),
       start: step.start,
-      courseId: null,
+      courseId: "courseKey" in step ? courseIds.get(step.courseKey)! : null,
       afterStepId: step.start === "after_step" ? previous : null,
       minutes: step.minutes,
     });

@@ -186,7 +186,7 @@ describe("seedFloor", () => {
     ]);
   });
 
-  it("each demo department starts with the three starter steps", async () => {
+  it("each demo department starts with the four linked meal visits", async () => {
     await provisionVenue();
 
     const steps = await withTransaction(suite.db, async (tx) => {
@@ -211,7 +211,8 @@ describe("seedFloor", () => {
       [TRADING_NAMES.deli, TRADING_NAMES.restaurant].flatMap((department) => [
         { department, name: "Set up", start: "seated", minutes: 0 },
         { department, name: "Take order", start: "after_step", minutes: 2 },
-        { department, name: "Anything else?", start: "all_served", minutes: 10 },
+        { department, name: "Dessert?", start: "course_served", minutes: 5 },
+        { department, name: "Coffee or bill?", start: "course_served", minutes: 5 },
       ]),
     );
   });

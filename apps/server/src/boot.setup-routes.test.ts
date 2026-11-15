@@ -1137,7 +1137,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         select s.name from service_steps s join departments d on d.id = s.department_id
         where d.is_default = 1 order by s.position
       `),
-      ).toEqual(["Set up", "Take order", "Anything else?"].map((name) => ({ name })));
+      ).toEqual(["Set up", "Take order", "Dessert?", "Coffee or bill?"].map((name) => ({ name })));
       expect(
         venue.store.venue.all(sql`
         select name, kitchen_name from products where json_extract(customer_name, '$.en') = 'Ham croquettes'

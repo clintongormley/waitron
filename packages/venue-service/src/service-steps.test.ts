@@ -20,12 +20,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createDepartment } from "./operations.js";
 import { clearServiceDeleteSettings } from "./service-delete-settings.js";
-import {
-  listServiceSteps,
-  listStepCourses,
-  saveServiceSteps,
-  STARTER_STEPS,
-} from "./service-steps.js";
+import { listServiceSteps, listStepCourses, saveServiceSteps } from "./service-steps.js";
 import { STARTER_STEP_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
@@ -80,7 +75,6 @@ function starterSteps(departmentId: string, names: readonly string[]) {
   return [
     { start: "seated", minutes: 0 },
     { start: "after_step", minutes: 2 },
-    { start: "all_served", minutes: 10 },
   ].map((step, index) => ({
     id: expect.any(String),
     departmentId,
@@ -91,15 +85,15 @@ function starterSteps(departmentId: string, names: readonly string[]) {
   }));
 }
 
-const spanishSteps = STARTER_STEPS.map((step) => STARTER_STEP_NAMES[step.name].es);
+const spanishSteps = [STARTER_STEP_NAMES["Set up"].es, STARTER_STEP_NAMES["Take order"].es];
 
 describe("a new department's starter steps", () => {
   it.each([
     {
       title:
-        "a department created in an English venue starts with Set up, Take order and Anything else?",
+        "a department created in an English venue starts with Set up and Take order without preset links",
       locales: ["en"],
-      names: ["Set up", "Take order", "Anything else?"],
+      names: ["Set up", "Take order"],
     },
     {
       title: "a department created in a Spanish venue starts with the file's Spanish names",
@@ -110,7 +104,7 @@ describe("a new department's starter steps", () => {
       title:
         "a venue with no country whose first receipt language the screens lack starts with the English names",
       locales: ["fr"],
-      names: ["Set up", "Take order", "Anything else?"],
+      names: ["Set up", "Take order"],
     },
     {
       title:
@@ -141,6 +135,63 @@ describe("a new department's starter steps", () => {
       starterSteps(department.id, [...names]),
     );
   });
+  it.each(["both", "missing mains", "missing desserts", "inactive desserts"])(
+    "new departments reuse renamed preset links: %s",
+    async (availability) => {
+      await seedVenueCfg("Linked venue");
+      const courses = await db
+        .insert(kitchenCourses)
+        .values([
+          { name: "House hot food", starterKey: availability === "missing mains" ? null : "mains" },
+          {
+            name: "House sweets",
+            starterKey: availability === "missing desserts" ? null : "desserts",
+            active: availability !== "inactive desserts",
+          },
+          { name: "Mains" },
+          { name: "Desserts" },
+        ])
+        .returning({ id: kitchenCourses.id });
+      const department = await scoped((tx) => createDepartment(tx, { name: "Dining" }));
+      const steps = await departmentRows(department.id);
+      expect(
+        steps.map(({ name, start, minutes, courseId, afterStepId }) => ({
+          name,
+          start,
+          minutes,
+          courseId,
+          afterStepId,
+        })),
+      ).toEqual([
+        { name: "Set up", start: "seated", minutes: 0, courseId: null, afterStepId: null },
+        {
+          name: "Take order",
+          start: "after_step",
+          minutes: 2,
+          courseId: null,
+          afterStepId: steps[0]!.id,
+        },
+        ...(availability === "both"
+          ? [
+              {
+                name: "Dessert?",
+                start: "course_served",
+                minutes: 5,
+                courseId: courses[0]!.id,
+                afterStepId: null,
+              },
+              {
+                name: "Coffee or bill?",
+                start: "course_served",
+                minutes: 5,
+                courseId: courses[1]!.id,
+                afterStepId: null,
+              },
+            ]
+          : []),
+      ]);
+    },
+  );
 });
 
 describe("service steps", () => {

@@ -1,3 +1,4 @@
+import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 import { dirname, join } from "node:path";
@@ -7002,7 +7003,8 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   });
   nodeId(source.nodeId);
   const ids = await withTransaction(suite.db, async (tx) => {
-    await tx.delete(kitchenCourses);
+    for (const course of await tx.select({ id: kitchenCourses.id }).from(kitchenCourses))
+      await deleteCourse(tx, course.id);
     const course = await createCourse(tx, { name: "Retired dessert", displayOrder: 2 });
     const station = await createStation(tx, { name: "Retired pastry" });
     const product = await createProduct(tx, {
@@ -8339,4 +8341,26 @@ it("imports named starts under new ids and replaces existing dependent steps", a
   expect(parent.name).toBe("Set up");
   expect(parent.departmentId).toBe(child.departmentId);
   expect(imported.some((row) => original.some((old) => old.id === row.id))).toBe(false);
+  expect(imported.filter((row) => row.departmentId === child.departmentId)).toHaveLength(2);
+  const courses = await targetSuite.db.select().from(kitchenCourses);
+  const importedVisits = imported.filter((row) => row.start === "course_served");
+  expect(importedVisits.map(({ name, courseId }) => ({ name, courseId }))).toEqual([
+    {
+      name: STARTER_STEP_NAMES["Dessert?"].es,
+      courseId: courses.find((row) => row.starterKey === "mains")!.id,
+    },
+    {
+      name: STARTER_STEP_NAMES["Coffee or bill?"].es,
+      courseId: courses.find((row) => row.starterKey === "desserts")!.id,
+    },
+  ]);
+  const later = await withTransaction(targetSuite.db, async (tx) => {
+    const department = await createDepartment(tx, { name: "Later dining" });
+    return (await listServiceSteps(tx)).filter(
+      (row) => row.departmentId === department.id && row.start === "course_served",
+    );
+  });
+  expect(later.map(({ name, courseId }) => ({ name, courseId }))).toEqual(
+    importedVisits.map(({ name, courseId }) => ({ name, courseId })),
+  );
 });

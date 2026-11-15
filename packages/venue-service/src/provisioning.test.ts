@@ -62,7 +62,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         name: staffLanguage === "en" ? english : translations[english]!.es,
       });
       expect(rows(sql`select name from service_steps order by position`)).toEqual(
-        ["Set up", "Take order", "Anything else?"].map((name) => names(name, STARTER_STEP_NAMES)),
+        ["Set up", "Take order", "Dessert?", "Coffee or bill?"].map((name) =>
+          names(name, STARTER_STEP_NAMES),
+        ),
       );
       expect(rows(sql`select name from floor_zones`)).toEqual([
         names("Counter", STARTER_ZONE_NAMES),
@@ -148,7 +150,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const authored = await rows();
       await seed();
       expect(await rows()).toEqual(authored);
-      await db.execute(sql`delete from kitchen_courses`);
+      await withTransaction(db, async (tx) => {
+        const steps = await tx.select({ id: serviceSteps.id }).from(serviceSteps);
+        await deleteServiceSteps(
+          tx,
+          steps.map((step) => step.id),
+        );
+        await tx.delete(kitchenCourses);
+      });
       await seed();
       expect(await rows()).toEqual([]);
     });
@@ -271,14 +280,45 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       expect(await steps()).toEqual([
         { name: "Set up", start: "seated", minutes: 0, position: 0 },
         { name: "Take order", start: "after_step", minutes: 2, position: 1 },
-        { name: "Anything else?", start: "all_served", minutes: 10, position: 2 },
+        { name: "Dessert?", start: "course_served", minutes: 5, position: 2 },
+        { name: "Coffee or bill?", start: "course_served", minutes: 5, position: 3 },
       ]);
+    });
+
+    it("links the visits to the preset courses created by the seed", async () => {
+      const { seed } = await venue("Linked visits");
+      await seed();
+      const steps = await db.select().from(serviceSteps).orderBy(serviceSteps.position);
+      const courses = await db.select().from(kitchenCourses);
+      expect(
+        steps.map(({ name, courseId, afterStepId }) => ({ name, courseId, afterStepId })),
+      ).toEqual([
+        { name: "Set up", courseId: null, afterStepId: null },
+        { name: "Take order", courseId: null, afterStepId: steps[0]!.id },
+        {
+          name: "Dessert?",
+          courseId: courses.find((c) => c.starterKey === "mains")!.id,
+          afterStepId: null,
+        },
+        {
+          name: "Coffee or bill?",
+          courseId: courses.find((c) => c.starterKey === "desserts")!.id,
+          afterStepId: null,
+        },
+      ]);
+      await db
+        .update(serviceSteps)
+        .set({ name: "House visit", minutes: 8 })
+        .where(eq(serviceSteps.id, steps[2]!.id));
+      const authored = await db.select().from(serviceSteps).orderBy(serviceSteps.position);
+      await seed();
+      expect(await db.select().from(serviceSteps).orderBy(serviceSteps.position)).toEqual(authored);
     });
 
     it("a second run of the seed puts back no step the venue deleted", async () => {
       const { seed, steps } = await venue("Starter re-run");
       await seed();
-      expect(await steps()).toHaveLength(3);
+      expect(await steps()).toHaveLength(4);
       await withTransaction(db, async (tx) => {
         const rows = await tx.select({ id: serviceSteps.id }).from(serviceSteps);
         await deleteServiceSteps(
