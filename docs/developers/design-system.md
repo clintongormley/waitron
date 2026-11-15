@@ -2934,7 +2934,9 @@ department at that date’s changeover. Before Save, unticking restores that dep
 hours. A separate Close the whole venue tick writes the date’s global flag, retaining paint; while
 it is ticked, department Closed is checked and disabled. A zone shows only the whole-venue tick
 and keeps its Open/Closed strokes. Department all-day paint uses the grid’s Closed all day display
-when dates have different changeovers and prevents strokes until unticked. Changing the venue’s
+and prevents strokes until unticked, including when changeovers differ. Painting a whole day Closed
+by hand also checks the department tick and locks its column; unticking that saved or hand-painted
+closure clears its paint, so the season hours show through. Changing the venue’s
 changeover can refuse until affected all-day department paint is unticked.
 Each date's season hours are drawn faded under the paint; what is painted replaces them for that
 stretch. A department paints its periods and Closed; a zone paints Open and Closed over its

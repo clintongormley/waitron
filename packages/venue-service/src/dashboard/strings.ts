@@ -88,7 +88,6 @@ const en = {
   "special.add_dates": "+ Add dates…",
   "special.remove_date": "Remove {date}",
   "special.no_dates": "Add dates to paint them.",
-  "special.closed": "Closed all day",
   "special.every_year": "Every year",
   "special.holiday_note":
     "With Yes, a date on a holiday repeats on that holiday, whatever its date that year.",
@@ -1021,7 +1020,6 @@ const es: Record<keyof typeof en, string> = {
   "special.add_dates": "+ Añadir fechas…",
   "special.remove_date": "Quitar {date}",
   "special.no_dates": "Añade fechas para pintarlas.",
-  "special.closed": "Cerrado todo el día",
   "special.every_year": "Cada año",
   "special.holiday_note":
     "Con Sí, una fecha en un festivo se repite en ese festivo, caiga en la fecha que caiga ese año.",

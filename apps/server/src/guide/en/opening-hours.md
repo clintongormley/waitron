@@ -10,7 +10,7 @@ To change the usual timetable, choose **Edit <season>'s standard week** beside t
 
 ## Close a department for a special day {#department-closed}
 
-In the special-day editor, choose the department and tick **Closed** under the date. This closes that department all day and leaves the others on their own hours. Unticking before you save puts back the hours you had painted.
+In the special-day editor, choose the department and tick **Closed** under the date. This closes that department all day and leaves the others on their own hours. A full-day Closed stroke also checks this tick. Untick it before painting new hours.
 
 To close every department, use the separate **Close the whole venue** tick under that date. Untick it to change an individual department’s closure.
 

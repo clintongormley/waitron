@@ -10,7 +10,7 @@ Para cambiar el horario habitual, elige **Editar la semana estándar de <tempora
 
 ## Cerrar un departamento en un día especial {#department-closed}
 
-En el editor del día especial, elige el departamento y marca **Cerrado** bajo la fecha. Se cierra ese departamento todo el día y los demás conservan su propio horario. Si desmarcas antes de guardar, recuperas el horario que habías pintado.
+En el editor del día especial, elige el departamento y marca **Cerrado** bajo la fecha. Se cierra ese departamento todo el día y los demás conservan su propio horario. Pintar todo el día como Cerrado también marca esta casilla. Desmárcala antes de pintar un horario nuevo.
 
 Para cerrar todos los departamentos, usa la casilla separada **Cerrar todo el establecimiento** bajo esa fecha. Desmárcala para cambiar el cierre de un departamento.
 
