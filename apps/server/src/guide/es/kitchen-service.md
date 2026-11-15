@@ -22,8 +22,8 @@ Después del último pago, sigue [Elegir documentos después de cobrar](table-se
 
 En **Dispositivos**, edita un dispositivo **Caja registradora** y elige **Este dispositivo está en**: una estación de
 preparación o **Ningún sitio** para enviar su trabajo a cocina como siempre. Los artículos que
-envíes desde este terminal para su estación se preparan aquí, sin comanda ni entrada en las
-pantallas de cocina. Configura cada terminal por separado, aunque compartan perfil.
+envíes desde esta caja registradora para su estación se preparan aquí, sin comanda ni entrada en las
+pantallas de cocina. Configura cada caja registradora por separado, aunque compartan perfil.
 
 ## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
 
