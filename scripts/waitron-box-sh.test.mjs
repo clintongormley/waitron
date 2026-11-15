@@ -646,7 +646,7 @@ it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (r
   expect(sb.calls()).toContainEqual(["flock", "-w", "15", "9"]);
 });
 
-async function observing(sb, { manualClock = false } = {}) {
+async function observing(sb, { manualClock = false, trace = false } = {}) {
   const dir = join(sb.dir, "observer");
   mkdirSync(dir);
   writeFileSync(join(dir, "state"), "inactive");
@@ -663,9 +663,18 @@ async function observing(sb, { manualClock = false } = {}) {
   tick();
   const clock = manualClock ? null : setInterval(tick, 100);
   const clockEnv = join(dir, "steady-clock-only.sh");
-  if (manualClock) writeFileSync(clockEnv, "unset SECONDS\nSECONDS=0\n");
-  const child = spawn("bash", [HANDLER, "--network-monitor"], {
-    env: { ...sb.env, WB_MONITOR_DIR: dir, ...(manualClock ? { BASH_ENV: clockEnv } : {}) },
+  if (manualClock || trace) {
+    writeFileSync(
+      clockEnv,
+      `${manualClock ? "unset SECONDS\nSECONDS=0\n" : ""}${trace ? "PS4='+observer:${line-}: '\n" : ""}unset BASH_ENV\n`,
+    );
+  }
+  const child = spawn("bash", [...(trace ? ["-x"] : []), HANDLER, "--network-monitor"], {
+    env: {
+      ...sb.env,
+      WB_MONITOR_DIR: dir,
+      ...(manualClock || trace ? { BASH_ENV: clockEnv } : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
@@ -723,12 +732,16 @@ describe("outside network changes", () => {
   it("starts after the grace and retains a burst while the worker is running", async () => {
     const sb = sandbox();
     const began = performance.now();
-    const observer = await observing(sb);
+    const observer = await observing(sb, { trace: true });
     try {
       observer.send("NetworkManager is running");
       await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
       expect(performance.now() - began).toBeGreaterThanOrEqual(800);
       observer.send("profile changed\nprofile changed\nprofile removed");
+      // A FIFO write can finish before consumption; this follows network_monitor's dirty=1 after its read.
+      await expect
+        .poll(observer.stderr, { timeout: 3000 })
+        .toMatch(/^\+observer:profile removed: dirty=1$/m);
       observer.finish(1);
       await expect.poll(observer.count, { timeout: 6000 }).toBe(2);
       expect(sb.calls().filter(([cmd, sub]) => cmd === "systemctl" && sub === "start")).toEqual([
@@ -755,7 +768,7 @@ describe("outside network changes", () => {
     } finally {
       await observer.stop();
     }
-  }, 20000);
+  }, 24000);
   it("keeps a refused pass pending without another notification", async () => {
     const observer = await observing(sandbox());
     try {
