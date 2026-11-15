@@ -1,6 +1,4 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-// The fiscal half of split-bill: paying a carved check files its own registro, the items partition
-// across the checks, and a repeated pay replays rather than files twice.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -166,7 +164,6 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 interface ThreeChecks {
   /** The emptied ORIGIN tab. */
   tabId: string;
-  /** Check A = 1 agua + the whole jamón (MIXED VAT); B = 1 agua; C = 1 agua. */
   a: string;
   b: string;
   c: string;
@@ -176,12 +173,6 @@ interface ThreeChecks {
   rC: TillSaleResult;
 }
 
-/**
- * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into three checks
- * (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties the tab), and pay all three.
- * `portions` holds each agua as its own line; the jamón is ordered first so that check A holds it
- * first, and its VAT breakdown lists the rates in the same order.
- */
 async function splitIntoThreeChecks(
   seeded: Seeded,
   deps: Parameters<typeof payWorkingOrder>[0],
@@ -262,9 +253,6 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(rB.total).toBe("1.50");
     expect(rC.total).toBe("1.50");
 
-    // (4) Coherent per-check DESGLOSE — each invoice's breakdown corresponds to its OWN items:
-    //   - A carries BOTH rates (21% agua + 10% jamón); B and C carry only 21%.
-    //   - Each check's Σ(base+tax) == its own total (there is no aggregate bill to reconcile).
     expect(new Set(rA.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00", "10.00"]));
     expect(new Set(rB.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00"]));
     expect(new Set(rC.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00"]));
@@ -272,24 +260,19 @@ describe("split-bill: pay each check files its own registro", () => {
       const sum = r.vatBreakdown.reduce((acc, v) => acc + Number(v.base) + Number(v.tax), 0);
       expect(sum.toFixed(2)).toBe(r.total);
     }
-    // Exact desgloses, difference-method (base = round(gross/(1+rate)), tax = gross − base):
-    //   A agua  1.50 / 1.21 → 1.24 base, 0.26 tax
-    //   A jamón 7.47 / 1.10 → 6.79 base, 0.68 tax
-    //   B / C agua 1.50 → 1.24 base, 0.26 tax
+
     expect(rA.vatBreakdown).toEqual([
-      { rate: "10.00", base: "6.79", tax: "0.68" }, // 0.300 kg jamón, check A's first line
-      { rate: "21.00", base: "1.24", tax: "0.26" }, // 1 agua
+      { rate: "10.00", base: "6.79", tax: "0.68" },
+      { rate: "21.00", base: "1.24", tax: "0.26" },
     ]);
     expect(rB.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
     expect(rC.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
 
-    // (5) Each registro is tied to its OWN check via sales.working_order_id (the idempotency key).
     const filedFor = await asApp((tx) =>
       tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
 
-    // (6) Each check's agua row stands for exactly one portion, and the three are different ones.
     const waterLinks = await asApp((tx) =>
       tx
         .select({ workingOrderId: sales.workingOrderId, portionId: saleLinePortions.portionId })
@@ -375,8 +358,7 @@ describe("split-bill: pay each check files its own registro", () => {
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId));
-      // Every filed sale_line, tagged with its check, partitioned by vat_rate (the single 10% jamón
-      // line vs the three 21% agua lines).
+
       const filedRows = await tx
         .select({
           workingOrderId: sales.workingOrderId,
@@ -411,7 +393,6 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(totalWater).toBe(3); // 1 + 1 + 1, no unit created or destroyed
     expect(totalHam.toFixed(3)).toBe("0.300"); // moved whole to check A
 
-    // PARTITION: the 10%-rate (jamón) quantity appears on EXACTLY ONE check (no double-file).
     const checksWith10 = new Set(filed10.map((f) => f.workingOrderId));
     expect(checksWith10).toEqual(new Set([a]));
   });
@@ -419,7 +400,7 @@ describe("split-bill: pay each check files its own registro", () => {
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
     const { cfg, waterId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
-    // Open a 2× agua tab and split ONE agua onto a detached check — the working order under proof.
+
     const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
@@ -448,8 +429,6 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
 
-    // Exactly one registro is tied to this check after both payments. The returned
-    // invoice number also stays the same on replay.
     const forCheck = await asApp((tx) =>
       tx
         .select({ id: registrosFacturacion.id })

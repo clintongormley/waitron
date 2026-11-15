@@ -2186,6 +2186,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Other private person and dish bindings remain.
+  The placed-order payment suite uses `lagerId` for its private beer binding; redundant split-bill comments are pruned.
   Protected fiscal and receipt helpers still need their boundary audit.
   Split-suite comments and file names also remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
