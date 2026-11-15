@@ -1,0 +1,62 @@
+import { expect, it, vi } from "vitest";
+import { createRequest } from "@waitron/dashboard-kit";
+import { DashboardApi } from "./api/client.js";
+import { deviceSettingSearchDestinations } from "./device-setting-search.js";
+import {
+  device,
+  deviceProfile,
+  deviceResponses,
+  savedScreen,
+} from "./testing/device-settings-fixture.js";
+it("resolves offered rows through passive lists and encodes device addresses", async () => {
+  const rows = [
+    { ...device, id: "d/+", label: "Pass", active: false, kitchenScreens: [savedScreen("pass")] },
+    { ...device, id: "kds", deviceProfileId: "kds", kitchenScreens: [savedScreen("station")] },
+    { ...device, id: "gone", deviceProfileId: null },
+    {
+      ...device,
+      id: "empty",
+      kitchenScreens: [{ ...savedScreen("pass"), everyStation: false, stations: [] }],
+    },
+  ];
+  const answers = deviceResponses({
+    devices: rows,
+    profiles: [
+      { ...deviceProfile, capabilities: ["show-expo", "show-station"] },
+      { ...deviceProfile, id: "kds", formFactor: "kds" },
+    ],
+    kitchen: [{ profileId: "kds", screens: { station: { stationIds: null, zoneIds: null } } }],
+  });
+  const fetchImpl = vi.fn(async (path: string) => new Response(JSON.stringify(answers[path])));
+  const api = new DashboardApi("", fetchImpl);
+  const methods = [
+    "listDevices",
+    "listDeviceProfiles",
+    "listProfileKitchenScreens",
+    "listStations",
+    "listZones",
+  ] as const;
+  const reads = methods.map((method) => vi.spyOn(api.background, method));
+  for (const method of methods)
+    vi.spyOn(api, method).mockRejectedValue(new Error("foreground read"));
+  const entries = deviceSettingSearchDestinations(api);
+  const resolve = (name: string) =>
+    entries
+      .find((e) => e.id === `dashboard:device:${name}`)!
+      .resolve({ request: createRequest({ fetchImpl }) });
+  expect(await resolve("screenZones")).toEqual([
+    { id: "d/+", label: "Pass", path: "/manage/devices/device/d%2F%2B" },
+    { id: "empty", label: "Counter till", path: "/manage/devices/device/empty" },
+  ]);
+  expect((await resolve("showNonPassStations")).map((row) => row.id)).toEqual(["d/+"]);
+  expect((await resolve("kitchenScreen")).map((row) => row.id)).toEqual(["kds"]);
+  expect((await resolve("madeHereStationIds")).map((row) => row.id)).toEqual([
+    "d/+",
+    "gone",
+    "empty",
+  ]);
+  expect((await resolve("name")).map((row) => row.id)).toEqual(["d/+", "kds", "gone", "empty"]);
+  expect(await resolve("approvedProfileIds")).toEqual([]);
+  for (const read of reads) expect(read).toHaveBeenCalledTimes(6);
+  vi.restoreAllMocks();
+});
