@@ -5157,7 +5157,7 @@ The receipt-print field and its controls are retired.
 A department keeps its sale rules and receipt trading-name choice on its own row. Its
 `transfer_desk_profile_id` names the receiving device profile; deleting that profile clears the
 choice and keeps the department. Delete also clears the choice when a disabled device keeps
-the profile row and the action retires it. Configuration format 36 carries these columns with the
+the profile row and the action retires it. Configuration format 37 carries these columns with the
 department. Earlier exports are refused as outdated because their two side tables are gone.
 
 `resolveZoneContext` and the order-context writers in
@@ -6658,6 +6658,8 @@ guard and pointer.
 > devices, A1420 D9, the watcher's, 2026-11-10 17:28, not the owner's)
 
 ### Declared product facts and configuration format 36 (2026-11-15, A1308 mn6)
+
+> Historical format: superseded by format 37 in [Department and zone service settings](#department-and-zone-service-settings).
 
 Your export carries one allergen declaration and the diet override. It no longer carries a folded
 product name, a separate manual declaration or a stored diet profile. Format 36 refuses a format-35
