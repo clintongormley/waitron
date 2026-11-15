@@ -2117,7 +2117,7 @@ describe("a link naming a station", () => {
     expect(stationEditor(el)).toBeNull();
     expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   });
-  it("leaves an editor opened from its row menu open when the address names another station, then names none", async () => {
+  it("leaves an editor opened from its row menu open when a link names another station, which leaves the address", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/stations");
     const el = await mount(
       api({ load: vi.fn().mockResolvedValue({ ...view, stations: [...view.stations, upstairs] }) }),
@@ -2132,10 +2132,17 @@ describe("a link naming a station", () => {
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
     expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it("a link naming a station again after its editor was cancelled opens it again", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const el = await mount(api());
+    await settleEditor(el);
+    await cancelEditor(el);
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
-    expect(push).not.toHaveBeenCalled();
   });
 });
 
