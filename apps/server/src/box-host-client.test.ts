@@ -317,6 +317,23 @@ describe("boxHostClient().timeServiceOn", () => {
     });
   });
 
+  it("answers lost, not missing, when the host closes the connection after the request without answering", async () => {
+    const h = await host((_line, socket) => socket.destroy());
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toMatchObject({
+      available: false,
+      reason: "lost",
+    });
+    expect(h.lines).toEqual(["clock.sync-on"]);
+  });
+
+  it("answers malformed for a host refusal without a reason", async () => {
+    const h = await host(answer({ ok: false }));
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toEqual({
+      available: false,
+      reason: "malformed",
+    });
+  });
+
   it("answers timeout at the set limit", async () => {
     const h = await host(() => {});
     expect(await boxHostClient({ socketPath: h.path, setMs: 200 }).timeServiceOn()).toEqual({
