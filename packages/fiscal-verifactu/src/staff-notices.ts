@@ -35,7 +35,7 @@ export async function unsentNotices(
            coalesce(sum(e.estado = 'retenido'), 0) as held,
            coalesce(max(e.incidencia or e.technical_incidence), 0) as failed,
            (select technical_incident_token is not null from envio_flujo where id = 1) as open,
-           min(r.creado_en) as since
+           min(r.fecha_hora_huso_gen_registro) as since
     from envios e
     join registros_facturacion r on r.id = e.registro_id
     where e.estado in ('pendiente', 'enviando', 'detenido', 'retenido')

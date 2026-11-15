@@ -251,18 +251,18 @@ describe("unsentNotices", () => {
     expect(await readUnsent()).toEqual([unsent(2, 0)]);
   });
 
-  it("names when the oldest waiting record was made", async () => {
+  it("names when the oldest waiting record was made, by the record's own time", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
-      vi.setSystemTime(new Date("2026-07-21T17:40:00.000Z"));
-      const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-      vi.setSystemTime(new Date("2026-07-21T17:31:00.000Z"));
-      await appendPendingAlta(suite.db, seeded, 2);
       vi.setSystemTime(new Date("2026-07-21T17:05:00.000Z"));
-      const accepted = await appendPendingAlta(suite.db, seeded, 3);
+      const seeded = await seedPendingEnvios(suite.db, { count: 1 });
       await suite.db.execute(sql`
-        update envios set estado = 'aceptado' where registro_id = ${accepted.registroId}
+        update envios set estado = 'aceptado' where registro_id = ${seeded.registroIds[0]!}
       `);
+      vi.setSystemTime(new Date("2026-07-21T17:31:00.000Z"));
+      await appendPendingAlta(suite.db, seeded, 2, { generadoEn: "2026-07-21T17:50:00.000Z" });
+      vi.setSystemTime(new Date("2026-07-21T17:45:00.000Z"));
+      await appendPendingAlta(suite.db, seeded, 3, { generadoEn: "2026-07-21T17:20:00.000Z" });
       await suite.db.execute(sql`update envios set technical_incidence = 1`);
     } finally {
       vi.useRealTimers();
@@ -272,7 +272,7 @@ describe("unsentNotices", () => {
         key: "fiscal.records_unsent",
         code: "fiscal.records_unsent",
         severity: "notice",
-        params: { count: 2, held: 0, since: "2026-07-21T17:31:00.000Z" },
+        params: { count: 2, held: 0, since: "2026-07-21T17:20:00.000Z" },
       },
     ]);
   });
