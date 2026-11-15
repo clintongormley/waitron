@@ -13,7 +13,7 @@ import { AppError, isUuid } from "@waitron/shared";
 import { assertDeviceCapability } from "./device-session.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
-import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
+import { expireInvoiceDeliveryClaims, invoiceDeliveryClaimsDue } from "./invoice-delivery.js";
 import { requestPrintDelivery, switchToReceipt } from "./invoice-delivery-actions.js";
 import { readInvoiceDeliveryState } from "./invoice-delivery-status.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
@@ -68,6 +68,10 @@ export function mountTransactionReceiptApi(
   ) {
     await orderlessSale(tx, session, id);
     await expireInvoiceDeliveryClaims(tx);
+    return readState(tx, session, id);
+  }
+
+  async function readState(tx: Transaction, session: { deviceId: string }, id: string) {
     const state = await readInvoiceDeliveryState(tx, id, {
       emailAvailable: false,
       printers: async () => {
@@ -139,10 +143,19 @@ export function mountTransactionReceiptApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = parsedId(c.req.param("saleId"));
-      const status = await withTransaction(deps.db, async (tx) => {
-        const state = await invoiceState(tx, session, id);
-        return state.status;
+      // Only claim expiry needs the draining transaction; an ordinary status read leaves changes waiting.
+      const current = await deps.db.withWriteLock(async () => {
+        await orderlessSale(deps.db, session, id);
+        if (await invoiceDeliveryClaimsDue(deps.db, new Date())) return null;
+        return { status: (await readState(deps.db, session, id)).status };
       });
+      const status =
+        current === null
+          ? await withTransaction(deps.db, async (tx) => {
+              const state = await invoiceState(tx, session, id);
+              return state.status;
+            })
+          : current.status;
       return c.json(status);
     }),
   );

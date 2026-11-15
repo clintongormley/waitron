@@ -58,7 +58,7 @@ import {
   readReaderRole,
 } from "@waitron/payments";
 import { resendInvoicePrintJob } from "./invoice-print.js";
-import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
+import { expireInvoiceDeliveryClaims, invoiceDeliveryClaimsDue } from "./invoice-delivery.js";
 import { venueCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
@@ -188,7 +188,7 @@ import {
   readBillEditState,
 } from "./bill-editing.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
-import { ensureToday } from "./floor-today-store.js";
+import { ensureToday, todayReconciliationDue } from "./floor-today-store.js";
 import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
 import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
@@ -2481,9 +2481,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const transport = await readEmailTransport();
-      const status = await withTransaction(deps.db, async (tx) => {
-        const saleId = await zonedSale(tx, session, id);
-        await expireInvoiceDeliveryClaims(tx);
+      const read = async (tx: Transaction, saleId: string) => {
         if (c.req.query("medium") === "email") {
           return readReceiptEmailDeliveries(tx, saleId, {
             emailAvailable: await canEmailInvoice(tx, saleId, transport),
@@ -2493,7 +2491,21 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
           printers: () => tillInvoicePrinters(tx, session),
         });
+      };
+      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
+      const current = await deps.db.withWriteLock(async () => {
+        const saleId = await zonedSale(deps.db, session, id);
+        if (await invoiceDeliveryClaimsDue(deps.db, new Date())) return null;
+        return { status: await read(deps.db, saleId) };
       });
+      const status =
+        current === null
+          ? await withTransaction(deps.db, async (tx) => {
+              const saleId = await zonedSale(tx, session, id);
+              await expireInvoiceDeliveryClaims(tx, new Date());
+              return read(tx, saleId);
+            })
+          : current.status;
       return c.json(status);
     }),
   );
@@ -2799,13 +2811,24 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
-      const state = await withTransaction(deps.db, async (tx) => {
-        await catchUpFloor(tx);
+      const read = async (tx: Transaction) => {
         const scope = await readZoneScope(tx, device.deviceProfileId);
         return (await listTablesWithState(tx, deps.floorAnnotators ?? [], undefined, log)).filter(
           (table) => inScope(scope, table.zoneId),
         );
+      };
+      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
+      const current = await deps.db.withWriteLock(async () => {
+        if (await todayReconciliationDue(deps.db, deps.clock.now().instant)) return null;
+        return read(deps.db);
       });
+      const state =
+        current === null
+          ? await withTransaction(deps.db, async (tx) => {
+              await catchUpFloor(tx);
+              return read(tx);
+            })
+          : current;
       return c.json(state);
     }),
   );
@@ -3253,6 +3276,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
+      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
       const current = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
