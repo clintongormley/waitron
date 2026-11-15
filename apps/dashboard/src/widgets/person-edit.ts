@@ -700,7 +700,7 @@ export class PersonEdit extends LitElement {
                     error=${this.localeLoadError ? codeMessage(this.localeLoadError) : (errors.locale ?? "")}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("locale", event)}
                   ></wt-combobox>
-                  ${this.localeLoadError ? html`<wt-button data-test="locale-retry" variant="secondary" ?disabled=${this.busy} @click=${() => void this.#loadLocales()}>${t("action.retry")}</wt-button>` : nothing}
+                  ${this.localeLoadError ? html`<wt-button data-test="locale-retry" variant="secondary" ?disabled=${this.busy} @click=${() => void this.#loadLocales()}>${t("person.retry_languages")}</wt-button>` : nothing}
 
                   <wt-combobox
                     ?preserve-order=${true /* Preserve account lifecycle. */}

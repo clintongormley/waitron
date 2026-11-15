@@ -132,7 +132,9 @@ it("puts a locale refusal at the chooser and focuses its real control", async ()
   await el.updateComplete;
   await vi.waitFor(() => expect(picker(el).error).toBe(codeMessage("locale.unsupported")));
   await vi.waitFor(() => expect(picker(el).shadowRoot!.activeElement?.tagName).toBe("BUTTON"));
-  const actions = el.shadowRoot!.querySelector('wt-form-actions[slot="footer"]')!;
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    'wt-form-actions[slot="footer"]',
+  )!;
   expect((await formMessageOf(actions))?.textContent?.trim()).toBe(t("form.fix_fields"));
 });
 it("ignores an earlier editor's locale metadata after reopening for another person", async () => {
