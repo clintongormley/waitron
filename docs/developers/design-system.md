@@ -2366,9 +2366,9 @@ a screen may set to the element focus should go to instead (usually the button t
 dialog, or one standing in for it), when that is still on the page and takes focus (a host that
 passes focus into its own shadow root counts). Otherwise it walks outward from the element that had
 focus at opening, or from the dialog when that element is gone or the page body had focus at opening. At each
-enclosing element it tries every element inside it with tabindex 0 or above that is not disabled, in
+enclosing element it tries every element inside it the Tab key can stop on (`packages/ui/src/tabbable.ts`), in
 document order with a host's open shadow root before its own children, skipping the dialog; then the
-enclosing element itself, when its tabindex is 0 or above and it is not disabled. The first that
+enclosing element itself, when the Tab key can stop on it. The first that
 takes focus keeps it. So after a put-back with no `opener`, focus can land on an earlier tab stop
 beside the button that opened the dialog rather than on that button. When none of those takes focus,
 focus stays where the browser left it. This

@@ -289,6 +289,7 @@ test("while the impact loads, its status shows and Delete stays quiet and disabl
   el.loading = false;
   await settle(el);
   expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe("");
+  expect(el.shadowRoot!.querySelector('[role="status"] wt-spinner')).toBeNull();
   expect(inner(el, "confirm").disabled).toBe(false);
 });
 
