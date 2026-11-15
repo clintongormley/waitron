@@ -4148,18 +4148,18 @@ jobs:
       actions: read
       pull-requests: read
     steps:
-      - name: Read capacity with the existing workflow token
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Inspect direct controller-state access from this guest
         run: |
-          status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
-            --output "$RUNNER_TEMP/capacity-read.json" --write-out '%{http_code}' \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/variables/DISPOSABLE_TESTS_CAPACITY")
-          echo "WORKFLOW_CAPACITY_READ_HTTP=$status"
-          cat "$RUNNER_TEMP/capacity-read.json"
-          test "$status" = 200
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          echo "RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT"
+          echo "Guest hostname: $(hostname)"
+          echo "Virtual machine product: $(cat /sys/class/dmi/id/product_name)"
+          for path in \
+            /opt/waitron-disposable-controller-d579-ui0210-cd3f18f077a3/config.json \
+            /var/lib/waitron-disposable-controller/states/d579-ui0210-cd3f18f077a3/ledger/state.json \
+            /opt/waitron-disposable-controller-d579-ui0210-cd3f18f077a3/deploy/disposable-tests/ci-status.py; do
+            if test -r "$path"; then echo "LOCAL_CONTROLLER_READABLE=$path"; else echo "LOCAL_CONTROLLER_NOT_READABLE=$path"; fi
+          done
 
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
