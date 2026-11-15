@@ -339,51 +339,11 @@ it("refuses a case AEAT accepted with errors", async () => {
 });
 
 it("refuses a full invoice while full-invoice replacement is switched off, as it is by default", async () => {
-  const id = brandSaleId(crypto.randomUUID());
-  const fullInvoice = await withTransaction(suite.db, async (tx) => {
-    await tx.insert(sales).values({
-      id,
-      source: "device",
-      deviceId: node.deviceId,
-      nodeId: node.nodeId,
-      seriesId: node.seriesId,
-      invoiceNumber: 500,
-      issuedAt: "2026-03-01T12:05:00.000Z",
-      issuedOffsetMinutes: 60,
-      total: 1210,
-      vatBreakdown: [],
-      locale: "en",
-      invoiceLocales: ["en"],
-      fiscalBackend: "verifactu",
-      fiscalState: "recorded",
-    });
-    const recorded = await backend().recordSale(tx, {
-      origin: deviceOrigin(node.deviceId),
-      nodeId: node.nodeId,
-      saleId: id,
-      seriesId: seriesId(node.seriesId),
-      seriesCode: "GA",
-      invoiceNumber: 500,
-      issuedAt: new Date("2026-03-01T12:05:00.000Z"),
-      offsetMinutes: 60,
-      descriptionOfOperation: "Food and drink",
-      total: decimal("12.10"),
-      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-      counterparty: CUSTOMER,
-    });
-    await tx
-      .update(envios)
-      .set({ estado: "rechazado", codigoError: "1112" })
-      .where(eq(envios.registroId, recorded.recordId));
-    const filingCase = await openFilingCase(tx, {
-      registroId: recorded.recordId,
-      cause: "fiscal.registro_rechazado",
-      evidence: { codigo: 1112, mensaje: null, csv: null },
-      now: TODAY,
-    });
-    return { registroId: recorded.recordId, caseId: filingCase.id };
-  });
-  await refuses({ ...body, ...fullInvoice }, "fiscal.remedy_invalid");
+  const original = await refusedOriginal(undefined, { customer: CUSTOMER });
+  await refuses(
+    { ...body, caseId: original.caseId, registroId: original.registroId },
+    "fiscal.remedy_invalid",
+  );
 });
 
 it("replaces a full invoice with an R4 'S' naming the same customer, and resolves the case", async () => {

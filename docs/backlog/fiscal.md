@@ -1115,8 +1115,12 @@ date is when the table closes, which normally coincides with the invoice date", 
 invoice is issued days after the meal finished … the operation date and the invoice date should be
 distinct". So a replacement corrective, R4 and R5 alike, is to print a "Date of the sale" row with
 that real day when it differs from its own issue date (Task 3a of the
-[A1407 plan](../superpowers/plans/2026-11-15-a1407-full-invoice-replacement.md)); nothing else
-changes this entry's rule._
+[A1407 plan](../superpowers/plans/2026-11-15-a1407-full-invoice-replacement.md)). The owner's
+reading has two parts: the creation-date rule above covers an invoice issued at the end of the meal,
+when the table closes, which normally coincides with the invoice date; an invoice issued days after
+the meal carries a separate date of sale. A1407 step 2 applies that to replacement correctives; the
+other paths that issue an invoice days after the sale are with the owner (watcher, 2026-11-15
+01:58), and nothing about them has changed yet._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
