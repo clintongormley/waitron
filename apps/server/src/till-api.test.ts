@@ -2351,6 +2351,7 @@ describe("zone-offer menu routes", () => {
           unit: eachUnit,
           unitPrice: "1.50",
           vatClass: "general",
+          takeawayVatClass: "general",
           category: "Drinks",
           allergens: { sulphites: {} },
           // No override: vegan/vegetarian "unknown" — an unreviewed plate asserts no
@@ -2373,6 +2374,7 @@ describe("zone-offer menu routes", () => {
           unit: eachUnit,
           unitPrice: "2.50",
           vatClass: "general",
+          takeawayVatClass: "general",
           category: "Drinks",
           allergens: null,
           // No override → the cautious "unknown" profile (see Agua mineral above).

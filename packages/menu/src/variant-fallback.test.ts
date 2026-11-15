@@ -218,6 +218,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
+          takeawayVatClass: "general",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
           courseId: f.courseId,
@@ -237,6 +238,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
+          takeawayVatClass: "zero",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
           courseId: f.ownCourseId,
@@ -257,6 +259,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
+          takeawayVatClass: "general",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
           courseId: f.courseId,
@@ -268,6 +271,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
+          takeawayVatClass: "zero",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
           courseId: f.ownCourseId,
@@ -819,6 +823,7 @@ describe("INHERITED_KEYS", () => {
         "manualAllergens",
         "unitPrice",
         "vatClass",
+        "takeawayVatClass",
       ].sort(),
     );
   });
