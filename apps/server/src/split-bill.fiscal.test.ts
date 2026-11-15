@@ -180,6 +180,7 @@ async function splitIntoThreeChecks(
   const { cfg, waterId, hamId, tableId, offers } = seeded;
   const water = { productId: waterId, quantity: "3" };
   const ham = { productId: hamId, quantity: "0.300" };
+  // Each water becomes its own line, so line 1 is the ham and lines 2–4 the waters; check A takes 1–2.
   const { tabId } = await asApp((tx) =>
     openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) }),
   );
