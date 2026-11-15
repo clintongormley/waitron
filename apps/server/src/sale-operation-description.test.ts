@@ -95,6 +95,37 @@ const read = (
 ) => withTransaction(suite.db, (tx) => readSaleOperationDescription(tx, cfg, source));
 
 describe("department operation description", () => {
+  it("files the department's description from its column rather than receipt text", async () => {
+    const f = await fixture();
+    await authored(f.primary, { operationDescription: "Old receipt text" });
+    await suite.db.execute(
+      sql`update departments set operation_description = 'Column meals' where id = ${f.primary}`,
+    );
+    expect(await read({}, { kind: "order", orderId: f.orderId })).toBe("Column meals");
+    expect(await read({}, { kind: "sale", saleId: f.saleId })).toBe("Column meals");
+  });
+  it.each([null, "", " \t\n "])(
+    "an empty column %j takes the configured default or refuses without one",
+    async (value) => {
+      const f = await fixture();
+      await authored(f.primary, { operationDescription: "Old receipt text" });
+      await suite.db.execute(
+        sql`update departments set operation_description = ${value} where id = ${f.primary}`,
+      );
+      for (const source of [
+        { kind: "order", orderId: f.orderId },
+        { kind: "sale", saleId: f.saleId },
+      ] as const) {
+        expect(await read({ operationDescriptionDefault: "Seat default" }, source)).toBe(
+          "Seat default",
+        );
+        await expect(read({}, source)).rejects.toMatchObject({
+          code: "department.operation_description_required",
+          params: { departmentId: f.primary },
+        });
+      }
+    },
+  );
   it.each(["order", "sale"] as const)(
     "reads the %s department without venue/default substitution",
     async (kind) => {
@@ -122,7 +153,7 @@ describe("department operation description", () => {
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.primary));
     expect(await read({}, { kind: "sale", saleId: f.saleId })).toBe("Retained meals");
   });
-  it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
+  it.each([undefined, "", " \t\n ", "x".repeat(501), "Bad\u0000text"])(
     "refuses missing/invalid authored description %j when no default is offered, without another department fallback",
     async (operationDescription) => {
       const f = await fixture();
@@ -141,7 +172,7 @@ describe("department operation description", () => {
       expect(await read({}, { kind: "order", orderId: f.orderId })).toBe("Deli meals");
     },
   );
-  it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
+  it.each([undefined, "", " \t\n ", "x".repeat(501), "Bad\u0000text"])(
     "files the fiscal seat's default for missing/invalid authored description %j",
     async (operationDescription) => {
       const f = await fixture();

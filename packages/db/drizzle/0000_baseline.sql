@@ -2253,6 +2253,7 @@ CREATE TABLE `departments` (
 	`dining` text DEFAULT 'eat_in' NOT NULL,
 	`dining_starts_as` text DEFAULT 'eat_in' NOT NULL,
 	`transfer_desk_profile_id` text,
+	`operation_description` text,
 	`receipt_text` text,
 	`receipt_logo_image_id` text,
 	`receipt_logo_rasters` text,

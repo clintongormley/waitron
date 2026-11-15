@@ -512,6 +512,17 @@ function validateServiceHierarchy(tables: Tables): void {
 
 function validateReceiptFields(tables: Tables): void {
   for (const row of tables.departments ?? []) {
+    const description = row.operation_description;
+    if (
+      description !== undefined &&
+      description !== null &&
+      (typeof description !== "string" ||
+        description.length > 500 ||
+        Array.from(description).some(
+          (character) => character < " " && !"\t\n\r".includes(character),
+        ))
+    )
+      refuse("departments.operation_description");
     let receipt = row.receipt_text;
     if (receipt === null || receipt === undefined) continue;
     if (typeof receipt === "string") {
@@ -527,27 +538,11 @@ function validateReceiptFields(tables: Tables): void {
     if (
       Object.keys(value).some(
         (key) =>
-          ![
-            "printAddress",
-            "phone",
-            "email",
-            "headerSubtitle",
-            "footerMessage",
-            "operationDescription",
-          ].includes(key),
+          !["printAddress", "phone", "email", "headerSubtitle", "footerMessage"].includes(key),
       )
     )
       refuse("departments.receipt_text");
     if (value.printAddress !== undefined && typeof value.printAddress !== "boolean")
-      refuse("departments.receipt_text");
-    if (
-      value.operationDescription !== undefined &&
-      (typeof value.operationDescription !== "string" ||
-        value.operationDescription.length > 500 ||
-        Array.from(value.operationDescription).some(
-          (character) => character < " " && !"\t\n\r".includes(character),
-        ))
-    )
       refuse("departments.receipt_text");
   }
 }

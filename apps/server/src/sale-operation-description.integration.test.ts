@@ -127,7 +127,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, offers.zoneId));
     await tx
       .update(departments)
-      .set({ receiptText: { operationDescription: "Counter drinks" } })
+      .set({ operationDescription: "Counter drinks" })
       .where(eq(departments.id, zone!.departmentId));
     return { ...offers, departmentId: zone!.departmentId };
   });

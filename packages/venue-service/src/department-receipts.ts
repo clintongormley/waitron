@@ -74,7 +74,9 @@ function trimProjection(cfg: DepartmentReceiptScope) {
     printAddress: sql<
       string | null
     >`json_type(${validDocument(departments.receiptText)}, '$.printAddress')`,
-    operationDescription: stringField("operationDescription", 2000),
+    operationDescription: sql<
+      string | null
+    >`case when typeof(${departments.operationDescription}) = 'text' and length(cast(${departments.operationDescription} as blob)) <= 2000 then ${departments.operationDescription} else null end`,
     logo: mediaImages.filename,
     phone: stringField("phone", 120),
     email: stringField("email", 1016),
@@ -289,7 +291,7 @@ export async function writeDepartmentReceipt(
     (!rasters || !decode(rasters["58mm"], "58mm") || !decode(rasters["80mm"], "80mm"))
   )
     throw new Error("Receipt logo requires both printable pictures");
-  const { logo, ...receiptText } = receipt;
+  const { logo, operationDescription, ...receiptText } = receipt;
   let receiptLogoImageId: string | null = null;
   if (logo !== undefined) {
     const [image] = await tx
@@ -302,6 +304,7 @@ export async function writeDepartmentReceipt(
   await tx
     .update(departments)
     .set({
+      operationDescription: operationDescription ?? null,
       receiptText,
       receiptLogoImageId,
       receiptLogoRasters: logo ? rasters! : null,

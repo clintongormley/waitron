@@ -383,7 +383,7 @@ export async function seedDepartmentReceipt(
   receipt: DepartmentReceiptConfig,
   logoRasters: ReceiptLogoRasters | null = null,
 ): Promise<void> {
-  const { logo, ...receiptText } = receipt;
+  const { logo, operationDescription, ...receiptText } = receipt;
   let receiptLogoImageId: string | null = null;
   if (logo !== undefined) {
     const [image] = await db
@@ -396,6 +396,7 @@ export async function seedDepartmentReceipt(
   await db
     .update(departments)
     .set({
+      operationDescription: operationDescription ?? null,
       receiptText,
       receiptLogoImageId,
       receiptLogoRasters: logoRasters,
