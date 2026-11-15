@@ -4143,6 +4143,10 @@ lists. A refused reader read in the editor still hides its field. The chooser sh
 and opens the existing
 Edit dialog; search does not start pairing. Mounted EN/ES checks compare its named controls and
 group headings with the declarations.
+Card-reader name and automatic-slip settings use **Edit** and the reader-list hardware permission.
+The chooser includes disabled readers and opens the existing editor without adopting, saving or
+unpairing a reader. Linked edits follow Back/Forward; a live refresh retains the draft.
+Mounted EN/ES checks compare the named Edit controls and labels with the declarations.
 
 When nothing matches, the nav says **No pages
 match.** in a `role="status"` message. Enter opens the first result shown, in the order shown, and does

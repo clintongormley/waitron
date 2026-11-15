@@ -185,7 +185,7 @@ export async function mountReceiptApp(
     .poll(() =>
       deep(
         app.shadowRoot!,
-        "venue-departments-shell, dashboard-venue-settings-screen, dashboard-overview-screen, dashboard-printers-screen, dashboard-devices-screen, dashboard-my-schedule-screen",
+        "venue-departments-shell, dashboard-venue-settings-screen, dashboard-overview-screen, dashboard-printers-screen, dashboard-devices-screen, dashboard-my-schedule-screen, dashboard-payments-screen",
       ),
     )
     .toBeTruthy();

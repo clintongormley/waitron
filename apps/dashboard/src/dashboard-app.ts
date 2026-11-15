@@ -109,6 +109,7 @@ import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
+import { readerSettingSearchDestinations } from "./reader-setting-search.js";
 import { deviceSettingSearchDestinations } from "./device-setting-search.js";
 import { printerSettingSearchDestinations } from "./printer-setting-search.js";
 import "./screens/floor-plan-editor.js";
@@ -1675,6 +1676,7 @@ export class DashboardApp extends LitElement {
         ...departmentReceiptSearchDestinations(this.api),
         ...printerSettingSearchDestinations(this.api),
         ...deviceSettingSearchDestinations(this.api),
+        ...readerSettingSearchDestinations(this.api),
       ];
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
