@@ -141,6 +141,7 @@ export function deviceSettingIsOffered(
     case "paymentSlipPrinterId":
     case "cashDrawerPrinterId":
     case "invoicePrinterId":
+      return profile?.formFactor !== SHARED_DISPLAY;
     case "madeHereStationIds":
       return profile?.formFactor === "till";
     default:
@@ -633,7 +634,8 @@ export class DevicesScreen extends LitElement {
               ? {}
               : { invoicePrinterId: form.invoicePrinterId === "" ? null : form.invoicePrinterId }),
           }),
-      ...(this.deviceProfiles.find((profile) => profile.id === form.profileId)?.formFactor === "till"
+      ...(this.deviceProfiles.find((profile) => profile.id === form.profileId)?.formFactor ===
+      "till"
         ? { madeHereStationIds: this.#madeHereToSend() }
         : {}),
       ...this.#approvalsToSend(this.editing!),
