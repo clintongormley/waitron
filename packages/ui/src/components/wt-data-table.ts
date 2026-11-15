@@ -163,6 +163,10 @@ interface ActiveFilter<Row> {
 /** Search and Customise share the last line at or below this host width. */
 const STACKED_SEARCH_WIDTH = 640;
 
+// Arrow keys belong to a field, a list or a menu that a cell holds; a tree row takes only the rest.
+const KEEPS_ARROWS =
+  'input:not([type="checkbox"], [type="button"]), textarea, select, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="menu"], [role="menuitem"], [role="option"], [role="radio"], [role="radiogroup"], [role="slider"], [role="spinbutton"], [role="tablist"], [role="textbox"], [aria-keyshortcuts*="Arrow"]';
+
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
@@ -799,6 +803,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
+      tbody tr[tabindex]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
       .tree-spacer {
         display: inline-block;
         width: var(--tree-arrow-width);
@@ -1197,6 +1206,44 @@ export class WtDataTable<Row = unknown> extends LitElement {
       "data-focus-visible",
       event.type !== "focusout" && control instanceof Element && control.matches(":focus-visible"),
     );
+  };
+
+  readonly #treeKey = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+      return;
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    const path = event.composedPath();
+    const at = path.findIndex(
+      (node) => node instanceof HTMLTableRowElement && node.getRootNode() === this.renderRoot,
+    );
+    const row = path[at] as HTMLTableRowElement;
+    // A table nested in a cell keeps the arrow keys pressed anywhere inside it, not only in its rows.
+    const inner = path.slice(0, at);
+    if (inner.some((node) => node instanceof WtDataTable)) return;
+    if (inner.some((node) => node instanceof Element && node.matches(KEEPS_ARROWS))) return;
+    const open = row.getAttribute("aria-expanded");
+    const level = Number(row.getAttribute("aria-level"));
+    const toggle = row.querySelector<HTMLButtonElement>(
+      ".tree-toggle, .row-activate[aria-expanded]",
+    );
+    let target: Element | null = null;
+    if (event.key === "ArrowDown") target = row.nextElementSibling;
+    else if (event.key === "ArrowUp") target = row.previousElementSibling;
+    else if (toggle && open === (event.key === "ArrowRight" ? "false" : "true")) toggle.click();
+    else if (event.key === "ArrowRight") target = open === "true" ? row.nextElementSibling : null;
+    else {
+      target = row.previousElementSibling;
+      while (target && Number(target.getAttribute("aria-level")) >= level)
+        target = target.previousElementSibling;
+    }
+    event.preventDefault();
+    if (!(target instanceof HTMLTableRowElement)) return;
+    const control = target.querySelector<HTMLElement>(".row-activate, .tree-toggle");
+    if (control) control.focus();
+    else {
+      target.tabIndex = -1;
+      target.focus();
+    }
   };
 
   override connectedCallback(): void {
@@ -3217,7 +3264,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
               : nothing
           }
           ${this.#renderHead(visibleKeys, shown)}
-          <tbody role="rowgroup">
+          <tbody role="rowgroup" @keydown=${this.#treeKey}>
             ${repeat(
               entries,
               repeatKeys(entries.map(({ key }) => key)),
@@ -3312,6 +3359,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                           class="tree-toggle"
                                           part=${`tree-toggle ${this.rowToggleParts?.(row) ?? ""}`.trim()}
                                           aria-label=${toggleLabel}
+                                          aria-expanded=${String(expanded)}
                                           @click=${(event: Event) => {
                                             event.stopPropagation();
                                             this.#toggle(key);

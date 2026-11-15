@@ -454,6 +454,7 @@ export class WtCombobox extends LitElement {
   private readonly generatedTriggerId = uniqueId("wt-combobox-trigger");
   private readonly labelId = uniqueId("wt-combobox-label");
   private readonly listboxId = uniqueId("wt-combobox-listbox");
+  private readonly valueId = uniqueId("wt-combobox-value");
   private readonly errorId = uniqueId("wt-combobox-error");
   private readonly hintId = uniqueId("wt-combobox-hint");
   constructor() {
@@ -1094,15 +1095,14 @@ export class WtCombobox extends LitElement {
           id=${triggerId}
           name=${this.name || nothing}
           class="field-control trigger"
+          role="combobox"
           aria-haspopup="listbox"
           aria-expanded=${this.expanded}
-          aria-labelledby=${
-            showLabel
-              ? `${this.labelId} ${triggerId}`
-              : triggerName
-                ? `${this.labelId}-name ${triggerId}`
-                : nothing
-          }
+          aria-controls=${this.listboxId}
+          aria-required=${this.required ? "true" : nothing}
+          aria-labelledby=${this.triggerLabelledBy(
+            showLabel ? this.labelId : triggerName ? `${this.labelId}-name` : "",
+          )}
           aria-invalid=${invalid}
           aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
           popovertarget="panel"
@@ -1115,8 +1115,10 @@ export class WtCombobox extends LitElement {
               ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
               : nothing
           }
-          ${this.renderIcon()}
-          <span class=${classMap({ value: true, placeholder: !selectedText, muted })}
+          ${this.renderIcon(this.chosenOption, `${this.valueId}-icon`)}
+          <span
+            id=${this.valueId}
+            class=${classMap({ value: true, placeholder: !selectedText, muted })}
             >${shownText}</span
           >
           ${guard([this.reservedTexts], () =>
@@ -1130,9 +1132,22 @@ export class WtCombobox extends LitElement {
     `;
   }
 
-  private renderIcon(option = this.chosenOption) {
+  /** A combobox takes no name from its content, so the trigger names its own parts: the label, then
+   * the named icon, then the words it shows. */
+  private triggerLabelledBy(labelId: string): string {
+    return [
+      labelId,
+      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "",
+      this.valueId,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  private renderIcon(option = this.chosenOption, id?: string) {
     return option?.icon
       ? html`<wt-icon
+          id=${id ?? nothing}
           class="icon"
           name=${option.icon}
           role=${option.iconLabel ? "img" : nothing}
@@ -1155,8 +1170,12 @@ export class WtCombobox extends LitElement {
       id=${triggerId}
       name=${this.name || nothing}
       class="trigger link"
+      role="combobox"
       aria-haspopup="listbox"
       aria-expanded=${this.expanded}
+      aria-controls=${this.listboxId}
+      aria-required=${this.required ? "true" : nothing}
+      aria-labelledby=${this.triggerLabelledBy("")}
       aria-invalid=${invalid}
       aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
       popovertarget="panel"
@@ -1164,7 +1183,9 @@ export class WtCombobox extends LitElement {
       @click=${this.onTriggerClick}
       @keydown=${this.onTriggerKeydown}
     >
-      ${this.renderIcon()}<span class="link-text"
+      ${this.renderIcon(this.chosenOption, `${this.valueId}-icon`)}<span
+        id=${this.valueId}
+        class="link-text"
         >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
           class=${selectedText ? "value" : "value placeholder"}
           >${shownText}</span
