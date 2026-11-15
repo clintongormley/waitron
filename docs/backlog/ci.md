@@ -1154,14 +1154,6 @@ deadline. The till shard selects all three for the existing case/hook trace and
 enables `DEBUG=pw:api`; these diagnostics do not establish a cause or repair. Keep the venue-service startup investigation and A419's dashboard stall
 separate; no shared cause is established.
 
-## One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker
-
-In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's success branch makes
-the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
-reports one failure (it still exits 1). Reproduced on `27ae35c09` by breaking the existing
-tax-number check, during A980 S1a2. Cause not found.
-
-
 ## A1230: dashboard shard 1's blocked operation is unknown
 
 Main CI run `41046955691`, job `124036233860`, ended at its 360-second

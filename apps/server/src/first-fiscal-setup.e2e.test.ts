@@ -169,9 +169,9 @@ it.each([
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     };
     let server: StartedServer | undefined, agent: Agent | undefined;
-    vi.spyOn(process, "kill").mockReturnValue(true);
+    const seams = { testClock: time.clock, restart: () => {} };
     try {
-      if (launch === "direct") server = await startServer(env, {}, { testClock: time.clock });
+      if (launch === "direct") server = await startServer(env, {}, seams);
       else
         await runEntry({
           args: [],
@@ -183,7 +183,7 @@ it.each([
           readRecoveryState,
           writeRecoveryState,
           startServer: async (merged, base) =>
-            (server = await startServer(merged, base, { testClock: time.clock })),
+            (server = await startServer(merged, base, seams)),
           serveRecovery: async () => {
             throw new Error("unexpected recovery mode");
           },
@@ -513,7 +513,7 @@ it.each([
         code: "ENOENT",
       });
       const merged = await loadBoxEnv(env, stateDir);
-      server = await startServer(merged, env, { testClock: time.clock });
+      server = await startServer(merged, env, seams);
       const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
       expect(health.status).toBe(200);
       const undeclared = async (directory: string) =>
