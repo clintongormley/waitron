@@ -130,7 +130,7 @@ time service such as `systemd-timesyncd`; `install` carries on. It matters becau
 that files invoices takes no payment until the system reports its clock in step with internet time
 (`timedatectl`'s `NTPSynchronized`, read through the box's clock service), two tills or handhelds
 that are switched on and connected agree with its clock, or someone confirms it. It is also what
-lets setup, restore and promotion name an invoice series without a phone or laptop on the venue's
+lets setup, restore and promotion name an invoice series without another device on the venue's
 network. `install` switches synchronisation back on even where someone switched it off, so a test
 box whose clock is set wrong on purpose needs it switched off again after each `install`. `reset` does not touch it.
 

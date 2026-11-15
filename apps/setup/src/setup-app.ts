@@ -766,7 +766,6 @@ export class SetupApp extends LitElement {
   #connectionGeneration = 0;
 
   @state() private installationOrigin?: "usb";
-  /** The URL another device on the venue's network opens this box at, from the setup discovery. */
   @state() private boxAddress?: string;
   @state() private environment?: "production" | "preproduction";
   @state() private developmentMode = false;

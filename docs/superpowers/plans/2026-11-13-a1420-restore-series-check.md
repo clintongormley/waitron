@@ -505,7 +505,8 @@ whose time service is synchronised names its series with no question.
   its time over the internet, or set up from a phone or laptop on the venue's network."; the restore
   command prints, for a `sif.allocation_invalid` clock refusal, "The box could not confirm its time,
   so it made no invoice series. Let the box keep its time over the internet, or restore from the
-  restore page on a phone or laptop on the venue's network."
+  restore page on a phone or laptop on the venue's network." (2026-11-15: replaced on the restore
+  page and in the restore command by the owner's words, A1420 queue item, commit e4a59c6b97.)
 - [ ] C4′ and the #3003 clause (below); `docs/operations/first-live-fiscal-setup.md:18-21,96-99,243-245`,
   `hour-recovery.md:124-126,189-191,233-245`, `conventions-data.md:4166-4168`.
 - [ ] `memory_pressure | grep free`, then the setup browser suites of 14c′, and

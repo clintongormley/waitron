@@ -34,7 +34,6 @@ export interface SetupContribution {
     };
     binding: RecoveryOperationBinding;
     prepare(request: ModuleRecoveryPreparationRequest): Promise<unknown>;
-    /** The URL another device on the venue's network opens this box at, when the setup app knows it. */
     boxAddress?: string;
   }): ModuleRecoveryEntry;
   createPromotion?(context: ModulePromotionContext): ModulePromotionEntry;

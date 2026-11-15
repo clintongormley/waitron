@@ -11,7 +11,6 @@ export type ClockProblem =
   | { kind: "later" | "in-use" }
   | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
 
-/** A page's no-second-clock wait says what to do in two sentences, or lists two choices. */
 export type ClockWords = SharedClockWords &
   (
     | { secondClockDo: string; secondClockEnds: string; secondClockChoices?: never }
