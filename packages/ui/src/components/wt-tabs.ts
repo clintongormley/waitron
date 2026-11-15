@@ -20,6 +20,18 @@ export interface TabItem {
 /** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
 const FADE_SPACES = 2;
 
+const CONTROL =
+  ':is(a[href], button, input, select, textarea, [tabindex], [contenteditable]):not([tabindex^="-"], :disabled)';
+
+function holdsControl(elements: Iterable<Element>): boolean {
+  for (const element of elements) {
+    if (element.matches(CONTROL)) return true;
+    if (holdsControl(element.children)) return true;
+    if (element.shadowRoot && holdsControl(element.shadowRoot.children)) return true;
+  }
+  return false;
+}
+
 @customElement("wt-tabs")
 export class WtTabs extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -359,9 +371,27 @@ export class WtTabs extends LitElement {
     tabs[index]!.focus({ preventScroll: true });
   }
 
+  constructor() {
+    super();
+    // Checked as focus arrives and before Tab moves it, when slotted content has rendered.
+    this.addEventListener("focusin", () => this.#syncPanelStop());
+    this.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") this.#syncPanelStop();
+    });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated) this.#observeSizes();
+  }
+
+  /** A panel is a Tab stop of its own only when nothing inside it can take focus. */
+  #syncPanelStop(): void {
+    for (const panel of this.renderRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')) {
+      const slotted = panel.querySelector("slot")!.assignedElements({ flatten: true });
+      if (panel.hidden || holdsControl(slotted)) panel.removeAttribute("tabindex");
+      else panel.tabIndex = 0;
+    }
   }
 
   override disconnectedCallback(): void {
@@ -380,6 +410,7 @@ export class WtTabs extends LitElement {
     this.#showOverflow();
     this.#placeBadges();
     this.#syncStickyHeight();
+    this.#syncPanelStop();
   }
 
   #syncStickyHeight(): void {
@@ -454,7 +485,6 @@ export class WtTabs extends LitElement {
             role="tabpanel"
             id=${`${this.#id}-panel-${index}`}
             aria-labelledby=${`${this.#id}-tab-${index}`}
-            tabindex="0"
             ?hidden=${item.key !== this.#selected}
           >
             <slot name=${item.key}></slot>

@@ -1365,3 +1365,26 @@ test("stops watching a tab once another is selected, and watches the new one", a
   expect(unobserve).toHaveBeenCalledWith(old);
   expect(observe).toHaveBeenCalledWith(buttons(el)[0], { box: "border-box" });
 });
+
+test("Tab from the selected tab goes straight to the first control in its panel", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><div slot="plain"><p>Notes</p><button id="first">First</button></div><div slot="field"><wt-input label="Name"></wt-input></div><div slot="text">Only text</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [
+    { key: "plain", label: "Plain" },
+    { key: "field", label: "Field" },
+    { key: "text", label: "Text" },
+  ];
+  await el.updateComplete;
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  expect(document.activeElement!.id).toBe("first");
+  await userEvent.click(page.elementLocator(buttons(el)[1]!));
+  await userEvent.tab();
+  expect(document.activeElement).toBe(el.querySelector("wt-input"));
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(el.shadowRoot!.activeElement).toBe(buttons(el)[1]);
+  await userEvent.click(page.elementLocator(buttons(el)[2]!));
+  await userEvent.tab();
+  expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+});
