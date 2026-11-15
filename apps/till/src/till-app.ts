@@ -22713,12 +22713,15 @@ export class TillApp extends LitElement {
         ${
           this.deadEndsQuestion === null
             ? nothing
-            : html`<till-dead-ends-dialog
-                .answer=${this.deadEndsQuestion.answer}
-                .allowRemove=${this.deadEndsQuestion.allowRemove}
-                @dead-ends-continue=${(event: CustomEvent<DeadEndsDecision>) => this.#answerDeadEnds(event.detail)}
-                @dead-ends-cancel=${() => this.#answerDeadEnds(null)}
-              ></till-dead-ends-dialog>`
+            : keyed(
+                this.deadEndsQuestion,
+                html`<till-dead-ends-dialog
+                  .answer=${this.deadEndsQuestion.answer}
+                  .allowRemove=${this.deadEndsQuestion.allowRemove}
+                  @dead-ends-continue=${(event: CustomEvent<DeadEndsDecision>) => this.#answerDeadEnds(event.detail)}
+                  @dead-ends-cancel=${() => this.#answerDeadEnds(null)}
+                ></till-dead-ends-dialog>`,
+              )
         }
         ${
           this.reprintAsking === null
