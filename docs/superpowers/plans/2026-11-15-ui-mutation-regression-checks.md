@@ -25,3 +25,18 @@ pnpm --filter @waitron/ui exec vitest run src/components/wt-tabs.help.test.ts sr
 The complete failed-night UI score is 11,812/13,172 (89.675%). It needs 43 more detections at that denominator; these checks promise no such count. Leaving the two Node-only helpers out gives 11,812/13,047 (90.534%) arithmetically, but that remains the owner's decision and is not verified qualification. DB's separate refresh already passed its required run, `43691802402`, after #3310.
 
 Keep these checks on one UI repair branch; do not open a partial test PR now. Await the owner's helper decision or a separately reviewed meaningful repair before `finish-branch`, then use Claude's run-it review, the normal hook and current-head scoped CI. The overall UI failure closes only after the repair as a whole passes the required `mutation.yml` run on main with `packages=ui`; do not dispatch that run while this partial repair cannot yet establish the aggregate result. The watcher must clear this branch-holding approach before build.
+
+**15 November, owner decision (watcher’s 12:12 note in Lane I questions.md):**
+The owner chose “Leave them out (Recommended)”: remove `vitest-park-pointer.ts`
+and `vitest-pointer-gestures.ts` from UI’s mutate list and land the three checks.
+This supersedes the exclusion/holding limits above; no owner plan approval is claimed.
+Add exactly those two exclusions to `packages/ui/stryker.config.json`; add the same
+files to the existing UI-only exclusion assertion in `scripts/mutation-shard.test.mjs`,
+keeping all prior values and the 90 floor. No source or coverage setting changes.
+Remove both duplicate helper backlog entries in `docs/backlog/ci.md`, retain the DB
+static-mutant question and its index link in `docs/backlog.md`, and record this choice
+under CI’s decisions. Additional code/config about +3/-1, guard +2/-0, docs +6/-20.
+Run the complete mutation-shard guard and the three browser files; then finish/CI/land.
+Dispatch `mutation.yml --ref main -f packages=ui` and read all shard and aggregate
+results before calling the scheduled UI failure fixed. The earlier score is arithmetic,
+not qualification; no new test project, helper, mutator or lower threshold is needed.
