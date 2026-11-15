@@ -29,3 +29,11 @@ export function withProfileListRead(api: DashboardApi, choices: ProfileScopeChoi
     },
   });
 }
+
+export async function selectProfileTab(screen: DeviceProfilesScreen, key: string) {
+  const tabs = screen.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  await userEvent.click(tabs.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!);
+  await screen.updateComplete;
+  await tabs.updateComplete;
+}

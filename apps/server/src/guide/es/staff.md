@@ -161,6 +161,10 @@ ver sus puestos actuales antes de elegir de nuevo.
 En **Hardware**, abre **Perfiles de dispositivo**. Busca el perfil que necesitas y selecciona su
 fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
 
+Elige **Qué puede hacer** para las acciones y pantallas. Usa **Pantallas de estación** para elegir
+qué pantallas puede mostrar el dispositivo. Abre una pestaña marcada para corregir su campo
+y pulsa **Guardar**.
+
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 
 Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar

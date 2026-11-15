@@ -1,4 +1,4 @@
-import { profileAction } from "../testing/profile-table.js";
+import { selectProfileTab, profileAction } from "../testing/profile-table.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
@@ -190,7 +190,10 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     // Both printer lists, with order buttons and a switched-off printer still listed.
     expect(el.shadowRoot!.querySelector("[data-test=receipt-printers-up-pr1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
-    await expectNoA11yViolations(host);
+    for (const item of el.shadowRoot!.querySelector("wt-tabs")!.items) {
+      await selectProfileTab(el, item.key);
+      await expectNoA11yViolations(host);
+    }
   });
 
   it.each([
@@ -231,6 +234,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         expect(inScreenOrRow(el, ".form-message")?.textContent?.trim()).toBe(t("form.fix_fields"));
         expect(await saveState(el)).toEqual(["secondary", true, true]);
         await expectNoA11yViolations(host);
+        await selectProfileTab(el, "where");
         const zone = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
           "[data-test=profile-zone-z1]",
         )!;
@@ -263,6 +267,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
     );
     await flush(el);
+    await selectProfileTab(el, "where");
     expect(await visibleHelp(el.shadowRoot!)).toBe(2);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
@@ -339,6 +344,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).not.toBeNull(),
       );
+      await selectProfileTab(el, "equipment");
       expect(el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-pr2]")).not.toBeNull();
       await expectNoA11yViolations(host);
       await rename(el, "Bar");
@@ -352,6 +358,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
           }
         ).error,
       ).not.toBe("");
+      expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("equipment");
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
@@ -413,12 +420,14 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       await flush(el);
       await profileAction(el, "edit-p2");
       await flush(el);
+      await selectProfileTab(el, "kitchen");
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s-off]"),
       ).toBeNull();
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s1]"),
       ).not.toBeNull();
+      await selectProfileTab(el, "capabilities");
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
       ).not.toBeNull();
@@ -471,6 +480,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await flush(el);
     await profileAction(el, "edit-p2");
     await flush(el);
+    await selectProfileTab(el, "kitchen");
     const other = (kind: string) =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
         `[data-test=profile-${kind}-other-stations]`,
@@ -587,6 +597,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       toggle("profile-every-zone", false);
       toggle("cap-show-schedule", true);
       await flush(el);
+      await selectProfileTab(el, "where");
       expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z2]")).not.toBeNull();
       await expectNoA11yViolations(host);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
@@ -594,6 +605,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       for (const role of ["job-waiter", "job-chef"]) toggle(`profile-role-${role}`, false);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
+      await selectProfileTab(el, "who");
       expect(el.shadowRoot!.querySelector("[data-test=admitted-people]")!.textContent).toContain(
         t("device_profiles.admitted_nobody"),
       );
@@ -612,6 +624,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await flush(el);
+    await selectProfileTab(el, "equipment");
     expect(el.shadowRoot!.querySelector("[data-test=no-printers]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

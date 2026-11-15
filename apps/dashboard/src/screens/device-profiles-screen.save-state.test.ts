@@ -1,4 +1,4 @@
-import { profileAction } from "../testing/profile-table.js";
+import { selectProfileTab, profileAction } from "../testing/profile-table.js";
 import { LitElement, html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -269,6 +269,7 @@ async function press(el: DeviceProfilesScreen) {
 }
 
 async function typeName(el: DeviceProfilesScreen, value: string) {
+  await selectProfileTab(el, "general");
   const field = q<HTMLElementTagNameMap["wt-input"]>(el, "profile-name")!;
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
