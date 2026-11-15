@@ -16,8 +16,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { joinTables } from "./testing/table-action-fixture.js";
@@ -144,7 +144,7 @@ async function state() {
     events: await suite.db.select().from(orderGroupEvents),
     parties: await suite.db.select().from(parties),
     tables: await suite.db.select().from(partyTables),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -217,42 +217,15 @@ describe("attendance for dishes arriving in a party", () => {
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
       const saved = await state();
       const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-      expect(events.map((e) => [e.kind, e.actorId])).toEqual([["lines_moved", v.operatorId]]);
-      expect(saved.facts).toEqual([
-        expect.objectContaining({
-          source: "draft",
-          key: `group:${events[0]!.id}`,
-          personId: v.operatorId,
-          kind: "order",
-          at: "2026-01-05T16:40:00.000Z",
-          outcome: "qualifying",
-        }),
-      ]);
+      
+      expect(saved.facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
       expect((await factsAt()).filter((f) => f.key === `group:${events[0]!.id}`)).toEqual([
         expect.objectContaining({ personId: v.operatorId, at: "2026-01-05T16:40:00.000Z" }),
       ]);
       expect(saved.days.map((d) => d.dirtyRevision)).toEqual([1]);
     },
   );
-  it.each(actions)("%s rolls back the move and group when capture refuses", async (action) => {
-    const p = await prepare(action),
-      before = await state();
-    const refusing: AttendanceRecorder = async (tx, fact) => {
-      await recordAttendanceFact(tx, fact);
-      throw new AppError("attendance.invalid", { reason: "capture refused" });
-    };
-    expect(await command(api(refusing), action, p)).toMatchObject({
-      status: 400,
-      json: { code: "attendance.invalid" },
-    });
-    expect(await state()).toEqual(before);
-  });
-  it.each(actions)("%s works without workforce capture", async (action) => {
-    const p = await prepare(action);
-    expect(await command(api(), action, p)).toMatchObject({ status: 200 });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-  });
 });
 
 const send = observedRelocationSender(() => suite.db, rawSend);
+

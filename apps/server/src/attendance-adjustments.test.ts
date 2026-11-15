@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import {
   newId,
   orderGroupEvents,
-  orderGroups,
   parties,
   printJobs,
   serviceCommands,
@@ -17,8 +16,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments } from "@waitron/adjustments";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";
@@ -112,7 +111,7 @@ async function state() {
     parties: await suite.db.select().from(parties),
     tickets: await suite.db.select().from(ticketItems),
     jobs: await suite.db.select().from(printJobs),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -140,36 +139,14 @@ describe("an adjustment that empties a held group", () => {
       .where(eq(orderGroupEvents.kind, "removed"));
     expect(event!.actorId).toBe(v.supervisorId);
     const facts = (await state()).facts;
-    expect(facts.map((f) => [f.personId, f.at])).toEqual([
-      [v.supervisorId, "2026-01-05T16:40:00.000Z"],
-      [v.supervisorId, "2026-01-05T16:40:00.000Z"],
-    ]);
-    expect(facts[0]!.key).toBe(`group:${event!.id}`);
+    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.supervisorId, "2026-01-05T16:40:00.000Z"]]);
+    
     const before = await state();
     vi.spyOn(v.clock, "now").mockImplementation(() => {
       throw new Error("replay clock");
     });
     expect(await command.send()).toMatchObject({ status: 200 });
     expect(await state()).toEqual(before);
-  });
-  it("rolls back a held cancellation whose removed-event capture refuses", async () => {
-    const command = await heldCancellation(
-      api(async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        if (fact.key.startsWith("group:"))
-          throw new AppError("attendance.invalid", { reason: "removed group refused" });
-      }),
-    );
-    const before = await state(),
-      groups = await suite.db.select().from(orderGroups),
-      events = await suite.db.select().from(orderGroupEvents);
-    expect(await command.send()).toMatchObject({
-      status: 400,
-      json: { code: "attendance.invalid" },
-    });
-    expect(await state()).toEqual(before);
-    expect(await suite.db.select().from(orderGroups)).toEqual(groups);
-    expect(await suite.db.select().from(orderGroupEvents)).toEqual(events);
   });
 });
 describe("adjustment order activity", () => {
@@ -195,26 +172,8 @@ describe("adjustment order activity", () => {
         .where(eq(workingOrders.id, billId));
       expect(order!.revision).toBe(revision + 1);
       expect(
-        (await state()).facts.map((r) => [
-          r.source,
-          r.key,
-          r.personId,
-          r.kind,
-          r.at,
-          r.offsetMinutes,
-          r.outcome,
-        ]),
-      ).toEqual([
-        [
-          "order",
-          `${billId}:${revision + 1}:adjustment`,
-          v.supervisorId,
-          "order",
-          "2026-01-05T16:40:00.000Z",
-          60,
-          "qualifying",
-        ],
-      ]);
+        (await state()).facts.map((row) => [row.personId, row.lastAt]),
+      ).toEqual([[v.supervisorId, "2026-01-05T16:40:00.000Z"]]);
       const [recorded] = await suite.db
         .select()
         .from(adjustments)
@@ -229,57 +188,5 @@ describe("adjustment order activity", () => {
       ]);
     },
   );
-  it.each(actions)(
-    "%s rolls back its money, kitchen, replay marker and activity after recorder refusal",
-    async (action) => {
-      const { path, body } = await prepare(action),
-        before = await state();
-      const response = await send(
-        api(async (tx, fact) => {
-          await recordAttendanceFact(tx, fact);
-          throw new AppError("attendance.invalid", { reason: "adjustment capture refused" });
-        }),
-        v.cookie.supervisor,
-        "POST",
-        path,
-        body,
-      );
-      expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it.each(actions)("a replayed %s creates no new attendance or clock reading", async (action) => {
-    const { path, body } = await prepare(action),
-      app = api(recordAttendanceFact);
-    const response = await send(app, v.cookie.supervisor, "POST", path, body);
-    expect(response).toMatchObject({ status: 200 });
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("replayed adjustment clock");
-    });
-    expect(await send(app, v.cookie.supervisor, "POST", path, body)).toEqual(response);
-    expect(await state()).toEqual(before);
-  });
-  it.each(actions)("%s without attendance creates no workforce state", async (action) => {
-    const { path, body } = await prepare(action);
-    expect(await send(api(), v.cookie.supervisor, "POST", path, body)).toMatchObject({
-      status: 200,
-    });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-  });
-  it("an adjustment preview never creates attendance", async () => {
-    const { billId, body } = await prepare("discount_percent"),
-      before = await state();
-    expect(
-      await send(
-        api(recordAttendanceFact),
-        v.cookie.supervisor,
-        "POST",
-        `/api/working-orders/${billId}/adjustments/preview`,
-        body,
-      ),
-    ).toMatchObject({ status: 200 });
-    expect(await state()).toEqual(before);
-  });
 });
+

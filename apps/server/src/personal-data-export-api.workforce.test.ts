@@ -36,7 +36,7 @@ import { departments } from "@waitron/venue-service";
 import {
   WorkforceBackend,
   absences,
-  attendanceOperationFacts,
+  staffActivity,
   attendanceQuestions,
   availability,
   employments,
@@ -147,7 +147,7 @@ const MARTHA_VALUES: [file: string, value: string][] = [
   ["attendance.json", "2026-04-19T04:00:00.000Z"],
   ["attendance.json", "marta.reminders@example.test"],
   ["attendance.json", "Forgot to clock in after the delivery"],
-  ["attendance.json", "2026-03-07T22:30:00+01:00"],
+  ["attendance.json", "2026-03-07T21:30:00.000Z"],
   ["staff-roles.json", '"name": "Bartender"'],
   ["staff-roles.json", '"staffRole": "Barback"'],
   ["staff-roles.json", "Rooftop bar"],
@@ -178,7 +178,7 @@ const COLLEAGUE_VALUES = [
   COLLEAGUE.questionCreatedAt,
   COLLEAGUE.reminderRecipient,
   COLLEAGUE.responseReason,
-  localWallClock(COLLEAGUE.fact.at, COLLEAGUE.fact.offsetMinutes),
+  COLLEAGUE.fact.at,
   COLLEAGUE.staffRole,
   COLLEAGUE.area,
   localWallClock(COLLEAGUE.clockInAt, CLOCK_OFFSET_MINUTES),
@@ -475,26 +475,20 @@ beforeEach(async () => {
     },
     createdAt: "2026-04-27T09:11:00.000Z",
   });
-  await suite.db.insert(attendanceOperationFacts).values([
+  await suite.db.insert(staffActivity).values([
     {
-      source: "clock",
-      key: "clock:marta-2",
       personId: marthaId,
-      kind: "break",
-      at: "2026-03-07T21:30:00.000Z",
-      offsetMinutes: 60,
       businessDay: "2026-03-07",
-      outcome: "pending",
+      shiftKey: `gap:${"2026-03-07"}:start`,
+      firstAt: "2026-03-07T21:30:00.000Z",
+      lastAt: "2026-03-07T21:30:00.000Z",
     },
     {
-      source: "order",
-      key: "order:colleague-1",
       personId: colleagueId,
-      kind: "order",
-      at: COLLEAGUE.fact.at,
-      offsetMinutes: COLLEAGUE.fact.offsetMinutes,
       businessDay: "2026-04-25",
-      outcome: "refused",
+      shiftKey: `gap:${"2026-04-25"}:start`,
+      firstAt: COLLEAGUE.fact.at,
+      lastAt: COLLEAGUE.fact.at,
     },
   ]);
 

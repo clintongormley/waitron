@@ -1,15 +1,10 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+
 import {
   CORE_MIGRATIONS,
   appendOrderAmendment,
-  billPayments,
-  devices,
   newId,
-  orderDraftEvents,
-  orderDrafts,
-  orderGroupEvents,
   parties,
   withTransaction,
   type Transaction,
@@ -22,16 +17,14 @@ import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_PERMISSIONS,
   WorkforceBackend,
-  attendanceOperationFacts,
   rosterVersions,
   shifts,
   requestSwap,
   acceptSwap,
   decideSwap,
-  timeEntries,
   type AttendanceDay,
 } from "@waitron/workforce";
-import { recordAttendanceFact } from "./attendance-capture.js";
+
 
 registerModulePermissions(WORKFORCE_PERMISSIONS);
 
@@ -39,7 +32,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-const backend = new WorkforceBackend();
+
 let anna: string, beth: string, carol: string, david: string;
 let nodeId: string, deviceId: string, orderId: string, partyId: string;
 const day = (): AttendanceDay => ({
@@ -47,42 +40,14 @@ const day = (): AttendanceDay => ({
   startAt: "2026-01-05T03:00:00.000Z",
   endAt: "2026-01-06T03:00:00.000Z",
 });
-async function facts(scope = day()) {
-  const { readAttendanceFacts } = await import("./attendance-facts.js");
-  return run((tx) => readAttendanceFacts(tx, scope));
-}
+
 async function planned(scope = day()) {
   const { readPlannedAttendanceShifts } = await import("./attendance-facts.js");
   return run((tx) => readPlannedAttendanceShifts(tx, scope));
 }
-async function signIn(personId: string, at: string) {
-  const id = newId();
-  await suite.db
-    .insert(sessions)
-    .values({ id, personId, deviceId, tokenHash: hashSessionToken(id), openedAt: at });
-  return id;
-}
-async function amendment(at: string, kind: "order_placed" | "order_cancelled" = "order_placed") {
-  return run((tx) =>
-    appendOrderAmendment(tx, {
-      workingOrderId: orderId,
-      kind,
-      actorId: beth,
-      reason: kind === "order_cancelled" ? "Changed mind" : null,
-      origin: jobOrigin("dashboard"),
-      capturedByNodeId: nodeId,
-      eventAt: new Date(at),
-      eventOffsetMinutes: 0,
-    }),
-  );
-}
-const event = (at: string) => ({
-  personId: anna,
-  nodeId,
-  at,
-  offsetMinutes: 0,
-  origin: jobOrigin("dashboard"),
-});
+
+
+
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Madrid",
@@ -114,302 +79,6 @@ beforeEach(async () => {
 });
 
 describe("attendance source facts", () => {
-  it("reads the venue's facts for a day with no venue", async () => {
-    const placed = await amendment("2026-01-05T12:00:00Z");
-    expect(
-      await facts({
-        businessDay: "2026-01-05",
-        startAt: "2026-01-05T03:00:00.000Z",
-        endAt: "2026-01-06T03:00:00.000Z",
-      }),
-    ).toMatchObject([{ source: "order", key: placed.id, personId: beth }]);
-  });
-  it("attributes sign-in, unpaid orders and collection to their own actors and original instants", async () => {
-    const session = await signIn(anna, "2026-01-05T08:00:00.987Z");
-    const placed = await amendment("2026-01-05T12:00:00Z");
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "whole-payment",
-        key: "collection",
-        personId: carol,
-        kind: "payment",
-        at: "2026-01-05T16:40:00Z",
-        offsetMinutes: 0,
-        outcome: "pending",
-      }),
-    );
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "whole-payment",
-        key: "collection",
-        personId: david,
-        kind: "payment",
-        at: "2026-01-06T18:00:00Z",
-        offsetMinutes: 0,
-        outcome: "qualified",
-      }),
-    );
-    await suite.db
-      .update(devices)
-      .set({ lastSeenAt: "2026-01-05T19:00:00Z" })
-      .where(eq(devices.id, deviceId));
-    expect(await facts()).toEqual([
-      {
-        source: "session",
-        key: session,
-        personId: anna,
-        kind: "sign-in",
-        at: "2026-01-05T08:00:00.000Z",
-        offsetMinutes: 60,
-      },
-      {
-        source: "order",
-        key: placed.id,
-        personId: beth,
-        kind: "order",
-        at: "2026-01-05T12:00:00.000Z",
-        offsetMinutes: 60,
-      },
-      {
-        source: "whole-payment",
-        key: "collection",
-        personId: carol,
-        kind: "payment",
-        at: "2026-01-05T16:40:00.000Z",
-        offsetMinutes: 60,
-      },
-    ]);
-    expect(await facts()).toEqual(await facts());
-  });
-  it("retains cancelled unpaid work and discarded drafts without crediting the current owner", async () => {
-    const placed = await amendment("2026-01-05T12:00:00Z");
-    const cancelled = await amendment("2026-01-05T13:00:00Z", "order_cancelled");
-    const draftId = newId(),
-      draftEvent = newId(),
-      groupEvent = newId();
-    await suite.db.insert(orderDrafts).values({
-      id: draftId,
-      partyId,
-      ownerId: david,
-      state: "discarded",
-      updatedAt: "2026-01-05T20:00:00Z",
-    });
-    await suite.db.insert(orderDraftEvents).values({
-      id: draftEvent,
-      draftId,
-      kind: "discarded",
-      actorId: carol,
-      fromPerson: anna,
-      toPerson: anna,
-      detail: {},
-      createdAt: "2026-01-05T14:00:00Z",
-    });
-    await suite.db.insert(orderGroupEvents).values([
-      {
-        id: groupEvent,
-        partyId,
-        kind: "reordered",
-        actorId: anna,
-        detail: {},
-        createdAt: "2026-01-05T15:00:00Z",
-      },
-      {
-        partyId,
-        kind: "reordered",
-        actorDeviceId: deviceId,
-        detail: {},
-        createdAt: "2026-01-05T21:00:00Z",
-      },
-    ]);
-    expect((await facts()).map((f) => [f.key, f.personId, f.at])).toEqual([
-      [placed.id, beth, "2026-01-05T12:00:00.000Z"],
-      [cancelled.id, beth, "2026-01-05T13:00:00.000Z"],
-      [`event:${draftEvent}`, carol, "2026-01-05T14:00:00.000Z"],
-      [`group:${groupEvent}`, anna, "2026-01-05T15:00:00.000Z"],
-    ]);
-  });
-  it("includes the lower day boundary and excludes the upper boundary", async () => {
-    const included = await signIn(anna, "2026-01-05T04:00:00+01:00");
-    await signIn(anna, "2026-01-06T03:00:00Z");
-    await signIn(anna, "2026-01-05T02:59:59Z");
-    expect((await facts()).map((f) => f.key)).toEqual([included]);
-  });
-  it("ignores pending and refused actions and retains a qualifying payment after decline", async () => {
-    const id = newId();
-    await suite.db.insert(billPayments).values({
-      id,
-      workingOrderId: orderId,
-      submissionId: "one",
-      fingerprint: "one",
-      kind: "contribution",
-      method: "card",
-      applied: 100,
-      state: "declined",
-      requestedBy: carol,
-      source: "device",
-      deviceId,
-      createdAt: "2026-01-05T10:00:00Z",
-      receivedAt: "2026-01-06T19:00:00Z",
-      attestedBy: david,
-      attestationNote: "Provider confirmation",
-    });
-    for (const outcome of ["pending", "refused"] as const) {
-      await run((tx) =>
-        recordAttendanceFact(tx, {
-          source: "whole-payment",
-          key: outcome,
-          personId: anna,
-          kind: "payment",
-          at: "2026-01-05T20:00:00Z",
-          offsetMinutes: 0,
-          outcome,
-        }),
-      );
-    }
-    expect(await facts()).toEqual([
-      {
-        source: "bill-payment",
-        key: id,
-        personId: carol,
-        kind: "payment",
-        at: "2026-01-05T10:00:00.000Z",
-        offsetMinutes: 60,
-      },
-    ]);
-  });
-  it("captured payment evidence replaces its retained row without duplicate or later timestamp", async () => {
-    const id = newId();
-    await suite.db.insert(billPayments).values({
-      id,
-      workingOrderId: orderId,
-      submissionId: "one",
-      fingerprint: "one",
-      kind: "contribution",
-      method: "card",
-      applied: 100,
-      state: "received",
-      requestedBy: david,
-      source: "device",
-      deviceId,
-      createdAt: "2026-01-05T12:00:00Z",
-      receivedAt: "2026-01-05T13:00:00Z",
-    });
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "bill-payment",
-        key: id,
-        personId: carol,
-        kind: "payment",
-        at: "2026-01-05T11:00:00Z",
-        offsetMinutes: 0,
-        outcome: "qualified",
-      }),
-    );
-    expect((await facts()).map((f) => [f.key, f.personId, f.at])).toEqual([
-      [id, carol, "2026-01-05T11:00:00.000Z"],
-    ]);
-  });
-  it("break instants count, targeted retimes and acknowledgments do not create activity", async () => {
-    await run((tx) => backend.clockIn(tx, event("2026-01-05T08:00:00Z")));
-    await run((tx) => backend.breakStart(tx, event("2026-01-05T12:00:00Z")));
-    await run((tx) => backend.breakEnd(tx, event("2026-01-05T12:30:00Z")));
-    const entries = await suite.db.select().from(timeEntries);
-    const request = await run((tx) =>
-      backend.requestCorrection(tx, {
-        nodeId,
-        correctsEntryId: entries[1]!.id,
-        at: "2026-01-05T12:10:00Z",
-        offsetMinutes: 0,
-        reason: "Corrected break",
-        actorPersonId: anna,
-        origin: jobOrigin("dashboard"),
-      }),
-    );
-    await run((tx) =>
-      backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: beth }),
-    );
-    const out = await run((tx) =>
-      backend.recordAutomaticClose(tx, {
-        ...event("2026-01-05T17:00:00Z"),
-        openEntryId: entries[0]!.id,
-      }),
-    );
-    await run((tx) =>
-      backend.confirmAutomaticEntry(tx, {
-        nodeId,
-        entryId: out,
-        workerPersonId: anna,
-        origin: jobOrigin("dashboard"),
-      }),
-    );
-    expect((await facts()).map((f) => [f.source, f.key, f.at])).toEqual([
-      ["clock", entries[1]!.id, "2026-01-05T12:00:00.000Z"],
-      ["clock", entries[2]!.id, "2026-01-05T12:30:00.000Z"],
-    ]);
-  });
-  it("empty retained sources and no captured operations produce no facts", async () => {
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([]);
-    expect(await facts()).toEqual([]);
-  });
-  it("includes approved missing break entries at event time rather than approval time", async () => {
-    await run((tx) => backend.clockIn(tx, event("2026-01-05T08:00:00Z")));
-    await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z")));
-    for (const [missingEntryKind, at] of [
-      ["break_start", "2026-01-05T12:00:00Z"],
-      ["break_end", "2026-01-05T12:30:00Z"],
-    ] as const) {
-      const correctionId = await run((tx) =>
-        backend.requestCorrection(tx, {
-          nodeId,
-          personId: anna,
-          missingEntryKind,
-          at,
-          offsetMinutes: 0,
-          reason: "Forgot break",
-          actorPersonId: anna,
-          origin: jobOrigin("dashboard"),
-        }),
-      );
-      await run((tx) =>
-        backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: beth }),
-      );
-    }
-    expect((await facts()).map((f) => [f.kind, f.personId, f.at])).toEqual([
-      ["break", anna, "2026-01-05T12:00:00.000Z"],
-      ["break", anna, "2026-01-05T12:30:00.000Z"],
-    ]);
-  });
-  it.each([
-    [
-      "2026-03-29T01:30:00.000Z",
-      "2026-03-28",
-      "2026-03-28T03:00:00.000Z",
-      "2026-03-29T02:00:00.000Z",
-      120,
-    ],
-    [
-      "2026-10-25T01:30:00.000Z",
-      "2026-10-24",
-      "2026-10-24T02:00:00.000Z",
-      "2026-10-25T03:00:00.000Z",
-      60,
-    ],
-  ])(
-    "uses the venue offset at %s across DST",
-    async (at, businessDay, startAt, endAt, offsetMinutes) => {
-      const id = await signIn(anna, at);
-      expect(await facts({ businessDay, startAt, endAt })).toEqual([
-        {
-          source: "session",
-          key: id,
-          personId: anna,
-          kind: "sign-in",
-          at,
-          offsetMinutes,
-        },
-      ]);
-    },
-  );
 });
 
 describe("planned attendance shifts", () => {

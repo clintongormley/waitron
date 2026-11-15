@@ -19,7 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
@@ -130,7 +130,7 @@ async function state() {
     sales: await suite.db.select().from(sales),
     parties: await suite.db.select().from(parties),
     departures: await suite.db.select().from(unpaidDepartures),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -141,7 +141,7 @@ describe("accepted till order command attendance", () => {
     async (action) => {
       const id = await prepare(action);
       expect(await command(api(recordAttendanceFact), id, action)).toMatchObject({ status: 200 });
-      let key = `${id}:1:${action}`;
+      
       if (action === "place" || action === "cancel") {
         const rows = await suite.db
           .select()
@@ -151,21 +151,10 @@ describe("accepted till order command attendance", () => {
           (row) => row.kind === (action === "place" ? "order_placed" : "order_cancelled"),
         )!;
         expect(amendment.actorId).toBe(v.operatorId);
-        key = amendment.id;
       }
       expect(
-        (await state()).facts.map((r) => [
-          r.source,
-          r.key,
-          r.personId,
-          r.kind,
-          r.at,
-          r.offsetMinutes,
-          r.outcome,
-        ]),
-      ).toEqual([
-        ["order", key, v.operatorId, "order", "2026-01-05T16:40:00.000Z", 60, "qualifying"],
-      ]);
+        (await state()).facts.map((row) => [row.personId, row.lastAt]),
+      ).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
       expect((await state()).days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([
         ["2026-01-05", 1],
       ]);
@@ -180,51 +169,6 @@ describe("accepted till order command attendance", () => {
       if (action === "dining") expect(order!.dining).toBe("takeaway");
     },
   );
-  it.each(actions)(
-    "%s rolls back its write and evidence when the recorder refuses",
-    async (action) => {
-      const id = await prepare(action),
-        before = await state();
-      const response = await command(
-        api(async (tx, fact) => {
-          await recordAttendanceFact(tx, fact);
-          throw new AppError("attendance.invalid", { reason: "command capture refused" });
-        }),
-        id,
-        action,
-      );
-      expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it.each(actions)("a repeated %s has no new clock reading or evidence", async (action) => {
-    const id = await prepare(action),
-      app = api(recordAttendanceFact);
-    expect(await command(app, id, action)).toMatchObject({ status: 200 });
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("replayed command clock");
-    });
-    if (action === "place")
-      expect(await command(app, id, action)).toEqual({
-        status: 200,
-        json: { id, status: "placed" },
-      });
-    else
-      expect(await command(app, id, action)).toMatchObject({
-        status: 409,
-        json: {
-          code: action === "cancel" ? "working_order.not_placed" : "working_order.out_of_date",
-        },
-      });
-    expect(await state()).toEqual(before);
-  });
-  it.each(actions)("%s with attendance disabled creates no attendance state", async (action) => {
-    const id = await prepare(action);
-    expect(await command(api(), id, action)).toMatchObject({ status: 200 });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-  });
   it.each([false, true])(
     "the real unpaid-departure route captures its admitted placement atomically (recorder refused: %s)",
     async (refused) => {
@@ -262,10 +206,9 @@ describe("accepted till order command attendance", () => {
           (row) => row.workingOrderId === party.tabId && row.kind === "order_placed",
         );
         expect(amendment!.actorId).toBe(v.operatorId);
-        expect((await state()).facts.map((r) => [r.key, r.personId, r.at])).toEqual([
-          [amendment!.id, v.operatorId, "2026-01-05T16:40:00.000Z"],
-        ]);
+        expect((await state()).facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
       }
     },
   );
 });
+

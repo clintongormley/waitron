@@ -32,27 +32,6 @@ CREATE TABLE `attendance_day_work` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `attendance_day_work_scope_uq` ON `attendance_day_work` (`business_day`);--> statement-breakpoint
 CREATE INDEX `attendance_day_work_due_idx` ON `attendance_day_work` (`next_due_at`);--> statement-breakpoint
-CREATE TABLE `attendance_operation_facts` (
-	`sequence` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`source` text NOT NULL,
-	`key` text NOT NULL,
-	`person_id` text NOT NULL,
-	`kind` text NOT NULL,
-	`at` text NOT NULL,
-	`offset_minutes` integer NOT NULL,
-	`business_day` text NOT NULL,
-	`outcome` text NOT NULL,
-	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "attendance_operation_facts_source_ck" CHECK("attendance_operation_facts"."source" in ('session', 'draft', 'order', 'whole-payment', 'bill-payment', 'refund', 'clock')),
-	CONSTRAINT "attendance_operation_facts_kind_ck" CHECK("attendance_operation_facts"."kind" in ('sign-in', 'order', 'payment', 'break')),
-	CONSTRAINT "attendance_operation_facts_outcome_ck" CHECK("attendance_operation_facts"."outcome" in ('pending', 'qualifying', 'refused')),
-	CONSTRAINT "attendance_operation_facts_offset_ck" CHECK("attendance_operation_facts"."offset_minutes" between -840 and 840)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_operation_facts_source_uq` ON `attendance_operation_facts` (`source`,`key`);--> statement-breakpoint
-CREATE INDEX `attendance_operation_facts_day_idx` ON `attendance_operation_facts` (`business_day`,`person_id`,`at`);--> statement-breakpoint
-CREATE INDEX `attendance_operation_facts_pending_idx` ON `attendance_operation_facts` (`outcome`,`sequence`);--> statement-breakpoint
-CREATE INDEX `attendance_operation_facts_person_idx` ON `attendance_operation_facts` (`person_id`,`at`,`sequence`);--> statement-breakpoint
 CREATE TABLE `attendance_questions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,
@@ -104,25 +83,6 @@ CREATE TABLE `attendance_response_commands` (
 );
 --> statement-breakpoint
 CREATE INDEX `attendance_response_commands_question_idx` ON `attendance_response_commands` (`person_id`,`question_id`);--> statement-breakpoint
-CREATE TABLE `attendance_source_state` (
-	`id` text PRIMARY KEY NOT NULL,
-	`source` text NOT NULL,
-	`key` text NOT NULL,
-	`record_kind` text NOT NULL,
-	`generation` text,
-	`cursor` integer,
-	`endpoint` integer,
-	`completed` integer,
-	`fingerprint` text,
-	`previous_days` text DEFAULT '[]' NOT NULL,
-	`next_due_at` text,
-	CONSTRAINT "attendance_source_state_source_ck" CHECK("attendance_source_state"."source" in ('session', 'draft', 'order', 'group', 'whole-payment', 'bill-payment', 'refund', 'clock', 'rota', 'operation')),
-	CONSTRAINT "attendance_source_state_kind_ck" CHECK("attendance_source_state"."record_kind" in ('scan', 'watch')),
-	CONSTRAINT "attendance_source_state_shape_ck" CHECK(("attendance_source_state"."record_kind" = 'scan' and "attendance_source_state"."generation" is not null and "attendance_source_state"."cursor" is not null and "attendance_source_state"."endpoint" is not null and "attendance_source_state"."completed" is not null and "attendance_source_state"."cursor" >= 0 and "attendance_source_state"."endpoint" >= 0 and "attendance_source_state"."cursor" <= "attendance_source_state"."endpoint") or ("attendance_source_state"."record_kind" = 'watch' and "attendance_source_state"."generation" is null and "attendance_source_state"."cursor" is null and "attendance_source_state"."endpoint" is null and "attendance_source_state"."completed" is null))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_source_state_scope_uq` ON `attendance_source_state` (`source`,`record_kind`,`key`);--> statement-breakpoint
-CREATE INDEX `attendance_source_state_watch_idx` ON `attendance_source_state` (`record_kind`,`next_due_at`,`id`);--> statement-breakpoint
 CREATE TABLE `availability` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,
@@ -257,6 +217,21 @@ CREATE TABLE `shifts` (
 --> statement-breakpoint
 CREATE INDEX `shifts_person_starts_idx` ON `shifts` (`person_id`,`starts_at`);--> statement-breakpoint
 CREATE INDEX `shifts_roster_version_idx` ON `shifts` (`roster_version_id`);--> statement-breakpoint
+CREATE TABLE `staff_activity` (
+	`id` text PRIMARY KEY NOT NULL,
+	`person_id` text NOT NULL,
+	`business_day` text NOT NULL,
+	`shift_key` text NOT NULL,
+	`shift_start_at` text,
+	`shift_end_at` text,
+	`first_at` text NOT NULL,
+	`last_at` text NOT NULL,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "staff_activity_bounds_ck" CHECK("staff_activity"."first_at" <= "staff_activity"."last_at")
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `staff_activity_person_shift_uq` ON `staff_activity` (`person_id`,`shift_key`);--> statement-breakpoint
+CREATE INDEX `staff_activity_day_idx` ON `staff_activity` (`business_day`,`person_id`);--> statement-breakpoint
 CREATE TABLE `time_entries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

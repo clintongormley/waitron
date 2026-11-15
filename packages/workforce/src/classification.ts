@@ -27,8 +27,7 @@ export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("roster_versions", "state", STATE),
   ...[
     "attendance_day_work",
-    "attendance_source_state",
-    "attendance_operation_facts",
+    "staff_activity",
     "attendance_questions",
     "attendance_response_commands",
   ].map((name) =>

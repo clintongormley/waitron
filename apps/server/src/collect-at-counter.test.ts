@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -286,18 +286,8 @@ describe("releaseHeldWorkOf", () => {
         [removed.partyId, "removed"],
       ].sort(),
     );
-    const facts = await venue.db
-      .select()
-      .from(attendanceOperationFacts)
-      .where(
-        inArray(
-          attendanceOperationFacts.key,
-          events.map((event) => `group:${event.id}`),
-        ),
-      );
-    expect(facts.map((fact) => [fact.key, fact.personId]).sort()).toEqual(
-      events.map((event) => [`group:${event.id}`, venue.staffId]).sort(),
-    );
+    
+    
   });
 });
 

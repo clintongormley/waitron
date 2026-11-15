@@ -12,13 +12,12 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   attendanceDayWork,
-  attendanceSourceState,
   rosterVersions,
   shifts,
 } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, convenioConfig } from "@waitron/workforce-es";
 import { mountWorkforceApi } from "./workforce-api.js";
-import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
+
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
@@ -79,22 +78,6 @@ async function cleanQueue() {
 }
 
 describe("accepted rota writes invalidate attendance in their transaction", () => {
-  it("watches a newly created empty draft for later publication", async () => {
-    const response = await send("POST", "roster", { period: "2026-01-05" });
-    expect(response.status).toBe(201);
-    const { versionId } = (await response.json()) as { versionId: string };
-    expect(await suite.db.select().from(attendanceSourceState)).toEqual([
-      expect.objectContaining({
-        source: "rota",
-        key: `version:${versionId}`,
-        recordKind: "watch",
-        previousDays: [],
-        nextDueAt: "1970-01-01T00:00:00.000Z",
-        fingerprint: null,
-      }),
-    ]);
-    expect(await days()).toEqual([]);
-  });
 
   it("adds the shift's business day with venue bounds", async () => {
     await add(await version());
@@ -131,7 +114,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
       otherId,
     );
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from attendance_operation_facts`,
+      sql`select count(*) as n from staff_activity`,
     );
     expect(rows).toEqual([{ n: 0 }]);
   });
@@ -142,9 +125,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect((await send("DELETE", `roster/shifts/${id}`)).status).toBe(204);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);
     expect(await suite.db.select().from(shifts)).toEqual([]);
-    expect(await suite.db.select().from(attendanceSourceState)).toContainEqual(
-      expect.objectContaining({ key: `shift:${id}`, previousDays: ["2026-01-05"] }),
-    );
   });
 
   it("publishes new days and dirties the superseded version's distinct days", async () => {
@@ -159,9 +139,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect(
       (await suite.db.select().from(rosterVersions).where(eq(rosterVersions.id, first)))[0]!.status,
     ).toBe("superseded");
-    expect(await suite.db.select().from(attendanceSourceState)).toContainEqual(
-      expect.objectContaining({ key: `version:${first}`, previousDays: ["2026-01-05"] }),
-    );
   });
 
   it("publication discovers newly attached unversioned shifts", async () => {
@@ -174,12 +151,10 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
   it("a refused edit commits no invalidation", async () => {
     const id = await add(await version());
     await cleanQueue();
-    const before = await suite.db.select().from(attendanceSourceState);
     const response = await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T08:00:00Z" });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "shift.invalid" } });
     expect(await days()).toEqual([]);
-    expect(await suite.db.select().from(attendanceSourceState)).toEqual(before);
   });
 
   it("a permission refusal commits no invalidation or shift edit", async () => {
@@ -194,32 +169,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     expect(await days()).toEqual([]);
     expect(await suite.db.select().from(shifts).where(eq(shifts.id, id))).toHaveLength(1);
-  });
-
-  it("a repeated invalidation of a deleted shift keeps its saved old scope", async () => {
-    const id = await add(await version());
-    await send("DELETE", `roster/shifts/${id}`);
-    await cleanQueue();
-    await withTransaction(suite.db, (tx) => markAttendanceSourceChanged(tx, "shift", id));
-    expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);
-  });
-
-  it("an accepted edit invalidates a previously scanned fingerprint and wakes its watch", async () => {
-    const id = await add(await version());
-    await suite.db.update(attendanceSourceState).set({
-      fingerprint: "previous assignment",
-      nextDueAt: "2099-01-01T00:00:00.000Z",
-    });
-    expect(
-      (await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })).status,
-    ).toBe(204);
-    expect(await suite.db.select().from(attendanceSourceState)).toContainEqual(
-      expect.objectContaining({
-        key: `shift:${id}`,
-        fingerprint: null,
-        nextDueAt: "1970-01-01T00:00:00.000Z",
-      }),
-    );
   });
 
   it("keeps captured day bounds when the venue's cutover is later changed", async () => {
@@ -274,17 +223,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
   });
 
-  it("a missing source with no snapshot adds no watch or day", async () => {
-    await withTransaction(suite.db, (tx) =>
-      markAttendanceSourceChanged(tx, "shift", crypto.randomUUID()),
-    );
-    await withTransaction(suite.db, (tx) =>
-      markAttendanceSourceChanged(tx, "rota", crypto.randomUUID()),
-    );
-    expect(await days()).toEqual([]);
-    expect(await suite.db.select().from(attendanceSourceState)).toEqual([]);
-  });
-
   it("deleting a retained unattached shift captures its day before the row disappears", async () => {
     const [row] = await suite.db
       .insert(shifts)
@@ -293,38 +231,4 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect((await send("DELETE", `roster/shifts/${row!.id}`)).status).toBe(204);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);
   });
-
-  it.each(["create", "add", "edit", "remove", "publish"])(
-    "a refused attendance snapshot rolls back the %s command",
-    async (action) => {
-      const draft = await version();
-      const id = await add(draft);
-      await cleanQueue();
-      const beforeShifts = await suite.db.select().from(shifts);
-      const beforeVersions = await suite.db.select().from(rosterVersions);
-      const beforeWatches = await suite.db.select().from(attendanceSourceState);
-      await suite.db.execute(sql`create trigger refuse_attendance_snapshot
-        before insert on attendance_source_state begin select raise(abort, 'test snapshot refusal'); end`);
-      try {
-        const response =
-          action === "create"
-            ? await send("POST", "roster", { period: "2026-01-12" })
-            : action === "add"
-              ? await send("POST", `roster/${draft}/shifts`, shiftBody("2026-01-06"))
-              : action === "edit"
-                ? await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })
-                : action === "remove"
-                  ? await send("DELETE", `roster/shifts/${id}`)
-                  : await send("POST", `roster/${draft}/publish`);
-        expect(response.status).toBe(500);
-        expect(await response.json()).toEqual({ error: { code: "server.internal" } });
-        expect(await suite.db.select().from(shifts)).toEqual(beforeShifts);
-        expect(await suite.db.select().from(rosterVersions)).toEqual(beforeVersions);
-        expect(await suite.db.select().from(attendanceSourceState)).toEqual(beforeWatches);
-        expect(await days()).toEqual([]);
-      } finally {
-        await suite.db.execute(sql`drop trigger refuse_attendance_snapshot`);
-      }
-    },
-  );
 });

@@ -144,10 +144,6 @@ import {
 } from "./card-reader-delete.js";
 import { queryFlag } from "./report-api.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
-import {
-  finishIntegratedAttendance,
-  pendingIntegratedAttendanceKey,
-} from "./attendance-integrated.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -1590,12 +1586,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           if (order.paymentAttemptAt !== null)
             await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
         } else {
-          const attendanceKey = await pendingIntegratedAttendanceKey(
-            tx,
-            deps.attendance,
-            payment.workingOrderId,
-            payment.provider,
-          );
           const [part] = await tx
             .insert(billPayments)
             .values({
@@ -1619,7 +1609,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             .update(payments)
             .set({ billPaymentId: part!.id })
             .where(eq(payments.id, paymentId));
-          await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+
           if (order.paymentAttemptAt !== null)
             await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
           await issueIfFullyPaid(
@@ -1806,13 +1796,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const origin = storedDeviceOrigin(row);
         if (row.provider !== "simulator")
           await requireConnected(tx, cardProviderById(deps.providers, row.provider));
-        const attendanceKey = await pendingIntegratedAttendanceKey(
-          tx,
-          deps.attendance,
-          row.workingOrderId,
-          row.provider,
-        );
-        return { ...row, attemptAt: row.attemptAt, personId, origin, attendanceKey };
+
+        return { ...row, attemptAt: row.attemptAt, personId, origin };
       });
 
       const { provider, resolved } = await resolveAtProvider(
@@ -1832,7 +1817,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const orderUnlocked = await gated(sessionId, async (tx) => {
           if (stuck.attemptAt !== null)
             await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
-          await finishIntegratedAttendance(tx, deps.attendance, stuck.attendanceKey, "refused");
+
           const [order] = await tx
             .select({ mark: workingOrders.paymentAttemptAt })
             .from(workingOrders)

@@ -16,8 +16,6 @@ import {
   shifts,
 } from "@waitron/workforce";
 import {
-  beginAttendanceDiscovery,
-  discoverAttendanceDays,
   nextAttendanceDay,
 } from "./attendance-discovery.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
@@ -36,12 +34,6 @@ const day = () => ({
 });
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 const next = (at = now) => run((tx) => nextAttendanceDay(tx, { now: at }));
-async function drain() {
-  for (let i = 0; i < 100; i++) {
-    if (!(await run((tx) => discoverAttendanceDays(tx, { now, batchSize: 1 }))).more) return;
-  }
-  throw new Error("source discovery did not finish");
-}
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Deli",
@@ -83,7 +75,7 @@ beforeEach(async () => {
       now,
     ),
   );
-  await run((tx) => beginAttendanceDiscovery(tx, { generation: "opening" }));
+  await run((tx) => markAttendanceSourceChanged(tx, "shift", shiftId));
 });
 async function replace() {
   await run(async (tx) => {
@@ -95,14 +87,12 @@ async function replace() {
 
 describe("selected-day rota reconciliation", () => {
   it("retires the prior publication's question before returning a newly dirty day", async () => {
-    await drain();
     const [work] = await suite.db.select().from(attendanceDayWork);
     await suite.db
       .update(attendanceDayWork)
       .set({ evaluatedRevision: work!.dirtyRevision })
       .where(eq(attendanceDayWork.id, work!.id));
     await replace();
-    await drain();
     expect(await next()).toEqual(day());
     expect(await own()).toEqual([]);
     expect((await suite.db.select().from(attendanceQuestions))[0]).toMatchObject({
@@ -113,23 +103,13 @@ describe("selected-day rota reconciliation", () => {
     });
     expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
   });
-  it("finishes every bootstrap source before retiring an obsolete question", async () => {
-    await replace();
-    expect(await next()).toBeNull();
-    expect((await own()).map((q) => q.id)).toEqual([questionId]);
-    await drain();
-    expect(await next()).toEqual(day());
-    expect(await own()).toEqual([]);
-  });
   it("does not retire questions when no completed day is due", async () => {
     await replace();
-    await drain();
     expect(await next(new Date("2026-01-06T03:59:59.999Z"))).toBeNull();
     expect((await own()).map((q) => q.id)).toEqual([questionId]);
     expect((await attendanceMailRows(suite.db))[0]!.status).toBe("pending");
   });
-  it("rereads current assignment after source discovery rather than accepting a cached assignee", async () => {
-    await drain();
+  it("rereads current assignment rather than accepting a cached assignee", async () => {
     const [other] = await seedPersons(suite.db, {
       displayName: "Bea",
       pinHash: "scrypt$00$00",
@@ -141,7 +121,6 @@ describe("selected-day rota reconciliation", () => {
   });
   it("rolls selection retirement back if later work in the same transaction fails", async () => {
     await replace();
-    await drain();
     const questions = await suite.db.select().from(attendanceQuestions);
     const mail = await attendanceMailRows(suite.db);
     await expect(

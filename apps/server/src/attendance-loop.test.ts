@@ -11,14 +11,13 @@ import {
   WorkforceBackend,
   attendanceDayWork,
   attendanceQuestions,
-  attendanceSourceState,
   readChain,
   rosterVersions,
   shifts,
   timeEntries,
   verifyChain,
 } from "@waitron/workforce";
-import { beginAttendanceDiscovery, discoverAttendanceDays } from "./attendance-discovery.js";
+import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { realSleep } from "./loop.js";
 
@@ -60,25 +59,13 @@ async function seed() {
       offsetMinutes: 60,
       outcome: "qualified",
     });
-    await beginAttendanceDiscovery(tx, { generation: "opened" });
   });
-}
-async function prime() {
-  for (let i = 0; i < 20; i++)
-    if (
-      !(
-        await withTransaction(suite.db, (tx) => discoverAttendanceDays(tx, { now, batchSize: 100 }))
-      ).more
-    )
-      return;
-  throw new Error("bootstrap exceeded bounded fixture batches");
 }
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries),
     work: await suite.db.select().from(attendanceDayWork),
     questions: await suite.db.select().from(attendanceQuestions),
-    sources: await suite.db.select().from(attendanceSourceState),
   };
 }
 async function pass() {
@@ -118,7 +105,7 @@ describe("attendance duty pass", () => {
         rosterVersionId: version!.id,
       })
       .returning();
-    await prime();
+    await withTransaction(suite.db, (tx) => markAttendanceSourceChanged(tx, "shift", shift!.id));
     const { runAttendancePass } = await import("./attendance-loop.js");
     const early = new Date("2026-01-06T04:00:00Z");
     expect(await runAttendancePass({ ...deps(), now: () => early })).toEqual({
@@ -169,11 +156,8 @@ describe("attendance duty pass", () => {
     ]);
     expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
-  it("bootstraps before closing and replays a committed day without another end", async () => {
+  it("closes and replays a committed day without another end", async () => {
     await seed();
-    expect(await pass()).toEqual({ processed: false, more: true });
-    expect((await snapshot()).entries.map((e) => e.entryKind)).toEqual(["in"]);
-    expect((await snapshot()).sources.some((s) => s.cursor !== null && s.cursor > 0)).toBe(true);
     await settle();
     const first = await snapshot();
     expect(first.entries).toMatchObject([
@@ -199,7 +183,6 @@ describe("attendance duty pass", () => {
         outcome: "qualified",
       }),
     );
-    await prime();
     expect(await pass()).toEqual({ processed: true, more: true });
     const first = await snapshot();
     expect(first.work.find((w) => w.businessDay === "2026-01-06")!.evaluatedRevision).toBe(0);
@@ -219,7 +202,6 @@ describe("attendance duty pass", () => {
   it("rechecks primary ownership after waiting for another write", async () => {
     await import("./attendance-loop.js");
     await seed();
-    await prime();
     const before = await snapshot();
     const entered = gate(),
       held = gate(),
@@ -251,7 +233,6 @@ describe("attendance duty pass", () => {
   });
   it("rolls failed processing back and retries its durable day after the cause is removed", async () => {
     await seed();
-    await prime();
     const before = await snapshot();
     await suite.db.execute(
       sql`create trigger reject_question before insert on attendance_questions begin select raise(abort, 'question refused'); end`,
@@ -284,8 +265,7 @@ describe("a running shift across a clock days off", () => {
         offsetMinutes: 60,
         outcome: "qualified",
       });
-      await beginAttendanceDiscovery(tx, { generation: "opened" });
-    });
+      });
   };
   const settleAt = async (at: Date) => {
     const { runAttendancePass } = await import("./attendance-loop.js");
@@ -388,7 +368,6 @@ describe("attendance loop lifecycle", () => {
   });
   it("reports a failed pass and retries on the short tick without losing the day", async () => {
     await seed();
-    await prime();
     await suite.db.execute(
       sql`create trigger reject_question before insert on attendance_questions begin select raise(abort, 'question refused'); end`,
     );
@@ -453,7 +432,6 @@ describe("attendance loop lifecycle", () => {
   });
   it("awaits its active queued pass before resolving an abort", async () => {
     await seed();
-    await prime();
     const entered = gate(),
       held = gate(),
       queued = gate();

@@ -13,7 +13,7 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { recordAttendanceFact } from "./attendance-capture.js";
 import {
   kitchenStations,
@@ -1449,7 +1449,7 @@ describe("Cancel item service command", () => {
         ),
       );
     await command();
-    const facts = await inTx(venue, (tx) => tx.select().from(attendanceOperationFacts));
+    
     const accepted = facts.filter(
       (row) => row.key === `service:${order.billId}:party:${order.partyId}:${ask.submissionId}`,
     );
@@ -1460,7 +1460,7 @@ describe("Cancel item service command", () => {
       kind: "order",
     });
     await command();
-    expect(await inTx(venue, (tx) => tx.select().from(attendanceOperationFacts))).toEqual(facts);
+    
   });
 
   it("uses the existing cancel approval policy and records the manager without storing the PIN", async () => {

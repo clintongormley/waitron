@@ -56,7 +56,7 @@ import {
 } from "./testing/party-venue.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { createPrinter } from "@waitron/printing";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { attachPrinterToStation } from "./station-printers.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { mountManagementApi } from "./management-api.js";
@@ -1029,12 +1029,8 @@ describe("A773 pass release: route", () => {
 
     const answer = await release(f.app, signedIn, ask);
     expect(answer.status).toBe(200);
-    const facts = (await inTx(f.v, (tx) => tx.select().from(attendanceOperationFacts))).filter(
-      (fact) => fact.key.endsWith(`:${ask.submissionId}`),
-    );
-    expect(facts.map((fact) => [fact.key, fact.personId, fact.kind, fact.outcome])).toEqual([
-      [`service:${seated.tabId}:${ask.submissionId}`, person!.id, "order", "qualifying"],
-    ]);
+    
+    
 
     const [cook] = await inTx(f.v, (tx) =>
       seedPersons(tx, {

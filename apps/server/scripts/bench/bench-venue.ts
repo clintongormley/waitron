@@ -45,7 +45,6 @@ import {
   departments,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
-import { beginAttendanceDiscovery } from "../../src/attendance-discovery.js";
 import { recordAttendanceFact } from "../../src/attendance-capture.js";
 import { deploymentEnvironment } from "../../src/config.js";
 import { mountDeviceApi } from "../../src/device-api.js";
@@ -182,9 +181,6 @@ export async function openBenchVenue(
         MODULES.flatMap((module) => module.changes ?? []),
       ),
     );
-    // A reopened folder carries on its saved scan: starting again rescans the whole history.
-    if (!seeded)
-      await withTransaction(db, (tx) => beginAttendanceDiscovery(tx, { generation: randomUUID() }));
     const nodeId = brandNodeId(
       db.all<{ id: string }>(sql`select id from nodes order by rowid limit 1`)[0]!.id,
     );

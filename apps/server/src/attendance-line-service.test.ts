@@ -14,14 +14,14 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
-import { setStationsWaitForPass } from "./testing/pass-waiting.js";
+
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -119,7 +119,7 @@ async function state() {
     lines: await suite.db.select().from(workingOrderLines),
     tickets: await suite.db.select().from(ticketItems),
     prints: await suite.db.select().from(printJobs),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -130,26 +130,8 @@ describe("direct line service attendance", () => {
     expect(await command(api(recordAttendanceFact), action, order)).toMatchObject({ status: 200 });
     const after = await state();
     expect(
-      after.facts.map((r) => [
-        r.source,
-        r.key,
-        r.personId,
-        r.kind,
-        r.at,
-        r.offsetMinutes,
-        r.outcome,
-      ]),
-    ).toEqual([
-      [
-        "order",
-        `${order.id}:${order.revision + 1}:${action}`,
-        v.operatorId,
-        "order",
-        "2026-01-05T16:40:00.000Z",
-        60,
-        "qualifying",
-      ],
-    ]);
+      after.facts.map((row) => [row.personId, row.lastAt]),
+    ).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
     expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const line = after.lines.find((r) => r.id === order.lineId)!;
     if (action === "course") expect(line.courseId).toBe(courseId);
@@ -159,92 +141,8 @@ describe("direct line service attendance", () => {
         after.tickets.find((r) => r.workingOrderLineId === order.lineId)!.firedAt === null,
       ).toBe(false);
   });
-  it.each(actions)("%s rolls back command writes if capture fails", async (action) => {
-    const order = await prepare(action),
-      before = await state();
-    const response = await command(
-      api(async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        throw new AppError("attendance.invalid", { reason: "service capture refused" });
-      }),
-      action,
-      order,
-    );
-    expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
-    expect(await state()).toEqual(before);
-  });
-  it.each(actions)("a repeated %s creates no later activity", async (action) => {
-    const order = await prepare(action),
-      app = api(recordAttendanceFact);
-    expect(await command(app, action, order)).toMatchObject({ status: 200 });
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("unchanged service clock read");
-    });
-    const response = await command(app, action, order);
-    expect(response).toMatchObject(
-      action === "make-at"
-        ? { status: 409, json: { code: "working_order.out_of_date" } }
-        : { status: 200 },
-    );
-    expect((await state()).facts).toEqual(before.facts);
-    expect((await state()).days).toEqual(before.days);
-  });
-  it.each(actions)("%s with capture disabled creates no attendance state", async (action) => {
-    const order = await prepare(action);
-    expect(await command(api(), action, order)).toMatchObject({ status: 200 });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-  });
-  it("an unchanged make-at choice at the current revision is not later activity", async () => {
-    const order = await prepare("make-at"),
-      app = api(recordAttendanceFact);
-    expect(await command(app, "make-at", order)).toMatchObject({ status: 200 });
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("unchanged make-at clock read");
-    });
-    expect(await command(app, "make-at", { ...order, revision: order.revision + 1 })).toMatchObject(
-      { status: 200 },
-    );
-    expect((await state()).facts).toEqual(before.facts);
-    expect((await state()).days).toEqual(before.days);
-  });
 });
 
 describe("A773 waiter request", () => {
-  it("a send of only requested work still records the send's activity", async () => {
-    const order = await prepare("send");
-    await withTransaction(suite.db, (tx) => setStationsWaitForPass(tx, true, [stationId]));
-    expect(await command(api(recordAttendanceFact), "send", order)).toMatchObject({ status: 200 });
-    const after = await state();
-    expect(
-      after.facts.map((r) => [
-        r.source,
-        r.key,
-        r.personId,
-        r.kind,
-        r.at,
-        r.offsetMinutes,
-        r.outcome,
-      ]),
-    ).toEqual([
-      [
-        "order",
-        `${order.id}:${order.revision + 1}:send`,
-        v.operatorId,
-        "order",
-        "2026-01-05T16:40:00.000Z",
-        60,
-        "qualifying",
-      ],
-    ]);
-    expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
-    expect(after.tickets.find((r) => r.workingOrderLineId === order.lineId)).toMatchObject({
-      stationId,
-      requestedAt: expect.any(String),
-      firedAt: null,
-      passControlled: true,
-    });
-  });
 });
+

@@ -88,11 +88,6 @@ import type {
 } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { LateSendConfirmation } from "./late-send.js";
-import {
-  beginIntegratedAttendance,
-  finishIntegratedAttendance,
-  pendingIntegratedAttendanceKey,
-} from "./attendance-integrated.js";
 type TillSaleDeps = BaseTillSaleDeps & {
   attendance?: AttendanceRecorder;
   /**
@@ -1280,15 +1275,9 @@ async function payIntegrated(
         workingOrderId: req.id,
       });
       if (captured !== undefined && captured.saleId === null) {
-        const attendanceKey = await pendingIntegratedAttendanceKey(
-          tx,
-          deps.attendance,
-          req.id,
-          deps.provider.provider,
-        );
         return outstanding !== undefined
-          ? { kind: "recover-settle" as const, captured, outstanding, attendanceKey }
-          : { kind: "recover" as const, captured, attendanceKey };
+          ? { kind: "recover-settle" as const, captured, outstanding }
+          : { kind: "recover" as const, captured };
       }
 
       // After the recovery above, which files money already taken whatever the till showed.
@@ -1315,20 +1304,16 @@ async function payIntegrated(
           };
         }
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
-        const attendanceKey = await beginIntegratedAttendance(
+        await captureWholePayment(
           tx,
           deps.attendance,
-          {
-            id: req.id,
-            provider: deps.provider.provider,
-            personId: operatorId,
-          },
-          () => deps.clock.now().instant,
+          req.id,
+          operatorId,
+          deps.attendance === undefined ? undefined : deps.clock.now().instant,
         );
         return {
           kind: "settle" as const,
           outstanding,
-          attendanceKey,
           slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
         };
       }
@@ -1411,15 +1396,12 @@ async function payIntegrated(
     // Inside the transaction, so no release pass runs between a mark and its registration, and a
     // check of this order in any transaction after this one (`refusePlacedPaymentInFlight`, a
     // cancel's `paymentAttemptIsLive`) sees the attempt live until this call ends.
-    const attendanceKey = await beginIntegratedAttendance(
+    await captureWholePayment(
       tx,
       deps.attendance,
-      {
-        id: req.id,
-        provider: deps.provider.provider,
-        personId: operatorId,
-      },
-      () => deps.clock.now().instant,
+      req.id,
+      operatorId,
+      deps.attendance === undefined ? undefined : deps.clock.now().instant,
     );
     onLive(attemptAt ?? PLACED_ATTEMPT);
     return {
@@ -1428,7 +1410,6 @@ async function payIntegrated(
       identities: order.identities,
       wasPlaced,
       attemptAt,
-      attendanceKey,
       slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
     };
   });
@@ -1439,15 +1420,15 @@ async function payIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    const { captured, attendanceKey } = prepared;
+    const { captured } = prepared;
     return afterCardCharged(deps, req.id, () =>
-      finalizeRecovery(deps, cfg, req, captured, operatorId, attendanceKey),
+      finalizeRecovery(deps, cfg, req, captured, operatorId),
     );
   }
   if (prepared.kind === "recover-settle") {
-    const { captured, outstanding, attendanceKey } = prepared;
+    const { captured, outstanding } = prepared;
     return afterCardCharged(deps, req.id, () =>
-      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey, operatorId),
+      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, operatorId),
     );
   }
 
@@ -1459,9 +1440,6 @@ async function payIntegrated(
   // Only a collect of an open order marked it; a settle is of a placed order.
   const attemptAt = prepared.kind === "collect" ? prepared.attemptAt : null;
   if (deps.disk?.noted() === true) {
-    await withTransaction(deps.db, (tx) =>
-      finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
-    );
     await releasePaymentAttempt(deps, req.id, attemptAt);
     refuseForStop();
   }
@@ -1488,9 +1466,6 @@ async function payIntegrated(
     });
   if (result.state !== "captured") {
     if (result.state === "failed" || result.state === "network_unavailable") {
-      await withTransaction(deps.db, (tx) =>
-        finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
-      );
     }
     await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
@@ -1507,15 +1482,7 @@ async function payIntegrated(
             });
             return captured === undefined
               ? null
-              : retainShortCapture(
-                  tx,
-                  deps,
-                  cfg,
-                  req.id,
-                  captured,
-                  operatorId,
-                  prepared.attendanceKey,
-                );
+              : retainShortCapture(tx, deps, cfg, req.id, captured, operatorId);
           }),
         )
       : null;
@@ -1525,7 +1492,7 @@ async function payIntegrated(
       ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, undefined, deps.log)),
     };
   if (prepared.kind === "settle") {
-    const { outstanding, attendanceKey } = prepared;
+    const { outstanding } = prepared;
     const answer: IntegratedPayOutcome = {
       outcome: "captured",
       ticket: await afterCardCharged(deps, req.id, () =>
@@ -1536,7 +1503,6 @@ async function payIntegrated(
           outstanding,
           subtractDecimal(result.amount, baseAmount),
           result,
-          attendanceKey,
         ),
       ),
     };
@@ -1553,21 +1519,10 @@ async function payIntegrated(
       )),
     };
   }
-  const { gross, identities, wasPlaced, attendanceKey } = prepared;
+  const { gross, identities, wasPlaced } = prepared;
   const actualTip = subtractDecimal(result.amount, baseAmount);
   const ticket = await afterCardCharged(deps, req.id, () =>
-    finalizeCapture(
-      deps,
-      cfg,
-      req,
-      gross,
-      identities,
-      actualTip,
-      result,
-      operatorId,
-      wasPlaced,
-      attendanceKey,
-    ),
+    finalizeCapture(deps, cfg, req, gross, identities, actualTip, result, operatorId, wasPlaced),
   );
   return {
     outcome: "captured",
@@ -1583,7 +1538,6 @@ async function retainShortCapture(
   orderId: string,
   captured: CapturedPaymentForOrder,
   operatorId: string | undefined,
-  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [payment] = await tx.select().from(payments).where(eq(payments.id, captured.id));
@@ -1623,7 +1577,6 @@ async function retainShortCapture(
         .update(workingOrders)
         .set({ paymentAttemptAt: null })
         .where(eq(workingOrders.id, orderId));
-    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
   }
   return {
     outcome: "partial",
@@ -1789,7 +1742,6 @@ async function finalizeCapture(
   operatorId?: string,
   // True when the order was `placed` at P1.
   wasPlaced = false,
-  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`
@@ -1871,7 +1823,7 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
-      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,
@@ -1915,7 +1867,6 @@ async function finalizeRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   operatorId?: string,
-  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   return withIssuanceTransaction(
     deps.db,
@@ -1946,7 +1897,7 @@ async function finalizeRecovery(
       const capturedAmount = decimal(captured.amount);
 
       if (compareDecimal(capturedAmount, priced.total) < 0) {
-        return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
+        return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId);
       }
 
       const tip = subtractDecimal(capturedAmount, priced.total);
@@ -2027,7 +1978,7 @@ async function finalizeRecovery(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
-      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,
@@ -2124,7 +2075,6 @@ async function finalizeSettle(
   outstanding: { saleId: SaleId; amountDue: Decimal },
   tip: Decimal,
   result: PaymentResult,
-  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`
@@ -2162,7 +2112,6 @@ async function finalizeSettle(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
-      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -2184,7 +2133,6 @@ async function finalizeSettleRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
-  attendanceKey?: string,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
@@ -2206,7 +2154,7 @@ async function finalizeSettleRecovery(
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
-      return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
+      return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId);
     }
 
     const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
@@ -2241,7 +2189,6 @@ async function finalizeSettleRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
-    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };

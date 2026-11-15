@@ -1,22 +1,18 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, dayCutoverChanges, type Transaction, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import {
-  attendanceDayWork,
-  attendanceOperationFacts,
-  WORKFORCE_MIGRATIONS,
-} from "@waitron/workforce";
+import { attendanceDayWork, staffActivity, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let personId: string, other: string;
+let personId: string;
 const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
@@ -42,161 +38,23 @@ beforeEach(async () => {
     { displayName: "Collector", pinHash: "scrypt$00$00" },
     { displayName: "Later operator", pinHash: "scrypt$00$00" },
   ]);
-  [personId, other] = people.map((r) => r.id) as [string, string];
+  personId = people[0]!.id;
 });
 
-describe("transactional attendance operation capture", () => {
-  it("accepts activity after tomorrow's cutover changes before discovery refreshes the current day", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-01-05T17:00:00Z"));
-    try {
-      await capture(fact());
-      const [before] = await suite.db.select().from(attendanceDayWork);
-      await suite.db
-        .insert(dayCutoverChanges)
-        .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
-      await expect(
-        capture({ ...fact(), key: "after-cutover-setting", at: "2026-01-05T16:42:00Z" }),
-      ).resolves.toBeUndefined();
-      expect(
-        (await suite.db.select().from(attendanceOperationFacts)).map((f) => [f.key, f.at]),
-      ).toEqual([
-        ["attempt:one", "2026-01-05T16:40:23.000Z"],
-        ["after-cutover-setting", "2026-01-05T16:42:00.000Z"],
-      ]);
-      const [dirtied] = await suite.db.select().from(attendanceDayWork);
-      expect(dirtied).toEqual({ ...before, dirtyRevision: 2 });
-      const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
-        await import("./attendance-discovery.js");
-      await run((tx) => beginAttendanceDiscovery(tx, { generation: "after-settings" }));
-      for (let n = 0; n < 15; n++) {
-        const { more } = await run((tx) =>
-          discoverAttendanceDays(tx, { now: new Date(), batchSize: 100 }),
-        );
-        if (!more) break;
-        if (n === 14) throw new Error("cutover discovery did not settle");
-      }
-      expect(
-        await run((tx) => nextAttendanceDay(tx, { now: new Date("2026-01-06T03:00:00Z") })),
-      ).toBeNull();
-      expect(await suite.db.select().from(attendanceDayWork)).toEqual([
-        expect.objectContaining({
-          id: before!.id,
-          businessDay: "2026-01-05",
-          evaluatedRevision: 0,
-          startAt: "2026-01-05T03:00:00.000Z",
-          endAt: "2026-01-06T05:00:00.000Z",
-          nextDueAt: "2026-01-06T05:00:00.000Z",
-        }),
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-  it("records the admitted human instant at whole seconds, using the venue-zone offset", async () => {
+describe("transactional attendance capture", () => {
+  it("records the admitted person and human instant", async () => {
     await capture(fact());
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([
-      {
-        sequence: 1,
-        source: "whole-payment",
-        key: "attempt:one",
-        personId,
-        kind: "payment",
-        at: "2026-01-05T16:40:23.000Z",
-        offsetMinutes: 60,
-        businessDay: "2026-01-05",
-        outcome: "qualifying",
-      },
-    ]);
-    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      {
-        businessDay: "2026-01-05",
-        startAt: "2026-01-05T03:00:00.000Z",
-        endAt: "2026-01-06T03:00:00.000Z",
-        dirtyRevision: 1,
-      },
+    expect(await suite.db.select().from(staffActivity)).toMatchObject([
+      { personId, firstAt: "2026-01-05T16:40:23.000Z", lastAt: "2026-01-05T16:40:23.000Z" },
     ]);
   });
-  it("replay cannot replace the original actor or human request instant", async () => {
-    await capture({ ...fact(), outcome: "pending" });
-    const original = (await suite.db.select().from(attendanceOperationFacts))[0]!;
-    await capture({
-      ...fact(),
-      personId: other,
-      at: "2026-01-06T19:00:00Z",
-      outcome: "qualified",
-    });
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([
-      { ...original, outcome: "qualifying" },
-    ]);
-    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      { businessDay: "2026-01-05", dirtyRevision: 2 },
-    ]);
-  });
-  it("unchanged replay leaves the saved day revision alone", async () => {
-    await capture(fact());
-    const before = await suite.db.select().from(attendanceDayWork);
-    await capture(fact());
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(before);
-    expect(await suite.db.select().from(attendanceOperationFacts)).toHaveLength(1);
-  });
-  it("later refusal or refund retains an already qualifying original action", async () => {
-    await capture(fact());
-    const before = await suite.db.select().from(attendanceOperationFacts);
-    const work = await suite.db.select().from(attendanceDayWork);
-    await capture({ ...fact(), outcome: "refused", at: "2026-01-08T20:00:00Z" });
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual(before);
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(work);
-  });
-  it("a pending-start replay does not revive a definitive refusal", async () => {
-    await capture({ ...fact(), outcome: "pending" });
-    await capture({ ...fact(), outcome: "refused" });
-    const before = await suite.db.select().from(attendanceOperationFacts);
-    await capture({ ...fact(), outcome: "pending" });
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual(before);
-  });
-  it("an accepted later outcome qualifies the original refused request without changing its time", async () => {
-    await capture({ ...fact(), outcome: "refused" });
-    await capture({ ...fact(), at: "2026-01-08T20:00:00Z", outcome: "qualified" });
-    expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { at: "2026-01-05T16:40:23.000Z", outcome: "qualifying" },
-    ]);
-  });
-  it("two different attempts keep separate human evidence", async () => {
-    await capture(fact());
-    await capture({ ...fact(), key: "attempt:two", personId: other, at: "2026-01-05T17:00:00Z" });
-    expect(
-      (await suite.db.select().from(attendanceOperationFacts)).map((r) => ({
-        key: r.key,
-        personId: r.personId,
-        at: r.at,
-      })),
-    ).toEqual([
-      { key: "attempt:one", personId, at: "2026-01-05T16:40:23.000Z" },
-      { key: "attempt:two", personId: other, at: "2026-01-05T17:00:00.000Z" },
-    ]);
-  });
-  it.each([
-    ["2026-03-29T01:30:00.500Z", "2026-03-28", 120],
-    ["2026-10-25T01:30:00.500Z", "2026-10-24", 60],
-    ["2026-01-05T03:00:00.000Z", "2026-01-05", 60],
-    ["2026-01-05T02:59:59.999Z", "2026-01-04", 60],
-  ])(
-    "saves the historical business day for %s rather than the callback's day",
-    async (at, businessDay, offsetMinutes) => {
-      await capture({ ...fact(), at });
-      expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
-        { businessDay, offsetMinutes },
-      ]);
-    },
-  );
   it.each([{ at: "bad" }, { key: "" }, { personId: "" }, { kind: "sign-in" }])(
     "refuses invalid evidence %j without saving work",
     async (bad) => {
       await expect(
         capture({ ...fact(), ...bad } as Parameters<typeof capture>[0]),
       ).rejects.toMatchObject({ code: "attendance.invalid" });
-      expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([]);
+      expect(await suite.db.select().from(staffActivity)).toEqual([]);
       expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
     },
   );
@@ -211,6 +69,6 @@ describe("transactional attendance operation capture", () => {
     expect(
       (await suite.db.select().from(persons).where(eq(persons.id, personId)))[0]!.displayName,
     ).toBe("Collector");
-    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([]);
+    expect(await suite.db.select().from(staffActivity)).toEqual([]);
   });
 });

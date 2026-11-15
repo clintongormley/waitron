@@ -56,7 +56,7 @@ describe("completed attendance day", () => {
     expect(await f.process()).toEqual({ automaticEntryIds: [], questionIds: first.questionIds });
     expect(await f.entries()).toEqual(before);
     const [work] = await f.suite.db.select().from(attendanceDayWork);
-    expect(work).toMatchObject({ dirtyRevision: 1, evaluatedRevision: 1, deferredShiftIds: [] });
+    expect(work).toMatchObject({ dirtyRevision: 3, evaluatedRevision: 3, deferredShiftIds: [] });
     expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
   });
   it.each([

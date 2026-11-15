@@ -195,16 +195,6 @@ async function recordOutcomeIn(
       authorizedBy: attestation?.attestedBy ?? refund.authorizedBy,
       ...(providerRef === null ? {} : { providerRefundRef: providerRef }),
     });
-  if (outcome !== "pending")
-    await deps.attendance?.(tx, {
-      source: "refund",
-      key: refund.id,
-      personId: refund.requestedBy,
-      kind: "payment",
-      at: refund.createdAt,
-      offsetMinutes: 0,
-      outcome: outcome === "completed" ? "qualified" : "refused",
-    });
   signal.throwIfAborted();
   return saved!;
 }

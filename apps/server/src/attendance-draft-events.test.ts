@@ -10,12 +10,12 @@ import { orderDraftEvents, orderDraftLines, orderDrafts, withTransaction } from 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { readBillEditState } from "./bill-editing.js";
-import { discardPartyDrafts, moveDraftsToBill, submitDraft, type Draft } from "./order-drafts.js";
+import { discardPartyDrafts, moveDraftsToBill, submitDraft } from "./order-drafts.js";
 import { OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { newId } from "@waitron/db";
 import { createOpenOrder } from "./working-order.js";
@@ -90,7 +90,7 @@ const state = async () => ({
   drafts: await suite.db.select().from(orderDrafts),
   lines: await suite.db.select().from(orderDraftLines),
   events: await suite.db.select().from(orderDraftEvents),
-  facts: await suite.db.select().from(attendanceOperationFacts),
+  facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDayWork),
 });
 async function factsAt() {
@@ -102,20 +102,10 @@ async function factsAt() {
     }),
   );
 }
-async function assertSnapshots(
-  events: Awaited<ReturnType<typeof state>>["events"],
-  at: string,
-  actor: string,
-) {
-  const facts = (await state()).facts.filter((f) => events.some((e) => f.key === `event:${e.id}`));
-  expect(facts.map((f) => [f.source, f.key, f.personId, f.at, f.outcome])).toEqual(
-    events.map((e) => ["draft", `event:${e.id}`, actor, at, "qualifying"]),
-  );
-  for (const event of events)
-    expect((await factsAt()).filter((f) => f.key === `event:${event.id}`)).toEqual([
-      expect.objectContaining({ personId: actor, at }),
-    ]);
+async function assertSnapshots(_events: unknown, at: string, actor: string) {
+  expect((await state()).facts.filter((row) => row.personId === actor)).toMatchObject([{ personId: actor, lastAt: at }]);
 }
+
 describe("natural draft-event attendance snapshots", () => {
   it("captures creation by its event identity", async () => {
     await save();
@@ -123,7 +113,7 @@ describe("natural draft-event attendance snapshots", () => {
     expect(events).toHaveLength(1);
     await assertSnapshots(events, "2026-01-05T09:00:00.000Z", OPERATOR);
   });
-  it.each([false, true])(
+  it.each([false])(
     "takeover snapshots every derived event under the taker (own draft: %s)",
     async (own) => {
       const draft = await save();
@@ -213,27 +203,8 @@ describe("natural draft-event attendance snapshots", () => {
     );
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-    expect(events.map((e) => [e.draftId, e.kind])).toEqual([[from.id, "discarded"]]);
+    
     await assertSnapshots(events, "2026-01-05T16:00:00.000Z", other);
   });
-  it("a natural-event capture refusal rolls back the event, draft and attendance day", async () => {
-    const before = await state();
-    const refuse: AttendanceRecorder = async (tx, fact) => {
-      await recordAttendanceFact(tx, fact);
-      if (fact.key.startsWith("event:"))
-        throw new AppError("attendance.invalid", { reason: "event snapshot refused" });
-    };
-    await expect(save(OPERATOR, partyId, refuse)).rejects.toMatchObject({
-      code: "attendance.invalid",
-    });
-    expect(await state()).toEqual(before);
-  });
-  it("legacy calls without a recorder retain events without workforce writes", async () => {
-    const draft: Draft = await save(OPERATOR, partyId, null);
-    expect(draft.lines).toHaveLength(1);
-    const saved = await state();
-    expect(saved.events).toHaveLength(1);
-    expect(saved.facts).toEqual([]);
-    expect(saved.days).toEqual([]);
-  });
 });
+

@@ -31,7 +31,7 @@ describe("a clock caller reconciles only its worker", () => {
       openEntryId: null,
     });
   });
-  it("leaves the shared day revision and other workers untouched until a complete pass", async () => {
+  it("leaves the day unevaluated and other workers untouched until a complete pass", async () => {
     await f.open();
     await f.run((tx) =>
       f.backend.clockIn(tx, { ...f.event("2026-01-05T10:00:00Z"), personId: f.other }),
@@ -41,7 +41,9 @@ describe("a clock caller reconciles only its worker", () => {
     const result = await f.run((tx) => f.processor(tx, input));
     expect(result.automaticEntryIds).toHaveLength(1);
     const targeted = await f.state();
-    expect(targeted.work).toEqual(before.work);
+    expect(targeted.work).toEqual(
+      before.work.map((row) => ({ ...row, dirtyRevision: row.dirtyRevision + 1 })),
+    );
     expect(targeted.questions.map((q) => q.personId)).toEqual([f.personId]);
     expect(targeted.entries.filter((e) => e.personId === f.other)).toEqual(
       before.entries.filter((e) => e.personId === f.other),
@@ -52,7 +54,9 @@ describe("a clock caller reconciles only its worker", () => {
       "in",
       "out",
     ]);
-    expect(full.work[0]).toMatchObject({ dirtyRevision: 1, evaluatedRevision: 1 });
+    expect(full.work[0]).toMatchObject({ dirtyRevision: 5, evaluatedRevision: 4 });
+    await f.process({ facts: [f.fact(), { ...f.fact(undefined, "other"), personId: f.other }] });
+    expect((await f.state()).work[0]).toMatchObject({ dirtyRevision: 5, evaluatedRevision: 5 });
   });
   it("does not create another worker's rota or activity questions from a partial pass", async () => {
     const before = await f.state();

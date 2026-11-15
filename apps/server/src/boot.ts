@@ -58,7 +58,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import {
   installChangeFeed,
@@ -307,7 +307,6 @@ import { layOutSaleReceipt } from "./receipt-print.js";
 import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
@@ -1313,7 +1312,6 @@ async function bootServer(
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
-  let attendanceSchemaBeforeMigrations: number | undefined;
   let migrationModules: readonly WaitronModule[] = availableModules;
   let letGoOfCheckedAddresses: () => Promise<void>;
   try {
@@ -1351,9 +1349,6 @@ async function bootServer(
       config.environment,
       availableModules.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
     );
-    attendanceSchemaBeforeMigrations = stampProbe.venue.execute<{ schema_version: number }>(
-      sql`pragma schema_version`,
-    ).rows[0]!.schema_version;
   } finally {
     await stampProbe.close();
   }
@@ -2993,13 +2988,6 @@ async function bootServer(
   const attendanceController = new AbortController();
   let attendanceLoop: Promise<void> | undefined;
   if (workforceEnabled && isSingletonPrimary) {
-    await withTransaction(db, (tx) =>
-      beginAttendanceDiscovery(tx, {
-        generation: randomUUID(),
-        schemaVersionBeforeMigrations: attendanceSchemaBeforeMigrations,
-        migrationVersions: appliedModuleVersions,
-      }),
-    );
     attendanceLoop = runAttendanceLoop({
       db,
       nodeId: tradingContext.nodeId,

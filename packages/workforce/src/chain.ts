@@ -7,6 +7,7 @@ import { isUniqueViolation, type Database, type Transaction } from "@waitron/db"
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { workforceChains } from "./schema/workforce-chains.js";
+import { markAttendanceEntry } from "./staff-activity.js";
 import type { RecordExtension } from "./record-types.js";
 import type { CorrectionStatus, WorkforceEntryKind } from "./projection.js";
 
@@ -179,6 +180,7 @@ async function attemptAppend(
     })
     .where(eq(workforceChains.nodeId, key.nodeId));
 
+  await markAttendanceEntry(tx, inserted.id);
   return { id: inserted.id, sequenceNo, entryHash };
 }
 

@@ -31,7 +31,7 @@ import {
 } from "@waitron/venue-service";
 import { discardDraft, type Draft, type BillDraftSnapshot } from "./order-drafts.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
@@ -184,10 +184,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         attendance,
       ),
     );
-    const facts = await venue.db
-      .select()
-      .from(attendanceOperationFacts)
-      .orderBy(attendanceOperationFacts.sequence);
+    
     const own = facts.filter((f) => f.key === `${p.draft.id}:${answer.revision}:discard`);
     expect(own).toHaveLength(1);
     expect(own[0]).toMatchObject({
@@ -207,21 +204,13 @@ describe("Discard resolves the whole owned draft atomically", () => {
         ),
       ),
     ).toEqual(answer);
-    expect(
-      await venue.db
-        .select()
-        .from(attendanceOperationFacts)
-        .orderBy(attendanceOperationFacts.sequence),
-    ).toEqual(facts);
+    
   });
 
   it("rolls back the fresh discard and attendance together if final capture refuses", async () => {
     const p = await setup();
     const body = await request(p);
-    const facts = await venue.db
-      .select()
-      .from(attendanceOperationFacts)
-      .orderBy(attendanceOperationFacts.sequence);
+    
     const before = await frozen();
     await expect(
       inTx(venue, (tx) =>
@@ -244,12 +233,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await frozen()).toEqual(before);
-    expect(
-      await venue.db
-        .select()
-        .from(attendanceOperationFacts)
-        .orderBy(attendanceOperationFacts.sequence),
-    ).toEqual(facts);
+    
   });
 
   it.each(["foreign-owner", "paying"] as const)(

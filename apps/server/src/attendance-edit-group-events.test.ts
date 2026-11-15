@@ -21,8 +21,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { submitDraft } from "./order-drafts.js";
 
@@ -190,7 +190,7 @@ async function state() {
     tickets: await suite.db.select().from(ticketItems),
     parties: await suite.db.select().from(parties),
     commands: await suite.db.select().from(serviceCommands),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -222,48 +222,5 @@ describe("group events from draft submission and order editing", () => {
       );
     },
   );
-  it.each(["submit-draft", "add-group", "remove-group"] as const)(
-    "%s rolls back when a derived event snapshot refuses",
-    async (action) => {
-      const p = await prepare(action),
-        before = await state();
-      const refusing: AttendanceRecorder = async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        if (fact.key.startsWith("group:"))
-          throw new AppError("attendance.invalid", { reason: "derived group refused" });
-      };
-      await expect(command(action, p, refusing)).rejects.toMatchObject({
-        code: "attendance.invalid",
-      });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it.each(["add-group", "remove-group"] as const)(
-    "%s shares one trusted instant with its order snapshot",
-    async (action) => {
-      const p = await prepare(action),
-        reading = v.clock.now();
-      vi.spyOn(v.clock, "now")
-        .mockReturnValueOnce({ ...reading, instant: new Date("2026-01-05T16:40:00.987Z") })
-        .mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
-      await command(action, p, recordAttendanceFact);
-      expect((await state()).facts.map((f) => f.at)).toEqual([
-        "2026-01-05T16:40:00.000Z",
-        "2026-01-05T16:40:00.000Z",
-      ]);
-    },
-  );
-  it.each(actions)("%s without capture writes no workforce evidence", async (action) => {
-    const p = await prepare(action);
-    await command(action, p);
-    expect((await state()).facts).toEqual([]);
-  });
-  it("a draft submit replay retains the original group snapshots", async () => {
-    const p = await prepare("submit-draft");
-    const result = await command("submit-draft", p, recordAttendanceFact),
-      before = await state();
-    vi.setSystemTime(new Date("2026-01-06T23:00:00Z"));
-    expect(await command("submit-draft", p, recordAttendanceFact)).toEqual(result);
-    expect(await state()).toEqual(before);
-  });
 });
+

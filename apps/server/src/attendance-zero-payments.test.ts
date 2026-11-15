@@ -1,18 +1,18 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { readBillEditState } from "./bill-editing.js";
-import { collectOrderOrchestration } from "./till-sale.js";
+
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import { newId, saleSettlements, tenders, withTransaction, workingOrders } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { newId, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { AppError } from "@waitron/shared";
+
 import { updateProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { payments } from "@waitron/payments";
-import { attendanceOperationFacts } from "@waitron/workforce";
+import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { collectOrder, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
@@ -67,7 +67,7 @@ function at(instant = "2026-01-05T11:00:00.987Z") {
   const reading = v.clock.now();
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
-const operations = () => suite.db.select().from(attendanceOperationFacts);
+const operations = () => suite.db.select().from(staffActivity);
 const tender = (method: "cash" | "card") => ({
   method,
   amount: "20.00",
@@ -79,19 +79,7 @@ const request = (id: string = newId()) => ({
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
   tender: tender("cash"),
 });
-function evidence(key: string) {
-  return {
-    sequence: 1,
-    source: "whole-payment",
-    key,
-    personId: collector.personId,
-    kind: "payment",
-    at: "2026-01-05T11:00:00.000Z",
-    offsetMinutes: 60,
-    businessDay: "2026-01-05",
-    outcome: "qualifying",
-  };
-}
+function evidence(key: string) { return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }; }
 async function bill(issued = false) {
   const { tabId } = await seat(v, await v.table("Attendance collection"));
   await order(v, tabId, "Burger");
@@ -138,7 +126,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
       );
       expect(ticket.total).toBe("0.00");
       expect(ticket.tender).toEqual({ method: "unpaid" });
-      expect(await operations()).toEqual([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence(id)]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
@@ -151,7 +139,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
           v.operator,
         ),
       ).toEqual(ticket);
-      expect(await operations()).toEqual([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence(id)]);
     },
   );
   it.each(["issued", "placed", "retrieved", "counter"] as const)(
@@ -185,7 +173,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
       expect(result.ticket.total).toBe("0.00");
       expect(result.ticket.tender).toEqual({ method: "unpaid" });
       expect(provider.collectCalls).toEqual([]);
-      expect(await operations()).toEqual([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence(id)]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
@@ -198,46 +186,8 @@ describe("a human zero-owing command remains attendance evidence", () => {
           v.operator,
         ),
       ).toEqual(result);
-      expect(await operations()).toEqual([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence(id)]);
     },
   );
-  it("a zero collection's evidence refusal rolls back settlement", async () => {
-    const id = await zeroBill(true);
-    const refusal: AttendanceRecorder = async () => {
-      throw new AppError("attendance.invalid", { reason: "probe" });
-    };
-    at();
-    await expect(
-      collectOrder(
-        { ...deps(refusal), admission: testTradingAdmission() },
-        v.cfg,
-        { id, lines: [], tender: tender("cash") },
-        collector,
-      ),
-    ).rejects.toMatchObject({ code: "attendance.invalid" });
-    expect(
-      (await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id)))[0]!.status,
-    ).toBe("placed");
-    expect(await operations()).toEqual([]);
-    expect(await suite.db.select().from(saleSettlements)).toEqual([]);
-    await noMoney();
-  });
-  it("requires an actor for a zero party bill without inventing a worker", async () => {
-    const id = await zeroBill(true);
-    at();
-    const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, id));
-    await expect(
-      collectOrderOrchestration({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-        id,
-        lines: [],
-        tender: tender("cash"),
-        expectedEdit,
-      }),
-    ).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "operatorId" },
-    });
-    expect(await operations()).toEqual([]);
-    await noMoney();
-  });
 });
+

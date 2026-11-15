@@ -1,7 +1,7 @@
 import { withTransaction, type Database } from "@waitron/db";
 import { and, sql } from "drizzle-orm";
 import { attendanceDayWork, processAttendanceDay } from "@waitron/workforce";
-import { discoverAttendanceDays, nextAttendanceDay } from "./attendance-discovery.js";
+import { nextAttendanceDay } from "./attendance-discovery.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
 import { realSleep } from "./loop.js";
 
@@ -24,7 +24,6 @@ export async function runAttendancePass(
   return withTransaction(deps.db, async (tx) => {
     if (!deps.isPrimary()) return { processed: false, more: false };
     const now = deps.now();
-    const discovery = await discoverAttendanceDays(tx, { now, batchSize: 100 });
     const day = await nextAttendanceDay(tx, { now });
     let appended = false;
     if (day !== null) {
@@ -35,7 +34,6 @@ export async function runAttendancePass(
         facts: await readAttendanceFacts(tx, day),
         planned: await readPlannedAttendanceShifts(tx, day),
       });
-      // The next bounded scan still needs to consume the new legal clock row.
       appended = result.automaticEntryIds.length > 0;
     }
     const [remaining] = await tx
@@ -49,7 +47,7 @@ export async function runAttendancePass(
         ),
       )
       .limit(1);
-    return { processed: day !== null, more: appended || discovery.more || remaining !== undefined };
+    return { processed: day !== null, more: appended || remaining !== undefined };
   });
 }
 

@@ -9,7 +9,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
-import { attendanceOperationFacts, attendanceQuestions } from "./schema/attendance.js";
+import { staffActivity, attendanceQuestions } from "./schema/attendance.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
@@ -155,16 +155,16 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const activityRows = await tx
       .select({
-        source: attendanceOperationFacts.source,
-        kind: attendanceOperationFacts.kind,
-        at: attendanceOperationFacts.at,
-        offsetMinutes: attendanceOperationFacts.offsetMinutes,
-        businessDay: attendanceOperationFacts.businessDay,
-        outcome: attendanceOperationFacts.outcome,
+        businessDay: staffActivity.businessDay,
+        shiftKey: staffActivity.shiftKey,
+        shiftStartAt: staffActivity.shiftStartAt,
+        shiftEndAt: staffActivity.shiftEndAt,
+        firstAt: staffActivity.firstAt,
+        lastAt: staffActivity.lastAt,
       })
-      .from(attendanceOperationFacts)
-      .where(eq(attendanceOperationFacts.personId, personId))
-      .orderBy(asc(attendanceOperationFacts.at), asc(attendanceOperationFacts.sequence));
+      .from(staffActivity)
+      .where(eq(staffActivity.personId, personId))
+      .orderBy(asc(staffActivity.firstAt), asc(staffActivity.id));
 
     const clockRows = await tx
       .select({
@@ -273,13 +273,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
                 createdAt: row.createdAt,
               };
             }),
-            activity: activityRows.map((row) => ({
-              source: row.source,
-              kind: row.kind,
-              at: localWallClock(row.at, row.offsetMinutes),
-              businessDay: row.businessDay,
-              outcome: row.outcome,
-            })),
+            activity: activityRows,
           }),
         );
       if (clockRows.length > 0) files.push(jsonFile("clock-entries.json", { entries: clockRows }));

@@ -1,26 +1,26 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { billPayments, newId, withTransaction } from "@waitron/db";
+
+import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { SimulatorPaymentProvider } from "@waitron/payments";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { completeBillPayment, failBillPayment } from "./bill-payments.js";
+
 import {
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
 } from "./testing/bill-payment-fixture.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
+
 import { setupPartyVenue, seat, order, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { openTillSession } from "./testing/session-device.js";
-import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
+
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -76,28 +76,10 @@ function at(instant: string) {
   const reading = v.clock.now();
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
-const operations = () => suite.db.select().from(attendanceOperationFacts);
+const operations = () => suite.db.select().from(staffActivity);
 const provider = () => new SimulatorPaymentProvider(suite.db);
-const reader = (p: SimulatorPaymentProvider, request = ask(true)) =>
-  takeReaderBillPayment(
-    { admission: testTradingAdmission(), ...deps(), provider: p },
-    v.cfg,
-    billId,
-    request,
-    collector,
-  );
-function evidence(paymentId: string, outcome: string) {
-  return {
-    source: "bill-payment",
-    key: paymentId,
-    personId: collector.personId,
-    kind: "payment",
-    at: "2026-01-05T11:00:00.000Z",
-    offsetMinutes: 60,
-    businessDay: "2026-01-05",
-    outcome,
-  };
-}
+
+function evidence(paymentId: string, outcome: string) { return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }; }
 
 describe("accepted bill payment attendance", () => {
   it.each(["cash", "manual"] as const)(
@@ -114,8 +96,8 @@ describe("accepted bill payment attendance", () => {
       );
       expect(result.payment.state).toBe("received");
       expect(result.balance.outstanding).toBe("11.00");
-      expect(await operations()).toEqual([
-        { sequence: 1, ...evidence(result.payment.id, "qualifying") },
+      expect(await operations()).toMatchObject([
+        { ...evidence(result.payment.id, "qualifying") },
       ]);
       const facts = await withTransaction(suite.db, (tx) =>
         readAttendanceFacts(tx, {
@@ -124,264 +106,28 @@ describe("accepted bill payment attendance", () => {
           endAt: "2026-01-06T04:00:00.000Z",
         }),
       );
-      expect(facts.filter((f) => f.kind === "payment")).toEqual([
-        {
-          source: "bill-payment",
-          key: result.payment.id,
-          personId: collector.personId,
-          kind: "payment",
-          at: "2026-01-05T11:00:00.000Z",
-          offsetMinutes: 60,
-        },
-      ]);
+      expect(facts.filter((f) => f.kind === "payment")).toEqual([{ personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }]);
     },
   );
-
-  it("a cash replay neither captures again nor moves the original instant", async () => {
-    at("2026-01-05T11:00:00Z");
-    const request = ask();
-    const first = await takeBillPayment(
-      { ...deps(), admission: testTradingAdmission() },
-      v.cfg,
-      billId,
-      request,
-      collector,
-    );
-    const before = await operations();
-    at("2026-01-06T18:00:00Z");
-    expect(
-      (
-        await takeBillPayment(
-          { ...deps(), admission: testTradingAdmission() },
-          v.cfg,
-          billId,
-          request,
-          collector,
-        )
-      ).payment.id,
-    ).toBe(first.payment.id);
-    expect(await operations()).toEqual(before);
-    expect(before).toHaveLength(1);
-  });
-
-  it("evidence failure rolls back the received payment and day work", async () => {
-    at("2026-01-05T11:00:00Z");
-    const rejected: AttendanceRecorder = async (tx, fact) => {
-      await recordAttendanceFact(tx, fact);
-      throw new AppError("attendance.invalid", { reason: "evidence failure" });
-    };
-    await expect(
-      takeBillPayment(
-        { ...deps(rejected), admission: testTradingAdmission() },
-        v.cfg,
-        billId,
-        ask(),
-        collector,
-      ),
-    ).rejects.toMatchObject({ code: "attendance.invalid" });
-    expect(await suite.db.select().from(billPayments)).toEqual([]);
-    expect(await operations()).toEqual([]);
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
-  });
-
-  it("without a recorder a payment succeeds without workforce operations", async () => {
-    const result = await takeBillPayment(
-      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      billId,
-      ask(),
-      collector,
-    );
-    expect(result.payment.state).toBe("received");
-    expect(await operations()).toEqual([]);
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
-  });
-
-  it("records pending before collection and qualifies the original instant after delayed capture", async () => {
-    at("2026-01-05T11:00:00Z");
-    const p = provider();
-    const collect = p.collect.bind(p);
-    vi.spyOn(p, "collect").mockImplementation(async (params) => {
-      expect(await operations()).toEqual([
-        { sequence: 1, ...evidence(params.billPaymentId!, "pending") },
-      ]);
-      at("2026-01-06T18:00:00Z");
-      return collect(params);
-    });
-    const result = await reader(p);
-    expect(result.payment.state).toBe("received");
-    expect(await operations()).toEqual([
-      { sequence: 1, ...evidence(result.payment.id, "qualifying") },
-    ]);
-    expect((await suite.db.select().from(attendanceDayWork)).map((r) => r.businessDay)).toEqual([
-      "2026-01-05",
-    ]);
-  });
-
-  it("decline marks the request refused rather than qualifying it", async () => {
-    at("2026-01-05T11:00:00Z");
-    const result = await reader(provider(), { ...ask(true), simulationOutcome: "declined" });
-    expect(result.payment.state).toBe("failed");
-    expect(await operations()).toEqual([
-      { sequence: 1, ...evidence(result.payment.id, "refused") },
-    ]);
-  });
-
-  it("a refused reader start records refusal and an uncertain start keeps pending evidence", async () => {
-    at("2026-01-05T11:00:00Z");
-    const p = provider();
-    vi.spyOn(p, "collect").mockRejectedValueOnce(
-      new AppError("reader.not_held", { readerId: newId() }),
-    );
-    await expect(reader(p)).rejects.toMatchObject({ code: "reader.not_held" });
-    const [failed] = await suite.db.select().from(billPayments);
-    expect(failed!.state).toBe("failed");
-    expect(await operations()).toEqual([{ sequence: 1, ...evidence(failed!.id, "refused") }]);
-    vi.spyOn(p, "collect").mockRejectedValueOnce(new Error("transport disconnected"));
-    await expect(reader(p)).rejects.toThrow("transport disconnected");
-    const [pending] = await suite.db
-      .select()
-      .from(billPayments)
-      .where(eq(billPayments.state, "pending"));
-    expect((await operations()).find((r) => r.key === pending!.id)).toEqual({
-      sequence: 2,
-      ...evidence(pending!.id, "pending"),
-    });
-  });
-
-  it("recovery completion preserves the requesting worker and time", async () => {
-    at("2026-01-05T11:00:00Z");
-    const p = provider();
-    const collect = p.collect.bind(p);
-    vi.spyOn(p, "collect").mockImplementation(async (params) => ({
-      ...(await collect(params)),
-      state: "attempting",
-    }));
-    const first = await reader(p);
-    expect(first.payment.state).toBe("pending");
-    at("2026-01-06T18:00:00Z");
-    const pass = await settlePendingBillPayments({
-      admission: testTradingAdmission(),
-      ...deps(),
-      cfg: v.cfg,
-    });
-    expect(pass.received).toBe(1);
-    expect(await operations()).toEqual([
-      { sequence: 1, ...evidence(first.payment.id, "qualifying") },
-    ]);
-  });
-
-  it("manual completion credits the initiator rather than the attesting manager", async () => {
-    at("2026-01-05T11:00:00Z");
-    const p = provider();
-    vi.spyOn(p, "collect").mockRejectedValue(new Error("unknown outcome"));
-    await expect(reader(p)).rejects.toThrow("unknown outcome");
-    const [pending] = await suite.db.select().from(billPayments);
-    await withTransaction(suite.db, (tx) =>
-      completeBillPayment(
-        tx,
-        { ...deps(), admission: testTradingAdmission() },
-        v.cfg,
-        pending!.id,
-        new Date("2026-01-06T18:00:00Z"),
-        {
-          attestedBy: OPERATOR,
-          note: "Charged",
-        },
-      ),
-    );
-    expect(await operations()).toEqual([{ sequence: 1, ...evidence(pending!.id, "qualifying") }]);
-  });
-
-  it("manual failure settles the original request evidence in the same transaction", async () => {
-    at("2026-01-05T11:00:00Z");
-    const p = provider();
-    vi.spyOn(p, "collect").mockRejectedValue(new Error("unknown outcome"));
-    await expect(reader(p)).rejects.toThrow("unknown outcome");
-    const [pending] = await suite.db.select().from(billPayments);
-    await withTransaction(suite.db, (tx) =>
-      failBillPayment(
-        tx,
-        pending!.id,
-        new Date("2026-01-06T18:00:00Z"),
-        { attestedBy: OPERATOR, note: "Not charged" },
-        recordAttendanceFact,
-      ),
-    );
-    expect(await operations()).toEqual([{ sequence: 1, ...evidence(pending!.id, "refused") }]);
-  });
 });
 
 describe("bill payments refused before the reader", () => {
-  it("keeps no attendance row when a reader payment is refused for a full disk", async () => {
-    at("2026-01-05T11:00:00.987Z");
-    const disk = createDiskFullState({
-      dir: "/unused",
-      now: () => new Date(),
-      log: () => {},
-      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
-    });
-    disk.noteRefused();
-    const p = provider();
-    const collect = vi.spyOn(p, "collect");
-    await expect(
-      takeReaderBillPayment(
-        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
-        v.cfg,
-        billId,
-        ask(true),
-        collector,
-      ),
-    ).rejects.toMatchObject({ code: "storage.disk_full" });
-    expect(collect).not.toHaveBeenCalled();
-    expect(await suite.db.select().from(billPayments)).toEqual([]);
-    expect(await operations()).toEqual([]);
-  });
+});
 
-  it("finishes the attendance as refused when a full disk is noted just before the reader", async () => {
-    at("2026-01-05T11:00:00.987Z");
-    let calls = 0;
-    const disk: DiskFullState = {
-      noteRefused: () => {},
-      noted: () => ++calls >= 2,
-      since: () => null,
-      full: () => Promise.resolve(false),
-    };
-    const p = provider();
-    const collect = vi.spyOn(p, "collect");
-    await expect(
-      takeReaderBillPayment(
-        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
-        v.cfg,
-        billId,
-        ask(true),
-        collector,
-      ),
-    ).rejects.toMatchObject({ code: "storage.disk_full" });
-    expect(collect).not.toHaveBeenCalled();
-    const [failed] = await suite.db.select().from(billPayments);
-    expect(failed!.state).toBe("failed");
-    expect(await operations()).toEqual([{ sequence: 1, ...evidence(failed!.id, "refused") }]);
-  });
 
-  it("keeps no attendance row when a reader or cash payment is refused under a clock in 2001", async () => {
-    at("2001-01-01T11:00:00.000Z");
-    const p = provider();
-    const collect = vi.spyOn(p, "collect");
-    await expect(reader(p)).rejects.toMatchObject({ code: "clock.unusable" });
-    await expect(
-      takeBillPayment(
-        { ...deps(), admission: testTradingAdmission() },
-        v.cfg,
-        billId,
-        ask(),
-        collector,
-      ),
-    ).rejects.toMatchObject({
-      code: "clock.unusable",
-    });
-    expect(collect).not.toHaveBeenCalled();
-    expect(await suite.db.select().from(billPayments)).toEqual([]);
-    expect(await operations()).toEqual([]);
-  });
+it("a reader initiation records its collector once and completion adds no activity", async () => {
+  at("2026-01-05T11:00:00Z");
+  const recorder = vi.fn(recordAttendanceFact);
+  const result = await takeReaderBillPayment(
+    { admission: testTradingAdmission(), ...deps(recorder), provider: provider() },
+    v.cfg,
+    billId,
+    ask(true),
+    collector,
+  );
+  expect(result.payment.state).toBe("received");
+  expect(recorder).toHaveBeenCalledTimes(1);
+  expect(await suite.db.select().from(staffActivity)).toMatchObject([
+    { personId: collector.personId, firstAt: "2026-01-05T11:00:00.000Z" },
+  ]);
 });

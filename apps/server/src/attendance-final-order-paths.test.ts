@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -67,7 +67,7 @@ async function state() {
     tickets: await suite.db.select().from(ticketItems),
     prints: await suite.db.select().from(printJobs),
     departures: await suite.db.select().from(unpaidDepartures),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -112,17 +112,11 @@ describe("remaining accepted order attendance", () => {
           json: { state: "closed", departures: [{ workingOrderId: p.tabId, amount: "12.00" }] },
         });
         const saved = await state();
-        expect(saved.facts).toEqual([
-          expect.objectContaining({
-            source: "order",
-            personId: v.operatorId,
-            at: "2026-01-05T16:40:00.000Z",
-            outcome: "qualifying",
-          }),
-        ]);
+        expect(saved.facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
         expect(saved.amendments).toEqual(before.amendments);
         expect(saved.departures[0]!.recordedBy).toBe(v.operatorId);
       }
     },
   );
 });
+

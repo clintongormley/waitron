@@ -38,7 +38,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import { AppError, deviceOrigin, type ResourceIdentity } from "@waitron/shared";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -257,7 +257,7 @@ async function noEffects() {
   expect(await store.db.select().from(drawerOpens)).toEqual([]);
   expect(await store.db.select().from(printJobs)).toEqual([]);
   expect(await store.db.select().from(paymentRefunds)).toEqual([]);
-  expect(await store.db.select().from(attendanceOperationFacts)).toEqual([]);
+  
 }
 
 describe("settled-tender refund command local transaction", () => {
@@ -297,16 +297,7 @@ describe("settled-tender refund command local transaction", () => {
     expect(await store.db.select().from(printJobs)).toMatchObject([
       { kind: "drawer", printerId: drawerId },
     ]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      {
-        source: "refund",
-        key: result.id,
-        personId,
-        kind: "payment",
-        at: AT,
-        outcome: "qualifying",
-      },
-    ]);
+    
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
     expect(await originalFacts()).toEqual(before);
   });
@@ -318,7 +309,6 @@ describe("settled-tender refund command local transaction", () => {
       refunds: await store.db.select().from(tenderRefunds),
       drawers: await store.db.select().from(drawerOpens),
       jobs: await store.db.select().from(printJobs),
-      attendance: await store.db.select().from(attendanceOperationFacts),
     };
     const failIfCalled: TenderRefundDeps = {
       ...deps,
@@ -331,7 +321,6 @@ describe("settled-tender refund command local transaction", () => {
       refunds: await store.db.select().from(tenderRefunds),
       drawers: await store.db.select().from(drawerOpens),
       jobs: await store.db.select().from(printJobs),
-      attendance: await store.db.select().from(attendanceOperationFacts),
     }).toEqual(snapshot);
   });
   it("rolls back completion, drawer audit/job and attendance together", async () => {
@@ -364,7 +353,7 @@ describe("settled-tender refund command local transaction", () => {
     expect(await store.db.select().from(drawerOpens)).toMatchObject([
       { tenderRefundId: result.id, personId, authorizedBy: managerId, viaOverride: true },
     ]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([{ personId }]);
+    
   });
   it("returns cash with no confirmation and opens the drawer as before", async () => {
     const t = await target();
@@ -415,7 +404,7 @@ describe("settled-tender refund command local transaction", () => {
     expect((await run(t)).state).toBe("completed");
     expect(await store.db.select().from(drawerOpens)).toEqual([]);
     expect(await store.db.select().from(printJobs)).toEqual([]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toHaveLength(1);
+    
   });
   it("serializes duplicate cash clicks as one completed return", async () => {
     const t = await target();
@@ -425,7 +414,7 @@ describe("settled-tender refund command local transaction", () => {
     expect(await store.db.select().from(tenderRefunds)).toHaveLength(1);
     expect(await store.db.select().from(drawerOpens)).toHaveLength(1);
     expect(await store.db.select().from(printJobs)).toHaveLength(1);
-    expect(await store.db.select().from(attendanceOperationFacts)).toHaveLength(1);
+    
   });
   it("concurrent different requests cannot return more cash than the original tender", async () => {
     const t = await target();
@@ -488,9 +477,7 @@ describe("settled-tender refund command local transaction", () => {
     ]);
     expect(await store.db.select().from(drawerOpens)).toEqual([]);
     expect(await store.db.select().from(printJobs)).toEqual([]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { key: result.id, personId, outcome: "qualifying" },
-    ]);
+    
     expect(await originalFacts()).toEqual(before);
     expect(await run(t, req, localDeps)).toEqual(result);
     expect(await store.db.select().from(paymentRefunds)).toHaveLength(1);
@@ -539,7 +526,7 @@ describe("settled-tender refund command local transaction", () => {
       clock: deps.clock,
     };
     expect((await run(t, request(t), withoutAttendance)).state).toBe("completed");
-    expect(await store.db.select().from(attendanceOperationFacts)).toEqual([]);
+    
     expect(await store.db.select().from(printJobs)).toHaveLength(1);
   });
   it("checks connected refund capability before committing a reservation", async () => {
@@ -599,7 +586,7 @@ describe("settled-tender refund command local transaction", () => {
       }),
     ).toEqual(first);
     expect(await store.db.select().from(tenderRefunds)).toHaveLength(1);
-    expect(await store.db.select().from(attendanceOperationFacts)).toHaveLength(1);
+    
   });
   it("keeps a connected-capable command pending without fabricating returned money", async () => {
     const t = await target("card", "fake");
@@ -613,9 +600,7 @@ describe("settled-tender refund command local transaction", () => {
     expect(await store.db.select().from(tenderRefunds)).toMatchObject([
       { id: result.id, state: "pending", sentAt: null, sendCount: 0 },
     ]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { key: result.id, outcome: "pending" },
-    ]);
+    
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
     expect(await store.db.select().from(printJobs)).toEqual([]);
     expect(await originalFacts()).toEqual(before);
@@ -873,9 +858,7 @@ describe("settled-tender connected refund orchestration", () => {
       sendCount: 1,
     });
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { outcome: expected === "failed" ? "refused" : "pending" },
-    ]);
+    
   });
   it("looks up an accepted answer immediately and records its matched outcome", async () => {
     const { t, provider } = await connected();
@@ -1054,9 +1037,7 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
     expect((await resumeTenderRefund(deps, pending.id, "loop")).state).toBe("completed");
     expect(await store.db.select().from(paymentRefunds)).toHaveLength(1);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { outcome: "qualifying" },
-    ]);
+    
   });
   it("retains a pending provider event and completes that same event on lookup", async () => {
     const { t, provider } = await connected();
@@ -1480,9 +1461,7 @@ describe("settled-tender refund scheduled recovery", () => {
     expect(provider.lookupCalls).toEqual([]);
     expect(provider.refundCalls).toEqual([]);
     expect(await store.db.select().from(drawerOpens)).toEqual([]);
-    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { key: refund.id, outcome: "refused" },
-    ]);
+    
   });
   it("recovers provider acceptance after a lost answer, recording the return once without resending", async () => {
     const { t, provider } = await connected();

@@ -100,12 +100,6 @@ export async function processAttendanceDay(
     .where(eq(attendanceDayWork.businessDay, day.businessDay));
   if (!work || work.startAt !== startAt || work.endAt !== endAt)
     throw invalid("saved attendance day mismatch");
-  const facts = input.facts
-    .map((f) => ({
-      ...f,
-      at: recordInstant(f.at, f.offsetMinutes, "attendance"),
-    }))
-    .filter((f) => f.at >= startAt && f.at < endAt);
   const planned = input.planned
     .filter((p) => instant(p.startsAt) >= instant(startAt) && instant(p.startsAt) < instant(endAt))
     .sort(
@@ -113,6 +107,18 @@ export async function processAttendanceDay(
         instant(a.startsAt) - instant(b.startsAt) ||
         instant(a.endsAt) - instant(b.endsAt) ||
         a.id.localeCompare(b.id),
+    );
+  const facts = input.facts
+    .map((f) => ({ ...f, at: recordInstant(f.at, f.offsetMinutes, "attendance") }))
+    .filter(
+      (f) =>
+        (f.at >= startAt && f.at < endAt) ||
+        planned.some(
+          (p) =>
+            p.personId === f.personId &&
+            instant(f.at) >= instant(p.startsAt) &&
+            instant(f.at) < instant(p.endsAt),
+        ),
     );
   const subjects = await tx
     .selectDistinct({ personId: timeEntries.personId })
@@ -200,15 +206,39 @@ export async function processAttendanceDay(
     const intervals = intervalsFor(entries);
     const ownFacts = facts.filter((f) => f.personId === personId);
     const covered = new Set<AttendanceFact>();
-    const matched = new Set<Interval>();
+    const ownPlans = planned.filter((p) => p.personId === personId);
+    const matches = new Map<string, Interval>();
+    for (const p of ownPlans) {
+      const match = intervals.find(
+        (i) =>
+          ![...matches.values()].includes(i) &&
+          instant(i.effectiveStart.eventAt) < instant(p.endsAt) &&
+          instant(i.effectiveEnd?.eventAt ?? p.endsAt) > instant(p.startsAt),
+      );
+      if (match) matches.set(p.id, match);
+    }
     for (const interval of intervals) {
       const { start, next } = interval;
+      const plan = ownPlans.find((p) => matches.get(p.id) === interval);
+      if (plan && now.getTime() < instant(plan.endsAt)) {
+        for (const fact of ownFacts)
+          if (instant(fact.at) >= instant(start.eventAt) && instant(fact.at) < instant(plan.endsAt))
+            covered.add(fact);
+        deferred.push({ id: plan.id, at: new Date(plan.endsAt).toISOString() });
+        continue;
+      }
       const automatic = next?.entryKind === "out" && next.extension?.authorKind === "automatic";
+      const dayLimit = plan && instant(plan.endsAt) > instant(endAt) ? plan.endsAt : endAt;
+      const laterPlan = plan && ownPlans.find((p) => instant(p.startsAt) > instant(plan.startsAt));
       // Later evidence can extend this day's question, but later days remain separate gaps.
-      const limit =
+      const clockLimit =
         automatic && start.eventAt >= startAt && start.eventAt < endAt
-          ? (intervals.find((i) => compareEvents(i.start, next) > 0)?.start.eventAt ?? endAt)
-          : (next?.eventAt ?? endAt);
+          ? (intervals.find((i) => compareEvents(i.start, next) > 0)?.start.eventAt ?? dayLimit)
+          : (next?.eventAt ?? dayLimit);
+      const limit =
+        laterPlan && instant(laterPlan.startsAt) < instant(clockLimit)
+          ? laterPlan.startsAt
+          : clockLimit;
       const intervalFacts = ownFacts.filter(
         (f) => instant(f.at) >= instant(start.eventAt) && instant(f.at) < instant(limit),
       );
@@ -249,7 +279,7 @@ export async function processAttendanceDay(
           (e) =>
             (e.entryKind === "break_start" || e.entryKind === "break_end") &&
             compareEvents(e, start) > 0 &&
-            e.eventAt < endAt &&
+            instant(e.eventAt) < instant(limit) &&
             (next === undefined || compareEvents(e, next) < 0),
         )
         .map((e) => ({
@@ -301,17 +331,9 @@ export async function processAttendanceDay(
       }
       await addQuestion(personId, key, eligible, start.entryId, end);
     }
-    for (const p of planned.filter((p) => p.personId === personId)) {
-      const match = intervals
-        .filter(
-          (i) =>
-            !matched.has(i) &&
-            instant(i.effectiveStart.eventAt) < instant(p.endsAt) &&
-            instant(i.effectiveEnd?.eventAt ?? endAt) > instant(p.startsAt),
-        )
-        .sort((a, b) => compareEvents(a.effectiveStart, b.effectiveStart))[0];
+    for (const p of ownPlans) {
+      const match = matches.get(p.id);
       if (match) {
-        matched.add(match);
         const [rotaQuestion] = await tx
           .select()
           .from(attendanceQuestions)
