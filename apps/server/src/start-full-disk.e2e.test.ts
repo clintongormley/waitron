@@ -1385,7 +1385,7 @@ describe("a start on a real full disk", () => {
     }
   });
 
-  it.each(["image", "source"] as const)(
+  it.for(["image", "source"] as const)(
     "warns on the %s connection page when the real disk remains full, then rereads freed space",
     async (mode, ctx) => {
       const small = needDisk(ctx);

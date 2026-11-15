@@ -400,7 +400,7 @@ it.each(["en", "es"] as const)(
     let bytes: number | null = 500_000;
     let fail = false;
     const f = await fixture(false, undefined, async () => {
-      if (fail) throw new Error("Space cannot be read");
+      if (fail) throw Object.assign(new Error("Space cannot be read"), { code: "EIO" });
       return bytes;
     });
     const page = async () =>
@@ -425,26 +425,38 @@ it.each(["en", "es"] as const)(
     expect(await page()).not.toContain("data-storage-warning");
     bytes = null;
     expect(await page()).not.toContain("data-storage-warning");
+    expect(f.log).toHaveBeenLastCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
     fail = true;
     expect(await page()).not.toContain("data-storage-warning");
     expect(f.log).toHaveBeenCalledTimes(2);
     expect(f.log).toHaveBeenLastCalledWith("warn", "recovery.free_space_unreadable", {
-      errno: null,
+      errno: "EIO",
     });
   },
 );
 
-it.each(["healthy", "operator", "elsewhere"] as const)(
-  "names only an available next step in the %s connection-space warning",
-  async (state) => {
+it.each([
+  ["healthy", "en"],
+  ["operator", "en"],
+  ["elsewhere", "en"],
+  ["healthy", "es"],
+  ["operator", "es"],
+  ["elsewhere", "es"],
+] as const)(
+  "names only an available next step in the %s connection-space warning (%s)",
+  async (state, lang) => {
     const f = await fixture(
       state === "healthy",
       state === "operator" ? false : state === "elsewhere" ? () => false : undefined,
       async () => 1000,
     );
-    const html = await (await f.app.request("http://waitron.local:8080/")).text();
+    const html = await (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
     const warning = html.match(/<section data-storage-warning[^>]*>(.*?)<\/section>/s)?.[1];
-    expect(warning).toContain("choose Check again.");
-    expect(warning).not.toContain("then set up the secure connection");
+    expect(warning).toContain(lang === "en" ? "choose Check again." : "elige Comprobar de nuevo.");
+    expect(warning).not.toContain(
+      lang === "en" ? "then set up the secure connection" : "y configura la conexión segura",
+    );
   },
 );

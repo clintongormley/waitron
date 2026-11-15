@@ -838,15 +838,21 @@ it.each(["station", "pass", "pass_monitor"] as const)(
       return c.text("ok");
     });
     if (kind === "station") {
-      app.get("/passive", async (c) => {
-        await requireDeviceProof({ db: suite.db }, c, { passive: true });
-        return c.text("ok");
-      });
-      expect(
-        (await app.request("/passive", { headers: { cookie: `waitron_device=${id}.${token}` } }))
-          .status,
-      ).toBe(200);
-      expect(await dark(at)).toHaveLength(1);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(at);
+      try {
+        app.get("/passive", async (c) => {
+          await requireDeviceProof({ db: suite.db }, c, { passive: true });
+          return c.text("ok");
+        });
+        expect(
+          (await app.request("/passive", { headers: { cookie: `waitron_device=${id}.${token}` } }))
+            .status,
+        ).toBe(200);
+        expect(await dark(at)).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
     }
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
