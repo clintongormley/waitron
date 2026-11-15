@@ -6743,7 +6743,8 @@ it("transfers how each department sells and how its till-choice orders start", a
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  const imported = await targetSuite.db.execute(sql`select name, dining, dining_starts_as from departments
+  const imported = await targetSuite.db
+    .execute(sql`select name, dining, dining_starts_as from departments
     where name in ('Choosing department', 'Takeaway department') order by name`);
   expect(imported.rows).toEqual([
     { name: "Choosing department", dining: "till_choice", dining_starts_as: "takeaway" },

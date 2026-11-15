@@ -5175,7 +5175,7 @@ You choose how orders start separately from when a counter order is paid.
 `departments.order_start` holds `table` or `counter`;
 `floor_zones.order_start` is nullable, with null following the department.
 The same zone-first resolution applies to paid-when and collection tickets.
-`department_sale_policies.dining` holds `eat_in`, `takeaway` or `till_choice`, and `dining_starts_as`
+`departments.dining` holds `eat_in`, `takeaway` or `till_choice`, and `dining_starts_as`
 the way a till-choice counter order starts; zones have no override. A new order records its way in
 `working_orders.dining` (`resolveOrderDining`, `packages/venue-service/src/dining.ts`).
 The receipt-print field and its controls are retired.

@@ -1239,6 +1239,8 @@ for (const locale of ["en", "es"] as const) {
             paid_when: "paid_when",
             collection_number: "collection_number",
             print_trading_name: "print_trading_name",
+            dining: "dining",
+            dining_starts_as: "dining_starts_as",
           },
         },
         {
@@ -1337,7 +1339,7 @@ for (const locale of ["en", "es"] as const) {
         },
       ]);
       const department = expected[phase].tables.departments!;
-      const policyColumns = department.columns.splice(-5);
+      const policyColumns = department.columns.splice(-7);
       department.columns.splice(
         department.columns.findIndex((column) => column.name === "release_reminder_minutes"),
         0,

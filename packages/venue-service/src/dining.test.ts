@@ -178,7 +178,7 @@ describe("resolveOrderDining", () => {
     expect(await resolve(zoneId, "takeaway")).toBe("takeaway");
   });
 
-  it("sells eaten here in a department that has no sale policy row", async () => {
+  it("sells eaten here in a department stored with its column defaults", async () => {
     await venueIn("ES", "ES-common");
     const [department] = await db
       .insert(departments)

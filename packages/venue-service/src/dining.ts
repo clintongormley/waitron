@@ -50,14 +50,11 @@ export async function findOrdersWithDiningChoice(
   const rows = await tx
     .select({ id: orderServiceContexts.workingOrderId })
     .from(orderServiceContexts)
-    .innerJoin(
-      departmentSalePolicies,
-      eq(departmentSalePolicies.departmentId, orderServiceContexts.departmentId),
-    )
+    .innerJoin(departments, eq(departments.id, orderServiceContexts.departmentId))
     .where(
       and(
         inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]),
-        eq(departmentSalePolicies.dining, "till_choice"),
+        eq(departments.dining, "till_choice"),
       ),
     );
   return new Set(rows.map((row) => row.id));
@@ -117,11 +114,10 @@ export async function applyDepartmentDining(
     .where(eq(workingOrders.id, workingOrderId));
   if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
   if (order.dining === "takeaway" && to.serviceMode === "table_tab") return;
-  // No row (seedZone's test departments): eaten here, as `resolveOrderDining` reads it.
   const [policy] = await tx
-    .select({ dining: departmentSalePolicies.dining })
-    .from(departmentSalePolicies)
-    .where(eq(departmentSalePolicies.departmentId, to.departmentId));
+    .select({ dining: departments.dining })
+    .from(departments)
+    .where(eq(departments.id, to.departmentId));
   const dining = policy?.dining ?? "eat_in";
   if (dining === "till_choice" || dining === order.dining) return;
   if (dining === "takeaway" && (await orderHasSetLunch(tx, workingOrderId)))
