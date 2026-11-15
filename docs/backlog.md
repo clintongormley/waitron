@@ -925,8 +925,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **One rule for a booking when the evening's layout changes** (bundle of 3, 1 important, size M, needs the owner). Holds A474, A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
 
-- **Floor map drag, hidden map, allergy mark** (bundle of 4, size S). [Detail](backlog/till.md#bundle-floor-map-drag-hidden-map-allergy-mark)
-
 - **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
 
 - **Joined-table writers keep their rows right** (bundle of 2, size M, waits for another entry). Holds A592, A594. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
