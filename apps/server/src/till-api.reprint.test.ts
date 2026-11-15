@@ -38,7 +38,7 @@ import type { TradingContext } from "./trading-context.js";
 // is pinned in `kitchen-print.test.ts`.
 const COFFEE = "Cafe con leche";
 let cfg: TradingContext;
-let ana: { id: string };
+let anna: { id: string };
 let stationId: string;
 let coffeeOffer: string;
 
@@ -62,7 +62,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     cfg = makeCfg(nodeId);
 
     // One sellable product no routing cell covers, routed to the default station.
@@ -130,7 +130,7 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,
-      personId: ana.id,
+      personId: anna.id,
       pin: "5555",
     });
   });
