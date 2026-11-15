@@ -377,8 +377,25 @@ export class SetupApi {
   }
 
   /** The main server's own address, from the chart this spare holds; `null` when it names none. */
-  mainServer(): Promise<{ mainUrl: string | null }> {
-    return this.#request("/api/node/main", "GET");
+  async mainServer(signal?: AbortSignal): Promise<{ mainUrl: string | null }> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/api/node/main", {
+      method: "GET",
+      credentials: "include",
+      signal,
+    });
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as { mainUrl: string | null };
+  }
+
+  /** Resolves once the main server answers at all: a `no-cors` answer is opaque, and still an answer. */
+  async probeMain(mainUrl: string, signal: AbortSignal): Promise<void> {
+    const fetchImpl = this.#fetchImpl;
+    await fetchImpl(new URL("/api/node", mainUrl).href, {
+      mode: "no-cors",
+      cache: "no-store",
+      signal,
+    });
   }
 
   previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {

@@ -109,7 +109,7 @@ export const handoverEn = {
     "This step could not finish. Check this copy again before trying to continue.",
   "handover.emergency.main_checking": "Checking whether the main server is answering…",
   "handover.emergency.main_answering":
-    "The main server is still answering. Open it at its own address, or hand over from Servers there.",
+    "The main server is still answering. Open its Servers page to hand over, or switch it off and check again.",
   "handover.emergency.main_check_again": "Check again",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
@@ -225,6 +225,6 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
   "handover.emergency.main_checking": "Comprobando si el servidor principal responde…",
   "handover.emergency.main_answering":
-    "El servidor principal todavía responde. Ábrelo en su propia dirección o haz el traspaso desde Servidores allí.",
+    "El servidor principal todavía responde. Abre su página Servidores para hacer el traspaso, o apágalo y vuelve a comprobarlo.",
   "handover.emergency.main_check_again": "Comprobar otra vez",
 };
