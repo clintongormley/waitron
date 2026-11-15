@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { FilingCaseView } from "./filing-overview-types.js";
-import { descriptionProblem, putRightFor } from "./put-right.js";
+import { descriptionProblem, FULL_INVOICE_REPLACEMENT_ON, putRightFor } from "./put-right.js";
 
 function refused(
   code: number,
@@ -48,11 +48,27 @@ describe("putRightFor, code 1112 (issue date in the future)", () => {
   it("offers the replacement corrective for a simplified invoice", () => {
     expect(putRightFor(refused(1112))).toEqual({ kind: "replacement-invoice" });
   });
-  it.each(["F1", "F3"])("names the full-invoice corrective for %s", (tipoFactura) => {
-    expect(putRightFor(refused(1112, { tipoFactura }))).toEqual({
-      kind: "none",
-      why: "full-invoice",
-    });
+  it("keeps full-invoice replacement switched off by default", () => {
+    expect(FULL_INVOICE_REPLACEMENT_ON).toBe(false);
+  });
+  it.each(["F1", "F3"])(
+    "names the full-invoice corrective for %s while full-invoice replacement is off",
+    (tipoFactura) => {
+      expect(putRightFor(refused(1112, { tipoFactura }))).toEqual({
+        kind: "none",
+        why: "full-invoice",
+      });
+    },
+  );
+  it("offers the replacement corrective for a full invoice once full-invoice replacement is on", () => {
+    expect(
+      putRightFor(refused(1112, { tipoFactura: "F1" }), { fullInvoiceReplacement: true }),
+    ).toEqual({ kind: "replacement-invoice" });
+  });
+  it("offers nothing yet for an exchanged ticket (F3) once full-invoice replacement is on", () => {
+    expect(
+      putRightFor(refused(1112, { tipoFactura: "F3" }), { fullInvoiceReplacement: true }),
+    ).toEqual({ kind: "none", why: "not-yet" });
   });
   it.each(["R1", "R5"])("offers nothing yet for a refused corrective %s", (tipoFactura) => {
     expect(putRightFor(refused(1112, { tipoFactura }))).toEqual({ kind: "none", why: "not-yet" });

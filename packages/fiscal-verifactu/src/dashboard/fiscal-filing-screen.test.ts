@@ -1582,3 +1582,65 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(action(details).disabled).toBe(false);
   });
 });
+
+describe("replacing a full invoice AEAT refused for a future date, with full-invoice replacement on", () => {
+  function fullInvoiceCase(): FilingCaseView {
+    const found = futureCase("2026-11-03");
+    return { ...found, record: { ...found.record, tipoFactura: "F1" } };
+  }
+
+  async function mountFull(request: ReturnType<typeof vi.fn>) {
+    const mounted = await mount(request, continuation(["fiscal.remedy"]).value);
+    mounted.screen.fullInvoiceReplacement = true;
+    return mounted;
+  }
+
+  it("offers Put this right with the full-invoice intro, and sends the record and the day, no customer and no amount", async () => {
+    const request = replacementServer(fullInvoiceCase());
+    const { screen } = await mountFull(request);
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-heading]"))).toBe("Put this right");
+    expect(flat(details.querySelector("[data-test=put-right-intro]"))).toBe(
+      "AEAT refused this full invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective invoice for it, naming the same customer.",
+    );
+    expect(
+      [...details.querySelectorAll("wt-input, wt-textarea, wt-select")].map((el) =>
+        el.getAttribute("name"),
+      ),
+    ).toEqual(["operationDate"]);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    expect(remedyCalls(request)[0]![2]).toEqual({
+      kind: "replacement-invoice",
+      registroId: "rec-1",
+      actionKey: expect.stringMatching(/.+/),
+      reason: expect.stringContaining("1112"),
+      operationDate: "2026-11-02",
+    });
+  });
+
+  it("keeps the simplified invoice's intro for a simplified invoice", async () => {
+    const { screen } = await mountFull(replacementServer(futureCase("2026-11-03")));
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-intro]"))).toBe(
+      "AEAT refused this simplified invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective invoice for it.",
+    );
+  });
+
+  it("says under the actions that the business needs a registered address when the server refuses for it", async () => {
+    const request = replacementServer(fullInvoiceCase(), async () => {
+      throw refusal("fiscal.taxpayer_domicile_missing");
+    });
+    const { screen } = await mountFull(request);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() =>
+      expect(bottomMessage(details)).toBe(
+        "The business has no registered address, which a full invoice must show, so nothing was sent. The invoice was issued with one, so this is a fault in Waitron; the case stays open.",
+      ),
+    );
+    expect(action(details).disabled).toBe(false);
+  });
+});

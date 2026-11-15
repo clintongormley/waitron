@@ -1108,6 +1108,15 @@ worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 _2026-11-14 (owner's answer B, Q37-FIX): the one exception is a replacement corrective (R5 "S") of
 a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
 differs from its own date._
+_2026-11-15 (A1407): an R4 "S" replacing a refused full invoice is the same exception, filing the
+real day as `FechaOperacion` when it differs from its own date; it is built but switched off
+(`FULL_INVOICE_REPLACEMENT_ON`). The owner, 2026-11-15 01:58, relayed by the watcher: "the operation
+date is when the table closes, which normally coincides with the invoice date", and "where an
+invoice is issued days after the meal finished … the operation date and the invoice date should be
+distinct". So a replacement corrective, R4 and R5 alike, is to print a "Date of the sale" row with
+that real day when it differs from its own issue date (Task 3a of the
+[A1407 plan](../superpowers/plans/2026-11-15-a1407-full-invoice-replacement.md)); nothing else
+changes this entry's rule._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
@@ -1138,6 +1147,10 @@ day as its operation date, the printed copy says it replaces the invoice in full
 rectification, and a later refund names the replacement. E: the sale counts in its real day's VAT
 period (owner, 2026-11-14 17:20). The replacement is dated today (watcher, 11:54); the real day is
 asked of the administrator and stored as `sales.supply_day` (watcher, 18:22).
+_2026-11-15 (A1407): a full invoice refused the same way is to be put right by an R4 "S" naming
+the same customer, with the same rectified amounts, real day and VAT period. It is built but
+switched off (`FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts`) until
+adviser question S14 is answered and AEAT's test service has accepted one._
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

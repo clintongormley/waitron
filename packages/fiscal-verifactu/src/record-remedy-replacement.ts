@@ -4,7 +4,7 @@ import { readLiveSeriesIdTx, type Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, isCalendarDate, jobOrigin, localCalendarDate, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
-import type { RemedyPolicy } from "./record-remedy.js";
+import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
 import { only, requestCaseId, text } from "./record-remedy-request.js";
 import { makeVerifactuBackend } from "./slot.js";
 
@@ -18,8 +18,10 @@ function operationDateOf(value: unknown): string {
 }
 
 /**
- * Puts right a simplified invoice AEAT refused for a future issue date (`1112`) with a replacement
- * corrective (R5 "S") carrying the day the sale really happened.
+ * Puts right an invoice AEAT refused for a future issue date (`1112`) with a replacement corrective
+ * carrying the day the sale really happened: an R5 "S" for a simplified invoice (F2), and, only
+ * where the policy carries `FULL_INVOICE_REPLACEMENT`, an R4 "S" naming the same customer for a
+ * full invoice (F1).
  */
 export async function applyReplacementInvoiceRequest(
   tx: Transaction,
@@ -56,7 +58,8 @@ export async function applyReplacementInvoiceRequest(
       admits: ({ filingCase, delivery, target }) =>
         filingCase.cause === "fiscal.registro_rechazado" &&
         delivery.codigoError === "1112" &&
-        target.tipoFactura === "F2",
+        (target.tipoFactura === "F2" ||
+          (target.tipoFactura === "F1" && enabledRemedies.has(FULL_INVOICE_REPLACEMENT))),
       async issue(tx, { correctsSaleId, target, clock }) {
         const now = clock.now();
         // The replacement's own issue day, from the reading that dates it.

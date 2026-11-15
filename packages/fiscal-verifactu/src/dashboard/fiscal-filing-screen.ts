@@ -43,7 +43,12 @@ import type {
   ReplyMismatchView,
   WarnedRecordView,
 } from "../filing-overview-types.js";
-import { descriptionProblem, putRightFor, type PutRight } from "../put-right.js";
+import {
+  descriptionProblem,
+  FULL_INVOICE_REPLACEMENT_ON,
+  putRightFor,
+  type PutRight,
+} from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { calendarDay } from "./dates.js";
 import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
@@ -676,6 +681,8 @@ export class FiscalFilingScreen extends LitElement {
 
   @property({ attribute: false }) client!: FiscalFilingClient;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
+  /** Read when a case opens; tests turn it on before the server's switch is. */
+  fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON;
 
   @state() private overview: FilingOverviewAnswer | null = null;
   @state() private loading = true;
@@ -722,7 +729,9 @@ export class FiscalFilingScreen extends LitElement {
     this.#forget();
     this.caseChanged = false;
     this.viewing = row;
-    const { kind } = (this.#fix = putRightFor(row));
+    const { kind } = (this.#fix = putRightFor(row, {
+      fullInvoiceReplacement: this.fullInvoiceReplacement,
+    }));
     if (kind === "none") return;
     const describes = kind === "record-correction";
     // The day is never prefilled: a refused future date is wrong by definition, and a prefill
@@ -947,7 +956,13 @@ export class FiscalFilingScreen extends LitElement {
       <h3 id="fiscal-filing-put-right" data-test="put-right-heading">
         ${t("fiscal_filing.put_right.replace.heading")}
       </h3>
-      <p>${t("fiscal_filing.put_right.replace.intro")}</p>
+      <p data-test="put-right-intro">
+        ${t(
+          record.tipoFactura === "F1"
+            ? "fiscal_filing.put_right.replace.intro_full"
+            : "fiscal_filing.put_right.replace.intro",
+        )}
+      </p>
       <wt-input
         name="operationDate"
         type="date"

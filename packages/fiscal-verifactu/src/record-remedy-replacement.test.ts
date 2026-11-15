@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { recordCorrection, recordSale } from "@waitron/core";
-import { invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { invoiceSeries, sales, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -23,6 +23,7 @@ import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
 import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
@@ -41,6 +42,13 @@ let instant: Date;
 let confirmed: boolean;
 let rectificativeId: string;
 let body: Record<string, unknown>;
+let enabledRemedies: RemedyPolicy | undefined;
+const FULL_INVOICES_ON: RemedyPolicy = new Set([
+  "record-correction",
+  "replacement-invoice",
+  FULL_INVOICE_REPLACEMENT,
+]);
+const CUSTOMER = { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" };
 
 const backend = () =>
   new VerifactuBackend({
@@ -53,18 +61,35 @@ const backend = () =>
     },
   });
 
-/** A simplified invoice AEAT refused with `codigo`, and its open case. */
+/** A simplified invoice (or, naming `customer`, a full one) AEAT refused with `codigo`, and its open case. */
 async function refusedOriginal(
   at = new Date("2026-03-01T12:05:00Z"),
-  { codigo = "1112", estado = "rechazado" as "rechazado" | "aceptado_con_errores" } = {},
+  {
+    codigo = "1112",
+    estado = "rechazado" as "rechazado" | "aceptado_con_errores",
+    customer = null as typeof CUSTOMER | null,
+  } = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
+    let series = node.seriesId;
+    if (customer !== null) {
+      const [full] = await tx
+        .insert(invoiceSeries)
+        .values({ nodeId: node.nodeId, code: "F", purpose: "full" })
+        .returning({ id: invoiceSeries.id });
+      series = full!.id;
+      await tx.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
+    }
     const original = await recordSale(
       tx,
       backend(),
       saleInput({
         nodeId: node.nodeId,
-        seriesId: seriesId(node.seriesId),
+        seriesId: seriesId(series),
+        ...(customer !== null && {
+          counterparty: customer,
+          recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+        }),
         origin: deviceOrigin(node.deviceId),
         operationDescription: "Food and drink",
         locale: "en",
@@ -107,6 +132,7 @@ beforeEach(async () => {
   node = await seedNode(suite.db);
   instant = TODAY;
   confirmed = true;
+  enabledRemedies = undefined;
   generation = {
     nodeId: node.nodeId,
     environment: "preproduction",
@@ -144,7 +170,12 @@ beforeEach(async () => {
 
 function send(value: unknown = body) {
   const app = new Hono();
-  mountRecordRemedies(app, { db: suite.db, recordGeneration: generation }, () => {});
+  mountRecordRemedies(
+    app,
+    { db: suite.db, recordGeneration: generation },
+    () => {},
+    enabledRemedies,
+  );
   return app.request("/management-api/fiscal-records/remedy", {
     method: "POST",
     headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
@@ -307,7 +338,7 @@ it("refuses a case AEAT accepted with errors", async () => {
   );
 });
 
-it("refuses a full invoice", async () => {
+it("refuses a full invoice while full-invoice replacement is switched off, as it is by default", async () => {
   const id = brandSaleId(crypto.randomUUID());
   const fullInvoice = await withTransaction(suite.db, async (tx) => {
     await tx.insert(sales).values({
@@ -338,7 +369,7 @@ it("refuses a full invoice", async () => {
       descriptionOfOperation: "Food and drink",
       total: decimal("12.10"),
       vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-      counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: CUSTOMER,
     });
     await tx
       .update(envios)
@@ -353,6 +384,131 @@ it("refuses a full invoice", async () => {
     return { registroId: recorded.recordId, caseId: filingCase.id };
   });
   await refuses({ ...body, ...fullInvoice }, "fiscal.remedy_invalid");
+});
+
+it("replaces a full invoice with an R4 'S' naming the same customer, and resolves the case", async () => {
+  enabledRemedies = FULL_INVOICES_ON;
+  const original = await refusedOriginal(undefined, { customer: CUSTOMER });
+  const before = await snapshot();
+  const res = await send({ ...body, caseId: original.caseId, registroId: original.registroId });
+  expect(res.status).toBe(200);
+  const result = (await res.json()) as { saleId: string; registroId: string; eventId: string };
+  const after = await snapshot();
+  const refused = before.records.find((row) => row.id === original.registroId)!;
+  expect(refused.tipoFactura).toBe("F1");
+  expect(refused.destinatarios).not.toBeNull();
+  expect(after.records).toHaveLength(before.records.length + 1);
+  expect(after.records.at(-1)).toMatchObject({
+    id: result.registroId,
+    saleId: result.saleId,
+    tipoFactura: "R4",
+    tipoRectificativa: "S",
+    numSerieFactura: "R/1",
+    fechaExpedicionFactura: "2026-03-01",
+    fechaOperacion: "2026-02-28",
+    importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+    destinatarios: refused.destinatarios,
+    anteriorHuella: before.records.at(-1)!.huella,
+    facturasRectificadas: {
+      IDFacturaRectificada: [
+        {
+          IDEmisorFactura: refused.idEmisorFactura,
+          NumSerieFactura: refused.numSerieFactura,
+          FechaExpedicionFactura: "01-03-2026",
+        },
+      ],
+    },
+  });
+  const rectificative = (rows: typeof before.series) =>
+    rows.find((row) => row.id === rectificativeId)!.nextNumber;
+  expect(rectificative(after.series)).toBe(rectificative(before.series) + 1);
+  expect(after.sales.find((row) => row.id === result.saleId)).toMatchObject({
+    correctsSaleId: original.saleId,
+    replacesOriginal: true,
+    supplyDay: "2026-02-28",
+    counterpartyTaxId: CUSTOMER.taxId,
+  });
+  expect(after.events).toMatchObject([
+    {
+      id: result.eventId,
+      caseId: original.caseId,
+      kind: "resolved",
+      remedyRegistroId: result.registroId,
+    },
+  ]);
+  expect((await withTransaction(suite.db, (tx) => verifyChain(tx, node.nodeId))).issues).toEqual(
+    [],
+  );
+});
+
+it("refuses a full invoice when the business has no registered address, using no number", async () => {
+  enabledRemedies = FULL_INVOICES_ON;
+  const original = await refusedOriginal(undefined, { customer: CUSTOMER });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
+  await refuses(
+    { ...body, caseId: original.caseId, registroId: original.registroId },
+    "fiscal.taxpayer_domicile_missing",
+    409,
+  );
+});
+
+it("refuses an exchanged ticket (F3) with full-invoice replacement switched on", async () => {
+  enabledRemedies = FULL_INVOICES_ON;
+  const ticket = await refusedOriginal(undefined, { codigo: "1100" });
+  const id = brandSaleId(crypto.randomUUID());
+  const exchanged = await withTransaction(suite.db, async (tx) => {
+    await tx.insert(sales).values({
+      id,
+      source: "device",
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
+      seriesId: node.seriesId,
+      invoiceNumber: 501,
+      issuedAt: "2026-03-01T12:06:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: 1210,
+      vatBreakdown: [],
+      locale: "en",
+      invoiceLocales: ["en"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+    });
+    const recorded = await backend().recordSubstitution(
+      tx,
+      {
+        origin: deviceOrigin(node.deviceId),
+        nodeId: node.nodeId,
+        saleId: id,
+        seriesId: seriesId(node.seriesId),
+        seriesCode: "GA",
+        invoiceNumber: 501,
+        issuedAt: new Date("2026-03-01T12:06:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Food and drink",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty: CUSTOMER,
+      },
+      { substitutedSaleIds: [ticket.saleId] },
+    );
+    await tx
+      .update(envios)
+      .set({ estado: "rechazado", codigoError: "1112" })
+      .where(eq(envios.registroId, recorded.recordId));
+    const filingCase = await openFilingCase(tx, {
+      registroId: recorded.recordId,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1112, mensaje: null, csv: null },
+      now: TODAY,
+    });
+    return { registroId: recorded.recordId, caseId: filingCase.id };
+  });
+  const [record] = await suite.db
+    .select({ tipoFactura: registrosFacturacion.tipoFactura })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, exchanged.registroId));
+  expect(record).toEqual({ tipoFactura: "F3" });
+  await refuses({ ...body, ...exchanged }, "fiscal.remedy_invalid");
 });
 
 it("refuses while the start's time check holds", async () => {
