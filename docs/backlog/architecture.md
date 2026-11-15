@@ -986,14 +986,9 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
-- **A negative menu price can still be stored by a direct call** — OPEN (left by #487).
-  [Detail](menu.md#a-negative-menu-price-can-still-be-stored-by-a-direct-call)
 - **Loose ends left by A322 (#1372, an included menu can show its sections directly).** A folder's
   fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
   [Detail](menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
-- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
-  and only the editor's parser refuses a blank (`packages/db/drizzle/0000_baseline.sql`). **Next
-  action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
   record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
@@ -1024,13 +1019,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 
 These entries stay open until the A1308 or A760 slice that removes the need for them lands (backlog review, 2026-11-06). The slice that does so deletes them here. If a slice changes course, its entry goes back to the index.
 
-- **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
-  `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
-  repeats. A668-1's Claude probe recorded that result. A1308's one allergen column normalises them
-  on write. Decide whether direct declarations should be refused instead, then check product requests
-  with repeated kinds.
-- **Menu names (W72): there is no unique index, and no backfill.**
-  [Detail](menu.md#menu-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
   edit puts one there (the writers read, not run). Two such boxes pass and can differ in a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain

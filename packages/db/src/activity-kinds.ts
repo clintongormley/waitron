@@ -10,6 +10,7 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  readonly "product.archived": { readonly name: string; readonly variantIds: readonly string[] };
   readonly "credentials.saved": { readonly keyVersion: number };
   readonly "credentials.removed": { readonly keyVersion: number };
   /** The taxpayer-name exception in slice 2 registry rule 1. */
@@ -104,6 +105,7 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "product.archived": { subject: "product" },
   "credentials.saved": { subject: "credential" },
   "credentials.removed": { subject: "credential" },
   "taxpayer.legal_name_changed": { subject: "taxpayer" },

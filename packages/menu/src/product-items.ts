@@ -138,6 +138,7 @@ export async function deleteProductItems(
   selection: ProductSelection,
   contents: FolderContents,
   shown?: readonly ShownFolderCounts[],
+  personId: string | null = null,
 ): Promise<void> {
   const tree = await readTree(tx, selection);
   if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
@@ -152,7 +153,7 @@ export async function deleteProductItems(
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct)))
         reached.push(row.id);
-  await archiveProducts(tx, reached);
+  await archiveProducts(tx, reached, personId);
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));

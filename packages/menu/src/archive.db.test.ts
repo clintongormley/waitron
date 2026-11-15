@@ -1,5 +1,7 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import {
+  readActivityForSubject,
   categories,
   extraListItems,
   extraLists,
@@ -736,4 +738,50 @@ it("lets an active variant reuse an archived variant's staff name while preservi
       ),
     ),
   ).rejects.toMatchObject({ code: "product.name_taken" });
+});
+
+describe("product archive history", () => {
+  it.each(["person-1", null])(
+    "records an archived product with its variants and person %s",
+    async (personId) => {
+      const f = await menusFixture(fx.db);
+      if (personId !== null)
+        await seedPerson(fx.db, { id: personId, displayName: "Archive manager" });
+      await app(async (tx) => {
+        const existing = await listProductVariants(tx, f.lemonade);
+        await setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            ...existing,
+            {
+              name: "Small",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        );
+      });
+      const variants = (await app((tx) => listProductVariants(tx, f.lemonade)))
+        .filter((v) => v.active)
+        .map((v) => v.id)
+        .sort();
+      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      const entries = await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        kind: "product.archived",
+        personId,
+        data: { name: "Lemonade", variantIds: variants },
+      });
+      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      expect(await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade })).toEqual(
+        entries,
+      );
+    },
+  );
 });

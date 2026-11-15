@@ -53,9 +53,8 @@ const PARENT_ALLERGENS = { sulphites: {} };
 // 175 ml's own value for every inherited field, each different from the parent's, so a read that
 // takes the parent's where the variant has its own fails.
 const W175_PUBLISHED_ALLERGENS = { milk: {} };
-const W175_MANUAL_ALLERGENS = { eggs: {} };
 const W175_DIET_OVERRIDE = { vegetarian: "yes" as const };
-const W175_DIET = { vegan: "no" as const, vegetarian: "yes" as const, contains: ["dairy"] };
+const W175_DIET = { vegan: "unknown" as const, vegetarian: "yes" as const, contains: [] };
 
 interface Fixture {
   menuId: string;
@@ -158,9 +157,7 @@ beforeEach(async () => {
         image: libraryImageName("large.jpg"),
         courseId: ownCourse!.id,
         allergens: W175_PUBLISHED_ALLERGENS,
-        manualAllergens: W175_MANUAL_ALLERGENS,
         dietOverride: W175_DIET_OVERRIDE,
-        diet: W175_DIET,
         color: "#b12525",
         variantOrder: 1,
       })
@@ -537,7 +534,7 @@ describe("readProductEditor", () => {
       unitId: null,
       primaryCategoryId: null,
       courseId: f.ownCourseId,
-      allergens: W175_MANUAL_ALLERGENS,
+      allergens: W175_PUBLISHED_ALLERGENS,
       dietaryDeclarations: ["vegetarian"],
       inherited: parentValues(),
     });
@@ -798,11 +795,9 @@ describe("INHERITED_KEYS", () => {
         "color",
         "courseId",
         "description",
-        "diet",
         "dietOverride",
         "dietaryDeclarations",
         "image",
-        "manualAllergens",
         "unitPrice",
         "vatClass",
         "takeawayVatClass",

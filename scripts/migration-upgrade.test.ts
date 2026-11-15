@@ -585,8 +585,6 @@ const PRODUCT_TRIGGERS = [
   "products_variant_one_level_insert",
   "products_variant_parent_fixed_update",
   "products_id_fixed_update",
-  "products_ordering_check_insert",
-  "products_ordering_check_update",
   "products_media_image_fk_insert",
   "products_media_image_fk_update",
   "products_media_image_fk_parent_delete",

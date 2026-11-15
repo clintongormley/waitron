@@ -989,3 +989,12 @@ it.each([
     expect(opaque).not.toContain(orders);
   },
 );
+
+it("explains an invalid contains tag in both languages", () => {
+  expect(codeMessage("diet.invalid_contains_tag", "en")).toBe(
+    "Choose a valid dietary contains tag",
+  );
+  expect(codeMessage("diet.invalid_contains_tag", "es")).toBe(
+    "Elige una etiqueta dietética válida",
+  );
+});

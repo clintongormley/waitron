@@ -36,7 +36,7 @@ const columns = {
   available: products.available,
   vatClass: products.vatClass,
   takeawayVatClass: products.takeawayVatClass,
-  allergens: products.manualAllergens,
+  allergens: products.allergens,
   dietaryDeclarations: products.dietaryDeclarations,
   courseId: products.courseId,
   unitId: products.unitId,
@@ -45,12 +45,9 @@ const columns = {
 };
 
 async function readStored(tx: Transaction, productId: string) {
-  const [row] = await tx
-    .select({ ...columns, publishedAllergens: products.allergens })
-    .from(products)
-    .where(eq(products.id, productId));
+  const [row] = await tx.select(columns).from(products).where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
-  const { publishedAllergens, ...stored } = row;
+  const stored = row;
   return {
     stored: {
       ...stored,
@@ -62,14 +59,13 @@ async function readStored(tx: Transaction, productId: string) {
           ? null
           : validateDietaryDeclarations(stored.dietaryDeclarations),
     },
-    publishedAllergens,
   };
 }
 
 /** A parent has no parent of its own, so `products_top_level_owns_ck` sets its price, VAT class
  * and dietary declarations. */
 async function readInherited(tx: Transaction, parentId: string): Promise<InheritedValues> {
-  const { stored: parent, publishedAllergens } = await readStored(tx, parentId);
+  const { stored: parent } = await readStored(tx, parentId);
   return {
     name: parent.name,
     description: parent.description,
@@ -80,7 +76,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     unitId: parent.unitId,
     primaryCategoryId: parent.primaryCategoryId,
     courseId: parent.courseId,
-    allergens: publishedAllergens,
+    allergens: parent.allergens,
     dietaryDeclarations: parent.dietaryDeclarations!,
   };
 }
@@ -119,6 +115,7 @@ export async function saveProductEditor(
   productId: string | null,
   input: unknown,
   fallbackLanguage: string,
+  personId: string | null = null,
 ): Promise<ProductEditorValue> {
   // An update reads the stored row first, because whether the body may leave inherited fields
   // blank depends on it; a create has no stored row and parses first.
@@ -138,7 +135,7 @@ export async function saveProductEditor(
     throw new AppError("product.invalid", { field: "parentId" });
   // Archiving preserves the stored details, rather than rewriting the editor's draft.
   if (productId !== null && !value.active) {
-    await archiveProducts(tx, [productId]);
+    await archiveProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
   const config = await readContentLanguages(tx, fallbackLanguage);

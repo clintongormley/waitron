@@ -372,7 +372,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_code": 400,
   "allergen.kinds_required": 400,
   "allergen.invalid_kind": 400,
-  "diet.invalid_origin": 400,
+  "diet.invalid_contains_tag": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
   "options.invalid": 400,
@@ -1330,7 +1330,9 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const shown = selection.categoryIds.length
         ? shownBody(body.shown, selection.categoryIds)
         : undefined;
-      await gated(c, session, (tx) => deleteProductItems(tx, selection, contents, shown));
+      await gated(c, session, (tx, personId) =>
+        deleteProductItems(tx, selection, contents, shown, personId),
+      );
       return c.body(null, 204);
     }),
   );
@@ -1375,12 +1377,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
-      const saved = await gated(c, sessionId, async (tx) => {
+      const saved = await gated(c, sessionId, async (tx, personId) => {
         const product = await saveProductEditor(
           tx,
           null,
           body,
           deps.venueLocale ?? FALLBACK_LOCALE,
+          personId,
         );
         return applyRouting(tx, product, routing);
       });
@@ -1416,12 +1419,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
       return c.json(
-        await gated(c, sessionId, async (tx) => {
+        await gated(c, sessionId, async (tx, personId) => {
           const product = await saveProductEditor(
             tx,
             productId,
             body,
             deps.venueLocale ?? FALLBACK_LOCALE,
+            personId,
           );
           return product.active ? applyRouting(tx, product, routing) : product;
         }),

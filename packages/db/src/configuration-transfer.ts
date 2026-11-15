@@ -76,8 +76,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
-    // The menu module's `afterImport` sets `name_key` from the name.
-    { name: "products", omit: ["name_key"] },
+    { name: "products" },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
     {
       name: "floor_zones",

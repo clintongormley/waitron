@@ -1,7 +1,7 @@
 import type { PricingUnit } from "./pricing-unit.js";
 import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
-import type { DietOverride } from "./dietary.js";
+import type { DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { ProductOrdering } from "./product-ordering.js";
 
@@ -131,7 +131,7 @@ export interface Product {
 
   allergens: ProductAllergens | null;
 
-  manualAllergens: ProductAllergens | null;
+  diet: DietProfile;
 
   dietOverride: DietOverride | null;
 

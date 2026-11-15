@@ -23,7 +23,7 @@ export interface DietProfile {
 const CONTAINS = new Set<string>(CONTAINS_TAGS);
 export function validateContainsTag(value: unknown): ContainsTag {
   if (typeof value !== "string" || !CONTAINS.has(value)) {
-    throw new AppError("diet.invalid_origin", { origin: String(value) });
+    throw new AppError("diet.invalid_contains_tag", { tag: String(value) });
   }
   return value as ContainsTag;
 }
@@ -51,7 +51,8 @@ export function validateDietOverride(value: DietOverride | null): DietOverride |
 }
 
 function validateContainsList(value: unknown): void {
-  if (!Array.isArray(value)) throw new AppError("diet.invalid_origin", { origin: String(value) });
+  if (!Array.isArray(value))
+    throw new AppError("diet.invalid_contains_tag", { tag: String(value) });
   for (const tag of value) validateContainsTag(tag);
 }
 

@@ -121,17 +121,16 @@ it("round-trips cereal and nut kinds through the editor and stored published dec
     saveProductEditor(tx, null, { ...input, allergens }, "en"),
   );
   expect(result.allergens).toEqual({
-    gluten: { kinds: ["wheat", "barley"] },
+    gluten: { kinds: ["barley", "wheat"] },
     nuts: { kinds: ["almonds"] },
     eggs: {},
   });
   const [stored] = await fx.db
-    .select({ allergens: products.allergens, manualAllergens: products.manualAllergens })
+    .select({ allergens: products.allergens })
     .from(products)
     .where(eq(products.id, result.id));
   expect(stored).toEqual({
     allergens: { gluten: { kinds: ["barley", "wheat"] }, nuts: { kinds: ["almonds"] }, eggs: {} },
-    manualAllergens: allergens,
   });
 });
 
@@ -665,7 +664,7 @@ describe("a variant's own page", () => {
           vatClass: products.vatClass,
           unitId: products.unitId,
           categoryId: products.categoryId,
-          manualAllergens: products.manualAllergens,
+          allergens: products.allergens,
           dietaryDeclarations: products.dietaryDeclarations,
         })
         .from(products)
@@ -755,7 +754,7 @@ describe("a variant's own page", () => {
       vatClass: null,
       unitId: null,
       categoryId: null,
-      manualAllergens: null,
+      allergens: null,
       dietaryDeclarations: null,
     });
   });
@@ -784,7 +783,7 @@ describe("a variant's own page", () => {
       vatClass: null,
       unitId: null,
       categoryId: null,
-      manualAllergens: null,
+      allergens: null,
       dietaryDeclarations: null,
     });
     // A blank price follows the parent's, and the parent's own list shows it blank.
@@ -1254,4 +1253,17 @@ it("creates available products and variants when their save flags are absent", a
   );
   expect(saved.available).toBe(true);
   expect(saved.variants.map((v) => v.available)).toEqual([true, true]);
+});
+
+it("stores repeated allergen kinds once through create and update", async () => {
+  const repeated = { gluten: { kinds: ["wheat", "wheat", "barley"] } };
+  const wanted = { gluten: { kinds: ["barley", "wheat"] } };
+  const created = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, { ...input, allergens: repeated }, "en"),
+  );
+  expect(created.allergens).toEqual(wanted);
+  const updated = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, created.id, { ...input, allergens: repeated }, "en"),
+  );
+  expect(updated.allergens).toEqual(wanted);
 });

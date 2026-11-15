@@ -21,7 +21,6 @@ import {
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
   PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
-  PRODUCT_ORDERING_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
   TRANSITION_REFUSAL,
@@ -39,8 +38,7 @@ import {
  * so a regenerated migration set does not carry it.
  *
  * It also holds three triggers on `products` — a variant is one level deep, keeps the parent it
- * was created with, and no product's id changes — and two more holding `products.ordering` to one
- * of its three values; and the state guards on `bill_payments` and `bill_payment_refunds`, with a
+ * was created with, and no product's id changes — and the state guards on `bill_payments` and `bill_payment_refunds`, with a
  * trigger on each refusing every delete — those two refuse by design whatever the row, so they
  * have no accepting control here.
  *
@@ -56,8 +54,8 @@ import {
  *
  * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
  * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
- * path. `INSERT OR REPLACE` is tried only against `products_variant_one_level_insert` and
- * `products_ordering_check_insert`, and `UPDATE OR REPLACE` only against
+ * path. `INSERT OR REPLACE` is tried only against `products_variant_one_level_insert`, and
+ * `UPDATE OR REPLACE` only against
  * `products_id_fixed_update`; no other trigger here, media's triggers on `products` included, is
  * tried with either. Nor is any concurrency claim: one connection, one process.
  */
@@ -104,8 +102,6 @@ const EXPECTED_TRIGGERS = [
   "bill_payments_no_delete",
   "device_profile_form_factor_locked",
   "products_id_fixed_update",
-  "products_ordering_check_insert",
-  "products_ordering_check_update",
   "products_variant_one_level_insert",
   "products_variant_parent_fixed_update",
   "sale_settlements_check_coverage",
@@ -1702,90 +1698,6 @@ describe("products_id_fixed_update", () => {
     expect(
       refusalFor(connection, `update products set id = id, name = 'Same id' where id = 'p-var'`),
     ).toBeUndefined();
-  });
-});
-
-/** A top-level product row carrying `ordering`, spelled into the statement as given. */
-function productOrdered(id, ordering) {
-  return (
-    `insert into products (id, name, ordering, created_at, updated_at) ` +
-    `values ('${id}', '${id}', '${ordering}', '${STAMP}', '${STAMP}')`
-  );
-}
-
-/** The stored `ordering` of a product, or `undefined` when no row has that id. */
-function orderingOf(id) {
-  return connection.prepare(`select ordering from products where id = ?`).get(id)?.ordering;
-}
-
-// `products.ordering` has no CHECK constraint, because adding one makes drizzle rebuild `products`;
-// these two triggers are what refuses any other value.
-describe("products_ordering_check_insert", () => {
-  it("accepts each of the three values", () => {
-    for (const ordering of ["public", "staff_only", "not_sold_separately"])
-      expect(refusalFor(connection, productOrdered(`p-ordered-${ordering}`, ordering))).toBe(
-        undefined,
-      );
-    expect(orderingOf("p-ordered-staff_only")).toBe("staff_only");
-  });
-
-  it("gives a product written without the column the value public", () => {
-    expect(refusalFor(connection, product("p-ordered-default"))).toBeUndefined();
-    expect(orderingOf("p-ordered-default")).toBe("public");
-  });
-
-  it("refuses an insert with any other value", () => {
-    expect(refusalFor(connection, productOrdered("p-ordered-secret", "secret"))).toBe(
-      PRODUCT_ORDERING_REFUSAL,
-    );
-    expect(orderingOf("p-ordered-secret")).toBeUndefined();
-  });
-
-  it("compares the value exactly, so a capitalised one is refused", () => {
-    expect(refusalFor(connection, productOrdered("p-ordered-caps", "Public"))).toBe(
-      PRODUCT_ORDERING_REFUSAL,
-    );
-  });
-
-  it("raises through the trigger class", () => {
-    expect(errcodeFor(connection, productOrdered("p-ordered-secret-2", "secret"))).toBe(1811);
-  });
-
-  it("refuses an INSERT OR REPLACE with any other value", () => {
-    expect(
-      refusalFor(
-        connection,
-        productOrdered("p-ordered-public", "secret").replace(
-          "insert into",
-          "insert or replace into",
-        ),
-      ),
-    ).toBe(PRODUCT_ORDERING_REFUSAL);
-    expect(orderingOf("p-ordered-public")).toBe("public");
-  });
-});
-
-describe("products_ordering_check_update", () => {
-  it("refuses an update to any other value", () => {
-    expect(
-      refusalFor(
-        connection,
-        `update products set ordering = 'secret' where id = 'p-ordered-public'`,
-      ),
-    ).toBe(PRODUCT_ORDERING_REFUSAL);
-    expect(orderingOf("p-ordered-public")).toBe("public");
-  });
-
-  it("accepts an update to each of the three values", () => {
-    for (const ordering of ["not_sold_separately", "staff_only", "public"]) {
-      expect(
-        refusalFor(
-          connection,
-          `update products set ordering = '${ordering}' where id = 'p-ordered-public'`,
-        ),
-      ).toBeUndefined();
-      expect(orderingOf("p-ordered-public")).toBe(ordering);
-    }
   });
 });
 

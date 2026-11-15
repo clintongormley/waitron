@@ -1146,6 +1146,13 @@ describe("product archive route boundaries", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: productId, active: false, courseId });
     expect(
+      (
+        await suite.db.execute(
+          sql`select person_id from activity_log where kind = 'product.archived' and subject_id = ${productId}`,
+        )
+      ).rows,
+    ).toEqual([{ person_id: managerPersonId }]);
+    expect(
       (await suite.db.execute(sql`select active, course_id from products where id = ${productId}`))
         .rows,
     ).toEqual([{ active: 0, course_id: courseId }]);
@@ -2078,6 +2085,20 @@ describe("mountMenuApi — products", () => {
     ]);
   });
 
+  it("a product request with repeated allergen kinds stores them once", async () => {
+    const app = mountApp();
+    const body = await editorBody(app, { allergens: { gluten: { kinds: ["wheat", "wheat"] } } });
+    const created = await send(app, "POST", "/management-api/products/editor", { body });
+    expect(created.status).toBe(201);
+    const value = (await created.json()) as { id: string; allergens: unknown };
+    expect(value.allergens).toEqual({ gluten: { kinds: ["wheat"] } });
+    const updated = await send(app, "PUT", `/management-api/products/${value.id}/editor`, { body });
+    expect(updated.status).toBe(200);
+    expect(((await updated.json()) as { allergens: unknown }).allergens).toEqual({
+      gluten: { kinds: ["wheat"] },
+    });
+  });
+
   /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
   async function editorBody(
     app: Hono,
@@ -2274,7 +2295,7 @@ describe("mountMenuApi — products", () => {
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
-          sql`select vat_class, unit_price, category_id, manual_allergens
+          sql`select vat_class, unit_price, category_id, allergens
               from products where id = ${variantId}`,
         )
       ).rows[0];
@@ -2282,7 +2303,7 @@ describe("mountMenuApi — products", () => {
       vat_class: null,
       unit_price: null,
       category_id: null,
-      manual_allergens: null,
+      allergens: null,
     };
 
     const kept = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -2317,7 +2338,7 @@ describe("mountMenuApi — products", () => {
       vat_class: "general",
       unit_price: 260,
       category_id: null,
-      manual_allergens: JSON.stringify({ eggs: {} }),
+      allergens: JSON.stringify({ eggs: {} }),
     });
 
     const cleared = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -3258,7 +3279,6 @@ describe("mountMenuApi — products", () => {
     });
     expect(res.status).toBe(201);
     // The management product read exposes the staff override distinctly (the diet twin of
-    // `manualAllergens`), so the dashboard's diet-override editor can seed from it.
     const list = await send(app, "GET", `/management-api/products`);
     const { id } = await res.json();
     const products = (await list.json()) as { id: string; dietOverride: unknown }[];
@@ -3271,8 +3291,8 @@ describe("mountMenuApi — products", () => {
 
   it.each([
     ["a bad label", { vegan: "maybe" }, "diet.invalid_label"],
-    ["a non-contains-tag addContains", { addContains: ["plant"] }, "diet.invalid_origin"],
-    ["an unknown addContains", { addContains: ["wombat"] }, "diet.invalid_origin"],
+    ["a non-contains-tag addContains", { addContains: ["plant"] }, "diet.invalid_contains_tag"],
+    ["an unknown addContains", { addContains: ["wombat"] }, "diet.invalid_contains_tag"],
     [
       "a conflicting overlay",
       { addContains: ["meat"], removeContains: ["meat"] },

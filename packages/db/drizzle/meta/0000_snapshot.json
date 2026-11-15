@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "77596ba3-c5b1-4b11-8963-3c8241bba786",
+  "id": "6f0a930b-cb27-4494-96b3-6b9297d6cac1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6642,13 +6642,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "name_key": {
-          "name": "name_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "customer_name": {
           "name": "customer_name",
           "type": "text",
@@ -6751,22 +6744,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "manual_allergens": {
-          "name": "manual_allergens",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "diet_override": {
           "name": "diet_override",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet": {
-          "name": "diet",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -6788,12 +6767,13 @@
         }
       },
       "indexes": {
-        "products_name_key_idx": {
-          "name": "products_name_key_idx",
+        "products_image_idx": {
+          "name": "products_image_idx",
           "columns": [
-            "name_key"
+            "image"
           ],
-          "isUnique": false
+          "isUnique": false,
+          "where": "\"products\".\"image\" is not null"
         },
         "products_unit_idx": {
           "name": "products_unit_idx",
@@ -6875,6 +6855,18 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "products_ordering_ck": {
+          "name": "products_ordering_ck",
+          "value": "\"products\".\"ordering\" in ('public', 'staff_only', 'not_sold_separately')"
+        },
+        "products_unit_price_ck": {
+          "name": "products_unit_price_ck",
+          "value": "\"products\".\"unit_price\" is null or \"products\".\"unit_price\" >= 0"
+        },
+        "products_name_ck": {
+          "name": "products_name_ck",
+          "value": "trim(\"products\".\"name\") <> ''"
+        },
         "products_top_level_owns_ck": {
           "name": "products_top_level_owns_ck",
           "value": "\"products\".\"parent_id\" is not null or (\"products\".\"vat_class\" is not null and \"products\".\"unit_price\" is not null and \"products\".\"dietary_declarations\" is not null)"

@@ -10,7 +10,6 @@ import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkIncludeFolderRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
-import { storeProductNameKeys } from "./product-names.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
@@ -244,5 +243,4 @@ export const MENU_CONFIGURATION_TRANSFER = {
       area: (await readVenue(tx)).province,
     });
   },
-  afterImport: storeProductNameKeys,
 } as const;

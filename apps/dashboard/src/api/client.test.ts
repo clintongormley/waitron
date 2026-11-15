@@ -625,7 +625,8 @@ describe("DashboardApi", () => {
       vatClass: "reduced",
       active: true,
       allergens: null,
-      manualAllergens: null,
+
+      diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
       dietOverride: null,
       image: null,
     };

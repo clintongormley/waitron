@@ -5,6 +5,7 @@ import {
   menuScheduledPublications,
   menuVersions,
   now,
+  recordActivity,
   products,
   type Transaction,
 } from "@waitron/db";
@@ -122,27 +123,52 @@ export async function assertProductWritable(tx: Transaction, productId: string):
     throw new AppError("product.archived", { productId });
 }
 
-export async function archiveProducts(tx: Transaction, ids: readonly string[]): Promise<void> {
-  const named: { id: string; parentId: string | null; active: boolean }[] = [];
+export async function archiveProducts(
+  tx: Transaction,
+  ids: readonly string[],
+  personId: string | null = null,
+): Promise<void> {
+  const named: { id: string; name: string; parentId: string | null; active: boolean }[] = [];
   for (const batch of batches(ids))
     named.push(
       ...(await tx
-        .select({ id: products.id, parentId: products.parentId, active: products.active })
+        .select({
+          id: products.id,
+          name: products.name,
+          parentId: products.parentId,
+          active: products.active,
+        })
         .from(products)
         .where(inArray(products.id, batch))),
     );
   const dishes = named.filter((r) => r.active && r.parentId === null).map((r) => r.id);
   const variants = new Set(named.filter((r) => r.active && r.parentId !== null).map((r) => r.id));
+  const children: { id: string; parentId: string | null }[] = [];
   for (const batch of batches(dishes))
     for (const variant of await tx
-      .select({ id: products.id })
+      .select({ id: products.id, parentId: products.parentId })
       .from(products)
-      .where(and(inArray(products.parentId, batch), eq(products.active, true))))
+      .where(and(inArray(products.parentId, batch), eq(products.active, true)))) {
       variants.add(variant.id);
+      children.push(variant);
+    }
   const all = [...dishes, ...variants];
   await assertOffPublishedMenus(tx, all);
   await markInactive(tx, all);
   await removeFromExtraLists(tx, all);
   await takeOffMenus(tx, dishes);
   await dropMenuPrices(tx, [...variants]);
+  for (const row of named.filter((row) => row.active && !dishes.includes(row.parentId ?? "")))
+    await recordActivity(tx, {
+      kind: "product.archived",
+      subjectId: row.id,
+      personId,
+      data: {
+        name: row.name,
+        variantIds: children
+          .filter((child) => child.parentId === row.id)
+          .map((child) => child.id)
+          .sort(),
+      },
+    });
 }

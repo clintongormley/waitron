@@ -1,6 +1,5 @@
 import { combineOffer } from "./menu-combine.js";
 import { includedMenus, placesOf } from "./menu-inclusion.js";
-import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import { and, eq, inArray } from "drizzle-orm";
@@ -16,7 +15,6 @@ import {
   overlayDietProfile,
   validateDietOverride,
   type DietOverride,
-  type DietProfile,
   validateDietaryDeclarations,
   type DietaryLabel,
   VAT_CLASSES,
@@ -63,12 +61,7 @@ import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
-import {
-  assertFamilyNamesFree,
-  assertUpdatedNamesFree,
-  nameColumns,
-  readUpdatedName,
-} from "./product-names.js";
+import { assertFamilyNamesFree, assertUpdatedNamesFree, readUpdatedName } from "./product-names.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -201,7 +194,6 @@ const PRODUCT_BASE_COLUMNS = {
   active: products.active,
   available: products.available,
   allergens: effective.allergens,
-  manualAllergens: effective.manualAllergens,
   dietOverride: effective.dietOverride,
   image: effective.image,
   description: effective.description,
@@ -246,7 +238,6 @@ interface RawProduct {
   active: boolean;
   available: boolean;
   allergens: ProductAllergens | null;
-  manualAllergens: ProductAllergens | null;
   // Looser than {@link DietOverride}; `toProduct` narrows it, relying on the write-side
   // `validateDietOverride`.
   dietOverride: {
@@ -286,6 +277,7 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
   return {
     ...product,
     unitPrice: centsToDecimal(row.unitPrice),
+    diet: overlayDietProfile(UNDECLARED_DIET, row.dietOverride as DietOverride | null),
     primaryCategoryId: row.categoryId,
     modifiers: [],
     unit,
@@ -440,7 +432,6 @@ const offerLineColumns = {
   takeawayVatClass: effective.takeawayVatClass,
   category: categories.name,
   allergens: effective.allergens,
-  diet: effective.diet,
   dietOverride: effective.dietOverride,
   dietaryDeclarations: effective.dietaryDeclarations,
   courseId: effective.courseId,
@@ -463,7 +454,6 @@ interface OfferLineRow {
   takeawayVatClass: VatClass;
   category: (typeof categories.$inferSelect)["name"] | null;
   allergens: ProductRow["allergens"];
-  diet: ProductRow["diet"];
   dietOverride: ProductRow["dietOverride"];
   dietaryDeclarations: NonNullable<ProductRow["dietaryDeclarations"]>;
   courseId: ProductRow["courseId"];
@@ -487,7 +477,7 @@ function offerLineValues(row: OfferLineRow) {
     takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     allergens: row.allergens,
-    diet: row.diet as DietProfile | null,
+    diet: overlayDietProfile(UNDECLARED_DIET, row.dietOverride as DietOverride | null),
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
@@ -878,41 +868,6 @@ export async function deactivateMenu(tx: Transaction, id: string): Promise<void>
   await tx.update(menus).set({ active: false, updatedAt: now() }).where(eq(menus.id, id));
 }
 
-async function republishOverlays(
-  tx: Transaction,
-  id: string,
-  columns: { allergens: boolean; diet: boolean },
-): Promise<void> {
-  const rows = await tx
-    .select({
-      id: products.id,
-      parentId: products.parentId,
-      allergens: products.allergens,
-      diet: products.diet,
-      ownManual: products.manualAllergens,
-      ownDietOverride: products.dietOverride,
-    })
-    .from(products)
-    .where(eq(products.id, id));
-  for (const row of rows) {
-    const inherits = row.parentId !== null;
-    const changed: { allergens?: ProductAllergens | null; diet?: typeof row.diet } = {};
-    if (columns.allergens) {
-      const allergens = publishedAllergens(row.ownManual);
-      if (!isDeepStrictEqual(allergens, row.allergens)) changed.allergens = allergens;
-    }
-    if (columns.diet) {
-      const diet =
-        inherits && row.ownDietOverride === null
-          ? null
-          : overlayDietProfile(UNDECLARED_DIET, row.ownDietOverride as DietOverride | null);
-      if (!isDeepStrictEqual(diet, row.diet)) changed.diet = diet;
-    }
-    if (Object.keys(changed).length > 0)
-      await tx.update(products).set(changed).where(eq(products.id, row.id));
-  }
-}
-
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   return insertProduct(tx, input, true);
 }
@@ -930,6 +885,9 @@ async function insertProduct(
   input: CreateProductInput,
   checkNames: boolean,
 ): Promise<Product> {
+  if (!input.name.trim()) throw new AppError("product.invalid", { field: "name" });
+  if (stringToCents(input.unitPrice) < 0)
+    throw new AppError("product.invalid", { field: "unitPrice" });
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
   }
@@ -950,11 +908,11 @@ async function insertProduct(
   const takeawayVatClass = input.takeawayVatClass ?? null;
   if (takeawayVatClass !== null && !VAT_CLASSES.includes(takeawayVatClass))
     throw new AppError("product.invalid", { field: "takeawayVatClass" });
-  const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
+  const allergens = input.allergens == null ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
     categoryId: input.categoryId,
-    ...nameColumns(input.name),
+    name: input.name,
     customerName: input.customerName ?? null,
     description: input.description ?? null,
     kitchenName: input.kitchenName?.trim() || null,
@@ -966,10 +924,8 @@ async function insertProduct(
     available: input.available ?? true,
     ordering: input.ordering ?? "public",
     setLunch: input.setLunch === undefined ? false : input.setLunch,
-    manualAllergens: allergens,
     allergens: publishedAllergens(allergens),
     dietOverride,
-    diet: overlayDietProfile(UNDECLARED_DIET, dietOverride),
     image: input.image ?? null,
   };
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
@@ -1076,8 +1032,9 @@ export async function updateProduct(
   tx: Transaction,
   id: string,
   patch: UpdateProductInput,
+  personId: string | null = null,
 ): Promise<void> {
-  await patchProduct(tx, id, patch, true);
+  await patchProduct(tx, id, patch, true, personId);
 }
 
 /** {@link updateProduct} without the unique-name check, for the reason
@@ -1086,8 +1043,9 @@ export async function updateProductSkippingNameCheck(
   tx: Transaction,
   id: string,
   patch: UpdateProductInput,
+  personId: string | null = null,
 ): Promise<void> {
-  await patchProduct(tx, id, patch, false);
+  await patchProduct(tx, id, patch, false, personId);
 }
 
 async function patchProduct(
@@ -1095,18 +1053,22 @@ async function patchProduct(
   id: string,
   patch: UpdateProductInput,
   checkNames: boolean,
+  personId: string | null,
 ): Promise<void> {
+  if (patch.name !== undefined && !patch.name.trim())
+    throw new AppError("product.invalid", { field: "name" });
+  if (patch.unitPrice != null && stringToCents(patch.unitPrice) < 0)
+    throw new AppError("product.invalid", { field: "unitPrice" });
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
   const row = await readUpdatedName(tx, id);
   if (row !== undefined && (!row.active || row.parentActive === false))
     throw new AppError("product.archived", { productId: id });
   // Archive before writing the patch: archiving skips rows already inactive.
-  if (patch.active === false && row?.active === true) await archiveProducts(tx, [id]);
+  if (patch.active === false && row?.active === true) await archiveProducts(tx, [id], personId);
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
     await assertUpdatedNamesFree(tx, row, { name: patch.name, active: patch.active });
-  // `allergens` and `dietOverride` are the staff overlays, not the published columns.
   const {
     allergens,
     dietOverride,
@@ -1160,11 +1122,10 @@ async function patchProduct(
     .update(products)
     .set({
       ...rest,
-      ...(rest.name === undefined ? {} : nameColumns(rest.name)),
       ...(unitPrice === undefined
         ? {}
         : { unitPrice: unitPrice === null ? null : stringToCents(unitPrice) }),
-      ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
+      ...(allergens !== undefined ? { allergens: publishedAllergens(allergens) } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
       ...(categoryId === undefined ? {} : { categoryId }),
@@ -1174,16 +1135,14 @@ async function patchProduct(
     .where(eq(products.id, id));
   if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
   else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
-  // Republish only the columns whose overlay changed: an unrelated edit leaves both as they are.
-  if (allergens !== undefined || dietOverride !== undefined)
-    await republishOverlays(tx, id, {
-      allergens: allergens !== undefined,
-      diet: dietOverride !== undefined,
-    });
 }
 
-export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
-  await archiveProducts(tx, [id]);
+export async function deactivateProduct(
+  tx: Transaction,
+  id: string,
+  personId: string | null = null,
+): Promise<void> {
+  await archiveProducts(tx, [id], personId);
 }
 
 export async function readDefaultMenuId(tx: Transaction): Promise<string | null> {
@@ -1243,7 +1202,6 @@ export async function listAvailableProducts(
       takeawayVatClass: effective.takeawayVatClass,
       category: categories.name,
       allergens: effective.allergens,
-      diet: effective.diet,
       dietOverride: effective.dietOverride,
       dietaryDeclarations: effective.dietaryDeclarations,
       courseId: effective.courseId,
@@ -1291,7 +1249,7 @@ export async function listAvailableProducts(
     takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     allergens: row.allergens,
-    diet: row.diet as DietProfile | null,
+    diet: overlayDietProfile(UNDECLARED_DIET, row.dietOverride as DietOverride | null),
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,

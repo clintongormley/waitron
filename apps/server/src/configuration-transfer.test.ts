@@ -412,7 +412,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 35,
+  version: 36,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3802,7 +3802,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
   });
 });
 
-it("gives each imported product the folded key of its own name, whatever the bundle held", async () => {
+it("preserves imported product names and refuses their duplicates without stored keys", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -3834,15 +3834,10 @@ it("gives each imported product the folded key of its own name, whatever the bun
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
-    .select({ name: products.name, nameKey: products.nameKey })
+    .select({ name: products.name })
     .from(products)
     .where(inArray(products.name, [" Café Solo ", idShaped]));
-  expect(imported.map(({ name, nameKey }) => ({ name, nameKey }))).toEqual(
-    expect.arrayContaining([
-      { name: " Café Solo ", nameKey: "café solo" },
-      { name: idShaped, nameKey: idShaped.toLowerCase() },
-    ]),
-  );
+  expect(imported).toEqual(expect.arrayContaining([{ name: " Café Solo " }, { name: idShaped }]));
   expect(imported).toHaveLength(2);
   for (const name of ["café solo", idShaped]) {
     await expect(
@@ -3858,7 +3853,7 @@ it("gives each imported product the folded key of its own name, whatever the bun
     ).rejects.toMatchObject({ code: "product.name_taken" });
   }
 
-  // The key is derived from the name, so a bundle neither carries one nor may supply one.
+  // Unknown columns are refused, including a retired folded-name key.
   for (const row of transferred.tables.products!) expect(row).not.toHaveProperty("name_key");
   await expect(
     withTransaction(targetSuite.db, (tx) =>
@@ -3877,7 +3872,7 @@ it("gives each imported product the folded key of its own name, whatever the bun
     ),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
-    params: { field: "products.name_key" },
+    params: { field: "table:products" },
   });
 });
 
@@ -5485,7 +5480,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(35);
+  expect(exported.version).toBe(36);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

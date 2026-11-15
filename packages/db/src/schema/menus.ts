@@ -1,7 +1,21 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
-import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
-import type { AllergenMap, ProductOrdering } from "@waitron/shared";
+import {
+  bigCount,
+  count,
+  flag,
+  id,
+  json,
+  label,
+  money,
+  newId,
+  now,
+  table,
+  ts,
+  enumType,
+  enumCheck,
+} from "./columns.js";
+import { PRODUCT_ORDERINGS, type AllergenMap } from "@waitron/shared";
 import { units } from "./menu/units.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
@@ -35,6 +49,8 @@ export const categories = table("categories", {
 
 /** A priced item. Deactivate via `active`, never delete (may sit behind historical sale-line
  * snapshots). */
+const productOrdering = enumType(PRODUCT_ORDERINGS);
+
 export const products = table(
   "products",
   {
@@ -56,9 +72,6 @@ export const products = table(
     /* v8 ignore stop */
     // Staff-facing product name, shown on the dashboard, till buttons/basket and reports.
     name: label("name").notNull(),
-    // `name` folded as `@waitron/menu`'s `foldName` folds it; the unique staff-name check looks
-    // rows up by it. May be null, and the check does not see a row whose key is null.
-    nameKey: label("name_key"),
     // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,
     // invoice lines, the customer display and customer menus.
     customerName: json<Record<string, string>>("customer_name"),
@@ -78,11 +91,7 @@ export const products = table(
     // true. `available` is never inherited by a variant.
     active: flag("active").notNull().default(true),
     available: flag("available").notNull().default(true),
-    // Who may order the product on its own: `public`, `staff_only` or `not_sold_separately`. No
-    // CHECK, because adding one makes drizzle rebuild this table, whose children a rebuild deletes
-    // or refuses; the `products_ordering_check_*` triggers (`triggers/core.sql`) refuse
-    // any other value. Being offered as an extra does not read it.
-    ordering: label("ordering").$type<ProductOrdering>().notNull().default("public"),
+    ordering: productOrdering("ordering").notNull().default("public"),
     // The photo's original hash filename is its stable reference; media resolves its current picture.
     image: label("image"),
     // Its own tile colour, lowercase #rrggbb; null takes its category's. A variant's own value is
@@ -91,8 +100,6 @@ export const products = table(
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none.
     allergens: json<AllergenMap>("allergens"),
-    // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
-    manualAllergens: json<AllergenMap>("manual_allergens"),
     dietOverride: json<{
       vegan?: "yes" | "no";
       vegetarian?: "yes" | "no";
@@ -101,19 +108,16 @@ export const products = table(
       addContains?: string[];
       removeContains?: string[];
     }>("diet_override"),
-    // The published profile: the override laid over UNDECLARED_DIET.
-    diet: json<{
-      vegan: "yes" | "no" | "unknown";
-      vegetarian: "yes" | "no" | "unknown";
-      contains: string[];
-      halal?: "yes" | "no";
-      kosher?: "yes" | "no";
-    }>("diet"),
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
-    index("products_name_key_idx").on(t.nameKey),
+    index("products_image_idx")
+      .on(t.image)
+      .where(sql`${t.image} is not null`),
+    check("products_ordering_ck", enumCheck(t.ordering)),
+    check("products_unit_price_ck", sql`${t.unitPrice} is null or ${t.unitPrice} >= 0`),
+    check("products_name_ck", sql`trim(${t.name}) <> ''`),
     index("products_unit_idx").on(t.unitId),
     index("products_course_idx").on(t.courseId),
     // Target of menu's `menu_item_variant_overrides` key `(product_id, variant_id)`.

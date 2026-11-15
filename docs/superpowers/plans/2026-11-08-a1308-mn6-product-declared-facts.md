@@ -41,6 +41,31 @@ refused at every request boundary (`docs/backlog/catalogue.md:34-43`).
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2)
 
+## Dated corrections — watcher clearance, 2026-11-15 08:56
+
+The watcher cleared these two corrections in Lane E's `questions.md` at 08:56; this is
+watcher clearance, not a separate owner approval. Keep the existing name rule: case folds,
+accents remain distinct and NFC-equivalent spellings match. Task 2's example is therefore
+“Café con leche” versus “CAFÉ con LECHE”. The old NULL-key case permits a duplicate;
+port that documented gap to a raw insertion without a key and assert `product.name_taken`.
+Measurement, size stop and lane landing authority remain unchanged.
+
+The watcher also cleared the following on 2026-11-15 at 09:16–09:17:
+- The raw W175 fixture's diet now follows its override: vegan unknown, vegetarian yes,
+  contains `[]`; its published milk declaration remains, and the editor reads that same milk.
+  Parent-versus-own inheritance and all money values remain checked.
+- The operations inheritance helper reads the own `dietOverride` rather than a stored diet,
+  and keeps assertions on the effective computed profile.
+- The dashboard has no old diet wording to rename: add new English and Spanish wording.
+- The import test round-trips original names instead of stored keys; both duplicate refusals
+  and the supplied-retired-key refusal remain. That last test is a finish-line scan exception.
+- Removing the ordering triggers also shifts the two media trigger positions listed below;
+  their bodies, timing and events and every other position remain unchanged.
+
+At 09:26 the watcher also cleared removal of the two retired ordering-trigger entries from
+`scripts/migration-upgrade.test.ts` and their unused constant in
+`packages/db/src/trigger-refusals.ts`, after a search confirms no imports remain.
+
 ## What it builds
 
 1. **Measurement first** (tables-menu.md §8 item 1, Task 1): the name check by scan at 1,000
@@ -218,6 +243,12 @@ extra table products.checks[products_ordering_ck]
 extra table products.checks[products_unit_price_ck]
 missing trigger products_ordering_check_insert
 missing trigger products_ordering_check_update
+changed trigger products_media_image_fk_insert.order
+old: 2
+new: 1
+changed trigger products_media_image_fk_update.order
+old: 3
+new: 2
 changed trigger products_media_image_fk_insert.order
 old: 2
 new: 1

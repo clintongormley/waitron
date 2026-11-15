@@ -31,17 +31,6 @@ JavaScript, and name sorting still uses `Intl.Collator` for accented names.
 remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
 measure a way to bound name sorting without changing its results.
 
-## A negative menu price can still be stored by a direct call
-
-**A negative menu price can still be stored by a direct call — OPEN (left by #487).** A
-negative menu price is never valid (owner ruling 2026-09-21); the product-create and menu-item writes in
-`apps/server/src/menu-api.ts` refuse one at the request boundary. `createProduct` and
-`updateProduct` (`packages/menu/src/operations.ts`) still accept and store a negative when
-called directly — a seed, a script or a future caller — and `products.unit_price` carries no
-`>= 0` check. Decide whether the screen belongs in the ops or as a `products.unit_price >= 0` check
-beside the sibling price checks the other menu tables carry; the column is an integer count of
-cents, so a check constraint is now the only thing that would refuse it at the database.
-
 ## Two price rules disagree about a value that is not negative
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
@@ -183,12 +172,6 @@ DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
 ## Menu: no two categories with one parent, and no two Active products, share a name (W72 to W72h): left open
 
-There is no unique index: each product row stores its folded staff name in `products.name_key`, and
-the product check looks other rows up by that key. There is no
-backfill: a row whose name has not been written since the column was added keeps a null key, and the
-check does not see it until its name is next written (every product editor save writes it) or the
-venue is reset. Stored data is not renamed: a venue that already holds
-duplicates keeps them until someone renames one.
 The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by its
 name, so a reference named otherwise is still unseen.
 Since W72c an imported print agent arrives with no node; the importing box's
@@ -1018,6 +1001,11 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- Two active products of one parent may not share a staff name, checked in code by folding each
+  name (`foldName`); no unique index holds it, because the fold is Unicode-aware and this engine's
+  `lower()` folds ASCII only (`packages/menu/src/product-names.ts`).
+
 
 - **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. Remaining Spanish horizontal scrolling is accepted. The 390 px read-outs cases in `station-table.test.ts` check that headings wrap, names and read-outs stay within their cells, and Actions stays reachable; they do not pin a width or promise no scrolling for arbitrary names.
 
