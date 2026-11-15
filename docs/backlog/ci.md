@@ -409,7 +409,9 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 The [checked routing records](../developers/ci-and-gates.md#disposable-server-test-runners)
 cover guest tools/history/API, real PR planner pickup, scheduled unavailable-label rescue,
 one untouched-run overflow and a natural blind hosted choice. Fresh-capacity server/hosted
-choices are reconciled with their workflow commits. The bundle stays open; these records
+choices, including an idle-server decision followed by successful server jobs on 15 November,
+are reconciled with their workflow commits. Later idle snapshots did not invalidate earlier
+busy-server choices. The bundle stays open; these records
 supply no full-day queue or speed result. Keep the corrected v41 controller and the
 [13 November measured-memory decision](#decisions-and-deliberate-limits).
 

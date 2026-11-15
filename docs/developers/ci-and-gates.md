@@ -404,13 +404,25 @@ local call in `ci.yml`, rather than substituting the checked-out PR head.
 | Natural unreadable-inventory fallback | [43715014403/1](https://github.com/clintongormley/waitron/actions/runs/43715014403), `0c10fb8cd2e6c2926c971418f7fe9c0e379f03d7` | Same commit; `132814545360` / `1000346848` | Empty page after 2 of 3 entries logged a blind hosted choice; aggregate `132815831908` passed. Predates the agreeing-row exception. |
 | Fresh capacity, hosted choice | [43740649924/1](https://github.com/clintongormley/waitron/actions/runs/43740649924), `90668e930077704686aa83944a1e828e0926385a` | `96fc128aa6277932d52b3ee0c24aabcb6d69205d`; `132892837492` / `21409` | Server 1+0/12 versus hosted 0+0/20 chose hosted, age 56011 ms; all 46 selected jobs passed. |
 | Fresh capacity, server choice | [43742448917/1](https://github.com/clintongormley/waitron/actions/runs/43742448917), `ce594453da69dec8bd272db17aea7365a49ad611` | `b36d5ec7e2cd21f8968e4debe179193cb451b01d`; `132898361561` / `21452` | Server 1+0/12 versus hosted 4+0/20 chose server, age 59316 ms. Till shard 2 (`132898828059`, runner `21487`) passed 2519 tests; the run was cancelled. |
+| Natural server choice and completed PR | [43762363482/1](https://github.com/clintongormley/waitron/actions/runs/43762363482), `dae0624175bb2b25b029f5011fcd7c2b8a62cb7c` | `409ba29a3530164811315c2090a41c4ad05bab86`; planner `132959766471` / `22063` | At 21:13:37 UTC, fresh server 1+0/12 versus hosted 2+0/20 selected server. All 13 selected server jobs and the hosted aggregate passed. |
+| Natural idle server choice | [43763090634/1](https://github.com/clintongormley/waitron/actions/runs/43763090634), `a06769381334fd3f9609c6012269f0bebbdf5e87` | Same commit; planner `132962043266` / `1000350116` | At 21:20:33 UTC, fresh server 0+0/12 selected server without hosted counts, age 19172 ms. Four server jobs and the aggregate passed. |
+| Natural busy server, hosted choice | [43762851651/1](https://github.com/clintongormley/waitron/actions/runs/43762851651), `6e38f045569187a9e3028865e8714669fc6ff007` | `95fbb76b1e0762c5e09191e612372ccaaf5b87f8`; planner `132961296135` / `22076` | At 21:18:32 UTC, fresh server 7+0/12 versus hosted 1+0/20 selected hosted, age 129872 ms. The server planner and 77 hosted jobs passed. |
 
 API runner names for the disposable jobs above are `dt-1314919489-RUN-1-JOB`;
 labels are `self-hosted` plus the job-family label, not that runner name. The health
-revision's checked-out recovery module matches the tool and planner revisions byte for byte. Today's
-two routing revisions also have identical workflow and module bytes; neither choosing log
+revision's checked-out recovery module matches the tool and planner revisions byte for byte. The earlier
+43740649924 and 43742448917 routing revisions have identical workflow and module bytes; neither choosing log
 exercises stale-count acceptance. The contributor-approval API returned
 `all_external_contributors` on 15 November. These receipts do not establish VM isolation.
+
+When a later status check shows an idle server, inspect the choosing job's earlier capacity
+before diagnosing a routing fault. The eight runs created from 21:06 through 21:25 UTC on
+15 November had 22 successful server assignments across four CI runs; three of the eight
+were hosted Server health runs. The routing logs above distinguish an idle-server choice
+from a busy-server choice. To inspect assignments, read
+`gh api --paginate "repos/clintongormley/waitron/actions/runs/RUN_ID/jobs?per_page=100"`
+and check each job's `labels`, `runner_id` and `runner_name`; the watcher's
+`gh run view --json jobs` inspection omitted those assignment details.
 
 Keep server coverage and automatic idle pickup open. Successful nightly
 [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
