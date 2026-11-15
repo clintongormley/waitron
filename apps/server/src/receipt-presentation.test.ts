@@ -145,6 +145,7 @@ describe("department-only on-screen receipt", () => {
     "requires explicit address consent %j while keeping department wording",
     async (printAddress) => {
       const f = await fixture();
+      await suite.db.insert(mediaImages).values({ filename: `${"b".repeat(64)}.png`, names: {} });
       await f.authored({
         ...(printAddress === undefined ? {} : { printAddress }),
         logo: `${"b".repeat(64)}.png`,
@@ -156,6 +157,8 @@ describe("department-only on-screen receipt", () => {
       const presentation = await f.read("ca-ES");
       expect(presentation.receiptTrim).toEqual({
         logo: `${"b".repeat(64)}.png`,
+        logoUrl:
+          "/media/renditions/v1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png/display/5000-5000-100.webp",
         phone: "910111111",
         email: "own@example.test",
         headerSubtitle: "Own Catalan",

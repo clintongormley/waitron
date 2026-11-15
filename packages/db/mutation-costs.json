@@ -132,7 +132,6 @@
   "src/schema/ticket-items.ts": 47.5,
   "src/schema/unpaid-departures.ts": 82,
   "src/schema/venue-service/bill-identities.ts": 46.5,
-  "src/schema/venue-service/department-receipts.ts": 29.2,
   "src/schema/venue-service/department-transfers.ts": 165.9,
   "src/schema/venue-service/device-zone-selection.ts": 87.5,
   "src/schema/venue-service/index.ts": 0.1,

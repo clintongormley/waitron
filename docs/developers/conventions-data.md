@@ -6678,12 +6678,12 @@ product name, a separate manual declaration or a stored diet profile. Format 36 
 export as outdated; the pre-product-declared-facts case in `apps/server/src/configuration-import.test.ts`
 checks that refusal.
 
-### Department receipt storage and configuration format 38 (2026-11-15, A1308 vb5)
+### Department receipt storage and configuration format 39 (2026-11-15, A1308 vb5)
 
 Your department's receipt text, logo image id, raster cache and last-save time live on its row.
 `receipt_text` holds the authored fields and temporarily the operation description; it never holds
 `logo`. The receipt API still uses the image filename. The store resolves it to
 `receipt_logo_image_id`, whose foreign key refuses deleting that image. Media usage reads that key,
 and image edits refresh the department's cached pictures. A null `receipt_updated_at` means no
-receipt has been saved. Configuration format 38 carries these columns and rewrites the image key;
-format 37 is refused as outdated. The raster cache stays with the department until its separate removal change.
+receipt has been saved. Configuration format 39 carries these columns and rewrites the image key;
+format 38 is refused as outdated. The raster cache stays with the department until its separate removal change.

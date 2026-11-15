@@ -37,7 +37,7 @@ const EXPECTED: Record<
 > = {
   departments: {
     table: departments,
-    foreignKeys: ["departments_transfer_desk_profile_fk"],
+    foreignKeys: ["departments_transfer_desk_profile_fk", "departments_receipt_logo_fk"],
     checks: [
       "departments_order_start_ck",
       "departments_paid_when_ck",
