@@ -76,6 +76,7 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
     );
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(fullSeriesId),

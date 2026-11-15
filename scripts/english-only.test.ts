@@ -37,7 +37,7 @@ const repoRoot = join(import.meta.dirname, "..");
  * `STILL_TO_CLEAN`'s length, pinned equal so a change in either direction fails: deleting entries
  * lowers this in the same change, and adding one has to raise it where the diff shows it.
  */
-const STILL_TO_CLEAN_COUNT = 1144;
+const STILL_TO_CLEAN_COUNT = 1027;
 
 // A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
 // a per-test bound above it for the case that builds a repository.
@@ -285,6 +285,7 @@ describe("the lists", () => {
       "apps/server/src/log-personal-data.ts",
       "apps/server/src/return-records.real.test.ts",
       "apps/server/src/start-again-full-disk.e2e.test.ts",
+      "apps/server/src/upgrade-sale.test.ts",
       "packages/db/src/immutability.sql.md",
       "packages/identity/src/passkey-providers.ts",
       "packages/migrations/migrations.manifest.json",

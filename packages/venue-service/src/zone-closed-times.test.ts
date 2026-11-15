@@ -38,7 +38,6 @@ async function venue() {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
     });
     const cfg = {};
     const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;

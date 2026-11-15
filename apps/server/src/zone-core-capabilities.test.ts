@@ -186,6 +186,7 @@ describe("core-only callers prepare the saved writing zone", () => {
     const credit = await addSeries("rectificative");
     const issued = await withTransaction(v.db, async (tx) =>
       recordCorrection(tx, v.backend, {
+        operationDescription: "Restaurante",
         origin: v.cfg.origin,
         nodeId: v.cfg.nodeId,
         seriesId: credit,
@@ -325,6 +326,7 @@ describe("core-only callers prepare the saved writing zone", () => {
           const clock = await issuingClock(tx);
           if (capability === "R5")
             return recordCorrection(tx, v.backend, {
+              operationDescription: "Restaurante",
               origin: v.cfg.origin,
               nodeId: v.cfg.nodeId,
               seriesId: selected,

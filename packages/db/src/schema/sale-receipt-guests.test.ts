@@ -16,7 +16,6 @@ async function seedSales(db: Database, count: number): Promise<string[]> {
   await seedVenue(db, {
     name: "Fixture",
     invoiceLocales: ["es"],
-    operationDescription: "Hostelería",
   });
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);

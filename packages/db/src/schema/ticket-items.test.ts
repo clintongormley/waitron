@@ -30,7 +30,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     await seedVenue(db, {
       name: "Fixture Venue A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
     const [prodA] = await db

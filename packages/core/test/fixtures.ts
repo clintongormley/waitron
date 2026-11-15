@@ -34,7 +34,6 @@ export async function seedTaxpayer(db: Database): Promise<SeededTaxpayer> {
     await seedVenue(db, {
       name: "Sala principal",
       invoiceLocales: ["es-ES", "ca-ES"],
-      operationDescription: "Venta en establecimiento",
     });
   }
 

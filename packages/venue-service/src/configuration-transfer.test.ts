@@ -1298,16 +1298,37 @@ describe("season weeks in a configuration bundle", () => {
 });
 
 describe("department receipt configuration fields", () => {
-  it.each([{ logo: "old-name.png" }, { unknown: true }])(
-    "refuses keys that are not receipt text: %j",
-    (receipt_text) => {
+  it.each([7, [], "x".repeat(501), "bad\u0000text"])(
+    "refuses an invalid operation-description column %j",
+    (operation_description) => {
       expect(() =>
         VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-          departments: [{ id: RESTAURANT, active: 1, receipt_text }],
+          departments: [{ id: RESTAURANT, active: 1, operation_description }],
         }),
-      ).toThrowError(refusal("departments.receipt_text"));
+      ).toThrowError(refusal("departments.operation_description"));
     },
   );
+  it.each([null, "", "Dining service", "x".repeat(500)])(
+    "accepts an operation-description column %j without saved receipt text",
+    (operation_description) => {
+      expect(() =>
+        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+          departments: [{ id: RESTAURANT, active: 1, operation_description, receipt_text: null }],
+        }),
+      ).not.toThrow();
+    },
+  );
+  it.each([
+    { logo: "old-name.png" },
+    { unknown: true },
+    { operationDescription: "Old receipt text" },
+  ])("refuses keys that are not receipt text: %j", (receipt_text) => {
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+        departments: [{ id: RESTAURANT, active: 1, receipt_text }],
+      }),
+    ).toThrowError(refusal("departments.receipt_text"));
+  });
 
   function tables(receipt: unknown): Tables {
     return {
@@ -1317,16 +1338,15 @@ describe("department receipt configuration fields", () => {
   it("accepts a department with no saved receipt text", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(null))).not.toThrow();
   });
-  it.each([
-    {},
-    { printAddress: false, operationDescription: "Dining service" },
-    { printAddress: true, operationDescription: "x".repeat(500) },
-  ])("accepts own receipt fields %j as an object or stored JSON", (receipt) => {
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).not.toThrow();
-    expect(() =>
-      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(JSON.stringify(receipt))),
-    ).not.toThrow();
-  });
+  it.each([{}, { printAddress: false }, { printAddress: true }])(
+    "accepts own receipt fields %j as an object or stored JSON",
+    (receipt) => {
+      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).not.toThrow();
+      expect(() =>
+        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(JSON.stringify(receipt))),
+      ).not.toThrow();
+    },
+  );
   it.each([
     ["null"],
     [[]],
@@ -1336,9 +1356,6 @@ describe("department receipt configuration fields", () => {
     [{ printAddress: "false" }],
     [{ printAddress: 0 }],
     [{ operationDescription: null }],
-    [{ operationDescription: [] }],
-    [{ operationDescription: "x".repeat(501) }],
-    [{ operationDescription: "bad\u0000text" }],
   ])("refuses invalid receipt configuration %j", (receipt) => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).toThrowError(
       refusal("departments.receipt_text"),

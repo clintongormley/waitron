@@ -23,7 +23,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 

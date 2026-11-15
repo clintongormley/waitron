@@ -21,7 +21,6 @@ describe("printer_holders", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
     ({ deviceId: deviceA } = await seedDevice(db, { profileId: profile!.id, label: "Till A" }));

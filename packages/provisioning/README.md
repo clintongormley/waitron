@@ -44,7 +44,7 @@ usage: waitron-provision <command> [options]
   venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
            [--taxpayer-domicile <address>]
            [--venue-name <name>] [--territory <t>] [--locale <l>]
-           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
+           [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
@@ -196,8 +196,7 @@ standard, full and rectificative series (`provisioning.duplicate_series_code`) b
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
-refuses a legal name or operation description carrying a character XML forbids, an operation
-description over 500 characters, and any series code outside AEAT's character set or longer than
+refuses a legal name carrying a character XML forbids and any series code outside AEAT's character set or longer than
 the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
 races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
 taxpayer row names a different country or tax id is refused with `provisioning.foreign_taxpayer`, and

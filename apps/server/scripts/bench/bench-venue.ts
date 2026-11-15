@@ -240,7 +240,6 @@ async function provision(db: Database): Promise<void> {
         name: "Bench Restaurant",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Restaurant",
         taxpayerDomicile: "1 High Street, 28013 Madrid, Madrid",
         addressLine1: "1 High Street",
         addressLine2: null,

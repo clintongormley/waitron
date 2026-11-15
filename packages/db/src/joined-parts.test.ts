@@ -28,7 +28,6 @@ async function seedJoinedToday(db: Db): Promise<void> {
   await seedVenue(db, {
     name: "Room",
     invoiceLocales: ["es"],
-    operationDescription: "Hostelería",
   });
   await seedZone(db, { id: ZONE, name: "Bar" });
   await db.insert(diningTables).values([

@@ -87,6 +87,7 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   return withTransaction(suite.db, async (tx) => {
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId,
@@ -120,6 +121,7 @@ function replacementInput(
   overrides: Partial<RecordReplacementInput> = {},
 ): RecordReplacementInput {
   return {
+    operationDescription: "Sale on premises",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
@@ -525,6 +527,7 @@ describe("recordReplacement — refusals use no number", () => {
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, (tx) =>
       recordSubstitution(tx, backend, {
+        operationDescription: "Sale on premises",
         origin: deviceOrigin(deviceId),
         nodeId,
         seriesId: brandSeriesId(fullSeries!.id),
@@ -561,6 +564,7 @@ describe("recordReplacement — refusals use no number", () => {
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, (tx) =>
       recordCorrection(tx, backend, {
+        operationDescription: "Sale on premises",
         origin: deviceOrigin(deviceId),
         nodeId,
         seriesId: rectSeriesId,

@@ -45,6 +45,7 @@ export function recordFixtureSale(db: Database, args: FixtureSale) {
       resolveClient: () => Promise.reject(new Error("fixture sales must not contact AEAT")),
     });
     return recordSale(tx, backend, {
+      operationDescription: "Retail sale",
       origin: jobOrigin("operator_script"),
       nodeId: nodeId(args.nodeId),
       seriesId: seriesId(args.seriesId),

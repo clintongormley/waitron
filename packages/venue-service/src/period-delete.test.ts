@@ -60,7 +60,6 @@ async function venue() {
   await seedVenue(db, {
     name: `Venue ${randomUUID()}`,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
     timeZone: ZONE,
     dayCutover: "06:00:00",
   });

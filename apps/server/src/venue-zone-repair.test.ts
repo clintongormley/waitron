@@ -40,7 +40,6 @@ beforeEach(async () => {
     timeZone: RAW,
     dayCutover: "06:00:00",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
   });
   scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
@@ -56,7 +55,7 @@ const read = (candidate?: string) =>
   );
 const snapshot = () => ({
   venueState: suite.db.all<Record<string, unknown>>(
-    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   settings: suite.db.all<Record<string, unknown>>(
     sql`select * from settings where module = 'business_day'`,

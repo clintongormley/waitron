@@ -135,7 +135,6 @@ beforeAll(async () => {
   await seedVenueSettings(db, {
     name: VENUE.venueName,
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   await withTransaction(db, (tx) => saveVenueFields(tx, { streamId: T.streamId }, null));
   await seedBusinessDay(db, {});

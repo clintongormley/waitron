@@ -29,7 +29,6 @@ describe("settled-tender refund ledger", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["es"],
-      operationDescription: "Meals",
     });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));

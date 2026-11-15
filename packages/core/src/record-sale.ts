@@ -1,7 +1,6 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./operation-description.js";
 import { eq } from "drizzle-orm";
 import {
   insertInChunks,
@@ -62,7 +61,7 @@ export interface RecordSaleInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`; its incidents name
    * it too. */
   origin: SaleOrigin;
-  operationDescription?: string;
+  operationDescription: string;
   /** The node that chains the sale. The named series must belong to it. */
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -322,7 +321,7 @@ export async function recordSale(
     await settleSale(tx, { saleId, tenders: input.settlement.tenders });
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
+  const descriptionOfOperation = input.operationDescription;
 
   // The module builds the fiscal record behind this one call; this package never touches a
   // module's tables.

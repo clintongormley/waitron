@@ -103,6 +103,7 @@ async function seedDeleted() {
   ).deviceId;
   const sale = await inTx((tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(barTill),
       nodeId: venue.cfg.nodeId,
       seriesId: venue.seriesId,

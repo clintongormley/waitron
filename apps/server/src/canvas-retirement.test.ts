@@ -44,7 +44,6 @@ describe("canvas retirement on a fresh venue", () => {
     await seedVenue(suite.db, {
       name: "Retained venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Food",
     });
     const { profileId } = await seedDevice(suite.db);
     const refused = await captureError(() =>

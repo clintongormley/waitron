@@ -1,6 +1,6 @@
 import { seedZone, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { menus, floorZones, products, readVenue, departments } from "@waitron/db";
+import { menus, floorZones, products, departments } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { addProducts, createMenu, menuItems, requireMenuRoot } from "@waitron/menu";
 import {
@@ -31,6 +31,7 @@ export interface OfferProductsOptions {
   orderStart?: "table" | "counter";
   paidWhen?: "prepay" | "ticket_then_pay";
   productIds?: readonly string[];
+  operationDescription?: string;
 }
 
 const MENU_NAME = "Test offers";
@@ -51,7 +52,7 @@ export async function offerProducts(
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";
   const orderStart = options.orderStart ?? (zone === "tables" ? "table" : "counter");
-  const zoneId = await resolveZone(tx, zone, orderStart);
+  const zoneId = await resolveZone(tx, zone, orderStart, options.operationDescription);
   if (options.paidWhen !== undefined) {
     await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", options.paidWhen);
   }
@@ -83,6 +84,7 @@ async function resolveZone(
   tx: Transaction,
   zone: NonNullable<OfferProductsOptions["zone"]>,
   orderStart: "table" | "counter",
+  operationDescription?: string,
 ): Promise<string> {
   let zoneId: string;
   if (typeof zone === "object") {
@@ -102,14 +104,17 @@ async function resolveZone(
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
-  const venueDoc = await readVenue(tx);
+  const [defaultDepartment] = await tx
+    .select({ description: departments.operationDescription })
+    .from(departments)
+    .where(eq(departments.isDefault, true));
   const [receipt] = await tx
     .select({ saved: departments.receiptUpdatedAt })
     .from(departments)
     .where(eq(departments.id, departmentId));
   if (receipt?.saved === null)
     await seedDepartmentReceipt(tx, departmentId, {
-      operationDescription: venueDoc.operationDescription,
+      operationDescription: operationDescription ?? defaultDepartment?.description ?? "Restaurant",
     });
   await configureZone(tx, { zoneId, departmentId, orderStart });
   if (zone === "counter") {

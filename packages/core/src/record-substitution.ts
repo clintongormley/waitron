@@ -1,7 +1,6 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./operation-description.js";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   insertInChunks,
@@ -27,7 +26,7 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordSubstitutionInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
-  operationDescription?: string;
+  operationDescription: string;
   /**
    * The node that issues this F3 and whose chain it extends. Checked against the series but not
    * against the substituted tickets' nodes: an F3 references them only by identity
@@ -248,7 +247,7 @@ export async function recordSubstitution(
     }
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
+  const descriptionOfOperation = input.operationDescription;
 
   const fiscal = await backend.recordSubstitution(
     tx,

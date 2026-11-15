@@ -56,7 +56,6 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es"],
-      operationDescription: "Retail",
     });
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);

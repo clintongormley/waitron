@@ -17,7 +17,6 @@ it("counts only department logos and protects each until cleared despite retired
     await seedVenue(tx, {
       name: "Dining room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
     });
     const rows = await tx
       .insert(departments)
@@ -78,7 +77,6 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
       await seedVenue(tx, {
         name: "Restaurant",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
       });
       const [good, broken] = await tx
         .insert(departments)
@@ -110,7 +108,6 @@ it("protects a deleted department's retained receipt logo after its name is reus
     await seedVenue(tx, {
       name: "Restaurant",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
     });
     await createDepartment(tx, { name: "Survivor" });
     const old = await createDepartment(tx, { name: "Dining" });

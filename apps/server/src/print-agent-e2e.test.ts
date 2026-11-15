@@ -68,7 +68,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Bar",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {

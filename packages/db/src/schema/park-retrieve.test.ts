@@ -52,7 +52,6 @@ describe("park & retrieve schema", () => {
     await seedVenue(admin, {
       name: "Fixture Venue A",
       invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
     });
     nodeA = await seedNode(admin);
     ({ deviceId: deviceA } = await seedDevice(admin));

@@ -296,7 +296,11 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       })
     ).image;
     const department = await createDepartment(tx, { name: "Photo receipt" });
-    await seedDepartmentReceipt(tx, department.id, { logo: a.filename, phone: "+34 600 111 222" });
+    await seedDepartmentReceipt(tx, department.id, {
+      logo: a.filename,
+      phone: "+34 600 111 222",
+      operationDescription: "Exported dining meals",
+    });
     for (const [index, image] of [a, b].entries())
       await saveImage(
         tx,
@@ -368,6 +372,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
     .select()
     .from(departments)
     .where(eq(departments.name, "Photo receipt"));
+  expect(department!.operationDescription).toBe("Exported dining meals");
   const scope = { receiptLanguages: ["es-ES"] };
   for (const paper of ["58mm", "80mm"] as const) {
     const printed = await readPrintedDepartmentReceipt(
@@ -382,6 +387,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       bits: new Uint8Array(Buffer.from(pictures[0]![paper].data, "base64")),
     });
     expect(printed.receipt.phone).toBe("+34 600 111 222");
+    expect(printed.receipt.operationDescription).toBe("Exported dining meals");
   }
 });
 
@@ -448,7 +454,6 @@ function venue(taxId: string): VenueRequest {
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Calle 1",
     addressLine2: null,
@@ -470,7 +475,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 40,
+  version: 41,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -483,7 +488,6 @@ const bundle: ConfigurationBundle = {
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Calle 1",
     addressLine2: null,
@@ -1223,6 +1227,7 @@ describe("configuration transfer database path", () => {
         tx,
         fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
+          operationDescription: "Restaurant",
           origin,
           nodeId: nodeId(target.nodeId),
           seriesId: seriesId(target.seriesIds[0]!),
@@ -5567,7 +5572,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(40);
+  expect(exported.version).toBe(41);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

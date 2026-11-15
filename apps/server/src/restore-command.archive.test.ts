@@ -122,7 +122,6 @@ beforeAll(async () => {
     await seedVenueSettings(tx, {
       name: "Archive venue",
       invoiceLocales: ["es"],
-      operationDescription: "Venta",
     });
     await seedBusinessDay(tx, {});
     await tx.insert(nodes).values({ id: ids.node, name: "Archive node" });

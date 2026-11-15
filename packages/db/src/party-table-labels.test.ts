@@ -37,7 +37,6 @@ describe("party table labels", () => {
     await seedVenue(suite.db, {
       name: "Room",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 

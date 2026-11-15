@@ -53,7 +53,6 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     await seedVenueSettings(db, {
       name: "Local principal",
       invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(db, {});
   }
@@ -107,7 +106,6 @@ export async function seedTenants(db: Database): Promise<void> {
   if (existing.revision === 0) {
     await seedVenueSettings(db, {
       name: "Local principal",
-      operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(db, {});
   }
@@ -125,7 +123,6 @@ export async function seedVenueNodes(db: Database): Promise<void> {
     .onConflictDoNothing({ target: taxpayer.id });
   await seedVenueSettings(db, {
     name: "Local principal",
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values([
@@ -240,7 +237,6 @@ async function insertNodeAndSeries(
   if (existing.revision === 0) {
     await seedVenueSettings(tx, {
       name: "Sala principal",
-      operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(tx);
   }

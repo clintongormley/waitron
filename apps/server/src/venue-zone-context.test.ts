@@ -30,7 +30,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Test venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
     province: "Madrid",
     timeZone: "Invalid/Zone",
     dayCutover: "06:00:00",
@@ -43,7 +42,7 @@ const preview = (zone = "Europe/Madrid", at = AT) =>
   withTransaction(suite.db, (tx) => validateRetainedZoneClock(tx, scope, zone, at));
 const retained = () => ({
   venueState: suite.db.all(
-    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   changes: suite.db.all(sql`select * from day_cutover_changes order by effective_business_day`),
   settings: suite.db.all(sql`select * from settings where module = 'business_day'`),

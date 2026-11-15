@@ -56,7 +56,7 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
 }
 
 async function seedFixtureVenue(name: string): Promise<void> {
-  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"] });
 }
 
 async function seedPrinter(

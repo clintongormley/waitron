@@ -386,7 +386,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
     store = await openVenueDatabase(venueDir);
     db = store.venue;
-    await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
+    await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"] });
     manager = await seedPerson("manager", "Martha");
     supervisor = await seedPerson("supervisor", "Simon");
     admin = await seedPerson("admin", "Anna");
@@ -1282,7 +1282,6 @@ describe("a start on a real full disk", () => {
       await seedVenue(db, {
         name: "Corner Bistro",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Sale",
       });
       const [admin] = await seedPersons(db, {
         displayName: "Admin",
@@ -1371,7 +1370,6 @@ describe("a start on a real full disk", () => {
       await seedVenue(db, {
         name: "Main",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Sale",
       });
       const { deviceId } = await seedDevice(db, { label: "Till 1" });
       const token = "equipment-token";
@@ -1573,7 +1571,6 @@ describe("a start on a real full disk", () => {
         await seedVenue(db, {
           name: "Main",
           invoiceLocales: ["en-GB"],
-          operationDescription: "Sale",
         });
         const [row] = await db
           .insert(printAgents)
@@ -2127,7 +2124,6 @@ describe("a start on a real full disk", () => {
       await seedVenue(db, {
         name: "Corner Bistro",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Sale",
       });
       const [admin] = await seedPersons(db, {
         displayName: "Admin",
@@ -2176,7 +2172,6 @@ describe("a start on a real full disk", () => {
       await seedVenue(db, {
         name: "Main",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Sale",
       });
       const { deviceId } = await seedDevice(db, { label: "Till 1" });
       const token = "equipment-notices-token";

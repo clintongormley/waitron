@@ -21,7 +21,6 @@ it.each(["calendar", "opening hours"] as const)(
         await seedVenue(tx, {
           name: randomUUID(),
           invoiceLocales: ["en-GB"],
-          operationDescription: "Hospitality",
           timeZone: "Europe/Madrid",
           dayCutover: "06:00:00",
         });

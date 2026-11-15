@@ -82,7 +82,6 @@ async function venue() {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(suite.db);
   const agentOne = await agent("Back office agent");
@@ -133,6 +132,7 @@ async function fullInvoice(nodeId: string): Promise<string> {
   });
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId: nodeId as Parameters<typeof recordSale>[2]["nodeId"],
       seriesId: seriesId(series!.id),

@@ -44,7 +44,7 @@ const suite = useVenueDb({
 });
 
 async function seedPlace(db: Database): Promise<Place> {
-  await seedVenue(db, { name: "Actions", invoiceLocales: ["en"], operationDescription: "Meals" });
+  await seedVenue(db, { name: "Actions", invoiceLocales: ["en"] });
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const series: Record<string, string> = {};

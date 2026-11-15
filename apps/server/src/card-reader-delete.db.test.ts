@@ -126,7 +126,6 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
   await seedVenue(suite.db, {
     name: "Main bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta",
   });
   const [rRow] = await suite.db
     .insert(cardReaders)

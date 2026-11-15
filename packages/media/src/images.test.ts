@@ -1291,7 +1291,6 @@ describe("free default choice with incomplete menu and image text", () => {
       await seedVenueSettings(tx, {
         name: "Saved-order venue",
         invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
       });
       await seedBusinessDay(tx);
       const order = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 17 });

@@ -52,7 +52,6 @@ describe("floor plan tables", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     DEPARTMENT = (await seedZone(db, { id: ZONE, name: "Dining room" })).departmentId;
     await seedZone(db, { id: OTHER_ZONE, name: "Terrace" });

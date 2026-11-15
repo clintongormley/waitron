@@ -294,7 +294,6 @@ async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, {
     name,
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
     timeZone: "UTC",
   });
 }

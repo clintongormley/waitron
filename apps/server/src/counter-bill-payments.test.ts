@@ -173,9 +173,9 @@ describe("Counter full invoice through the bill window", () => {
     async (invoiceType) => {
       const venue = await provisionBillVenue(suite.db);
       await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
-      await suite.db.update(departments).set({
-        receiptText: { operationDescription: "Restaurant", email: "dining@example.test" },
-      });
+      await suite.db
+        .update(departments)
+        .set({ operationDescription: "Restaurant", receiptText: { email: "dining@example.test" } });
       const app = new Hono();
       mountTillApi(
         app,

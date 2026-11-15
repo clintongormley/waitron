@@ -65,7 +65,6 @@ describe("signing and verifying handover envelopes between boxes", () => {
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta",
     });
     const self = await seedNode(db);
     const peer = await seedNode(db);

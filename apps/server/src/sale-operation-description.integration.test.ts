@@ -35,9 +35,6 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     const [zone] = await db.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     departmentId = zone!.departmentId;
-    await db.run(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic venue service"}) where module = 'venue'`,
-    );
     await authored("Dining meals");
   },
 });
@@ -127,7 +124,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, offers.zoneId));
     await tx
       .update(departments)
-      .set({ receiptText: { operationDescription: "Counter drinks" } })
+      .set({ operationDescription: "Counter drinks" })
       .where(eq(departments.id, zone!.departmentId));
     return { ...offers, departmentId: zone!.departmentId };
   });

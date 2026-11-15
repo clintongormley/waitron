@@ -14,7 +14,6 @@ const doc = {
   streamId: null,
   name: "Harbour restaurant",
   fiscalTerritory: "ES-common",
-  operationDescription: "Meals",
   addressLine1: "1 Main Street",
   addressLine2: null,
   postalCode: "10001",
@@ -31,6 +30,11 @@ const doc = {
 describe("the venue document", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
+  it("parses a venue without an operation description", () => {
+    const without = doc;
+    expect(api.VENUE_SETTINGS.parse(without)).toEqual({ ok: true, doc: without });
+  });
+
   it("declares a non-transferring core document with invalid defaults", () => {
     expect(api.VENUE_SETTINGS).toMatchObject({ module: "venue", version: 1, transfers: false });
     expect(api.VENUE_SETTINGS.defaults()).toEqual({
@@ -38,7 +42,6 @@ describe("the venue document", () => {
       streamId: null,
       name: "",
       fiscalTerritory: "ES-common",
-      operationDescription: "Restaurant",
       addressLine1: null,
       addressLine2: null,
       postalCode: null,
@@ -200,7 +203,6 @@ describe("the venue document", () => {
       city: doc.city,
       province: doc.province,
       invoiceLocales: ["en", "es"],
-      operationDescription: "Meals",
       fiscalTerritory: "ES-common",
       timeZone: "Europe/London",
       dayCutover: "04:00:00",
@@ -244,7 +246,6 @@ describe("the venue document", () => {
         streamId: null,
         name: "Test venue",
         fiscalTerritory: "ES-common",
-        operationDescription: "Restaurant",
         addressLine1: null,
         addressLine2: null,
         postalCode: null,
@@ -299,13 +300,9 @@ describe("the business-day document", () => {
     });
   });
 
-  it("reads the zone, territory and description from the documents", async () => {
+  it("reads the zone and territory from the documents", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await api.createVenueSettings(
-        tx,
-        { ...doc, fiscalTerritory: "ES-canary", operationDescription: "New meals" },
-        null,
-      );
+      await api.createVenueSettings(tx, { ...doc, fiscalTerritory: "ES-canary" }, null);
       await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
         doc: { timeZone: "Atlantic/Canary" },
         expectedRevision: 0,
@@ -318,7 +315,6 @@ describe("the business-day document", () => {
     expect(await withTransaction(suite.db, api.readVenue)).toMatchObject({
       timeZone: "Atlantic/Canary",
       fiscalTerritory: "ES-canary",
-      operationDescription: "New meals",
     });
   });
 

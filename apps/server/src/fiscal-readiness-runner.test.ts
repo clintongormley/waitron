@@ -27,7 +27,6 @@ const venue: VenueRequest = {
   name: "Prepared",
   fiscalTerritory: "GB-vat",
   invoiceLocales: ["en-GB"],
-  operationDescription: "Restaurant",
   addressLine1: "1 High Street",
   addressLine2: null,
   postalCode: "SW1A 1AA",

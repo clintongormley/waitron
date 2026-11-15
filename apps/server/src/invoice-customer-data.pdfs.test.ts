@@ -95,6 +95,7 @@ async function jordiInvoiceIn(seriesId: string, taxId = "01234567L"): Promise<st
   const billId = await parked(venue, "Caña");
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(seriesId),

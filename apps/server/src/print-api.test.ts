@@ -98,7 +98,6 @@ async function seedPrintRouteFixture(db: Database) {
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   // Knock and accept must share this one cfg: every join-request statement filters by node.
   cfg = {

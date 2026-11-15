@@ -2,7 +2,7 @@ import type { ConfigurationBundle } from "../src/configuration-transfer.js";
 
 export function configurationBundle(): ConfigurationBundle {
   return {
-    version: 40,
+    version: 41,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -18,7 +18,6 @@ export function configurationBundle(): ConfigurationBundle {
       rectificativeSeriesCode: "R",
       name: "Synthetic source",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant",
       fiscalTerritory: "GB-vat",
       addressLine1: null,
       addressLine2: null,

@@ -25,7 +25,6 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
           name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: ["es-ES"],
-          operationDescription: "Retail sale",
           addressLine1: "1 Market Street",
           addressLine2: null,
           postalCode: "28013",

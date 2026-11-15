@@ -17,7 +17,6 @@ describe("station printer list mapping", () => {
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 

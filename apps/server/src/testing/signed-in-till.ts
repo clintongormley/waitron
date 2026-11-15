@@ -81,7 +81,6 @@ export async function provisionSignedInTill<S extends TillSeed>(
         name: "Casa Delgado",
         fiscalTerritory: "ES-common",
         invoiceLocales: [SIGNED_IN_TILL_LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

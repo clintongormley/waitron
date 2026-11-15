@@ -34,7 +34,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
     await seedVenue(db, {
       name: "Fixture Venue",
       invoiceLocales: [...LOCALES],
-      operationDescription: "Hostelería",
     });
     const [prod] = await db
       .insert(products)

@@ -51,7 +51,6 @@ const venue: VenueRequest = {
   name: "Prepared",
   fiscalTerritory: "GB-vat",
   invoiceLocales: ["en-GB"],
-  operationDescription: "Restaurant",
   addressLine1: "1 High Street",
   addressLine2: null,
   postalCode: "SW1A 1AA",
@@ -95,14 +94,32 @@ describe("fiscal readiness submission runner", () => {
     ).not.toBe(original);
   });
 
-  it("records the sample in an isolated retained database before asking the fiscal slot to drain", async () => {
+  it("the readiness test sale files the fiscal contribution's default description", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-"));
     dirs.push(stateDir);
     const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const drain = vi.fn().mockResolvedValue({ ...emptyDrainResult(), recordsAccepted: 1 });
+    const descriptions: string[] = [];
     const contribution = {
       ...selected.contribution!,
+      venueFields: {
+        defaults: { operationDescription: "Readiness default" },
+        validate: () => {},
+        validateLegalName: () => {},
+        validateOperationDescription: () => {},
+      },
+      makeBackend: (
+        args: Parameters<NonNullable<typeof selected.contribution>["makeBackend"]>[0],
+      ) => {
+        const backend = selected.contribution!.makeBackend(args);
+        const record = backend.recordSale.bind(backend);
+        backend.recordSale = (tx, sale) => {
+          descriptions.push(sale.descriptionOfOperation);
+          return record(tx, sale);
+        };
+        return backend;
+      },
       activationReadiness: "accepted-test-submission" as const,
       drain,
     };
@@ -130,6 +147,7 @@ describe("fiscal readiness submission runner", () => {
         now: () => new Date("2026-09-09T12:00:00.000Z"),
       }),
     ).resolves.toEqual({ status: "accepted" });
+    expect(descriptions).toEqual(["Readiness default"]);
     expect(drain).toHaveBeenCalledOnce();
     expect(drain.mock.calls[0]![0]).toMatchObject({
       environment: "preproduction",

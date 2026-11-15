@@ -18,7 +18,6 @@ it("signs in normally in a venue where workforce has never been migrated", async
   await seedVenue(suite.db, {
     name: "No workforce",
     invoiceLocales: ["en"],
-    operationDescription: "Restaurant",
   });
   const node = await seedNode(suite.db);
   const device = await seedDevice(suite.db);

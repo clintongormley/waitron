@@ -42,7 +42,6 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await seedVenueSettings(db, {
     name: "Local principal",
     invoiceLocales: ["es"],
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
   await seedDevice(db, {});

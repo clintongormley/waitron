@@ -353,7 +353,6 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     await seedVenueSettings(tx, {
       name: "Before probe",
       invoiceLocales: ["es"],
-      operationDescription: "probe",
     });
     await seedBusinessDay(tx, {});
     const [zone] = [await seedZone(tx, { name: "Probe tables" })];

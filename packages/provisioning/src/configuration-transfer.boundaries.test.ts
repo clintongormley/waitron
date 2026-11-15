@@ -717,7 +717,6 @@ it("exports the venue's own fields and the default flag in its menu rows", async
       "name",
       "fiscalTerritory",
       "invoiceLocales",
-      "operationDescription",
       "addressLine1",
       "addressLine2",
       "postalCode",

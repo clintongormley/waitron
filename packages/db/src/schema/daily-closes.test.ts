@@ -45,7 +45,6 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
     await seedVenue(db, {
       name: "Fixture Venue A",
       invoiceLocales: ["es"],
-      operationDescription: "Hosteleria",
     });
     nodeA = await seedNode(db);
   });

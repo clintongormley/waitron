@@ -53,7 +53,6 @@ describe("order_amendments append helper", () => {
     await seedVenue(admin, {
       name: "Fixture Venue A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeA = await seedNode(admin);
     ({ deviceId: deviceA1 } = await seedDevice(admin));
@@ -61,7 +60,6 @@ describe("order_amendments append helper", () => {
     await seedVenueSettings(admin, {
       name: "Fixture Venue B",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedBusinessDay(admin, {});
     nodeB = await seedNode(admin);

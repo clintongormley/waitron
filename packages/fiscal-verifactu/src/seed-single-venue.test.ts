@@ -30,7 +30,6 @@ it.each([
   await seedVenueSettings(suite.db, {
     name: "Retained venue",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Rome" });
   const before = await readVenue(suite.db);

@@ -34,7 +34,6 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
     name: "Main",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["en"],
-    operationDescription: "Restaurant",
     addressLine1: "1 Market Street",
     addressLine2: null,
     postalCode: "28013",

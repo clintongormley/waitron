@@ -197,7 +197,6 @@ it("a pending adoption with the allocation-dependent module enabled finishes wit
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
   const own = generateNodeKeyPair();

@@ -36,7 +36,6 @@ async function seed() {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
     timeZone: "Europe/Madrid",
   });
   const nodeId = await seedNode(db);

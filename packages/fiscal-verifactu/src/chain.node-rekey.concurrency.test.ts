@@ -157,7 +157,6 @@ describe("currentSif resolves per node", () => {
       await seedVenueSettings(tx, {
         name: "Sala sib",
         invoiceLocales: ["es"],
-        operationDescription: "Venta en establecimiento",
       });
       await seedBusinessDay(tx, {});
       const [nodeRow] = await tx

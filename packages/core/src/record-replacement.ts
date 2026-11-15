@@ -21,11 +21,10 @@ import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { storedCounterparty } from "./counterparty.js";
 import { requireCorrectiveSeries } from "./corrective-series.js";
-import { operationDescriptionFor } from "./operation-description.js";
 
 export interface RecordReplacementInput {
   origin: SaleOrigin;
-  operationDescription?: string;
+  operationDescription: string;
   /** The node that issues the replacement and whose chain it extends. */
   nodeId: NodeId;
   /** Must be this node's live `rectificative` series. */
@@ -202,7 +201,7 @@ export async function recordReplacement(
     })),
   );
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
+  const descriptionOfOperation = input.operationDescription;
 
   const fiscal = await backend.recordCorrection(
     tx,

@@ -1434,11 +1434,6 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       "fullSeriesCode",
       (b) => void (asRec(b.venue).fullSeriesCode = "Series F"),
     ],
-    [
-      "an operation description carrying a character XML forbids",
-      "operationDescription",
-      (b) => void (asRec(b.venue).operationDescription = "Main\u0007bar"),
-    ],
     // Without this row `legalName` could be wired to any other string field and every test would
     // still pass.
     [
@@ -1520,51 +1515,6 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     expect(res.status).toBe(200);
     expect(provision).toHaveBeenCalledOnce();
     await tick();
-  });
-});
-
-describe("POST /setup-api/provision — the operation description", () => {
-  it("takes the filing module's default when the field is absent", async () => {
-    const app = new Hono();
-    const { deps, provisionRequests } = makeDeps();
-    mountSetup(app, deps, noopLog);
-
-    const body = demoBody();
-    delete asRec(body.venue).operationDescription;
-    const res = await postProvision(app, body);
-
-    expect(res.status).toBe(200);
-    expect(provisionRequests[0]!.venue.operationDescription).toBe("Venta en establecimiento");
-    await tick();
-  });
-
-  it("keeps an explicitly sent value as sent", async () => {
-    const app = new Hono();
-    const { deps, provisionRequests } = makeDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postProvision(app, demoBody());
-
-    expect(res.status).toBe(200);
-    expect(provisionRequests[0]!.venue.operationDescription).toBe("Retail counter sales");
-    await tick();
-  });
-
-  it("still refuses an explicitly sent empty value", async () => {
-    const app = new Hono();
-    const { deps, provision } = makeDeps();
-    mountSetup(app, deps, noopLog);
-
-    const body = demoBody();
-    asRec(body.venue).operationDescription = "";
-    const res = await postProvision(app, body);
-
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toEqual({
-      code: "setup.request_invalid",
-      params: { field: "operationDescription" },
-    });
-    expect(provision).not.toHaveBeenCalled();
   });
 });
 

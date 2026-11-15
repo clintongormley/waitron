@@ -1,7 +1,6 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./operation-description.js";
 import { eq, sql } from "drizzle-orm";
 import { insertInChunks, allocateInvoiceNumber, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -42,7 +41,7 @@ const ZERO = decimal("0");
 export interface RecordCorrectionInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
-  operationDescription?: string;
+  operationDescription: string;
   /**
    * The node that issues this corrective invoice and whose chain it extends. Checked against the
    * corrective series (`sale.series_wrong_node`) but deliberately NOT against the original sale's
@@ -330,7 +329,7 @@ export async function recordCorrection(
       saleLineRows(saleId, input.lines, { corrective: true }),
   );
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
+  const descriptionOfOperation = input.operationDescription;
 
   const fiscal = await backend.recordCorrection(
     tx,

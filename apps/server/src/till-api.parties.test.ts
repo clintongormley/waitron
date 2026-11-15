@@ -54,7 +54,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurante",
     });
     const nodeId = await seedNode(db);
     const [person] = await seedPersons(db, {

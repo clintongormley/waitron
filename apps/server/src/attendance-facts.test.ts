@@ -89,7 +89,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     dayCutover: "04:00",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   nodeId = await seedNode(suite.db);
   deviceId = (await seedDevice(suite.db)).deviceId;

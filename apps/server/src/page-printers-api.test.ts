@@ -52,7 +52,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Barra",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta",
   });
   cfg = {
     nodeId: brandNodeId(randomUUID()),

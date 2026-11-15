@@ -74,7 +74,6 @@ async function ensureVenue(tx: Transaction, label: string): Promise<void> {
   await seedVenueSettings(tx, {
     name: "Sala " + label,
     invoiceLocales: ["es"],
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(tx, {});
 }

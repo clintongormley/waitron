@@ -131,6 +131,7 @@ async function operation(kind: "F2" | "F1" | "R5" | "F3" | "cancellation") {
       return recordVoid(tx, backend, original!.saleId, "Staff error", { sessionId }, node.nodeId);
     if (kind === "R5")
       return recordCorrection(tx, backend, {
+        operationDescription: "Venta en establecimiento",
         origin: value.origin,
         nodeId: node.nodeId,
         seriesId: correctionSeries,
@@ -146,6 +147,7 @@ async function operation(kind: "F2" | "F1" | "R5" | "F3" | "cancellation") {
       });
     if (kind === "F3")
       return recordSubstitution(tx, backend, {
+        operationDescription: "Venta en establecimiento",
         origin: value.origin,
         nodeId: node.nodeId,
         seriesId: fullSeries,

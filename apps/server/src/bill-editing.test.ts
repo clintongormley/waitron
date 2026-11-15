@@ -26,7 +26,6 @@ async function fixture() {
     await seedVenue(tx, {
       name: "Dining room",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
     const [anna] = await seedPersons(tx, { displayName: "Anna" });
     const [lewis] = await seedPersons(tx, { displayName: "Lewis" });

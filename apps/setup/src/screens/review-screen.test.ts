@@ -64,7 +64,6 @@ function everyRowDraft(mode: "demo" | "live"): DeepPartial<ProvisionBody> {
   const draft = fullDraft();
   draft.mode = mode;
   Object.assign(draft.venue!, {
-    operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
     addressLine1: "Calle Mayor 1",
     postalCode: "28013",
@@ -438,7 +437,6 @@ it("shows the fixed demo identity's note and full venue details for review", asy
   const draft = fullDraft();
   draft.mode = "demo";
   Object.assign(draft.venue!, {
-    operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
     addressLine1: "Calle Mayor 1",
     postalCode: "28013",

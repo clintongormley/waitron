@@ -548,7 +548,6 @@ describe("runStagedReset", () => {
           await seedVenueSettings(store.venue, {
             name: "Sala principal",
             invoiceLocales: ["es-ES"],
-            operationDescription: "Venta en establecimiento",
           });
           await seedBusinessDay(store.venue, {});
         } finally {

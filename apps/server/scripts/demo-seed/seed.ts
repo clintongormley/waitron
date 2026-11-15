@@ -35,6 +35,7 @@ import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js"
 export interface SeedDemoVenue {
   nodeId: string;
   seriesId: string;
+  operationDescription: string;
 }
 
 export interface SeedDemoInput {
@@ -117,6 +118,7 @@ export async function seedDemoRestaurant(
     venue: {
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
+      operationDescription: venue.operationDescription,
     },
     invoiceLocale,
     days: salesDays,

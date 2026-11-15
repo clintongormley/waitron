@@ -29,7 +29,6 @@ it("routing upgrade preserves populated predecessor rows", async () => {
   await seedVenue(db, {
     name: "Oak Room",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   const node = await seedNode(db);
   const { deviceId } = await seedDevice(db);

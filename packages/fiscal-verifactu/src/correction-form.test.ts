@@ -69,6 +69,7 @@ async function correctedSale(correctionClock: TrustedClock = steadyClock): Promi
   );
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordCorrection(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,

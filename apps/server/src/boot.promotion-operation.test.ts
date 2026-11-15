@@ -111,7 +111,6 @@ it.each(["account", "key"])(
     await seedVenueSettings(suite.db, {
       name: "Restaurant",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "05:00" });
     await suite.db.insert(nodes).values({

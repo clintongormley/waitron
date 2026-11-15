@@ -81,7 +81,6 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
       timeZone: "Europe/Madrid",
     });
     await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });
@@ -118,7 +117,6 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Meals",
     });
     const nodeId = await seedNode(suite.db);
     const { deviceId } = await seedDevice(suite.db);

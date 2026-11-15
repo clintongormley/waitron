@@ -89,7 +89,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
 
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold; its refusal is shown above Next. */
-type FieldKey = FormField | "operationDescription" | "staffLanguage";
+type FieldKey = FormField | "staffLanguage";
 
 /** The venue's own address, or the business's one-line registered address. */
 type AddressSearch = "address" | "domicile";
@@ -632,10 +632,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #shows(key: FieldKey): boolean {
-    return (
-      key !== "operationDescription" &&
-      (key === "staffLanguage" || !(this.#demo && DEMO_HIDDEN.has(key)))
-    );
+    return key === "staffLanguage" || !(this.#demo && DEMO_HIDDEN.has(key));
   }
 
   #invalidFields(): Set<FormField> {

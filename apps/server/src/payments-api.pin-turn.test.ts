@@ -44,7 +44,6 @@ async function setup(role: "manager" | "staff" = "manager") {
     name: "PIN venue",
     timeZone: "Europe/Madrid",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
   });
   const writingNodeId = await seedNode(suite.db);
   const app = new Hono();

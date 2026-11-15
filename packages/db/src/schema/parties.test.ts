@@ -29,7 +29,6 @@ describe("parties, party_tables and service_commands", () => {
     await seedVenue(db, {
       name: "Room",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
     await seedPerson(db, { id: OPERATOR });

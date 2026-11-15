@@ -101,7 +101,6 @@ async function setupVenue(): Promise<Venue> {
   await seedVenue(db, {
     name: "Dining room",
     invoiceLocales: [LOCALE],
-    operationDescription: "Restaurante",
   });
   const kitchenStationId = await seedKitchenStation(db, {
     name: "Kitchen",

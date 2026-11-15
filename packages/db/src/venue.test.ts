@@ -31,12 +31,10 @@ describe("the venue accessor", () => {
       timeZone,
       dayCutover,
       fiscalTerritory = "ES-common",
-      operationDescription = "Meals",
     } = values;
     await seedVenueSettings(suite.db, {
       name,
       fiscalTerritory,
-      operationDescription,
       addressLine1,
       addressLine2,
       postalCode,
@@ -51,7 +49,6 @@ describe("the venue accessor", () => {
     await insertVenue({
       name: "Bar Tenerife",
       invoiceLocales: ["es", "en"],
-      operationDescription: "Food and drink",
       fiscalTerritory: "ES-canary",
       addressLine1: "Calle Mayor 1",
       addressLine2: "Bajo",
@@ -66,7 +63,6 @@ describe("the venue accessor", () => {
     expect(await withTransaction(suite.db, readVenue)).toEqual({
       name: "Bar Tenerife",
       invoiceLocales: ["es", "en"],
-      operationDescription: "Food and drink",
       fiscalTerritory: "ES-canary",
       addressLine1: "Calle Mayor 1",
       addressLine2: "Bajo",

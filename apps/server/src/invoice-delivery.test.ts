@@ -86,7 +86,6 @@ async function issue(full = true) {
     await seedVenue(suite.db, {
       name: "Bar",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Sale on premises",
     });
   }
   const nodeId = await seedNode(suite.db);
@@ -105,6 +104,7 @@ async function issue(full = true) {
   });
   return withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId,
       seriesId: seriesId(series!.id),
@@ -2422,6 +2422,7 @@ describe("invoice email worker pass", () => {
       const another = await within(
         withTransaction(suite.db, (tx) =>
           recordSale(tx, backend, {
+            operationDescription: "Sale on premises",
             origin: jobOrigin("operator_script"),
             nodeId: nodeId(series!.nodeId),
             seriesId: seriesId(series!.id),

@@ -40,7 +40,6 @@ async function venue(tx: Transaction, suffix = "") {
   await seedVenue(tx, {
     name: `Venue${suffix}`,
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const cfg = {};
   const department = await createDepartment(tx, {

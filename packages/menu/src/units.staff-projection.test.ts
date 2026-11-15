@@ -49,7 +49,6 @@ it.each(["products", "available", "offers"] as const)(
         name: "Room",
         defaultMenuId: menu.id,
         invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
       });
       await addProductToMenu(tx, { menuId: menu.id, productId: weighed.id, grossPrice: "3.00" });
       await addProductToMenu(tx, { menuId: menu.id, productId: each.id, grossPrice: "1.00" });

@@ -44,7 +44,6 @@ describe("deferred_closures", () => {
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
     otherNodeId = await seedNode(db);

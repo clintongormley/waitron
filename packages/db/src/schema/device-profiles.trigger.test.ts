@@ -26,7 +26,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 

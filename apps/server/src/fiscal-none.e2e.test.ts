@@ -104,7 +104,6 @@ async function setupGbVenue(): Promise<GbVenue> {
         name: "Main counter",
         fiscalTerritory: "GB-vat",
         invoiceLocales: [LOCALE],
-        operationDescription: "Sale on premises",
         addressLine1: "1 High Street",
         addressLine2: null,
         postalCode: "EC1A 1AA",
@@ -179,6 +178,7 @@ async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: string }> {
   return asApp(async (tx) => {
     const { saleId, fiscal } = await recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: deviceOrigin(venue.deviceId),
       nodeId: venue.nodeId,
       seriesId: venue.standardSeriesId,
@@ -259,6 +259,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     // 4. A rectificativa correcting the second sale, drawn from the rectificative series.
     await asApp((tx) =>
       recordCorrection(tx, backend, {
+        operationDescription: "Sale on premises",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.rectificativeSeriesId,
@@ -283,6 +284,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     // 5. A factura de canje (F3) substituting the third sale, drawn from the full series.
     await asApp((tx) =>
       recordSubstitution(tx, backend, {
+        operationDescription: "Sale on premises",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.fullSeriesId,

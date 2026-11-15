@@ -197,7 +197,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Main dining room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     ({ deviceId } = await seedDevice(db, { label: "Bar 1" }));
     nodeId = await seedNode(db);

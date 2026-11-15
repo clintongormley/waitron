@@ -299,7 +299,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
             name: "Sala principal",
             fiscalTerritory: "ES-common",
             invoiceLocales: [LOCALE],
-            operationDescription: "Venta en establecimiento",
             addressLine1: "Calle Mayor 2",
             addressLine2: null,
             postalCode: "28013",

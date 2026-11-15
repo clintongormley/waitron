@@ -237,3 +237,47 @@ is. Nothing in this area waits for this PR; vb7–vb9 may land before it.
 - [ ] **Step 4: Run** Finish-line items 1–5 — PASS.
 - [ ] **Step 5:** Docs; `pnpm protection-list list --out <B>`; `compare`; paste and mark.
 - [ ] **Step 6: Commit** `git commit -s -m "sales: the operation description is a required input; the venue's copy goes (FISCAL)"`.
+
+
+## Current-main consumer ports — watcher clearance, 2026-11-15
+
+The watcher cleared these direct ports at 17:24 and 17:33 in Lane H's `questions.md`:
+move import refusals and malformed-reader controls to `departments.operation_description`;
+keep number/array refusals at import rather than as JSON types in a TEXT column. Current main
+also has a fourth recording input, `RecordReplacementInput`: it becomes required too. A replacement
+copies its target's recorded text exactly, using the fiscal contribution's default only if the
+target had none. The upgrade-check department uses that default. The venue-field contribution
+contract and setup validator lose only the venue description; department validation stays.
+All existing filed descriptions must stay byte-identical; the fiscal pair stays unedited, and a
+replacement test covers exact copying. The PR says "fiscal-adjacent" and the owner lands it.
+This is the watcher's clearance, not a new owner approval of the design.
+
+
+**Watcher, 2026-11-15 18:04:** the upgrade-check invoice is a second named exception to
+unchanged text: the copied fixture's “Restaurante” becomes the contribution default,
+“Venta en establecimiento”. The production wrapper runs that sale in its disposable
+`check/state` copy and starts its container with `--network none`
+(`scripts/box/upgrades/candidate.mjs`; the eight candidate-wrapper tests passed under a Docker stub).
+The base/candidate `upgrade-sale.test.ts` probes each asserted the newest stored fiscal description
+and passed. This exception does not authorise changing a real venue's filed description.
+
+**Watcher, 2026-11-15 18:20:** remove the 114 now-clean English-debt paths and lower
+the pin; use the contribution default in the two server fixtures. Four core fixtures retain
+their exact prior Spanish fiscal text with individual `KEEPS_NON_ENGLISH` entries, exact finding
+counts and a byte-preservation reason. No debt paths are added or scanner rules broadened.
+The watcher also cleared about 1,200 conservative gross handwritten lines at 17:55; past that,
+stop and split.
+
+**Watcher, 2026-11-15 18:28:** Claude's completed review established that the four core
+suites use `FakeFiscalBackend` and file nothing. Use English synthetic text (“Sale on premises”)
+and remove their new guard exceptions, superseding the 18:20 fixture-text instruction.
+Byte preservation still applies to real fiscal record paths and their inputs; the golden pair
+stays unedited.
+
+**Watcher, 2026-11-15 18:33:** retain the committed real upgrade-copy record assertion.
+Its fiscal table and column names are the existing `VERIFACTU_NAMES` case: one counted
+`KEEPS_NON_ENGLISH` entry for `upgrade-sale.test.ts` (five findings), with its expected-list row.
+
+**Final cleanup count, 2026-11-15:** 117 debt-list paths are removed: the 114 cleared at
+18:20, then two CLI fixtures and the country-pack fixture whose only remaining non-English
+text belonged to the retired field cases. The rebased pin drops from 1,144 to 1,027.

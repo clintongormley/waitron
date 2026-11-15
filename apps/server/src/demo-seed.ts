@@ -1,5 +1,6 @@
 import { type Database } from "@waitron/db";
-import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import { venueFiscalSelection, type VenueRequest, type VenueResult } from "@waitron/provisioning";
+import { ALL_MODULES } from "./modules.js";
 import { seedDemoRestaurant } from "../scripts/demo-seed/seed.js";
 import type { SeedLocale } from "../scripts/demo-seed/locale.js";
 import { readDemoSeedSelection } from "../scripts/demo-seed/data-set.js";
@@ -23,6 +24,9 @@ export async function seedInstalledDemo(
   const { identity, dataSet } = await readDemoSeedSelection(db);
   await seedDemoRestaurant(db, {
     venue: {
+      operationDescription:
+        venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory).contribution?.venueFields?.defaults
+          ?.operationDescription ?? "",
       nodeId: result.nodeId,
       seriesId: result.seriesIds[0]!,
     },

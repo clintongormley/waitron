@@ -96,6 +96,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,

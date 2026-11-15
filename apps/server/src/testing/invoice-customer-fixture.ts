@@ -121,6 +121,7 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
     const billId = await parked(venue, "Caña");
     const { saleId } = await inTx(venue, (tx) =>
       recordSale(tx, venue.backend, {
+        operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(customer ? fullSeriesId : venue.seriesId),

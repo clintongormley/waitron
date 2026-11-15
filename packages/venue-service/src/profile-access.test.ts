@@ -69,7 +69,7 @@ interface Venue {
 }
 
 async function seedFixtureVenue(name: string): Promise<void> {
-  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
 }
 
 async function seedProfile(): Promise<string> {

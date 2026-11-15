@@ -1020,6 +1020,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
@@ -1062,6 +1063,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

@@ -659,7 +659,6 @@ for (const locale of ["en", "es"] as const) {
         {
           name: "name",
           fiscal_territory: "fiscalTerritory",
-          operation_description: "operationDescription",
           invoice_locales: "invoiceLocales",
           address_line1: "addressLine1",
           address_line2: "addressLine2",
@@ -1371,12 +1370,15 @@ for (const locale of ["en", "es"] as const) {
       receiptDepartment.columns.splice(
         receiptDepartment.columns.findIndex((column) => column.name === "created_at"),
         0,
+        { name: "operation_description", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         receiptColumns[0]!,
         { name: "receipt_logo_image_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         ...receiptColumns.slice(1),
       );
       for (const row of Object.values(receiptDepartment.rows)) {
         const receipt = row.receipt_text as Record<string, unknown> | null;
+        row.operation_description = receipt?.operationDescription ?? null;
+        if (receipt) delete receipt.operationDescription;
         row.receipt_logo_image_id = null;
         if (receipt?.logo !== undefined) {
           const image = Object.values(expected[phase].tables.media_images!.rows).find(

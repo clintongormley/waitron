@@ -40,7 +40,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
     });
     deviceId = await seedSessionDevice(db);
     deviceCookie = await deviceCookieForTest(db, deviceId);

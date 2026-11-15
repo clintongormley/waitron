@@ -45,12 +45,11 @@ async function seedVenueCfg(
     name,
     invoiceLocales,
     province: options.province ?? null,
-    operationDescription: "Hospitality",
   };
   if (options.taxpayer === true) await seedVenue(db, venue);
   else {
-    const { name, province, invoiceLocales, operationDescription } = venue;
-    await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+    const { name, province, invoiceLocales } = venue;
+    await seedVenueSettings(db, { name, province, invoiceLocales });
     await seedBusinessDay(db);
   }
 }

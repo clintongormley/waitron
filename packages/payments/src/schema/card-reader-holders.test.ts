@@ -24,7 +24,6 @@ async function seed(db: Database) {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["es"],
-    operationDescription: "Hostelería",
   });
   const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
   const made = [

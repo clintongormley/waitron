@@ -22,7 +22,6 @@ describe("device made-here stations schema", () => {
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
     await seedDeviceProfiles(suite.db, { id: PROFILE, name: "Till profile", formFactor: "till" });

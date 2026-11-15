@@ -99,7 +99,6 @@ async function venue(db: Database): Promise<Venue> {
         name: "Sala",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle 1",
         addressLine2: null,
         postalCode: "28013",

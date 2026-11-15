@@ -76,7 +76,12 @@ it("management supplies the installed description validator before writing", asy
     error: { code: "management.request_invalid", params: { field: "operationDescription" } },
   });
   expect(
-    (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!.receiptText,
+    (
+      await suite.db
+        .select({ operationDescription: departments.operationDescription })
+        .from(departments)
+        .where(eq(departments.id, id))
+    )[0],
   ).toEqual({ operationDescription: "Meals" });
 });
 it.each(["/management-api/receipt", "/management-api/receipt-settings"])(

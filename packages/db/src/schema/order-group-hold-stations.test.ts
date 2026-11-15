@@ -26,7 +26,6 @@ describe("order group hold stations schema", () => {
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
     await suite.db.insert(parties).values({ id: PARTY, openedBy: OPERATOR });

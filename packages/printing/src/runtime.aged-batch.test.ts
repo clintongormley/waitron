@@ -14,7 +14,6 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const agents = await suite.db
     .insert(printAgents)

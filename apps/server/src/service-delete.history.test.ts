@@ -65,8 +65,8 @@ it("deleted department reprints its original receipt configuration and frozen he
     await tx
       .update(departments)
       .set({
+        operationDescription: "Restaurante",
         receiptText: {
-          operationDescription: "Restaurante",
           headerSubtitle: { "es-ES": "Retained service subtitle" },
           phone: "911111111",
         },

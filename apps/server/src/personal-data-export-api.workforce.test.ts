@@ -203,7 +203,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Venue",
     invoiceLocales: ["es"],
-    operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
   await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });

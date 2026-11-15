@@ -17,13 +17,11 @@ async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
     name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
-    operationDescription: "Hostelería",
   });
   nodeA1 = await seedNode(db);
   await seedVenueSettings(db, {
     name: "Fixture Venue B",
     invoiceLocales: ["es"],
-    operationDescription: "Hostelería",
   });
   await seedBusinessDay(db, {});
   await seedNode(db);

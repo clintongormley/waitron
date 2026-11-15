@@ -57,7 +57,6 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   await seedVenue(db, {
     name: `House ${randomUUID()}`,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
@@ -187,7 +186,6 @@ describe("resolveDepartmentDays", () => {
     await seedVenue(db, {
       name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
     const departmentId = await scoped(
@@ -1034,7 +1032,6 @@ describe("readServiceDayPlan on a repeating date that follows a holiday's name",
     await seedVenue(db, {
       name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       province: "Madrid",

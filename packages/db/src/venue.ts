@@ -61,7 +61,6 @@ export async function ensureStreamId(tx: Transaction): Promise<string> {
 export interface Venue {
   name: string;
   invoiceLocales: string[];
-  operationDescription: string;
   fiscalTerritory: string;
   addressLine1: string | null;
   addressLine2: string | null;
@@ -85,7 +84,6 @@ export async function readVenue(tx: Transaction): Promise<Venue> {
   return {
     name: doc.name,
     invoiceLocales: doc.invoiceLocales,
-    operationDescription: doc.operationDescription,
     fiscalTerritory: doc.fiscalTerritory,
     addressLine1: doc.addressLine1,
     addressLine2: doc.addressLine2,

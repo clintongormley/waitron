@@ -45,7 +45,9 @@ export const departments = table(
     dining: diningPolicy("dining").notNull().default("eat_in"),
     diningStartsAs: dining("dining_starts_as").notNull().default("eat_in"),
     transferDeskProfileId: id("transfer_desk_profile_id"),
-    receiptText: json<Omit<DepartmentReceiptConfig, "logo">>("receipt_text"),
+    operationDescription: label("operation_description"),
+    receiptText:
+      json<Omit<DepartmentReceiptConfig, "logo" | "operationDescription">>("receipt_text"),
     receiptLogoImageId: id("receipt_logo_image_id"),
     receiptLogoRasters: json<ReceiptLogoRasters>("receipt_logo_rasters"),
     receiptUpdatedAt: tsString("receipt_updated_at"),

@@ -66,7 +66,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -93,6 +92,9 @@ export async function setupVenue(db: Database): Promise<Venue> {
   const cfg = tillConfigFromVenue(venue);
 
   const seeded = await withTransaction(db, async (tx) => {
+    await tx.execute(
+      sql`update departments set operation_description = ${"Venta en establecimiento"} where is_default = 1`,
+    );
     const cat = await createMenu(tx, { name: `Delicatessen ${venue.nodeId}` });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {

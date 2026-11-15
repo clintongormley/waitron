@@ -17,7 +17,6 @@ async function makeVenue(timeZone: string): Promise<void> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant service",
     timeZone,
   });
 }

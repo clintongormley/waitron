@@ -102,7 +102,6 @@ describe("document routing schema", () => {
     await seedVenue(suite.db, {
       name: "Oak Room",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
     });
     const { deviceId } = await seedDevice(suite.db);
     for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
@@ -125,7 +124,6 @@ describe("document routing schema", () => {
     await seedVenue(suite.db, {
       name: "Oak Room",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
     });
     const nodeId = await seedNode(suite.db);
     const { deviceId } = await seedDevice(suite.db);

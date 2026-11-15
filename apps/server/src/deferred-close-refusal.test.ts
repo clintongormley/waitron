@@ -91,6 +91,7 @@ async function correct(saleId: string) {
       pin: "1234",
     });
     await recordCorrection(tx, t.venue.backend, {
+      operationDescription: "Restaurante",
       origin: t.venue.cfg.origin,
       nodeId: t.venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),

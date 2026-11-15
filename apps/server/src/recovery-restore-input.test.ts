@@ -97,7 +97,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Original",
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, name: "Restored" });

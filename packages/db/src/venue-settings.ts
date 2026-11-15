@@ -9,8 +9,6 @@ export interface VenueSettings {
   streamId: string | null;
   name: string;
   fiscalTerritory: string;
-  /** vb6 removes the interim venue description. */
-  operationDescription: string;
   invoiceLocales: string[];
   contentLanguages: string[] | null;
   defaultContentLanguage: string | null;
@@ -38,7 +36,6 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     streamId: null,
     name: "",
     fiscalTerritory: "ES-common",
-    operationDescription: "Restaurant",
     invoiceLocales: ["es"],
     contentLanguages: null,
     defaultContentLanguage: null,
@@ -68,7 +65,6 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         field !== "streamId" &&
         field !== "name" &&
         field !== "fiscalTerritory" &&
-        field !== "operationDescription" &&
         !["invoiceLocales", "contentLanguages", "defaultContentLanguage", "holidayArea"].includes(
           field,
         ) &&
@@ -86,8 +82,6 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
       return { ok: false, field: "name" };
     if (typeof value.fiscalTerritory !== "string" || value.fiscalTerritory.trim() === "")
       return { ok: false, field: "fiscalTerritory" };
-    if (typeof value.operationDescription !== "string")
-      return { ok: false, field: "operationDescription" };
     const invoiceLocales = value.invoiceLocales;
     if (
       !Array.isArray(invoiceLocales) ||
@@ -145,7 +139,6 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         streamId: (value.streamId as string | null | undefined) ?? null,
         name: value.name.trim(),
         fiscalTerritory: value.fiscalTerritory,
-        operationDescription: value.operationDescription,
         invoiceLocales: [...invoiceLocales],
         contentLanguages: languages === null ? null : [...(languages as string[])],
         defaultContentLanguage: defaultLanguage as string | null,

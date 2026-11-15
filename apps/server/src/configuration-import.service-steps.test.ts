@@ -49,7 +49,6 @@ it("a configuration import over a venue whose closed party has a completed step 
     name: "Imported venue",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     addressLine1: "Calle Mayor 2",
     addressLine2: null,
     postalCode: "28013",

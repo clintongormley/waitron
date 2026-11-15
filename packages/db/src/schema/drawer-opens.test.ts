@@ -30,7 +30,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await db.insert(printers).values({
       id: PRINTER_A,
@@ -208,7 +207,6 @@ describe("settled-tender refund drawer targets", () => {
     await seedVenue(db, {
       name: "Return drawer",
       invoiceLocales: ["en"],
-      operationDescription: "Meals",
     });
     const nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));

@@ -25,12 +25,10 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedVenueSettings(db, {
       name: "Loc A2",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
     courseA = await seedCourse("Starters");

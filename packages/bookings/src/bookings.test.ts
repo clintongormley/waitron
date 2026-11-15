@@ -66,7 +66,6 @@ async function setupVenue(): Promise<Venue> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant service",
   });
   return {
     createdBy: await seedPerson(db),
@@ -458,7 +457,6 @@ describe("seatBooking", () => {
     await seedVenue(db, {
       name: "Front counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant service",
     });
     const nodeId = await seedNode(db);
     return {

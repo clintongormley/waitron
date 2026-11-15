@@ -19,7 +19,6 @@ beforeAll(async () => {
   await seedVenue(suite.db, {
     name: "Barra",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   // `stamped` names both module columns and `bare` names neither, which is what the null case turns on.
   stamped = await seedNode(suite.db);

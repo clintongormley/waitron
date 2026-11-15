@@ -75,7 +75,6 @@ describe("POST /api/node/peer-status", () => {
     await seedVenue(db, {
       name: "Main room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta",
     });
     const self = await seedNode(db);
     const peer = await seedNode(db);

@@ -61,7 +61,6 @@ export async function seedVenueSettings(
         streamId: null,
         name: "Test venue",
         fiscalTerritory: "ES-common",
-        operationDescription: "Restaurant",
         invoiceLocales: ["es"],
         contentLanguages: null,
         defaultContentLanguage: null,
@@ -127,7 +126,6 @@ export async function seedVenue(
     timeZone,
     dayCutover,
     fiscalTerritory,
-    operationDescription,
   } = overrides;
   if (defaultMenuId !== undefined) {
     await db.update(menus).set({ isDefault: false }).where(eq(menus.isDefault, true));
@@ -144,7 +142,6 @@ export async function seedVenue(
     city,
     province,
     fiscalTerritory,
-    operationDescription,
   }))
     if (value !== undefined) Object.assign(doc, { [key]: value });
   await seedVenueSettings(db, doc);
@@ -383,7 +380,7 @@ export async function seedDepartmentReceipt(
   receipt: DepartmentReceiptConfig,
   logoRasters: ReceiptLogoRasters | null = null,
 ): Promise<void> {
-  const { logo, ...receiptText } = receipt;
+  const { logo, operationDescription, ...receiptText } = receipt;
   let receiptLogoImageId: string | null = null;
   if (logo !== undefined) {
     const [image] = await db
@@ -396,6 +393,7 @@ export async function seedDepartmentReceipt(
   await db
     .update(departments)
     .set({
+      operationDescription: operationDescription ?? null,
       receiptText,
       receiptLogoImageId,
       receiptLogoRasters: logoRasters,

@@ -403,8 +403,6 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "ES-common",
     "--locale",
     "es-ES",
-    "--operation-description",
-    "Restaurante",
     "--address-line1",
     "Mayor 1",
     "--postal-code",

@@ -92,7 +92,6 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
   await seedVenue(admin, {
     name: "Bar",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   const nodeId = await seedNode(admin);
   const cfg: TradingContext = {
@@ -894,7 +893,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     await seedVenue(admin, {
       name: "Bar",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
     });
     const [prof] = await seedDeviceProfiles(admin, { name: "Screen", formFactor: "kds" });
     const { deviceId } = await seedDevice(admin, { profileId: prof!.id, label: "Kitchen screen" });

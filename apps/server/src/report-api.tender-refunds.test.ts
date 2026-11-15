@@ -43,7 +43,6 @@ beforeEach(async () => {
   await seedVenue(db, {
     name: "Returns",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Meals",
     dayCutover: "05:00:00",
   });
 

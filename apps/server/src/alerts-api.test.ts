@@ -82,7 +82,6 @@ async function seedVenueWithStaff(): Promise<Venue> {
   await seedVenue(db, {
     name: "Dining room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   const { deviceId } = await seedDevice(db, { label: "Till 1" });
   const cookie = (role: BuiltInRoleKey, name: string) =>
@@ -502,7 +501,6 @@ async function seedStuckPrintJob(): Promise<void> {
   await seedVenueSettings(db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Retail",
   });
   await seedBusinessDay(db, {});
   const [printer] = await db

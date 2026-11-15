@@ -5,7 +5,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   assignMenuToVenue,
   createMenu,
@@ -323,7 +323,6 @@ export async function provisionAdjustmentVenue(
         name: "Dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Restaurante",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -351,6 +350,9 @@ export async function provisionAdjustmentVenue(
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {
+    await tx.execute(
+      sql`update departments set operation_description = ${"Restaurante"} where is_default = 1`,
+    );
     const [station] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)

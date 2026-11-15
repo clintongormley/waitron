@@ -26,7 +26,6 @@ async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(suite.db, {
     name,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
 }
 

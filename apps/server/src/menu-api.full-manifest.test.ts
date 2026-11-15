@@ -204,7 +204,6 @@ async function setupVenue(): Promise<Venue> {
         name: "Main dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

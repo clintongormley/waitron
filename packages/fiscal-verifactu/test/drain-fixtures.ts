@@ -469,7 +469,6 @@ export async function seedSecondChain(
   const existing = await readSettings(db, VENUE_SETTINGS);
   await seedVenueSettings(db, {
     invoiceLocales: ["es"],
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
   if (existing.revision === 0) await seedVenueSettings(db, { name: "Sala B" });

@@ -21,7 +21,6 @@ describe("bill editing state", () => {
     await seedVenue(suite.db, {
       name: "Dining room",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
   });
 

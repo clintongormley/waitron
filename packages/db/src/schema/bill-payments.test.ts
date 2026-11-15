@@ -53,7 +53,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));

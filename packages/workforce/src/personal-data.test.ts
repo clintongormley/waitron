@@ -154,7 +154,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   await seedVenueSettings(db, {
     name: "Harbour Terrace",
     invoiceLocales: ["en"],
-    operationDescription: "Sale on premises",
   });
   await seedBusinessDay(db, {});
   const publishedVersion = await insertRosterVersion(db, {});

@@ -43,6 +43,7 @@ it.each(["ES-common", "GB-vat"])(
       await suite.db
         .update(departments)
         .set({
+          operationDescription: null,
           receiptText: null,
           receiptLogoImageId: null,
           receiptLogoRasters: null,

@@ -132,7 +132,6 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
   await db
@@ -358,7 +357,7 @@ async function seedMirrorIdentity(
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
+  await seedVenueSettings(db, { name: "Barra" });
   await seedBusinessDay(db, {});
   const t = await db.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`);
   const nif = t.rows[0]!.tax_id;

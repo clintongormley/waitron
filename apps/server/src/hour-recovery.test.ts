@@ -46,7 +46,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Selected venue",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });

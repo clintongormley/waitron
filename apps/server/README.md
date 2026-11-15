@@ -228,7 +228,6 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --country ES --tax-id B12345678 --legal-name 'Deli SL' \
     --taxpayer-domicile '8 Taxpayer Street, 28013 Madrid' \
     --venue-name Counter --territory ES-common --locale es-ES \
-    --operation-description 'In-store sales' \
     --address-line1 '1 Main Street' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
     --series-code A --full-series-code FF --rectificative-code R \

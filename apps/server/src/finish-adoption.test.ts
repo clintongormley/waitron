@@ -116,7 +116,6 @@ describe("runFinishAdoption — on a migrated venue", () => {
     await seedVenue(suite.db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     await suite.db.insert(nodes).values({ id: STANDBY_NODE_ID, name: "standby", publicKey });
   }

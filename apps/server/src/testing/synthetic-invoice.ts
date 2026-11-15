@@ -36,7 +36,7 @@ const clock: TrustedClock = {
 export async function recordSyntheticInvoice(
   db: Database,
   nodeId: string,
-  options: { full?: boolean; seriesCode?: string } = {},
+  options: { full?: boolean; seriesCode?: string; operationDescription: string },
 ): Promise<{ saleId: string; number: string }> {
   const full = options.full ?? true;
   const [series] = await db
@@ -53,6 +53,7 @@ export async function recordSyntheticInvoice(
   ).makeBackend({ db, clock, environment: "preproduction" });
   const sale = await withTransaction(db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: options.operationDescription,
       origin: jobOrigin("operator_script"),
       nodeId: nodeId as Parameters<typeof recordSale>[2]["nodeId"],
       seriesId: seriesId(series!.id),

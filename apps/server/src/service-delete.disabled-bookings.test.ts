@@ -33,7 +33,6 @@ it("deletes through the real core seat when the optional bookings table was neve
   await seedVenue(suite.db, {
     name: "Booking-free venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const cfg: TradingContext = {
     nodeId: nodeId(randomUUID()),

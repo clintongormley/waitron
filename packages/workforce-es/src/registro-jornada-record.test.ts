@@ -29,7 +29,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Deli",
     invoiceLocales: ["en"],
-    operationDescription: "Sale on premises",
   });
   nodeId = await seedNode(suite.db);
   const people = await seedPersons(suite.db, [

@@ -34,7 +34,7 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 async function seedFixtureVenue(name: string): Promise<void> {
   for (const id of ["sender", "p1", "p2", "p3"]) await seedPerson(db, { id, displayName: id });
-  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
 }
 

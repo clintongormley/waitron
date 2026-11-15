@@ -36,7 +36,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     dayCutover: "04:00",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
 
   const people = await seedPersons(suite.db, [

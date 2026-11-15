@@ -81,7 +81,6 @@ async function fixture() {
     await seedVenue(tx, {
       name: randomUUID(),
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const cfg = {};
     const ds = await tx

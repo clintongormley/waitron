@@ -120,7 +120,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     await seedVenue(db, {
       name: "Fixture Venue A",
       invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
@@ -128,7 +127,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     await seedVenueSettings(db, {
       name: "Fixture Venue B",
       invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
     const [product] = await db

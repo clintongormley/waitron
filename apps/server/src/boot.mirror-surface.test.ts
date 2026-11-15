@@ -108,7 +108,6 @@ async function seedVenue(): Promise<void> {
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(suite.db, {});
 }

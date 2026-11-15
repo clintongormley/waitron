@@ -26,19 +26,6 @@ describe("the demo scripts' test venue", () => {
     ).toEqual([{ invoice_locales: '["es-ES"]' }]);
   });
 
-  it("stores an English operation description", async () => {
-    await createDemoVenueProvisioner(() => suite.db, {
-      nifBase: 82_000_000,
-      invoiceLocale: "es-ES",
-    })();
-
-    expect(
-      suite.db.all(
-        sql`select json_extract(doc, '$.operationDescription') as operation_description from settings where module = 'venue'`,
-      ),
-    ).toEqual([{ operation_description: "Sale on premises" }]);
-  });
-
   it.each([
     {
       country: "ES" as const,

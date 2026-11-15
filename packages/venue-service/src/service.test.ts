@@ -184,7 +184,6 @@ async function stationFixture(tx: Transaction) {
   await seedVenue(tx, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });

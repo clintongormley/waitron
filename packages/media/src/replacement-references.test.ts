@@ -81,7 +81,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
     await seedVenue(tx, {
       name: "Restaurant",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
     });
     for (const active of [true, false]) {
       const [department] = await tx

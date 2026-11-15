@@ -1044,7 +1044,6 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
       await seedVenueSettings(copy.venue, {
         name: "Archive venue",
         invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
       });
       await withTransaction(copy.venue, ensureStreamId);
       await withTransaction(copy.venue, (tx) => writeStreamSettings(tx, ring, KIT.bucket, null));

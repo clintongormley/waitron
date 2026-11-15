@@ -47,7 +47,6 @@ export async function createClockVenue(
         name: "Clock venue",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

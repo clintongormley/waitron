@@ -53,7 +53,6 @@ beforeAll(async () => {
     await seedVenueSettings(tx, {
       name: "File venue",
       invoiceLocales: ["es"],
-      operationDescription: "Venta",
     });
     await seedBusinessDay(tx, {});
     await tx.insert(nodes).values({ id: ids.node, name: "File node" });

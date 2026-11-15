@@ -59,7 +59,6 @@ describe("seedSales across a rate change", () => {
           name: "Sala principal",
           fiscalTerritory: "ES-common",
           invoiceLocales: ["es-ES"],
-          operationDescription: "Venta en establecimiento",
           addressLine1: "Calle Mayor 1",
           addressLine2: null,
           postalCode: "28013",
@@ -82,7 +81,11 @@ describe("seedSales across a rate change", () => {
     );
 
     await seedSales(suite.db, {
-      venue: { nodeId: venue.nodeId, seriesId: venue.seriesIds[0]! },
+      venue: {
+        nodeId: venue.nodeId,
+        seriesId: venue.seriesIds[0]!,
+        operationDescription: "Venta en establecimiento",
+      },
       invoiceLocale: "es-ES",
       days: 3,
       products: [

@@ -10,7 +10,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Clock",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
 });

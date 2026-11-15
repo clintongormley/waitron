@@ -22,7 +22,6 @@ async function setup() {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db

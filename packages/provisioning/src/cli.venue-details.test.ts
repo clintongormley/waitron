@@ -22,7 +22,6 @@ const fields = {
   "venue-name": "Venue",
   territory: "ES-common",
   locale: "es-ES",
-  "operation-description": "Restaurant",
   "address-line1": "Calle Mayor 1",
   "address-line2": "Floor 2",
   "postal-code": "28001",

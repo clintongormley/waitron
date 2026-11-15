@@ -40,7 +40,6 @@ describe("unpaid_departures", () => {
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
     const [series] = await db

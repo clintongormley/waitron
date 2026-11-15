@@ -25,7 +25,6 @@ describe("device_profile_printers defaults", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     const [made] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
     profile = made!.id;

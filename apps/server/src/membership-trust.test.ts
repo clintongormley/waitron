@@ -65,7 +65,6 @@ describe("the held document's check against the keys this box stores", () => {
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta",
     });
     const nodeId = await seedNode(db);
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
@@ -121,7 +120,6 @@ describe("the held document's check against the keys this box stores", () => {
     await seedVenueSettings(db, {
       name: "Terraza",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
     const otherId = await seedNode(db);
@@ -149,7 +147,7 @@ describe("the held document's check against the keys this box stores", () => {
     "refuses a document signed with a key venue.db names for %s, with reason bad_signature",
     async (whose) => {
       const { db, nodeId } = await box();
-      await seedVenueSettings(db, { operationDescription: "Venta" });
+      await seedVenueSettings(db, {});
       await seedBusinessDay(db, {});
       const mainId = await seedNode(db);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });

@@ -63,7 +63,6 @@ async function fixture(tx: Transaction, suffix = "") {
   await seedVenue(tx, {
     name: randomUUID(),
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const cfg = {};
   const ds = await tx

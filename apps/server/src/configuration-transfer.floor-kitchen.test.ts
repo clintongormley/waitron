@@ -36,7 +36,6 @@ function request(taxId: string): VenueRequest {
     taxpayerDomicile: "Street 1, Madrid",
     name: "Test restaurant",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Street 1",
     addressLine2: null,

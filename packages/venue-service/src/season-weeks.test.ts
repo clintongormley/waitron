@@ -47,7 +47,6 @@ async function venue() {
   await seedVenue(db, {
     name: `Venue ${randomUUID()}`,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
   const zone = await seedZone(db, { name: "Dining room", displayOrder: 0 });

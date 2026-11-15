@@ -38,7 +38,6 @@ const suite = useVenueDb({
         name: "Main",
         timeZone: "Europe/Madrid",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Sale on premises",
       });
       // Through the table definitions, not raw SQL: every `id` here is a NOT NULL `$defaultFn`
       // generator a raw insert never reaches.

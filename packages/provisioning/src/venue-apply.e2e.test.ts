@@ -51,7 +51,6 @@ function request(taxId = "B12345674", adminEmail = "owner@example.test"): VenueR
     name: "Mostrador",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "venta en establecimiento",
     addressLine1: "Calle Mayor 1",
     addressLine2: null,
     postalCode: "28013",
@@ -73,6 +72,7 @@ function request(taxId = "B12345674", adminEmail = "owner@example.test"): VenueR
 /** A well-formed sale — the reconciled figures from `write-path-fixtures.ts`'s `saleInput`. */
 function saleInput(ids: { deviceId: string; nodeId: string; seriesId: string }): RecordSaleInput {
   return {
+    operationDescription: "venta en establecimiento",
     origin: deviceOrigin(ids.deviceId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),

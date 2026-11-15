@@ -41,7 +41,6 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
   // `startServer` reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it
@@ -200,7 +199,6 @@ export function provisionVenueBody(taxId: string) {
     name: "Main room",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
     addressLine1: "Calle Mayor 1",
     addressLine2: null,
     postalCode: "28013",
@@ -313,7 +311,7 @@ export async function seedTradingVenue(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
-  await seedVenueSettings(db, { name: "Barra", operationDescription: "Venta en establecimiento" });
+  await seedVenueSettings(db, { name: "Barra" });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,

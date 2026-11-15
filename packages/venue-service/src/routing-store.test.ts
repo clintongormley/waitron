@@ -96,7 +96,6 @@ async function fixture(tx: Transaction, suffix = "") {
   await seedVenue(tx, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const cfg = {};
   const department = await createDepartment(tx, {
@@ -1792,7 +1791,6 @@ describe("routing previews", () => {
       await seedVenue(tx, {
         name: "Venue",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
       });
       const cfg = {};
       const zone = async (name: string) => {

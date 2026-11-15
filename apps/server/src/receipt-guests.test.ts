@@ -267,6 +267,7 @@ async function saleWithNoRow(
       .from(invoiceSeries)
       .where(and(eq(invoiceSeries.nodeId, v.cfg.nodeId), eq(invoiceSeries.purpose, "standard")));
     const { saleId } = await recordSale(tx, v.backend, {
+      operationDescription: "Restaurante",
       origin: v.cfg.origin,
       nodeId: v.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),

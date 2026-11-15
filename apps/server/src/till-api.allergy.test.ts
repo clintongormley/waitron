@@ -46,7 +46,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Dining room",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   cfg = {
     nodeId: nodeId(await seedNode(suite.db)),

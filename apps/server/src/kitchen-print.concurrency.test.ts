@@ -94,7 +94,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     await seedVenue(suite.db, {
       name: "Bar",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
     });
     const nodeId = await seedNode(suite.db);
     const cfg: OriginConfig = {

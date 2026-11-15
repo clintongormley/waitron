@@ -388,7 +388,6 @@ describe("attendance_question queue owner", () => {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
     });
     nodeId = await seedNode(suite.db);
     const [person] = await seedPersons(suite.db, {

@@ -18,7 +18,6 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
-    operationDescription: "Generic bootstrap",
     addressLine1: "Current street",
     city: "Madrid",
   });

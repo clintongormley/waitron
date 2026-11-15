@@ -23,7 +23,6 @@ export async function seedSessionDevice(db: Database): Promise<string> {
     await seedVenue(db, {
       name: "Main",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
   }
   const { deviceId } = await seedDevice(db);

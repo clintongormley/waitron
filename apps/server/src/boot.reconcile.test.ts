@@ -92,7 +92,6 @@ async function seed(db: Database): Promise<void> {
   await seedVenueSettings(db, {
     name: "Loc",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
   await db

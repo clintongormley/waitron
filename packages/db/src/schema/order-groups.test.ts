@@ -34,7 +34,6 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     await seedVenue(db, {
       name: "Room",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));

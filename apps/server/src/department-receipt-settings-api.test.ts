@@ -22,7 +22,7 @@ import {
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { departments } from "@waitron/venue-service";
-import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { nodeId, type DepartmentReceiptWrite, type DepartmentReceiptConfig } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
@@ -52,7 +52,6 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["gl-ES"],
-    operationDescription: "Bootstrap",
     addressLine1: "Calle Uno 1",
     postalCode: "28013",
     city: "Madrid",
@@ -110,15 +109,22 @@ const body = (extra: Partial<DepartmentReceiptWrite> = {}): DepartmentReceiptWri
   ...extra,
 });
 async function rows() {
+  const receipts = await suite.db
+    .select({
+      departmentId: departments.id,
+      operationDescription: departments.operationDescription,
+      receipt: departments.receiptText,
+      logoRasters: departments.receiptLogoRasters,
+      logoImageId: departments.receiptLogoImageId,
+    })
+    .from(departments);
   return {
-    receipts: await suite.db
-      .select({
-        departmentId: departments.id,
-        receipt: departments.receiptText,
-        logoRasters: departments.receiptLogoRasters,
-        logoImageId: departments.receiptLogoImageId,
-      })
-      .from(departments),
+    receipts: receipts.map(({ operationDescription, ...row }) => ({
+      ...row,
+      receipt: (operationDescription === null
+        ? row.receipt
+        : { ...row.receipt, operationDescription }) as DepartmentReceiptConfig | null,
+    })),
     policies: await suite.db.select().from(departments),
   };
 }
@@ -146,6 +152,7 @@ describe("the fiscal seat's default description", () => {
     await suite.db
       .update(departments)
       .set({
+        operationDescription: null,
         receiptText: null,
         receiptLogoImageId: null,
         receiptLogoRasters: null,
@@ -606,7 +613,8 @@ describe("replacement department receipt HTTP contract", () => {
         await tx
           .update(departments)
           .set({
-            receiptText: { operationDescription: "Deli meals" },
+            operationDescription: "Deli meals",
+            receiptText: {},
             receiptLogoImageId: null,
             receiptLogoRasters: null,
           })
@@ -614,6 +622,7 @@ describe("replacement department receipt HTTP contract", () => {
         await tx
           .update(departments)
           .set({
+            operationDescription: null,
             receiptText: {},
             receiptLogoImageId: otherImage.id,
             receiptLogoRasters: otherRasters,
@@ -621,7 +630,12 @@ describe("replacement department receipt HTTP contract", () => {
           .where(eq(departments.id, retained!.id));
         await tx
           .update(departments)
-          .set({ receiptText: {}, receiptLogoImageId: image.id, receiptLogoRasters: rasters })
+          .set({
+            operationDescription: null,
+            receiptText: {},
+            receiptLogoImageId: image.id,
+            receiptLogoRasters: rasters,
+          })
           .where(eq(departments.id, attached!.id));
       });
       return prepared;
@@ -685,7 +699,8 @@ describe("replacement department receipt HTTP contract", () => {
             await tx
               .update(departments)
               .set({
-                receiptText: { ...savedReceipt, footerMessage: { "eu-ES": "New hidden text" } },
+                operationDescription: savedReceipt.operationDescription,
+                receiptText: { footerMessage: { "eu-ES": "New hidden text" } },
               })
               .where(eq(departments.id, f.departmentId));
           if (kind === "image") await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));

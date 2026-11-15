@@ -60,7 +60,6 @@ async function setupVenue(): Promise<Venue> {
   await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   const nodeId = await seedNode(db);
   const tillCfg: TradingContext = {

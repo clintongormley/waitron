@@ -68,6 +68,7 @@ it.each([
           .where(eq(invoiceSeries.purpose, "rectificative"));
         const session = await startManagementSession(tx, { personId: venue.adminId });
         await recordCorrection(tx, venue.backend, {
+          operationDescription: "Restaurante",
           origin: venue.cfg.origin,
           nodeId: venue.cfg.nodeId,
           seriesId: seriesId(series!.id),

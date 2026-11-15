@@ -88,7 +88,6 @@ beforeAll(async () => {
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: NODE_ID, name: "Node" });

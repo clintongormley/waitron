@@ -113,7 +113,7 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
 
 /** Seeds the taxpayer, the venue, a node and that node's invoice series "A". */
 export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
-  await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" });
+  await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"] });
   const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)

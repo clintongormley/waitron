@@ -35,7 +35,6 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
         name: "Sala",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Uno 1",
         addressLine2: null,
         postalCode: "28013",

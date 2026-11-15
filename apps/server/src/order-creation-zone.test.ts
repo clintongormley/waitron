@@ -32,7 +32,7 @@ beforeEach(async () => {
   counterDepartmentId = zone.departmentId;
   await suite.db
     .update(departments)
-    .set({ receiptText: { operationDescription: "Counter meals" } })
+    .set({ operationDescription: "Counter meals", receiptText: {} })
     .where(eq(departments.id, counterDepartmentId));
 });
 

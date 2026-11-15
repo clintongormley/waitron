@@ -30,7 +30,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Main",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta",
       timeZone: "Europe/Madrid",
     });
     await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Copas" } });

@@ -209,6 +209,12 @@ questions. The follow-ups and the rows:
 
 ## A913's fix items: general code English only
 
+**2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
+operation-description references below no longer describe that venue field; recording helpers
+now pass their original description explicitly, and department receipts store theirs in
+`departments.operation_description`. Remaining language cleanup is tracked by the root
+English-only guard and its debt list.
+
 **Audit done 2026-10-20 on main `a3be14ba4`: [english-only-audit.md](english-only-audit.md).** The
 owner answered points 2–8 on 2026-10-20 (the campaign's questions file has the words): 2, 4, 7 and 8
 as recommended; 3, 5 and 6 in the owner's own words, recorded in
@@ -277,8 +283,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults, as do the split-extras venue's operation description and the
-  adjustment venue's legal name and operation description.
+  still need English defaults, as do the adjustment venue's legal name and department operation description.
   Native provisioning and floor-plan-set route suites use English venue, operation and menu
   samples; their Spanish locale and starter-content checks remain.
   The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English
@@ -617,6 +622,9 @@ control that creates an unwanted sale or record on the new bill and reaches thos
 while retaining the dish-name, sale-count, record-count and open-status checks.
 
 ## A976. Finish the server's English test-venue defaults.
+
+**2026-11-15, A1308 vb6:** the [fixture-field update above](#a913s-fix-items-general-code-english-only)
+also qualifies the historical operation-description references in this section.
 
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.

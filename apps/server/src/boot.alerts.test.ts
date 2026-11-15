@@ -1,3 +1,4 @@
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -57,7 +58,12 @@ type Venue = Awaited<ReturnType<typeof setupVenue>>;
 async function fullInvoice(venue: Venue): Promise<string> {
   beforeServerStarts();
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved issuer address" });
-  return (await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, { seriesCode: "FB" })).saleId;
+  return (
+    await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, {
+      seriesCode: "FB",
+      operationDescription: FISCAL_SLOT.venueFields!.defaults!.operationDescription!,
+    })
+  ).saleId;
 }
 
 /** Starts the server on the suite's venue, runs `use` against its base URL, and stops it. */

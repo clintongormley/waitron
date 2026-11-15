@@ -51,6 +51,7 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
+    operationDescription: "Retail",
     origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),

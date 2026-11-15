@@ -188,6 +188,7 @@ function replace(saleId: SaleId): Promise<SaleId> {
       pin: "1234",
     });
     const replaced = await recordReplacement(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "rectificative")),

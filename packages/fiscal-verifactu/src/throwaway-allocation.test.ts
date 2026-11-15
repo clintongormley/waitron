@@ -39,7 +39,6 @@ async function seedStampedVenue(stamp: "preproduction" | "production") {
   await seedVenueSettings(suite.db, {
     name: "Casa Real",
     invoiceLocales: ["es"],
-    operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: node.nodeId, name: "Node 1" });

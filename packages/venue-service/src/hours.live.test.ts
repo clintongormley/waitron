@@ -56,7 +56,6 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
     const [department] = await tx
@@ -157,7 +156,6 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       province: "Lleida",
       city: "Vielha",
@@ -197,7 +195,6 @@ it("daily station status refreshes routing and special days refresh Opening hour
     await seedVenue(tx, {
       name: `Retained ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
     const [bar] = await tx

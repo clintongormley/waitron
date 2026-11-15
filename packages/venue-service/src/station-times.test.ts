@@ -33,7 +33,6 @@ async function fixture(tx: Transaction) {
   await seedVenue(tx, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
@@ -62,7 +61,6 @@ describe("station times", () => {
       await seedVenue(tx, {
         name: "New venue",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       });

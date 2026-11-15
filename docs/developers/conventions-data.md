@@ -6405,6 +6405,11 @@ older exports after the core reset.
 
 **2026-11-10, A1308 slice 5c:** receipt languages, content languages and holiday area share this document. Format 16 carries `contentLanguages` and `holidayArea` at the bundle’s top level; receipt languages remain in `venue.invoiceLocales`.
 
+**2026-11-15, A1308 vb6:** the temporary venue description described below is removed. The
+department owns `operation_description`; receipt text no longer carries it. Configuration format
+41 carries the column and omits the venue field. Each core recording input requires its caller
+to supply the description.
+
 **2026-11-11, A1308 slice 5d:** fiscal territory and the temporary operation description also live in
 `settings.venue`; vb6 removes the description. Read the saved time zone verbatim from
 `settings.business_day`, including an invalid or empty string so the zone repair can see it.
@@ -6720,3 +6725,5 @@ receipt has been saved. Configuration format 39 carries these columns and rewrit
 format 38 is refused as outdated. The raster cache stays with the department until its separate removal change.
 
 > 2026-11-15: the watcher retained the department raster cache after the [write-lock timing](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15); the separate removal mentioned above is retired.
+
+> 2026-11-15, A1308 vb6: the operation description mentioned in the vb5 receipt-storage note above now lives in `departments.operation_description`, outside `receipt_text`; configuration format 41 carries it.

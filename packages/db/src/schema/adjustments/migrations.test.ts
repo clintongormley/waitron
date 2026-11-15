@@ -72,7 +72,6 @@ async function seedWorkingOrder(db: Database): Promise<string> {
     await seedVenue(db, {
       name: "Dining room",
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
   orderNumber += 1;
   const order = await seedOrder(db, { source: "dashboard", deviceId: null, orderNumber });

@@ -37,7 +37,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   nodeId = await seedNode(suite.db);
   const [person] = await seedPersons(suite.db, { displayName: "Worker", pinHash: "scrypt$00$00" });

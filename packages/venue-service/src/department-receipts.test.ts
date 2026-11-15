@@ -28,7 +28,6 @@ async function fixture(active = true) {
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
   });
   await suite.db
     .insert(mediaImages)
@@ -52,8 +51,15 @@ function scoped<T>(body: (tx: Transaction) => Promise<T>) {
 }
 async function imported(id: string, receipt: string, rasters: string | null = null) {
   let imageId: string | null = null;
+  let operationDescription: string | null = null;
   try {
     const parsed = JSON.parse(receipt);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      operationDescription =
+        typeof parsed.operationDescription === "string" ? parsed.operationDescription : null;
+      delete parsed.operationDescription;
+      receipt = JSON.stringify(parsed);
+    }
     if (
       parsed &&
       typeof parsed === "object" &&
@@ -68,11 +74,41 @@ async function imported(id: string, receipt: string, rasters: string | null = nu
     /* The malformed-document controls deliberately bypass the writer. */
   }
   await suite.db.execute(
-    sql`update departments set receipt_text = ${receipt}, receipt_logo_image_id = ${imageId}, receipt_logo_rasters = ${rasters}, receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${id}`,
+    sql`update departments set operation_description = ${operationDescription}, receipt_text = ${receipt}, receipt_logo_image_id = ${imageId}, receipt_logo_rasters = ${rasters}, receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${id}`,
   );
 }
 
 describe("department receipt storage", () => {
+  it("stores the editor's description in its column and leaves it out of receipt text", async () => {
+    const f = await fixture();
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.id, {
+        operationDescription: "Dining meals",
+        phone: "+34911234567",
+      }),
+    );
+    expect(
+      (
+        await suite.db.execute(
+          sql`select operation_description, receipt_text from departments where id = ${f.id}`,
+        )
+      ).rows,
+    ).toEqual([
+      { operation_description: "Dining meals", receipt_text: '{"phone":"+34911234567"}' },
+    ]);
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+      operationDescription: "Dining meals",
+      phone: "+34911234567",
+    });
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, {}));
+    expect(
+      (
+        await suite.db.execute(
+          sql`select operation_description from departments where id = ${f.id}`,
+        )
+      ).rows,
+    ).toEqual([{ operation_description: null }]);
+  });
   it("saves a logo by image id, reads its name, and leaves logo out of receipt text", async () => {
     const f = await fixture();
     const filename = `${"d".repeat(64)}.png`;
@@ -632,7 +668,6 @@ describe("department-owned address and fiscal description", () => {
     { printAddress: "true" },
     { printAddress: null },
     { operationDescription: null },
-    { operationDescription: [] },
     { operationDescription: "x".repeat(501) },
     { operationDescription: "bad\u0000text" },
   ])("omits malformed optional imported fields %j", async (receipt) => {

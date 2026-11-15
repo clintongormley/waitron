@@ -19,7 +19,6 @@ function request(changes: Partial<VenueRequest> = {}): VenueRequest {
     name: "Casa Delgado",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
     addressLine1: "Calle Mayor 1",
     addressLine2: null,
     postalCode: "28013",

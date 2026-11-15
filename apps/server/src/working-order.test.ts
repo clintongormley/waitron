@@ -188,7 +188,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
-    operationDescription: "On-premises sale",
   });
   const nodeId = await seedNode(db);
 

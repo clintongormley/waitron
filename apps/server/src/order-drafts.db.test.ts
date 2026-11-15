@@ -123,7 +123,6 @@ async function setupVenue(): Promise<Venue> {
   await seedVenue(db, {
     name: "Main room",
     invoiceLocales: [LOCALE],
-    operationDescription: "Restaurante",
   });
   await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);

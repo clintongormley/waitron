@@ -46,6 +46,10 @@ const VERIFACTU_NAMES =
  * findings, not to which lines hold them.
  */
 export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
+  "apps/server/src/upgrade-sale.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 5,
+  },
   "packages/shared/src/locales.ts": {
     reason: "a language's own name in the language picker",
     findings: 1,

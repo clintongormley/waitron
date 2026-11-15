@@ -171,7 +171,6 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -779,7 +778,6 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
           name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales,
-          operationDescription: "Venta en establecimiento",
           addressLine1: "Calle Mayor 1",
           addressLine2: null,
           postalCode: "28013",
@@ -1032,7 +1030,6 @@ describe("ordering extras and options — parent + child lines", () => {
           name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
           addressLine1: "Calle Mayor 1",
           addressLine2: null,
           postalCode: "28013",
@@ -2889,8 +2886,8 @@ describe("per-answer receipt presentation", () => {
       await suite.db
         .update(departments)
         .set({
+          operationDescription: "Venta en establecimiento",
           receiptText: {
-            operationDescription: "Venta en establecimiento",
             headerSubtitle: { "es-ES": "Department subtitle" },
             footerMessage: { "es-ES": "Department footer" },
             printAddress: true,
@@ -2976,6 +2973,7 @@ describe("receipt presentation sources", () => {
     });
     const sale = await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, {
+        operationDescription: "Venta en establecimiento",
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         seriesId,
@@ -3029,8 +3027,8 @@ describe("receipt presentation sources", () => {
       await suite.db
         .update(departments)
         .set({
+          operationDescription: "Venta en establecimiento",
           receiptText: {
-            operationDescription: "Venta en establecimiento",
             footerMessage: { "es-ES": "Own footer" },
             email: "own@example.test",
           },
@@ -3095,8 +3093,8 @@ describe("receipt presentation address failure", () => {
     await suite.db
       .update(departments)
       .set({
+        operationDescription: "Venta en establecimiento",
         receiptText: {
-          operationDescription: "Venta en establecimiento",
           headerSubtitle: { "es-ES": "Surviving subtitle" },
         },
       })

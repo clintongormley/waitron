@@ -16,7 +16,6 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
   await seedVenueSettings(suite.db, {
     name: randomUUID(),
     invoiceLocales: [receiptLanguage],
-    operationDescription: "Bootstrap",
   });
   await seedBusinessDay(suite.db, {});
   if (languages !== undefined) {

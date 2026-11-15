@@ -230,7 +230,6 @@ export interface FiscalContribution {
       readonly seriesCode: string;
       readonly fullSeriesCode: string;
       readonly rectificativeSeriesCode: string;
-      readonly operationDescription: string;
     }): void;
   };
   readonly certificate?: FiscalCertificateSeat;

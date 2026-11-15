@@ -3,7 +3,7 @@ import { testTradingAdmission } from "./trading-admission.js";
 import { addTabRound } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import {
   addProductToMenu,
   assignMenuToVenue,
@@ -111,7 +111,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         name: "Sala",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Restaurante",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -143,6 +142,9 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
+    await tx.execute(
+      sql`update departments set operation_description = ${"Restaurante"} where is_default = 1`,
+    );
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)

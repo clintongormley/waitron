@@ -1,6 +1,6 @@
 import { NoneBackend } from "@waitron/fiscal-none";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 import {
   AppError,
   seriesId as brandSeriesId,
@@ -83,6 +83,7 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -181,6 +182,13 @@ describe("formatInvoiceNumber", () => {
 });
 
 describe("recordSale — the sale's origin", () => {
+  it("requires an operation description in the record input", () => {
+    const { operationDescription: _description, ...missing } = input();
+    void _description;
+    // @ts-expect-error A record's description belongs to its caller.
+    const _invalid: RecordSaleInput = missing;
+    expectTypeOf(_invalid).toEqualTypeOf<RecordSaleInput>();
+  });
   it("stores the device a sale was rung on", async () => {
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       origin: deviceOrigin(deviceId),
@@ -220,23 +228,6 @@ describe("recordSale — the sale's origin", () => {
       expect(await descriptionsFiled({ operationDescription })).toEqual([operationDescription]);
     },
   );
-
-  it("describes a device sale from the venue", async () => {
-    await suite.db.run(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
-    );
-    expect(await descriptionsFiled({ origin: deviceOrigin(deviceId) })).toEqual([
-      "Counter service",
-    ]);
-  });
-
-  it("describes a sale with no device from the venue", async () => {
-    await suite.db.run(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
-    );
-    const seen = await descriptionsFiled({ origin: jobOrigin("readiness_test") });
-    expect(seen).toEqual(["Counter service"]);
-  });
 });
 
 /** The `descriptionOfOperation` each filed sale handed the fiscal backend. */

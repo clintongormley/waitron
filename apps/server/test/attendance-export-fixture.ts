@@ -15,7 +15,6 @@ export async function seedAttendanceExport(db: Database) {
   await seedVenue(db, {
     name: "Charcutería",
     invoiceLocales: ["es"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(db);
   const [worker, manager] = await seedPersons(db, [

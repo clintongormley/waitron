@@ -114,7 +114,6 @@ async function seedVenueWithStaff(): Promise<Venue> {
     name: "Barra",
     timeZone: "Europe/Madrid",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   const writingNodeId = await seedNode(suite.db);
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {

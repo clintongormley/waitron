@@ -74,7 +74,6 @@ beforeEach(async () => {
     await seedVenueSettings(suite.db, {
       name: "Main",
       invoiceLocales: ["en"],
-      operationDescription: "Sale",
     });
     await seedBusinessDay(suite.db, {});
     await seedDeviceProfiles(suite.db, {

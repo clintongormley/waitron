@@ -184,7 +184,6 @@ async function setupVenue(): Promise<{
         name: "Sala principal",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -789,6 +788,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
           null,
         );
         const sale = await recordSale(tx, backend, {
+          operationDescription: "Venta en establecimiento",
           origin: jobOrigin("operator_script"),
           nodeId: cfg.nodeId,
           seriesId: brandSeriesId(series!.id),
@@ -3128,6 +3128,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
         { zoneId: scope.rows[0]!.zone_id },
       );
       return recordSale(tx, backend, {
+        operationDescription: "Venta en establecimiento",
         origin: jobOrigin("operator_script"),
         nodeId: cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

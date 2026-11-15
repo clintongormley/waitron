@@ -45,7 +45,6 @@ async function venue(country: string, province: string, receipt: string | string
     name: "Venue",
     province,
     invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
-    operationDescription: "Hospitality",
   });
   const nodeId = await seedNode(suite.db);
   return { nodeId };

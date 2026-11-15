@@ -113,7 +113,6 @@ async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -1321,6 +1320,7 @@ async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
   const [row] = await suite.db
     .select({
       receiptText: departments.receiptText,
+      operationDescription: departments.operationDescription,
       receiptLogoRasters: departments.receiptLogoRasters,
       receiptUpdatedAt: departments.receiptUpdatedAt,
       logo: mediaImages.filename,
@@ -1332,6 +1332,9 @@ async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
     ? undefined
     : {
         ...row.receiptText,
+        ...(row.operationDescription === null
+          ? {}
+          : { operationDescription: row.operationDescription }),
         ...(row.logo === null ? {} : { logo: row.logo }),
         ...(row.receiptLogoRasters == null ? {} : { logoRasters: row.receiptLogoRasters }),
       };
@@ -2482,9 +2485,11 @@ describe("independent department receipt routes", () => {
       const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
       expect(response.status).toBe(200);
       expect((await response.json()).receipt).toEqual(receipt);
-      expect(
-        (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]?.receiptText,
-      ).toEqual(receipt);
+      const [stored] = await suite.db.select().from(departments).where(eq(departments.id, id));
+      expect({
+        ...stored!.receiptText,
+        operationDescription: stored!.operationDescription,
+      }).toEqual(receipt);
     },
   );
 

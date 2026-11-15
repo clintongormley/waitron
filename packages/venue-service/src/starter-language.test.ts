@@ -64,12 +64,11 @@ describe("readStarterStaffLanguage", () => {
       name: "Starter venue",
       province,
       invoiceLocales: [locale],
-      operationDescription: "Hospitality",
     };
     if (taxpayer) await seedVenue(db, venue);
     else {
-      const { name, province, invoiceLocales, operationDescription } = venue;
-      await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+      const { name, province, invoiceLocales } = venue;
+      await seedVenueSettings(db, { name, province, invoiceLocales });
       await seedBusinessDay(db);
     }
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx))).toBe(expected);

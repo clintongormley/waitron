@@ -55,8 +55,6 @@ const VENUE_ARGS = [
   "ES-common",
   "--locale",
   "es-ES",
-  "--operation-description",
-  "Restaurante",
   "--address-line1",
   "Calle Mayor 1",
   "--address-line2",
@@ -982,7 +980,6 @@ describe("runCli venue", () => {
         "Centro",
         "ES-common",
         "es-ES", // invoice locale
-        "Restaurante",
         "Calle Mayor 1",
         "", // address line 2 is optional — blank means none
         "28001",
@@ -1011,7 +1008,6 @@ describe("runCli venue", () => {
       "venue name: ",
       "fiscal territory (e.g. ES-common): ",
       "invoice locale (e.g. es-ES): ",
-      "operation description: ",
       "address line 1: ",
       "address line 2 (blank if none): ",
       "postal code: ",

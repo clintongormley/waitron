@@ -92,6 +92,7 @@ async function sell(input: {
   const total = addDecimal(decimal(input.base), decimal(input.tax));
   const clock = clockAt(input.day);
   const sale: RecordSaleInput = {
+    operationDescription: "Restaurant",
     origin: input.device ? deviceOrigin(input.device) : jobOrigin("demo_seed"),
     nodeId: owner.nodeId,
     seriesId: owner.seriesId,
@@ -141,6 +142,7 @@ async function sell(input: {
 async function correct(saleId: SaleId, day: string): Promise<void> {
   await withIssuanceTransaction(suite.db, async (tx) => {
     await recordCorrection(tx, backend, {
+      operationDescription: "Restaurant",
       origin: jobOrigin("demo_seed"),
       nodeId: issuer.nodeId,
       seriesId: issuer.correctionSeriesId,

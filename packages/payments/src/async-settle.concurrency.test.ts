@@ -56,6 +56,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   return {
+    operationDescription: "Retail",
     origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),

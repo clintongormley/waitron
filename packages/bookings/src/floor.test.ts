@@ -20,7 +20,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<void> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant service",
     timeZone: opts.timeZone ?? DEFAULT_TIME_ZONE,
   });
 }

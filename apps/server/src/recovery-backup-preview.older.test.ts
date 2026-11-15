@@ -58,7 +58,6 @@ it("previews a backup with an older venue schema by migrating only its private s
   await seedVenueSettings(suite.db, {
     name: "Earlier venue",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: nodeId, name: "Earlier node" });
@@ -137,7 +136,6 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await seedVenueSettings(suite.db, {
     name: "Earlier venue",
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: nodeId, name: "Earlier node" });

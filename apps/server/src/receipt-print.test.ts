@@ -219,7 +219,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "On-premises sale",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -2850,6 +2849,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         { zoneId },
       );
       const sale = await recordSale(tx, backend, {
+        operationDescription: "On-premises sale",
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

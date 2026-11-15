@@ -44,7 +44,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedFixtureVenue(name: string): Promise<void> {
-  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"] });
 }
 
 async function seedPrinter(name: string): Promise<string> {

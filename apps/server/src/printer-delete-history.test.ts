@@ -57,6 +57,7 @@ async function newSale(): Promise<string> {
   });
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId: nodeId(series!.nodeId),
       seriesId: seriesId(series!.id),
@@ -87,7 +88,6 @@ async function seedDeletedAndReplaced() {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const node = await seedNode(suite.db);
   await suite.db.insert(invoiceSeries).values({ nodeId: node, code: "F", purpose: "standard" });

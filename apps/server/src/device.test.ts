@@ -38,7 +38,6 @@ async function setupVenue(): Promise<SeededVenue> {
   await seedVenue(admin, {
     name: "Bar",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   const nodeId = await seedNode(admin);
   const cfg: TradingContext = {

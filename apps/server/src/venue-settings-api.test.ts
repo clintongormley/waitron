@@ -38,7 +38,7 @@ const departmentPath = () => `/management-api/venue-service/departments/${depart
 const resetDescription = () =>
   suite.db
     .update(departments)
-    .set({ receiptText: { operationDescription: "Venta en establecimiento" } })
+    .set({ operationDescription: "Venta en establecimiento", receiptText: {} })
     .where(eq(departments.id, departmentId));
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
@@ -126,9 +126,6 @@ async function sell() {
 
 describe("department invoice settings", () => {
   it("uses an edited department description for the next fiscal record while retaining the earlier record", async () => {
-    await suite.db.execute(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', 'Unrelated generic bootstrap') where module = 'venue'`,
-    );
     try {
       await sell();
       expect(
@@ -148,9 +145,6 @@ describe("department invoice settings", () => {
         { description: "  Venta de comidas  " },
       ]);
     } finally {
-      await suite.db.execute(
-        sql`update settings set doc = json_set(doc, '$.operationDescription', 'Venta en establecimiento') where module = 'venue'`,
-      );
       await resetDescription();
     }
   });
@@ -160,7 +154,8 @@ describe("department invoice settings", () => {
       await suite.db
         .update(departments)
         .set({
-          receiptText: description === undefined ? {} : { operationDescription: description },
+          operationDescription: description ?? null,
+          receiptText: {},
         })
         .where(eq(departments.id, departmentId));
       const snapshot = async () =>

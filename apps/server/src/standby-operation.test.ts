@@ -75,7 +75,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   await suite.db.insert(nodes).values({ id: PRIMARY, name: "Primary" });
   await stampDeployment(suite.db, "preproduction");

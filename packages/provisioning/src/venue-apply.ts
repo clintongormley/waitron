@@ -271,7 +271,6 @@ export async function applyVenue(
             const matches =
               row.name === action.name &&
               JSON.stringify(row.invoiceLocales) === JSON.stringify(action.invoiceLocales) &&
-              row.operationDescription === action.operationDescription &&
               row.fiscalTerritory === action.fiscalTerritory &&
               row.addressLine1 === action.addressLine1 &&
               row.addressLine2 === action.addressLine2 &&
@@ -295,7 +294,6 @@ export async function applyVenue(
               streamId: null,
               name: action.name,
               fiscalTerritory: action.fiscalTerritory,
-              operationDescription: action.operationDescription,
               invoiceLocales: [...action.invoiceLocales],
               contentLanguages: null,
               defaultContentLanguage: null,
