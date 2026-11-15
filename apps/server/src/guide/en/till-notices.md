@@ -106,9 +106,9 @@ table, a receipt from its sale) or a resend from **Printers** has printed.
 a newer version of the server. Tell a manager so they can check the server.
 
 If an action says **Not saved: the server is out of disk space. Tell a manager.**, tell a manager
-and wait for space to be freed before trying again. A refused receipt print, payment-slip print or drawer opening does
-not undo a payment; do not take it again. If the message says a card was charged, follow its
-recovery instructions instead of charging again.
+and wait for space to be freed before trying again. A refused receipt print, payment-slip print or
+drawer opening does not undo a payment; do not take it again. If the message says a card was charged,
+follow its recovery instructions instead of charging again.
 
 ## When invoices stop after an identity conflict {#invoice-conflict}
 

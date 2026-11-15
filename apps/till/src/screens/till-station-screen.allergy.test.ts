@@ -120,9 +120,14 @@ describe("A669 boards acknowledgement", () => {
       await clickAck(el);
       const shown = () => el.shadowRoot!.querySelector('[role="alert"]')?.textContent;
       await vi.waitFor(() => expect(shown()).toContain(codeMessage("storage.disk_full")));
-      const reads = read.mock.calls.length;
+      notices = [...snapshot().notices, allergyNotice("removed")];
       await vi.advanceTimersByTimeAsync(15_000);
-      await vi.waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(reads));
+      await vi.waitFor(() =>
+        expect(queue(el).notices.map((notice) => notice.id)).toEqual([
+          "allergy-changed",
+          "allergy-removed",
+        ]),
+      );
       expect(shown()).toContain(codeMessage("storage.disk_full"));
 
       notices = [allergyNotice("removed")];

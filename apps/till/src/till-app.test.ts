@@ -13615,6 +13615,7 @@ describe("till-app", () => {
         codeMessage("storage.disk_full"),
       );
       expect(counter(el)!.stationQueue).toEqual([stationGroup]);
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
     });
 
     it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {
