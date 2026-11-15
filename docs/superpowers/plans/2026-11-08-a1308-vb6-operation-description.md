@@ -267,3 +267,13 @@ their exact prior Spanish fiscal text with individual `KEEPS_NON_ENGLISH` entrie
 counts and a byte-preservation reason. No debt paths are added or scanner rules broadened.
 The watcher also cleared about 1,200 conservative gross handwritten lines at 17:55; past that,
 stop and split.
+
+**Watcher, 2026-11-15 18:28:** Claude's completed review established that the four core
+suites use `FakeFiscalBackend` and file nothing. Use English synthetic text (“Sale on premises”)
+and remove their new guard exceptions, superseding the 18:20 fixture-text instruction.
+Byte preservation still applies to real fiscal record paths and their inputs; the golden pair
+stays unedited.
+
+**Watcher, 2026-11-15 18:33:** retain the committed real upgrade-copy record assertion.
+Its fiscal table and column names are the existing `VERIFACTU_NAMES` case: one counted
+`KEEPS_NON_ENGLISH` entry for `upgrade-sale.test.ts` (five findings), with its expected-list row.

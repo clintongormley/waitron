@@ -96,7 +96,7 @@ const RECIPIENT = { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: 
  * vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "Sale on premises",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -138,7 +138,7 @@ function substitutionInput(
   overrides: Partial<RecordSubstitutionInput> = {},
 ): RecordSubstitutionInput {
   return {
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "Sale on premises",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: fullSeriesId,
@@ -322,7 +322,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
       const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
       return withTransaction(suite.db, (tx) =>
         recordReplacement(tx, backend, {
-          operationDescription: "Venta en establecimiento",
+          operationDescription: "Sale on premises",
           origin: deviceOrigin(deviceId),
           nodeId,
           seriesId: rectSeriesId,

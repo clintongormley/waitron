@@ -46,21 +46,9 @@ const VERIFACTU_NAMES =
  * findings, not to which lines hold them.
  */
 export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
-  "packages/core/src/correction-history.test.ts": {
-    reason: "preserves the exact fiscal description formerly inherited from the fixture venue",
-    findings: 4,
-  },
-  "packages/core/src/partial-correction-breakdown.test.ts": {
-    reason: "preserves the exact fiscal description formerly inherited from the fixture venue",
-    findings: 3,
-  },
-  "packages/core/src/record-replacement.test.ts": {
-    reason: "preserves the exact fiscal description formerly inherited from the fixture venue",
-    findings: 4,
-  },
-  "packages/core/src/record-substitution.test.ts": {
-    reason: "preserves the exact fiscal description formerly inherited from the fixture venue",
-    findings: 3,
+  "apps/server/src/upgrade-sale.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 5,
   },
   "packages/shared/src/locales.ts": {
     reason: "a language's own name in the language picker",

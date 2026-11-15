@@ -17,7 +17,6 @@ const targetSuite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(),
 const venue = (taxId: string) => ({
   ...request,
   taxId,
-  operationDescription: "Restaurant",
   admin: {
     displayName: "Admin",
     email: `${taxId.toLowerCase()}@example.test`,

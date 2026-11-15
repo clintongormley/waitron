@@ -86,7 +86,7 @@ function request(method = "POST", input: unknown = body, headers: Record<string,
 }
 const rows = () => ({
   venueState: suite.db.all(
-    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
   incidents: suite.db.all(sql`select * from incidents`),

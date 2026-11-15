@@ -956,7 +956,6 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
                   taxpayerDomicile: "Mayor 1, Madrid",
                   fiscalTerritory: "ES-common",
                   invoiceLocales: ["es-ES"],
-                  operationDescription: "Restaurant service",
                   addressLine1: "Mayor 1",
                   addressLine2: null,
                   postalCode: "28013",

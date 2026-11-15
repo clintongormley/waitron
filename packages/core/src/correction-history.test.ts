@@ -149,7 +149,7 @@ async function sell(
 ) {
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Sale on premises",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId,
@@ -182,7 +182,7 @@ function correctionInput(
   how: { wholeInvoice?: true } = {},
 ): RecordCorrectionInput {
   return {
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "Sale on premises",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
@@ -422,7 +422,7 @@ it("previews a correction of a replaced invoice from its replacement's lines", a
   const { saleId } = await sellSteak();
   const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
     recordReplacement(tx, backend, {
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Sale on premises",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,
@@ -498,7 +498,7 @@ it("refuses a replaced invoice that was also exchanged for a full invoice, as re
   const { saleId } = await sellSteak();
   await withTransaction(suite.db, (tx) =>
     recordReplacement(tx, backend, {
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Sale on premises",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,

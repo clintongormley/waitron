@@ -296,7 +296,11 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       })
     ).image;
     const department = await createDepartment(tx, { name: "Photo receipt" });
-    await seedDepartmentReceipt(tx, department.id, { logo: a.filename, phone: "+34 600 111 222" });
+    await seedDepartmentReceipt(tx, department.id, {
+      logo: a.filename,
+      phone: "+34 600 111 222",
+      operationDescription: "Exported dining meals",
+    });
     for (const [index, image] of [a, b].entries())
       await saveImage(
         tx,
@@ -368,6 +372,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
     .select()
     .from(departments)
     .where(eq(departments.name, "Photo receipt"));
+  expect(department!.operationDescription).toBe("Exported dining meals");
   const scope = { receiptLanguages: ["es-ES"] };
   for (const paper of ["58mm", "80mm"] as const) {
     const printed = await readPrintedDepartmentReceipt(
@@ -382,6 +387,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       bits: new Uint8Array(Buffer.from(pictures[0]![paper].data, "base64")),
     });
     expect(printed.receipt.phone).toBe("+34 600 111 222");
+    expect(printed.receipt.operationDescription).toBe("Exported dining meals");
   }
 });
 

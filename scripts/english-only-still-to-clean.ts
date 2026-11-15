@@ -495,7 +495,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/service-delete.integration.test.ts",
   "apps/server/src/service-step-done.test.ts",
   "apps/server/src/service-step-signals.test.ts",
-  "apps/server/src/setup-api.country-pack.test.ts",
   "apps/server/src/setup-api.recovery-input.test.ts",
   "apps/server/src/setup-api.throwaway.test.ts",
   "apps/server/src/setup-email-provision.test.ts",

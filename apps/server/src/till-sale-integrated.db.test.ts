@@ -3712,7 +3712,7 @@ describe("integrated answer receipt presentation", () => {
       })
       .where(eq(departments.id, departmentId));
     suite.db.run(
-      sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Connected subtitle"},"printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
+      sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"es-ES":"Connected subtitle"},"printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
     );
 
     const provider = new SimulatorPaymentProvider(suite.db);
@@ -3783,10 +3783,10 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         })
         .where(eq(departments.id, departmentId));
       suite.db.run(
-        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
+        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
       );
       suite.db.run(
-        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${otherId}`,
+        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${otherId}`,
       );
 
       await makeReceiptPrinter(cfg);
@@ -3865,7 +3865,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,
       );
       suite.db.run(
-        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Texto actual"}}' where id = ${departmentId}`,
+        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"es-ES":"Texto actual"}}' where id = ${departmentId}`,
       );
 
       suite.db.run(

@@ -283,8 +283,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults, as do the split-extras venue's operation description and the
-  adjustment venue's legal name and operation description.
+  still need English defaults, as do the adjustment venue's legal name and department operation description.
   Native provisioning and floor-plan-set route suites use English venue, operation and menu
   samples; their Spanish locale and starter-content checks remain.
   The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English

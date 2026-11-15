@@ -349,11 +349,10 @@ describe("venue detail edits", () => {
     );
     expect(saved.model.details.addressLine2).toBeNull();
     const rows = await suite.db.execute(
-      sql`select json_extract(doc, '$.operationDescription') as operation_description, json_extract(doc, '$.fiscalTerritory') as fiscal_territory from settings where module = 'venue'`,
+      sql`select json_extract(doc, '$.fiscalTerritory') as fiscal_territory from settings where module = 'venue'`,
     );
     expect(rows.rows).toEqual([
       {
-        operation_description: "Venta en establecimiento",
         fiscal_territory: "ES-common",
       },
     ]);
