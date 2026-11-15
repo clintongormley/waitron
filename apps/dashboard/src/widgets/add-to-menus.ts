@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, focusFirstInvalid, saveActionState } from "@waitron/ui";
+import { baseStyles, draftScopeFor, FormFeedback, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -141,8 +141,7 @@ export class AddToMenus extends LitElement {
   @property({ attribute: false }) loadError: string | null = null;
   @property({ attribute: false }) failures: PlacementFailure[] = [];
   @state() private selected: ReadonlySet<string> = new Set();
-  /** Set by the first press of Add; from then on an empty choice is marked as it happens. */
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** Every place in the order shown, each section once. */
   #placeIds: string[] = [];
   #places = new Map<string, { name: string; topLevel: boolean }>();
@@ -173,7 +172,7 @@ export class AddToMenus extends LitElement {
       this.#scope = undefined;
       this.#baseline = undefined;
       this.selected = new Set();
-      this.attempted = false;
+      this.#feedback.reset();
     }
     if (changed.has("failures") && this.failures.length) {
       this.selected = new Set(this.failures.map(({ sectionId }) => sectionId));
@@ -224,7 +223,7 @@ export class AddToMenus extends LitElement {
   }
 
   get #noneChosen(): boolean {
-    return this.attempted && this.selected.size === 0;
+    return this.#feedback.attempted && this.selected.size === 0;
   }
 
   #placeName(sectionId: string): string {
@@ -245,10 +244,10 @@ export class AddToMenus extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     const sectionIds = this.#placeIds.filter((id) => this.selected.has(id));
     if (!sectionIds.length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.dispatchEvent(
