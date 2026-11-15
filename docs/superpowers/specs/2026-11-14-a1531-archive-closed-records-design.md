@@ -305,6 +305,10 @@ trim is also the main lever for speed.
 
 ## The recommended next item: trim finished working rows
 
+**2026-11-15:** [A1543's proposal](2026-11-15-a1543-working-records-proposal.md) now separates the
+retained evidence from two limited cleanup candidates, with a fresh sample and current link receipts.
+Its proposed periods and the decision to build still await the owner.
+
 A short item, shaped like A1532:
 
 1. For the bookkeeping tables (`attendance_source_state`, `attendance_operation_facts`,

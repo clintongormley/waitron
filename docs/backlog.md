@@ -2256,20 +2256,15 @@ _Formerly entries spread across the old sections._
   Stays in the backlog until the advisers answer; question 48 is the owner's to send (owner, 2026-11-09).
   [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
-- **A1543. Trim finished working rows, the way A1532 trimmed print payloads — waits for the
-  owner's call.** After A1532, tables that are neither append-only nor print jobs hold 56% of a
-  30-day database: attendance and service bookkeeping (`attendance_source_state`,
-  `attendance_operation_facts`, `service_commands`) 38%, and order, kitchen-ticket and
-  attendance-question working rows 18%; fiscal records are 1.3%. Steps: trace every reader of and
-  every link into each table (a foreign key from an append-only row, such as `order_amendments` to
-  `working_orders` or `receipt_reprints` to `print_jobs`, keeps the row it points at); separate
-  machinery, such as where a scan got to, from evidence of who did what and when or what a guest
-  was served, which is not trimmed; bring the owner a period for the machinery rows, with figures;
-  measure the 30-day sample again. It changes no append-only protection, so A664's G5 is not
-  needed, but A664's adopted approach puts approved operational cleanup after the advisers'
-  agreement and G4 (A664 design line 191): whether it goes first is the owner's call, as A1532's
-  "a week is fine" was. Nothing is built before that call.
-  [A1531 design](superpowers/specs/2026-11-14-a1531-archive-closed-records-design.md#the-recommended-next-item-trim-finished-working-rows)
+- **A1543. Finished working records: the proposal awaits the owner's retention choice.**
+  The reader/link audit keeps attendance facts, order and kitchen evidence, their linked parents
+  and most scan/watch state. It proposes seven elapsed days for closed-party command replies and
+  a limited class of completed payment watches. On a fresh synthetic 30-day sample, those two
+  cutoffs made 28,049,408 bytes reusable inside a 1,244,479,488-byte database; the file did not shrink.
+  The owner must accept losing expired replies and decide whether this goes before A664's adviser
+  agreement and G4. No trimming is built or period accepted. After that decision, implementation
+  belongs in A1532's existing housekeeping seat, with no append-only protection changes.
+  [Proposal and measured limits](superpowers/specs/2026-11-15-a1543-working-records-proposal.md)
 
 - **Third party licence notices** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/data-protection.md#bundle-third-party-licence-notices)
 
