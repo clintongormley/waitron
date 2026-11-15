@@ -579,15 +579,13 @@ it("returns a dirty Periods editor to the list when a session refresh removes ed
   await expect.poll(() => screen.shadowRoot!.querySelector("period-dialog")).not.toBeNull();
   const editor = screen.shadowRoot!.querySelector("period-dialog")!;
   await editor.updateComplete;
-  editor
-    .shadowRoot!.querySelector<WtInput>("[name=name]")!
-    .dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Late lunch" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+  editor.shadowRoot!.querySelector<WtInput>("[name=name]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Late lunch" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await editor.updateComplete;
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
   const reads = getMe.mock.calls.length;
