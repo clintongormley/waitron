@@ -383,7 +383,6 @@ describe("the pass screen's device routes", () => {
     await seedVenueSettings(suite.db, {
       name: "Other venue",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
     });
     await seedBusinessDay(suite.db, {});
     const foreignNode = await seedNode(suite.db);

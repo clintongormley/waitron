@@ -12,7 +12,6 @@ async function venue(name: string) {
   await seedVenue(suite.db, {
     name,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant service",
   });
 }
 

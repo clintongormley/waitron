@@ -49,7 +49,6 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     await seedVenue(suite.db, {
       name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       province: "Sevilla",
@@ -654,7 +653,6 @@ describe("the Opening hours month read", () => {
     await seedVenue(suite.db, {
       name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       province: "Sevilla",

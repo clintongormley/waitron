@@ -22,7 +22,6 @@ describe("table in service", () => {
     await seedVenue(suite.db, {
       name: "Room",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedZone(suite.db, { id: ZONE, name: "On" });
     await seedZone(suite.db, { id: OTHER_ZONE, name: "Off", active: false });

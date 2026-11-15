@@ -228,7 +228,6 @@ describe("department name storage", () => {
     await seedVenueSettings(suite.db, {
       name,
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
   }

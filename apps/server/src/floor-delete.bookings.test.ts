@@ -42,7 +42,6 @@ for (const enabled of [true, false]) {
       await seedVenue(suite.db, {
         name: "Stream hierarchy",
         invoiceLocales: ["es"],
-        operationDescription: "test",
       });
 
       const zone = await seedZone(suite.db, { name: "Stream hierarchy" });
@@ -143,7 +142,6 @@ for (const enabled of [true, false]) {
         await seedVenue(suite.db, {
           name: "Hierarchy",
           invoiceLocales: ["es"],
-          operationDescription: "test",
         });
 
         const zone = await seedZone(suite.db, { name: "Hierarchy" });

@@ -46,6 +46,7 @@ import "../../src/errors.js";
 export interface SeedSalesVenue {
   nodeId: string;
   seriesId: string;
+  operationDescription: string;
 }
 
 /** `id` is NOT written anywhere: `sales`/`sale_lines` carry no product FK and snapshot the
@@ -254,6 +255,7 @@ export async function seedSales(
       );
 
       const input: RecordSaleInput = {
+        operationDescription: venue.operationDescription,
         origin: jobOrigin("demo_seed"),
         nodeId,
         seriesId,

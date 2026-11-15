@@ -324,7 +324,6 @@ async function seedVenueWithNode(directory: string): Promise<void> {
     await seedVenueSettings(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(db, {});
     await db.insert(nodes).values({

@@ -57,12 +57,10 @@ describe("devices schema (columns, FKs, unique)", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedVenueSettings(db, {
       name: "Loc B",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
     await seedDeviceProfiles(db, [

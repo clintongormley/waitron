@@ -20,14 +20,9 @@ What constrains the next change to the wizard:
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
-- **`operation_description` comes from the installed fiscal contribution.** The setup routes fill
-  in the filing module's default when the request has none (`parseVenue`,
-  `apps/server/src/setup-api.ts`). The wizard's venue form never adds it; a first setup carried
-  over from an earlier attempt copies that attempt's stored venue, which holds it
-  (`#acceptFirstIdentity` and `#replaceFirstSetup` in `apps/setup/src/setup-app.ts`). Product
-  sales use the description you save on the **Details** tab of each department's dialog, or the
-  fiscal module's default description when the department has none; the venue's own description is
-  not their fallback.
+- **A sale's operation description comes from its department.** Save it on the **Details** tab
+  of the department's dialog. When the department has none, the installed fiscal contribution's
+  default fills it (`apps/server/src/sale-operation-description.ts`).
 
 ## The configuration preview names what it will copy by database table
 

@@ -18,7 +18,6 @@ describe("sale receipt header snapshot", () => {
     await seedVenue(db, {
       name: "Corner Kitchen",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const nodeId = await seedNode(db);
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId }));

@@ -26,7 +26,6 @@ async function bill(full = false) {
     await seedVenueSettings(tx, {
       name: "Selector",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
     });
     await seedBusinessDay(tx, {});
     const [node] = await tx.insert(nodes).values({ name: "Selector" }).returning();

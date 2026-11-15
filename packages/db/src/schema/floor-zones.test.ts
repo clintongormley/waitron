@@ -25,7 +25,6 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     const [department] = await suite.db
       .insert(departments)

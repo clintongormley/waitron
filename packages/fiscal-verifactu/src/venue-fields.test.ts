@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { validateLegalName, validateVenueFiscalFields } from "./venue-fields.js";
+import {
+  validateLegalName,
+  validateOperationDescription,
+  validateVenueFiscalFields,
+} from "./venue-fields.js";
 
 const GOOD = {
   legalName: "Waitron SL",
   seriesCode: "FS",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "FR",
-  operationDescription: "Venta en establecimiento",
 };
 
 describe("validateVenueFiscalFields", () => {
@@ -62,18 +65,16 @@ describe("validateVenueFiscalFields", () => {
   });
 
   it("refuses a control character in the operation description", () => {
-    expect(() =>
-      validateVenueFiscalFields({ ...GOOD, operationDescription: "Venta\u0001aqui" }),
-    ).toThrow(expect.objectContaining({ params: { field: "operationDescription" } }));
+    expect(() => validateOperationDescription("Venta\u0001aqui")).toThrow(
+      expect.objectContaining({ params: { field: "operationDescription" } }),
+    );
   });
 
   it("refuses an operation description past AEAT's 500-character cap, at the boundary", () => {
-    expect(() =>
-      validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(501) }),
-    ).toThrow(expect.objectContaining({ params: { field: "operationDescription" } }));
-    expect(() =>
-      validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(500) }),
-    ).not.toThrow();
+    expect(() => validateOperationDescription("x".repeat(501))).toThrow(
+      expect.objectContaining({ params: { field: "operationDescription" } }),
+    );
+    expect(() => validateOperationDescription("x".repeat(500))).not.toThrow();
   });
 
   it("accepts a tab, which XML permits and the validator allows", () => {

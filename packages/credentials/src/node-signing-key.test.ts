@@ -172,7 +172,6 @@ describe("establishing the box's signing key", () => {
       await seedVenue(suite.db, {
         name: "Bar",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Sales on the premises",
       });
     }
     return seedNode(suite.db);

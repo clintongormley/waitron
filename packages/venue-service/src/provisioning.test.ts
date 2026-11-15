@@ -180,7 +180,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "First venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
@@ -222,7 +221,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "The Square",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
       defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
@@ -255,7 +253,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
   describe("the starter service steps", () => {
     async function venue(name: string) {
-      await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+      await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
       const node = { nodeId: await seedNode(db) };
       return {
         seed: () => withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node)),
@@ -349,7 +347,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Seasonal",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const node = { nodeId: await seedNode(db) };
 
@@ -368,7 +365,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Corner Kitchen",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const node = { nodeId: await seedNode(db) };
 
@@ -402,7 +398,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const nodeId = await seedNode(db);
     const node = { nodeId };
@@ -443,7 +438,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
@@ -484,7 +478,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const node = { nodeId: await seedNode(db) };
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -500,7 +493,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await seedVenue(db, {
       name: "Holiday Venue",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
       province: "Sevilla",
@@ -563,7 +555,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seedVenue(db, {
         name: "Sun Bar",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Bar",
       });
       const node = { nodeId: await seedNode(db) };
       const profile = async (
@@ -678,7 +669,6 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   await seedVenue(db, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const node = { nodeId: await seedNode(db) };
   const seeded = await seedZone(db, { name: "Counter", active: false });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { AltaInput } from "@waitron/verifactu";
 import { TEST_SISTEMA } from "./testing/seed.js";
-import { validateVenueFiscalFields } from "./venue-fields.js";
+import { validateOperationDescription, validateVenueFiscalFields } from "./venue-fields.js";
 
 /** `F2` and no `TipoImpositivo` keep every other rule satisfied, so the only issues this record can
  * produce are the ones under test. */
@@ -36,12 +36,11 @@ const GOOD = {
   seriesCode: "FS",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "FR",
-  operationDescription: "Venta en establecimiento",
 };
 
-function boundaryRefuses(venue: typeof GOOD): boolean {
+function boundaryRefuses(validate: () => void): boolean {
   try {
-    validateVenueFiscalFields(venue);
+    validate();
     return false;
   } catch {
     return true;
@@ -60,7 +59,7 @@ describe("the restated character set matches the record validator's", () => {
   it.each(["Serie A", "Série A", "FAC 1", "FS", "A-2026", "A/B", "a_b.c"])(
     "gives the same CHARACTER-SET verdict as validate() for %j",
     (code) => {
-      expect(boundaryRefuses({ ...GOOD, seriesCode: code })).toBe(
+      expect(boundaryRefuses(() => validateVenueFiscalFields({ ...GOOD, seriesCode: code }))).toBe(
         validatorRefuses(recordFor({ numSerie: `${code}/1` }), "NumSerieFactura"),
       );
     },
@@ -84,13 +83,13 @@ const CONTROL_CASES = [
 
 describe("the restated control characters match the record validator's", () => {
   it.each(CONTROL_CASES)("gives the same verdict for a legal name of %j", (value) => {
-    expect(boundaryRefuses({ ...GOOD, legalName: value })).toBe(
+    expect(boundaryRefuses(() => validateVenueFiscalFields({ ...GOOD, legalName: value }))).toBe(
       validatorRefuses(recordFor({ nombre: value }), "NombreRazonEmisor"),
     );
   });
 
   it.each(CONTROL_CASES)("gives the same verdict for an operation description of %j", (value) => {
-    expect(boundaryRefuses({ ...GOOD, operationDescription: value })).toBe(
+    expect(boundaryRefuses(() => validateOperationDescription(value))).toBe(
       validatorRefuses(recordFor({ descripcion: value }), "DescripcionOperacion"),
     );
   });
@@ -104,7 +103,7 @@ describe("the restated description cap matches the record validator's", () => {
     "gives the same verdict for a description of %i characters",
     (length) => {
       const value = "x".repeat(length);
-      expect(boundaryRefuses({ ...GOOD, operationDescription: value })).toBe(
+      expect(boundaryRefuses(() => validateOperationDescription(value))).toBe(
         validatorRefuses(recordFor({ descripcion: value }), "DescripcionOperacion"),
       );
     },
@@ -116,7 +115,7 @@ describe("the restated legal name cap matches the record validator's", () => {
   // cap counted in UTF-16 units disagrees with the validator at 120.
   it.each([119, 120, 121])("gives the same verdict for a legal name of %i characters", (length) => {
     const value = "x".repeat(length - 1) + "😀";
-    expect(boundaryRefuses({ ...GOOD, legalName: value })).toBe(
+    expect(boundaryRefuses(() => validateVenueFiscalFields({ ...GOOD, legalName: value }))).toBe(
       validatorRefuses(recordFor({ nombre: value }), "NombreRazonEmisor"),
     );
   });

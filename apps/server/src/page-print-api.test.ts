@@ -79,7 +79,6 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
@@ -173,6 +172,7 @@ async function printer(
 async function fullInvoice(v: Venue, name = "Coffee"): Promise<string> {
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, v.backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId: brandNode(v.nodeId),
       seriesId: seriesId(v.seriesId),

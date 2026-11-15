@@ -97,6 +97,7 @@ async function sell(
 ): Promise<Invoice> {
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId,
@@ -197,6 +198,7 @@ function file(draft: Draft, target: Target = {}) {
   const to = target.to ?? invoice;
   return withTransaction(suite.db, (tx) =>
     recordCorrection(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,
@@ -520,6 +522,7 @@ it("refuses a split that disagrees with its own lines before looking for the sal
 it("files partial refunds of a replaced sale against its replacement, the second seeing the first", async () => {
   const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
     recordReplacement(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,

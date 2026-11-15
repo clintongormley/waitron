@@ -62,7 +62,7 @@ async function seedInitiated(
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },
 ): Promise<SeededPayment> {
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
-  await seedVenue(db, { name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" });
+  await seedVenue(db, { name: "Counter", invoiceLocales: ["es"] });
   const { deviceId } = await seedDevice(db);
   const nodeId = brandNodeId("11111111-1111-4111-8111-111111111111");
   await db.insert(nodes).values({

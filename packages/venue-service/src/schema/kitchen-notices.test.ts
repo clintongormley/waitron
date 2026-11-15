@@ -19,7 +19,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Kitchen",
     invoiceLocales: ["en"],
-    operationDescription: "Restaurant",
   });
   const [station] = await suite.db.insert(kitchenStations).values({ name: "Grill" }).returning();
   stationId = station!.id;

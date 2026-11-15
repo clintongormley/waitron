@@ -25,7 +25,6 @@ async function venue() {
     await seedVenue(tx, {
       name: "Main",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
     const [department] = await tx
       .insert(departments)

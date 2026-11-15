@@ -40,7 +40,6 @@ beforeEach(async () => {
   await seedVenue(db, {
     name: "Refund venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Meals",
   });
 
   const nodeId = await seedNode(db);
@@ -693,7 +692,6 @@ describe("cash reservation without the optional payments module", () => {
     await seedVenue(db, {
       name: "Cash venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Meals",
     });
     const cashNodeId = await seedNode(db);
     const { deviceId } = await seedDevice(db);

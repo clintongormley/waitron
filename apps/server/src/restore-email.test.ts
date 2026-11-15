@@ -65,7 +65,6 @@ const suite = useVenueDb({
     await seedVenueSettings(db, {
       name: "Restaurant",
       invoiceLocales: ["es"],
-      operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
     await db.insert(nodes).values({ id: T.nodeId, name: "Original node" });

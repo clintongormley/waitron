@@ -18,7 +18,6 @@ describe("activity log storage", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
     ({ deviceId } = await seedDevice(suite.db));
     const [person] = await suite.db

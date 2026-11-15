@@ -659,7 +659,6 @@ for (const locale of ["en", "es"] as const) {
         {
           name: "name",
           fiscal_territory: "fiscalTerritory",
-          operation_description: "operationDescription",
           invoice_locales: "invoiceLocales",
           address_line1: "addressLine1",
           address_line2: "addressLine2",

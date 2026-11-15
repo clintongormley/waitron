@@ -113,7 +113,6 @@ async function fixture(
     await seedVenueSettings(tx, {
       name: "Clock venue",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
     await seedBusinessDay(tx, { timeZone: before.timeZone, dayCutover: "05:00:00" });
     const departmentId = randomUUID();
@@ -2130,7 +2129,7 @@ async function busyCalendar(count: number, run = 0) {
   const fixed = (kind: number, n: number) =>
     `00000000-0000-4${String(run).padStart(3, "0")}-8${String(kind).padStart(3, "0")}-${String(n).padStart(12, "0")}`;
   return withTransaction(suite.db, async (tx) => {
-    await seedVenueSettings(tx, { operationDescription: "Restaurant" });
+    await seedVenueSettings(tx, {});
     await seedBusinessDay(tx, { timeZone: before.timeZone, dayCutover: "05:00:00" });
     const seasonIds = ["03-01", "06-01", "09-01", "12-01"].map((startsOn, i) => ({
       id: fixed(1, i),

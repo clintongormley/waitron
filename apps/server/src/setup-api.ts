@@ -523,13 +523,6 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     fiscalTerritory: jurisdiction.id,
     invoiceLocales,
     ...(staffLanguage === undefined ? {} : { staffLanguage }),
-    operationDescription: asString(
-      v.operationDescription === undefined
-        ? venueFiscalSelection(ALL_MODULES, jurisdiction.id).contribution?.venueFields?.defaults
-            ?.operationDescription
-        : v.operationDescription,
-      "operationDescription",
-    ),
     addressLine1: asString(v.addressLine1, "addressLine1"),
     addressLine2: asNullableString(v.addressLine2, "addressLine2"),
     postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
@@ -628,7 +621,6 @@ function parseProvisionPayload(
     seriesCode: venue.seriesCode,
     fullSeriesCode: venue.fullSeriesCode ?? "FF",
     rectificativeSeriesCode: venue.rectificativeSeriesCode,
-    operationDescription: venue.operationDescription,
   });
   const secret = contribution.provisioningSecret;
   const secretExpected = secret?.required(environment) ?? false;

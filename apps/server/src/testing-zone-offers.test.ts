@@ -60,7 +60,6 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Retail",
   });
   await seedLegacySellingUnits(db);
   const kitchen = await seedKitchenStation(db, {});

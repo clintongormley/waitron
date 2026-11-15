@@ -54,7 +54,6 @@ describe("seedAdjustmentReasons", () => {
       await seedVenue(suite.db, {
         name: "Venue",
         invoiceLocales: [invoiceLocale],
-        operationDescription: "Demo",
       });
       const node = { nodeId: await seedNode(suite.db) };
       const reasons = await withTransaction(suite.db, async (tx) => {
@@ -75,7 +74,6 @@ describe("seedAdjustmentReasons", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Demo",
     });
     const node = { nodeId: await seedNode(suite.db) };
     const [before, after] = await withTransaction(suite.db, async (tx) => {
@@ -172,7 +170,6 @@ describe("seedAdjustmentReasons", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Demo",
     });
     const node = { nodeId: await seedNode(suite.db) };
     const [once, twice] = await withTransaction(suite.db, async (tx) => {

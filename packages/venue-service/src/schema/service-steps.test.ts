@@ -41,7 +41,6 @@ beforeEach(async () => {
   await seedVenue(db, {
     name: "Steps",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const [department] = await db
     .insert(departments)
@@ -204,7 +203,6 @@ describe("the service_step_completions table", () => {
       await seedVenueSettings(tx, {
         name,
         invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
       });
       await seedBusinessDay(tx, {});
       const [department] = await tx

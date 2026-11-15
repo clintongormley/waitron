@@ -23,7 +23,7 @@ beforeAll(() => {
 });
 
 async function stations(values: readonly ChangesAfterSending[]): Promise<string[]> {
-  await seedVenue(db, { name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Venue" });
+  await seedVenue(db, { name: "Bar", invoiceLocales: ["es-ES"] });
   const ids: string[] = [];
   for (const [i, changesAfterSending] of values.entries()) {
     const [row] = await db

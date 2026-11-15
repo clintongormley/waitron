@@ -230,7 +230,11 @@ describe("seedSales on a Spanish venue", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-01T09:30:00.000Z") });
     const venue = await provisionVenue();
     await seedSales(suite.db, {
-      venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
+      venue: {
+        nodeId: venue.nodeId,
+        seriesId: venue.seriesId,
+        operationDescription: venue.operationDescription,
+      },
       invoiceLocale: "es-ES",
       days: 3,
       products: PRODUCTS,

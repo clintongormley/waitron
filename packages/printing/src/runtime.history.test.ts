@@ -23,7 +23,6 @@ async function fixture() {
   await seedVenue(suite.db, {
     name: "Print history",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Sale on premises",
   });
   return withTransaction(suite.db, async (tx) => {
     const [agent] = await tx

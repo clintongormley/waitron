@@ -76,7 +76,6 @@ async function bill(
     await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurante",
     });
   orderNumber += 1;
   const order = await seedWorkingOrder(db, {

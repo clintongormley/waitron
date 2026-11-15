@@ -19,7 +19,6 @@ beforeEach(async () => {
     await seedVenueSettings(suite.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
     for (const id of ["recorded-person", "different-person"])

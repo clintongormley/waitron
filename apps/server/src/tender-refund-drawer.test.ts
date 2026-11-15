@@ -33,7 +33,7 @@ let drawerId: string;
 let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
-  await seedVenue(db, { name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" });
+  await seedVenue(db, { name: "Returns", invoiceLocales: ["en"] });
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;

@@ -161,7 +161,6 @@ async function venue(address: Address = {}): Promise<void> {
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       province: address.province === undefined ? "Northshire" : address.province,
       city: address.city === undefined ? "Villa Real" : address.city,
     });

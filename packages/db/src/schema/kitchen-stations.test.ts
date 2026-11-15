@@ -48,7 +48,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 
@@ -220,7 +219,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {
     // The index is recreated in a `finally` so every other case still meets it.
-    await seedVenueSettings(suite.db, { operationDescription: "Hostelería" });
+    await seedVenueSettings(suite.db, {});
     await seedBusinessDay(suite.db, {});
     await seedStation("Probe default", true);
     const [index] = suite.db.all<{ sql: string }>(

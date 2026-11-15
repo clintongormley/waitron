@@ -22,7 +22,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Main room",
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   deviceId = await seedSessionDevice(suite.db);
   personId = randomUUID();

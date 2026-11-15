@@ -301,9 +301,9 @@ it("two same-venue profiles have independent printer lists", async () => {
 });
 
 it("dashboard invoice email requires report export, even when the invoice is visible", async () => {
-  await suite.db.update(departments).set({
-    receiptText: { operationDescription: "Hospitality", email: "venue@example.test" },
-  });
+  await suite.db
+    .update(departments)
+    .set({ operationDescription: "Hospitality", receiptText: { email: "venue@example.test" } });
   const id = await fullSale();
   const supervisor: DeliveryAuthority = {
     surface: "dashboard",
@@ -388,6 +388,7 @@ async function fullSale() {
     .returning();
   const issued = await withTransaction(suite.db, (tx) =>
     recordSale(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: series!.id as typeof venue.seriesId,

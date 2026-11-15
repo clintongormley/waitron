@@ -66,7 +66,6 @@ async function fencedNode(): Promise<{
   await seedVenue(db, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   const nodeId = await seedNode(db);
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);

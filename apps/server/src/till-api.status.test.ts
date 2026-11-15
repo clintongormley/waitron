@@ -38,7 +38,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
 
     const nodeId = await seedNode(db);

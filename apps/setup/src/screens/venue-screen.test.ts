@@ -712,14 +712,6 @@ describe("setup-venue-screen", () => {
     expect(input.hasAttribute("invalid")).toBe(true);
   });
 
-  it("shows a refused internal description above Next without an editable field", async () => {
-    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-      invalidField: "operationDescription",
-    });
-    expect(q(el, "[data-test=operationDescription]")).toBeNull();
-    expect(await bottomOf(el)).toContain("fault in Waitron");
-  });
-
   it("marks nothing for a field path this form does not recognise", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "country",
@@ -975,7 +967,6 @@ describe("A2 shop form", () => {
     for (const field of [
       "taxId",
       "legalName",
-      "operationDescription",
       "dayCutover",
       "seriesCode",
       "fullSeriesCode",
@@ -1134,7 +1125,6 @@ it("shows a Demo legal-name refusal above Next, leaving the venue name unmarked"
 it.each([
   ["seriesCode", "server_fields.series_code"],
   ["rectificativeSeriesCode", "server_fields.series_code"],
-  ["operationDescription", "server_fields.operation_description"],
 ] as const)(
   "shows a Demo refusal of the hidden %s above Next, and pressing Next tries again",
   async (invalidField, message) => {
@@ -1159,19 +1149,6 @@ it.each([
     expect(await bottomOf(el)).toBe("");
   },
 );
-
-it.each([
-  ["en-GB", "fault in Waitron"],
-  ["es-ES", "fallo de Waitron"],
-] as const)("the operation description refusal names a fault in Waitron (%s)", (locale, words) => {
-  setLocale(locale);
-  try {
-    expect(t("server_fields.operation_description")).toContain(words);
-    expect(t("server_fields.operation_description")).not.toContain("500");
-  } finally {
-    setLocale("en-GB");
-  }
-});
 
 it("explains an unsupported Demo province", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {

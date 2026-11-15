@@ -140,7 +140,6 @@ async function venue(): Promise<Venue> {
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -308,6 +307,7 @@ async function invoice(v: Venue, full = true): Promise<{ orderId: string; saleId
       { zoneId: v.zoneId },
     );
     const sale = await recordSale(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: jobOrigin("operator_script"),
       nodeId: v.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),

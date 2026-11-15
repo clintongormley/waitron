@@ -36,7 +36,7 @@ const clearCourseDeleteSettings = async (tx: Transaction, courseId: string) =>
 type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "dessert"];
 
 async function venue(name: string) {
-  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
 
   const [dessert] = await db
     .insert(kitchenCourses)

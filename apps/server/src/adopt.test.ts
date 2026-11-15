@@ -609,7 +609,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await seedVenue(suite.db, {
       name: "Existing venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const secondVenue = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
       (e: unknown) => e,
@@ -690,7 +689,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await seedVenue(suite.db, {
       name: "Existing venue",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const error = await adoptFromPrimary(deps(), REQ, NO_HOOKS).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");

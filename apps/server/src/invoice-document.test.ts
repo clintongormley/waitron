@@ -82,6 +82,7 @@ async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
       .from(invoiceSeries)
       .where(eq(invoiceSeries.purpose, full ? "full" : "standard"));
     return recordSale(tx, backend, {
+      operationDescription: "Restaurante",
       origin: jobOrigin("operator_script"),
       nodeId: venue.cfg.nodeId,
       seriesId: seriesId(series!.id),
@@ -445,6 +446,7 @@ describe("stored invoice document projection", () => {
       .where(eq(invoiceSeries.purpose, "full"));
     const sale = await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, {
+        operationDescription: "Restaurante",
         origin: jobOrigin("operator_script"),
         nodeId: venue.cfg.nodeId,
         seriesId: seriesId(series!.id),
@@ -761,6 +763,7 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "full"));
       return recordSale(tx, backend, {
+        operationDescription: "Restaurante",
         origin: jobOrigin("operator_script"),
         nodeId: venue.cfg.nodeId,
         seriesId: seriesId(series!.id),

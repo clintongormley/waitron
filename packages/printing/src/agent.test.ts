@@ -17,7 +17,6 @@ async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: [LOCALE],
-    operationDescription: "Sale on premises",
   });
 }
 

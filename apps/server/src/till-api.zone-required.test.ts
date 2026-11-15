@@ -64,7 +64,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Retail",
   });
   await seedKitchenStation(db, {});
   const [person] = await seedPersons(db, {

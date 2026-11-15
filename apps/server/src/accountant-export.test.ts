@@ -643,6 +643,7 @@ describe("accountant period selection", () => {
     const { saleId: original } = await withTransaction(suite.db, async (tx) => {
       await backend.registerNode(tx, venue.nodeId);
       return recordSale(tx, backend, {
+        operationDescription: "Test op",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: brandSeriesId(full!.id),
@@ -672,6 +673,7 @@ describe("accountant period selection", () => {
     });
     const { saleId: replacement } = await withTransaction(suite.db, async (tx) =>
       recordReplacement(tx, backend, {
+        operationDescription: "Test op",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: brandSeriesId(rectificative!.id),

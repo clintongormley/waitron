@@ -52,7 +52,6 @@ const suite = useVenueDb({
         name: "Bar",
         province: "Madrid",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Sale on premises",
       });
       return [await cookieFor("manager"), await cookieFor("supervisor")];
     });

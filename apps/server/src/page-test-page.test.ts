@@ -73,7 +73,6 @@ async function venue(opts: { render?: Render } = {}) {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
@@ -179,6 +178,7 @@ async function printer(
 async function queuedInvoice(v: Venue, pagePrinterId: string): Promise<string> {
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, v.backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId: brandNode(v.nodeId),
       seriesId: seriesId(v.seriesId),

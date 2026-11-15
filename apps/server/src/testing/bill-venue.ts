@@ -141,7 +141,6 @@ export async function provisionBillVenue(
         name: "Sala",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Restaurante",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

@@ -24,7 +24,6 @@ async function fixture(nullHeader = false) {
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
   });
   const cfg = {};
   const nodeId = await seedNode(suite.db);

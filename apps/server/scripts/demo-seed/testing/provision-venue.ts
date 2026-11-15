@@ -76,7 +76,6 @@ export function createDemoVenueProvisioner(
           fiscalTerritory: fixture.fiscalTerritory,
           invoiceLocales: [options.invoiceLocale],
           ...(options.staffLanguage === undefined ? {} : { staffLanguage: options.staffLanguage }),
-          operationDescription: fixture.operationDescription,
           addressLine1: fixture.addressLine1,
           addressLine2: null,
           postalCode: options.postalCode ?? fixture.postalCode,
@@ -98,6 +97,10 @@ export function createDemoVenueProvisioner(
       { db: db(), modules: fixture.modules },
     );
     // planVenue puts the standard series before the rectificative one.
-    return { ...venue, seriesId: venue.seriesIds[0]! };
+    return {
+      ...venue,
+      seriesId: venue.seriesIds[0]!,
+      operationDescription: fixture.operationDescription,
+    };
   };
 }

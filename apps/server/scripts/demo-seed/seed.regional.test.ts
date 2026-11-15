@@ -205,7 +205,11 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
     (p) => p.name === "Butifarra con judías",
   )!;
   const { count } = await seedSales(suite.db, {
-    venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
+    venue: {
+      nodeId: venue.nodeId,
+      seriesId: venue.seriesId,
+      operationDescription: venue.operationDescription,
+    },
     invoiceLocale: "ca-ES",
     days: 2,
     products: [
@@ -439,7 +443,11 @@ it.each([
   const product = available.find((p) => p.name === staffName)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {
-    venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
+    venue: {
+      nodeId: venue.nodeId,
+      seriesId: venue.seriesId,
+      operationDescription: venue.operationDescription,
+    },
     invoiceLocale: "es-ES",
     days: 2,
     products: [
@@ -646,7 +654,11 @@ it.each([
   const product = available.find((p) => p.name === staffName)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {
-    venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
+    venue: {
+      nodeId: venue.nodeId,
+      seriesId: venue.seriesId,
+      operationDescription: venue.operationDescription,
+    },
     invoiceLocale: "es-ES",
     days: 2,
     products: [

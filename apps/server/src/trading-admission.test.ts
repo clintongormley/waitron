@@ -51,7 +51,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Test venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
     timeZone: "Europe/Madrid",
   });
   scope = { nodeId: await seedNode(suite.db) };

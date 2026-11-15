@@ -63,7 +63,6 @@ async function fixture(
   await seedVenueSettings(db, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
   const fixtureId = randomUUID();
@@ -3805,25 +3804,16 @@ it("editing a department preserves its previously read receipt defaults", async 
 });
 
 describe("department description setup in the live model", () => {
-  it.each([
-    undefined,
-    "{}",
-    JSON.stringify({ operationDescription: "  \t " }),
-    '{"operationDescription":23}',
-    "{broken",
-    JSON.stringify({ operationDescription: "x".repeat(501) }),
-    JSON.stringify({ operationDescription: "bad\u0001text" }),
-  ])(
+  it.each([null, "", "  \t ", "x".repeat(501), "bad\u0001text"])(
     "reports missing or unreadable department description %j only when the installed field requires it and offers no default",
-    async (receipt) => {
+    async (description) => {
       const fx = await fixture(true);
       const department = await withTransaction(db, (tx) =>
         createDepartment(tx, { name: "Dining" }),
       );
-      if (receipt !== undefined)
-        await db.execute(
-          sql`update departments set receipt_text = ${receipt}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
-        );
+      await db.execute(
+        sql`update departments set operation_description = ${description}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
+      );
       const read = async () =>
         (
           await (
@@ -3836,32 +3826,23 @@ describe("department description setup in the live model", () => {
         departmentName: "Dining",
       });
       await db.execute(
-        sql`update departments set receipt_text = ${JSON.stringify({ operationDescription: "Deli meals" })}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
+        sql`update departments set operation_description = ${"Deli meals"}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
       );
       expect(await read()).not.toContainEqual(
         expect.objectContaining({ code: "department.operation_description_required" }),
       );
     },
   );
-  it.each([
-    undefined,
-    "{}",
-    JSON.stringify({ operationDescription: "  \t " }),
-    '{"operationDescription":23}',
-    "{broken",
-    JSON.stringify({ operationDescription: "x".repeat(501) }),
-    JSON.stringify({ operationDescription: "bad\u0001text" }),
-  ])(
-    "a required description with a default offered reports no department for receipt %j",
-    async (receipt) => {
+  it.each([null, "", "  \t ", "x".repeat(501), "bad\u0001text"])(
+    "a required description with a default offered reports no department for description %j",
+    async (description) => {
       const fx = await fixture(true, "Seat default");
       const department = await withTransaction(db, (tx) =>
         createDepartment(tx, { name: "Dining" }),
       );
-      if (receipt !== undefined)
-        await db.execute(
-          sql`update departments set receipt_text = ${receipt}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
-        );
+      await db.execute(
+        sql`update departments set operation_description = ${description}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
+      );
       expect(
         (
           await (

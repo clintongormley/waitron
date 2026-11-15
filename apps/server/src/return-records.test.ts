@@ -81,7 +81,7 @@ const modules: WaitronModule[] = [
 beforeEach(async () => {
   received = [];
   accounted = true;
-  await seedVenue(suite.db, { name: "Return venue", operationDescription: "Restaurant service" });
+  await seedVenue(suite.db, { name: "Return venue" });
   await stampDeployment(suite.db, "preproduction");
   source = await seedNode(suite.db);
   receiver = await seedNode(suite.db);

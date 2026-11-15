@@ -51,7 +51,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "On-premises sale",
     });
 
     // The default station serves an item no routing cell covers.

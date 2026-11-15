@@ -53,7 +53,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Sala",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: VENUE }, null));
   nodeId = await seedNode(suite.db);

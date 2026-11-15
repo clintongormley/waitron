@@ -68,6 +68,7 @@ async function refusedOriginal(
     codigo = "1112",
     estado = "rechazado" as "rechazado" | "aceptado_con_errores",
     customer = null as typeof CUSTOMER | null,
+    operationDescription = "Food and drink",
   } = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
@@ -91,7 +92,7 @@ async function refusedOriginal(
           recipientAddress: "2 Main Street, 28013 Madrid, Spain",
         }),
         origin: deviceOrigin(node.deviceId),
-        operationDescription: "Food and drink",
+        operationDescription,
         locale: "en",
         invoiceLocales: ["en"],
         total: "12.10",
@@ -254,6 +255,24 @@ it("issues one R5 'S' naming the refused invoice, with the day the sale really h
   expect((await withTransaction(suite.db, (tx) => verifyChain(tx, node.nodeId))).issues).toEqual(
     [],
   );
+});
+
+it("copies the target's operation description byte for byte into the replacement", async () => {
+  const original = await refusedOriginal(new Date("2026-03-01T12:05:00Z"), {
+    operationDescription: "  Meals\tand drinks\n ",
+  });
+  const response = await send({
+    ...body,
+    caseId: original.caseId,
+    registroId: original.registroId,
+  });
+  expect(response.status).toBe(200);
+  const result = (await response.json()) as { registroId: string };
+  const [replacement] = await suite.db
+    .select({ description: registrosFacturacion.descripcionOperacion })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, result.registroId));
+  expect(replacement).toEqual({ description: "  Meals\tand drinks\n " });
 });
 
 it("sends no operation date when the day given is the replacement's own day", async () => {

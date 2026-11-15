@@ -104,7 +104,11 @@ it("demo seeding stops at a refused issuance without keeping that sale", async (
   const venue = await provision();
   await expect(
     seedSales(suite.db, {
-      venue: { nodeId: venue.nodeId, seriesId: venue.seriesIds[0]! },
+      venue: {
+        nodeId: venue.nodeId,
+        seriesId: venue.seriesIds[0]!,
+        operationDescription: venue.operationDescription,
+      },
       invoiceLocale: "es",
       days: 2,
       products: [

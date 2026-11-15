@@ -16,7 +16,6 @@ export interface VenueFiscalFields {
   readonly seriesCode: string;
   readonly fullSeriesCode: string;
   readonly rectificativeSeriesCode: string;
-  readonly operationDescription: string;
 }
 
 /* The next four constants restate rules `@waitron/verifactu` owns, which exports only the
@@ -50,12 +49,11 @@ export const VENUE_FISCAL_FIELD_PATHS = [
   "seriesCode",
   "fullSeriesCode",
   "rectificativeSeriesCode",
-  "operationDescription",
 ] as const;
 
 export type VenueFiscalFieldPath = (typeof VENUE_FISCAL_FIELD_PATHS)[number];
 
-function refuse(field: VenueFiscalFieldPath): never {
+function refuse(field: VenueFiscalFieldPath | "operationDescription"): never {
   throw new AppError("setup.request_invalid", { field });
 }
 
@@ -76,7 +74,6 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
     if (code.length > MAX_BASE_CODE_LENGTH) refuse(field);
   }
   validateLegalName(venue.legalName);
-  validateOperationDescription(venue.operationDescription);
 }
 
 export function validateLegalName(name: string): void {

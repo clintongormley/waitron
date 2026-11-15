@@ -98,7 +98,6 @@ export async function seedFiscalParents(
     await seedVenue(db, {
       name: "Local principal",
       invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
     });
     await seedDevice(db);
     ids.nodeId = await seedNode(db);

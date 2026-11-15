@@ -51,7 +51,6 @@ async function seedOrders(db: Database): Promise<Record<41 | 42 | 43, string>> {
   await seedVenue(db, {
     name: "Dining room",
     invoiceLocales: ["es"],
-    operationDescription: "Hospitality",
   });
   const orders = {} as Record<41 | 42 | 43, string>;
   for (const orderNumber of [41, 42, 43] as const) {

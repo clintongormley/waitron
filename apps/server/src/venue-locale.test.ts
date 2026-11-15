@@ -28,7 +28,6 @@ const suite = useVenueDb({
       name: "Counter",
       province: "Barcelona",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
     });
   },
 });

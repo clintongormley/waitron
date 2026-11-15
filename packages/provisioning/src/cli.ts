@@ -91,7 +91,7 @@ const USAGE = [
   "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--taxpayer-domicile <address>]",
   "           [--venue-name <name>] [--territory <t>] [--locale <l>]",
-  "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
+  "           [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
@@ -170,7 +170,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "venue-name": { type: "string" },
       territory: { type: "string" },
       locale: { type: "string", multiple: true },
-      "operation-description": { type: "string" },
       "address-line1": { type: "string" },
       "address-line2": { type: "string" },
       "postal-code": { type: "string" },
@@ -218,11 +217,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       deps,
     );
     const invoiceLocales = await resolveLocales(values.locale, deps);
-    const operationDescription = await resolveOption(
-      values["operation-description"],
-      "operation description: ",
-      deps,
-    );
     const addressLine1 = await resolveOption(values["address-line1"], "address line 1: ", deps);
     // Optional: a blank answer means no second line, not "ask again".
     const addressLine2Raw = await resolveOption(
@@ -267,7 +261,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       name: venueName,
       fiscalTerritory,
       invoiceLocales,
-      operationDescription,
       addressLine1,
       addressLine2: addressLine2Raw === "" ? null : addressLine2Raw,
       postalCode,
@@ -299,7 +292,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       seriesCode: request.seriesCode,
       fullSeriesCode: request.fullSeriesCode ?? "FF",
       rectificativeSeriesCode: request.rectificativeSeriesCode,
-      operationDescription: request.operationDescription,
     });
     const modules = enabledModules(installed, fiscalConfig);
 

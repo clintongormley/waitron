@@ -70,7 +70,6 @@ async function setup() {
   await seedVenue(db, {
     name: "Sala",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
   });
 
   const stationId = await seedKitchenStation(db, {});

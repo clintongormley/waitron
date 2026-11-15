@@ -38,7 +38,6 @@ async function seedVenueWithTill(): Promise<{ deviceId: DeviceId }> {
   await seedVenue(db, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const { deviceId } = await seedDevice(db, { label: "Till 1" });
   return { deviceId };

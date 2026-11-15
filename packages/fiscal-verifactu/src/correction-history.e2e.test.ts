@@ -132,6 +132,7 @@ async function correct(saleId: SaleId, gross: string) {
   const found = await preview(saleId, gross);
   const { saleId: correctionId } = await withTransaction(suite.db, (tx) =>
     recordCorrection(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,

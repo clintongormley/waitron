@@ -115,7 +115,6 @@ beforeAll(async () => {
   await seedVenue(aStore.venue, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
   const aId = await seedNode(aStore.venue);
   await establishNodeIdentity({ ownerDb: aStore.venue, node: aStore.node, ring: RING_A }, aId);

@@ -57,7 +57,6 @@ async function seedVenueWithPrinter(): Promise<string> {
   await seedVenue(suite.db, {
     name: "Counter",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Retail",
   });
   const node = await seedNode(suite.db);
   const [series] = await suite.db

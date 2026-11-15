@@ -36,7 +36,6 @@ async function seedTestVenue(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
 }
 

@@ -107,6 +107,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 /** The ordinary sale, settled immediately, so "the corrective is unsettled" is not vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -149,6 +150,7 @@ function correctionInput(
   overrides: Partial<RecordCorrectionInput> = {},
 ): RecordCorrectionInput {
   return {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,

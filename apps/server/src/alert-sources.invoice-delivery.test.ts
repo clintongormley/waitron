@@ -45,7 +45,6 @@ async function venue() {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
@@ -70,7 +69,7 @@ async function venue() {
 type Venue = Awaited<ReturnType<typeof venue>>;
 
 function invoice(v: Venue, full = true): Promise<{ saleId: string; number: string }> {
-  return recordSyntheticInvoice(suite.db, v.nodeId, { full });
+  return recordSyntheticInvoice(suite.db, v.nodeId, { full, operationDescription: "Restaurant" });
 }
 
 let hostCounter = 0;

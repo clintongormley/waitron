@@ -58,7 +58,6 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
     await seedVenueSettings(suite.db, {
       name: "Main",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db);
     await suite.db.insert(nodes).values({ id: f.context.binding.targetNodeId, name: "Box" });

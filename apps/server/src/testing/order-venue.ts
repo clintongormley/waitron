@@ -204,6 +204,7 @@ export async function credit(
       );
     const session = await adminSession(venue, tx);
     await recordCorrection(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
@@ -267,6 +268,7 @@ export async function contribute(venue: OrderVenue, billId: string, amount: stri
 export async function billlessSale(venue: OrderVenue): Promise<string> {
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
+      operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: venue.seriesId,

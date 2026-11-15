@@ -11,7 +11,6 @@ export type ServerFieldKey =
   | "seriesCode"
   | "fullSeriesCode"
   | "rectificativeSeriesCode"
-  | "operationDescription"
   | "staffLanguage";
 
 export interface ServerField {
@@ -43,12 +42,6 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
     key: "rectificativeSeriesCode",
     get message() {
       return t("server_fields.series_code");
-    },
-  },
-  operationDescription: {
-    key: "operationDescription",
-    get message() {
-      return t("server_fields.operation_description");
     },
   },
 };

@@ -58,7 +58,6 @@ it("reads the order's earlier payments through the working-order index", async (
     name: "Madrid",
     timeZone: "Europe/Madrid",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   const nodeId = await seedNode(suite.db);
   const [person] = await seedPersons(suite.db, {

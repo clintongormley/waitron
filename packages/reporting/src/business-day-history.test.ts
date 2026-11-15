@@ -20,7 +20,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Clock",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "05:00:00" });
 });

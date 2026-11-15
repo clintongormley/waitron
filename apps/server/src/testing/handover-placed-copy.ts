@@ -169,7 +169,6 @@ export function placedSpareFixture(boxes: {
     await seedVenueSettings(mainBox.db, {
       name: "Restaurant",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(mainBox.db, { timeZone: "Europe/Madrid" });
     await mainBox.db.insert(nodes).values({

@@ -105,7 +105,6 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale on premises",
   });
   const node = await seedNode(suite.db);
   await suite.db.update(nodes).set({ filingModule: "none" }).where(eq(nodes.id, node));
@@ -134,6 +133,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
   });
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Sale on premises",
       origin: jobOrigin("operator_script"),
       nodeId: node,
       seriesId: seriesId(series!.id),
@@ -481,6 +481,7 @@ describe("invoice email worker at trading boot", () => {
           .values({ nodeId: ctx.node, code: "S", purpose: "standard" })
           .returning();
         const sale = await recordSale(tx, ctx.backend, {
+          operationDescription: "Sale on premises",
           origin: jobOrigin("operator_script"),
           nodeId: ctx.node,
           seriesId: seriesId(series!.id),

@@ -32,7 +32,6 @@ async function provisionedNode({
     name: "Venue",
     province,
     invoiceLocales,
-    operationDescription: "Hospitality",
   });
   return { nodeId: await seedNode(db) };
 }

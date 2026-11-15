@@ -27,7 +27,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     await seedVenue(admin, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     // cloud_poll needs only `poll_id` under `printers_transport_fields_ck`.
     await admin

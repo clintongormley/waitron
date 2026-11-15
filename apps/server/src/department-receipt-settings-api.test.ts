@@ -22,7 +22,7 @@ import {
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { departments } from "@waitron/venue-service";
-import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { nodeId, type DepartmentReceiptWrite, type DepartmentReceiptConfig } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
@@ -52,7 +52,6 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["gl-ES"],
-    operationDescription: "Bootstrap",
     addressLine1: "Calle Uno 1",
     postalCode: "28013",
     city: "Madrid",
@@ -122,8 +121,9 @@ async function rows() {
   return {
     receipts: receipts.map(({ operationDescription, ...row }) => ({
       ...row,
-      receipt:
-        operationDescription === null ? row.receipt : { ...row.receipt, operationDescription },
+      receipt: (operationDescription === null
+        ? row.receipt
+        : { ...row.receipt, operationDescription }) as DepartmentReceiptConfig | null,
     })),
     policies: await suite.db.select().from(departments),
   };

@@ -86,6 +86,7 @@ const degradedClock: TrustedClock = fixedClock(() => ({
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,

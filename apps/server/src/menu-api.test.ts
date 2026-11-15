@@ -601,7 +601,7 @@ const suite = useVenueDb({
     await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
 
-    await seedVenue(db, { name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" });
+    await seedVenue(db, { name: "Main", invoiceLocales: ["es-ES"] });
 
     // A MANAGER (holds `menu.manage`) and a STAFF person (holds no `menu.manage`), each with a
     // live management session.

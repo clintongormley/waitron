@@ -22,7 +22,6 @@ function request(taxId: string): VenueRequest {
     name: "Policy import venue",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     addressLine1: "1 Central Street",
     addressLine2: null,
     postalCode: "28013",

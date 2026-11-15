@@ -21,7 +21,6 @@ describe("charged service cancellations", () => {
     await seedVenue(suite.db, {
       name: "Dining room",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
   });
 

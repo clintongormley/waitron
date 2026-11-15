@@ -38,6 +38,8 @@ import {
   writeDepartmentReceipt,
 } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { venueFiscalSelection } from "@waitron/provisioning";
+import { ALL_MODULES } from "./modules.js";
 import type { ServerConfig } from "./config.js";
 import { boxHostClient } from "./box-host-client.js";
 import { answersSynchronised } from "./clock-service-reading.js";
@@ -103,7 +105,9 @@ async function prepareSale(config: ServerConfig) {
         orderStart: "counter",
       });
       await writeDepartmentReceipt(tx, department.id, {
-        operationDescription: venue.operationDescription,
+        operationDescription:
+          venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory).contribution?.venueFields
+            ?.defaults?.operationDescription ?? "",
       });
       const period = await saveMenuPeriod(tx, department.id, {
         name,

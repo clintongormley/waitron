@@ -59,7 +59,6 @@ describe("booking change interests", () => {
     await seedVenue(suite.db, {
       name: "Events",
       invoiceLocales: ["es"],
-      operationDescription: "test",
     });
     const zone = await seedZone(suite.db, { name: "Events" });
     const tables = await suite.db

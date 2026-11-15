@@ -46,7 +46,6 @@ describe("an order's delivery table", () => {
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
   });

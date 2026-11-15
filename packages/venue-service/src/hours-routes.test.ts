@@ -86,7 +86,7 @@ async function fixture(): Promise<Fixture> {
       timeZone,
       dayCutover,
     } = venue("Venue");
-    await seedVenueSettings(tx, { name: venueName, invoiceLocales, operationDescription });
+    await seedVenueSettings(tx, { name: venueName, invoiceLocales });
     await seedBusinessDay(tx, { timeZone, dayCutover });
     const department = (name: string, isDefault = false) => ({
       name,

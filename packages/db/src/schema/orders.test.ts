@@ -74,7 +74,6 @@ async function seed(db: Database): Promise<void> {
     // that checks "at least one locale" instead of "exactly these".
     name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
-    operationDescription: "Hostelería",
   });
   DASHBOARD_ORDER = { source: "dashboard", deviceId: null, dining: "eat_in" };
   const [prodA] = await db

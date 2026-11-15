@@ -176,7 +176,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
     });
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {});

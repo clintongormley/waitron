@@ -729,7 +729,6 @@ const importedConfiguration: ConfigurationPreview = {
     rectificativeSeriesCode: "R",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Calle 1",
     addressLine2: null,
@@ -765,8 +764,7 @@ describe("setup root lifecycle and import", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
     expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "import proof");
     expect(unload()).toBe(true);
-    const { operationDescription: _, ...importedVenue } = importedConfiguration.venue;
-    void _;
+    const importedVenue = importedConfiguration.venue;
     expect((el as unknown as State).draft).toEqual({
       mode: "prepare",
       configurationImport: true,

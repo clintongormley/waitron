@@ -86,7 +86,6 @@ async function seedBoundDevice(profileId: string, active = true): Promise<string
   await seedVenueSettings(suite.db, {
     name: "Loc",
     invoiceLocales: ["es"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(suite.db, {});
   const [device] = await suite.db
@@ -661,7 +660,6 @@ describe("device-profile store against a real migrated database", () => {
     await seedVenue(suite.db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
     const [printer] = await suite.db
       .insert(printers)
@@ -761,7 +759,6 @@ describe("device-profile store against a real migrated database", () => {
     await seedVenue(suite.db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
     const [p1, p2] = await suite.db
       .insert(printers)
@@ -828,7 +825,6 @@ describe("device-profile store against a real migrated database", () => {
     await seedVenue(suite.db, {
       name: "Loc",
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
     const [bar] = await suite.db
       .insert(printers)

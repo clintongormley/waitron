@@ -43,7 +43,6 @@ async function fixture(tx: Transaction) {
   await seedVenue(tx, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const cfg = {};
   const department = await createDepartment(tx, {

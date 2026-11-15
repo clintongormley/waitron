@@ -18,7 +18,6 @@ describe("readBoxEmailContext", () => {
     await seedVenue(suite.db, {
       name: "Corner Bistro",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Sale",
     });
     const [admin] = await seedPersons(suite.db, {
       displayName: "Admin",

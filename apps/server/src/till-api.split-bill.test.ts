@@ -77,7 +77,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
     });
     // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db);

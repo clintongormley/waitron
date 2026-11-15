@@ -29,7 +29,6 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["es"],
-    operationDescription: "Hostelería",
   });
   const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
   const { deviceId } = await seedDevice(db, { profileId: profile!.id, label: "Counter till" });

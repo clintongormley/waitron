@@ -22,7 +22,6 @@ describe("receipt reprint record", () => {
     await seedVenue(db, {
       name: "Fixture",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     const nodeId = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));

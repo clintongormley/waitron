@@ -78,7 +78,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       province: address.province === undefined ? "Sevilla" : address.province,
       city: address.city === undefined ? "Sevilla" : address.city,

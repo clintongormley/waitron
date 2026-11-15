@@ -247,9 +247,10 @@ export const PREVIEW_NULLABLE_VENUE_FIELDS = [
 type PreviewNullableVenueField = (typeof PREVIEW_NULLABLE_VENUE_FIELDS)[number];
 
 export interface ConfigurationPreview {
-  venue: Omit<VenueDraft, "admin" | PreviewNullableVenueField> & {
-    operationDescription: string;
-  } & Record<PreviewNullableVenueField, string | null>;
+  venue: Omit<VenueDraft, "admin" | PreviewNullableVenueField> & {} & Record<
+      PreviewNullableVenueField,
+      string | null
+    >;
   counts: Record<string, number>;
   reconnect: string[];
 }

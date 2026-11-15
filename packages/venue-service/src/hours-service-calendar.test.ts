@@ -20,7 +20,6 @@ async function fixture() {
     await seedVenue(tx, {
       name: randomUUID(),
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "04:30:00",
     });

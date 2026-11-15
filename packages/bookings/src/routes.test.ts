@@ -38,7 +38,6 @@ async function setupVenue(): Promise<Venue> {
   await seedVenue(db, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant service",
   });
   const nodeId = await seedNode(db);
 

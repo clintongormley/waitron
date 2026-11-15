@@ -197,7 +197,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -578,6 +577,7 @@ async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<
       pin: "1234",
     });
     await recordCorrection(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: cfg.origin,
       nodeId: cfg.nodeId,
       seriesId: brandSeriesId(rectificativeSeries(cfg)),

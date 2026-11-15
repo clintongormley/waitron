@@ -19,7 +19,6 @@ let scope: IssueScope;
 beforeEach(async () => {
   await seedVenue(suite.db, {
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
     timeZone: "Europe/Madrid",
   });
   scope = { nodeId: await seedNode(suite.db) };

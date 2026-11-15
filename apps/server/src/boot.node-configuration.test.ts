@@ -200,7 +200,6 @@ it.each([
       name: "Counter",
       province,
       invoiceLocales: [...invoiceLocales],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(source.db, { timeZone });
     await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
@@ -246,7 +245,6 @@ it.each([
     await seedVenueSettings(source.db, {
       name: "Counter",
       province: "London",
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
@@ -287,7 +285,6 @@ it.each(["mirror", "primary"] as const)(
     await seedVenueSettings(source.db, {
       name: "Counter",
       province: "London",
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values([

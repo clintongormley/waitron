@@ -44,7 +44,6 @@ async function seedVenueWithNode(): Promise<NodeId> {
   await seedVenue(db, {
     name: "Main room",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });

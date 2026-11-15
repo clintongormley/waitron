@@ -165,7 +165,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Counter",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
   await suite.db.insert(nodes).values({ id: NODE, name: "Node", filingModule: "verifactu" });

@@ -55,6 +55,7 @@ export function saleInput(
 ): RecordSaleInput {
   const { nodeId, seriesId, ...overrides } = params;
   return {
+    operationDescription: "Venta en establecimiento",
     origin: jobOrigin("readiness_test"),
     nodeId,
     seriesId,

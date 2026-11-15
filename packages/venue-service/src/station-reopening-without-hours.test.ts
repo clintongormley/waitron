@@ -15,7 +15,6 @@ async function fixture(tx: Transaction) {
   await seedVenue(tx, {
     name: "Reopening venue",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });

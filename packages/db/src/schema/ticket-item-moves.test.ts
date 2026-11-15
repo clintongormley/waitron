@@ -29,7 +29,6 @@ describe("ticket_item_moves schema", () => {
     await seedVenue(db, {
       name: "Kitchen",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
     const [station, other] = await db
       .insert(kitchenStations)

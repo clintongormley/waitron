@@ -18,7 +18,6 @@ const request: VenueRequest = {
   name: "Restaurant",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],
-  operationDescription: "Venta",
   addressLine1: "Calle Mayor 1",
   addressLine2: null,
   postalCode: "28013",

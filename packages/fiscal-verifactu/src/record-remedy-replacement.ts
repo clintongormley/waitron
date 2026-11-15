@@ -6,7 +6,7 @@ import { AppError, isCalendarDate, jobOrigin, localCalendarDate, seriesId } from
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
 import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
 import { only, requestCaseId, text } from "./record-remedy-request.js";
-import { makeVerifactuBackend } from "./slot.js";
+import { FISCAL_SLOT, makeVerifactuBackend } from "./slot.js";
 
 function operationDateInvalid(): never {
   throw new AppError("fiscal.operation_date_invalid", { field: "operationDate" });
@@ -74,7 +74,10 @@ export async function applyReplacementInvoiceRequest(
           operationDateInvalid();
         return recordReplacement(tx, backend, {
           origin: jobOrigin("operator_script"),
-          operationDescription: target.descripcionOperacion ?? undefined,
+          operationDescription:
+            target.descripcionOperacion ??
+            FISCAL_SLOT.venueFields?.defaults?.operationDescription ??
+            "",
           nodeId: generation.nodeId,
           seriesId: seriesId(await readLiveSeriesIdTx(tx, generation.nodeId, "rectificative")),
           correctsSaleId,

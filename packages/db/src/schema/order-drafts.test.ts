@@ -32,7 +32,6 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
     await seedVenue(suite.db, {
       name: "Dining room",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
   });
 

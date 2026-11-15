@@ -1773,7 +1773,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         await seedVenueSettings(source.store.venue, {
           name: "Archive source",
           invoiceLocales: ["es"],
-          operationDescription: "Restaurant",
         });
         await withTransaction(source.store.venue, ensureStreamId);
         await withTransaction(source.store.venue, (tx) =>
@@ -2518,7 +2517,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             legalName: "Nueva Empresa SL",
             taxpayerDomicile: "Calle Nueva 3, 28013 Madrid",
 
-            operationDescription: "Comida para llevar",
             seriesCode: "B",
             fullSeriesCode: "FB",
             rectificativeSeriesCode: "RB",
@@ -2585,9 +2583,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
         target.store.venue.all(
-          sql`select json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where settings.module = 'venue'`,
+          sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where settings.module = 'venue'`,
         ),
-      ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);
+      ).toEqual([{ invoice_locales: '["es-ES"]' }]);
       const imported = await withTransaction(target.store.venue, (tx) =>
         readContentLanguages(tx, "es"),
       );

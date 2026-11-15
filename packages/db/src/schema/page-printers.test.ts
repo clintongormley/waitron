@@ -21,7 +21,6 @@ it("stores a page destination and its advertised formats outside the receipt-pri
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Sale",
   });
   await suite.db.execute(sql`insert into page_printers
     (id, name, host, port, resource_path, document_format, supported_formats, media, resolution_dpi, active)
@@ -49,7 +48,7 @@ it("stores a page destination and its advertised formats outside the receipt-pri
 
 describe("the agent that reaches a page printer", () => {
   async function seedFixtureVenue(name: string): Promise<void> {
-    await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Sale" });
+    await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"] });
   }
 
   async function insertPrinter(host: string, extra: { agentId?: string | null } = {}) {

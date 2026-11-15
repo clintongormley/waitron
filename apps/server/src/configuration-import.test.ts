@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 40,
+  version: 41,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -57,7 +57,6 @@ const bundle: ConfigurationBundle = {
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Calle 1",
     addressLine2: null,
@@ -621,7 +620,6 @@ describe("routing cells in a staged import", () => {
       taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
       name: "Prepared",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
       fiscalTerritory: "ES-common",
       addressLine1: "Calle 1",
       addressLine2: null,

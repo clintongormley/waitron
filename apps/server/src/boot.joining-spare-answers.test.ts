@@ -139,7 +139,6 @@ async function joinedPair() {
         name: "Main box",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Sale",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

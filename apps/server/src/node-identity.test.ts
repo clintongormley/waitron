@@ -61,7 +61,6 @@ describe("node identity establishment", () => {
     await seedVenue(db, {
       name: "Main room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     nodeId = await seedNode(db);
     otherNodeId = await seedNode(db);

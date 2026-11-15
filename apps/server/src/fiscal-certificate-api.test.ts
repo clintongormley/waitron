@@ -49,7 +49,6 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
         name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Uno 1",
         addressLine2: null,
         postalCode: "28013",

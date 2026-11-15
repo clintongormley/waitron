@@ -187,7 +187,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     const nodeId = await seedNode(db);
     await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary");
@@ -536,7 +535,6 @@ describe("promoteMirrorToPrimary", () => {
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     const t = await db.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`);
     const nif = t.rows[0]!.tax_id;

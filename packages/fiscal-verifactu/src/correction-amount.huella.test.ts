@@ -76,6 +76,7 @@ async function correct(
   vatRate = "21.00",
 ): Promise<SaleId> {
   const input: RecordCorrectionInput = {
+    operationDescription: "Venta en establecimiento",
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,

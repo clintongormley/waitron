@@ -20,7 +20,6 @@ import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
-import { startEn } from "./i18n/strings/start.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 
@@ -725,7 +724,6 @@ describe("setup-app", () => {
         id: "exported-id",
         name: "Prepared",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
         fiscalTerritory: "ES-common",
         addressLine1: "Calle 1",
         addressLine2: null,
@@ -769,7 +767,6 @@ describe("setup-app", () => {
       taxpayerDomicile: "Calle Vieja 1, 28001 Madrid",
       name: "Prepared",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
       fiscalTerritory: "ES-common",
       addressLine1: "Calle 1",
       addressLine2: null,
@@ -6074,30 +6071,6 @@ it.each([
     }
   },
 );
-
-it("routes an internal description refusal to the venue action message", async () => {
-  const provision = vi.fn().mockRejectedValue({
-    code: "setup.request_invalid",
-    params: { field: "operationDescription" },
-  });
-  const el = await mountSetupApp(stubApi({ provision }));
-  provisionRequest(el);
-  await flush(el);
-  const venue = await screenHost(el, "venue");
-  expect((venue as unknown as { invalidField?: string }).invalidField).toBe("operationDescription");
-  expect(venue.shadowRoot!.querySelector("[data-test=operationDescription]")).toBeNull();
-  const actions = venue.shadowRoot!.querySelector<
-    HTMLElement & { updateComplete: Promise<unknown> }
-  >("wt-form-actions")!;
-  await actions.updateComplete;
-  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
-    startEn["server_fields.operation_description"],
-  );
-  expect(
-    (venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
-      .disabled,
-  ).toBe(false);
-});
 
 describe("Prepare and Live email setup journey", () => {
   const email = {

@@ -73,7 +73,6 @@ const VENUE_M: VenueRequest = {
   name: "Main room",
   fiscalTerritory: "GB-vat",
   invoiceLocales: [LOCALE_M],
-  operationDescription: "Sale on premises",
   addressLine1: "1 High Street",
   addressLine2: null,
   postalCode: "EC1A 1AA",

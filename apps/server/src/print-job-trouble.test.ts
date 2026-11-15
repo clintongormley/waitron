@@ -28,7 +28,7 @@ function minsAgo(mins: number): string {
 }
 
 async function prepareVenue(name = "Counter"): Promise<void> {
-  await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Retail" });
+  await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"] });
 }
 
 async function seedPrinter(t: { name: string; active?: boolean }): Promise<string> {

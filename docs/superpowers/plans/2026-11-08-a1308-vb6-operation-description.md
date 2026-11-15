@@ -237,3 +237,26 @@ is. Nothing in this area waits for this PR; vb7–vb9 may land before it.
 - [ ] **Step 4: Run** Finish-line items 1–5 — PASS.
 - [ ] **Step 5:** Docs; `pnpm protection-list list --out <B>`; `compare`; paste and mark.
 - [ ] **Step 6: Commit** `git commit -s -m "sales: the operation description is a required input; the venue's copy goes (FISCAL)"`.
+
+
+## Current-main consumer ports — watcher clearance, 2026-11-15
+
+The watcher cleared these direct ports at 17:24 and 17:33 in Lane H's `questions.md`:
+move import refusals and malformed-reader controls to `departments.operation_description`;
+keep number/array refusals at import rather than as JSON types in a TEXT column. Current main
+also has a fourth recording input, `RecordReplacementInput`: it becomes required too. A replacement
+copies its target's recorded text exactly, using the fiscal contribution's default only if the
+target had none. The upgrade-check department uses that default. The venue-field contribution
+contract and setup validator lose only the venue description; department validation stays.
+All existing filed descriptions must stay byte-identical; the fiscal pair stays unedited, and a
+replacement test covers exact copying. The PR says "fiscal-adjacent" and the owner lands it.
+This is the watcher's clearance, not a new owner approval of the design.
+
+
+**Watcher, 2026-11-15 18:04:** the upgrade-check invoice is a second named exception to
+unchanged text: the copied fixture's “Restaurante” becomes the contribution default,
+“Venta en establecimiento”. The production wrapper runs that sale in its disposable
+`check/state` copy and starts its container with `--network none`
+(`scripts/box/upgrades/candidate.mjs`; the eight candidate-wrapper tests passed under a Docker stub).
+The base/candidate `upgrade-sale.test.ts` probes each asserted the newest stored fiscal description
+and passed. This exception does not authorise changing a real venue's filed description.

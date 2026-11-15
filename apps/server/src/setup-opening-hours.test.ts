@@ -26,7 +26,6 @@ async function seed(withMenu = true, receiptLocale = "en-GB") {
   await seedVenue(db, {
     name: "First venue",
     invoiceLocales: [receiptLocale],
-    operationDescription: "Hospitality",
     defaultMenuId: withMenu ? menu!.id : null,
   });
   const cfg = {

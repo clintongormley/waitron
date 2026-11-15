@@ -210,16 +210,14 @@ describe("devSetup against a real venue directory", () => {
     expect(read.records).toEqual([{ issuer: "B00000000", n: read.sales }]);
   });
 
-  it("stores English operation and street examples in a new developer venue", async () => {
+  it("stores an English street example in a new developer venue", async () => {
     const rows = await readVenue(async (db) => {
-      const result = await db.execute<{ operation_description: string; address_line1: string }>(
-        sql`select json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1 from settings where settings.module = 'venue'`,
+      const result = await db.execute<{ address_line1: string }>(
+        sql`select json_extract(settings.doc, '$.addressLine1') as address_line1 from settings where settings.module = 'venue'`,
       );
       return result.rows;
     });
-    expect(rows).toEqual([
-      { operation_description: "In-store sales", address_line1: "1 Main Street" },
-    ]);
+    expect(rows).toEqual([{ address_line1: "1 Main Street" }]);
   });
 
   it("gives the developer administrator an English display name", async () => {
@@ -632,7 +630,6 @@ describe("inspectVenues reads a migrated venue directory", () => {
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
       await seedVenue(store.venue, {
         name: "Inspection",
-        operationDescription: "Hospitality",
       });
       nodeId = await seedNode(store.venue);
     } finally {

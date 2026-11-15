@@ -29,7 +29,6 @@ async function fixture(role: "manager" | "staff" = "manager") {
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["gl-ES"],
-    operationDescription: "Bootstrap",
   });
   await seedVenueSettings(suite.db, {
     defaultContentLanguage: "es",
@@ -96,7 +95,10 @@ describe("checked department receipt write", () => {
     });
     expect(checked.input).toEqual(input);
     await save(f, input);
-    expect((await suite.db.select().from(departments))[0]!.receiptText).toEqual(input.receipt);
+    const [saved] = await suite.db.select().from(departments);
+    expect({ ...saved!.receiptText, operationDescription: saved!.operationDescription }).toEqual(
+      input.receipt,
+    );
     await withTransaction(suite.db, async (tx) => {
       expect((await departmentReceiptLanguages(tx)).languages).toEqual(["gl-ES", "es-ES", "ca-ES"]);
       const printed = await VENUE_SERVICE.readPrintedDepartmentReceipt(
@@ -111,7 +113,8 @@ describe("checked department receipt write", () => {
   it("allows decoration editing with venue permission when both policies are unchanged", async () => {
     const f = await fixture();
     await save(f, body());
-    expect((await suite.db.select().from(departments))[0]!.receiptText).toEqual({
+    const [saved] = await suite.db.select().from(departments);
+    expect({ ...saved!.receiptText, operationDescription: saved!.operationDescription }).toEqual({
       operationDescription: "Deli meals",
     });
     expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
@@ -185,7 +188,8 @@ describe("checked department receipt write", () => {
     await suite.db
       .update(departments)
       .set({
-        receiptText: { operationDescription: "Meals", footerMessage: { "eu-ES": "New text" } },
+        operationDescription: "Meals",
+        receiptText: { footerMessage: { "eu-ES": "New text" } },
       })
       .where(eq(departments.id, f.departmentId));
     await expect(save(f, input)).rejects.toMatchObject({

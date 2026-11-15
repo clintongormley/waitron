@@ -705,7 +705,6 @@ describe("adjustment report routes", () => {
     await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurante",
       timeZone: "Europe/Madrid",
       dayCutover: "05:00:00",
     });

@@ -113,7 +113,6 @@ beforeAll(async () => {
   await seedVenueSettings(db, {
     name: "Local",
     invoiceLocales: ["es"],
-    operationDescription: "Venta",
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
@@ -2222,7 +2221,7 @@ describe("transactional series restore identity", () => {
 
 it("resolves an archive node through the read-only source database", async () => {
   const otherNode = "c0000000-0000-4000-8000-000000000009";
-  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedVenueSettings(suite.db, {});
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: otherNode, name: "Other node" });
   try {

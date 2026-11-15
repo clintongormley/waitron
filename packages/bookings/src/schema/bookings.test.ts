@@ -69,7 +69,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await seedVenueSettings(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
     const zone = await seedZone(suite.db, { name: "Booking zone" });

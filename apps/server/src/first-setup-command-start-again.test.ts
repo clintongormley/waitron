@@ -100,8 +100,6 @@ function command(
     request.fiscalTerritory,
     "--locale",
     "es-ES",
-    "--operation-description",
-    request.operationDescription,
     "--address-line1",
     request.addressLine1,
     "--address-line2",
@@ -427,7 +425,7 @@ async function filesBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 40 as const,
+    version: 41 as const,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -440,7 +438,6 @@ async function filesBeforeActivation(stateDir: string) {
       taxpayerDomicile: request.taxpayerDomicile,
       name: request.name,
       invoiceLocales: ["es-ES"],
-      operationDescription: request.operationDescription,
       fiscalTerritory: request.fiscalTerritory,
       addressLine1: request.addressLine1,
       addressLine2: null,

@@ -66,7 +66,6 @@ async function seedFixtureVenue(): Promise<void> {
   await seedVenue(db, {
     name: `Venue ${randomUUID()}`,
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
 }
 

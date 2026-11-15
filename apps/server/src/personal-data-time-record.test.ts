@@ -41,7 +41,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Venue",
     invoiceLocales: ["es"],
-    operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
   const nodeId = await seedNode(suite.db);

@@ -39,7 +39,6 @@ describe("station queue rest of the order", () => {
     await seedVenue(db, {
       name: "Barra",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
     });
     const nodeId = await seedNode(db);
     const [{ id: stationId }] = await db
@@ -238,7 +237,6 @@ describe("station queue bump mode", () => {
     await seedVenue(db, {
       name: "Bar",
       invoiceLocales: [LOCALE],
-      operationDescription: "Dine-in sale",
     });
     const nodeId = await seedNode(db);
     const cfg: TradingContext = {

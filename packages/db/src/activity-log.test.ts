@@ -155,7 +155,6 @@ describe("activity log", () => {
     await seedVenue(suite.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
     const { deviceId } = await seedDevice(suite.db);
     const entry = await withTransaction(suite.db, (tx) =>

@@ -31,7 +31,6 @@ beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Sale",
   });
   const makePrinter = async (name: string) =>
     (

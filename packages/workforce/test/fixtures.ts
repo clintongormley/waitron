@@ -57,7 +57,6 @@ export async function seedFixtureVenue(db: Database): Promise<void> {
     await seedVenue(db, {
       name: "Main",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
 }
 

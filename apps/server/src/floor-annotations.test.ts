@@ -34,7 +34,6 @@ async function setupVenue(): Promise<TradingContext> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
-    operationDescription: "In-store sales",
     timeZone: DEFAULT_TIME_ZONE,
   });
   const nodeId = await seedNode(db);

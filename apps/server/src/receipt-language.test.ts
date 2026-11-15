@@ -132,7 +132,6 @@ async function venueWith(
         name: "Sala",
         fiscalTerritory: "ES-common",
         invoiceLocales,
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Carrer 1",
         addressLine2: null,
         ...place,
@@ -1896,6 +1895,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         pin: "1234",
       });
       await recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

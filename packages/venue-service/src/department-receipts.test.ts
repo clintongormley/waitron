@@ -28,7 +28,6 @@ async function fixture(active = true) {
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
   });
   await suite.db
     .insert(mediaImages)
@@ -56,7 +55,8 @@ async function imported(id: string, receipt: string, rasters: string | null = nu
   try {
     const parsed = JSON.parse(receipt);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      operationDescription = typeof parsed.operationDescription === "string" ? parsed.operationDescription : null;
+      operationDescription =
+        typeof parsed.operationDescription === "string" ? parsed.operationDescription : null;
       delete parsed.operationDescription;
       receipt = JSON.stringify(parsed);
     }

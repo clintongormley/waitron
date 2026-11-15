@@ -50,7 +50,6 @@ async function fixture(): Promise<Fixture> {
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });

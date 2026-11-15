@@ -79,8 +79,6 @@ async function fixture(answer = "yes") {
     request.fiscalTerritory,
     "--locale",
     "es-ES",
-    "--operation-description",
-    request.operationDescription,
     "--address-line1",
     request.addressLine1,
     "--address-line2",

@@ -424,7 +424,6 @@ describe("comparison immediately before real archive placement", () => {
     await seedVenueSettings(suite.db, {
       name: "Test room",
       invoiceLocales: ["en"],
-      operationDescription: "Meal",
     });
     await seedBusinessDay(suite.db, {});
     await suite.db.insert(nodes).values({ id: nodeId, name: "Test node" });

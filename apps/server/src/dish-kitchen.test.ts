@@ -25,7 +25,7 @@ beforeAll(() => {
 });
 
 async function seed() {
-  await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
+  await seedVenue(db, { name: "Venue", invoiceLocales: ["en"] });
   const nodeId = await seedNode(db);
   const stations = await db
     .insert(kitchenStations)

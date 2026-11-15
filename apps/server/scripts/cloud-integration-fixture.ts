@@ -72,7 +72,6 @@ if (savedEnv !== undefined) {
           name: "Cloud Test Venue",
           fiscalTerritory: "ES-common",
           invoiceLocales: ["es-ES"],
-          operationDescription: "Test sale",
           addressLine1: "1 Main Street",
           addressLine2: null,
           postalCode: "28013",

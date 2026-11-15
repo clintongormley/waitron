@@ -67,7 +67,6 @@ async function seedPrintVenue(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Barra",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Venta en establecimiento",
   });
 }
 

@@ -140,6 +140,7 @@ describe("menu → priceBasket → recordSale (end-to-end)", () => {
       expect(priced.total).toBe("7.97");
 
       return recordSale(tx, backend, {
+        operationDescription: "Test op",
         origin: deviceOrigin(deviceId),
         nodeId,
         seriesId,

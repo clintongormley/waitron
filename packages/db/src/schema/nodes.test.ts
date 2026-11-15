@@ -29,12 +29,10 @@ async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
     name: "Fixture venue",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await seedVenueSettings(db, {
     name: "Fixture venue",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(db, {});
 }

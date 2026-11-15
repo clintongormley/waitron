@@ -46,7 +46,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Old venue",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, name: "Old node" });

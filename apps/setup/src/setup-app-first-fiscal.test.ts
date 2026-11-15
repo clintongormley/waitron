@@ -914,7 +914,6 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
   const preview = {
     venue: {
       ...exported,
-      operationDescription: "Venta en establecimiento",
       dayCutover: "05:00:00",
       somethingNew: "not a setup field",
     },

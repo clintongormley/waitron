@@ -39,7 +39,6 @@ async function venue(): Promise<{ deviceId: string; profileId: string }> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant sale",
   });
   const { deviceId, profileId } = await seedDevice(suite.db, { label: "Counter" });
   return { deviceId, profileId };
@@ -250,7 +249,6 @@ describe("the Demo printer", () => {
     await seedVenue(suite.db, {
       name: "Empty",
       invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant sale",
     });
 
     const gone = await realPrinter("Gone");

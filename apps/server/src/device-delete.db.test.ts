@@ -357,6 +357,7 @@ async function seed() {
   // History a delete keeps: a cash sale, an incident, a drawer opening and a fired group on Bar till.
   const sale = await inTx((tx) =>
     recordSale(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(barTill),
       nodeId: cfg.nodeId,
       seriesId: venue.seriesId,

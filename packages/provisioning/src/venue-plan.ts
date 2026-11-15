@@ -26,7 +26,6 @@ export interface VenueRequest {
   fiscalTerritory: string;
   invoiceLocales: string[];
   staffLanguage?: "en" | "es";
-  operationDescription: string;
   addressLine1: string;
   addressLine2: string | null;
   postalCode: string;
@@ -56,7 +55,6 @@ export const VENUE_FIELDS = [
   "name",
   "fiscalTerritory",
   "invoiceLocales",
-  "operationDescription",
   "addressLine1",
   "addressLine2",
   "postalCode",
@@ -92,7 +90,6 @@ export type VenueAction =
       name: string;
       fiscalTerritory: string;
       invoiceLocales: string[];
-      operationDescription: string;
       addressLine1: string;
       addressLine2: string | null;
       postalCode: string;
@@ -212,7 +209,6 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       name: request.name,
       fiscalTerritory: request.fiscalTerritory,
       invoiceLocales: locales,
-      operationDescription: request.operationDescription,
       addressLine1: request.addressLine1,
       addressLine2: request.addressLine2,
       postalCode: request.postalCode,

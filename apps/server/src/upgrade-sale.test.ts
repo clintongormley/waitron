@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { beforeAll, afterAll, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { writeContentLanguages } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -90,6 +90,16 @@ it("enrols a real till and records a primary cash sale on the copy, continuing i
     const result = await checkUpgradeSale(f.config, f.env, { socketPath: f.socketPath });
     expect(result).toMatchObject({ total: "1.00", fiscalBackend: "verifactu", fiscalRecords: 2 });
     expect(result.saleId).toMatch(/^[0-9a-f-]{36}$/);
+    const copy = await openVenueDatabase(f.config.venueDir);
+    try {
+      expect(
+        copy.venue.all(
+          sql`select operation_description from departments where name like 'Upgrade check %'`,
+        ),
+      ).toEqual([{ operation_description: "Venta en establecimiento" }]);
+    } finally {
+      await copy.close();
+    }
     expect(source.db.all(sql`select count(*) as total from sales`)).toEqual([{ total: 1 }]);
     expect(
       await withTransaction(source.db, (tx) => venue.backend.checkIntegrity(tx, venue.cfg.nodeId)),

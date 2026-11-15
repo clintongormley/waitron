@@ -51,6 +51,7 @@ async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
       .from(invoiceSeries)
       .where(eq(invoiceSeries.purpose, full ? "full" : "standard"));
     return recordSale(tx, backend, {
+      operationDescription: "Restaurante",
       origin: jobOrigin("operator_script"),
       nodeId: venue.cfg.nodeId,
       seriesId: seriesId(series!.id),

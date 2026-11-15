@@ -139,7 +139,6 @@ beforeEach(async () => {
     await seedVenueSettings(db, {
       name: "Restaurant",
       invoiceLocales: ["es"],
-      operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
     await db.insert(nodes).values({ id: PRIMARY, name: "Primary" });

@@ -55,7 +55,7 @@ beforeAll(() => {
 });
 
 async function newVenue(name: string): Promise<void> {
-  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
 }
 
 const shape = (rows: { name: string; startsOn: string }[]) =>
@@ -110,7 +110,7 @@ describe("ensureDefaultSeasons", () => {
     if (taxpayer) await seedVenue(db, venue);
     else {
       const { name, province, invoiceLocales, operationDescription } = venue;
-      await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+      await seedVenueSettings(db, { name, province, invoiceLocales });
       await seedBusinessDay(db);
     }
   };
@@ -199,7 +199,6 @@ async function autumnVenue() {
   await seedVenue(db, {
     name: `House ${randomUUID()}`,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });

@@ -114,7 +114,6 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
   await suite.db.insert(nodes).values(
@@ -1089,7 +1088,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   await spare.db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
-  await seedVenueSettings(spare.db, { operationDescription: "Hospitality" });
+  await seedVenueSettings(spare.db, {});
   await seedBusinessDay(spare.db, {});
   await spare.db.insert(nodes).values({
     id: primary.nodeId,

@@ -396,7 +396,6 @@ async function attachLogo(filename: string, active: boolean) {
   await seedVenueSettings(suite.db, {
     name: "Place",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(suite.db, {});
   const [department] = await suite.db

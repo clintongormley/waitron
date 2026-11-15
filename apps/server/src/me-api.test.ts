@@ -68,7 +68,6 @@ const suite = useVenueDb({
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
     });
     const [meRow] = await seedPersons(db, {
       displayName: "Me",

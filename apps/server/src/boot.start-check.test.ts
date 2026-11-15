@@ -398,7 +398,6 @@ describe("the start check on a real start", () => {
             await seedVenueSettings(spareSuite.db, {
               name: "Standby venue",
               invoiceLocales: ["es"],
-              operationDescription: "Restaurant",
             });
             await withTransaction(spareSuite.db, (tx) =>
               saveVenueFields(tx, { streamId: "c0000000-0000-4000-8000-000000000002" }, null),

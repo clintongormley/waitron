@@ -18,7 +18,6 @@ describe("join_requests", () => {
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
     });
   });
 

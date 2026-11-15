@@ -27,7 +27,6 @@ describe("storeTableShortNameKeys", () => {
       await seedVenue(tx, {
         name: "Loc",
         invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
       });
       const zone = await seedZone(tx, { name: "Zone" });
       const ids: string[] = [];

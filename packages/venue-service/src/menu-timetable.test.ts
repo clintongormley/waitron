@@ -589,7 +589,6 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     await seedVenue(db, {
       name: `Casa ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
       timeZone: ZONE,
     });
   const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;

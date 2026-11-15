@@ -61,7 +61,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
     timeZone,
   });
   const nodeId = await seedNode(db);
@@ -377,7 +376,6 @@ async function setupTabVenue(): Promise<{
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
   await seedKitchenStation(db, { name: "Kitchen" });

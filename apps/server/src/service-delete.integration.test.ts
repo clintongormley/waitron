@@ -1060,8 +1060,8 @@ it.each(["zone", "department"] as const)(
       await tx
         .update(departments)
         .set({
+          operationDescription: "Restaurante",
           receiptText: {
-            operationDescription: "Restaurante",
             headerSubtitle: { "es-ES": "Retained table service" },
           },
         })

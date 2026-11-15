@@ -45,7 +45,6 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
     });
     const nodeId = await seedNode(db);
     const { deviceId } = await seedDevice(db);

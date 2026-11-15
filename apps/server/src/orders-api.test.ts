@@ -286,6 +286,7 @@ describe("Orders routes", () => {
             and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "full")),
           );
         const filed = await recordSale(tx, venue.backend, {
+          operationDescription: "Restaurante",
           origin: venue.cfg.origin,
           nodeId: venue.cfg.nodeId,
           seriesId: brandSeriesId(series!.id),

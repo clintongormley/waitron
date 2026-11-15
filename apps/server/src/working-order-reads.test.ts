@@ -47,7 +47,6 @@ beforeAll(async () => {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
-    operationDescription: "In-store sales",
   });
   const nodeId = await seedNode(db);
   [{ id: stationId }] = await db

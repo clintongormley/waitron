@@ -99,7 +99,6 @@ async function casaMarina() {
   await seedVenue(db, {
     name: `Seaside House ${randomUUID()}`,
     invoiceLocales: ["es-ES"],
-    operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });

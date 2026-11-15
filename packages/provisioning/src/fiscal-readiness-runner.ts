@@ -116,6 +116,8 @@ export async function submitFiscalReadiness(args: {
             origin: jobOrigin("readiness_test"),
             nodeId: nodeId(venue.nodeId),
             seriesId: seriesId(venue.seriesIds[0]!),
+            operationDescription:
+              args.contribution.venueFields?.defaults?.operationDescription ?? "",
             locale: request.invoiceLocales[0]!,
             invoiceLocales: request.invoiceLocales,
             total: "1.00",

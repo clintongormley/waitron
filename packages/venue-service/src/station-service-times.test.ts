@@ -38,7 +38,6 @@ async function fixture(db: Transaction) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant",
   });
   const cfg = {};
   const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;

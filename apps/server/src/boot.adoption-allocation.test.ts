@@ -57,7 +57,6 @@ it("boot keeps an adoption whose copy has not arrived pending, with no ambient s
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
@@ -132,7 +131,7 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   await suite.db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
-  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedVenueSettings(suite.db, {});
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
@@ -258,7 +257,7 @@ async function seedJoiningSpare() {
   await suite.db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
-  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedVenueSettings(suite.db, {});
   await seedBusinessDay(suite.db, {});
   const standby = generateNodeKeyPair();
   const main = { nodeId: PRIMARY, ...generateNodeKeyPair() };

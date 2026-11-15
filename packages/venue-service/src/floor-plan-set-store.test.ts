@@ -22,7 +22,6 @@ async function venue(tx: Transaction) {
   await seedVenue(tx, {
     name: randomUUID(),
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
   });
   const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
   const bar = await createDepartment(tx, { name: "Bar", orderStart: "table" });

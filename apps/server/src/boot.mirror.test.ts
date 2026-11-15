@@ -261,7 +261,6 @@ async function seedIdentity(admin: Database): Promise<void> {
   await seedVenueSettings(admin, {
     name: "Loc",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(admin, {});
   await admin

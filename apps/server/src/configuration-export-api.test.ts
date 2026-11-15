@@ -65,7 +65,6 @@ const request: VenueRequest = {
   legalName: "Prepared Export SL",
   name: "Prepared",
   invoiceLocales: ["es-ES"],
-  operationDescription: "Restaurant",
   fiscalTerritory: "ES-common",
   addressLine1: "Calle 1",
   addressLine2: null,

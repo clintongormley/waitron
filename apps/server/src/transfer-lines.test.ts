@@ -73,7 +73,6 @@ async function setupVenue(): Promise<Seeded> {
   await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
   const nodeId = await seedNode(db);

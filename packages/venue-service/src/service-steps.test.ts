@@ -50,7 +50,7 @@ async function seedVenueCfg(
   if (options.taxpayer === true) await seedVenue(db, venue);
   else {
     const { name, province, invoiceLocales, operationDescription } = venue;
-    await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+    await seedVenueSettings(db, { name, province, invoiceLocales });
     await seedBusinessDay(db);
   }
 }

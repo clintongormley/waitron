@@ -212,7 +212,6 @@ async function provisionVenue(
         fiscalTerritory: DEV_VENUE_TERRITORY,
         invoiceLocales: [receiptLocale],
         staffLanguage: seedLocale,
-        operationDescription: "In-store sales",
         addressLine1: preset.addressLine1,
         addressLine2: preset.addressLine2,
         postalCode: preset.postalCode,
@@ -235,6 +234,7 @@ async function provisionVenue(
   );
 
   const ids = {
+    operationDescription: "In-store sales",
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };

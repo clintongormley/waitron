@@ -838,7 +838,6 @@ function frozenAttempt(): FirstSetupFrozen {
       name: "Olivo",
       fiscalTerritory: "ES-common",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurante",
       addressLine1: "Calle Mayor 1",
       addressLine2: null,
       postalCode: "28001",

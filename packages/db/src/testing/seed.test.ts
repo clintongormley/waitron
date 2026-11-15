@@ -93,7 +93,6 @@ describe("seedVenue", () => {
     expect(await readVenue(db)).toEqual({
       name: "House",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
       fiscalTerritory: "ES-common",
       addressLine1: null,
       addressLine2: null,
@@ -146,7 +145,7 @@ describe("seedKitchenStation", () => {
 
   async function seedTaxpayerAndVenue() {
     await seedTaxpayer(db);
-    await seedVenueSettings(db, { operationDescription: "Restaurant" });
+    await seedVenueSettings(db, {});
     await seedBusinessDay(db, {});
   }
 
@@ -184,7 +183,7 @@ describe("seedDevice", () => {
   });
 
   async function seedVenueFixture(database: Database) {
-    await seedVenueSettings(database, { operationDescription: "Restaurant" });
+    await seedVenueSettings(database, {});
     await seedBusinessDay(database, {});
   }
 

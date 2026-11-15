@@ -29,7 +29,6 @@ async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
     name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
-    operationDescription: "Hostelería",
   });
   nodeA = await seedNode(db);
   ({ deviceId: deviceA } = await seedDevice(db));

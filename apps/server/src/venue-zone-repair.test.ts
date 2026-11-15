@@ -40,7 +40,6 @@ beforeEach(async () => {
     timeZone: RAW,
     dayCutover: "06:00:00",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant service",
   });
   scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });

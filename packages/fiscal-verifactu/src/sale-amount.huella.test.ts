@@ -92,6 +92,7 @@ async function substitute(total: string, lineTotals: string[], vatRate = "21.00"
   );
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSubstitution(tx, backend, {
+      operationDescription: "Venta en establecimiento",
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: fullSeriesId,

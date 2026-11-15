@@ -35,9 +35,6 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     const [zone] = await db.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     departmentId = zone!.departmentId;
-    await db.run(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic venue service"}) where module = 'venue'`,
-    );
     await authored("Dining meals");
   },
 });

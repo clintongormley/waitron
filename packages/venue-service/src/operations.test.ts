@@ -348,7 +348,6 @@ describe("new department service periods", () => {
     await seedVenue(db, {
       name: `Spanish ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
       defaultMenuId: menu.id,
     });
     const department = await scoped((tx) =>
@@ -467,7 +466,7 @@ async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedFixtureVenue(name: string, withDefault = true): Promise<void> {
-  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"] });
   if (withDefault) {
     await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
   }

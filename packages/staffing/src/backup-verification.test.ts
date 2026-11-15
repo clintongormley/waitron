@@ -40,7 +40,6 @@ beforeEach(async () => {
     await seedVenueSettings(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(db, {});
     await seedPersons(db, {

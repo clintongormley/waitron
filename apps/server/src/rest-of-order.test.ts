@@ -26,7 +26,7 @@ beforeAll(() => {
 
 describe("rest of the order read", () => {
   it("returns other-station kitchen records in station and line order, excluding hidden and served work", async () => {
-    await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
+    await seedVenue(db, { name: "Venue", invoiceLocales: ["en"] });
     const nodeId = await seedNode(db);
     const stations = await db
       .insert(kitchenStations)

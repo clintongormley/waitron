@@ -118,7 +118,6 @@ beforeAll(async () => {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -186,6 +185,7 @@ async function seedSale(
   );
   const priced = rateLines(gross, "2026-09-27");
   const { saleId } = await recordSale(tx, backend, {
+    operationDescription: "Venta en establecimiento",
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId,
@@ -355,6 +355,7 @@ describe("readTenderBlock", () => {
       );
       const priced = rateLines(gross, "2026-09-27");
       const { saleId } = await recordSale(tx, backend, {
+        operationDescription: "Venta en establecimiento",
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         seriesId,

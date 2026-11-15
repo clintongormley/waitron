@@ -58,7 +58,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     invoiceLocales: ["es"],
-    operationDescription: "Restaurant",
   });
   nodeId = await seedNode(suite.db);
   await suite.db.insert(fiscalCertificateInstalls).values({

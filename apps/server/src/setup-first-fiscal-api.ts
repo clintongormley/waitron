@@ -398,13 +398,13 @@ export function mountSetupFirstFiscalApi(
           "taxId",
           "legalName",
           "taxpayerDomicile",
-          ...VENUE_FIELDS.filter((field) => field !== "operationDescription"),
+          ...VENUE_FIELDS,
           "seriesCode",
           "fullSeriesCode",
           "rectificativeSeriesCode",
           "admin",
         ],
-        ["operationDescription", "staffLanguage"],
+        ["staffLanguage"],
       );
       const admin = exact(
         raw.admin,

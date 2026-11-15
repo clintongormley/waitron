@@ -111,7 +111,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",

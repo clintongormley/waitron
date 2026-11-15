@@ -186,7 +186,6 @@ async function seedMirror(
   await seedVenueSettings(admin, {
     name: "Barra",
     invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
   });
   await seedBusinessDay(admin, {});
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`);

@@ -203,6 +203,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         pin: "1234",
       });
       await recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

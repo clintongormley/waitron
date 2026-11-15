@@ -21,7 +21,6 @@ beforeEach(async () => {
     await seedVenue(tx, {
       name: "Sala",
       invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
     });
     await tx.insert(nodes).values({ id: NODE, name: "Caja" });
   });

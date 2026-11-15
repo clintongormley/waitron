@@ -421,7 +421,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await seedVenueSettings(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     await seedBusinessDay(db, {});
     const [department] = await db
@@ -902,7 +901,6 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     const [station] = await db
       .insert(kitchenStations)
@@ -952,7 +950,6 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     const [station] = await db
       .insert(kitchenStations)
@@ -998,7 +995,6 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     const [station] = await db
       .insert(kitchenStations)
@@ -1129,7 +1125,6 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
     });
     const [station] = await db
       .insert(kitchenStations)
@@ -1227,7 +1222,6 @@ describe("single-venue defaults", () => {
     await seedVenue(single.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
     async function add(name: string, isDefault: boolean) {
       return single.db.insert(departments).values({ name, tradingName: name, isDefault });
@@ -1244,7 +1238,6 @@ describe("single-venue defaults", () => {
     await seedVenue(single.db, {
       name: "Venue",
       invoiceLocales: ["en"],
-      operationDescription: "Sale on premises",
     });
     const [department] = await single.db
       .insert(departments)

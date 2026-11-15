@@ -100,7 +100,6 @@ async function fixture() {
         name: "Main",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Restaurant sales",
         addressLine1: "One Road",
         addressLine2: null,
         postalCode: "28013",

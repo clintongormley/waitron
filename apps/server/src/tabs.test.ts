@@ -115,7 +115,6 @@ async function setupVenue(): Promise<Seeded> {
   await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
   await seedKitchenStation(db, {});

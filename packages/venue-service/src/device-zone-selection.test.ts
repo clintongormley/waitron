@@ -27,7 +27,6 @@ async function fixture() {
     await seedVenue(tx, {
       name: randomUUID(),
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
     });
     const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
     const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });

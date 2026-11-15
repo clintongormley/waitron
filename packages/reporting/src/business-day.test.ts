@@ -209,7 +209,6 @@ describe("resolveVenueClock", () => {
     await seedVenue(suite.db, {
       name: "Sala",
       invoiceLocales: ["es"],
-      operationDescription: "Restaurante",
       timeZone: "Atlantic/Canary",
       dayCutover: "04:30:00",
     });

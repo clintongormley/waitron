@@ -30,7 +30,7 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
 
   beforeEach(async () => {
     db = suite.db;
-    await seedVenue(db, { name: "Fix", invoiceLocales: ["en"], operationDescription: "Meals" });
+    await seedVenue(db, { name: "Fix", invoiceLocales: ["en"] });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db

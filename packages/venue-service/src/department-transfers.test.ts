@@ -58,7 +58,6 @@ async function venue() {
       await seedVenue(tx, {
         name: randomUUID(),
         invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
       });
     }
     const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;

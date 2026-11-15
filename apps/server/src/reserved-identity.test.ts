@@ -42,7 +42,6 @@ describe("establishReservedStandbyIdentity", () => {
     await seedVenue(suite.db, {
       name: "Main room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
     });
     const t = await suite.db.execute<{ tax_id: string }>(
       sql`select tax_id from taxpayer where id = 1`,

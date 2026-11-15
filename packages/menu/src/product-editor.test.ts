@@ -592,7 +592,6 @@ describe("a variant's own page", () => {
       await seedVenue(tx, {
         name: "Main",
         invoiceLocales: ["en-GB"],
-        operationDescription: "Test op",
       });
       const [course] = await tx
         .insert(kitchenCourses)
