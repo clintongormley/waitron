@@ -21,8 +21,10 @@ import { recoveryApp } from "./recovery-surface.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
-  /** The real environment, which the box's own env files sit beneath; `env` itself unless merged. */
-  base: NodeJS.ProcessEnv = env,
+  // Empty for `bin.ts`, the dev stack's entry: `dev-server.mjs` loads `secrets.env` into the
+  // process environment, so passing that here would count the file's own vault key as an
+  // environment key and refuse a spare join.
+  base: NodeJS.ProcessEnv = {},
   seams: {
     startServer?: (
       env: NodeJS.ProcessEnv,
