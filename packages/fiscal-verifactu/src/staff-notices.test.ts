@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -62,7 +62,11 @@ const unsent = (count: number, held: number) => ({
   key: "fiscal.records_unsent",
   code: "fiscal.records_unsent",
   severity: "notice",
-  params: { count, held },
+  params: {
+    count,
+    held,
+    since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+  },
 });
 
 const readUnsent = (filing: { enabled: boolean } = FILING) =>
@@ -245,6 +249,32 @@ describe("unsentNotices", () => {
     await resolver.closeAll();
     expect(result.skipped).toEqual([{ errorCode: "credentials.missing" }]);
     expect(await readUnsent()).toEqual([unsent(2, 0)]);
+  });
+
+  it("names when the oldest waiting record was made, by the record's own time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-07-21T17:05:00.000Z"));
+      const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+      await suite.db.execute(sql`
+        update envios set estado = 'aceptado' where registro_id = ${seeded.registroIds[0]!}
+      `);
+      vi.setSystemTime(new Date("2026-07-21T17:31:00.000Z"));
+      await appendPendingAlta(suite.db, seeded, 2, { generadoEn: "2026-07-21T17:50:00.000Z" });
+      vi.setSystemTime(new Date("2026-07-21T17:45:00.000Z"));
+      await appendPendingAlta(suite.db, seeded, 3, { generadoEn: "2026-07-21T17:20:00.000Z" });
+      await suite.db.execute(sql`update envios set technical_incidence = 1`);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await readUnsent()).toEqual([
+      {
+        key: "fiscal.records_unsent",
+        code: "fiscal.records_unsent",
+        severity: "notice",
+        params: { count: 2, held: 0, since: "2026-07-21T17:20:00.000Z" },
+      },
+    ]);
   });
 
   it("a box that does not file shows nothing", async () => {

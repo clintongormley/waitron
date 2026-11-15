@@ -70,7 +70,7 @@ When nothing is wrong, each row says:
 
 After a send to the tax agency has failed, the **Tax agency** row says how many records are
 waiting, and whether the box is retrying them by itself or a manager needs to sort some of them
-out.
+out. It also says **Unsent since** and when the oldest of them was made.
 
 If the alerts could not be read, the page still shows every row and says that a part may look
 fine when it is not. If some checks could not be made, the page says it may not show every
@@ -210,7 +210,8 @@ Box administration, held by Admin by default, lets you set the clock from your o
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 server's clock is wrong**, and the bell says so too, with the date the box's clock reads.
 Nothing can confirm the clock then. The way out is to set the
-clock right: on a box kept in time over the internet, by connecting it to the internet; otherwise
+clock right. If the box's [time service](box-status.md#clock-service) is running, it puts the clock
+right once it reaches a time server over the internet; until then, or if the service is not running,
 an administrator sets it with **Check with this device's time**, or, during
 [start-up](box-status.md#clock-at-start), a staff member from a till.
 
@@ -225,8 +226,9 @@ This device says …**
   clock to your device's time and payments restart. The dialog says **The box's clock is
   set.** The box can set its clock only while it is not kept in time over the internet.
 - Otherwise it says **The box could not show that its clock is within a minute of your device's.
-  Check that your device's time is right; if it is, connect the box to the internet so it can
-  correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
+  Check that your device's time is right; if it is, the box's time service may still put its clock
+  right by itself once it reaches a time server over the internet.** and offers only **Close**.
+  Because of the time the answer takes, two times a
   little under a minute apart can still get this message. While payments
   [wait for the box's time](box-status.md#clock-waiting) and the part of the box that reads its
   internet time is not answering, it says instead that the box's time cannot be corrected until that
@@ -299,7 +301,8 @@ kept in time over the internet: the **Clock** row then starts with **The tax age
 sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
 or staff use **Check the time** on a till.
 
-The box confirms its time by itself as soon as it reaches the internet, or, unless it waits because
+The box confirms its time by itself as soon as its [time service](box-status.md#clock-service)
+reaches a time server over the internet, or, unless it waits because
 of a refused sale, once two tills or handhelds that are switched on and connected agree with its
 clock, even at the sign-in screen.
 

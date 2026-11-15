@@ -253,8 +253,8 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "clock.unusable": {
-    en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise an administrator can usually set it on the Box status page.",
-    es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el servidor corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
+    en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. If the box's time service is running, it puts the clock right by itself once it reaches a time server over the internet. Until then, or if the service is not running, an administrator can usually set it on the Box status page.",
+    es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Si el servicio de hora del servidor funciona, corrige la hora solo en cuanto contacta con un servidor de hora por internet. Mientras tanto, o si el servicio no funciona, un administrador normalmente puede ponerla en hora en Estado del servidor.",
   },
   "clock.peer_disagrees": {
     en: "A connected device's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on this box and the connected devices.",
@@ -715,8 +715,8 @@ export const ALERT_WORDS: Readonly<
   clock_unconfirmed: {
     words: {
       clock_jumped: {
-        en: "The box's clock jumped and it cannot check the time over the internet, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
-        es: "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+        en: "The box's clock jumped and it cannot check the time over the internet, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once its time service reaches a time server over the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+        es: "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma por sí solo en cuanto lo hacen dos o en cuanto su servicio de hora contacta con un servidor de hora por internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
       },
       future_date_refused: {
         en: "The tax agency refused a sale dated {refusedOn:date} because that date was in the future when it was sent, so the box has stopped taking payments until its time is checked. Confirm or correct the date and time on the Box status page; staff can use “Check the time” on a till.",
@@ -724,8 +724,8 @@ export const ALERT_WORDS: Readonly<
       },
     },
     otherwise: {
-      en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
-      es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+      en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once its time service reaches a time server over the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+      es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma por sí solo en cuanto lo hacen dos o en cuanto su servicio de hora contacta con un servidor de hora por internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
     },
   },
   clock_unconfirmed_host_silent: {

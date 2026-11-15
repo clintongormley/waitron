@@ -289,7 +289,7 @@ const en = {
   "fiscal_filing.refused.clock_unconfirmed":
     "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
   "fiscal_filing.refused.clock_unusable":
-    "The server's clock is wrong, so nothing was sent. With the internet the server puts it right by itself; otherwise set it on the Box status page, then send again.",
+    "The server's clock is wrong, so nothing was sent. If the server's time service is running, it puts the clock right by itself once it reaches a time server over the internet; until then, or if the service is not running, set it on the Box status page, then send again.",
   "fiscal_filing.refused.time_zone":
     "The venue's time zone is not ready, so nothing was sent. Check it in Venue settings, then send again.",
   "fiscal_filing.refused.not_main":
@@ -670,7 +670,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.clock_unconfirmed":
     "El servidor está esperando a que se confirme su hora. Confírmala en una caja o en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.clock_unusable":
-    "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del servidor y envía de nuevo.",
+    "La hora del servidor es incorrecta, así que no se ha enviado nada. Si el servicio de hora del servidor funciona, corrige la hora solo en cuanto contacta con un servidor de hora por internet; mientras tanto, o si el servicio no funciona, ponla en hora en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.time_zone":
     "La zona horaria del local no está lista, así que no se ha enviado nada. Revísala en Ajustes del local y envía de nuevo.",
   "fiscal_filing.refused.not_main":

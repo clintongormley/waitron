@@ -120,7 +120,7 @@ export interface EntryDeps {
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
-  /** Below this many free bytes the start deletes what it can make again; defaults to
+  /** Below this many free bytes the start deletes the files it no longer needs; defaults to
    *  `START_FREE_SPACE_FLOOR`. */
   freeSpaceFloor?: number;
   /** Reads a folder's filesystem; defaults to the real `statfs`. */
@@ -288,7 +288,7 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    this start's opens would create an empty one, and the next start would delete the folder
  *    holding the only copy. The clearing runs before the ahead check because that check's open
  *    creates a missing `venue.db`.
- * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
+ * 6. Below the floor, the start deletes the files it no longer needs before first-setup resolution, whose
  *    inspection opens the database.
  * 7. Still below it, or below it in the folders the start was admitted to, the start
  *    writes the count back unchanged before resolution's app or the page is served: a finished

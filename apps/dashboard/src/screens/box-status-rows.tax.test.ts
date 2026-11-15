@@ -77,7 +77,7 @@ describe("the Tax agency row's detail", () => {
     ]);
   });
 
-  it("draws nothing about the waiting records", () => {
+  it("draws the same details whatever the number of waiting records", () => {
     const row = taxRow(
       health({
         notices: [UNSENT],
@@ -91,6 +91,26 @@ describe("the Tax agency row's detail", () => {
       }),
     );
     expect(row.details).toEqual(none.details);
+  });
+
+  it("says since when the oldest waiting record has waited", () => {
+    const since = "2026-10-22T17:31:00.000Z";
+    const notices = [{ ...UNSENT, params: { count: 12, held: 0, since } }];
+    expect(taxRow(health({ notices })).details).toEqual([
+      `Last accepted ${formatIsoMinute(ACCEPTED)}`,
+      `Unsent since ${formatIsoMinute(since)}`,
+    ]);
+    setLocale("es");
+    expect(taxRow(health({ notices })).details).toEqual([
+      es["box_status.tax.last_accepted"].replace("{time}", formatIsoMinute(ACCEPTED)),
+      es["box_status.tax.unsent_since"].replace("{time}", formatIsoMinute(since)),
+    ]);
+  });
+
+  it("says nothing about since when the notice does not carry it", () => {
+    expect(taxRow(health({ notices: [UNSENT] })).details).toEqual([
+      `Last accepted ${formatIsoMinute(ACCEPTED)}`,
+    ]);
   });
 
   it("is empty when the box has no outbox to read", () => {

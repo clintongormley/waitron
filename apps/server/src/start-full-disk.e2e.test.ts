@@ -117,7 +117,7 @@ const MiB = 1024 * 1024;
 const FLOOR = 8 * MiB;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
-  "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full.",
+  "The box has deleted the files it no longer needs, and the disk is still full.",
 );
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;

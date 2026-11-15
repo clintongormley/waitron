@@ -1693,8 +1693,9 @@ the full-disk page's words quoted below are the ones that run asserted.
   `scratch` stays.
 - A start with nothing to delete and no spare file serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
-  temporary copies, old logs and crash reports it can make again, and the disk is still full." and
-  "Free space on the box's disk: 0 MB.";
+  temporary copies, old logs and crash reports it can make again, and the disk is still full." (the
+  page's words at that run; since #3266 it says "The box has deleted the files it no longer needs,
+  and the disk is still full.") and "Free space on the box's disk: 0 MB.";
   `recovery.json` was byte for byte what it was before, and both locks kept their inodes. After the
   filler is removed, the same folder boots.
 - A box whose first setup finished gets the full-disk page, not first-setup resolution

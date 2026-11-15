@@ -1745,8 +1745,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   check against the reader. Left open by A798-B slice 10.
 
 
-- **Box status rows** (bundle of 3, 1 important, size S). [Detail](backlog/box.md#bundle-box-status-rows)
-
 - **A transaction opened outside the write queue can let a body's writes after a full disk
   commit.**
   [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)

@@ -1449,19 +1449,15 @@ except the last, added 2026-11-14.
   it needs the owner's decision. Found by fix/backups-screen-small's review, by reading
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
-## Bundle: Box status rows
-
-3 entries, size S.
-
-- **The email about a clock set before 28 October 2024 points to the internet where that may not help.**
-  [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-points-to-the-internet-where-that-may-not-help)
-- **The Tax agency row does not say since when sends have failed.** Picture 4 draws «los envíos
-  fallan desde 17:31»; the row shows the last acceptance. The technical incident's open time could
-  carry it. Left open by A798-B slice 7b (#2030).
-- **The recovery page says the start "deleted what it could make again"; the Box status page says
-  "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7.
-
 ## Decisions and deliberate limits
+
+- **The Tax agency row on Box status shows the oldest unsent record's time ("Unsent since"), not
+  when sends began failing** (campaign watcher, 2026-11-15 02:28, lane C questions.md; #3266).
+  Nothing stores when sends began failing, and an incident's open time would cover only part of what
+  raises the unsent notice (a failure marked on one record raises it with no incident open). The
+  record's time is true in every case the notice shows. It is the same record time the bell's
+  delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
+  and held ones count too. Open to the owner.
 
 ### Retry after a full-disk stop
 
@@ -2106,14 +2102,6 @@ the box alert waits for a day, by the box's own clock; once the clock is set rig
 its day and is dropped unsent. The alert stays in the bell. A plain relay or the practice box's
 local capture does receive it. For the owner to know. Read, not run: no TLS relay with a
 future-dated certificate was used in 3b-ii.
-
-## The email about a clock set before 28 October 2024 points to the internet where that may not help.
-
-The `clock.unusable` email (`apps/server/src/i18n/box-emails.ts`) tells the managers that with the
-internet the box puts its clock right by itself. That may not help on a box that does not keep its
-clock in step with internet time (since A798-B slice 10, `waitron.sh install` switches
-synchronisation on where the system provides it, and says so where it cannot). Left open by A798-B
-slice 8 (#2012).
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

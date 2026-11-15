@@ -117,7 +117,7 @@ export function boxStatusRows(
       id,
       state,
       line: lineOf(id, health, notices, stopped, rowAlerts),
-      details: detailsOf(id, health),
+      details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
     };
@@ -253,7 +253,7 @@ function diskLine(disk: BoxHealth["disk"]): string {
   });
 }
 
-function detailsOf(id: PartId, health: BoxHealth): string[] {
+function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): string[] {
   switch (id) {
     case "sales":
       return [
@@ -261,15 +261,20 @@ function detailsOf(id: PartId, health: BoxHealth): string[] {
           ? t("box_status.sales.none")
           : fill("box_status.sales.last", { time: formatIsoMinute(health.sales.lastAt) }),
       ];
-    case "tax":
+    case "tax": {
       if (health.outbox === null) return [];
+      const since = notices.find((notice) => notice.code === "fiscal.records_unsent")?.params.since;
       return [
         health.outbox.lastAcceptedAt === null
           ? t("box_status.tax.none_accepted")
           : fill("box_status.tax.last_accepted", {
               time: formatIsoMinute(health.outbox.lastAcceptedAt),
             }),
+        ...(typeof since === "string"
+          ? [fill("box_status.tax.unsent_since", { time: formatIsoMinute(since) })]
+          : []),
       ];
+    }
     case "spare":
       return spareDetails(health.spare!);
     case "bucket": {

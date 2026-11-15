@@ -4112,6 +4112,7 @@ export const en = {
   "box_status.tax.unsent_held": "{count} records not yet sent · a manager needs to act",
   "box_status.tax.unsent_held_one": "1 record not yet sent · a manager needs to sort it out",
   "box_status.tax.last_accepted": "Last accepted {time}",
+  "box_status.tax.unsent_since": "Unsent since {time}",
   "box_status.tax.none_accepted": "None accepted yet",
   "box_status.retry": "Retry now",
   "box_status.retry_help_label": "What Retry now does",
@@ -4168,7 +4169,7 @@ export const en = {
     "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.differ":
-    "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
+    "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, the box's time service may still put its clock right by itself once it reaches a time server over the internet.",
   "box_status.clock.admin.differ_host_silent":
     "The box could not show that its clock is within a minute of your device's, and its time cannot be corrected until the part of the box that reads its internet time answers, so payments keep waiting.",
   "box_status.clock.admin.set.question":
@@ -8429,6 +8430,7 @@ export const es: Record<StringKey, string> = {
   "box_status.tax.unsent_held": "{count} registros sin enviar · el encargado tiene que actuar",
   "box_status.tax.unsent_held_one": "1 registro sin enviar · el encargado tiene que resolverlo",
   "box_status.tax.last_accepted": "Último aceptado {time}",
+  "box_status.tax.unsent_since": "Sin enviar desde {time}",
   "box_status.tax.none_accepted": "Aún no se ha aceptado ninguno",
   "box_status.retry": "Reintentar ahora",
   "box_status.retry_help_label": "Qué hace Reintentar ahora",
@@ -8487,7 +8489,7 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.times":
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.differ":
-    "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a internet para que corrija la hora.",
+    "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, puede que el servicio de hora del servidor aún corrija su reloj por sí solo en cuanto contacte con un servidor de hora por internet.",
   "box_status.clock.admin.differ_host_silent":
     "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo, y su hora no se puede corregir hasta que responda la parte del servidor que lee su hora de internet, así que los cobros siguen esperando.",
   "box_status.clock.admin.set.question":
