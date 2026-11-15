@@ -13,6 +13,7 @@ test.each([false, true])(
   async (sticky) => {
     const wrapper = await mountThemed(`<div style="height: 240px; overflow: auto">
     <wt-tabs ${sticky ? "sticky" : ""} label="Department">
+      <button slot="actions" style="height: 40px">Add route</button>
       <section slot="service"><div style="height: 300px"></div><wt-input label="Reminder"></wt-input><div style="height: 1400px"></div></section>
     </wt-tabs></div>`);
     const tabs = wrapper.querySelector("wt-tabs")!;
@@ -30,6 +31,9 @@ test.each([false, true])(
     expect(strip.getBoundingClientRect().top).toBe(before);
     tabs.style.setProperty("--wt-tabs-sticky-surface", "rgb(12, 23, 34)");
     expect(getComputedStyle(strip).backgroundColor).toBe("rgb(12, 23, 34)");
+    await frames();
+    tabs.querySelector<HTMLElement>('[slot="actions"]')!.style.height = "120px";
+    await frames();
     const input = field.shadowRoot!.querySelector("input")!;
     await expect
       .poll(() => parseFloat(getComputedStyle(input).scrollMarginBlockStart))

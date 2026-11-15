@@ -25,6 +25,8 @@ function items(withHelp = true): TabItem[] {
 
 async function setup(list: TabItem[] = items(), width?: string): Promise<WtTabs> {
   const el = (await mountThemed(markup)) as WtTabs;
+  host.style.marginLeft = "80px";
+  host.style.marginTop = "60px";
   if (width) host.style.width = width;
   el.items = list;
   await el.updateComplete;
