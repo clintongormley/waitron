@@ -758,7 +758,6 @@ async function guideVenue() {
     const categoryId = (await createCategory(tx, { name: randomUUID() })).id;
     const productId = (
       await createProduct(tx, {
-        menuId: menuId,
         name: randomUUID(),
         categoryId,
         unitPrice: "4",
