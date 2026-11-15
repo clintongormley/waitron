@@ -1878,6 +1878,19 @@ export interface BoxNetwork {
   wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
 }
 
+export interface BoxWifiNetwork {
+  ssidHex: string;
+  signal: number;
+  security: "wpa-psk" | "sae" | "other";
+}
+
+export interface BoxWifiJoin {
+  ssidHex: string;
+  keyMgmt: "wpa-psk" | "sae";
+  psk: string;
+  hidden: boolean;
+}
+
 /** Cached, signed follower facts from the main box's paired spare. */
 export interface SpareFollowView {
   peerNodeId: string;
@@ -4915,6 +4928,18 @@ export class DashboardApi {
 
   getBoxNetwork(): Promise<BoxNetwork> {
     return this.#request<BoxNetwork>("/api/box/network", "GET");
+  }
+
+  scanBoxNetwork(): Promise<{ networks: BoxWifiNetwork[] }> {
+    return this.#request("/api/box/network/scan", "POST", {});
+  }
+
+  joinBoxNetwork(input: BoxWifiJoin): Promise<Record<string, never>> {
+    return this.#request("/api/box/network/join", "POST", input);
+  }
+
+  forgetBoxNetwork(input: { ssidHex: string }): Promise<Record<string, never>> {
+    return this.#request("/api/box/network/forget", "POST", input);
   }
 
   async getBoxHealth(): Promise<BoxHealth> {
