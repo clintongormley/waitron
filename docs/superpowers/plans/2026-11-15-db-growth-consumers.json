@@ -1,6 +1,12 @@
 {
   "source": "d6a4c8c994bb7276acaf3cdbf329f1739bcbd5c8",
   "command": "git grep -l -E attendance_source_state|attendanceSourceState|attendance_operation_facts|attendanceOperationFacts -- apps packages scripts :!**/drizzle/**",
+  "scope": "Reviewed by Claude and CLEARED by the watcher in Lane H questions.md, 2026-11-15 23:01 including its amendment; not owner plan approval. PR 1: first/latest per planned shift and removal of per-action tracking. PR 2: fixed 30-day activity-log pruning beside the 7-day print rule, no calendar-month helper or print-payload compression. Lists below inventory existing consumers, not a rewrite of every listed test.",
+  "testOwnership": {
+    "groupingAndFirstLatest": "Test once in the workforce package.",
+    "captureBoundaries": "One records-activity test per existing capture boundary in apps/server/src/attendance-capture.test.ts.",
+    "otherRouteFiles": "Delete per-action checks instead of rewriting them; preserve independent route behavior assertions."
+  },
   "production": [
     "apps/server/src/attendance-capture.ts",
     "apps/server/src/attendance-discovery.ts",
@@ -77,16 +83,6 @@
     "packages/country-es/test-fixtures/demo/madrid-before-move.en.json",
     "packages/country-es/test-fixtures/demo/madrid-before-move.es.json",
     "packages/country-es/test-fixtures/demo/madrid-before-move.manifest.json"
-  ],
-  "rawPrintReadTests": [
-    "apps/server/src/till-api.fiscal-sale-paths.test.ts",
-    "apps/server/src/invoice-correction-api.test.ts",
-    "apps/server/src/print-agent-e2e.test.ts",
-    "apps/server/src/print-api.printer-wiring.test.ts",
-    "apps/server/src/finish-party-collect.test.ts",
-    "apps/server/src/party-move-bill.test.ts",
-    "apps/server/src/collect-at-counter.test.ts",
-    "apps/server/src/housekeeping.test.ts"
   ],
   "indirectAttendanceConsumers": [
     "apps/server/scripts/a1308/time-today-wake.ts",
