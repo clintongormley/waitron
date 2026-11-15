@@ -21641,6 +21641,7 @@ export class TillApp extends LitElement {
       .stations=${this.stations}
       .tables=${this.tables}
       .zones=${this.zones}
+      .counterZoneId=${this.counterServiceZoneId}
       .orderId=${this.activeTabId}
       .billEdits=${this.#tableBillEdits()}
       .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
@@ -21824,6 +21825,7 @@ export class TillApp extends LitElement {
           .stations=${this.stations}
           .tables=${this.tables}
           .zones=${this.zones}
+          .counterZoneId=${this.counterServiceZoneId}
           .orderId=${this.activeTabId}
           .billEdits=${this.#tableBillEdits()}
           .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}

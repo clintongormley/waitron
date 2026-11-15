@@ -1433,6 +1433,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** The floor's zones, whose service mode decides whether a free table there may take guests. */
   @property({ attribute: false }) zones: FloorZone[] = [];
+  /** The area Move this bill's counter destination puts the bill in; empty when the till has none. */
+  @property() counterZoneId = "";
   /** The party seated at this table, or null for a tab that belongs to none. */
   @property({ attribute: false }) party: TableParty | null = null;
   /** Every bill of {@link party}, merged parties' included. */
@@ -5831,18 +5833,9 @@ export class TillTableOrderScreen extends LitElement {
     const keepOwn = this.actionVerb === "move" && own.size > 1;
     const sourceZoneId = this.#partyZoneId();
     const zoneId = this.actionVerb === "join" ? sourceZoneId : null;
-    const takesOrders =
-      this.actionVerb === "move" ||
-      (this.actionVerb === "move-bill" &&
-        (this.#shownBill === undefined || this.#shownBill.status === "open"));
     const tables = this.tables
       .filter((table) => zoneId === null || table.zoneId === zoneId)
-      .filter(
-        (table) =>
-          !takesOrders ||
-          table.zoneId === sourceZoneId ||
-          !this.zones.find((zone) => zone.id === table.zoneId)?.closed,
-      )
+      .filter((table) => this.#mayEnterZone(table.zoneId, sourceZoneId))
       .filter(
         (table) =>
           table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),
@@ -5850,6 +5843,21 @@ export class TillTableOrderScreen extends LitElement {
       .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];
+  }
+
+  /** Whether the current action may take the party or bill into `zoneId`: one that takes orders
+   * may not enter a closed area other than its own, as the server refuses it; an area this screen
+   * has not read is allowed. */
+  #mayEnterZone(zoneId: string | null, sourceZoneId = this.#partyZoneId()): boolean {
+    const takesOrders =
+      this.actionVerb === "move" ||
+      (this.actionVerb === "move-bill" &&
+        (this.#shownBill === undefined || this.#shownBill.status === "open"));
+    return (
+      !takesOrders ||
+      zoneId === sourceZoneId ||
+      !this.zones.find((zone) => zone.id === zoneId)?.closed
+    );
   }
 
   /** The zone of the first of the party's tables this screen knows with one; null when none. */
@@ -6963,16 +6971,17 @@ export class TillTableOrderScreen extends LitElement {
   /** Move guests', Join a table's and Move this bill's list: every table it may name, with its
    * condition, and for a bill the counter first. */
   #tablePicker(): TemplateResult {
-    const movingBill = this.actionVerb === "move-bill";
+    const toCounter =
+      this.actionVerb === "move-bill" && this.#mayEnterZone(this.counterZoneId || null);
     const targets = this.#tableTargets();
     return html`<section class="actions" data-target-picker>
       <h2 tabindex="-1">${this.#tablePickerHeading()}</h2>
       ${
-        targets.length === 0 && !movingBill
+        targets.length === 0 && !toCounter
           ? html`<p class="empty">${t("table.no_other_tables")}</p>`
           : html`<div class="action-options">
               ${
-                movingBill
+                toCounter
                   ? html`<wt-button
                       class="target"
                       data-target="counter"
