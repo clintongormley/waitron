@@ -161,10 +161,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-radius-sm": "8px",
       "--wt-radius-md": "14px",
       "--wt-radius-lg": "24px",
-      "--wt-font-size-sm": "12px",
-      "--wt-font-size-md": "14px",
-      "--wt-font-size-lg": "18px",
-      "--wt-font-size-xl": "22px",
+      "--wt-font-size-sm": "0.75rem",
+      "--wt-font-size-md": "0.875rem",
+      "--wt-font-size-lg": "1.125rem",
+      "--wt-font-size-xl": "1.375rem",
       "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
       "--wt-font-weight-normal": "400",
       "--wt-font-weight-medium": "500",
@@ -196,10 +196,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-radius-sm": "8px",
       "--wt-radius-md": "14px",
       "--wt-radius-lg": "24px",
-      "--wt-font-size-sm": "12px",
-      "--wt-font-size-md": "14px",
-      "--wt-font-size-lg": "18px",
-      "--wt-font-size-xl": "22px",
+      "--wt-font-size-sm": "0.75rem",
+      "--wt-font-size-md": "0.875rem",
+      "--wt-font-size-lg": "1.125rem",
+      "--wt-font-size-xl": "1.375rem",
       "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
       "--wt-font-weight-normal": "400",
       "--wt-font-weight-medium": "500",
@@ -211,10 +211,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
     const standard = deriveTheme(DARK_GREEN);
     const larger = deriveTheme({ ...DARK_GREEN, textScale: 130 });
     const sizes = {
-      "--wt-font-size-sm": "16px",
-      "--wt-font-size-md": "18px",
-      "--wt-font-size-lg": "23px",
-      "--wt-font-size-xl": "29px",
+      "--wt-font-size-sm": "1rem",
+      "--wt-font-size-md": "1.125rem",
+      "--wt-font-size-lg": "1.4375rem",
+      "--wt-font-size-xl": "1.8125rem",
     };
     for (const mode of MODES) {
       expect(larger[mode]).toEqual({ ...standard[mode], ...sizes });
@@ -227,10 +227,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
   });
 
   test("a remembered settle does not carry another text size", () => {
-    expect(deriveTheme({ ...LEMON, textScale: 130 }).light["--wt-font-size-md"]).toBe("18px");
+    expect(deriveTheme({ ...LEMON, textScale: 130 }).light["--wt-font-size-md"]).toBe("1.125rem");
     const again = deriveTheme(LEMON);
-    expect(again.light["--wt-font-size-md"]).toBe("14px");
-    expect(again.dark["--wt-font-size-md"]).toBe("14px");
+    expect(again.light["--wt-font-size-md"]).toBe("0.875rem");
+    expect(again.dark["--wt-font-size-md"]).toBe("0.875rem");
   });
 
   test("a text set by hand moves only its own tokens", () => {
@@ -241,10 +241,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       text: { family: "serif", size: { sm: 9 }, weight: { bold: 800 } },
     });
     for (const mode of MODES) {
-      expect(plain[mode]["--wt-font-size-sm"]).toBe("16px");
+      expect(plain[mode]["--wt-font-size-sm"]).toBe("1rem");
       expect(hand[mode]).toEqual({
         ...plain[mode],
-        "--wt-font-size-sm": "12px",
+        "--wt-font-size-sm": "0.75rem",
         "--wt-font-family": 'ui-serif, Georgia, "Times New Roman", serif',
         "--wt-font-weight-bold": "800",
       });
@@ -268,7 +268,7 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
     for (const mode of MODES) {
       expect(again[mode]["--wt-font-family"]).toBe(WAITRON_DEFAULTS.structure["--wt-font-family"]);
       expect(again[mode]["--wt-font-weight-bold"]).toBe("600");
-      expect(again[mode]["--wt-font-size-sm"]).toBe("12px");
+      expect(again[mode]["--wt-font-size-sm"]).toBe("0.75rem");
     }
   });
 

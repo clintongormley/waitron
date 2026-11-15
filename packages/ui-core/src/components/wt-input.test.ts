@@ -98,9 +98,9 @@ test("renders its label", async () => {
   expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Weight");
 });
 
-test("its value is body text and its floated label small text", async () => {
+test("its value has a 16px minimum and its floated label stays small", async () => {
   const el = await mount('<wt-input label="Weight" value="1.25"></wt-input>');
-  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).fontSize).toBe("14px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).fontSize).toBe("16px");
   expect(getComputedStyle(el.shadowRoot!.querySelector("label")!).fontSize).toBe("12px");
 });
 
@@ -420,13 +420,13 @@ test("the placeholder paints from the muted-text token", async () => {
 });
 
 for (const type of ["text", "password"]) {
-  test(`an empty ${type} field's resting label is drawn at the size its typed value is drawn at`, async () => {
+  test(`an empty ${type} field's resting label keeps the body size while typed text has a minimum`, async () => {
     const el = await mount(`<wt-input label="Name" type="${type}"></wt-input>`);
     const { field, label, input } = parts(el);
     expect(field.getAttribute("data-label")).toBe("rest");
-    expect(getComputedStyle(label).fontSize).toBe(getComputedStyle(input).fontSize);
+    expect(getComputedStyle(label).fontSize).toBe("14px");
     host.style.setProperty("--wt-font-size-md", "15px");
-    expect(getComputedStyle(input).fontSize).toBe("15px");
+    expect(getComputedStyle(input).fontSize).toBe("16px");
     expect(getComputedStyle(label).fontSize).toBe("15px");
   });
 }
@@ -793,4 +793,22 @@ test("a time input applies quarter-hour steps to the native control and clears t
   await (el as LitElement).updateComplete;
   expect(input.hasAttribute("step")).toBe(false);
   expect(input.validity.stepMismatch).toBe(false);
+});
+
+test("typed text has a scalable minimum and respects larger inherited text", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  try {
+    const el = await mount('<wt-input label="Value"></wt-input>');
+    const control = el.shadowRoot!.querySelector("input")!;
+    expect(getComputedStyle(control).fontSize).toBe("16px");
+    document.documentElement.style.fontSize = "32px";
+    expect(getComputedStyle(control).fontSize).toBe("32px");
+    host.style.setProperty("--wt-font-size-md", "2rem");
+    expect(getComputedStyle(control).fontSize).toBe("64px");
+    el.style.fontSize = "72px";
+    expect(getComputedStyle(control).fontSize).toBe("72px");
+  } finally {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  }
 });

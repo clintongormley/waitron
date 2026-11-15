@@ -838,3 +838,19 @@ test("an intrinsic-width stepper gives a long error the available line width", a
   expect(new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size).toBe(1);
   expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth);
 });
+
+test("a three-digit number fits between the buttons at double browser text size", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  try {
+    document.documentElement.style.fontSize = "32px";
+    const el = await mount(
+      '<wt-number-stepper label="Quantity" hide-label value="999"></wt-number-stepper>',
+    );
+    const input = parts(el).input;
+    expect(getComputedStyle(input).fontSize).toBe("32px");
+    expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+  } finally {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  }
+});

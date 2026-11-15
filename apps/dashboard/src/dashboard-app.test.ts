@@ -10591,3 +10591,8 @@ it.each([
   expect(pages("configuration")).toContain("nav-email");
   expect(pages("configuration")).not.toContain("nav-devices");
 });
+
+it("opts into native system text scaling where supported", () => {
+  const page = new DOMParser().parseFromString(indexHtml, "text/html");
+  expect(page.querySelector('meta[name="text-scale"]')?.getAttribute("content")).toBe("scale");
+});

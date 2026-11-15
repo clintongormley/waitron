@@ -343,7 +343,7 @@ function pixels(theme: Pick<DerivedTheme, "light">, size: string): string {
   const name = `--wt-font-size-${size}`;
   const value = theme.light[name];
   if (value === undefined) throw new RangeError(`missing text size: ${name}`);
-  return value.replace(/px$/, "");
+  return String(Number.parseFloat(value) * 16);
 }
 
 export function textSizesLine(theme: Pick<DerivedTheme, "light">): string {

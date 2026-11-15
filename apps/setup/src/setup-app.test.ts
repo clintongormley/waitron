@@ -6709,3 +6709,8 @@ it("leaves no strip of scrolled content below a form's held action row in the wi
     scrollTo(0, 0);
   }
 });
+
+it("opts into native system text scaling where supported", () => {
+  const page = new DOMParser().parseFromString(indexHtml, "text/html");
+  expect(page.querySelector('meta[name="text-scale"]')?.getAttribute("content")).toBe("scale");
+});

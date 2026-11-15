@@ -480,6 +480,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font: inherit;
+        font-size: var(--wt-text-control-font-size);
       }
 
       .table-search-end {

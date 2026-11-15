@@ -20,7 +20,7 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-focus-ring": "2px solid var(--wt-color-focus)",
   "--wt-focus-offset": "2px",
   "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
-  "--wt-font-size-md": "14px",
-  "--wt-font-size-lg": "18px",
-  "--wt-font-size-xl": "22px",
+  "--wt-font-size-md": "0.875rem",
+  "--wt-font-size-lg": "1.125rem",
+  "--wt-font-size-xl": "1.375rem",
 };

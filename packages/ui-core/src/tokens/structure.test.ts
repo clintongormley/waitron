@@ -1,11 +1,14 @@
 import { expect, test, afterEach } from "vitest";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 
+const rootStyle = document.documentElement.getAttribute("style");
 let host: HTMLElement;
 let overrideSheet: CSSStyleSheet | undefined;
 
 afterEach(() => {
   host?.remove();
+  if (rootStyle === null) document.documentElement.removeAttribute("style");
+  else document.documentElement.setAttribute("style", rootStyle);
   // Clean up the override sheet so it cannot leak into other test files.
   if (overrideSheet) {
     const stale = overrideSheet;
@@ -96,6 +99,22 @@ test("the type scale is 12px small, 14px body, 18px large and 22px extra large",
   expect(size("--wt-font-size-md")).toBe("14px");
   expect(size("--wt-font-size-lg")).toBe("18px");
   expect(size("--wt-font-size-xl")).toBe("22px");
+});
+
+test("the four text roles double with the browser's root text size", () => {
+  const el = mount();
+  document.documentElement.style.fontSize = "32px";
+  const probe = document.createElement("span");
+  el.append(probe);
+  for (const [key, expected] of [
+    ["sm", 24],
+    ["md", 28],
+    ["lg", 36],
+    ["xl", 44],
+  ] as const) {
+    probe.style.fontSize = `var(--wt-font-size-${key})`;
+    expect(getComputedStyle(probe).fontSize, key).toBe(`${expected}px`);
+  }
 });
 
 test("the Google button sets Google Sans Medium on 20px lines, with a 20px mark 10px from its label", () => {
@@ -206,7 +225,7 @@ test("a name cell may grow wider than the controls that sit beside it", () => {
 test("a stepper's number box is never narrower than the tap target", () => {
   // The box is what a wt-number-stepper hands focus to, so it is held to the tap minimum.
   const el = mount();
-  expect(parseInt(token(el, "--wt-stepper-field-width"), 10)).toBeGreaterThanOrEqual(
+  expect(lengthPx(el, "var(--wt-stepper-field-width)")).toBeGreaterThanOrEqual(
     parseInt(token(el, "--wt-tap-min"), 10),
   );
 });
@@ -229,7 +248,7 @@ test("a help badge is a 24px target around a 20px circle", () => {
 
 test("the narrowest stepper box is 88px", () => {
   const el = mount();
-  expect(token(el, "--wt-stepper-field-width")).toBe("88px");
+  expect(lengthPx(el, "var(--wt-stepper-field-width)")).toBe(88);
 });
 
 test("a field box is never shorter than the tap target", () => {

@@ -1,3 +1,4 @@
+import { ownSize } from "@waitron/ui-core/theme";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
@@ -58,7 +59,12 @@ export function printEquipmentLabel(
       "--wt-font-size-xl",
       "--wt-font-weight-bold",
     ])
-      doc.documentElement.style.setProperty(token, WAITRON_DEFAULTS.structure[token]!);
+      doc.documentElement.style.setProperty(
+        token,
+        token.startsWith("--wt-font-size-")
+          ? `${ownSize(token.slice("--wt-font-size-".length) as "md" | "xl", WAITRON_DEFAULTS)}px`
+          : WAITRON_DEFAULTS.structure[token]!,
+      );
     const style = doc.createElement("style");
     style.textContent =
       "body{margin:0;font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);text-align:center}" +

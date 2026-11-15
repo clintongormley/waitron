@@ -3,6 +3,7 @@ import { THEME_TOKENS } from "./tokens.js";
 
 const COLOUR_VALUE = /^#[0-9a-f]{6}$/;
 const PIXEL_VALUE = /^\d+px$/;
+const FONT_VALUE = /^(0|[1-9]\d*)(\.\d{1,4})?rem$/;
 const WEIGHT_VALUE = /^[1-9]00$/;
 // A comma-separated list of bare words or names in paired double quotes: no `;`, `{`, `}`, `\`,
 // `<`, `'` or lone `"`, so a value cannot end its declaration or the next one.
@@ -12,6 +13,7 @@ const TYPEFACE_VALUE = new RegExp(`^${FAMILY}(?:, ${FAMILY})*$`);
 function shapeOf(name: string): RegExp {
   if (name.startsWith("--wt-color-")) return COLOUR_VALUE;
   if (name === "--wt-font-family") return TYPEFACE_VALUE;
+  if (name.startsWith("--wt-font-size-")) return FONT_VALUE;
   if (name.startsWith("--wt-font-weight-")) return WEIGHT_VALUE;
   return PIXEL_VALUE;
 }

@@ -131,11 +131,13 @@ export interface TextNote {
 export const isTextWarning = (warning: { readonly mode: Mode | null }): warning is TextWarning =>
   warning.mode === null;
 
-function ownSize(key: TextSizeKey, defaults: WaitronDefaults): number {
+export function ownSize(key: TextSizeKey, defaults: WaitronDefaults): number {
   const name = `--wt-font-size-${key}`;
-  const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
-  if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
-  return Number(match[1]);
+  const value = defaults.structure[name] ?? "";
+  const pixels = Number(value.slice(0, -3)) * 16;
+  if (!/^(0|[1-9]\d*)(\.\d{1,4})?rem$/.test(value) || !Number.isInteger(pixels))
+    throw new RangeError(`not a whole-pixel rem size: ${name}`);
+  return pixels;
 }
 
 export function drawnTextSize(

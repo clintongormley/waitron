@@ -137,10 +137,10 @@ describe("drawnSize", () => {
 describe("textTokens", () => {
   it("with nothing set by hand, answers Waitron's sizes, typeface and weights", () => {
     expect(textTokens(100, {}, WAITRON_DEFAULTS)).toEqual({
-      "--wt-font-size-sm": "12px",
-      "--wt-font-size-md": "14px",
-      "--wt-font-size-lg": "18px",
-      "--wt-font-size-xl": "22px",
+      "--wt-font-size-sm": "0.75rem",
+      "--wt-font-size-md": "0.875rem",
+      "--wt-font-size-lg": "1.125rem",
+      "--wt-font-size-xl": "1.375rem",
       "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
       "--wt-font-weight-normal": "400",
       "--wt-font-weight-medium": "500",
@@ -156,10 +156,10 @@ describe("textTokens", () => {
         WAITRON_DEFAULTS,
       ),
     ).toEqual({
-      "--wt-font-size-sm": "14px",
-      "--wt-font-size-md": "16px",
-      "--wt-font-size-lg": "29px",
-      "--wt-font-size-xl": "25px",
+      "--wt-font-size-sm": "0.875rem",
+      "--wt-font-size-md": "1rem",
+      "--wt-font-size-lg": "1.8125rem",
+      "--wt-font-size-xl": "1.5625rem",
       "--wt-font-family": 'ui-serif, Georgia, "Times New Roman", serif',
       "--wt-font-weight-normal": "700",
       "--wt-font-weight-medium": "500",
@@ -331,14 +331,14 @@ describe("larger than checked", () => {
     const structure: Record<string, string> = { ...WAITRON_DEFAULTS.structure };
     delete structure["--wt-font-size-lg"];
     expect(() => textLimit("lg", { ...WAITRON_DEFAULTS, structure })).toThrow(
-      new RangeError("not a whole-pixel size: --wt-font-size-lg"),
+      new RangeError("not a whole-pixel rem size: --wt-font-size-lg"),
     );
   });
 
-  it.each(["1rem", "x12px", "12pxx"])("a default size of %s is refused", (value) => {
+  it.each(["0.9rem", "x12px", "12pxx"])("a default size of %s is refused", (value) => {
     const structure = { ...WAITRON_DEFAULTS.structure, "--wt-font-size-sm": value };
     expect(() => textLimit("sm", { ...WAITRON_DEFAULTS, structure })).toThrow(
-      new RangeError("not a whole-pixel size: --wt-font-size-sm"),
+      new RangeError("not a whole-pixel rem size: --wt-font-size-sm"),
     );
   });
 });

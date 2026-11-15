@@ -659,7 +659,7 @@ describe("text size words", () => {
     expect(textSizesLine(theme)).toBe(
       "Text on screens: small 14\u00a0px · normal 16\u00a0px · large 21\u00a0px · largest 25\u00a0px",
     );
-    const replaced = { light: { ...theme.light, "--wt-font-size-md": "20px" } };
+    const replaced = { light: { ...theme.light, "--wt-font-size-md": "1.25rem" } };
     expect(textSizesLine(replaced)).toBe(fill("appearance.text_sizes", { ...sizes, md: "20" }));
   });
 

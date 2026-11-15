@@ -1941,12 +1941,12 @@ describe("the Text size slider", () => {
     );
     await el.updateComplete;
     expect(sizesLine(el)).toBe(sizes(14, 17, 22, 26));
-    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("17px");
-    expect(preview(el).theme.dark["--wt-font-size-md"]).toBe("17px");
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("1.0625rem");
+    expect(preview(el).theme.dark["--wt-font-size-md"]).toBe("1.0625rem");
     const label = slider(el).shadowRoot!.querySelector("[part=label]")!;
     expect(getComputedStyle(label).fontSize).toBe("12px");
-    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-sm").trim()).toBe("12px");
-    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-md").trim()).toBe("14px");
+    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-sm").trim()).toBe("0.75rem");
+    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-md").trim()).toBe("0.875rem");
     expect(button(el, "save").disabled).toBe(false);
     expect(button(el, "save").variant).toBe("primary");
   });
@@ -1959,7 +1959,7 @@ describe("the Text size slider", () => {
     );
     await el.updateComplete;
     expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
-    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("14px");
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("0.875rem");
     expect(button(el, "save").disabled).toBe(true);
   });
 

@@ -218,8 +218,8 @@ describe("the custom theme routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.choices.textScale).toBe(130);
-    expect(body.light["--wt-font-size-md"]).toBe("18px");
-    expect(body.dark["--wt-font-size-md"]).toBe("18px");
+    expect(body.light["--wt-font-size-md"]).toBe("1.125rem");
+    expect(body.dark["--wt-font-size-md"]).toBe("1.125rem");
   });
 
   it("a theme holding text by hand is saved and answered with it", async () => {

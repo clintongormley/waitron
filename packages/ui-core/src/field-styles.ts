@@ -73,6 +73,10 @@ export const fieldStyles = css`
     font: inherit;
     text-overflow: ellipsis;
   }
+  input.field-control:not([type="file"]),
+  textarea.field-control {
+    font-size: var(--wt-text-control-font-size);
+  }
   .field-control::placeholder {
     color: var(--wt-color-text-muted);
     font-style: italic;

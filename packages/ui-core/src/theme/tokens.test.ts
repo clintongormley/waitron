@@ -181,10 +181,10 @@ describe("corner radii", () => {
 
 describe("text sizes", () => {
   const sizes = (sm: number, md: number, lg: number, xl: number) => ({
-    "--wt-font-size-sm": `${sm}px`,
-    "--wt-font-size-md": `${md}px`,
-    "--wt-font-size-lg": `${lg}px`,
-    "--wt-font-size-xl": `${xl}px`,
+    "--wt-font-size-sm": `${sm / 16}rem`,
+    "--wt-font-size-md": `${md / 16}rem`,
+    "--wt-font-size-lg": `${lg / 16}rem`,
+    "--wt-font-size-xl": `${xl / 16}rem`,
   });
 
   test.each<[TextScale, Record<string, string>]>([
@@ -205,19 +205,22 @@ describe("text sizes", () => {
   });
 
   test("refuses a default that is not whole pixels", () => {
-    for (const value of ["14.5px", "1rem", "x14px", "14px;", "14"]) {
+    for (const value of ["14px", "0.9rem", "01rem", "1e0rem", "x1rem", "1rem;", "14", ""]) {
       const defaults = {
         ...WAITRON_DEFAULTS,
         structure: { ...sizes(12, 14, 18, 22), "--wt-font-size-md": value },
       };
       expect(() => fontSizes(100, defaults), value).toThrow(
-        new RangeError("not a whole-pixel size: --wt-font-size-md"),
+        new RangeError("not a whole-pixel rem size: --wt-font-size-md"),
+      );
+      expect(() => fontSizes(100, defaults, { md: 15 }), value).toThrow(
+        new RangeError("not a whole-pixel rem size: --wt-font-size-md"),
       );
     }
     const withoutLarge: Record<string, string> = sizes(12, 14, 18, 22);
     delete withoutLarge["--wt-font-size-lg"];
     expect(() => fontSizes(100, { ...WAITRON_DEFAULTS, structure: withoutLarge })).toThrow(
-      new RangeError("not a whole-pixel size: --wt-font-size-lg"),
+      new RangeError("not a whole-pixel rem size: --wt-font-size-lg"),
     );
   });
 });

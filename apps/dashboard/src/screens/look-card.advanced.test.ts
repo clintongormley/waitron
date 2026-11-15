@@ -1071,7 +1071,7 @@ describe("text set by hand in Advanced", () => {
   it("setting a size repaints the preview at that size and nothing outside it", async () => {
     const { el } = await mountEditing();
     await typeSize(el, "md", "16");
-    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("16px");
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("1rem");
     await preview(el).updateComplete;
     expect(getComputedStyle(panel(el)).fontSize).toBe("16px");
     expect(getComputedStyle(q(el, "section.settings-card")!).fontSize).toBe("14px");

@@ -270,6 +270,9 @@ export class MenuPricesTable extends LitElement {
             )
           );
         }
+        wt-data-table.ranges::part(override-field) {
+          margin-inline-start: calc(-1 * var(--wt-space-1));
+        }
         wt-data-table::part(override-field) {
           --wt-price-field-width: var(--narrow-price-field-width);
         }

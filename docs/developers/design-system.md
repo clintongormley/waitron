@@ -617,12 +617,12 @@ which no theme writes), `--wt-shadow-1|2`, `--wt-focus-ring`, `--wt-focus-offset
 `--wt-dialog-max-width`, `--wt-modal-compact-width`,
 `--wt-modal-standard-width`, `--wt-modal-max-width`, `--wt-modal-medium-height`, `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`, `--wt-floor-plan-preview-max-height`,
-`--wt-stepper-field-width` (88px), `--wt-stepper-button-width` (24px),
+`--wt-stepper-field-width` (5.5rem, 88px at the normal browser size), `--wt-stepper-button-width` (24px),
 `--wt-slider-thumb-size` (16px, the size `wt-slider` draws its round thumb, and its marks are
 inset by half of it, see its row),
 `--wt-help-badge-target` (24px) and `--wt-help-badge-size` (20px) (a help-mode badge's target and
 the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
-`--wt-price-range-field-width` (168px),
+`--wt-price-range-field-width` (10.5rem, 168px at the normal browser size),
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`,
 `--wt-duration-move`, `--wt-duration-disclosure`, `--wt-duration-pulse-slow`,
 `--wt-duration-pulse-fast`,
@@ -639,9 +639,16 @@ The field tokens size the filled form field (see "The field box" under Forms):
 line at rest and `--wt-field-line-width-active` (2px) the focused or invalid one;
 `--wt-dropdown-row-height` (48px) is the least height of a row in `wt-combobox`'s and `wt-address-lookup`'s open lists.
 
-The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
-system font (A179, 2026-10-01 — before it the scale was 13, 15, 19 and 24px). A venue's theme
-can scale all four together, from 100% to 130% in 5% steps, rounded to whole pixels (`fontSizes`,
+The type scale is 0.75rem, 0.875rem, 1.125rem and 1.375rem (`--wt-font-size-sm|md|lg|xl`),
+which draw at 12px, 14px, 18px and 22px with the normal 16px browser root. The owner's
+15 November 2026 “Both now” choice supersedes A179's fixed-pixel scale and sub-16px typed fields.
+Shared typing controls, including dropdown and table searches, use
+`--wt-text-control-font-size: max(1rem, 1em, var(--wt-font-size-md))`: at least 16px at that normal
+root, preserving larger inherited or venue text. Resting and floated labels keep their text roles;
+file controls and buttons keep theirs. Price boxes use 6rem, range boxes 10.5rem and number
+steppers 5.5rem, so enlarged typing text has room. Standalone server forms and connection-bootstrap
+keep their independent styling. A venue's theme
+can scale all four together, from 100% to 130% in 5% steps, rounded to whole reference pixels before conversion to rem (`fontSizes`,
 `packages/ui-core/src/theme/tokens.ts`); spacing, the tap minimum and every other token stay as
 they are. A theme can also set the typeface — the device's own or a serif, named in `TYPEFACES`
 and turned into CSS only by `typefaceStack` (`packages/ui-core/src/theme/text.ts`) — any of the
@@ -657,9 +664,18 @@ weight is set there and not on each component's host, so a component drawn insid
 bold. `baseStyles` also gives `strong`, `b`,
 `h1`–`h6` and `th` the Bold weight (`--wt-font-weight-bold`, 600) wherever a component sets none of
 its own, so a theme's Bold reaches them; components that include `baseStyles` no longer use the browser's own bold,
-700 (pages built without `baseStyles` still do: the custodian's offline page, the printed recovery sheet and the server's own pages, such as the help guide). A size in `rem`
-does not follow the scale — it is relative to the browser's 16px root, which none of the three
-changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
+700 (pages built without `baseStyles` still do: the custodian's offline page, the printed recovery sheet and the server's own pages, such as the help guide). A size in `rem` follows the browser's root text size. The three apps leave that root to the
+browser and opt into native OS scaling with `<meta name="text-scale" content="scale">` where
+supported. Safari and Firefox ignore this opt-in, so this change does not follow an iPhone or
+iPad's system Text Size setting; browser zoom remains available. No real iPhone focus-zoom or
+OS-text-size run has been made. Equipment labels and recovery packs convert the default sizes
+back to pixels at their paper boundary, preserving their 14px body and 22px heading sizes.
+
+| Source, checked 2026-11-15 | Source words | Applied here |
+| --- | --- | --- |
+| [Chrome's text-scale guidance](https://github.com/GoogleChrome/modern-web-guidance/blob/main/skills/modern-web-guidance/guides/accessibility/respect-os-text-scale.md) | “Unsupported in: Firefox and Safari.” | The opt-in is a progressive enhancement; Safari/iPad system Text Size is outside this change. |
+
+The normal text roles are pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
 `packages/ui-core/src/components/wt-card.test.ts` and
 `packages/ui-core/src/components/wt-input.test.ts`, and by two cases each in the dashboard, setup
 and till app suites: one for the app's own text, one for text on the page outside it. The Normal
@@ -3972,6 +3988,8 @@ Two notes on the primitives this pattern uses, both in the table above:
   (English and Spanish, with a unit button and a fixed unit). Re-measured 2026-10-01 for A179 in
   headless Chromium (Vitest browser mode, Playwright 1.63.0, macOS) in `--wt-font-family`: "9999.99"
   is 55.5px at 14px, against 59.0px at 15px in the same run; the box figures were not re-measured.
+  **2026-11-15:** typed fields now use the scalable 16px minimum described under Structure; these
+  earlier measurements describe the former typography.
 
 Inside Nutritional info, `dashboard-product-nutrition-picker` draws the choices directly, with no
 second summary. Native button chips expose their pressed state and support Enter and Space.

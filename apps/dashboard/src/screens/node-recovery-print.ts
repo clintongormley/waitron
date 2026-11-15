@@ -1,3 +1,4 @@
+import { ownSize } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import type { NodeRecoveryPack } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -15,7 +16,12 @@ export function renderNodeRecoveryPack(pack: NodeRecoveryPack, source: HTMLEleme
     "--wt-font-size-md",
     "--wt-font-size-xl",
   ]) {
-    page.documentElement.style.setProperty(name, WAITRON_DEFAULTS.structure[name]!);
+    page.documentElement.style.setProperty(
+      name,
+      name.startsWith("--wt-font-size-")
+        ? `${ownSize(name.slice("--wt-font-size-".length) as "md" | "xl", WAITRON_DEFAULTS)}px`
+        : WAITRON_DEFAULTS.structure[name]!,
+    );
   }
   const tokens = getComputedStyle(source);
   for (const name of [

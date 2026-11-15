@@ -235,15 +235,10 @@ The historical menu-only warning was not reproduced.
 
 ## Text size after A179 (#988)
 
-The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
-system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit
-later"_). Open: setup headings and the excluded fiscal-verifactu, staff and staff-role
+Open: setup headings and the excluded fiscal-verifactu, staff and staff-role
 screens still need checking against the Typography roles in `docs/developers/design-system.md`.
 The floor-plan editor's modal heading keeps the LG role. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
-cloud-recovery code. **Phone check, the
-owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
-zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
-the usual remedy is to keep field text at 16px on small screens only.
+cloud-recovery code.
 
 ## Bundle: One session with real phones and password managers
 
@@ -282,7 +277,7 @@ the usual remedy is to keep field text at 16px on small screens only.
   [Detail](dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 - Still open from #298/#305/#317, device checks before deployment
   [Detail](dashboard.md#still-open-from-298305317-device-checks-before-deployment)
-- **Text size after A179 (#988).**
+- **Check field focus on a real iPhone and finish the remaining typography-role audit.**
   [Detail](dashboard.md#text-size-after-a179-988)
 
 ## Bundle: Slow key derivation off the main thread
@@ -370,6 +365,11 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+- **Text roles and typed fields.** A179's 12/14/18/22px scale was accepted on 1 October 2026 as
+  “yes for now, then we can revisit later”. The owner's 15 November “Both now” choice keeps those
+  normal-browser role sizes, uses rem for browser text preferences, and gives shared typing
+  controls a 16px minimum. See [Structure](../developers/design-system.md#structure).
 
 ### The form plumbing is hand-written per form
 

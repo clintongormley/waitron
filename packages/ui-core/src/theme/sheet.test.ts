@@ -14,6 +14,7 @@ const GREEN: ThemeChoices = {
   corners: "round",
 };
 
+const rootStyle = document.documentElement.getAttribute("style");
 const roots: HTMLElement[] = [];
 let adopted: CSSStyleSheet | undefined;
 
@@ -26,6 +27,8 @@ const removeAdopted = () => {
 afterEach(() => {
   for (const root of roots.splice(0)) root.remove();
   removeAdopted();
+  if (rootStyle === null) document.documentElement.removeAttribute("style");
+  else document.documentElement.setAttribute("style", rootStyle);
 });
 
 const mount = (theme: "light" | "dark") => {
@@ -122,7 +125,17 @@ test("refuses what is not a derived value", () => {
   expect(withLight({ ...light, "--wt-radius-md": "x14px" })).toThrow(RangeError);
   expect(withLight({ ...light, "--wt-radius-md": "#ffffff" })).toThrow(RangeError);
   expect(withLight({ ...light, "--wt-color-bg": "14px" })).toThrow(RangeError);
-  for (const size of ["NaNpx", "14.5px", "1em"])
+  for (const size of [
+    "NaNrem",
+    "14px",
+    "14.5px",
+    "1em",
+    "01rem",
+    "1.00001rem",
+    "1rem;",
+    "-1rem",
+    ".5rem",
+  ])
     expect(withLight({ ...light, "--wt-font-size-md": size }), size).toThrow(
       new RangeError("not a derived value for --wt-font-size-md"),
     );
@@ -157,7 +170,11 @@ test("refuses what is not a derived value", () => {
   expect(withLight(light)).not.toThrow();
 });
 
-test("a theme at 130% draws 18px body text", () => {
+test.each([
+  ["16px", "18px"],
+  ["32px", "36px"],
+])("a theme at 130% draws %s root as %s body text", (rootSize, expected) => {
+  document.documentElement.style.fontSize = rootSize;
   adopted = new CSSStyleSheet();
   adopted.replaceSync(themeSheet(deriveTheme({ ...WAITRON_CHOICES, textScale: 130 })));
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, adopted];
@@ -166,7 +183,7 @@ test("a theme at 130% draws 18px body text", () => {
   probe.style.fontSize = "var(--wt-font-size-md)";
   probe.textContent = "Text";
   root.append(probe);
-  expect(getComputedStyle(probe).fontSize).toBe("18px");
+  expect(getComputedStyle(probe).fontSize).toBe(expected);
 });
 
 test("a theme in Serif with Bold 800 paints them", () => {
