@@ -319,8 +319,8 @@ Two points to check against his answer:
 - *Example 3 of B1* (paid Monday, dessert removed Wednesday) is built on the ticket waiting for full
   payment, which the adviser rejects.
 
-**Your decision (D10).** None until question 3 is answered; tell lane L about both points now.
-*Recommended: yes.*
+**Your decision (D10).** *Owner, 15 November: decide after Thursday's meeting; lane L is not told
+before then.* Nothing on the branch can land before that: it is fiscal, so the owner lands it.
 
 ### B12. Money given back as goodwill after the ticket (adviser 1.5)
 
@@ -382,7 +382,7 @@ Answer each with yes, no or a note; the recommendation is first.
   another date. Replaces A981.
 - **D8** (B9). Own bucket outside the EU: warn, after question 20.
 - **D9** (B10). Keep what AEAT returns for invoices the box lacks, after question 21.
-- **D10** (B11). Tell lane L about the meal's end and example 3 now.
+- **D10** (B11). Decided: after Thursday's meeting (owner, 15 November).
 - **D11** (B12). Goodwill refunds: wait for question 19.
 
 ## Evidence
