@@ -2364,8 +2364,6 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030), B32
   (#1055) and B34 (#1077).**
   [Detail](fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-  - **The approver list is fetched with no time limit.** The unpaid-departure and refund dialogs
-    fetch theirs the same way and predate B32; a time limit belongs on all three together.
   - **No till test covers a payment refusal that arrives after the approver's PIN** (since A845,
     #1895, the PIN prompt comes first).
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**

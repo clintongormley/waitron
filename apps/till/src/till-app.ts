@@ -15851,9 +15851,10 @@ export class TillApp extends LitElement {
       return;
     }
     this.adjusting = { ...open, refusal: null, busy: true };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const api = open.bill?.api ?? this.api;
-      const approvers = await api.listApprovers(approval.permission);
+      const approvers = await api.listApprovers(approval.permission, { signal: limit.signal });
       const now = this.#adjustingNow(open.id);
       if (now === null) return;
       this.adjusting = { ...now, busy: false };
@@ -15861,6 +15862,8 @@ export class TillApp extends LitElement {
       this.adjustApprovers = approvers;
     } catch (error) {
       if (this.#adjustingNow(open.id) !== null) await this.#onAdjustRefused(error, "approvers");
+    } finally {
+      limit.done();
     }
   }
 
@@ -18976,8 +18979,11 @@ export class TillApp extends LitElement {
     if (open === null) return;
     const current = () =>
       this.#departingNow(id) !== null && this.#billCompositionCurrent(open.composition);
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await open.composition.api.listUnpaidDepartureAuthorizers();
+      const approvers = await open.composition.api.listUnpaidDepartureAuthorizers({
+        signal: limit.signal,
+      });
       const now = this.#departingNow(id);
       if (now === null || !current()) return;
       this.departing = { ...now, busy: false };
@@ -18987,6 +18993,8 @@ export class TillApp extends LitElement {
       const now = this.#departingNow(id);
       if (now !== null && current())
         this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
+    } finally {
+      limit.done();
     }
   }
 
@@ -19138,8 +19146,9 @@ export class TillApp extends LitElement {
 
   /** The people who can approve the cancel in dialog `id` are read, and their PIN prompt opens. */
   async #askCancelCreditApprover(id: number): Promise<void> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await this.api.listCancelCreditAuthorizers();
+      const approvers = await this.api.listCancelCreditAuthorizers({ signal: limit.signal });
       const now = this.#cancelCreditingNow(id);
       if (now === null) return;
       this.cancelCrediting = { ...now, busy: false };
@@ -19149,6 +19158,8 @@ export class TillApp extends LitElement {
       const now = this.#cancelCreditingNow(id);
       if (now !== null)
         this.cancelCrediting = { ...now, refusal: { code: "approvers" }, busy: false };
+    } finally {
+      limit.done();
     }
   }
 
@@ -21016,8 +21027,9 @@ export class TillApp extends LitElement {
 
   /** The people who can approve the refund in dialog `id` are read, and their PIN prompt opens. */
   async #askRefundApprover(id: number): Promise<void> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await this.api.listRefundAuthorizers();
+      const approvers = await this.api.listRefundAuthorizers({ signal: limit.signal });
       const now = this.#billRefundingNow(id);
       if (now === null) return;
       this.billRefunding = { ...now, busy: false };
@@ -21027,6 +21039,8 @@ export class TillApp extends LitElement {
       const now = this.#billRefundingNow(id);
       if (now !== null)
         this.billRefunding = { ...now, refusal: { code: "approvers" }, busy: false };
+    } finally {
+      limit.done();
     }
   }
 

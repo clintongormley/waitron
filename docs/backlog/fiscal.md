@@ -772,12 +772,6 @@ of the departed bill requires correction authority and writes its credit note
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
     cancel's answer empty, so the till goes on reading the credit note's number from the bills.
     Open:
-    - **The approver list is fetched with no time limit.** After a refusal for lack of
-      permission the till asks `GET /api/cancel-credit-authorizers` who can approve, and until
-      the answer arrives the dialog stays busy with its buttons disabled (`apps/till/src/till-app.ts`,
-      the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
-      predate B32; a time limit belongs on all three together. Raised by B32's review by reading
-      only; nobody reproduced a stalled answer.
     - **No till test covers a payment refusal that arrives after the approver's PIN.** Since A845
       (#1895) a person without `sale.rectify` meets the PIN prompt before the server's
       `bill.payments_received` or `order.payment_in_flight`; by reading only (#1895's review), the

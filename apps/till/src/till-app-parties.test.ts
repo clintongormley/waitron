@@ -10903,6 +10903,42 @@ describe("till-app: recording an unpaid departure", () => {
     expect(bottom.error).toBe(t("departure.approvers_failed"));
   });
 
+  it("gives up reading who can approve it at the time limit, and says it could not be read", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+      listUnpaidDepartureAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    await typeReason(el, "Ran off");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await confirmDeparture(el);
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await flush(el, 6);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await flush(el, 6);
+
+      expect(dialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(
+        dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+          .error,
+      ).toBe(t("departure.approvers_failed"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says a departure whose resends all got no answer may have been recorded", async () => {
     const recordUnpaidDeparture = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await openDeparture({ recordUnpaidDeparture });
@@ -11241,6 +11277,39 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
 
     expect(approval(el)).toBeNull();
     expect(bottom(el)).toBe(t("cancel_credit.approvers_failed"));
+  });
+
+  it("gives up reading who can approve it at the time limit, and says it could not be read", async () => {
+    const { el } = await openCancel({
+      ...billServer(async () => {
+        throw { code: "authorization.not_permitted", status: 403 };
+      }),
+      listCancelCreditAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    await typeReason(el, "Wrong table");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await confirmCancel(el);
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await flush(el, 6);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await flush(el, 6);
+
+      expect(dialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(bottom(el)).toBe(t("cancel_credit.approvers_failed"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([

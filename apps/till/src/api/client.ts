@@ -3224,8 +3224,13 @@ export class TillApi {
 
   /** Who may approve a bill refund → `GET /api/refund-authorizers`: the active holders of the refund
    * permission, by id and name. */
-  listRefundAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/refund-authorizers", "GET");
+  listRefundAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/refund-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /**
@@ -3782,8 +3787,13 @@ export class TillApi {
   }
 
   /** Who may approve cancelling and crediting an invoiced bill → `GET /api/cancel-credit-authorizers`. */
-  listCancelCreditAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/cancel-credit-authorizers", "GET");
+  listCancelCreditAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/cancel-credit-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   // --- Live floor. ---
@@ -3862,8 +3872,13 @@ export class TillApi {
   }
 
   /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */
-  listUnpaidDepartureAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
+  listUnpaidDepartureAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/unpaid-departure-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   closeDeferred(billId: string, request: CloseDeferredRequest): Promise<CloseDeferredResult> {
@@ -4605,10 +4620,13 @@ export class TillApi {
 
   listApprovers(
     permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin",
+    options: ReadOptions = {},
   ): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
       `/api/adjustment-approvers?permission=${encodeURIComponent(permission)}`,
       "GET",
+      undefined,
+      options.signal,
     );
   }
 

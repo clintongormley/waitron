@@ -15,7 +15,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { DraftStore } from "./state/draft-sync.js";
+import { DraftStore, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { lineAdjustTarget } from "./state/adjust-target.js";
 import {
   openSentMore,
@@ -545,7 +545,9 @@ describe("till-app: an adjustment someone must approve", () => {
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
 
@@ -642,7 +644,9 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
   });
@@ -662,7 +666,9 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
   });
 });
@@ -846,6 +852,42 @@ describe("till-app: a refused adjustment", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  });
+
+  it("gives up reading the approvers at the time limit, and says so above the action", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
+      listApprovers: vi.fn(
+        (_permission: string, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      inDialog(el, "[data-adjust-confirm]").click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      await dialog(el)!.updateComplete;
+
+      expect(dialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+      expect(
+        (inDialog(el, "[data-adjust-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says so above the action when the approvers cannot be read", async () => {
@@ -1462,7 +1504,9 @@ describe("till-app: cancelling a dish", () => {
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([
