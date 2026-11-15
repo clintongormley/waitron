@@ -8,7 +8,7 @@ import {
   zoneDays,
   type Transaction,
 } from "@waitron/db";
-import { AppError, type BusinessDayClock } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
   assertWaitingChangeFits,
