@@ -316,11 +316,9 @@ export interface HandoverStatus {
   handoverPage?: string;
   copyPlaced?: boolean;
 }
-export interface HandoverSignIn {
-  email: string;
-  password: string;
-  totp?: string;
-}
+/** Left out on an emergency step when the switch's proof cookie stands in. */
+export type HandoverSignIn =
+  { email: string; password: string; totp?: string } | { passkey: unknown };
 
 export interface EmergencyHandoverPreview {
   sourceNodeId: string;
@@ -342,7 +340,7 @@ export interface FollowedCopyTake {
 export interface EmergencyHandoverDeclaration {
   operationId: string;
   expectedCopy: EmergencyHandoverPreview["copy"];
-  signIn: HandoverSignIn;
+  signIn: HandoverSignIn | undefined;
   statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
   reason: string;
   locale: "en" | "es";
@@ -398,17 +396,22 @@ export class SetupApi {
     });
   }
 
-  previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {
+  previewEmergencyHandover(signIn: HandoverSignIn | undefined): Promise<EmergencyHandoverPreview> {
     return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
   }
 
-  takeFollowedCopy(signIn: HandoverSignIn): Promise<FollowedCopyTake> {
+  /** WebAuthn sign-in options for one emergency step; the spare keeps the challenge two minutes. */
+  switchPasskeyChallenge(): Promise<{ options: unknown }> {
+    return this.#request("/api/node/handover/emergency/passkey-challenge", "POST");
+  }
+
+  takeFollowedCopy(signIn: HandoverSignIn | undefined): Promise<FollowedCopyTake> {
     return this.#request("/api/node/handover/emergency/followed", "POST", { signIn });
   }
 
   async selectEmergencyBackup(
     artifact: File,
-    signIn: HandoverSignIn,
+    signIn: HandoverSignIn | undefined,
     recoveryKey?: string,
   ): Promise<void> {
     const body = new FormData();
@@ -432,7 +435,7 @@ export class SetupApi {
 
   prepareHandover(
     operationId: string,
-    signIn: HandoverSignIn,
+    signIn: HandoverSignIn | undefined,
     binding: RecoveryOperationBinding,
     proposal: unknown,
   ): Promise<unknown> {
@@ -449,7 +452,7 @@ export class SetupApi {
 
   activateHandover(
     operationId: string,
-    signIn: HandoverSignIn,
+    signIn: HandoverSignIn | undefined,
     moduleOperation: { binding: RecoveryOperationBinding; input: unknown },
   ): Promise<{ activated: true; restarting: boolean }> {
     return this.#request(`/api/node/handover/${encodeURIComponent(operationId)}/activate`, "POST", {

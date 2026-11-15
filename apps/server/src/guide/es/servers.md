@@ -82,7 +82,7 @@ nada y recarga la página cuando el servidor principal vuelva. Desde cualquier o
 servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva. Identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta
-copia**. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
+copia**. O elige **Usar mi passkey** y usa tu passkey cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
 vuelve a poner al día su copia antes de que puedas intentarlo de nuevo. El servidor de reserva primero pone al día su copia y se reinicia; mantén la página
 abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de reserva** ofrece la copia que ya tiene,
 normalmente la de cuando se incorporó, sin nada posterior. Revisa la última actividad con fecha de la copia. Puede faltar la actividad posterior; si no hay

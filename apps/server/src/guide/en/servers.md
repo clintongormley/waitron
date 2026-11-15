@@ -75,7 +75,8 @@ an update for example, brings a reloading device here too; if you did not mean t
 declare anything, and reload the page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
-current authenticator code, if set up, then choose **Check this copy**. Type the password
+current authenticator code, if set up, then choose **Check this copy**. Or choose **Use my passkey**
+and use your passkey when the page asks. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
 again. The spare first brings its
 copy up to date and restarts; keep the page open. If that takes more than a minute or cannot be done, **Use the copy this spare holds**

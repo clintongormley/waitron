@@ -29,6 +29,13 @@ export const handoverEn = {
   "handover.zone": "Times are shown in your device’s time zone.",
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
+  "handover.emergency.sign_in_with": "Sign in with",
+  "handover.emergency.use_password": "Use my password",
+  "handover.emergency.use_passkey": "Use my passkey",
+  "handover.emergency.sign_in_passkey":
+    "Sign in with an administrator's passkey to check this spare and start the venue here.",
+  "handover.emergency.passkey_failed":
+    "Your passkey did not sign you in. Try again, or use your password.",
   "handover.emergency.saved":
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
@@ -176,6 +183,13 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo.",
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
+  "handover.emergency.sign_in_with": "Identificarse con",
+  "handover.emergency.use_password": "Usar mi contraseña",
+  "handover.emergency.use_passkey": "Usar mi passkey",
+  "handover.emergency.sign_in_passkey":
+    "Identifícate con la passkey de un administrador para comprobar esta copia e iniciar el local aquí.",
+  "handover.emergency.passkey_failed":
+    "Tu passkey no te ha identificado. Vuelve a intentarlo o usa tu contraseña.",
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",

@@ -121,6 +121,8 @@ async function mount(
     mainRead?: () => Promise<Response>;
     /** How `${MAIN}/api/node` answers the page's own check, by call from 0. */
     mainAnswers?: (call: number) => Promise<Response>;
+    /** The spare's passkey challenges and proof cookie, kept across mounts like a reload. */
+    proof?: SwitchProof;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -148,6 +150,12 @@ async function mount(
       probes.push(init);
       return options.mainAnswers!(probes.length - 1);
     }
+    const proof = options.proof;
+    if (proof && path.endsWith("/emergency/passkey-challenge")) {
+      const challenge = `chal${String(proof.issued.length).padStart(4, "0")}`;
+      proof.issued.push(challenge);
+      return new Response(JSON.stringify({ options: { challenge, rpId: location.hostname } }));
+    }
     if (init?.method === "GET" && options.statusUnavailable)
       throw new TypeError("progress unavailable");
     if (init?.method === "GET")
@@ -165,6 +173,8 @@ async function mount(
         ? (JSON.parse(String(init.body.get("request"))) as Record<string, unknown>)
         : (JSON.parse(init!.body as string) as Record<string, unknown>);
     posts.push({ path, body });
+    const proofRefusal = proof && switchSignIn(proof, path, body.signIn);
+    if (proofRefusal) return proofRefusal;
     if (path.endsWith("/emergency/backup")) {
       expect(init!.body).toBeInstanceOf(FormData);
       expect((init!.body as FormData).get("artifact")).toBeInstanceOf(File);
@@ -355,6 +365,70 @@ async function mount(
   if (typeof options.mainUrl !== "string")
     await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
   return { el, host, posts, probes };
+}
+interface SwitchProof {
+  cookie: boolean;
+  issued: string[];
+  used: Set<string>;
+  /** Passkey answers refused after their challenge is taken, as a wrong key would be. */
+  refuse: number;
+}
+const refusal = (code: string, status: number) =>
+  new Response(JSON.stringify({ error: { code } }), { status });
+/** The server's switch sign-in: a passkey over an unused challenge sets the cookie; no sign-in needs it. */
+function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Response | undefined {
+  if (!/\/(preview|followed|backup|declare|preparation|activate)$/.test(path)) return undefined;
+  const passkey = (signIn as { passkey?: { response: { clientDataJSON: string } } } | undefined)
+    ?.passkey;
+  if (passkey) {
+    const client = passkey.response.clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
+    const { challenge } = JSON.parse(atob(client)) as { challenge: string };
+    if (!proof.issued.includes(challenge) || proof.used.has(challenge))
+      return refusal("passkey.challenge_expired", 400);
+    proof.used.add(challenge);
+    if (proof.refuse > 0) {
+      proof.refuse -= 1;
+      return refusal("password.invalid", 401);
+    }
+    proof.cookie = true;
+    return undefined;
+  }
+  if (signIn !== undefined || proof.cookie) return undefined;
+  return path.endsWith("/followed")
+    ? refusal("handover.request_invalid", 400)
+    : refusal("password.invalid", 401);
+}
+const newProof = (): SwitchProof => ({ cookie: false, issued: [], used: new Set(), refuse: 0 });
+/** The device's passkey answers whatever challenge it is handed; the WebAuthn library stays real. */
+function stubPasskey() {
+  return vi.spyOn(navigator.credentials, "get").mockImplementation(async (request) => {
+    const challenge = new Uint8Array(request!.publicKey!.challenge as ArrayBuffer);
+    const encoded = btoa(String.fromCharCode(...challenge))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    return {
+      id: "AQ",
+      rawId: new Uint8Array([1]).buffer,
+      type: "public-key",
+      response: {
+        clientDataJSON: new TextEncoder().encode(
+          JSON.stringify({ type: "webauthn.get", challenge: encoded }),
+        ).buffer,
+        authenticatorData: new Uint8Array([3]).buffer,
+        signature: new Uint8Array([4]).buffer,
+        userHandle: null,
+      },
+      getClientExtensionResults: () => ({}),
+      authenticatorAttachment: null,
+    } as unknown as Credential;
+  });
+}
+async function choosePasskey(el: SetupHandoverScreen) {
+  const methods = q<LitElement>(el, '[name="handover-sign-in-method"]');
+  await methods.updateComplete;
+  methods.shadowRoot!.querySelectorAll<HTMLButtonElement>("button")[1]!.click();
+  await el.updateComplete;
 }
 async function authenticate(el: SetupHandoverScreen) {
   await edit(el, "handover-email", signIn.email);
@@ -1591,4 +1665,109 @@ it("no mainUrl lets the switch go on", async () => {
   const { el, probes } = await mount({ mainUrl: null });
   expect(q(el, "[data-test=emergency-preview]")).not.toBeNull();
   expect(probes).toEqual([]);
+});
+
+it("offers a passkey beside the password, and the passkey needs no email or password", async () => {
+  const { el } = await mount({ proof: newProof() });
+  const methods = q<LitElement>(el, '[name="handover-sign-in-method"]');
+  await methods.updateComplete;
+  expect(
+    [...methods.shadowRoot!.querySelectorAll("button")].map((b) => b.textContent!.trim()),
+  ).toEqual([t("handover.emergency.use_password"), t("handover.emergency.use_passkey")]);
+  expect(q(el, '[name="handover-password"]')).not.toBeNull();
+  await choosePasskey(el);
+  expect(q(el, '[name="handover-email"]')).toBeNull();
+  expect(q(el, '[name="handover-password"]')).toBeNull();
+  expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]").disabled).toBe(
+    false,
+  );
+});
+
+it("a passkey switch unlocks once and the later steps lean on the proof, through to activation", async () => {
+  const get = stubPasskey();
+  const { el, posts } = await mount({ proof: newProof() });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  expect(get).toHaveBeenCalledTimes(1);
+  const steps = posts.map(({ path, body }) => [
+    path.split("/").at(-1),
+    body.signIn === undefined ? "none" : "passkey" in (body.signIn as object) ? "passkey" : "other",
+  ]);
+  expect(steps.slice(0, 4)).toEqual([
+    ["preview", "none"],
+    ["preview", "passkey"],
+    ["followed", "none"],
+    ["preview", "none"],
+  ]);
+  expect(steps.slice(4).every(([, signIn]) => signIn === "none")).toBe(true);
+  expect(steps.slice(4).map(([step]) => step)).toEqual(
+    expect.arrayContaining(["declare", "preparation", "activate"]),
+  );
+});
+
+it("a reload after the take carries on with the proof, without a new unlock", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  const first = await mount({ proof });
+  await choosePasskey(first.el);
+  q(first.el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(first.el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(first.posts.some(({ path }) => path.endsWith("/followed"))).toBe(true);
+  cleanupWidgets();
+  const { el } = await mount({ proof });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("never writes the passkey answer to the address or to storage", async () => {
+  stubPasskey();
+  const { el, posts } = await mount({ proof: newProof() });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  const answer = posts.find(({ body }) => body.signIn !== undefined)!.body.signIn as {
+    passkey: { response: { clientDataJSON: string } };
+  };
+  const written = [
+    location.href,
+    JSON.stringify({ ...localStorage }),
+    JSON.stringify({ ...sessionStorage }),
+  ];
+  for (const place of written) {
+    expect(place).not.toContain(answer.passkey.response.clientDataJSON);
+    expect(place).not.toContain("chal0000");
+  }
+});
+
+it("a refused passkey, or a lapsed proof, offers the passkey again rather than ending the switch", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  const { el } = await mount({ proof });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  proof.cookie = false;
+  proof.refuse = 1;
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.passkey_failed"),
+    ),
+  );
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(q(el, '[name="handover-sign-in-method"]')).not.toBeNull();
+  const declare = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
+  await vi.waitFor(() => expect(declare.disabled).toBe(false));
+  declare.click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(3);
 });
