@@ -2163,6 +2163,10 @@ describe("the Edit dialog", () => {
 
     expect(api.updateDevice).not.toHaveBeenCalled();
     expect(field(el, "edit-name").error).toBe(t("form.name_required"));
+    const name = q(el, "[data-test=edit-name]")!;
+    await expect
+      .poll(() => name.shadowRoot!.activeElement)
+      .toBe(name.shadowRoot!.querySelector("input"));
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(true);
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     wtChange(el, "[data-test=edit-name]", "Cash till 3");
@@ -4260,6 +4264,10 @@ describe("add a device", () => {
 
     expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe(t("form.name_required"));
+    const name = q(el, "[data-test=pair-name]")!;
+    await expect
+      .poll(() => name.shadowRoot!.activeElement)
+      .toBe(name.shadowRoot!.querySelector("input"));
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
     expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
     typeField(el, "[data-test=pair-name]", "Bar 3");
