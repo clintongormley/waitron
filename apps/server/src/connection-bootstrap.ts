@@ -12,6 +12,7 @@ import { trustDeviceForRequest } from "./detect-device.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
 import type { Logger } from "./logger.js";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
 
 export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   origins: string[];
@@ -80,7 +81,11 @@ export function mountConnectionBootstrap(
         offered && status.caAvailable
           ? await readBoxPublicCa(deps.stateDir, deps.now()).catch(() => null)
           : null;
-      const free = await deps.freeSpace?.().catch(() => null);
+      const free = await deps.freeSpace?.().catch((error: unknown) => {
+        deps.log("warn", "recovery.free_space_unreadable", { errno: errnoOf(error) ?? null });
+        return undefined;
+      });
+      if (free === null) deps.log("warn", "recovery.free_space_unreadable", { errno: null });
       const html = renderTrustPage({
         caCertificate: caCertificate ?? undefined,
         caAvailable: status.caAvailable,

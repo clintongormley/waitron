@@ -67,14 +67,15 @@ export function renderConnectionPage(
   const words = CONNECTION_TEXT[locale];
   const status = input.connection;
   const recoveryLocale = locale === "es" ? "es-ES" : "en-GB";
-  const freeSpace =
-    status.storageFreeBytes === undefined
-      ? ""
-      : `<section data-storage-warning role="status"><h2>${words.spaceLow}</h2><p>${escape(RECOVERY_PAGE_WORDS[recoveryLocale].freeSpace(`${new Intl.NumberFormat(recoveryLocale, { maximumFractionDigits: 1 }).format(status.storageFreeBytes / 1_000_000)} MB`))}</p><p>${words.spaceAction}</p></section>`;
   const operator = status.repairAllowed === false;
   const retry = status.continuationRequired === true;
   const ready = status.state === "healthy" && !operator;
   const elsewhere = !operator && status.serverOnly === true && (!ready || retry);
+  const repairOffered = !ready && !operator && !elsewhere;
+  const freeSpace =
+    status.storageFreeBytes === undefined
+      ? ""
+      : `<section data-storage-warning role="status"><h2>${words.spaceLow}</h2><p>${escape(RECOVERY_PAGE_WORDS[recoveryLocale].freeSpace(`${new Intl.NumberFormat(recoveryLocale, { maximumFractionDigits: 1 }).format(status.storageFreeBytes / 1_000_000)} MB`))}</p><p>${words.spaceAction.replace("{retry}", repairOffered ? words.spaceRetry : words.spaceCheckAgain)}</p></section>`;
   const hidden = (visible: boolean) => (visible ? "" : " hidden");
   const help = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
   const devices =
@@ -177,7 +178,7 @@ button?.addEventListener("click", async () => {
 <p id="connection-error" role="alert"></p>
 <noscript><p>${words.javascript}</p></noscript>
 <div id="connection-work">
-${!ready && !operator && !elsewhere ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
+${repairOffered ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
 <div id="connection-download"${hidden(status.caAvailable)}><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>

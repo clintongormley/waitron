@@ -10,8 +10,10 @@ export const CONNECTION_TEXT = {
     reconnect: "Reconnect",
     needed: "The server’s secure connection needs repair.",
     spaceLow: "The box is low on disk space.",
+    spaceRetry: "Once more space is free, choose Check again, then set up the secure connection.",
+    spaceCheckAgain: "Once more space is free, choose Check again.",
     spaceAction:
-      "Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's. Once more space is free, choose Check again, then set up the secure connection. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+      "Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's. {retry} If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     busy: "Setting up the connection…",
     ready: "Certificate ready.",
     certificateReady: "Certificate ready. Follow the instructions, then reconnect.",
@@ -53,8 +55,11 @@ export const CONNECTION_TEXT = {
     reconnect: "Reconectar",
     needed: "La conexión segura del servidor necesita reparación.",
     spaceLow: "Queda poco espacio en el disco del equipo.",
+    spaceRetry:
+      "Cuando haya más espacio libre, elige Comprobar de nuevo y configura la conexión segura.",
+    spaceCheckAgain: "Cuando haya más espacio libre, elige Comprobar de nuevo.",
     spaceAction:
-      "Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, elige Comprobar de nuevo y configura la conexión segura. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      "Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. {retry} Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     busy: "Configurando la conexión…",
     ready: "Certificado listo.",
     certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",

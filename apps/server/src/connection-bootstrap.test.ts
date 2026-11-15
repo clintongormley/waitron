@@ -40,6 +40,7 @@ async function fixture(
   await writeFile(join(stateDir, "secrets.env"), "retained vault material");
   const onRepaired = vi.fn(async () => {});
   const app = new Hono();
+  const log = vi.fn();
   mountConnectionBootstrap(app, {
     stateDir,
     hostnames: ["waitron.local", "localhost"],
@@ -48,11 +49,11 @@ async function fixture(
     origins: ["http://waitron.local:8080", "http://127.0.0.1:8080"],
     reachUrls: ["https://waitron.local:8080"],
     onRepaired,
-    log: () => {},
+    log,
     repairAllowed,
     freeSpace,
   });
-  return { stateDir, app, onRepaired };
+  return { stateDir, app, onRepaired, log };
 }
 const url = "http://waitron.local:8080/setup-api/connection/repair";
 const allowed = { Origin: "http://waitron.local:8080" };
@@ -406,7 +407,11 @@ it.each(["en", "es"] as const)(
       (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
     const html = await page();
     expect(html).toContain("data-storage-warning");
-    expect(html).toContain(CONNECTION_TEXT[lang].spaceAction);
+    expect(html).toContain(
+      lang === "en"
+        ? "Once more space is free, choose Check again, then set up the secure connection."
+        : "Cuando haya más espacio libre, elige Comprobar de nuevo y configura la conexión segura.",
+    );
     expect(html).not.toContain(
       lang === "en" ? "Retry a normal boot" : "Reintentar un arranque normal",
     );
@@ -422,5 +427,24 @@ it.each(["en", "es"] as const)(
     expect(await page()).not.toContain("data-storage-warning");
     fail = true;
     expect(await page()).not.toContain("data-storage-warning");
+    expect(f.log).toHaveBeenCalledTimes(2);
+    expect(f.log).toHaveBeenLastCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+  },
+);
+
+it.each(["healthy", "operator", "elsewhere"] as const)(
+  "names only an available next step in the %s connection-space warning",
+  async (state) => {
+    const f = await fixture(
+      state === "healthy",
+      state === "operator" ? false : state === "elsewhere" ? () => false : undefined,
+      async () => 1000,
+    );
+    const html = await (await f.app.request("http://waitron.local:8080/")).text();
+    const warning = html.match(/<section data-storage-warning[^>]*>(.*?)<\/section>/s)?.[1];
+    expect(warning).toContain("choose Check again.");
+    expect(warning).not.toContain("then set up the secure connection");
   },
 );

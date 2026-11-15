@@ -92,7 +92,12 @@ import { freeBytes } from "./free-bytes.js";
 import { createSpaceFreer, surveyLeftovers, type FreedSpace } from "./free-space-now.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
 import { ALL_ALERT_CLAIMS, ALL_MODULES, enabledAlertSources } from "./modules.js";
-import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
+import {
+  runEntry,
+  serveRecovery,
+  startServerOrFirstSetupResolution,
+  type RecoveryServeOptions,
+} from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
@@ -1380,47 +1385,68 @@ describe("a start on a real full disk", () => {
     }
   });
 
-  it("warns on the public connection page when the real disk remains full, then rereads freed space", async (ctx) => {
-    const small = needDisk(ctx);
-    const stateDir = await startedBefore(small, "connection-space", { spareBytes: 0 });
-    mkdirSync(join(stateDir, "tls"), { recursive: true });
-    writeFileSync(join(stateDir, "tls", "ca.crt"), "unusable retained certificate");
-    small.fill(0);
-    const d = entryDeps(stateDir, { spareBytes: 0 });
-    await runEntry(d);
-    expect(d.startServer).not.toHaveBeenCalled();
-    expect(d.serveRecovery).toHaveBeenCalledOnce();
-    const [app, opts] = d.serveRecovery.mock.calls[0]!;
-    const listener = await serveRecovery(app, {
-      ...opts,
-      port: 0,
-      httpHost: "127.0.0.1",
-      landing: undefined,
-    });
-    try {
-      const address = listener.address();
-      if (address === null || typeof address === "string")
-        throw new Error("No connection listener");
-      const page = async (lang: string) =>
-        (await fetch(`http://127.0.0.1:${address.port}/?lang=${lang}`)).text();
-      for (const lang of ["en", "es"]) {
-        const html = await page(lang);
-        expect(html).toContain("data-storage-warning");
-        expect(html).toContain(
-          lang === "en"
-            ? "Free space on the box's disk: 0 MB."
-            : "Espacio libre en el disco del equipo: 0 MB.",
-        );
-        expect(html).toContain('id="connection-stop"');
+  it.each(["image", "source"] as const)(
+    "warns on the %s connection page when the real disk remains full, then rereads freed space",
+    async (mode, ctx) => {
+      const small = needDisk(ctx);
+      const stateDir = await startedBefore(small, `connection-space-${mode}`, { spareBytes: 0 });
+      mkdirSync(join(stateDir, "tls"), { recursive: true });
+      writeFileSync(join(stateDir, "tls", "ca.crt"), "unusable retained certificate");
+      small.fill(0);
+      const d = entryDeps(stateDir, { spareBytes: 0 });
+      const source =
+        mode === "source"
+          ? await startServerOrFirstSetupResolution(
+              {
+                WAITRON_STATE_DIR: stateDir,
+                WAITRON_HTTP_LANDING_PORT: "0",
+              },
+              {},
+              {
+                startServer: d.startServer,
+                serveResolution: async (app, opts) => {
+                  await d.serveRecovery(app, opts);
+                  return { close: async () => {} };
+                },
+              },
+            )
+          : undefined;
+      if (mode === "image") await runEntry(d);
+      expect(d.startServer).not.toHaveBeenCalled();
+      expect(d.serveRecovery).toHaveBeenCalledOnce();
+      const [app, opts] = d.serveRecovery.mock.calls[0]!;
+      const listener = await serveRecovery(app, {
+        ...opts,
+        port: 0,
+        httpHost: "127.0.0.1",
+        landing: undefined,
+      });
+      try {
+        const address = listener.address();
+        if (address === null || typeof address === "string")
+          throw new Error("No connection listener");
+        const page = async (lang: string) =>
+          (await fetch(`http://127.0.0.1:${address.port}/?lang=${lang}`)).text();
+        for (const lang of ["en", "es"]) {
+          const html = await page(lang);
+          expect(html).toContain("data-storage-warning");
+          expect(html).toContain(
+            lang === "en"
+              ? "Free space on the box's disk: 0 MB."
+              : "Espacio libre en el disco del equipo: 0 MB.",
+          );
+          expect(html).toContain('id="connection-stop"');
+        }
+        small.unfill();
+        expect(await page("en")).not.toContain("data-storage-warning");
+      } finally {
+        small.unfill();
+        await new Promise<void>((resolve) => listener.close(() => resolve()));
+        await source?.close();
+        rmSync(stateDir, { recursive: true, force: true });
       }
-      small.unfill();
-      expect(await page("en")).not.toContain("data-storage-warning");
-    } finally {
-      small.unfill();
-      await new Promise<void>((resolve) => listener.close(() => resolve()));
-      rmSync(stateDir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   it("keeps working kitchen screens lit on the full filesystem and still detects a real outage", async (ctx) => {
     const small = needDisk(ctx);

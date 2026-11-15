@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { hashDeviceToken } from "@waitron/identity";
-import { requireDevice } from "./device-session.js";
+import { requireDevice, requireDeviceProof } from "./device-session.js";
 import {
   devices,
   kitchenStations,
@@ -837,6 +837,17 @@ it.each(["station", "pass", "pass_monitor"] as const)(
       await requireDevice({ db: suite.db }, c);
       return c.text("ok");
     });
+    if (kind === "station") {
+      app.get("/passive", async (c) => {
+        await requireDeviceProof({ db: suite.db }, c, { passive: true });
+        return c.text("ok");
+      });
+      expect(
+        (await app.request("/passive", { headers: { cookie: `waitron_device=${id}.${token}` } }))
+          .status,
+      ).toBe(200);
+      expect(await dark(at)).toHaveLength(1);
+    }
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     const refusing = vi
