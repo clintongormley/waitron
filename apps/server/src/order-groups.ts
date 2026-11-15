@@ -579,7 +579,7 @@ export async function fireHeldLine(
           and(
             eq(workingOrderLines.id, lineId),
             await serviceDishCondition(tx, eq(workingOrderLines.id, lineId)),
-            eq(workingOrders.partyId, partyId),
+            inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),

@@ -101,7 +101,7 @@ import {
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cutParts, splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
-import { joinTables } from "./testing/table-action-fixture.js";
+import { combineParties, joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -6124,6 +6124,36 @@ describe("Fire now on one held dish", () => {
       [2, "fired"],
       [3, "fired"],
       [4, "fired"],
+    ]);
+  });
+
+  it("fires a held dish on a merged-in party's paid bill", async () => {
+    const { v, s, rows, steak, extra } = await fixture(false);
+    await db
+      .update(workingOrders)
+      .set({ status: "settled", settledAt: new Date().toISOString() })
+      .where(eq(workingOrders.id, s.tabId));
+    const into = await seated(v);
+    await inTx((tx) =>
+      combineParties(tx, v.cfg, {
+        from: s.partyId,
+        into: into.partyId,
+        tables: "join",
+        operatorId: ALEX,
+      }),
+    );
+    const command = await args(into.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, into.partyId, steak.id, command));
+    expect(await firedTicketLineIds(s.partyId)).toEqual([steak.id, extra.id].sort());
+    expect(
+      (await groupsOf(into.partyId)).groups.map((g) => [g.displayNumber, g.state, g.lineIds]),
+    ).toEqual([
+      [
+        1,
+        "held",
+        rows.filter((row) => row.parentLineId === null && row.id !== steak.id).map((row) => row.id),
+      ],
+      [2, "fired", [steak.id]],
     ]);
   });
 

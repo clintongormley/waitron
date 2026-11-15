@@ -1152,14 +1152,6 @@ paid bills moves, the copies of the bill left behind gain one. A simplified rece
 count stored at payment.
 
 
-## A1030. Firing one held dish is refused on a merged-in party's paid bill (found by A758-7).
-
-`fireHeldLine` (`apps/server/src/order-groups.ts`) looks for the dish only among bills whose
-`party_id` is the table's own party. A paid bill keeps the party it was paid under, so after
-Combine tables a held dish on the absorbed party's paid bill answers `group.not_found`. Firing the
-whole group, or collecting at the counter, fires it. It predates A758-7 (`c9ad7a634`).
-
-
 ## A957. The Spanish report still says «anulado» beside «Cancelaciones» (left open by A758-3).
 
 The column «Valor de carta anulado» and the summary figure «Valor de carta de lo
