@@ -1870,7 +1870,7 @@ only on release.
 
 ### Remembered, searchable, filterable tables
 
-A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. Keyboard opening and later keyboard navigation keep visible focus. Dialogs record whether the opening control had visible keyboard focus before moving into their content.
+A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. An editor opened and closed from the keyboard returns visible focus; later keyboard navigation shows focus. Dialogs record whether the opening control had visible focus before moving into their content.
 
 `wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty.
 When the table has source rows, it draws a toolbar if `searchable` is set, a column carries a

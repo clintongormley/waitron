@@ -1109,6 +1109,30 @@ test.each(lostByClosing)(
   },
 );
 
+test.each(["explicit opener", "nearby control"] as const)(
+  "returns quiet pointer focus to the %s after the opening control is removed",
+  async (fallback) => {
+    const { el, target, nearby, opener } = await scene();
+    if (fallback === "explicit opener") el.opener = opener;
+    const field = document.createElement("input");
+    el.append(field);
+    await userEvent.click(target);
+    el.open = true;
+    await el.updateComplete;
+    await userEvent.click(field);
+    await userEvent.keyboard("Counter");
+    target.remove();
+    const closed = new Promise((resolve) =>
+      el.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    const returned = fallback === "explicit opener" ? opener : nearby;
+    expect(deepActiveElement()).toBe(returned);
+    expect(returned.matches(":focus-visible")).toBe(false);
+  },
+);
+
 test.each(lostByClosing)(
   "closed by %s, puts focus beside what had it at opening when that and the opener were both %s",
   async (how, _, change) => {
