@@ -102,3 +102,20 @@ it.each(["none", "staff"])(
     expect(reader).not.toHaveBeenCalled();
   },
 );
+
+it("refuses a search beyond the shared 100-character bound before reading", async () => {
+  const response = await app.request(path + "?search=" + "x".repeat(101), { headers: { cookie } });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "search" } },
+  });
+  expect(reader).not.toHaveBeenCalled();
+});
+it("accepts 100 search characters and preserves trailing word completion", async () => {
+  const search = "x".repeat(100) + " ";
+  const response = await app.request(path + "?" + new URLSearchParams({ search }), {
+    headers: { cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(reader.mock.calls[0]![1].search).toBe(search);
+});

@@ -1,7 +1,13 @@
 import { appendOriginalForReturn } from "./testing/returned-invoice.js";
 import type { CanonicalValue } from "@waitron/membership";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { expect, it, onTestFinished, vi } from "vitest";
+
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, randomUUID: vi.fn(actual.randomUUID) };
+});
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -314,6 +320,18 @@ it("answers the returned invoice through the backend's own methods", async () =>
 });
 
 it("counts only marked rows, bounds pages and sorts receipt batches before stable positions", async () => {
+  const actual = await vi.importActual<typeof import("node:crypto")>("node:crypto");
+  let nextId = 0;
+  vi.mocked(randomUUID).mockImplementation(() => {
+    const suffix = (nextId++)
+      .toString(6)
+      .padStart(12, "0")
+      .replace(/[0-5]/g, (digit) => "abcdef"[Number(digit)]!);
+    return `cccccccc-cccc-4ccc-8ccc-${suffix}` as ReturnType<typeof randomUUID>;
+  });
+  onTestFinished(() => {
+    vi.mocked(randomUUID).mockImplementation(actual.randomUUID);
+  });
   const node = await fixture();
   await withTransaction(receiver.db, (tx) =>
     tx.execute(sql`update nodes set name = 'Node Returning a106' where id = ${node.nodeId}`),
@@ -347,6 +365,18 @@ it("counts only marked rows, bounds pages and sorts receipt batches before stabl
   expect((await read(0, "ascending")).rows.map((row) => row.sequence)).toEqual(
     Array.from({ length: 50 }, (_, i) => i + 1),
   );
+  for (const sortDirection of ["ascending", "descending"] as const) {
+    const ranked = await withTransaction(receiver.db, (tx) =>
+      returnedInvoices(tx, {
+        ...request,
+        search: "Node Returning",
+        sortKey: "receivedAt",
+        sortDirection,
+      }),
+    );
+    expect(ranked.total).toBe(103);
+    expect(ranked.rows.slice(0, 9).map((row) => row.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
   const search = (search: string, page = 0) =>
     withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, search, page }));
   expect(await search("A/102 ", 99)).toMatchObject({

@@ -1,3 +1,4 @@
+import { optionalSearch } from "./orders-list.js";
 import { listOutsidePayments } from "./outside-payments-report.js";
 import { validatedRangeWindow } from "@waitron/reporting";
 import { tableInService } from "@waitron/db";
@@ -268,7 +269,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           ["ascending", "descending"] as const,
         );
         const result = (await deps.returnedInvoices?.(tx, {
-          search: c.req.query("search") ?? "",
+          search: optionalSearch(c.req.query("search"), "search") ?? "",
           page,
           sortKey,
           sortDirection,

@@ -236,9 +236,9 @@ const BARE_NUMBER = /^\d{1,9}$/;
 const SEARCH_MAX = 100;
 
 /** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
-export function optionalSearch(raw: string | undefined): string | undefined {
+export function optionalSearch(raw: string | undefined, field = "q"): string | undefined {
   const typed = raw?.trim().length ?? 0;
-  if (typed > SEARCH_MAX) throw new AppError("management.request_invalid", { field: "q" });
+  if (typed > SEARCH_MAX) throw new AppError("management.request_invalid", { field });
   return typed === 0 ? undefined : raw;
 }
 

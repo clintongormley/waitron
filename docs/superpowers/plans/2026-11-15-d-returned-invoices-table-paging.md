@@ -18,3 +18,5 @@
 4. **Docs/bounds.** Update dashboard `i18n/strings.ts`, server `guide/{en,es}/servers.md#reconciliation`, `docs/developers/design-system.md`, `docs/backlog{,/dashboard}.md`. Watcher expects about 800 changed lines; stop for an outside opinion at 975. Exclude other screens/interval table, frameworks/protocols/schema/migrations/records, compatibility, benchmarks and H2 fiscal writes. Older offset clients need reload; no compatibility layer.
 
 **Clearance:** watcher 2026-11-15 23:44 cleared Received-only sorting and shared 60-second refresh, with the saved-view key above and guide changes limited to replacing the wrong sentence (EN:213–214 and its Spanish twin). No owner design approval is claimed. Source/Invoice sorts and immediate fiscal notifications are omitted.
+
+**Review clearance:** watcher 2026-11-16 00:13 kept the shared rank and all displayed provenance fields, cleared reuse of `orders-list.ts`’s 100-character trimmed search limit through `optionalSearch(raw, field)` (default field `q` unchanged), and requested deterministic new fixture ids. Final fixes receive one fresh Claude read before hook/CI/landing.
