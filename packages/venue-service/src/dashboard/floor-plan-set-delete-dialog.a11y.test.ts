@@ -43,7 +43,8 @@ describe.each(["light", "dark"] as const)("Floor plan set delete dialog (%s)", (
       el.refusal = { code: "floor_plan_set.invalid", params: { field: "replaceWith" } };
     await el.updateComplete;
     const picker = el.shadowRoot!.querySelector("[name=replaceWith]");
-    if (state === "loading") expect(el.shadowRoot!.querySelector("[role=status]")).not.toBeNull();
+    if (state === "loading")
+      expect(el.shadowRoot!.querySelector("[role=status] wt-spinner")).not.toBeNull();
     if (state === "read-failed")
       expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
     if (state === "used" || state === "refused") expect(picker).not.toBeNull();

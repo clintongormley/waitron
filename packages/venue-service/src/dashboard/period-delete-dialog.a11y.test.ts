@@ -65,7 +65,8 @@ describe.each(["light", "dark"] as const)("Period delete dialog (%s)", (theme) =
         await el.updateComplete;
         expect(picker!.error).toBe("Choose another period.");
       }
-      if (state === "loading") expect(el.shadowRoot!.querySelector("[role=status]")).not.toBeNull();
+      if (state === "loading")
+        expect(el.shadowRoot!.querySelector("[role=status] wt-spinner")).not.toBeNull();
       if (state === "read-failed")
         expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
       if (state === "painted") expect(picker).not.toBeNull();

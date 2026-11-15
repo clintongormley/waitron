@@ -120,6 +120,20 @@ it("draws Delete quiet and inert while the impact loads", async () => {
   expect(confirm(el).disabled).toBe(true);
 });
 
+it("the loading line is spoken by changing the text of a status line already in the page", async () => {
+  const el = await mount(impactOf());
+  const before = el.shadowRoot!.querySelector<HTMLElement>("[role=status]");
+  expect(before).not.toBeNull();
+  expect(before!.textContent!.trim()).toBe("");
+  expect(before!.getBoundingClientRect().height).toBe(0);
+  el.impact = undefined;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBe(before);
+  expect(before!.textContent!.trim()).toBe("Checking what changes…");
+  expect(before!.querySelector("wt-spinner")).not.toBeNull();
+  expect(before!.getBoundingClientRect().height).toBeGreaterThan(0);
+});
+
 it("says the read failed and offers Try again", async () => {
   const el = await mount();
   el.readError = "What deleting it changes could not be read.";
