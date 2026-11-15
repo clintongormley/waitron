@@ -262,8 +262,8 @@ export class StreamSettingsPanel extends LitElement {
           composed: true,
           detail: {
             refused:
-              this.failure?.code === "permission.denied" ||
-              this.readFailure?.code === "permission.denied",
+              this.failure?.code === "authorization.not_permitted" ||
+              this.readFailure?.code === "authorization.not_permitted",
           },
         }),
       );

@@ -2772,8 +2772,18 @@ it("retries a failed mint only on Retry and keeps the resulting key on refresh",
 
 it("offers one administrator sign-in for permission refusals", async () => {
   const api = stubApi({
-    getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }),
-    getStreamSettings: vi.fn().mockRejectedValue({ code: "permission.denied" }),
+    getBackupStatus: vi
+      .fn()
+      .mockRejectedValue({
+        code: "authorization.not_permitted",
+        params: { permission: "system.manage" },
+      }),
+    getStreamSettings: vi
+      .fn()
+      .mockRejectedValue({
+        code: "authorization.not_permitted",
+        params: { permission: "system.manage" },
+      }),
   });
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
   await flush(el);
@@ -2818,7 +2828,14 @@ it("recovers a stale held-key Apply refusal by making a key before another Apply
 it("offers administrator sign-in when only the stream panel refuses permission", async () => {
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
     api: stubApi(
-      { getStreamSettings: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
+      {
+        getStreamSettings: vi
+          .fn()
+          .mockRejectedValue({
+            code: "authorization.not_permitted",
+            params: { permission: "system.manage" },
+          }),
+      },
       ENABLED,
     ),
   });
@@ -2861,7 +2878,14 @@ it.each(["settings", "turn-on"])(
   "offers administrator sign-in beside a refused %s Save",
   async (source) => {
     const api = stubApi(
-      { applyBackup: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
+      {
+        applyBackup: vi
+          .fn()
+          .mockRejectedValue({
+            code: "authorization.not_permitted",
+            params: { permission: "system.manage" },
+          }),
+      },
       source === "settings" ? ENABLED : { ...OFF, recoveryKeySet: true },
     );
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });

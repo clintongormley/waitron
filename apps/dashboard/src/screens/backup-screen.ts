@@ -1205,7 +1205,7 @@ export class BackupScreen extends LitElement {
       ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
-      ${alertKey === "permission.denied" && !this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
+      ${alertKey === "authorization.not_permitted" && !this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
       <dashboard-backup-settings-evidence
         .api=${this.api}
         .open=${this.evidenceOpen}
@@ -1225,7 +1225,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #formNeedsAdmin(): boolean {
-    return this.formRefusal?.code === "permission.denied";
+    return this.formRefusal?.code === "authorization.not_permitted";
   }
 
   #adminAction(): TemplateResult {

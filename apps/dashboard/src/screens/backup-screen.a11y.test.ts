@@ -154,7 +154,14 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const overrides: Partial<DashboardApi> =
       problem === "mint"
         ? { mintBackupKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) }
-        : { getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }) };
+        : {
+            getBackupStatus: vi
+              .fn()
+              .mockRejectedValue({
+                code: "authorization.not_permitted",
+                params: { permission: "system.manage" },
+              }),
+          };
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       { api: stubApi(OFF, overrides) },
