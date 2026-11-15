@@ -755,7 +755,6 @@ describe("a variant's takeaway VAT class", () => {
             menuId: f.menuId,
             parentId: cola.id,
             name,
-            pricingUnit: null,
             unitPrice: null,
             vatClass: null,
             dietaryDeclarations: null,
