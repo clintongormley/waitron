@@ -362,6 +362,66 @@ describe("device cookie helpers", () => {
     expect(hostOnly.headers.get("set-cookie") ?? "").not.toMatch(/Domain=/i);
   });
 
+  // A till enrolled while the cookie was host-only keeps that cookie beside a new domain one, and
+  // the browser sends the old one first; the expiry must come BEFORE the set, or a browser that
+  // treats both as one entry would delete the new cookie.
+  it("setDeviceCookie expires a host-only cookie before setting the domain one", async () => {
+    const app = new Hono();
+    app.get("/set", (c) => {
+      setDeviceCookie(c, COOKIE_VALUE, true, "waitron.local");
+      return c.body(null, 204);
+    });
+    const res = await app.request("/set", { headers: { host: "waitron.local" } });
+    const cookies = res.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    const [expiry, set] = cookies as [string, string];
+    expect(expiry).toMatch(new RegExp(`^${DEVICE_COOKIE}=;`));
+    expect(expiry).toMatch(/Max-Age=0/i);
+    expect(expiry).toMatch(/Path=\//i);
+    expect(expiry).not.toMatch(/Domain=/i);
+    expect(set).toContain(`${DEVICE_COOKIE}=${COOKIE_VALUE}`);
+    expect(set).toMatch(/Domain=waitron\.local/i);
+  });
+
+  it("setDeviceCookie sends one cookie when no domain resolves", async () => {
+    const app = new Hono();
+    app.get("/set", (c) => {
+      setDeviceCookie(c, COOKIE_VALUE, true, "deli.waitron.app");
+      return c.body(null, 204);
+    });
+    const outside = await app.request("/set", { headers: { host: "192.168.10.5:8080" } });
+    expect(outside.headers.getSetCookie()).toEqual([
+      expect.stringContaining(`${DEVICE_COOKIE}=${COOKIE_VALUE}`),
+    ]);
+    const app2 = new Hono();
+    app2.get("/set", (c) => {
+      setDeviceCookie(c, COOKIE_VALUE, true);
+      return c.body(null, 204);
+    });
+    const none = await app2.request("/set", { headers: { host: "waitron.local" } });
+    expect(none.headers.getSetCookie()).toEqual([
+      expect.stringContaining(`${DEVICE_COOKIE}=${COOKIE_VALUE}`),
+    ]);
+  });
+
+  it("clearDeviceCookie clears both the domain and the host-only cookie", async () => {
+    const app = new Hono();
+    app.get("/clear", (c) => {
+      clearDeviceCookie(c, "waitron.local");
+      return c.body(null, 204);
+    });
+    const res = await app.request("/clear", { headers: { host: "waitron.local" } });
+    const cookies = res.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    for (const cookie of cookies) {
+      expect(cookie).toMatch(new RegExp(`^${DEVICE_COOKIE}=;`));
+      expect(cookie).toMatch(/Max-Age=0/i);
+      expect(cookie).toMatch(/Path=\//i);
+    }
+    expect(cookies.filter((cookie) => /Domain=waitron\.local/i.test(cookie))).toHaveLength(1);
+    expect(cookies.filter((cookie) => !/Domain=/i.test(cookie))).toHaveLength(1);
+  });
+
   describe("cookieDomainFor", () => {
     it("scopes to the venue domain for a host under it (port stripped, case-insensitive)", () => {
       expect(cookieDomainFor("box.deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");

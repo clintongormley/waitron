@@ -91,6 +91,12 @@ Checked at `main` bf034bc29. ✓ = re-opened by the designer; "sweep" = read by 
   past the browser's own certificate warning (`trust-check.ts:1-2`, round 2); the till ships no
   service worker. ✓ Its device cookie is host-only on `.local` (`device-session.ts:30-40`).
   So a renamed server is a new origin to every device: no cookie, no stored data, no installed app.
+
+  > **Pointer, 2026-11-15.** The box image now sets `WAITRON_VENUE_DOMAIN=waitron.local`, so a
+  > device cookie set at `waitron.local` names that domain; one set at a name outside it, with that
+  > setting left at its default, is host-only. A renamed server still gets no cookie from
+  > `waitron.local`.
+
 - The print agent on the server dials `https://127.0.0.1` (sweep, `deploy/compose.yml:120`). ✓ It
   fetches the authority from `http://<host>/ca.crt` at start and after a certificate error, at most
   once an hour once it holds one, with no timer (`apps/print-agent/src/server-ca.ts:9-18,82-84,132`;

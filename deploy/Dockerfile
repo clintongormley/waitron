@@ -282,7 +282,7 @@ COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party
 # Copying the root rather than the folder lets a build that is not a release copy nothing.
 COPY --from=declaration --chown=waitron:waitron /release-root/ /app/
 
-# Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
+# Set in the image: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer. Every writable path is a volume.
 #
 # WAITRON_HTTP_HOST must be 0.0.0.0: config.ts defaults it to 127.0.0.1, which is right for a dev
@@ -297,12 +297,16 @@ COPY --from=declaration --chown=waitron:waitron /release-root/ /app/
 # live gets server.config_missing on every boot until the entrypoint's counter reaches three and the
 # box serves the recovery page instead — it never trades again without an operator.
 #
-# These are the ON-PREM default, not a fixed fact: they are right only for a box reached at
-# waitron.local, so compose.yml passes both from the box's .env with these as the fallback (the
-# image's ENV beats trading.env, box-env.ts, so .env is the only override an operator has). They are
+# WAITRON_VENUE_DOMAIN is the domain a till's device cookie names, so the cookie reaches each of the
+# venue's servers at its own name after a switch.
+#
+# These three (the two WAITRON_MANAGEMENT_* values and WAITRON_VENUE_DOMAIN) are the ON-PREM
+# default, not a fixed fact: they are right only for a box reached at waitron.local, so compose.yml
+# passes each from the box's .env with these as the fallback (the image's ENV beats trading.env,
+# box-env.ts, so .env is the only override an operator has). They are
 # copies of box-name.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and waitron.sh's
-# QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
-# fail rather than ship a box whose certificate, QR and relying party disagree.
+# QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one copy fail rather
+# than ship a box whose certificate, QR, relying party and device-cookie domain disagree.
 ARG WAITRON_BUILD_ID
 # The software producer's settings, which the release records carry. CI passes them from repository
 # secrets; a build given none gets them set and empty, which the server reads as unset. compose.yml
@@ -326,6 +330,7 @@ ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_HTTP_HOST=0.0.0.0 \
   WAITRON_MANAGEMENT_RP_ID=waitron.local \
   WAITRON_MANAGEMENT_ORIGIN=https://waitron.local \
+  WAITRON_VENUE_DOMAIN=waitron.local \
   NODE_ENV=production
 
 USER waitron

@@ -13,7 +13,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { boxHostnameFor } from "../apps/server/src/box-name.js";
 import { loadConfig } from "../apps/server/src/config.js";
+import { cookieDomainFor } from "../apps/server/src/device-session.js";
 import { esbuildArgs } from "./bundle-node.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
@@ -21,10 +23,10 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * The container image's environment, checked against the server that has to boot on it.
  *
  * It reads TEXT for everything outside the server's own module graph — the Dockerfile's `ENV`
- * block, compose's two defaults, the shell's `BOX_URL`, and `box-name.ts`'s hostname literal. So these
- * are PINS between four copies of one string, not a single source anything derives from; the guard
- * is what makes a change to one of them fail loudly rather than ship a box whose certificate,
- * QR and passkey relying party disagree.
+ * block, compose's defaults, the shell's `BOX_URL`, and `box-name.ts`'s hostname literal. So these
+ * are PINS between copies of one string, not a single source anything derives from; the guard is
+ * what makes a change to one of them fail loudly rather than ship a box whose certificate, QR,
+ * passkey relying party and device-cookie domain disagree.
  */
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (path: string): string => readFileSync(`${ROOT}${path}`, "utf8");
@@ -238,6 +240,14 @@ describe("the container image's environment", () => {
       expect(error.params).toEqual({ variable });
     },
   );
+
+  it("scopes a till's device cookie to the venue's domain, so it reaches each box's own name", () => {
+    const config = load({ ...IMAGE_ENV, WAITRON_ENV: "production" });
+    const ownName = boxHostnameFor("3f2a9c4e-1b7d-4e8a-9c3f-5d6e7f8a9b0c");
+    expect(cookieDomainFor(ownName, config.venueDomain)).toBe(HOSTNAME);
+    expect(cookieDomainFor(HOSTNAME, config.venueDomain)).toBe(HOSTNAME);
+    expect(cookieDomainFor("192.168.10.5", config.venueDomain)).toBeUndefined();
+  });
 
   it("passes no backup setting and the Cloud origin through compose", () => {
     const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
@@ -1005,6 +1015,7 @@ describe("every copy of the box's hostname", () => {
   it("is the one box-name.ts declares", () => {
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_RP_ID).toBe(HOSTNAME);
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_ORIGIN).toBe(`https://${HOSTNAME}`);
+    expect(IMAGE_ENV.WAITRON_VENUE_DOMAIN).toBe(HOSTNAME);
     // compose's operator-override defaults, which must not disagree with the image they default to.
     expect(
       only(
@@ -1020,6 +1031,13 @@ describe("every copy of the box's hostname", () => {
         "compose origin",
       ),
     ).toBe(`https://${HOSTNAME}`);
+    expect(
+      only(
+        COMPOSE,
+        /WAITRON_VENUE_DOMAIN: \$\{WAITRON_VENUE_DOMAIN:-([^}]+)\}/,
+        "compose venue domain",
+      ),
+    ).toBe(HOSTNAME);
     // The URL in the QR code the restaurant actually scans.
     expect(only(WAITRON_SH, /BOX_URL="([^"]+)"/, "waitron.sh BOX_URL")).toBe(`https://${HOSTNAME}`);
   });

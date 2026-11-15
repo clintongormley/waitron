@@ -52,6 +52,12 @@ Whether that address is ever a server's own name for a till opened at `waitron.l
 whether a till would arrive there without its device cookie, was read, not run; the two-box
 rehearsal or a test on the router would settle it. The question is with the watcher.
 
+> **Pointer, 2026-11-15.** The router does move a till opened at
+> `waitron.local` to a server's own name (the case "follows the promoted box at its own name, then
+> back to the page when the page answers as it" in `apps/till/src/api/server-router.test.ts`), and
+> the box image now sets `WAITRON_VENUE_DOMAIN=waitron.local` (`deploy/Dockerfile`), so a box sets
+> the first row's cookie.
+
 ### A passkey made at the venue's name works at a server's own name, and only when that server is listed
 
 Before the run, the failing case was written down as: the browser refuses with a `SecurityError`,
@@ -100,5 +106,7 @@ joined; `<id>` is a box's id as its label shows it.
 5. **No certificate installed.** On a phone that has not installed the venue's certificate, scan
    the label. Does the page open, and does a passkey work? The answer decides whether the guide asks
    managers to install the certificate on their phone at `/setup/trust`.
+6. **The device sign-in across the switch.** Enrol a till at `https://waitron.local`, switch to the
+   spare, and check the till still works at the spare's own name without being enrolled again.
 
 Write each answer, with the device and its system version, under this list.

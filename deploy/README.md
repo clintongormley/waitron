@@ -849,6 +849,11 @@ have to be set there rather than in the box's own state, because the image's `EN
 the boot: the box comes up, and then no passkey can ever be registered, because the browser checks
 the relying party against the name in the address bar and raises `SecurityError` at registration.
 
+The image also sets `WAITRON_VENUE_DOMAIN=waitron.local`, so a till's device cookie names the
+venue's domain and still reaches each server at its own name (`box-….waitron.local`) after a
+switch. It can be overridden in `.env`, like the two above. A till that reaches the box at a name or
+address outside that domain gets a cookie for that name or address only.
+
 `WAITRON_ENV` is deliberately NOT in this file. The wizard decides whether a box is a demo or a live
 one and writes that into the `state` volume, so "`production` must be typed out" keeps its one home:
 the wizard, not a file on the box.
