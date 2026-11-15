@@ -56,7 +56,7 @@ export async function resolveOrderDining(
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
   const policy = zone.dining ?? "eat_in";
   let fixed: Dining | null = policy === "till_choice" ? null : policy;
-  if (!(await venueChargesTakeawayVat(tx))) fixed = "eat_in";
+  if (fixed !== "eat_in" && !(await venueChargesTakeawayVat(tx))) fixed = "eat_in";
   if (fixed !== null) {
     if (requested !== undefined && requested !== fixed) {
       throw new AppError("order.dining_fixed", { dining: fixed });

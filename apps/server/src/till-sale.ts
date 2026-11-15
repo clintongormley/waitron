@@ -1243,7 +1243,6 @@ async function payIntegrated(
     }
 
     if (locked !== undefined) {
-      refuseOtherDining(req.id, locked, req.dining);
       await refuseUnavailableFullInvoice(tx, req.id);
     }
     refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
@@ -1292,6 +1291,8 @@ async function payIntegrated(
           : { kind: "recover" as const, captured, attendanceKey };
       }
 
+      // After the recovery above, which files money already taken whatever the till showed.
+      refuseOtherDining(req.id, locked, req.dining);
       await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);

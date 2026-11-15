@@ -1,16 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sales, ticketItems, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining, DiningPolicy } from "@waitron/shared";
-import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
+import {
+  createDepartment,
+  createServiceZone,
+  departments,
+  setDepartmentSalePolicyField,
+} from "@waitron/venue-service";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { createTable } from "./testing/live-table.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import {
   inTx,
   provisionBillVenue,
   seatedWith,
+  tabWith,
   send,
   type BillVenue,
 } from "./testing/bill-venue.js";
@@ -169,6 +177,71 @@ describe("a new order's way of selling", () => {
     await departmentsSell("till_choice", "takeaway");
     const { tabId } = await seatedWith(venue);
     expect(await diningOf(tabId)).toBe("eat_in");
+  });
+
+  it("judges a counter sale delivered to a table by the table's department", async () => {
+    await departmentsSell("takeaway");
+    const tableId = await inTx(venue, async (tx) => {
+      const terrace = await createDepartment(tx, { name: `Terrace ${randomUUID()}` });
+      await setDepartmentSalePolicyField(tx, terrace.id, "dining", "eat_in");
+      const zone = await createServiceZone(tx, {
+        name: `Terrace ${randomUUID()}`,
+        departmentId: terrace.id,
+        orderStart: "table",
+      });
+      await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
+      return (await createTable(tx, venue.cfg, { label: `T-${randomUUID()}`, zoneId: zone.id })).id;
+    });
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: cana(),
+      zoneId: counterZoneId,
+      deliveryTableId: tableId,
+      tender: { method: "cash", amount: "3.00" },
+    });
+    expect(sold.status).toBe(200);
+    expect(await diningOf(workingOrderId)).toBe("eat_in");
+  });
+
+  it("gives a bill split off a takeaway bill the same way", async () => {
+    await departmentsSell("till_choice");
+    const tabId = await tabWith(venue, "Caña", "Tarta");
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, tabId)),
+    );
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId)),
+    );
+    const [line] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2))),
+    );
+    const [party] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${order!.partyId}`,
+    );
+    const path = `/api/bills/${tabId}/move-dishes`;
+    const moved = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      path,
+      await observedBillActionBody(venue.db, path, {
+        partyId: order!.partyId,
+        expectedPartyRevision: party!.revision,
+        lineIds: [line!.id],
+        toBillId: null,
+      }),
+    );
+    expect(moved.status).toBe(200);
+    const newBillId = moved.json.billId as string;
+    expect(newBillId).not.toBe(tabId);
+    expect(await diningOf(newBillId)).toBe("takeaway");
   });
 
   it.each([null, "", "delivery", 1])(
