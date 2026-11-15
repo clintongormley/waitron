@@ -787,7 +787,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   server.** Left open by A1171 part 3.
   [Detail](backlog/till.md#a-spanish-invoice-recipients-locality-or-province-holding-a-comma-is-refused-only-at-the-server)
 
-- **Small till and floor wording fixes** (bundle of 9, size M). Holds A1259, A934, A920, A912, A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 5, size M). Holds A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
   fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter

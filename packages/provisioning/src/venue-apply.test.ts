@@ -511,7 +511,7 @@ describe("applyVenue", () => {
       },
       {
         module: "adjustments",
-        report: "default cancel reason ready",
+        report: "starter void and comp reasons ready",
       },
     ]);
   });

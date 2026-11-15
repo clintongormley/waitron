@@ -1217,7 +1217,6 @@ export const en = {
   "table.title": "Table order",
   "table.back": "Back to floor",
   "table.loading": "Loading…",
-  "table.pending_title": "To serve",
   "table.sent_title": "Sent",
   "table.sent_counts": "{ready} ready · {firing} firing · {held} held · {served} served",
   "table.row_ready_ago": "Ready {n} min",
@@ -1225,7 +1224,6 @@ export const en = {
   "table.sent_other_bill": "Another bill",
   "table.cancelled_charged": "Cancelled, charged",
   "table.served_title": "Served",
-  "table.none_pending": "Nothing to serve",
   "table.serve": "Mark served",
   "table.pay_title": "Charge",
   // `table.course_default` means the product's default course; `table.course_none` an explicit
@@ -2194,7 +2192,7 @@ export const es: Record<StringKey, string> = {
   "device_zones.settings": "Ajustes",
   "device_zones.read_failed": "No se han podido consultar las zonas. Inténtalo de nuevo.",
   "device_zones.write_failed": "No se han podido guardar las zonas. Inténtalo de nuevo.",
-  "device_zones.order_in_zone": "Retén, envía o cancela este pedido antes de ocultar su zona.",
+  "device_zones.order_in_zone": "Aparca, envía o cancela este pedido antes de ocultar su zona.",
   "device_zones.table_order_in_zone":
     "Envía o quita los platos sin enviar antes de ocultar su zona.",
   "device_zones.table_order_pending":
@@ -3287,7 +3285,6 @@ export const es: Record<StringKey, string> = {
   "table.title": "Comanda",
   "table.back": "Volver a la sala",
   "table.loading": "Cargando…",
-  "table.pending_title": "Pendiente de servir",
   "table.sent_title": "Enviado",
   "table.sent_counts":
     "Listos: {ready} · Marchados: {firing} · En espera: {held} · Servidos: {served}",
@@ -3296,7 +3293,6 @@ export const es: Record<StringKey, string> = {
   "table.sent_other_bill": "Otra cuenta",
   "table.cancelled_charged": "Cancelado, cobrado",
   "table.served_title": "Servido",
-  "table.none_pending": "Nada por servir",
   "table.serve": "Marcar servido",
   "table.pay_title": "Cobrar",
   "table.course_label": "Curso",

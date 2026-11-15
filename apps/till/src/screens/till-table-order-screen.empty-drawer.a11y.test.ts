@@ -12,7 +12,6 @@ import "./till-table-order-screen.js";
 import {
   closeTableMenu,
   openTableMenu,
-  tableMenuAndSwitcherText,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
@@ -40,7 +39,6 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
         const menu = q("[data-table-menu]");
         expect(menu.checkVisibility()).toBe(true);
         expect(q(".pending")).toBeNull();
-        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.none_pending"));
         expect(q("[data-order-total]").textContent).toContain(formatMoney("0.00", currentLocale()));
         await expectNoA11yViolations(host);
 
@@ -100,7 +98,6 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
         expect(served.textContent).toContain("Recorded served dish");
         await openTableMenu(el);
         expect(q(".pending")).toBeNull();
-        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.pending_title"));
         expect(el.getBoundingClientRect().width).toBe(width);
         expect(window.innerWidth).toBe(width);
       },

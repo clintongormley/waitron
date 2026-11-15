@@ -86,7 +86,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
           names: starterNames(STARTER_REASON_NAMES, english, languages),
         });
       }
-      return "default cancel reason ready";
+      return "starter void and comp reasons ready";
     },
   },
 };
