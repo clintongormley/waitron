@@ -616,7 +616,7 @@ describe("Management API staff + session routes", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(
-        invitationBody("Ana", "ana@x.com", { roleIds: [builtIns.staff, builtIns.supervisor] }),
+        invitationBody("Anna", "ana@x.com", { roleIds: [builtIns.staff, builtIns.supervisor] }),
       ),
     });
     expect(res.status).toBe(201);
