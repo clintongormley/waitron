@@ -95,6 +95,33 @@ describe("SetupConfigurationPreviewScreen", () => {
     expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe("Review configuration");
   });
 
+  it("shows the same review when the export's address fields are empty", async () => {
+    const populated = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview },
+    );
+    const expected = populated.el.shadowRoot!.textContent;
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      {
+        preview: {
+          ...preview,
+          venue: {
+            ...preview.venue,
+            addressLine1: null,
+            postalCode: null,
+            city: null,
+            province: null,
+          },
+        },
+      },
+    );
+    expect(el.shadowRoot!.textContent).toBe(expected);
+    expect(el.shadowRoot!.textContent).toContain("Prepared SL (B12345678)");
+    expect(el.shadowRoot!.textContent).toContain("printers");
+    expect(el.shadowRoot!.textContent).not.toContain("null");
+  });
+
   it("says so when no hardware needs reconnecting", async () => {
     const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
       "setup-configuration-preview-screen",

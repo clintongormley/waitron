@@ -7,7 +7,12 @@ import indexHtml from "../index.html?raw";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
-import { SetupApi, type ProvisionBody, type SetupStatus } from "./api/client.js";
+import {
+  SetupApi,
+  type ConfigurationPreview,
+  type ProvisionBody,
+  type SetupStatus,
+} from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
@@ -794,10 +799,11 @@ describe("setup-app", () => {
       rectificativeSeriesCode: "NEWR",
     };
 
-    async function staged(api: Partial<Record<keyof SetupApi, unknown>> = {}) {
-      const stageConfiguration = vi
-        .fn()
-        .mockResolvedValue({ venue: exported, counts: {}, reconnect: [] });
+    async function staged(
+      api: Partial<Record<keyof SetupApi, unknown>> = {},
+      venue: ConfigurationPreview["venue"] = exported,
+    ) {
+      const stageConfiguration = vi.fn().mockResolvedValue({ venue, counts: {}, reconnect: [] });
       const el = await mountSetupApp(stubApi({ stageConfiguration, ...api }));
       patch(el, { mode: "live" });
       configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
@@ -866,6 +872,28 @@ describe("setup-app", () => {
       expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
       expect(body.configurationImport).toBe(true);
       expect(body.venue).toMatchObject(sixFields);
+    });
+
+    it("leaves an export's empty address fields out of the draft, so the form shows them empty", async () => {
+      const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision }, { ...exported, ...emptyAddress });
+      const drafted = readDraft(el).venue as Record<string, unknown>;
+      for (const key of Object.keys(emptyAddress)) expect(Object.hasOwn(drafted, key)).toBe(false);
+      expect(drafted).toMatchObject({ name: "Prepared", taxId: "B12345678" });
+      await choose(el, false);
+      goto(el, "venue");
+      await el.updateComplete;
+      const venue = await screenHost(el, "venue");
+      expect(
+        Object.fromEntries(Object.keys(emptyAddress).map((key) => [key, venueValue(venue, key)])),
+      ).toEqual({ addressLine1: "", postalCode: "", city: "", province: "" });
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody;
+      const sent = body.venue as unknown as Record<string, unknown>;
+      expect(Object.keys(emptyAddress).filter((key) => sent[key] === null)).toEqual([]);
+      expect(body.venue.addressLine2).toBeNull();
     });
 
     it("sends no operation description from the export", async () => {
