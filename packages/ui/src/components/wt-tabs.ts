@@ -21,6 +21,12 @@ export interface TabItem {
 /** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
 const FADE_SPACES = 2;
 
+// Chromium leaves the strip at a whole pixel (asked for 155.33, it stops at 155), so a distance
+// that brings an edge in is rounded up, landing that edge inside the strip, not a fraction past it.
+function scrollStrip(bar: HTMLElement, by: number): void {
+  bar.scrollLeft += by > 0 ? Math.ceil(by) : Math.floor(by);
+}
+
 @customElement("wt-tabs")
 export class WtTabs extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -291,9 +297,11 @@ export class WtTabs extends LitElement {
     const barBounds = bar.getBoundingClientRect();
     const tabBounds = selected.getBoundingClientRect();
     const rtl = getComputedStyle(bar).direction === "rtl";
-    // A tab wider than the strip shows its start, so its label reads from the beginning.
+    // A tab wider than the strip shows its start, so its label reads from the beginning; rounded
+    // like `scrollStrip`, toward keeping that start inside.
     if (tabBounds.width > barBounds.width) {
-      bar.scrollLeft += rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      const by = rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      bar.scrollLeft += rtl ? Math.ceil(by) : Math.floor(by);
     } else {
       // Stop short of a faded end wherever another tab lies beyond it, so that tab is the faint one.
       const fade = this.#fadeWidth(bar, selected);
@@ -301,8 +309,8 @@ export class WtTabs extends LitElement {
       const after = index < tabs.length - 1 ? fade : 0;
       const toLeft = tabBounds.left - barBounds.left - (rtl ? after : before);
       const toRight = tabBounds.right - barBounds.right + (rtl ? before : after);
-      if (rtl ? toRight > 0 : toLeft < 0) bar.scrollLeft += rtl ? toRight : toLeft;
-      else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
+      if (rtl ? toRight > 0 : toLeft < 0) scrollStrip(bar, rtl ? toRight : toLeft);
+      else if (rtl ? toLeft < 0 : toRight > 0) scrollStrip(bar, rtl ? toLeft : toRight);
     }
     this.#shownScroll = bar.scrollLeft;
   }

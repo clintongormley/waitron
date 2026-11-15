@@ -424,8 +424,8 @@ test("a selected tab wider than the strip shows its start, cut where the action 
     .getBoundingClientRect();
   expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
   expect(tablist(el).scrollLeft).toBeGreaterThan(0);
-  expect(tab.left).toBeGreaterThanOrEqual(strip.left - 1);
-  expect(tab.left).toBeLessThanOrEqual(strip.left + 1);
+  expect(tab.left).toBeGreaterThanOrEqual(strip.left);
+  expect(tab.left).toBeLessThan(strip.left + 1);
   expect(strip.right).toBeLessThanOrEqual(action.left + 1);
 });
 
@@ -442,8 +442,9 @@ test.each(["ltr", "rtl"] as const)(
     const tab = buttons(el)[2]!.getBoundingClientRect();
     expect(strip.left).toBeGreaterThanOrEqual(40);
     expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
-    if (dir === "ltr") expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
-    else expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+    const start = dir === "ltr" ? tab.left - strip.left : strip.right - tab.right;
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(start).toBeLessThan(1);
   },
 );
 
@@ -457,7 +458,8 @@ test("right to left, a selected tab wider than the strip shows its start at the 
   const tab = buttons(el)[2]!.getBoundingClientRect();
   expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
   expect(tablist(el).scrollLeft).toBeLessThan(0);
-  expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+  expect(strip.right - tab.right).toBeGreaterThanOrEqual(0);
+  expect(strip.right - tab.right).toBeLessThan(1);
 });
 
 test("right to left, a selected tab that fits scrolls in only as far as its end", async () => {
@@ -647,8 +649,8 @@ function expectSelectedInView(el: WtTabs) {
   const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
   const strip = tablist(el).getBoundingClientRect();
   const box = selected.getBoundingClientRect();
-  expect(box.left).toBeGreaterThanOrEqual(strip.left - 1);
-  expect(box.right).toBeLessThanOrEqual(strip.right + 1);
+  expect(box.left).toBeGreaterThanOrEqual(strip.left);
+  expect(box.right).toBeLessThanOrEqual(strip.right);
 }
 async function selectLastWide() {
   const el = await setup();
@@ -1003,18 +1005,20 @@ test("a marked tab keeps its colour under the fade, which masks the strip and no
 function fadeWidth(el: WtTabs): number {
   return 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6"));
 }
-/** The selected tab lies clear of each faded end, so no part of it is drawn faint. */
+/** The selected tab lies clear of each faded end, so no part of it is drawn faint. A fade is
+ * never wider than half the room beside the tab. */
 function expectSelectedClearOfFade(el: WtTabs) {
   expectSelectedInView(el);
   const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
   const strip = tablist(el).getBoundingClientRect();
   const box = selected.getBoundingClientRect();
+  const fade = Math.min(fadeWidth(el), (strip.width - box.width) / 2);
   const rtl = getComputedStyle(tablist(el)).direction === "rtl";
   const overflow = el.dataset.overflow ?? "";
   const leftCut = ["both", rtl ? "end" : "start"].includes(overflow);
   const rightCut = ["both", rtl ? "start" : "end"].includes(overflow);
-  if (leftCut) expect(box.left).toBeGreaterThanOrEqual(strip.left + fadeWidth(el) - 1);
-  if (rightCut) expect(box.right).toBeLessThanOrEqual(strip.right - fadeWidth(el) + 1);
+  if (leftCut) expect(box.left).toBeGreaterThanOrEqual(strip.left + fade - 1);
+  if (rightCut) expect(box.right).toBeLessThanOrEqual(strip.right - fade + 1);
 }
 
 test.each(["ltr", "rtl"] as const)(
@@ -1050,8 +1054,10 @@ test.each(["ltr", "rtl"] as const)(
     const strip = tablist(el).getBoundingClientRect();
     const box = buttons(el)[1]!.getBoundingClientRect();
     expect(el.dataset.overflow).toBe("both");
-    if (dir === "ltr") expect(box.left - strip.left).toBeCloseTo(40, 0);
-    else expect(strip.right - box.right).toBeCloseTo(40, 0);
+    // The strip stops at a whole pixel, so the tab lands up to a pixel clear of the fade.
+    const short = dir === "ltr" ? box.left - strip.left : strip.right - box.right;
+    expect(short).toBeGreaterThanOrEqual(40);
+    expect(short).toBeLessThan(41);
   },
 );
 
@@ -1302,17 +1308,18 @@ test.each(["ltr", "rtl"] as const)(
 
 // Chromium rounds scrollWidth to the nearest pixel but cuts a right-to-left strip's far-end scroll
 // position toward zero, so a strip pulled back to an end of 70.69 px reports 70 against an end of
-// 71, the position it was left at.
+// 71, the position it was left at. The widths are fixed before the tab is selected: with labels
+// wide enough, the strip would start at its end, already past that position.
 test("rtl, a selected tab that shrinks, pulling the strip back a pixel to an end it rounds up to where it was, and then grows is scrolled back so all of it is in view", async () => {
   const el = await setup();
   host.dir = "rtl";
   host.style.width = "300px";
-  el.value = "routes";
-  await el.updateComplete;
   const [first, second, selected] = buttons(el);
   first!.style.width = "100px";
   second!.style.width = "100px";
   selected!.style.width = "150.7px";
+  el.value = "routes";
+  await el.updateComplete;
   await frames();
   const shown = Math.abs(tablist(el).scrollLeft);
   selected!.style.width = "146.7px";
