@@ -1,5 +1,5 @@
 import type { WaitronDefaults } from "./defaults.js";
-import { drawnSize, type ThemeText } from "./text.js";
+import { drawnSize, ownSize, type ThemeText } from "./text.js";
 
 export const THEME_COLOURS = [
   "bg",
@@ -103,10 +103,7 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
   );
 }
 
-/**
- * The four sizes — each hand-set size, else the one in `defaults` — times `textScale`, rounded half
- * up to whole pixels.
- */
+/** Round half up at a 16px root before converting to rem, preserving saved numeric sizes. */
 export function fontSizes(
   textScale: TextScale,
   defaults: WaitronDefaults,
@@ -114,10 +111,9 @@ export function fontSizes(
 ): Record<string, string> {
   return Object.fromEntries(
     THEME_FONT_SIZES.map((name) => {
-      const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
-      if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
       const key = name.slice("--wt-font-size-".length) as keyof NonNullable<ThemeText["size"]>;
-      return [name, `${drawnSize(size?.[key] ?? Number(match[1]), textScale)}px`];
+      const fallback = ownSize(key, defaults);
+      return [name, `${drawnSize(size?.[key] ?? fallback, textScale) / 16}rem`];
     }),
   );
 }

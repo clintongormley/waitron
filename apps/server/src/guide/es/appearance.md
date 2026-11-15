@@ -95,10 +95,12 @@ página y abrir otro tema desde la tarjeta Temas te lo preguntan antes.
 
 ## Agranda el texto {#text-size}
 
+Para agrandar el texto solo en este dispositivo, usa el zoom o la preferencia de tamaño de texto
+de tu navegador. El **Tamaño del texto** del local afecta a las pantallas de todos.
+
 El control **Tamaño del texto** agranda el texto de todos los paneles, cajas, terminales de camarero
-y pantallas de estación: cada uno de los cuatro tamaños de texto crece en el mismo porcentaje,
-redondeado al píxel. El 100 % es el tamaño de Waitron, y el 130 %, el mayor. Los espacios no
-cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
+y pantallas de estación: cada uno de los cuatro tamaños de texto crece en el mismo porcentaje.
+El 100 % es el tamaño de Waitron, y el 130 %, el mayor. Los espacios no cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
 que un nombre largo que ya no cabe ocupa otra línea.
 
 En una caja o un terminal de camarero de un local cuyo [idioma de contenido

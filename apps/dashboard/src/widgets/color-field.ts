@@ -323,7 +323,7 @@ export const colourValueStyles = css`
     flex: none;
     width: calc(7ch + 2 * var(--wt-space-3) + var(--wt-space-1));
     font-family: var(--wt-font-family-mono);
-    font-size: var(--wt-font-size-sm);
+    font-size: var(--wt-text-control-font-size);
   }
   .colour-value input[type="color"] {
     flex: none;

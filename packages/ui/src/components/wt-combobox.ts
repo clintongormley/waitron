@@ -211,6 +211,7 @@ export class WtCombobox extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
+        font-size: var(--wt-text-control-font-size);
       }
 
       .list,

@@ -1,10 +1,16 @@
+import { chromium } from "playwright";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { GUIDE_PAGE_TOKENS, GUIDE_THEME_KEY, mountGuidePages } from "./guide-pages.js";
+import {
+  GUIDE_PAGE_TOKENS,
+  GUIDE_THEME_KEY,
+  mountGuidePages,
+  renderBoxPage,
+} from "./guide-pages.js";
 import type { Logger } from "./logger.js";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
@@ -377,4 +383,31 @@ it.each(["en", "es"])("serves the email test guide in %s", async (lang) => {
   const html = await response.text();
   expect(html).toContain('<section id="test-results"');
   expect(html).toContain(`<html lang="${lang}">`);
+});
+
+it("standalone guide pages keep fixed type with a larger browser default", async () => {
+  const browser = await chromium.launch({ args: ["--blink-settings=defaultFontSize=32"] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
+      "32px",
+    );
+    await page.setContent(
+      renderBoxPage(
+        "en",
+        "Appearance",
+        "<h1>Appearance</h1><h2>Text size</h2><p>Change the venue's text.</p>",
+      ),
+    );
+    for (const [selector, size] of [
+      ["body", "14px"],
+      ["h1", "22px"],
+      ["h2", "18px"],
+    ])
+      expect(await page.locator(selector!).evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+        size,
+      );
+  } finally {
+    await browser.close();
+  }
 });

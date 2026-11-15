@@ -86,8 +86,8 @@ describe("venueThemeAnswer", () => {
       inUse: { id: ID, choices: { ...LEMON, textScale: 130 } },
       logo: null,
     });
-    expect(larger.css.split("--wt-font-size-md: 18px;\n")).toHaveLength(4);
-    expect(standard.css.split("--wt-font-size-md: 14px;\n")).toHaveLength(4);
+    expect(larger.css.split("--wt-font-size-md: 1.125rem;\n")).toHaveLength(4);
+    expect(standard.css.split("--wt-font-size-md: 0.875rem;\n")).toHaveLength(4);
     expect(larger.hash).not.toBe(standard.hash);
   });
 

@@ -218,7 +218,7 @@ describe("till-party-name-dialog", () => {
         await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
         await measured();
         const before = drawn(el);
-        stylePlaceholder(el, "letter-spacing: 2px");
+        stylePlaceholder(el, "letter-spacing: 12px");
         expect(drawn(el).width(before.placeholder)).toBeGreaterThan(before.textBox);
 
         document.fonts.dispatchEvent(new Event("loadingdone"));

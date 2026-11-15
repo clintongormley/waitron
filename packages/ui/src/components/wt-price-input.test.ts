@@ -748,13 +748,13 @@ function field(el: Element) {
   };
 }
 
-test("an empty price field's resting label is drawn at the size its typed amount is drawn at", async () => {
+test("an empty price field's resting label keeps the body size while typed text has a minimum", async () => {
   const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
   const { field: box, label, input } = field(el);
   expect(box.getAttribute("data-label")).toBe("rest");
-  expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(input).fontSize);
+  expect(getComputedStyle(label!).fontSize).toBe("14px");
   host.style.setProperty("--wt-font-size-md", "15px");
-  expect(getComputedStyle(input).fontSize).toBe("15px");
+  expect(getComputedStyle(input).fontSize).toBe("16px");
   expect(getComputedStyle(label!).fontSize).toBe("15px");
 });
 
@@ -1415,5 +1415,26 @@ test.each([
   async (_, attributes, shown) => {
     const el = await mount(`<wt-price-input placeholder="4.50" ${attributes}></wt-price-input>`);
     expect(el.shadowRoot!.querySelector("input")!.placeholder).toBe(shown);
+  },
+);
+
+test.each([false, true])(
+  "the %s range-width amount has room for its text at double browser text size",
+  async (range) => {
+    const rootStyle = document.documentElement.getAttribute("style");
+    onTestFinished(() => {
+      if (rootStyle === null) document.documentElement.removeAttribute("style");
+      else document.documentElement.setAttribute("style", rootStyle);
+    });
+    document.documentElement.style.fontSize = "32px";
+    const shown = range ? "1000.00 – 9999.99" : "9999.99";
+    const { input } = await mountPrice(
+      `<wt-price-input label="Price" placeholder="${shown}" style="display:inline-block;${range ? "--wt-price-field-width:var(--wt-price-range-field-width)" : ""}"></wt-price-input>`,
+    );
+    expect(getComputedStyle(input).fontSize).toBe("32px");
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = getComputedStyle(input).font;
+    const content = contentBox(input);
+    expect(context.measureText(shown).width).toBeLessThanOrEqual(content.right - content.left);
   },
 );

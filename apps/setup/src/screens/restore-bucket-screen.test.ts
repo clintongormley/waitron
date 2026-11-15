@@ -212,7 +212,7 @@ describe("SetupRestoreBucketScreen", () => {
       autocapitalize: "off",
       autocomplete: "off",
       font: "fantasy",
-      size: "11px",
+      size: "16px",
     });
     expect(kit!.getAttribute("hint")).toBe(
       "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-2",
@@ -830,3 +830,22 @@ describe("SetupRestoreBucketScreen in Spanish", () => {
     expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe("WAITRON-RECOVERY-KIT-2:abc");
   });
 });
+
+it.each(["16px", "32px"])(
+  "the recovery kit uses the scalable typing minimum at %s root text",
+  async (rootSize) => {
+    const rootStyle = document.documentElement.getAttribute("style");
+    try {
+      document.documentElement.style.fontSize = rootSize;
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+      const field = q(el, "[data-test=kit]") as HTMLElementTagNameMap["wt-textarea"];
+      await field.updateComplete;
+      expect(getComputedStyle(field.shadowRoot!.querySelector("textarea")!).fontSize).toBe(
+        rootSize,
+      );
+    } finally {
+      if (rootStyle === null) document.documentElement.removeAttribute("style");
+      else document.documentElement.setAttribute("style", rootStyle);
+    }
+  },
+);

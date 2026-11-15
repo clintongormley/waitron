@@ -1454,7 +1454,7 @@ it("gives the maximum the standard stepper width, not a wider one of its own", a
       name,
     ).toBe(root);
   }
-  expect(root).toBe("88px");
+  expect(root).toBe("5.5rem");
 });
 
 it("sets Maximum choices just after Minimum choices on a wide screen, not at the far side of the form", async () => {

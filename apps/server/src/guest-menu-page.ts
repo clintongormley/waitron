@@ -13,7 +13,7 @@ import {
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import { NUTRITION_ICONS } from "@waitron/ui-core/nutrition-icons";
 import { escapeHtml as esc } from "./html-page.js";
-import { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
+import { fixedFontValue, GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 
 export interface GuestMenuPaperOptions extends GuestMenuPaperAppearance {
   order?: number[];
@@ -22,7 +22,10 @@ export interface GuestMenuPaperOptions extends GuestMenuPaperAppearance {
 }
 
 const pageTokens = Object.entries(GUIDE_PAGE_TOKENS)
-  .map(([name, value]) => `${name}:${typeof value === "string" ? value : value[0]}`)
+  .map(
+    ([name, value]) =>
+      `${name}:${typeof value === "string" ? fixedFontValue(name, value) : value[0]}`,
+  )
   .join(";");
 
 export function renderGuestMenuPage(

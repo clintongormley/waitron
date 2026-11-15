@@ -103,13 +103,13 @@ test("the value starts where a one-line field's value does", async () => {
   expect(areaTop).toBe(lineTop);
 });
 
-test("an empty textarea's resting label is drawn at the size its typed value is drawn at", async () => {
+test("an empty textarea's resting label keeps the body size while typed text has a minimum", async () => {
   const el = await mount('<wt-textarea label="Note"></wt-textarea>');
   const { field, label, textarea } = parts(el);
   expect(field.getAttribute("data-label")).toBe("rest");
-  expect(getComputedStyle(label).fontSize).toBe(getComputedStyle(textarea).fontSize);
+  expect(getComputedStyle(label).fontSize).toBe("14px");
   host.style.setProperty("--wt-font-size-md", "15px");
-  expect(getComputedStyle(textarea).fontSize).toBe("15px");
+  expect(getComputedStyle(textarea).fontSize).toBe("16px");
   expect(getComputedStyle(label).fontSize).toBe("15px");
 });
 
@@ -425,4 +425,22 @@ test("an error set in the same turn is found by focusFirstInvalid", async () => 
   expect(await focusFirstInvalid(host.querySelector("form")!)).toBe(
     area.shadowRoot!.querySelector("textarea"),
   );
+});
+
+test("typed text has a scalable minimum and respects larger inherited text", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  try {
+    const el = await mount('<wt-textarea label="Value"></wt-textarea>');
+    const control = el.shadowRoot!.querySelector("textarea")!;
+    expect(getComputedStyle(control).fontSize).toBe("16px");
+    document.documentElement.style.fontSize = "32px";
+    expect(getComputedStyle(control).fontSize).toBe("32px");
+    host.style.setProperty("--wt-font-size-md", "2rem");
+    expect(getComputedStyle(control).fontSize).toBe("64px");
+    el.style.fontSize = "72px";
+    expect(getComputedStyle(control).fontSize).toBe("72px");
+  } finally {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  }
 });

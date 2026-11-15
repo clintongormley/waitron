@@ -26338,3 +26338,8 @@ describe("request-device refusals keep their recovery instruction", () => {
     },
   );
 });
+
+it("opts into native system text scaling where supported", () => {
+  const page = new DOMParser().parseFromString(indexHtml, "text/html");
+  expect(page.querySelector('meta[name="text-scale"]')?.getAttribute("content")).toBe("scale");
+});

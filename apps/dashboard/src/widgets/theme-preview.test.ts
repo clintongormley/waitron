@@ -461,7 +461,7 @@ it("each panel draws its text at the theme's sizes", async () => {
         fontSize(box.querySelector(".field-value")!),
         fontSize(box.querySelector(".field-label")!),
         fontSize(box.closest("figure")!.querySelector("h4")!),
-      ]).toEqual([textScale, mode, md, sm, "12px"]);
+      ]).toEqual([textScale, mode, textScale === 100 ? "16px" : md, sm, "12px"]);
     }
     cleanupWidgets();
   }

@@ -89,9 +89,12 @@ theme from the Themes card ask you first.
 
 ## Make text bigger {#text-size}
 
+To make text bigger on just this device, use your browser's zoom or text-size preference.
+The venue's **Text size** setting affects everyone's screens.
+
 The **Text size** slider makes the text of every dashboard, till, handheld and station screen
-bigger: each of the four text sizes grows by the same percentage, to the nearest pixel. 100% is
-Waitron's size, and 130% the largest. Spacing stays as it is, and so does the smallest size of a
+bigger: each of the four text sizes grows by the same percentage. 100% is Waitron's size, and 130%
+the largest. Spacing stays as it is, and so does the smallest size of a
 button, a till's product buttons included, so a long name that no longer fits takes another line.
 
 On a till or handheld whose venue's [default content language](content-and-images.md#languages) is

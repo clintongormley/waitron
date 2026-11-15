@@ -299,3 +299,41 @@ it("shows the publication time in the venue's time zone", async () => {
   expect(await p.locator("time").getAttribute("datetime")).toBe("2026-11-14T05:00:00.000Z");
   expect(await p.locator("time").textContent()).toContain("06:00");
 });
+
+it("the standalone guest menu and its paper keep fixed type with a larger browser default", async () => {
+  const enlarged = await chromium.launch({ args: ["--blink-settings=defaultFontSize=32"] });
+  try {
+    for (const paper of [
+      undefined,
+      {
+        preset: "bistro",
+        font: "serif",
+        spacing: "compact",
+        ink: "#123456",
+        accent: "#654321",
+        key: "end",
+      },
+    ] as const) {
+      const page = await enlarged.newPage({ viewport: { width: 390, height: 844 } });
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
+        "32px",
+      );
+      if (paper) await page.emulateMedia({ media: "print" });
+      await page.setContent(renderGuestMenuPage(menu, "The Restaurant", "en", false, paper));
+      for (const [selector, size] of [
+        ["body", "14px"],
+        ["h1", "22px"],
+        ["h2", "18px"],
+      ])
+        expect(
+          await page
+            .locator(selector!)
+            .first()
+            .evaluate((el) => getComputedStyle(el).fontSize),
+        ).toBe(size);
+      await page.close();
+    }
+  } finally {
+    await enlarged.close();
+  }
+});

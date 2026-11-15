@@ -134,6 +134,7 @@ export class ThemePreview extends LitElement {
         color: var(--wt-color-field-label-focus);
       }
       .field-value {
+        font-size: var(--wt-text-control-font-size);
         contain: inline-size;
         color: var(--wt-color-field-value);
         overflow: hidden;

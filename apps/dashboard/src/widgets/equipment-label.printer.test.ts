@@ -108,30 +108,38 @@ it("prints the browser name larger and bolder than the code", async () => {
   );
   view.dispatchEvent(new Event("afterprint"));
 });
-it("the label prints Waitron's type under a theme at 130%", async () => {
-  const qr =
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-  document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
-  try {
-    const printed = vi.fn<(view: Window) => void>();
-    printEquipmentLabel({ qr, name: "Portable", code: "CODE" }, printed);
-    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
-    const view = printed.mock.calls[0]![0];
-    expect(getComputedStyle(view.frameElement!).getPropertyValue("--wt-font-size-md")).toBe("18px");
-    const root = view.document.documentElement.style;
-    expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");
-    expect(root.getPropertyValue("--wt-font-size-xl")).toBe("22px");
-    expect(root.getPropertyValue("--wt-font-weight-bold")).toBe("600");
-    expect(root.getPropertyValue("--wt-font-family")).toBe(
-      WAITRON_DEFAULTS.structure["--wt-font-family"],
-    );
-    view.dispatchEvent(new Event("afterprint"));
-  } finally {
-    document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
-      (sheet) => sheet !== TEXT_130_SHEET,
-    );
-  }
-});
+it.each(["16px", "32px"])(
+  "the label prints Waitron's type under a theme at 130% with its own document at %s root text",
+  async (rootSize) => {
+    const qr =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+    try {
+      const printed = vi.fn<(view: Window) => void>();
+      printEquipmentLabel({ qr, name: "Portable", code: "CODE" }, printed);
+      await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
+      const view = printed.mock.calls[0]![0];
+      expect(getComputedStyle(view.frameElement!).getPropertyValue("--wt-font-size-md")).toBe(
+        "1.125rem",
+      );
+      const root = view.document.documentElement.style;
+      root.fontSize = rootSize;
+      expect(view.getComputedStyle(view.document.body).fontSize).toBe("14px");
+      expect(view.getComputedStyle(view.document.querySelector("p")!).fontSize).toBe("22px");
+      expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");
+      expect(root.getPropertyValue("--wt-font-size-xl")).toBe("22px");
+      expect(root.getPropertyValue("--wt-font-weight-bold")).toBe("600");
+      expect(root.getPropertyValue("--wt-font-family")).toBe(
+        WAITRON_DEFAULTS.structure["--wt-font-family"],
+      );
+      view.dispatchEvent(new Event("afterprint"));
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== TEXT_130_SHEET,
+      );
+    }
+  },
+);
 it("the label prints Waitron's typeface and Bold under a theme in Serif with Bold 800", async () => {
   const qr =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";

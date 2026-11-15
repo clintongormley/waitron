@@ -86,7 +86,7 @@ it("gives the printed page the colour scheme of the screen it copies its colours
   }
 });
 
-it("the sheet carries Waitron's type and the page's colours under a theme at 130%", () => {
+it("the sheet carries fixed-pixel Waitron type and the page's colours under a theme at 130%", () => {
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
   const source = document.createElement("div");
   document.body.append(source);
@@ -96,7 +96,7 @@ it("the sheet carries Waitron's type and the page's colours under a theme at 130
   try {
     expect(FIXTURE_LIGHT_BG).not.toBe(WAITRON_LIGHT_BG);
     const sourceTokens = getComputedStyle(source);
-    expect(sourceTokens.getPropertyValue("--wt-font-size-md")).toBe("18px");
+    expect(sourceTokens.getPropertyValue("--wt-font-size-md")).toBe("1.125rem");
     const page = new DOMParser().parseFromString(renderNodeRecoveryPack(pack, source), "text/html");
     const root = page.documentElement.style;
     expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");

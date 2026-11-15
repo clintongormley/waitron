@@ -4278,3 +4278,23 @@ test.each(["isComposing", "keyCode 229"] as const)(
     await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
   },
 );
+
+test("search text keeps a 16px minimum and follows doubled browser text", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  try {
+    const { el, trigger } = await mountCombobox(
+      '<wt-combobox label="Choice" search="always"></wt-combobox>',
+    );
+    trigger.click();
+    await el.updateComplete;
+    const control = el.shadowRoot!.querySelector("input.search")!;
+    expect(getComputedStyle(control).fontSize).toBe("16px");
+    document.documentElement.style.fontSize = "32px";
+    expect(getComputedStyle(control).fontSize).toBe("32px");
+    host.style.setProperty("--wt-font-size-md", "2rem");
+    expect(getComputedStyle(control).fontSize).toBe("64px");
+  } finally {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  }
+});

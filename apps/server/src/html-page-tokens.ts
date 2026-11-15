@@ -1,3 +1,5 @@
+import { ownSize, type TextSizeKey } from "@waitron/ui-core/theme";
+
 /** Copies of `packages/ui-core/src/tokens/*.css`, as [light, dark] or one value; `scripts/guide-page-tokens.test.ts` compares them. */
 export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string] | string>> = {
   "--wt-color-bg": ["#f7f7f8", "#101216"],
@@ -20,7 +22,12 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-focus-ring": "2px solid var(--wt-color-focus)",
   "--wt-focus-offset": "2px",
   "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
-  "--wt-font-size-md": "14px",
-  "--wt-font-size-lg": "18px",
-  "--wt-font-size-xl": "22px",
+  "--wt-font-size-md": "0.875rem",
+  "--wt-font-size-lg": "1.125rem",
+  "--wt-font-size-xl": "1.375rem",
 };
+
+export const fixedFontValue = (name: string, value: string): string =>
+  name.startsWith("--wt-font-size-")
+    ? `${ownSize(name.slice("--wt-font-size-".length) as TextSizeKey, { structure: { [name]: value } })}px`
+    : value;

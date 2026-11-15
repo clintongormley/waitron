@@ -14,7 +14,7 @@ export interface GuidePagesDeps {
   root?: string;
 }
 
-import { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
+import { fixedFontValue, GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 export { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 
 export { GUIDE_THEME_KEY } from "./page-theme.js";
@@ -25,7 +25,7 @@ function tokenDeclarations(): string {
   return Object.entries(GUIDE_PAGE_TOKENS)
     .map(([name, value]) =>
       typeof value === "string"
-        ? `${name}: ${value};`
+        ? `${name}: ${fixedFontValue(name, value)};`
         : `${name}: light-dark(${value[0]}, ${value[1]});`,
     )
     .join("\n");

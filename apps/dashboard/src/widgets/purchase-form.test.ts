@@ -968,8 +968,10 @@ describe("purchase-form — a VAT line's layout", () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     const rate = el.shadowRoot!.querySelector<HTMLElement>("[data-test=line-rate-0]")!;
     const token = getComputedStyle(rate).getPropertyValue("--wt-price-field-width").trim();
-    expect(token).not.toBe("");
-    expect(getComputedStyle(rate).minWidth).toBe(token);
+    expect(token).toBe("6.25rem");
+    expect(getComputedStyle(rate).minWidth).toBe("100px");
+    el.style.setProperty("--wt-price-field-width", "123px");
+    expect(getComputedStyle(rate).minWidth).toBe("123px");
   });
 
   it("keeps the VAT-kind dropdown level with its neighbours while they show errors", async () => {
