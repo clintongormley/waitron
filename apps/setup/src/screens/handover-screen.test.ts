@@ -114,6 +114,57 @@ it("cancels a pending read on disconnect and ignores its late answer on reopenin
   }
 });
 
+it.each([
+  ["storage.disk_full", "handover.space"],
+  ["handover.no_room_to_place", "handover.space"],
+  ["handover.source_unreachable", "handover.source"],
+  ["handover.copy_pending", "handover.wait"],
+] as const)("says what a handover waiting on %s is waiting for", async (waitingReason, key) => {
+  const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+  const { t } = await import("../i18n/t.js");
+  const api = new SetupApi(
+    "",
+    vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ body: { ...status, waitingReason } })),
+    ),
+  );
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api,
+    operationId: "move one",
+  });
+  try {
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t(key)));
+    for (const other of ["handover.space", "handover.source", "handover.wait"] as const)
+      if (other !== key) expect(el.shadowRoot!.textContent).not.toContain(t(other));
+  } finally {
+    cleanupWidgets();
+  }
+});
+
+it("reads progress again when the page returns from the back-forward cache, and not on an ordinary show", async () => {
+  const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+  const fetcher = vi.fn<typeof fetch>(
+    async () => new Response(JSON.stringify({ body: { ...status, state: "activated" } })),
+  );
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api: new SetupApi("", fetcher),
+    operationId: "move one",
+  });
+  try {
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+  } finally {
+    cleanupWidgets();
+  }
+});
+
 describe("This device on the handover's clock step", () => {
   const binding = {
     module: "fiscal-verifactu",
