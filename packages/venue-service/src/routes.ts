@@ -361,7 +361,7 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
   return { kind: "cell", ...requireCellChange(body) };
 }
 
-import { stationServiceTimes } from "./station-service-times.js";
+import { stationServiceTimes, stationsServiceTimes } from "./station-service-times.js";
 import {
   readOpeningHoursMonth,
   readOpeningHoursYear,
@@ -495,6 +495,17 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     });
 
     mountFloorPlanSetRoutes(app, ctx, log, run);
+
+    app.get("/management-api/venue-service/stations/service-times", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        if (c.req.query("week") !== undefined)
+          throw new AppError("management.request_invalid", { field: "week" });
+        return c.json(await viewed(sessionId, (tx) => stationsServiceTimes(tx, from, to)));
+      }),
+    );
 
     app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
       run(c, log, async () => {

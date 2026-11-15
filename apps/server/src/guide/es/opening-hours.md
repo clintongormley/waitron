@@ -12,6 +12,12 @@ Para cambiar el horario habitual, elige **Editar la semana estándar de <tempora
 
 Pinta todo el tramo de **Cerrado** de la zona, aunque termine después del cierre actual de su departamento.
 
+## Compara los horarios de las estaciones {#station-hours}
+
+En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** para comparar las estaciones, o una estación para ver qué departamentos le envían pedidos. En Semana, elige **Mostrar todo** para ver los departamentos seguidos de las estaciones. El icono de estación las distingue de las zonas con nombres parecidos.
+
+Los horarios de las estaciones siguen los periodos pintados, sus menús, las rutas y los cierres de las zonas que envían. Para cambiarlos, abre **Periodos** debajo de Mostrar y edita los periodos y sus menús. La estación predeterminada siempre está abierta. La ventana de un día que solo muestra estaciones presenta estos horarios calculados en lugar de acciones de edición.
+
 ## Selecciona varios días {#select-days}
 
 En Año o Mes, selecciona un tramo con Mayús+clic y añade fechas sueltas con Cmd+clic (Ctrl+clic en Windows). En el móvil, mantén pulsada una fecha y arrastra para seleccionar un tramo. Mientras aparezca la barra de selección, toca fechas para añadirlas o quitarlas y elige **Crear un día especial**.

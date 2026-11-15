@@ -113,7 +113,7 @@ describe("seedFloor", () => {
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones where name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
-        select id from kitchen_stations where name = 'Downstairs bar'`);
+        select id from kitchen_stations where name = 'Downstairs bar prep'`);
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];

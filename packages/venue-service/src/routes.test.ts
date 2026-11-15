@@ -3289,15 +3289,19 @@ describe("name-only department creation", () => {
   });
 });
 
-describe("station service-times planning route", () => {
+describe.each(["individual", "batch"])("%s station service-times planning route", (mode) => {
   const path = (id: string, range = "from=2026-10-12&to=2026-10-12") =>
-    `/management-api/venue-service/stations/${id}/service-times?${range}`;
+    `/management-api/venue-service/stations/${mode === "batch" ? "" : `${id}/`}service-times?${range}`;
   it("serves the same read-only default-station answer to managers and supervisors", async () => {
     const f = await fixture();
     for (const cookie of [f.managerCookie, f.supervisorCookie]) {
       const response = await send(f.app, "GET", path(f.stationId), cookie);
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ always: "default", days: [] });
+      expect(await response.json()).toEqual(
+        mode === "batch"
+          ? { [f.stationId]: { always: "default", days: [] } }
+          : { always: "default", days: [] },
+      );
     }
   });
   it.each([
@@ -3328,15 +3332,16 @@ describe("station service-times planning route", () => {
       error: { code: "management.request_invalid", params: { field } },
     });
   });
-  it("refuses an unknown station as not found", async () => {
-    const f = await fixture();
-    const id = randomUUID();
-    const response = await send(f.app, "GET", path(id), f.managerCookie);
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({
-      error: { code: "station.not_found", params: { stationId: id } },
+  if (mode === "individual")
+    it("refuses an unknown station as not found", async () => {
+      const f = await fixture();
+      const id = randomUUID();
+      const response = await send(f.app, "GET", path(id), f.managerCookie);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "station.not_found", params: { stationId: id } },
+      });
     });
-  });
 });
 it("the station planning route returns the configured period ranges for a non-default station", async () => {
   const f = await fixture();

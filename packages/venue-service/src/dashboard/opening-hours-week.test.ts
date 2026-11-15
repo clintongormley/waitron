@@ -817,23 +817,30 @@ const choose = (el: OpeningHoursWeekView, value: string) =>
   );
 
 describe("Opening hours week, a station shown", () => {
-  it("Show lists stations in their own group, after the departments", async () => {
-    for (const [locale, departments, stations] of [
-      ["en", "Departments", "Prep stations"],
-      ["es", "Departamentos", "Estaciones de preparación"],
-    ] as const) {
+  it("Show has pickable parents and indented departments and stations", async () => {
+    for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       const el = await mount({ stations: STATIONS });
-      expect(show(el).options.map(({ value, label, group }) => ({ value, label, group }))).toEqual([
+      expect(show(el).options.map(({ value, label, depth }) => ({ value, label, depth }))).toEqual([
+        {
+          value: "show:all",
+          label: locale === "en" ? "Show all" : "Mostrar todo",
+          depth: undefined,
+        },
         {
           value: "all",
           label: locale === "en" ? "All departments" : "Todos los departamentos",
-          group: undefined,
+          depth: undefined,
         },
-        { value: "rest", label: "Restaurant", group: departments },
-        { value: "bar", label: "Bar", group: departments },
-        { value: "station:grill", label: "Grill", group: stations },
-        { value: "station:cold", label: "Cold kitchen", group: stations },
+        { value: "rest", label: "Restaurant", depth: 1 },
+        { value: "bar", label: "Bar", depth: 1 },
+        {
+          value: "show:stations",
+          label: locale === "en" ? "All prep stations" : "Todas las estaciones de preparación",
+          depth: undefined,
+        },
+        { value: "station:grill", label: "Grill", depth: 1 },
+        { value: "station:cold", label: "Cold kitchen", depth: 1 },
       ]);
       el.remove();
     }
@@ -843,8 +850,8 @@ describe("Opening hours week, a station shown", () => {
     const el = await mount({ departmentId: "bar" });
     expect(show(el).options).toEqual([
       { value: "all", fixed: true, label: "All departments" },
-      { value: "rest", label: "Restaurant" },
-      { value: "bar", label: "Bar" },
+      { value: "rest", label: "Restaurant", depth: 1 },
+      { value: "bar", label: "Bar", depth: 1 },
     ]);
     expect(show(el).value).toBe("bar");
   });
@@ -864,6 +871,7 @@ describe("Opening hours week, a station shown", () => {
 
   it("a station draws a row per sending department, its day names still open the box", async () => {
     const el = await mount({ stations: STATIONS, station: grill() });
+    expect(root(el).querySelector('.row-name wt-icon[name="prep-station"]')).not.toBeNull();
     expect(root(el).querySelectorAll("section")).toHaveLength(7);
     const wednesday = section(el, "2026-12-02");
     expect([...wednesday.querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([

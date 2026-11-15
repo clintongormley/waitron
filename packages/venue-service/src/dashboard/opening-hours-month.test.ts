@@ -37,25 +37,6 @@ async function mount(
   await el.updateComplete;
   return el;
 }
-/** A station's month: one row, the Grill, getting the Restaurant's orders. */
-const STATION = [
-  {
-    id: "grill",
-    name: "Grill",
-    zones: [],
-    periods: DEPARTMENTS[0]!.periods.map(({ id, name, colour }) => ({ id, name, colour })),
-  },
-];
-function stationModel(): OpeningHoursMonth {
-  const model = monthModel();
-  return {
-    ...model,
-    days: model.days.map((day) => ({
-      ...day,
-      departments: [{ departmentId: "grill", ranges: day.departments[0]!.ranges, zones: [] }],
-    })),
-  };
-}
 const root = (el: OpeningHoursMonthView) => el.shadowRoot!;
 const text = (node: Element | null | undefined) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -277,7 +258,11 @@ describe("Opening hours month", () => {
         period.id === "breakfast" ? { ...period, colour: "brown" as const } : period,
       ),
     }));
-    const el = await mount(monthModel(), { departments, stationMode: true });
+    const model = monthModel();
+    const el = await mount(model, {
+      departments,
+      station: { id: "grill", state: "ready", model, departments },
+    });
     applyTokens(el);
     const breakfast = cell(el, "2026-12-07").querySelector<HTMLElement>(".segment")!;
     expect(breakfast.dataset.colour).toBe("brown");
@@ -555,7 +540,7 @@ describe("Opening hours month", () => {
 
   it.each([
     ["the Calendar's month without linkYear", {}],
-    ["station mode", { stationMode: true, readOnly: true }],
+    ["read-only Calendar", { readOnly: true }],
   ] as const)("keeps the year plain text in %s", async (_, extra) => {
     const el = await mount(monthModel(), extra);
     const opened = events<{ year: number }>(el, "month-year-open");
@@ -595,21 +580,6 @@ describe("Opening hours month", () => {
       expect(lefts).toEqual(lefts.map(([shown]) => [shown, lefts[0]![1]]));
     },
   );
-
-  it("keeps station mode as it was", async () => {
-    const el = await mount(monthModel(), {
-      readOnly: true,
-      stationMode: true,
-      departments: DEPARTMENTS.map(({ id, name, periods }) => ({
-        id,
-        name,
-        zones: [],
-        periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
-      })),
-    });
-    expect(root(el).querySelector("season-chips")!.keyOnly).toBe(true);
-    expect(text(testId(el, "rows"))).toBe("Rows: Restaurant · Bar");
-  });
 
   it("steps a month either way from the requested month", async () => {
     const el = await mount(monthModel(), { month: "2027-01" });
@@ -697,123 +667,6 @@ describe("Opening hours month", () => {
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     dayButton(el, "2026-12-14").click();
     expect(sent.map(({ date }) => date)).toEqual(["2026-12-14"]);
-  });
-
-  it("in station mode over one row, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
-    const el = await mount(stationModel(), {
-      readOnly: true,
-      stationMode: true,
-      departments: STATION,
-    });
-    expect(testId(el, "year-back")).toBeNull();
-    expect(root(el).querySelector("wt-combobox")).toBeNull();
-    expect(testId(el, "add-special-day")).toBeNull();
-    expect(root(el).querySelector("season-chips")!.keyOnly).toBe(true);
-    expect(root(el).querySelectorAll("button")).toHaveLength(0);
-    expect(cell(el, "2026-12-09").querySelector(".day")!.getAttribute("role")).toBe("group");
-    expect(testId(el, "rows")).toBeNull();
-    const months = events<{ month: string }>(el, "month-change");
-    testId(el, "previous-month")!.click();
-    testId(el, "next-month")!.click();
-    expect(months).toEqual([{ month: "2026-11" }, { month: "2027-01" }]);
-  });
-
-  it('in station mode, reads "No orders" for a date the station gets nothing', async () => {
-    for (const [locale, words] of [
-      ["en", "No orders"],
-      ["es", "Sin pedidos"],
-    ] as const) {
-      setLocale(locale);
-      const el = await mount(stationModel(), {
-        readOnly: true,
-        stationMode: true,
-        departments: STATION,
-      });
-      const sunday = cell(el, "2026-12-06");
-      expect([...sunday.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
-      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(words);
-      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).not.toContain("Grill");
-      expect(cell(el, "2026-12-07").querySelector('[data-test="no-orders"]')).toBeNull();
-      expect(cell(el, "2026-12-07").querySelectorAll(".track")).toHaveLength(1);
-      el.remove();
-    }
-  });
-
-  it("in station mode with a row per department, keys the rows and names each period's department on hover", async () => {
-    for (const [locale, rows] of [
-      ["en", "Rows: Restaurant · Bar"],
-      ["es", "Filas: Restaurant · Bar"],
-    ] as const) {
-      setLocale(locale);
-      const model = monthModel();
-      const days = model.days.map((day) => ({
-        ...day,
-        departments: day.departments.map((d) => ({
-          ...d,
-          ranges: day.date === "2026-12-15" ? [] : d.ranges,
-          zones: [],
-        })),
-      }));
-      const el = await mount(
-        { ...model, days },
-        {
-          readOnly: true,
-          stationMode: true,
-          departments: DEPARTMENTS.map(({ id, name, periods }) => ({
-            id,
-            name,
-            zones: [],
-            periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
-          })),
-        },
-      );
-      expect(text(testId(el, "rows"))).toBe(rows);
-      const tracks = [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".track")];
-      expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
-      expect(
-        tracks.map((track) =>
-          [...track.querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
-        ),
-      ).toEqual([
-        [
-          "Breakfast (Restaurant) 08:00–11:00",
-          "Lunch (Restaurant) 13:00–16:00",
-          "Dinner (Restaurant) 20:00–23:00",
-        ],
-        ["All day (Bar) 10:00–02:00"],
-      ]);
-      expect(cell(el, "2026-12-07").querySelector(".day")!.getAttribute("aria-label")).toContain(
-        "Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
-      );
-      const words = locale === "en" ? "No orders" : "Sin pedidos";
-      const sunday = cell(el, "2026-12-06");
-      expect([...sunday.querySelectorAll<HTMLElement>(".track")].map((t) => t.dataset.row)).toEqual(
-        ["rest", "bar"],
-      );
-      expect(sunday.querySelectorAll('.track[data-row="rest"] .segment')).toHaveLength(0);
-      expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
-      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(
-        `Restaurant: ${words}, Bar: All day 10:00–02:00`,
-      );
-      const none = cell(el, "2026-12-15");
-      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
-      expect(none.querySelectorAll(".track")).toHaveLength(0);
-      const label = none.querySelector(".day")!.getAttribute("aria-label")!;
-      expect(label.split(words)).toHaveLength(2);
-      expect(label).not.toContain("Restaurant");
-      expect(cell(el, "2026-12-25").querySelectorAll('[data-test="no-orders"]')).toHaveLength(1);
-      el.remove();
-    }
-  });
-
-  it("passes the seasons the month touches to the chips", async () => {
-    const el = await mount(stationModel(), {
-      readOnly: true,
-      stationMode: true,
-      departments: STATION,
-    });
-    const chips = root(el).querySelector("season-chips")!;
-    expect(chips.seasons.map((season) => season.id)).toEqual(["autumn", "winter"]);
   });
 
   it("moves between dates with the arrow keys, holding one Tab stop", async () => {
@@ -916,18 +769,6 @@ describe("Opening hours month", () => {
     el.model = monthModel();
     await el.updateComplete;
     expect(pressed(el)).toEqual([]);
-  });
-
-  it("in station mode, a drag or a double-click picks and opens nothing", async () => {
-    const el = await mount(stationModel(), { stationMode: true, departments: STATION });
-    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
-    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
-    const sel = (date: LocalDate) => `opening-hours-month td[data-date="${date}"] .day`;
-    await commands.mouseDrag(DRAG.map(sel));
-    await userEvent.dblClick(cell(el, "2026-12-22").querySelector<HTMLElement>(".day")!);
-    expect(root(el).querySelector("[aria-pressed]")).toBeNull();
-    expect(opened).toEqual([]);
-    expect(runs).toEqual([]);
   });
 
   it("fits a phone's width without scrolling sideways", async () => {
@@ -1054,18 +895,14 @@ describe("Opening hours month", () => {
     expect(contentHeight(sunday!)).toBe(contentHeight(monday!));
   });
 
-  it('in station mode at a phone\'s width, drops "No orders" from a date closed all day only', async () => {
-    const el = await mountAt(PHONE, stationModel(), {
-      readOnly: true,
-      stationMode: true,
-      departments: STATION,
-    });
+  it("on a phone, drops No orders from a closed station date only", async () => {
+    const el = await mountAt(PHONE, monthModel(), { station: grill() });
     const shown = (date: LocalDate) => {
       const line = cell(el, date).querySelector<HTMLElement>('[data-test="no-orders"]')!;
       return getComputedStyle(line).display !== "none" && line.getBoundingClientRect().height > 0;
     };
     expect(shown("2026-12-25")).toBe(false);
-    expect(shown("2026-12-06")).toBe(true);
+    expect(shown("2026-12-15")).toBe(true);
   });
 
   it("draws a date closed all day with a bar per row, at a phone's width too", async () => {
@@ -1288,23 +1125,25 @@ const choose = (el: OpeningHoursMonthView, value: string) =>
   );
 
 describe("Opening hours month, a station shown", () => {
-  it("Show lists stations in their own group, after the departments", async () => {
-    for (const [locale, departments, stations] of [
-      ["en", "Departments", "Prep stations"],
-      ["es", "Departamentos", "Estaciones de preparación"],
-    ] as const) {
+  it("Show has pickable parents and indented departments and stations", async () => {
+    for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       const el = await mount(monthModel(), { stations: STATIONS });
-      expect(show(el).options.map(({ value, label, group }) => ({ value, label, group }))).toEqual([
+      expect(show(el).options.map(({ value, label, depth }) => ({ value, label, depth }))).toEqual([
         {
           value: "all",
           label: locale === "en" ? "All departments" : "Todos los departamentos",
-          group: undefined,
+          depth: undefined,
         },
-        { value: "rest", label: "Restaurant", group: departments },
-        { value: "bar", label: "Bar", group: departments },
-        { value: "station:grill", label: "Grill", group: stations },
-        { value: "station:cold", label: "Cold kitchen", group: stations },
+        { value: "rest", label: "Restaurant", depth: 1 },
+        { value: "bar", label: "Bar", depth: 1 },
+        {
+          value: "show:stations",
+          label: locale === "en" ? "All prep stations" : "Todas las estaciones de preparación",
+          depth: undefined,
+        },
+        { value: "station:grill", label: "Grill", depth: 1 },
+        { value: "station:cold", label: "Cold kitchen", depth: 1 },
       ]);
       el.remove();
     }
@@ -1314,8 +1153,8 @@ describe("Opening hours month, a station shown", () => {
     const el = await mount(monthModel(), { departmentId: "bar" });
     expect(show(el).options).toEqual([
       { value: "all", fixed: true, label: "All departments" },
-      { value: "rest", label: "Restaurant" },
-      { value: "bar", label: "Bar" },
+      { value: "rest", label: "Restaurant", depth: 1 },
+      { value: "bar", label: "Bar", depth: 1 },
     ]);
     expect(show(el).value).toBe("bar");
   });
@@ -1365,17 +1204,15 @@ describe("Opening hours month, a station shown", () => {
     expect(sent.map(({ date }) => date)).toEqual(["2026-12-07"]);
   });
 
-  it("a drag on a station's dates picks a run and a double-click asks to open it", async () => {
+  it("a drag on a station's dates never stages an hours edit", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
     const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
     await commands.mouseDrag(DRAG.map(daySel));
     await el.updateComplete;
-    expect(pressed(el)).toEqual(DRAG);
+    expect(pressed(el)).toEqual([]);
     await userEvent.dblClick(dayButton(el, "2026-12-22"));
     await el.updateComplete;
-    expect(runs).toEqual([
-      { date: "2026-12-22", dates: ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"] },
-    ]);
+    expect(runs).toEqual([]);
   });
 
   it("names a lone sending department beside each period", async () => {
@@ -1497,14 +1334,15 @@ describe("Opening hours month, a station shown", () => {
     expect(getComputedStyle(none).color).not.toBe(getComputedStyle(probe).color);
   });
 
-  it("loading draws only the head", async () => {
+  it("loading keeps the picker and explanation without dates", async () => {
     const el = await mount(monthModel(), {
       stations: STATIONS,
       station: { id: "grill", state: "loading" },
     });
     expect(root(el).querySelector("table")).toBeNull();
     expect(testId(el, "always-open")).toBeNull();
-    expect([...root(el).children].map((child) => child.className)).toEqual(["head"]);
+    expect(root(el).querySelector(".head")).not.toBeNull();
+    expect(testId(el, "station-explanation")).not.toBeNull();
     expect(show(el).value).toBe("station:grill");
   });
 

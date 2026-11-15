@@ -658,28 +658,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   where a group heading sits, and 48 px rows, the same before and after. The owner still needs
   to identify the spacing they saw. Watcher retained this point on 14 November at 21:43.
 
-- **A1539. Calendar: prep stations, all at once, and said to be stations (owner, 2026-11-14).**
-  Reads only, no migration. Build not started. The watcher cleared the
-  [build plan](superpowers/plans/2026-11-14-a1539-calendar-stations.md) on 2026-11-14;
-  uses A1537's Calendar changes. The Periods link wants A1536.
-  - **The "Show" dropdown (`calendar-show.ts`) reads "Show all", "All departments" with each
-    department indented beneath, then "All prep stations" with each station beneath.** "All
-    departments" is today's separate first entry, and the "Departments" and "Prep stations"
-    headings become those two pickable entries, using the dropdown's existing indent for nested
-    options. It still starts on "All departments".
-  - **"All prep stations" is new in the Month and Week views:** one row per station, as for
-    departments; today only one station shows at a time. **"Show all" is in the Week view only**:
-    each day lists its department rows, then its station rows.
-  - **A station's hours are worked out, not edited, and the screen says so.** An always-visible
-    line beneath "Show", and in the day pop-up in place of "Make a special day" and "Edit … week",
-    for example "A prep station is open while a period sends it orders. To change its hours, edit
-    the periods and their menus.", linking to A1536's Periods page. Write the sentence from the
-    code that works the hours out (routing rules may count too).
-  - **A station is marked as one wherever the Calendar shows it** (its rows, the pop-up title, the
-    picked "Show" value) with a prep-station icon, because a zone and a station often share a name
-    ("Downstairs bar", "Deli counter"). **The demo's stations get names that differ from its
-    zones'**, in every demo language (`packages/country-es/src/demo/`).
-
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)

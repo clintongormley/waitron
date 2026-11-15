@@ -7,9 +7,15 @@ import { t } from "./strings.js";
 
 const ALL = "all";
 const STATION = "station:";
+export type CalendarShow = "" | "stations" | "all";
 
-/** The Show picker the Month and the Week share: every department, one department, or, when
- *  `stations` are given, one prep station; `stationId` set shows that station. */
+export const stationIcon = () =>
+  html`<wt-icon name="prep-station" role="img" aria-label=${t("opening.prep_station")}></wt-icon>`;
+export const stationExplanation = () =>
+  html`<p data-test="station-explanation">
+    ${t("opening.station_hours")} <a href="/manage/periods">${t("period.title")}</a>
+  </p>`;
+
 export function showPicker(options: {
   model: OpeningHoursMonth;
   chosen: string;
@@ -18,21 +24,35 @@ export function showPicker(options: {
   stations: readonly ShowStation[];
   stationId: string;
   onStation: (stationId: string) => void;
+  show?: CalendarShow;
+  week?: boolean;
+  onShow?: (show: CalendarShow) => void;
 }): TemplateResult {
   const { model, chosen, names, onDepartment, stations, stationId, onStation } = options;
-  const value = stationId ? STATION + stationId : chosen || ALL;
-  const grouped = (group: string) => (stations.length ? { group } : {});
+  const value = stationId
+    ? STATION + stationId
+    : options.show
+      ? `show:${options.show}`
+      : chosen || ALL;
+  const stationMark = { icon: "prep-station", iconLabel: t("opening.prep_station") };
   const choices = [
+    ...(options.week && stations.length
+      ? [{ value: "show:all", fixed: true, label: t("opening.show_all") }]
+      : []),
     { value: ALL, fixed: true, label: t("opening.all_departments") },
     ...model.days[0]!.departments.map((d) => ({
       value: d.departmentId,
       label: names.name(d.departmentId),
-      ...grouped(t("opening.show_departments")),
+      depth: 1,
     })),
+    ...(stations.length
+      ? [{ value: "show:stations", fixed: true, label: t("opening.all_stations"), ...stationMark }]
+      : []),
     ...stations.map((station) => ({
       value: STATION + station.id,
       label: station.name,
-      group: t("nav.prep_stations"),
+      depth: 1,
+      ...stationMark,
     })),
   ];
   return html`<wt-combobox
@@ -46,13 +66,17 @@ export function showPicker(options: {
       const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
       chooser.value = value;
       const picked = event.detail.value;
+      if (picked.startsWith("show:")) {
+        options.onShow?.(picked.slice(5) as CalendarShow);
+        return;
+      }
       if (picked.startsWith(STATION)) {
         const next = picked.slice(STATION.length);
         if (next !== stationId) onStation(next);
         return;
       }
       const next = picked === ALL ? "" : picked;
-      if (stationId || next !== chosen) onDepartment(next);
+      if (stationId || options.show || next !== chosen) onDepartment(next);
     }}
   ></wt-combobox>`;
 }

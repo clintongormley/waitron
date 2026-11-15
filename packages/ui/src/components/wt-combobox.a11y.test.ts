@@ -85,6 +85,19 @@ const WITH_DISABLED: ComboboxOption[] = [
 ];
 
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
+  test.each(["field", "link"])("picked named icon, %s", async (appearance) => {
+    const el = (await mountThemed(
+      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
+      theme,
+    )) as WtCombobox;
+    el.options = [{ value: "station", label: "Bar", icon: "leaf", iconLabel: "Prep station" }];
+    el.value = "station";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    await userEvent.click(el.shadowRoot!.querySelector(".trigger")!);
+    await expectNoA11yViolations(host);
+  });
+
   test("closed, empty", async () => {
     await mountThemed('<wt-combobox label="Dietary tags"></wt-combobox>', theme);
     await expectNoA11yViolations(host);
@@ -185,7 +198,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with icons", async () => {
     await openThemed('<wt-combobox label="Tags"></wt-combobox>', theme, [
-      { value: "vegan", label: "Vegan option", icon: "leaf" },
+      { value: "vegan", label: "Vegan option", icon: "leaf", iconLabel: "Plant based" },
       { value: "halal", label: "Halal", icon: "check" },
     ]);
     await expectNoA11yViolations(host);

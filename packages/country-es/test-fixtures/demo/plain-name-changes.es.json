@@ -893,21 +893,21 @@
     "row": "@kitchen_stations:[\"Downstairs bar\"]",
     "column": "name",
     "old": "Downstairs bar",
-    "new": "Bar de abajo"
+    "new": "Preparación del bar de abajo"
   },
   {
     "table": "kitchen_stations",
     "row": "@kitchen_stations:[\"Upstairs bar\"]",
     "column": "name",
     "old": "Upstairs bar",
-    "new": "Bar de arriba"
+    "new": "Preparación del bar de arriba"
   },
   {
     "table": "kitchen_stations",
     "row": "@kitchen_stations:[\"Deli counter\"]",
     "column": "name",
     "old": "Deli counter",
-    "new": "Mostrador de charcutería"
+    "new": "Preparación de charcutería"
   },
   {
     "table": "printers",

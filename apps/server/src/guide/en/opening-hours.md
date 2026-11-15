@@ -12,6 +12,12 @@ To change the usual timetable, choose **Edit <season>'s standard week** beside t
 
 Paint the zone’s whole **Closed** stretch, even past its department’s current closing time.
 
+## Compare prep-station hours {#station-hours}
+
+In Month or Week, choose **All prep stations** in **Show** to compare stations, or choose one station to see which departments send it orders. In Week, choose **Show all** to see departments followed by stations. The station icon distinguishes them from zones with similar names.
+
+Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change them, open **Periods** beneath Show and edit the periods and their menus. The default station is always open. A station-only day pop-up shows these worked-out hours instead of editing actions.
+
 ## Select days together {#select-days}
 
 In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.

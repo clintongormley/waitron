@@ -23,6 +23,28 @@ test("the dropdown chevron paints wide enough to read", async () => {
   expect(path.getBoundingClientRect().width).toBeGreaterThanOrEqual(13);
 });
 
+test.each(["field", "link"])(
+  "names and draws the picked icon in the %s trigger and option",
+  async (appearance) => {
+    registerIcons({ "test-station": "M1 1H15V15H1Z" });
+    const { el, trigger } = await mountCombobox(
+      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
+    );
+    el.options = [
+      { value: "station", label: "Bar", icon: "test-station", iconLabel: "Prep station" },
+    ];
+    el.value = "station";
+    await el.updateComplete;
+    expect(trigger.querySelector('wt-icon[name="test-station"]')).not.toBeNull();
+    await expect.element(trigger).toHaveAccessibleName(/Prep station.*Bar/);
+    trigger.click();
+    await el.updateComplete;
+    await expect
+      .element(el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!)
+      .toHaveAccessibleName(/Prep station.*Bar/);
+  },
+);
+
 test("the closed field gives its chevron a larger slot", async () => {
   const { el } = await mountCombobox();
   const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;

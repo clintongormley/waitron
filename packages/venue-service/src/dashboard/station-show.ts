@@ -20,6 +20,7 @@ export type StationShow =
   | {
       id: string;
       state: "ready";
+      mixed?: boolean;
       model: OpeningHoursMonth;
       departments: readonly MonthDepartment[];
     };

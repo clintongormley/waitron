@@ -19,6 +19,39 @@ const model: OpeningHoursModel = {
 };
 const base = "/management-api/venue-service";
 
+it("watches all stations in one passive read, including station-list and routing changes", async () => {
+  const live = new LiveData();
+  const request = vi.fn(async () => ({ grill: { always: null, days: [] } }));
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const received: unknown[] = [];
+  const stop = api.watchStationsTimes(
+    "2026-12-01",
+    "2026-12-07",
+    (value) => received.push(value),
+    vi.fn(),
+    vi.fn(),
+  );
+  try {
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    for (const type of ["kitchen_stations", "menus", "special_days", "routing_cell_periods"]) {
+      const count = received.length;
+      live.invalidate([{ type }]);
+      await vi.waitFor(() => expect(received).toHaveLength(count + 1));
+    }
+    expect(request.mock.calls).toEqual(
+      Array.from({ length: 5 }, () => [
+        `${base}/stations/service-times?from=2026-12-01&to=2026-12-07`,
+        "GET",
+        undefined,
+        { passive: true },
+      ]),
+    );
+  } finally {
+    stop();
+  }
+  expect(live.interests).toEqual([]);
+});
+
 describe("OpeningHoursApi", () => {
   it("encodes write identities and sends colour and staff menus without changing the timetable body", async () => {
     const request = vi.fn(async (_path: string, method: string) =>
