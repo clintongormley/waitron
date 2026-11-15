@@ -1451,6 +1451,12 @@ except the last, added 2026-11-14.
 
 ## Decisions and deliberate limits
 
+- **The Tax agency row on Box status shows the oldest unsent record's time ("Unsent since"), not
+  when sends began failing** (campaign watcher, 2026-11-15, #3266). Nothing stores when sends began
+  failing, and an incident's open time would cover only part of what raises the unsent notice (a
+  failure marked on one record raises it with no incident open); the record's time is true in every
+  case the notice shows and matches the bell and Fiscal filing. Open to the owner.
+
 ### Retry after a full-disk stop
 
 After freeing space on the recovery page, choose Retry. The page does not retry startup
