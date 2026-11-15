@@ -557,7 +557,7 @@ declare module "@waitron/shared" {
      * department sells one way only, or in a region without takeaway VAT. `dining`: the order's way.
      */
     "order.dining_fixed": { dining: Dining };
-    /** The order's way of selling can no longer be switched: its kitchen has it, or money was taken. */
+    /** The order's way of selling can no longer be switched: its kitchen has it, or a payment has started. */
     "order.dining_locked": { reason: "sent" | "paid" };
     /** Dishes move only between two orders sold the same way (eaten here or taken away). */
     "order.dining_differs": { fromOrderId: string; toOrderId: string };

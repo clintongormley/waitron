@@ -21,6 +21,7 @@ import {
   writePartyAllergy,
 } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { splitTable } from "./table-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { seatTable } from "./parties.js";
@@ -34,6 +35,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { openGroupedCounterOrder, writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { createTable } from "./testing/live-table.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
@@ -339,6 +341,38 @@ describe("switching an order's way of selling", () => {
       params: { workingOrderId: id, revision: (await orderOf(id)).revision },
     });
     expect(salesOf(id)).toBe(0);
+
+    const repaid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: [],
+      dining: "takeaway",
+    });
+
+    expect(repaid.status).toBe(200);
+    expect(salesOf(id)).toBe(1);
+    expect(filedRates(id)).toEqual([2100]);
+  });
+
+  it("changes nothing, not even the revision, when asked for the way the order already has", async () => {
+    const id = await parked(menu.cola);
+    const before = await orderOf(id);
+
+    const same = await switchTo(id, "eat_in");
+
+    expect(same.status).toBe(200);
+    expect(same.json).toEqual({ revision: before.revision });
+    expect(await orderOf(id)).toEqual(before);
+  });
+
+  it("answers a request for the way a sent order already has without refusing it", async () => {
+    const { tabId } = await seatedWith(venue, "Croquettes");
+    const before = await orderOf(tabId);
+
+    const same = await switchTo(tabId, "eat_in", { expectedEdit: await editOf(tabId) });
+
+    expect(same.status).toBe(200);
+    expect(same.json).toEqual({ revision: before.revision });
+    expect(await orderOf(tabId)).toEqual(before);
   });
 
   it("decides by the order's own department, as the till's read does, when its zone moves", async () => {
@@ -471,6 +505,121 @@ describe("moving dishes between a party's bills", () => {
         expect.objectContaining({ vat_class: "reduced", takeaway_vat_class: "super_reduced" }),
       ]),
     );
+  });
+});
+
+describe("splitting a table with loose dishes", () => {
+  /** A party seated at a fresh table in the tables zone, its bill holding a cola and a cheese
+   * board unsent, joined to a second fresh table. */
+  async function joinedParty(): Promise<{ partyId: string; tabId: string; second: string }> {
+    const { partyId, tabId } = await unsentTab([
+      { productId: menu.cola },
+      { productId: menu.cheeseBoard },
+    ]);
+    const second = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `T-${randomUUID().slice(0, 8)}`,
+        zoneId: tables.zoneId,
+      });
+      await joinTables(tx, venue.cfg, partyId, table.id, {
+        expectedPartyRevision: await partyRevision(tx, partyId),
+        operatorId: venue.operatorId,
+      });
+      return table.id;
+    });
+    return { partyId, tabId, second };
+  }
+
+  async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, partyId));
+    return party!.revision;
+  }
+
+  async function splitLoose(
+    partyId: string,
+    tableId: string,
+    loose: { billId: string; lineIds: string[] }[],
+  ) {
+    return inTx(venue, async (tx) => {
+      const expectedEdits = [];
+      for (const billId of [...new Set(loose.map((entry) => entry.billId))].sort())
+        expectedEdits.push(await readBillEditState(tx, billId));
+      return splitTable(
+        tx,
+        venue.cfg,
+        partyId,
+        tableId,
+        { wholeBillIds: [], loose },
+        {
+          expectedPartyRevision: await partyRevision(tx, partyId),
+          operatorId: venue.operatorId,
+          expectedEdits,
+        },
+      );
+    });
+  }
+
+  it("puts a takeaway bill's loose dishes on a new takeaway bill, filed at the takeaway rate", async () => {
+    const { partyId, tabId, second } = await joinedParty();
+    expect((await switchTo(tabId, "takeaway", { expectedEdit: await editOf(tabId) })).status).toBe(
+      200,
+    );
+    const [cola] = classesOf(tabId);
+
+    const result = await splitLoose(partyId, second, [{ billId: tabId, lineIds: [cola!.id] }]);
+
+    const newBill = result.billIds[0]!;
+    expect((await orderOf(newBill)).dining).toBe("takeaway");
+    expect(classesOf(newBill).map((row) => row.id)).toEqual([cola!.id]);
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${newBill}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: classesOf(newBill)[0]!.line_no }],
+        method: "cash",
+        tendered: "1.80",
+        applied: "1.80",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    expect(filedRates(newBill)).toEqual([2100]);
+  });
+
+  it("refuses loose dishes from two bills sold different ways, moving nothing", async () => {
+    const { partyId, tabId, second } = await joinedParty();
+    const eatenHere = await inTx(
+      venue,
+      async (tx) =>
+        (
+          await splitBill(tx, venue.cfg, tabId, [{ lineNo: 2 }], {
+            expectedPartyRevision: await partyRevision(tx, partyId),
+            operatorId: venue.operatorId,
+          })
+        ).billId,
+    );
+    expect((await switchTo(tabId, "takeaway", { expectedEdit: await editOf(tabId) })).status).toBe(
+      200,
+    );
+    const before = [classesOf(tabId), classesOf(eatenHere)];
+
+    await expect(
+      splitLoose(partyId, second, [
+        { billId: tabId, lineIds: [classesOf(tabId)[0]!.id] },
+        { billId: eatenHere, lineIds: [classesOf(eatenHere)[0]!.id] },
+      ]),
+    ).rejects.toMatchObject({
+      code: "order.dining_differs",
+      params: { fromOrderId: eatenHere },
+    });
+    expect([classesOf(tabId), classesOf(eatenHere)]).toEqual(before);
   });
 });
 

@@ -1470,6 +1470,8 @@ export async function createOpenOrder(
     lateSend?: LateSendConfirmation;
     /** The way the till showed; refused `order.dining_fixed` where the department sells otherwise. */
     dining?: Dining;
+    /** The way of the existing order this one takes dishes from, whatever its department says. */
+    keepDining?: Dining;
     invoiceChoice?: {
       invoiceType: unknown;
       recipient: unknown;
@@ -1540,7 +1542,9 @@ export async function createOpenOrder(
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
   }
   const dining =
-    copiedDining ?? (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
+    copiedDining ??
+    placement.keepDining ??
+    (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
   const pricedLines = await priceOrderLines(
     tx,
     cfg,

@@ -165,13 +165,15 @@ export function moduleCoreServices(
 }
 
 /**
- * Make an empty open bill on the party, in its zone, numbered next in the party. The party's
- * revision is left alone: a caller moves it once for its whole command.
+ * Make an empty open bill on the party, in its zone, numbered next in the party, sold `keepDining`
+ * when given (the way of the bill its dishes come from). The party's revision is left alone: a
+ * caller moves it once for its whole command.
  */
 export async function insertPartyBill(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
+  keepDining?: Dining,
 ): Promise<string> {
   const billId = randomUUID();
   const zoneId = await partyZone(tx, partyId);
@@ -179,6 +181,7 @@ export async function insertPartyBill(
     zoneId: zoneId ?? undefined,
     partyId,
     existingService: true,
+    ...(keepDining === undefined ? {} : { keepDining }),
   });
   return billId;
 }

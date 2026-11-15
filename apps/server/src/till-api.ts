@@ -2105,14 +2105,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const dining = parseDining(body.dining);
       if (dining === undefined)
         throw new AppError("management.request_invalid", { field: "dining" });
-      const revision = requireRevision(body.revision);
-      await withTransaction(deps.db, (tx) =>
-        switchOrderDining(tx, id, dining, revision, {
+      const revision = await withTransaction(deps.db, (tx) =>
+        switchOrderDining(tx, id, dining, requireRevision(body.revision), {
           operatorId: session.personId,
           expectedEdit: body.expectedEdit,
         }),
       );
-      return c.json({ revision: revision + 1 });
+      return c.json({ revision });
     }),
   );
 

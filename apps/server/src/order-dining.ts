@@ -122,7 +122,8 @@ async function takesEitherWay(tx: Transaction, zoneId: string): Promise<boolean>
  * Switch an open order between eaten here and takeaway at `revision`, moving its revision on. The
  * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
  * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
- * keep both their classes, so nothing else changes.
+ * keep both their classes, so nothing else changes. A request for the way the order already has
+ * changes nothing, not even the revision. Answers the order's revision after.
  */
 export async function switchOrderDining(
   tx: Transaction,
@@ -130,7 +131,7 @@ export async function switchOrderDining(
   dining: Dining,
   revision: number,
   authority: OrderEditAuthority,
-): Promise<void> {
+): Promise<number> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
@@ -144,6 +145,7 @@ export async function switchOrderDining(
     throw new AppError("working_order.out_of_date", { workingOrderId, revision: order.revision });
   }
   await requireOrderBillEditor(tx, workingOrderId, authority);
+  if (dining === order.dining) return revision;
   const switchable = await VENUE_SERVICE.findOrdersWithDiningChoice(tx, [workingOrderId]);
   if (!switchable.has(workingOrderId)) {
     throw new AppError("order.dining_fixed", { dining: order.dining });
@@ -165,4 +167,5 @@ export async function switchOrderDining(
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })
     .where(eq(workingOrders.id, workingOrderId));
+  return revision + 1;
 }

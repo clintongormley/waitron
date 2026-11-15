@@ -3,6 +3,7 @@ import { diningTables, nowIso, parties, partyTables, workingOrders } from "@wait
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
 import { moveCheckedDishes, resolveMoveLines } from "./bill-actions.js";
+import { storedOrderDining } from "./order-dining.js";
 import {
   readPartyBillIds,
   relocateBillEditor,
@@ -397,7 +398,14 @@ export async function splitTable(
   const arriving = [...leaving];
   let newBill: string | null = null;
   if (looseMoves.length > 0) {
-    newBill = await insertPartyBill(tx, cfg, newParty);
+    // The new bill keeps its first source's way; a source sold the other way is then refused
+    // `order.dining_differs` by the move, as moving dishes between bills is.
+    newBill = await insertPartyBill(
+      tx,
+      cfg,
+      newParty,
+      await storedOrderDining(tx, looseSourceIds[0]!),
+    );
     for (const { billId, transfers } of looseMoves) {
       await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
         actorId: options.operatorId,
