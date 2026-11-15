@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { invoiceSeries, sales, type Transaction } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
+import { localCalendarDate } from "@waitron/shared";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -24,8 +25,10 @@ export type InvoiceTyping = Pick<
   "invoiceType" | "corrects" | "recipient" | "saleDay"
 >;
 
-function issueDay(issuedAt: string, offsetMinutes: number): string {
-  return new Date(Date.parse(issuedAt) + offsetMinutes * 60_000).toISOString().slice(0, 10);
+/** Whether a document of this type prints the full-invoice layout: an F1, or an R4 replacement of
+ * one. */
+export function printsAsFullInvoice(invoiceType: InvoiceTyping["invoiceType"]): boolean {
+  return invoiceType === "F1" || invoiceType === "R4";
 }
 
 function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
@@ -76,7 +79,7 @@ export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promi
       ...(sale.replacesOriginal ? { inFull: true as const } : {}),
     },
     ...(sale.supplyDay !== null &&
-    sale.supplyDay !== issueDay(sale.issuedAt, sale.issuedOffsetMinutes)
+    sale.supplyDay !== localCalendarDate(new Date(sale.issuedAt), sale.issuedOffsetMinutes)
       ? { saleDay: sale.supplyDay }
       : {}),
     ...recipient,

@@ -35,6 +35,7 @@ import {
   receiptDay,
   receiptDayNumeric,
 } from "./receipt-dates.js";
+import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -159,7 +160,7 @@ export function buildReceiptDocument({
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
-  const simplified = result.invoiceType !== "F1" && result.invoiceType !== "R4";
+  const simplified = !printsAsFullInvoice(result.invoiceType);
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
