@@ -532,7 +532,7 @@ export async function confirmReceiptHandover(
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
- * queued job, marked a copy when the original already went out by email.
+ * queued job and whether it is marked a copy.
  */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
