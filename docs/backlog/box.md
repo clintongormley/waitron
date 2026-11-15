@@ -310,12 +310,13 @@ qualify power loss during placement; A1415's process-kill tests establish restar
 - **The box image carries the WireGuard link.**
 - **The box image keeps its clock synchronised, with no terminal** (A798). The server reads
   the time service through the box's host service (`apps/server/src/box-host-client.ts`) and
-  reports "unavailable" when that service does not answer. Since A798's revision 5 (owner, 2026-10-19) a box whose clock
-  reads earlier than its last recorded sale stops taking payment until the clock is set, so the
-  image should also keep time through a power cut (hardware with a battery-backed clock), and set
+  reports "unavailable" when that service does not answer. Every start of a box that files records waits for its time to be
+  confirmed, so the image should also keep time through a power cut (hardware with a battery-backed clock), and set
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
   set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
-  right; the image makes it standing.
+  right, and the running server asks the host to switch it back on whenever it reads it switched
+  off, waiting from a minute up to an hour after failed tries
+  (`apps/server/src/time-service-kept-on.ts`); the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Kiosk options, none built: Chromium in the box image, every box (the owner's decision in B3's
@@ -852,8 +853,8 @@ its request writer and reply reader; PR 9's routes call that client): what the s
 host service and what the host may answer, as a pure module with no socket, root or NetworkManager.
 
 - Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to the installed
-  first-start service); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
-  module answers them `unknown_request`.
+  first-start service); `clock.status`, `clock.set` and `clock.sync-on` stay slice 9b's shell
+  handler's (`SHELL_VERBS`), and this module answers them `unknown_request`.
 - A request is one line: the verb, one space and one JSON object of the request's fields and then
   `actor`, printable ASCII only, at most 4096 characters, and accepted only in the exact form
   `formatHostRequest` writes, so a duplicate key, another key order, extra spaces or an upper-case

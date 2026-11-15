@@ -33,37 +33,49 @@ const timeServiceOff: BoxHostClient = {
   setClock: async () => ({ available: false, reason: "missing" }),
 };
 
+async function startWith(
+  boxHost: BoxHostClient,
+  check: (venue: Awaited<ReturnType<typeof setupVenue>>) => Promise<void>,
+) {
+  const venue = await setupVenue(suite.db);
+  const [port] = await freePorts(1);
+  let scratch: string | undefined;
+  let server: StartedServer | undefined;
+  try {
+    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-sync-"));
+    const migrationsRoot = join(scratch, "migrations");
+    for (const [index, set] of manifestSets().entries()) {
+      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+        recursive: true,
+      });
+    }
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
+    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const env = {
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      WAITRON_STATE_DIR: scratch,
+      WAITRON_VENUE_DIR: dirname(database),
+      WAITRON_NODE_ID: venue.cfg.nodeId,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    };
+    server = await startServer(env, env, { boxHost });
+    await vi.waitFor(async () => {
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+    });
+    await check(venue);
+  } finally {
+    if (server !== undefined) await server.close();
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 describe("the running server's time-service alert", () => {
   it("shows a switched-off time service in the bell, from the box's clock service", async () => {
-    const venue = await setupVenue(suite.db);
-    const [port] = await freePorts(1);
-    let scratch: string | undefined;
-    let server: StartedServer | undefined;
-    try {
-      scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-sync-"));
-      const migrationsRoot = join(scratch, "migrations");
-      for (const [index, set] of manifestSets().entries()) {
-        await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-          recursive: true,
-        });
-      }
-      await seedModuleSettings(suite.db, { "fiscal-none": false });
-      const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-      const env = {
-        WAITRON_HTTP_LANDING_PORT: "0",
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_STATE_DIR: scratch,
-        WAITRON_VENUE_DIR: dirname(database),
-        WAITRON_NODE_ID: venue.cfg.nodeId,
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "preproduction",
-      };
-      server = await startServer(env, env, { boxHost: timeServiceOff });
-      await vi.waitFor(async () => {
-        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-      });
+    await startWith(timeServiceOff, async (venue) => {
       const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
         headers: { cookie: venue.managerCookie },
       });
@@ -81,9 +93,13 @@ describe("the running server's time-service alert", () => {
           area: "box",
         },
       ]);
-    } finally {
-      if (server !== undefined) await server.close();
-      if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
-    }
+    });
+  });
+
+  it("asks the box to switch a switched-off time service back on", async () => {
+    const timeServiceOn = vi.fn(async () => ({ available: true as const }));
+    await startWith({ ...timeServiceOff, timeServiceOn }, async () => {
+      expect(timeServiceOn).toHaveBeenCalled();
+    });
   });
 });

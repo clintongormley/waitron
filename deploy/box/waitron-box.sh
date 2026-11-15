@@ -152,6 +152,21 @@ clock_set() {
   answer "{\"ok\":true,\"beforeMs\":$before,\"afterMs\":$after}"
 }
 
+clock_sync_on() {
+  mkdir -p -m 0700 "$STATE_DIR"
+  exec 9> "$STATE_DIR/set.lock"
+  if ! flock -n 9; then
+    refuse busy
+    return
+  fi
+  logger -t waitron-box "clock.sync-on"
+  if ! timedatectl set-ntp true >&2; then
+    refuse sync_on_failed
+    return
+  fi
+  answer '{"ok":true}'
+}
+
 network_monitor() {
   # Setting the box's date must not move the observer's grace or retry waits.
   local monitor_pid waiter_pid="" dirty=1 due retry=1 state rc line was_running=0
@@ -245,6 +260,7 @@ main() {
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
   case "$line" in
     clock.status) clock_status ;;
+    clock.sync-on) clock_sync_on ;;
     "clock.set "*)
       rest="${line#clock.set }"
       target="${rest%% *}"

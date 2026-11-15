@@ -288,3 +288,57 @@ describe("boxHostClient().setClock", () => {
     expect(DEFAULT_SET_MS).toBeGreaterThan(15_000);
   });
 });
+
+describe("boxHostClient().timeServiceOn", () => {
+  it("sends one clock.sync-on line and answers available when the host switched it on", async () => {
+    const h = await host(answer({ ok: true }));
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toEqual({
+      available: true,
+    });
+    expect(h.lines).toEqual(["clock.sync-on"]);
+  });
+
+  it("answers refused with the host's reason", async () => {
+    const h = await host(answer({ ok: false, reason: "busy" }));
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toEqual({
+      available: false,
+      reason: "refused",
+      refusal: "busy",
+    });
+  });
+
+  it("answers missing, naming the error, when no socket is there", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "box-host-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    expect(await boxHostClient({ socketPath: join(dir, "box.sock") }).timeServiceOn()).toEqual({
+      available: false,
+      reason: "missing",
+      detail: "ENOENT",
+    });
+  });
+
+  it("answers lost, not missing, when the host closes the connection after the request without answering", async () => {
+    const h = await host((_line, socket) => socket.destroy());
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toMatchObject({
+      available: false,
+      reason: "lost",
+    });
+    expect(h.lines).toEqual(["clock.sync-on"]);
+  });
+
+  it("answers malformed for a host refusal without a reason", async () => {
+    const h = await host(answer({ ok: false }));
+    expect(await boxHostClient({ socketPath: h.path }).timeServiceOn()).toEqual({
+      available: false,
+      reason: "malformed",
+    });
+  });
+
+  it("answers timeout at the set limit", async () => {
+    const h = await host(() => {});
+    expect(await boxHostClient({ socketPath: h.path, setMs: 200 }).timeServiceOn()).toEqual({
+      available: false,
+      reason: "timeout",
+    });
+  });
+});

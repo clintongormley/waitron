@@ -4600,7 +4600,7 @@ suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the bo
 
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
-the container — the **host service** — sets it when the server asks. The box sets its clock
+the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.
@@ -4631,6 +4631,9 @@ comes out:
   plus the time since the request arrived; moves timesyncd's saved clock file to the new time when
   there is one; and starts the services again — also from a `trap` on any exit, and, after a kill,
   from the unit's `ExecStopPost=`. It answers `{"ok":true,"beforeMs":…,"afterMs":…}`, or `set_failed`.
+- `clock.sync-on` is refused `busy` while a set holds the same lock, running nothing. Otherwise it
+  writes one `logger -t waitron-box` line and runs `timedatectl set-ntp true`, answering
+  `{"ok":true}` or `sync_on_failed`.
   Any other line answers `unknown_request`.
 
 The requester is JSON the server reports about itself: the host only logs it, never runs it, and
@@ -4640,14 +4643,27 @@ the app mounts the socket's folder only once `.env` names it (`WAITRON_BOX_SOCKE
 `deploy/compose.yml`).
 
 **The server's client** (`apps/server/src/box-host-client.ts`). `clockStatus()` waits 2 seconds and
-`setClock()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
+`setClock()` and `timeServiceOn()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
 throw: `missing` (no connection was made), `lost` (the connection broke, or closed with no answer,
 after the request was sent, so the clock may have moved), `refused`, `timeout` or `malformed`.
 The start check, the clock watch, time health, the `clock.sync_off` warning
 (`apps/server/src/clock-sync-alert.ts`: `off`, `stopped`, `unsynchronised`, and `unreachable` in
 production only), the `clock.disagrees` and `clock.peer_disagrees` warnings and the till's
 `clock.device_wrong` notice read the status through one 60-second cache
-(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself.
+(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself. Boot hands
+every reader the host through `keepTimeServiceOn` (`apps/server/src/time-service-kept-on.ts`): a
+status reading `off` asks `clock.sync-on` and waits for its answer, logs `time_service.switched_on`
+or, once per distinct failure, `time_service.switch_on_failed`, and answers the reading as it was.
+The wait is there because a clock set reads the status and then asks the host to set the clock, and
+the host refuses that set `busy` while a switch-on holds its lock. After a failed switch-on, other
+than a `busy` refusal, it asks no more for a minute (`SWITCH_ON_FIRST_WAIT_MS`), and each further
+failure in a row doubles that wait, up to an hour (`SWITCH_ON_LONGEST_WAIT_MS`). A success, or a
+reading that finds the service not `off`, starts the wait again at a minute. So a host where
+`timedatectl set-ntp true` keeps failing is asked about once an hour rather than at every reading.
+In trading mode the clock watch also reads the shared reading at the end of every look, every 15
+seconds, whatever the start's state (`readTimeService` in `createClockWatch`), so a service
+switched off is found with no request from a screen; the cache keeps that to about one host request
+a minute. It reads outside the correction's turn.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the

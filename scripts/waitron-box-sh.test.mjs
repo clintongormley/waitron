@@ -30,7 +30,7 @@ const logs = [];
 afterEach(() => {
   // No case, whatever it sends, may switch automatic time off.
   for (const log of logs.splice(0)) {
-    expect(readFileSync(log, "utf8")).not.toMatch(/^timedatectl\tset-ntp/m);
+    expect(readFileSync(log, "utf8")).not.toMatch(/^timedatectl\tset-ntp(?!\ttrue$)/m);
   }
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
@@ -71,6 +71,7 @@ case "$1" in
     [ "\${WB_SETTIME_FAIL}" = 1 ] && { echo "Failed to set time" >&2; exit 1; }
     [ -n "\${WB_MARKER_SEEN}" ] && cat "\${WAITRON_TEST_HOST_ROOT}/run/waitron-box-state"/stopped.* > "\${WB_LOG}.marker"
     t="\${2#@}"; printf '%s' "\${t/./}" > "\${WB_LOG}.now" ;;
+  set-ntp) [ "\${WB_SETNTP_FAIL}" = 1 ] && { echo "Failed to set ntp" >&2; exit 1; } ;;
 esac
 exit 0
 `,
@@ -456,6 +457,29 @@ describe("waitron-box.sh clock.set", () => {
     );
     expect(existsSync(join(sb.state, "stopped.7-100-0"))).toBe(false);
   }, 10_000);
+});
+
+describe("waitron-box.sh clock.sync-on", () => {
+  it("switches automatic time on and logs that it did", () => {
+    const sb = sandbox({ WB_NTP: "no" });
+    expect(answer(sb, "clock.sync-on")).toEqual({ ok: true });
+    expect(sb.calls()).toEqual([
+      ["flock", "-n", "9"],
+      ["logger", "-t", "waitron-box", "clock.sync-on"],
+      ["timedatectl", "set-ntp", "true"],
+    ]);
+  });
+
+  it("answers busy, running nothing, while a set holds the lock", () => {
+    const sb = sandbox({ WB_NTP: "no", WB_FLOCK_RC: "1" });
+    expect(answer(sb, "clock.sync-on")).toEqual({ ok: false, reason: "busy" });
+    expect(sb.calls()).toEqual([["flock", "-n", "9"]]);
+  });
+
+  it("answers sync_on_failed when timedatectl cannot switch automatic time on", () => {
+    const sb = sandbox({ WB_NTP: "no", WB_SETNTP_FAIL: "1" });
+    expect(answer(sb, "clock.sync-on")).toEqual({ ok: false, reason: "sync_on_failed" });
+  });
 });
 
 describe("waitron-box.sh --restore", () => {
