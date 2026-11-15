@@ -165,7 +165,7 @@ function billRefusalText(error: unknown): string {
   return codeMessage(code);
 }
 
-// Two status reads can wait on the card provider for 250 seconds; keep other browser connections
+// Two status reads can wait on the card provider; keep other browser connections
 // available, including in browsers without Web Locks.
 let statusSlotsFree = 2;
 const statusSlotWaiters: (() => void)[] = [];

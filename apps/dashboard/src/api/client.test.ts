@@ -2828,14 +2828,18 @@ describe("the card readers' outside-provider reads", () => {
       "the provider's available readers",
       (api: DashboardApi): Promise<unknown> => api.availableReaders("acme"),
     ],
-  ])("waits for %s past a minute, up to four minutes", async (_what, read) => {
-    const fetchImpl = answersAfter(240_000, { ok: 1 });
+  ])("accepts %s at 45 seconds and gives up at 50 seconds", async (_what, read) => {
+    const fetchImpl = answersAfter(45_000, { ok: 1 });
     const out = track(read(new DashboardApi("", fetchImpl)));
+    const late = track(read(new DashboardApi("", answersAfter(60_000, { ok: 1 }))));
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(30_000);
     expect(out.settled).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(180_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     expect(out.settled).toEqual({ value: { ok: 1 } });
+    expect(late.settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(late.settled).toEqual({ error: { code: "connection.timed_out" } });
   });
 
   it("still gives up on another read at 30 seconds", async () => {

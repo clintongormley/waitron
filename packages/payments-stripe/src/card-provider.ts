@@ -43,16 +43,16 @@ const everyClientMethodListed: Exclude<
   : never = true;
 void everyClientMethodListed;
 
-export type MakeStripe = (secretKey: string) => Stripe;
+export type MakeStripe = (secretKey: string, options?: Stripe.StripeConfig) => Stripe;
 
-// The dashboard's `CARD_PROVIDER_READ_LIMIT_MS` (apps/dashboard/src/api/client.ts) is set above these.
 const STRIPE_TIMEOUT_MS = 80_000;
 const STRIPE_MAX_NETWORK_RETRIES = 2;
 
-export function defaultMakeStripe(secretKey: string): Stripe {
+export function defaultMakeStripe(secretKey: string, options?: Stripe.StripeConfig): Stripe {
   return new Stripe(secretKey, {
     timeout: STRIPE_TIMEOUT_MS,
     maxNetworkRetries: STRIPE_MAX_NETWORK_RETRIES,
+    ...options,
   });
 }
 
@@ -203,7 +203,11 @@ export function createStripeCardProvider(
       async list(deps) {
         const secretKey = await sealedSecretKey(deps);
         // The default account page only; this does not enumerate subsequent pages.
-        const page = await makeStripe(secretKey).terminal.readers.list();
+        const page = await makeStripe(secretKey, {
+          httpClient: Stripe.createFetchHttpClient(),
+          timeout: 20_000,
+          maxNetworkRetries: 0,
+        }).terminal.readers.list();
         return page.data.map((reader) => ({
           providerRef: reader.id,
           name: reader.label,
@@ -233,7 +237,11 @@ export function createStripeCardProvider(
       async status(deps: CardProviderRuntimeDeps, providerRef: string): Promise<ReaderStatus> {
         try {
           const secretKey = await sealedSecretKey(deps);
-          const reader = await makeStripe(secretKey).terminal.readers.retrieve(providerRef);
+          const reader = await makeStripe(secretKey, {
+            httpClient: Stripe.createFetchHttpClient(),
+            timeout: 20_000,
+            maxNetworkRetries: 0,
+          }).terminal.readers.retrieve(providerRef);
           if (!("status" in reader)) return { online: false, unreachable: true };
           return {
             online: reader.status === "online",

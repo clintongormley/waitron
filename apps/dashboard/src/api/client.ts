@@ -2662,9 +2662,8 @@ export interface OrderDeliveries {
   history: OrderDeliveryAttempt[];
 }
 
-/** Above three Stripe attempts that go silent for 80 s once connected (`defaultMakeStripe`, in
- * payments-stripe's card-provider.ts); a slow sender or a connection slow to open can take longer. */
-const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
+/** Above SumUp's two sequential 20-second status calls. */
+const CARD_PROVIDER_READ_LIMIT_MS = 50_000;
 /** Keep above the battery deadline in apps/server/src/alert-sources.ts; no shared constant enforces it. */
 const ALERTS_READ_LIMIT_MS = 55_000;
 

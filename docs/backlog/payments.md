@@ -263,21 +263,12 @@ library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-p
 `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
 sandbox case beside `checkout.sandbox.test.ts` would settle it.
 
-## A provider that keeps sending data slowly, or a connection that is slow to open, can take longer
-
-A reader's status and the provider's available readers wait up to 250 seconds. Stripe
-gives up on an attempt after 80 seconds of silence once connected and tries three times (stated
-in `defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps
-sending data slowly, or a connection that is slow to open, can take longer, since Stripe's limit
-is on silence, not on the whole answer.
-
 ## The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit
 
-The SumUp pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
-`packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other
-screens' reads are not limited, and it was not measured in a real browser against a real silent
-provider. Left open by A260 (several card readers' status reads at once can use up the browser's
-connections to the box; W18c #1145 and W48 #1162).
+Real-browser qualification against a silent provider remains open: several concurrent reader
+status reads may exhaust the browser's HTTP/1.1 connections to the box. Exercise the real
+browser and provider transport; a mocked fetch does not measure this. Left open by A260
+(W18c #1145 and W48 #1162).
 
 
 ## A875. Check two writes the bill payments design says a pending card refund refuses
@@ -388,19 +379,6 @@ Remaining Stripe qualification and maintenance.
 - **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
   paid, not the paid screen** (known limit of A796; read, not run).
   [Detail](payments.md#on-a-venue-with-no-fiscal-module-a-handheld-shows-the-ticket-view-after-a-presented-bill-is-paid-not-the-paid-screen)
-
-## Bundle: Reader status time limits
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A provider that keeps sending data slowly, or a connection that is slow to open, can take
-  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Left
-  open by A255 (#1145, lane A's W18c).
-  [Detail](payments.md#a-provider-that-keeps-sending-data-slowly-or-a-connection-that-is-slow-to-open-can-take-longer)
-- **The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit.**
-  Left open by A260 (several card readers' status reads at once can use up the browser's
-  connections to the box; W18c #1145 and W48 #1162).
-  [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
 
