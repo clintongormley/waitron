@@ -3546,7 +3546,8 @@ retry, the append-only check's refusal while trading) is one read and one write 
 (`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
 connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0
-times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`. Each
+times (measured 2026-09-24 on Node v26.7.0). Never unlink `recovery.lock` either. Guard:
+`apps/server/src/recovery-race.test.ts`. Each
 of its races but the undo-after-clear one runs real child processes twice: with the lock, where no write is lost, and with the
 lock held around the write alone, where the test requires that a write IS lost — another start's
 counted failure in the counting races, the running server's clear in the clear-versus-undo race.
@@ -4294,12 +4295,11 @@ changing issued records or closing the original rejected case. Automatic switchi
 The local conflict, pre-capture and captured-payment paths run in the conflict issuance/recovery
 suites named in that procedure.
 
-What a till DOES need is the one node accepting sales. INTENDED: the on-site box when the internet
-is down, a promoted cloud when the box is dead (which needs the internet), box-down AND
-internet-down together being no failover — the MVP's accepted case. TODAY there is none of it: a
-venue has ONE node and no failover at all until slice 3 (2026-09-19,
-[Replication, membership & failover — residuals](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)). The till follows the primary and never chooses
-(till reroute, #244 to #265); only the primary sells.
+The till follows the primary; only the primary sells. A joined local spare can take over by
+handover or emergency switch. The separate-database case in `apps/server/src/handover-two-boxes.test.ts`
+exercises both paths without real box restarts. Hardware and power-loss qualification remain in
+[A947](../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes); the Cloud runtime remains
+open in A1188. Do not read the local test as Cloud or disconnected-internet qualification.
 
 **Provisioning and boot**
 
@@ -6249,15 +6249,15 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
   the rehearsal fails a sound migration. Nothing guards it.
   [Receipt](conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
 
-### No external dependency on the sale path, and the planned failover
+### No external dependency on the sale path, and local failover
 
 - **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
   and the internet are never on the sale path of whichever node is primary: records chain locally and
   the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
-  inline. TODAY a venue has ONE node and no failover at all; the intended failover is in
-  `docs/backlog.md` → _Replication, membership & failover — residuals_. Detail:
-  [conventions-data.md](conventions-data.md).
+  inline. Local handover and emergency switch are exercised on separate databases in
+  `apps/server/src/handover-two-boxes.test.ts`, without real box restarts. Remaining qualification:
+  [A947](../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes).
 
 
 

@@ -672,7 +672,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("refuses a FOREIGN taxpayer before any mutation (§5, one taxpayer per database)", async () => {
+  it("refuses a foreign taxpayer without stamping the local deployment", async () => {
     // Through the table definition: a raw insert reaches no `$defaultFn` (`taxpayer.created_at`).
     await suite.db
       .insert(taxpayer)
@@ -682,7 +682,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("refuses a same-taxpayer venue before any mutation", async () => {
+  it("refuses a same-taxpayer venue without stamping the local deployment", async () => {
     await suite.db
       .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
@@ -695,7 +695,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("refuses (fail-closed) a bundle naming an unknown module, before any mutation", async () => {
+  it("refuses a bundle naming an unknown module without stamping the local deployment", async () => {
     const error = await adoptFromPrimary(
       deps({
         fetchBundle: async () => makeBundle({ moduleOverrides: { "no-such": false } }),

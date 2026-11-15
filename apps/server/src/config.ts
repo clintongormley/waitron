@@ -72,9 +72,6 @@ export interface ServerConfig {
    * records. Undefined means the host's interfaces (`listBoxIpv4`), which a container behind bridge
    * networking cannot use. From `WAITRON_BOX_ADDRESSES`, a comma-separated IPv4 list; unset or
    * empty → undefined.
-   *
-   * The leaf is minted once and reused, so changing this on a box that has already booted moves the
-   * QR and mDNS but not the certificate. Delete the `tls/` quartet to force a re-mint.
    */
   boxAddresses?: string[];
   /**
