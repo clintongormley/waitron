@@ -1447,3 +1447,9 @@ Recovery now checks both refund arrays, records identified completed events with
 capture, and leaves uncertain evidence for another pass. The first slice does not perform
 settlement audit, orphan reconciliation or a provider refund. The hands-on qualifications
 still open in §11 remain open; no additional provider call was made for this slice.
+
+### 11.6 Qualification script, 15 November 2026
+
+Use the [sandbox checks and 15-minute owner settlement script](2026-11-15-a949-sandbox-and-settlement-check.md)
+for the next session. They do not add experimental results: sandbox access and the
+owner’s real-card session are still needed; physical backup and signature qualification stay open.

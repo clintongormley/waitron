@@ -1,6 +1,9 @@
 # A949: SumUp sandbox qualification and the owner's settlement check
 
-Codex plan; Claude reviewed it on 15 November. Watcher clearance pending.
+Codex plan; Claude reviewed it on 15 November (199 seconds). The watcher cleared
+docs-only publication at 16:08, inside the owner’s 12:05 “Do it soon” request,
+recorded in `~/waitron-campaign-f/questions.md`. Experiments still need sandbox
+access and the real-card check needs the owner’s session. No owner design approval is claimed.
 Request, verbatim from `~/waitron-campaign-f/queue.md`:
 
 > - **OWNER 2026-11-15 ~12:05 (picker, watcher's window), chose "Do it soon (Recommended)":** first run the sandbox tests your research found (Virtual Solo; €11.00 decline, €42.51 insufficient funds; a second reader on the same account) through Waitron's real SumUp client, recording what the till shows. Then write a 15-minute script for the owner's one real-card check (pay about €1 on the paired Solo; a day or two later confirm Waitron matched SumUp's settlement report) and put `## OWNER-ACTION: SumUp settlement check — pick a time` in questions.md. No signature-card test: there is no documented one.

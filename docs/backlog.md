@@ -1224,7 +1224,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   cards, declined-card behavior, the statement/fee check, remaining connection
   probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
   full payment, but its request bytes were not saved and the cause is unknown.
-  No further paid request unattended.
+  [Sandbox checks and the owner’s 15-minute settlement script](research/2026-11-15-a949-sandbox-and-settlement-check.md)
+  are ready; experiments need sandbox access and an owner session. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
 - **The deli's outage card machine.** Buy the standalone machine and
