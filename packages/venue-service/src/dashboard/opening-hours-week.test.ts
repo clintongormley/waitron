@@ -980,6 +980,7 @@ describe("Opening hours week, a station shown", () => {
       expect(window.innerWidth).toBe(390);
       const el = await mount({ date: "2026-12-02", stations: STATIONS, station: grill() });
       const card = testId(el, "day-card")!;
+      expect(card.querySelector('.row-name wt-icon[name="prep-station"]')).toBeNull();
       const rows = [...card.querySelectorAll<HTMLElement>(".row")];
       expect(rows.map((r) => r.dataset.row)).toEqual(["rest", "bar"]);
       expect(rows.map((r) => text(r.querySelector(".words")))).toEqual([

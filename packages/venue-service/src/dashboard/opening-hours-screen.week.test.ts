@@ -1221,6 +1221,11 @@ it("keeps loaded departments visible when Show all's station times fail, then ad
     ].map((row) => row.dataset.row);
   expect(rows()).toEqual(["rest", "bar"]);
   expect(week(el)!.shadowRoot!.querySelector('[data-test="no-orders"]')).toBeNull();
+  await userEvent.click(dayName(el, "2026-12-09"));
+  await expect.poll(() => boxOpen(el)).toBe(true);
+  expect(dayBox(el)!.rows.map((row) => row.name)).toEqual(["Restaurant", "Terrace", "Bar"]);
+  dayBox(el)!.hide();
+  await expect.poll(() => boxOpen(el)).toBe(false);
   answers.timesFail = undefined;
   el.api.rereadWatches();
   await expect.poll(rows).toEqual(["rest", "bar", "s2", "s1"]);

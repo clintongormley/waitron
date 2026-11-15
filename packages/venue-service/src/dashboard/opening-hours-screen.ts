@@ -658,13 +658,7 @@ export class OpeningHoursScreen extends LitElement {
     return this.stationId !== "" && this.stationsWanted() && this.stations === undefined;
   }
   private shownGroup(): CalendarShow {
-    if (
-      !this.stationsWanted() ||
-      this.shownStation() ||
-      this.stationListPending() ||
-      this.stations?.length === 0
-    )
-      return "";
+    if (!this.stationsWanted() || this.shownStation() || !this.stations?.length) return "";
     if (this.show === "all" && this.view !== "week") return "";
     return this.show;
   }
@@ -672,7 +666,7 @@ export class OpeningHoursScreen extends LitElement {
     const station = this.shownStation();
     const group = this.shownGroup();
     const month = this.readMonth();
-    const target = station?.id || (group && this.stations?.length ? `show:${group}` : "");
+    const target = station?.id || (group ? `show:${group}` : "");
     const key = target && month ? `${target} ${monthWeeks(month).join(" ")}` : "";
     this.stationTimesWatch.follow(key, () => {
       this.stationReadError = "";
@@ -741,9 +735,9 @@ export class OpeningHoursScreen extends LitElement {
     meta: OpeningHoursMonth | undefined,
   ): StationShow {
     const loading: StationShow = { id: "", state: "loading" };
-    if (!times || meta?.month !== this.readMonth() || !this.stations?.length) return loading;
+    if (!times || meta?.month !== this.readMonth()) return loading;
     const periods = this.timesPeriods();
-    const parts = this.stations.map((station) => {
+    const parts = this.showStations().map((station) => {
       const read = times[station.id];
       if (!read) return undefined;
       const planned = read.always
@@ -1244,7 +1238,7 @@ export class OpeningHoursScreen extends LitElement {
         }));
         shown.rows = [...(station.mixed ? shown.rows : []), ...stationRows];
       }
-      if (station?.state === "loading") shown.rows = [];
+      if (station?.state === "loading" && this.shownGroup() !== "all") shown.rows = [];
       return {
         shown,
         message: "",
