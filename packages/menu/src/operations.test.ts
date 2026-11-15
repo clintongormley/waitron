@@ -507,7 +507,6 @@ describe("menu operations", () => {
 
   it("rejects a create whose takeaway class is not a VAT class", async () => {
     await asVenue(async (tx) => {
-      const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
           categoryId: null,
