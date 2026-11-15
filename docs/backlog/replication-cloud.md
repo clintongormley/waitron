@@ -210,6 +210,8 @@ another restart and leaves the setup latch set. `setup-api.test.ts` checks the a
 and the successful-adoption latch separately; neither closes the restart gap. After a refused
 resend of a half-finished adopt, the identity reserved on the primary and the local leftovers
 remain unmeasured. The reset page still needs a way to identify this box in the primary's list.
+From source reading, removal treats a `serving-secondary` entry with no `nodes` row as a standby
+that never finished joining (`membership-removal.ts`).
 
 The following remain source-reading findings unless a test is named.
 
@@ -225,8 +227,7 @@ removed ids and full charts; the credential-free fetch in (ii) does not deliver 
 (vi) Bundle fetch passes only login refusals and `JOIN_REFUSALS`; removal and full-chart refusals
 still become `mirror.bundle_fetch_failed`. (vii) Removing a live standby as though it never
 finished joining could leave its later charts refused as `signer_removed`, logged without an
-alert. That removal/promotion sequence on started boxes remains unmeasured. A spare can now
-finish joining, so the former “no such standby exists” reassurance no longer applies.
+alert. That removal/promotion sequence on started boxes remains unmeasured.
 
 Incomplete-adoption reset still accepts the email/password proof recorded at join time without
 rechecking that account or requesting another one-time code. A record without that proof is
@@ -247,7 +248,7 @@ transaction. A failure partway through those steps remains unqualified. The opti
 assembly. `recovery-race.test.ts`'s header still lacks the house rule's “weaker than its name”
 qualification. Remaining test wording: the obsolete media-directory title in `backup-sweep`,
 “C2b Task 9” in `mirror-bundle-fetch`, “swap S2” in `mirror-bundle`, and the historical-file
-wording in `recovery-state`. No assertions or fixtures in those files were changed by this audit.
+wording in `recovery-state`.
 
 ## Boot membership fetch and remaining entry fixtures
 
@@ -257,7 +258,7 @@ mean the persisted fence is ignored. The helper and boot fixture tests exercise 
 steps; the authenticated production fetch remains unqualified.
 
 `node-entry.test.ts` still uses PostgreSQL-shaped failure fixtures (`Failed query`, `42703`).
-The history tag in `device-api.test.ts` remains. These are source-reading findings.
+This is a source-reading finding.
 
 ## Fiscal-certificate distribution
 
@@ -270,7 +271,8 @@ under another's. Since A947 slice 3a a spare receives the main box's ring when i
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
 rows a copy of `venue.db` brings open there. Since 3b-6a a spare receives that copy, and since 3b-F
 a spare of a venue that files with Veri*Factu does too; nothing yet delivers a ring the main box
-changes after the join (A1273).
+changes after the join (A1273). Re-encrypting the certificate when restoring onto Cloud also
+remains open.
 
 ## Adding a mirror while the internet is down
 
@@ -316,8 +318,7 @@ Cloud's production store still needs its own run.
 - A fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced (reproduced with a temporary two-boot case in
   `apps/server/src/boot.reconcile.test.ts`). Adoption now finishes and writes the mirror link.
-  Whether this two-start sequence affects two started boxes remains unmeasured; the old
-  never-finishes-adoption reassurance is retired. Recorded, not redesigned.
+  Whether this two-start sequence affects two started boxes remains unmeasured.
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
@@ -353,16 +354,21 @@ handover and the reset old box's later emergency switch on separate databases, w
 box restarts. Real hardware, disconnected internet and power-loss qualification remain open in
 [A947](#a947-go-live-on-two-local-boxes). The owner's 2026-10-21 request, “For go live I want one
 box with failover to another local box”, remains the target of the
-[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md).
+[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md). A second box is a
+choice for later venues (the owner's answer to question 4 of that design).
 
+- **Setup wizard choice, open since #443.** Whether to keep offering “Add a mirror node” remains
+  an owner decision. Joining and takeover run in tests, but two started boxes remain unqualified.
+  Decide `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and `role-screen.ts`'s row
+  together; removing or disabling the option is a product decision.
 - **Retirement and rejoin still lack a drain confirmation.** From source reading, `retireSelf`
   checks membership before self-eviction, and `rejoinAsSecondary` checks fencing and a carrier
   before wiping. Neither proves the old box's tail was carried forward. `rejoin --accept-loss`
   logs an acknowledgement but waives no drain check. Return handling belongs with A1342/A1418;
   do not treat successful joining or a handover test as qualification of these wipe paths.
 - **Re-admission and chart capacity.** A returned `sell-only` box occupies a chart slot until it
-  retires; an administrator can clear an `evicted` entry. Re-admission must settle reuse versus
-  retirement rather than append indefinitely to the bounded chart.
+  retires; an administrator can clear an `evicted` entry. Re-admission must retire the node's
+  previous chart entry and delete its live `fiscal.aeat` row. It must retire, not add.
 - **Chart addresses.** A post-setup `WAITRON_MANAGEMENT_ORIGIN` change is not republished.
   The separate [empty-contactUrl entry](#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
   keeps the missing-self fallback concern.
@@ -373,10 +379,17 @@ box with failover to another local box”, remains the target of the
   the shared ring at join, but later ring changes, restore onto Cloud and the dormant certificate's
   protection still need the [distribution work](#fiscal-certificate-distribution).
 - **Remaining operator surfaces.** A dashboard promote UI and a break-glass-panel accessibility
-  test remain on this list; no screen or accessibility qualification was performed by the audit.
+  test remain open.
 - **Split-brain and payments.** Examine selling, the fiscal chain, pending card payments and
   printing together (owner, 2026-08-26), including the till's timed-out-card choices. Settle
   [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
+
+- **Carry-in qualification.** Measure the installation reservation cost of a bundle fetch and
+  qualify provision/adopt serialization on one box. Verify that node identity is established
+  before signing. The old returned-primary and one-more-filing-pass risks need start/fencing
+  qualification against today's A947 start checks; they are not established by the sequential
+  handover test. The design says slice 5a decides the role before the first filing pass, but this
+  audit has not qualified that on two started boxes.
 
 The streaming and stored-primary-key decisions remain under
 [Decisions and deliberate limits](#decisions-and-deliberate-limits).
@@ -1174,4 +1187,3 @@ No path was found that copies `node_membership` from the primary to a standby. A
 standby whose own held membership list omits it takes the fallback in `nextStandings`
 (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
 `routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
-[Detail](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
