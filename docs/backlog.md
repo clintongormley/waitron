@@ -648,6 +648,23 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
+- **A1545. Seasons and Periods: a list page and an edit page each (owner, 2026-11-15).** Seasons
+  drops its edit-in-place table with Save and Cancel, Periods drops its pop-up dialog, both get the
+  row menu, and the Periods Floor plan column is tidied. Follows A1536 (#3247).
+  [Detail](backlog/service-periods.md#a1545-seasons-and-periods-a-list-page-and-an-edit-page-each)
+
+- **A1546. The Calendar: prep-station hours and the day box (owner, 2026-11-15).** The default
+  station shows the periods that feed it, a station two departments feed gets a row for each,
+  "No orders" becomes "Closed", the day box is laid out in sections and opens where you click,
+  the Month gains Show all and row names, and month names use three letters. Takes in the former
+  "Calendar marks" bundle.
+  [Detail](backlog/service-periods.md#a1546-the-calendar-prep-station-hours-and-the-day-box)
+
+- **A1547. Closed on a special day closes the chosen department, not the whole venue (owner,
+  2026-11-15).** With Deli chosen in the special-day editor, ticking Closed closes the restaurant and
+  bar too.
+  [Detail](backlog/service-periods.md#a1547-closed-on-a-special-day-closes-the-chosen-department-not-the-whole-venue)
+
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
 
 - **Loose ends left by A755 (#1809).**
@@ -658,8 +675,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-
-- **Calendar marks** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-calendar-marks)
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it

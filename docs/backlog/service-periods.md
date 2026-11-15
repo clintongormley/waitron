@@ -266,15 +266,105 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **A season painter save writes each edited week whole**
   [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
 
-## Bundle: Calendar marks
+## A1545. Seasons and Periods: a list page and an edit page each
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Owner, 2026-11-15, reviewing the pages A1536 (#3247) made. All in
+`packages/venue-service/src/dashboard/`.
 
-- **A purple season looks like a special day**
-  [Detail](service-periods.md#a-purple-season-looks-like-a-special-day)
-- **The Opening hours Month marks a special day only by its name** — left open by A762, #1850 (its plan's
-  Decision 11): the Staffing month draws a purple run over a special day's dates, the Opening hours
-  Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
+1. **Seasons becomes a list page with an edit page per season.** Today `seasons-screen.ts` edits
+   the whole table in place, with Save and Cancel under it. Instead the page lists the seasons;
+   a row, or Add season, opens that season's own page, which carries "Seasons ›" above its heading
+   (design-system.md, "A sub-page puts its parent's name above its own"). "Runs until" stays on
+   the list.
+2. **Periods becomes a list page with an edit page per period**, replacing `period-dialog.ts`, so
+   the two pages beside Calendar work the same way. The Painted in column stays: its chips go
+   straight to that season's hours, which the owner wants kept.
+3. **Both lists get the row menu.** The Periods Actions column draws only a bin
+   (`periods-list.ts`, `bin`), so nothing on screen says a row can be edited. Use the `⋯` row menu
+   with Edit and Delete, as other lists do; Seasons gets the same once it is a list.
+4. **A default floor plan is shown as its name in grey italics, without "(default)"** — the way an
+   inherited value is shown elsewhere. A floor plan chosen for the period stays in normal text.
+5. **A department with no floor plans shows "—"** in the Floor plan column. Today Deli's cell is
+   blank (`floorPlanCell` returns nothing when the department has no sets), while other empty cells
+   on the page show "—".
+
+The guide's pages for Seasons and Periods (EN and ES) follow. The three-letter month names on the
+Seasons page ("Sept") are A1546 item 1. Lane D's form-plumbing sweep (D-form-plumbing) lists the
+Period and Seasons forms; whichever lands second takes the other's change into account.
+
+## A1546. The Calendar: prep-station hours and the day box
+
+Owner, 2026-11-15, reviewing the Calendar's Opening hours tab. Mock-ups were shown to the owner and
+approved; they are not committed. Mostly `packages/venue-service/src/dashboard/`
+(`opening-hours-year.ts`, `-month.ts`, `-week.ts`, `-screen.ts`, `hours-view.ts`, `strings.ts`).
+
+1. **Month names use three letters**: "Sep", not "Sept", everywhere a short month is drawn (season
+   chips, Seasons page, day labels). `hours-view.ts` formats with `month: "short"`, and the
+   browser's British English gives "Sept" (Spanish gives "sept").
+2. **Remove the Seasons and Periods links** after the season chips (`opening-hours-year.ts`), and
+   the Periods link under the prep-station explanation. Both pages are in the sidebar.
+3. **The default station shows the periods that feed it, not "Always open: this is the default
+   station".** It can only receive orders while some period is selling, so when the venue closes
+   at midnight the kitchen gets nothing. Its row shows a bar for each period that can send it work,
+   across every department. Reword the explanation's "The default station is always open", and the
+   same wording in the month view, the week view and the prep stations screen.
+4. **A station fed by more than one department gets a heading row and one thin row per
+   department** in All prep stations and Show all, in the week and month views — the layout the
+   single-station view already uses. Today those views combine a station's senders into one row,
+   so two departments' periods at the same time (Restaurant and bar's Lunch and Deli's lunch, both
+   13:00–16:00, both sent to the Kitchen) compete for one stretch. A station one department feeds
+   keeps its single row with no department name.
+5. **"No orders" becomes "Closed"**, whatever the reason (owner's choice over a "Not used" variant).
+6. **The Show menu draws the prep-station icon after the name**, in the menu and in the closed
+   field, so "All prep stations" lines up with "All departments" instead of looking indented under
+   it.
+7. **The Month offers Show all**, as the Week does. Today the Month treats Show all as All
+   departments (design-system.md, Calendar). The day boxes already grow to fit; a week row becomes
+   as tall as its tallest day.
+8. **The Month names its rows on the department views**, as All prep stations does: a
+   department's zones, or each department under All departments.
+9. **The day box, every view:**
+   - Sections: one per department, its name bold and its zones beneath in normal weight; then a
+     "Prep stations" section, its heading bold and the stations in normal weight. Bold no longer
+     marks a zone's own hours: a zone that follows its department keeps its hours in grey italics,
+     and one with its own hours (Terrace's 09:00–23:00) shows them in normal text.
+   - A station fed by more than one department lists its periods department by department, one
+     line each ("Restaurant and bar: Lunch 13:00–16:00 · …", "Deli: …").
+   - Each "·" is joined to the range before it by a non-breaking space, so a wrapped line starts
+     with a time range and the ranges stay left-aligned. The box is wider so more ranges fit, and
+     scrolls when it is still too tall.
+   - On an ordinary day "Winter standard hours" becomes the link to the season's standard week, in
+     place of the "Edit Winter's standard week" button. A special day keeps its "Edit special day"
+     button.
+   - On the prep-station views: it opens from a click anywhere on a day's row, including the grey
+     closed stretches; it opens beside where you clicked, not at the left edge; it drops the
+     repeated explanation and Periods link; and it ends with the same buttons as the other day
+     boxes (today it has none). "Open this week" is left out on the week it is already showing.
+10. **Taken in from the former "Calendar marks" bundle** (backlog review, 2026-11-06):
+    - [A purple season looks like a special day](#a-purple-season-looks-like-a-special-day).
+    - The Opening hours Month marks a special day only by its name — left open by A762, #1850 (its
+      plan's Decision 11): the Staffing month draws a purple run over a special day's dates, the
+      Opening hours Month does not. The owner's "even on the month view the special day is not
+      shown" may mean it too.
+
+The Opening hours guide (EN and ES) and design-system.md's Calendar section follow.
+
+## A1547. Closed on a special day closes the chosen department, not the whole venue
+
+Owner, 2026-11-15: in the special-day editor, with Deli chosen, ticking Closed for the whole day
+closes the whole venue. The tick is drawn under the department picker
+(`special-day-painter.ts`, `paintArea`), but it writes `special_day_dates.closed_all_day`, one
+value per date with no department (`packages/db/src/schema/venue-service/seasons.ts`), which the
+design calls "the whole-venue tick" (2026-10-11 opening-hours design, `special_day_dates` row).
+
+The ask: Closed closes only the chosen department for that day, through the department's own
+all-day paint, which the painter can already store and draw ("Restaurant closed all day" behind a
+zone's grid). Closing the whole venue on a date stays a separate, clearly named action (the
+Calendar's "Close the whole venue" already exists). Check the season week editor and any other
+painter that puts a Closed control under a department picker. Whether `closed_all_day` is still
+needed, and how the day resolver (`day-resolver.ts`) and the year's closed marking read the change,
+is for the plan. It changes which parts of the venue are open on a date, so it takes the full
+review.
 
 ## Decisions and deliberate limits
 
