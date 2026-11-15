@@ -385,8 +385,8 @@ const refusal = (code: string, status: number) =>
   new Response(JSON.stringify({ error: { code } }), { status });
 /**
  * The server's switch sign-in: a passkey over a live, unused challenge sets the cookie; no sign-in
- * needs it. A take answers `take`: one still catching up checks no passkey, and one refused before
- * its sign-in only checks the challenge is live.
+ * needs it. A take answers `take`: one still catching up or already taken checks no passkey, and one
+ * refused by the copy checks after the early check only checks the challenge is live.
  */
 function switchSignIn(
   proof: SwitchProof,
@@ -398,7 +398,7 @@ function switchSignIn(
   const passkey = (signIn as { passkey?: { response: { clientDataJSON: string } } } | undefined)
     ?.passkey;
   if (passkey) {
-    if (take === "catching-up") return undefined;
+    if (take === "catching-up" || take === "taken") return undefined;
     const client = passkey.response.clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
     const { challenge } = JSON.parse(atob(client)) as { challenge: string };
     const issuedAt = proof.issued.get(challenge);
@@ -1799,10 +1799,12 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
     const get = stubPasskey();
     const proof = newProof();
     proof.refusals = [code];
-    const { el, posts } = await mount({ proof });
+    const { el, posts } = await mount({ proof, takes: ["restarting"] });
     await choosePasskey(el);
     q(el, "[data-test=emergency-preview]").click();
-    await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+    );
     const sent = posts
       .filter(({ body }) => body.signIn !== undefined)
       .map(({ path, body }) => {
@@ -1827,7 +1829,7 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
     stubPasskey();
     const proof = newProof();
     proof.refusals = [code, code];
-    const { el, posts } = await mount({ proof });
+    const { el, posts } = await mount({ proof, takes: ["restarting"] });
     await choosePasskey(el);
     q(el, "[data-test=emergency-preview]").click();
     await vi.waitFor(() =>
@@ -1842,10 +1844,10 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
 it("a passkey answer that lapses while the spare catches up says so, and checking again asks anew", async () => {
   const get = stubPasskey();
   const proof = newProof();
-  proof.refusals = ["passkey.not_registered"];
+  proof.refusals = ["passkey.not_registered", "passkey.not_registered"];
   const { el, posts } = await mount({
     proof,
-    takes: [...Array<string>(66).fill("catching-up"), "taken"],
+    takes: [...Array<string>(66).fill("catching-up"), "restarting"],
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   await choosePasskey(el);
@@ -1866,8 +1868,10 @@ it("a passkey answer that lapses while the spare catches up says so, and checkin
   const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]");
   await vi.waitFor(() => expect(again.disabled).toBe(false));
   again.click();
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
-  expect(get).toHaveBeenCalledTimes(3);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  expect(get).toHaveBeenCalledTimes(4);
 });
 
 it("a passkey take the held copy refused, then sent to the held copy, keeps the take's explanation", async () => {
