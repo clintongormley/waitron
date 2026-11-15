@@ -2250,6 +2250,8 @@ CREATE TABLE `departments` (
 	`paid_when` text DEFAULT 'prepay' NOT NULL,
 	`collection_number` text DEFAULT 'none' NOT NULL,
 	`print_trading_name` integer DEFAULT true NOT NULL,
+	`dining` text DEFAULT 'eat_in' NOT NULL,
+	`dining_starts_as` text DEFAULT 'eat_in' NOT NULL,
 	`transfer_desk_profile_id` text,
 	`receipt_text` text,
 	`receipt_logo_image_id` text,
@@ -2260,7 +2262,9 @@ CREATE TABLE `departments` (
 	FOREIGN KEY (`receipt_logo_image_id`) REFERENCES `media_images`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "departments_order_start_ck" CHECK("departments"."order_start" in ('table', 'counter')),
 	CONSTRAINT "departments_paid_when_ck" CHECK("departments"."paid_when" in ('prepay', 'ticket_then_pay')),
-	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered'))
+	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered')),
+	CONSTRAINT "departments_dining_ck" CHECK("departments"."dining" in ('eat_in', 'takeaway', 'till_choice')),
+	CONSTRAINT "departments_dining_starts_as_ck" CHECK("departments"."dining_starts_as" in ('eat_in', 'takeaway'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
