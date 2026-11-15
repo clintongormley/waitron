@@ -5894,8 +5894,9 @@ unverifiable under the other environment.
 
 **Restore and promotion start a new chain under a new installation name.** A working box keeps its
 identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
-its installation from the box's clock — five symbols for the UTC minute — only after a check
-against a clock on another machine (within 30 seconds, no confirmation). The minute is not taken
+its installation from the box's clock — five symbols for the UTC minute — only after the box's
+internet time service says it is synchronised, or a clock on another machine agrees within 30
+seconds (no confirmation); AEAT's time is not read for it. The minute is not taken
 when a name in the history the box reads already holds it: the module's own record of the names it
 has chosen, earlier abandoned attempts of the same setup, a restored or surviving database and a
 backup's record of names. A later name or a later record is never a reason to refuse or to pick a

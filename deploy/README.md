@@ -129,9 +129,10 @@ service runs on the machine nothing keeps its clock right, and to check the cloc
 time service such as `systemd-timesyncd`; `install` carries on. It matters because at every start a box
 that files invoices takes no payment until the system reports its clock in step with internet time
 (`timedatectl`'s `NTPSynchronized`, read through the box's clock service), two tills or handhelds
-that are switched on and connected agree with its clock, or someone confirms it. `install` switches
-synchronisation back on even where someone switched it off, so a test box whose clock is set wrong
-on purpose needs it switched off again after each `install`. `reset` does not touch it.
+that are switched on and connected agree with its clock, or someone confirms it. It is also what
+lets setup, restore and promotion name an invoice series without a phone or laptop on the venue's
+network. `install` switches synchronisation back on even where someone switched it off, so a test
+box whose clock is set wrong on purpose needs it switched off again after each `install`. `reset` does not touch it.
 
 On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
 set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it
@@ -682,10 +683,10 @@ command against it treat that entrypoint differently:
   backup's server key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
-  When the series check refuses because the box's time is unconfirmed (`sif.allocation_invalid`
-  with reason `second_clock_missing`, `clock_disagreement` or `clock_unconfirmed`), the command
-  prints "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet, or
-  restore from the restore page on a phone or laptop on the venue's network."
+  When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
+  `second_clock_missing` or `clock_unconfirmed`), the command prints "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet and
+  run this command again, or open the restore page on a phone or laptop on the venue's network,
+  which says what is wrong with the box's clock."
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \

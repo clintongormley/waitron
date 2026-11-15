@@ -49,7 +49,7 @@ state is the same file's "while %s the page's one button reads %s".
 Each detail sits on its own row, its value beside its label (`first-hour.browser.test.ts`, "Check
 this venue puts each detail on a row of its own, label then value"), and the list shows no clock time
 (the same file's "when only the %s agrees, Check this venue shows no clock rows").
-When the clocks differ, after **Proceed** the page says "It is very important that the server time
+When the box's time service is not synchronised and the clocks differ, after **Proceed** the page says "It is very important that the server time
 is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row, each one time to the minute (with seconds on every
 row when another clock reads the server's minute), then **The server**, **This device** and
 **Both times are wrong**. **The server** and **Both times are wrong** send nothing and say to correct
@@ -59,8 +59,7 @@ from the device showing the page, under the owner's pass, and the page then make
 nobody pressing (the same file's "after Proceed on clocks that differ, This device sets the server's
 clock and the series are made with nobody pressing"); a refusal says what happened and what to do
 (the same file's "in %s a refusal for %s says what happened and what to do, compares nothing and
-keeps the choices"). It is not offered when the internet's time agrees with the box's (the same
-file's "offers no This device when the internet's time agrees with the server's"). Each step
+keeps the choices"). Each step
 becomes an alert, handed to the managers' email duty, at the venue's first full start that is
 neither a mirror nor fenced (`apps/server/src/boot.box-emails.test.ts`, "boot raises and emails
 each clock step the setup page noted, then deletes the note"); a step whose note could not be saved
@@ -105,8 +104,10 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   (`first-hour.browser.test.ts`, "with no second clock it explains itself and carries on when the
   internet arrives" and "with no second clock on load it explains itself before the tick, and makes
   the series once Proceed is pressed and a clock answers").
-- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time
-  and this device's, and asks which is correct; either answer says to correct this device's time and reconnect to the box.
+- **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): after
+  **Proceed** the page shows the server's time and this device's, and asks which is correct; **The
+  server** and **Both times are wrong** say to correct this device's time and reconnect to the box,
+  and **This device** sets the box's clock.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
   clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
@@ -256,7 +257,7 @@ recent setups. It needs the box's internet time service to say it is synchronise
 `timedatectl show -p NTPSynchronized --value`); otherwise it explains why and stops. `timedatectl`
 reports on the machine the command runs on, so run the command on the box itself: where
 `timedatectl` is missing or fails, the answer is "not synchronised" and the command stops
-(`packages/provisioning/src/time-service-command.ts`;
+(`packages/provisioning/src/timedatectl-reader.ts`;
 `packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"; `packages/provisioning/src/first-setup-command.test.ts`,
 "names the series with no browser when the box's time service is synchronised" and "names none when

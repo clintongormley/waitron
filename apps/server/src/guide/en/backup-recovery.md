@@ -197,8 +197,8 @@ losing changes after this snapshot." for a Waitron Cloud copy — and choose **R
 **Restore from my bucket** or **Restore this snapshot**.
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
-refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, after
-**Proceed** the page shows the server's time and this device's and asks which is correct: **The
+refuses, resolve its cause and choose **Compare the clocks again**. If the server cannot check its time over the internet and the
+clocks differ, after **Proceed** the page shows the server's time and this device's and asks which is correct: **The
 server**, **This device** or **Both times are wrong**. **This device** sets the server's time from
 the device you are using, and the page carries on by itself. After either of the other two, correct
 this device's time, reconnect to the box, then choose **Compare the clocks again**. If the box then shows a page saying it could not make
