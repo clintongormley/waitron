@@ -235,18 +235,18 @@ it("offers Receipts between Tables and Transfers when an editor is supplied, and
   expect(modal.size).toBe("wide");
   const strip = form.shadowRoot!.querySelector("wt-tabs")!;
   await strip.updateComplete;
-  expect(
-    [...strip.shadowRoot!.querySelectorAll("[role=tab]")].map((tab) => [
-      tab.getAttribute("data-key"),
-      tab.textContent!.trim(),
-    ]),
-  ).toEqual([
+  const tabs = [...strip.shadowRoot!.querySelectorAll("[role=tab]")];
+  const expected = [
     ["details", "Details"],
     ["service", "Service"],
     ["tables", "Tables"],
     ["receipt", "Receipts"],
     ["transfers", "Transfers"],
-  ]);
+  ];
+  expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(expected.map(([key]) => key));
+  for (const [index, [, name]] of expected.entries()) {
+    await expect.element(page.elementLocator(tabs[index]!)).toHaveAccessibleName(name!);
+  }
   expect(form.shadowRoot!.querySelector("[slot=receipt]")!.contains(editor)).toBe(true);
   expect(departmentSave(form)).not.toBeNull();
   await selectDepartmentTab(form, "receipt");

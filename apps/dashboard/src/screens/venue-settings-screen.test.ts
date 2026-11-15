@@ -1,6 +1,7 @@
 import { es } from "../i18n/strings.js";
 import { html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { WtTabs } from "@waitron/ui";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -260,9 +261,12 @@ describe("the Venue settings page", () => {
     navigate("/manage/venue-settings");
     const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
-    expect(
-      [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Datos del local", es["venue_settings.tab.kitchen"]]);
+    const strip = [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')];
+    expect(strip).toHaveLength(2);
+    await expect.element(page.elementLocator(strip[0]!)).toHaveAccessibleName("Datos del local");
+    await expect
+      .element(page.elementLocator(strip[1]!))
+      .toHaveAccessibleName(es["venue_settings.tab.kitchen"]);
   });
 });
 
@@ -278,9 +282,11 @@ it.each([
     expect(tabKeys(el)).toEqual(["venue-details", "kitchen"]);
     expect(selected(el)).toBe("venue-details");
     expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
-    expect(
-      tabs(el)!.shadowRoot!.querySelector('[data-key="venue-details"]')?.textContent?.trim(),
-    ).toBe(label);
+    await expect
+      .element(
+        page.elementLocator(tabs(el)!.shadowRoot!.querySelector('[data-key="venue-details"]')!),
+      )
+      .toHaveAccessibleName(label);
     await select(el, "kitchen");
     expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
     expect(selected(el)).toBe("kitchen");

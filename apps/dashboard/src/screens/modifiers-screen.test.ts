@@ -249,10 +249,10 @@ it("shows an Extras tab and an Options tab, Extras first", async () => {
   const el = await mount();
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
-  const labels = [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')].map((tab) =>
-    tab.textContent?.trim(),
-  );
-  expect(labels).toEqual([t("extras.title"), t("options.title")]);
+  const strip = [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')];
+  expect(strip).toHaveLength(2);
+  await expect.element(page.elementLocator(strip[0]!)).toHaveAccessibleName(t("extras.title"));
+  await expect.element(page.elementLocator(strip[1]!)).toHaveAccessibleName(t("options.title"));
   expect(
     tabs
       .shadowRoot!.querySelector('[role="tab"][data-key="extras"]')!
