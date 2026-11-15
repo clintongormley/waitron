@@ -1227,11 +1227,8 @@ once released. Belongs with A1016.
 
 ## A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).
 
-- **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).** Waits for A1188
-  part 1, whose card facts the page prints, for people holding `node.manage`. Part 1 landed in
-  pull requests from #2250 to setup's first pack (PR E): one PDF holding the bucket copy, the
-  archives and the server key, made from the Backups card or by setup.
-  [Design](../superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
+- **A1187 part 2: status and Cloud shortcut.** Backups can print the emergency page, with Cloud’s address/code, QR codes, issue date, eligible people and steps. Codes require Cloud’s deployed endpoint and hosting eligibility. PR 2 still adds the Cloud shortcut opening the existing maker, current-code status checks and missing-code wording. The watcher retained the changed-code warning on 16 November; PR 2 follows this printing slice. No hosted activation is delivered here.
+  [Plan](../superpowers/plans/2026-11-15-a1187-2-emergency-page.md).
 
 ## A1187: wording part 1's reviews left on the restore command and setup.
 
@@ -2001,6 +1998,7 @@ Part 1 of the recovery pack (design: [A1187](../superpowers/specs/2026-10-29-a11
 landed in pull requests from #2250 to setup's first pack (PR E). What their reviews left, by the
 pull request that left it:
 
+- **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
 - **#2250 (the pack format and its readers).** `waitron-restore`'s usage line still says
   `<pack-file>` for `--from-archive`, which a test pins. The restore command's refusals for a file
   holding no kit or no archive pack still name the kit file and the archive recovery pack file,

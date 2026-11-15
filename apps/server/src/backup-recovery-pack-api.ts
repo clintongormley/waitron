@@ -28,12 +28,14 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
+  buildEmergencyPart,
+  type EmergencyPartInput,
   buildArchivesPart,
   buildBucketPart,
   buildServerKeyPart,
@@ -53,9 +55,16 @@ import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
+import type { CloudConnection } from "./cloud-client.js";
+import { readEmergencyPeople } from "./cloud-emergency-people.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackMakeDeps {
+  cloud?: {
+    connection: Pick<CloudConnection, "status" | "emergencyCode">;
+    managementOrigin: string;
+    isPrimary: () => boolean;
+  };
   db: Database;
   ring: KeyRing;
   /** This box's node.db, which holds the recovery-key check. */
@@ -179,7 +188,53 @@ async function currentChecks(
   };
 }
 
+async function mayPrintEmergency(db: Database | Transaction, token: string): Promise<boolean> {
+  try {
+    await authorizeManager(db, {
+      managementSessionId: token,
+      permission: "node.manage",
+      touch: false,
+    });
+    return true;
+  } catch (error) {
+    if (isAppError(error) && error.code === "authorization.not_permitted") return false;
+    throw error;
+  }
+}
+
+async function readPackEmergency(
+  deps: BackupRecoveryPackMakeDeps,
+  token: string,
+  signal: AbortSignal,
+): Promise<EmergencyPartInput> {
+  const cloud = deps.cloud;
+  if (!cloud) return { state: "absent", reason: "not_connected" };
+  if (!cloud.isPrimary()) return { state: "absent", reason: "not_primary" };
+  if (!(await mayPrintEmergency(deps.db, token))) return { state: "absent", reason: "permission" };
+  try {
+    if ((await cloud.connection.status()).state !== "complete")
+      return { state: "absent", reason: "not_connected" };
+    return {
+      state: "included",
+      code: await cloud.connection.emergencyCode(cloud.managementOrigin, signal),
+    };
+  } catch (error) {
+    if (isAppError(error) && error.code === "cloud.emergency_hosting_closed") {
+      const reason = (error.params as Record<string, unknown>).reason;
+      if (
+        reason === "setting_off" ||
+        reason === "level_inactive" ||
+        reason === "no_payment_method" ||
+        reason === "not_provisioned"
+      )
+        return { state: "absent", reason };
+    }
+    return { state: "failed", failedWith: isAppError(error) ? error.code : "unexpected" };
+  }
+}
+
 type MakeInput = {
+  emergency: EmergencyPartInput;
   token: string;
   personId: string;
   request: MakeRequest;
@@ -238,6 +293,17 @@ async function makePack(
     ring: deps.ring,
     env: input.env,
   };
+  let emergency = input.emergency;
+  if (emergency.state === "included") {
+    if (!deps.cloud?.isPrimary()) emergency = { state: "absent", reason: "not_primary" };
+    else if (!(await mayPrintEmergency(tx, input.token)))
+      emergency = { state: "absent", reason: "permission" };
+  }
+  const emergencyPart = buildEmergencyPart(
+    context,
+    emergency,
+    emergency.state === "included" ? await readEmergencyPeople(tx) : [],
+  );
   const bucket = await buildBucketPart(tx, context);
   const archives = await buildArchivesPart(tx, context);
   const serverKey = await buildServerKeyPart(tx, context, {
@@ -246,7 +312,10 @@ async function makePack(
     keyInForce,
     ...(newKey === undefined ? {} : { newKey }),
   });
-  const parts = withServerKeyPageNumber([bucket, archives, serverKey], request.locale);
+  const parts = withServerKeyPageNumber(
+    [emergencyPart, bucket, archives, serverKey],
+    request.locale,
+  );
   const carried = serverKey.record.carriedKey === true;
   const pdf = await renderRecoveryPack({
     locale: request.locale,
@@ -312,6 +381,8 @@ export function mountBackupRecoveryPackMakeApi(
       });
       const { personId } = await requireFreshManagementSignIn(deps.db, token);
       const request = makeRequest(await readRawJsonBody<unknown>(c));
+      const emergency = await readPackEmergency(deps, token, c.req.raw.signal);
+      c.req.raw.signal.throwIfAborted();
       const made = await deps.turns(() =>
         inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
           const env = await deps.readBoxEnv();
@@ -321,6 +392,7 @@ export function mountBackupRecoveryPackMakeApi(
           return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
             const made = await withTransaction(deps.db, (tx) =>
               makePack(tx, nodeTx, deps, {
+                emergency,
                 token,
                 personId,
                 request,

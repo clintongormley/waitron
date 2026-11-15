@@ -562,6 +562,8 @@ account". Left open by A1185.
 
 ## A1188. Someone at the venue can start the venue in the cloud when the box has died (owner, 2026-10-29)
 
+Before A1188 activation ships, recheck A1187-2’s printed emergency steps against the actual hosted flow; printing the page does not qualify hosted activation.
+
 Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
 show the emergency link to an administrator when the box disappears. The locked copy Cloud
 restores after a valid emergency code offers only an administrator sign-in; a manager
@@ -576,8 +578,7 @@ source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue 
 Veri*Factu can join, with nothing fiscal written at the join. Cloud placement and the hosted start
 still wait for Cloud's half. The emergency-card adapter is built; its facts need
 Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
-readiness; Cloud's code endpoint remains required. The till entrance is built, including without a spare; recovery-pack printing and
-the hosted runtime remain open.
+readiness; Cloud's code endpoint remains required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. A1187-2’s status checks and Cloud shortcut, and the hosted runtime, remain open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The [part 2 plan](../superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.

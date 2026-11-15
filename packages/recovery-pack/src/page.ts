@@ -5,6 +5,7 @@ export type RecoveryPackPage = {
   title: string;
   intro?: string;
   rows: { label: string; value: string }[];
+  address?: { label: string; text: string; qr: true };
   secret?: {
     label: string;
     text: string;

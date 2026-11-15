@@ -2196,14 +2196,14 @@ export interface MadeRecoveryPack {
   key: RecoveryPackKeyState;
 }
 
-type RecoveryPackPart = "bucket" | "archives" | "server-key";
+type RecoveryPackPart = "bucket" | "archives" | "server-key" | "emergency";
 
 /** Each reason names only the parts the box can give it for. */
 export type RecoveryPackReason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: RecoveryPackPart; kind: "set_up_after" }
-  | { part: RecoveryPackPart; kind: "removed" }
+  | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
+  | { part: "bucket" | "archives" | "server-key"; kind: "removed" }
   | { part: "server-key"; kind: "key_replaced" };
 
 /** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s

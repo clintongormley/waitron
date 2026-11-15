@@ -4,7 +4,8 @@ import { recoveryPacks } from "./schema/recovery-packs.js";
 
 /** What one part of a pack held, and the checks that tell when it is out of date. */
 export type RecoveryPackPartRecord = {
-  part: "bucket" | "archives" | "server-key";
+  part: "bucket" | "archives" | "server-key" | "emergency";
+  codeIssuedAt?: string;
   state: "included" | "absent" | "failed" | "not-set-up";
   keyChangedAt?: string;
   /** `keyChangedAt` is the pack's own time: nothing had changed the backup key yet. */
@@ -24,9 +25,9 @@ export type RecoveryPackRecord = {
   parts: RecoveryPackPartRecord[];
 };
 
-const PARTS = new Set(["bucket", "archives", "server-key"]);
+const PARTS = new Set(["bucket", "archives", "server-key", "emergency"]);
 const STATES = new Set(["included", "absent", "failed", "not-set-up"]);
-const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision", "keyName"]);
+const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision", "keyName", "codeIssuedAt"]);
 
 // An allow-list, so nothing secret can reach a backup through this table: the row travels in
 // every copy of venue.db.

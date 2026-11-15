@@ -199,6 +199,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       const fresh = await status();
       // Every part drawn, the server key by the real fiscal module.
       expect(fresh.latest.parts).toEqual([
+        { part: "emergency", state: "absent" },
         { part: "bucket", state: "included" },
         { part: "archives", state: "included" },
         { part: "server-key", state: "included" },

@@ -20,6 +20,7 @@ import {
   setNodePublicKey,
   stampDeployment,
   withTransaction,
+  withNodeTransaction,
 } from "@waitron/db";
 import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -40,7 +41,10 @@ import { AppError } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
-import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
+import {
+  mountBackupRecoveryPackMakeApi,
+  type BackupRecoveryPackMakeDeps,
+} from "./backup-recovery-pack-api.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { invoiceFontBytes } from "./invoice-font.js";
@@ -132,6 +136,7 @@ const drawingSeat: Seat = async (_tx, _node, context) =>
 
 function fixture(
   options: {
+    cloud?: BackupRecoveryPackMakeDeps["cloud"];
     remote?: boolean;
     seat?: Seat | null;
     seats?: number;
@@ -167,6 +172,7 @@ function fixture(
   mountBackupRecoveryPackMakeApi(
     local,
     {
+      cloud: options.cloud,
       db: suite.db,
       nodeDb: suite.node,
       ring: RING,
@@ -194,12 +200,14 @@ function fixture(
       tls = true,
       raw,
       stream,
+      signal,
     }: {
       token?: string | null;
       headers?: Record<string, string>;
       tls?: boolean;
       raw?: string;
       stream?: ReadableStream<Uint8Array>;
+      signal?: AbortSignal;
     } = {},
   ) {
     const socket = tls ? new TLSSocket(new Socket()) : undefined;
@@ -208,6 +216,7 @@ function fixture(
       `https://${options.remote ? "staff.example.test" : "box.test"}${path}`,
       {
         method: "POST",
+        signal,
         headers: {
           "Content-Type": "application/json",
           ...(token === null ? {} : { cookie: `waitron_management_session=${token}` }),
@@ -323,7 +332,9 @@ describe("the make route's refusals", () => {
     ],
     ["no session", { token: null }, 401, "management_session.required"],
   ] as const)("refuses %s before reading anything", async (_name, extra, status, code) => {
-    const response = await fixture().make(true, extra);
+    const fetchCode = vi.fn(async () => EMERGENCY);
+    const response = await fixture({ cloud: cloudPack(fetchCode) }).make(true, extra);
+    expect(fetchCode).not.toHaveBeenCalled();
     expect(response.status).toBe(status);
     expect((await codeOf(response)).code).toBe(code);
     expect(await packs()).toEqual([]);
@@ -462,11 +473,12 @@ describe("a made pack", () => {
       madeAt: new Date("2026-10-30T09:00:00.000Z"),
     });
     expect(record!.parts.map((p) => [p.part, p.state])).toEqual([
+      ["emergency", "absent"],
       ["bucket", "included"],
       ["archives", "included"],
       ["server-key", "included"],
     ]);
-    expect(record!.parts[2]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
+    expect(record!.parts[3]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
     const stored = JSON.stringify(record);
     for (const secret of [KEY, BUCKET.secretAccessKey, keyInForce.secret])
       expect(stored).not.toContain(secret);
@@ -485,7 +497,7 @@ describe("a made pack", () => {
     expect(await verifySecretAsync(carried.secret, verifier)).toBe(true);
     expect(await verifySecretAsync(keyInForce.secret, verifier)).toBe(false);
     const [record] = await packs();
-    expect(record!.parts[2]).toMatchObject({ keyName: carried.name, carriedKey: true });
+    expect(record!.parts[3]).toMatchObject({ keyName: carried.name, carriedKey: true });
     expect(JSON.stringify(record)).not.toContain(carried.secret);
   });
 
@@ -541,7 +553,7 @@ describe("a made pack", () => {
       expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
       expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
       const [record] = await packs();
-      expect(record!.parts[2]).toEqual({
+      expect(record!.parts[3]).toEqual({
         part: "server-key",
         state: "failed",
         keyName: keyInForce.name,
@@ -568,6 +580,7 @@ describe("a made pack", () => {
       expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
       expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
       expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
+        ["emergency", "absent"],
         ["bucket", "included"],
         ["archives", "included"],
         ["server-key", "failed"],
@@ -596,6 +609,7 @@ describe("a made pack", () => {
       expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
       expect(await pdfText(await response.arrayBuffer())).toContain(words);
       expect((await packs())[0]!.parts.map((p) => p.state)).toEqual([
+        "absent",
         "included",
         "included",
         "failed",
@@ -620,8 +634,8 @@ describe("a made pack", () => {
     );
     expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     const [record] = await packs();
-    expect(record!.parts.map((p) => p.state)).toEqual(["included", "included", "failed"]);
-    expect(record!.parts[2]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
+    expect(record!.parts.map((p) => p.state)).toEqual(["absent", "included", "included", "failed"]);
+    expect(record!.parts[3]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
   });
 
   it("with no key in force and the box ticked, fails the page and writes no key", async () => {
@@ -631,7 +645,7 @@ describe("a made pack", () => {
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
     expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
-    expect(record!.parts[2]).toEqual({ part: "server-key", state: "failed", carriedKey: false });
+    expect(record!.parts[3]).toEqual({ part: "server-key", state: "failed", carriedKey: false });
   });
 
   it("on a venue that files no invoices, has no server-key part and says the key is unchanged", async () => {
@@ -653,7 +667,7 @@ describe("a made pack", () => {
     expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     const [record] = await packs();
     expect(record!.number).toBe(2);
-    expect(record!.parts[2]).toEqual({ part: "server-key", state: "absent" });
+    expect(record!.parts[3]).toEqual({ part: "server-key", state: "absent" });
   });
 
   it("waits for a backup turn already running before it reads anything", async () => {
@@ -692,6 +706,7 @@ describe("a made pack", () => {
         personId: admin.personId,
         number: 1,
         parts: [
+          { part: "emergency", state: "absent" },
           { part: "bucket", state: "included" },
           { part: "archives", state: "included" },
           { part: "server-key", state: "included" },
@@ -712,6 +727,7 @@ describe("a made pack", () => {
         personId: admin.personId,
         number: 2,
         parts: [
+          { part: "emergency", state: "absent" },
           { part: "bucket", state: "included" },
           { part: "archives", state: "failed", failedWith: "backup.archive_settings_unreadable" },
           { part: "server-key", state: "failed", failedWith: "unexpected" },
@@ -826,7 +842,7 @@ describe("a made pack", () => {
     const file = await readRecoveryPackPdf(new Uint8Array(await answer.arrayBuffer()));
     const carried = (file.serverKey as { nodeKey: { name: string } }).nodeKey;
     const [record] = await packs();
-    expect(record!.parts[2]).toMatchObject({ keyName: carried.name, carriedKey: true });
+    expect(record!.parts[3]).toMatchObject({ keyName: carried.name, carriedKey: true });
     expect(replaced.name).not.toBe(carried.name);
     expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(replaced.name);
   });
@@ -836,6 +852,7 @@ describe("a made pack", () => {
     const response = await fixture().make();
     expect(response.status).toBe(200);
     expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
+      ["emergency", "absent"],
       ["bucket", "failed"],
       ["archives", "failed"],
       ["server-key", "included"],
@@ -1070,8 +1087,8 @@ describe("the status route", () => {
     await f.make(true);
     const [record] = await packs();
     expect(record).toMatchObject({ receivedAt: null });
-    expect(record!.parts[2]).toMatchObject({ carriedKey: true });
-    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(record!.parts[2]!.keyName);
+    expect(record!.parts[3]).toMatchObject({ carriedKey: true });
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(record!.parts[3]!.keyName);
     expect(await read(f)).toMatchObject({
       upToDate: false,
       unreceived: { number: 1, holdsCurrentServerKey: true },
@@ -1103,8 +1120,8 @@ describe("the status route", () => {
       suite.node.run(sql`drop trigger refuse_recovery_key`);
     }
     const [record] = await packs();
-    expect(record!.parts[2]).toMatchObject({ carriedKey: true });
-    expect(record!.parts[2]!.keyName).not.toBe(keyInForce.name);
+    expect(record!.parts[3]).toMatchObject({ carriedKey: true });
+    expect(record!.parts[3]!.keyName).not.toBe(keyInForce.name);
     expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
     expect(await verifySecretAsync(keyInForce.secret, verifier)).toBe(true);
@@ -1211,3 +1228,172 @@ describe("the status route", () => {
     expect((await read(fixture())).latest).toBeNull();
   });
 });
+
+const EMERGENCY = {
+  version: 1 as const,
+  installationId: "installation",
+  venueId: "venue",
+  countryCode: "ES" as const,
+  asOf: "2026-10-30T09:00:00.000Z",
+  codeIssuedAt: "2026-10-20T08:00:00.000Z",
+  address: "https://rescue.venue.example/",
+  code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+};
+const cloudPack = (
+  code = async () => EMERGENCY,
+  isPrimary = () => true,
+): NonNullable<BackupRecoveryPackMakeDeps["cloud"]> => ({
+  connection: { status: async () => ({ state: "complete", code: "" }), emergencyCode: code },
+  managementOrigin: "https://box.test",
+  isPrimary,
+});
+
+it.each(["en", "es"] as const)(
+  "prints Cloud's returned address and code, storing only the issue date (%s)",
+  async (locale) => {
+    const response = await fixture({ cloud: cloudPack() }).make(
+      false,
+      {},
+      { locale, newServerKey: false },
+    );
+    expect(response.status).toBe(200);
+    const bytes = await response.arrayBuffer();
+    const text = await pdfText(bytes);
+    expect(text).toContain(EMERGENCY.address);
+    expect(text.replace(/\s+/g, "")).toContain(EMERGENCY.code);
+    expect(text).toContain(PART_WORDS[locale].emergency.intro);
+    const [record] = await packs();
+    expect(record!.parts[0]).toEqual({
+      part: "emergency",
+      state: "included",
+      codeIssuedAt: EMERGENCY.codeIssuedAt,
+    });
+    for (const value of [
+      JSON.stringify(record),
+      JSON.stringify(logs),
+      JSON.stringify(await readRecoveryPackPdf(new Uint8Array(bytes))),
+    ]) {
+      expect(value).not.toContain(EMERGENCY.code);
+      expect(value).not.toContain(EMERGENCY.address);
+    }
+  },
+);
+
+it("waits for Cloud before the backup turn or either write lock, then rechecks code authority", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const requested = vi.fn(async () => {
+    await gate;
+    return EMERGENCY;
+  });
+  const enteredTurn = vi.fn();
+  const queue = createTurns();
+  const turns: Turns = (body) => {
+    enteredTurn();
+    return queue(body);
+  };
+  let primary = true;
+  const pending = fixture({ cloud: cloudPack(requested, () => primary), turns }).make();
+  try {
+    await vi.waitFor(() => expect(requested).toHaveBeenCalledOnce());
+    expect(enteredTurn).not.toHaveBeenCalled();
+    await withTransaction(suite.db, async () => {
+      primary = false;
+    });
+    expect(await withNodeTransaction(suite.node, async () => "written")).toBe("written");
+  } finally {
+    release();
+  }
+  const response = await pending;
+  expect(response.status).toBe(200);
+  expect(await pdfText(await response.arrayBuffer())).not.toContain(EMERGENCY.code);
+  expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
+});
+
+it.each([
+  "setting_off",
+  "level_inactive",
+  "no_payment_method",
+  "not_provisioned",
+  "unavailable",
+  "rate_limited",
+  "unknown",
+] as const)("prints a usable partial pack when emergency is %s", async (reason) => {
+  const closed = ["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
+    reason,
+  );
+  const response = await fixture({
+    cloud: cloudPack(async () => {
+      if (closed) throw new AppError("cloud.emergency_hosting_closed", { reason } as never);
+      if (reason === "rate_limited")
+        throw new AppError("cloud.emergency_code_rate_limited", { seconds: 99 });
+      if (reason === "unknown") throw new Error("SECRET-error-message");
+      throw new AppError("cloud.unavailable", {});
+    }),
+  }).make();
+  expect(response.status).toBe(200);
+  const text = await pdfText(await response.arrayBuffer());
+  expect(text).not.toContain(EMERGENCY.code);
+  expect(text).not.toContain("SECRET-error-message");
+  expect(text).not.toContain("99 seconds");
+  expect(text).toContain("new pack");
+  const record = (await packs())[0]!;
+  expect(record.parts[0]).toEqual({ part: "emergency", state: closed ? "absent" : "failed" });
+  expect(record.parts.slice(1).map((p) => p.state)).toEqual(["included", "included", "included"]);
+});
+
+it.each(["disconnected", "secondary", "permission"] as const)(
+  "omits the emergency code without fetching it when %s",
+  async (reason) => {
+    const fetchCode = vi.fn(async () => EMERGENCY);
+    const cloud = cloudPack(fetchCode, () => reason !== "secondary");
+    if (reason === "disconnected")
+      cloud.connection.status = async () => ({ state: "not_connected", code: "" });
+    if (reason === "permission") await setBuiltInRoleForTest(suite.db, admin.personId, "manager");
+    const response = await fixture({ cloud }).make();
+    expect(response.status).toBe(200);
+    const text = await pdfText(await response.arrayBuffer());
+    expect(text).not.toContain(EMERGENCY.code);
+    expect(text).toContain(
+      reason === "permission"
+        ? "administrator"
+        : reason === "secondary"
+          ? "main box"
+          : "not connected",
+    );
+    expect(fetchCode).not.toHaveBeenCalled();
+    expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
+  },
+);
+
+it.each(["code permission", "maker permission", "cancelled"] as const)(
+  "rechecks %s after the Cloud wait before writing a pack or replacing a key",
+  async (change) => {
+    const controller = new AbortController();
+    const before = await readRecoveryKeyVerifier(suite.node, node.nodeId);
+    const code = async () => {
+      if (change === "cancelled") controller.abort();
+      else
+        await setBuiltInRoleForTest(
+          suite.db,
+          admin.personId,
+          change === "code permission" ? "manager" : "supervisor",
+        );
+      return EMERGENCY;
+    };
+    const response = await fixture({ cloud: cloudPack(code) }).make(true, {
+      signal: controller.signal,
+    });
+    if (change === "code permission") {
+      expect(response.status).toBe(200);
+      expect(await pdfText(await response.arrayBuffer())).not.toContain(EMERGENCY.code);
+      expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
+    } else {
+      expect(response.status).toBe(change === "cancelled" ? 500 : 403);
+      if (change === "maker permission")
+        expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+      expect(await packs()).toEqual([]);
+      expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(before);
+    }
+  },
+);

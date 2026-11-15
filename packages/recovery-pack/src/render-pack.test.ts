@@ -820,3 +820,56 @@ describe("the attached file", () => {
     );
   });
 });
+
+it.each(["en", "es"] as const)(
+  "prints two distinct emergency QR codes and keeps attachment v1 (%s)",
+  async (locale) => {
+    const emergency: PackPart = {
+      kind: "emergency",
+      state: "included",
+      lastChanged: "2026-10-12",
+      page: {
+        title: "Emergency start",
+        intro: "Starts a locked copy; sign in with your password.",
+        address: { label: "Emergency address", text: "https://rescue.venue.example/", qr: true },
+        secret: { label: "Emergency code", text: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ", qr: true },
+        rows: [{ label: "People", value: "Alex Smith" }],
+        notes: ["Unplug the old box first."],
+      },
+    };
+    const bytes = await renderRecoveryPack(
+      input({ locale, parts: [emergency, bucket, archives, serverKey] }),
+    );
+    const pages = await rendered(bytes);
+    expect(pages).toHaveLength(5);
+    expect(pages[0]!.text).toContain(PACK_WORDS[locale].emergencyWarning);
+    if (locale === "en")
+      expect(pages[0]!.text).toContain(
+        "You also need your password and your authenticator or a recovery code.",
+      );
+    expect(pages[1]!.text).toContain("https://rescue.venue.example/");
+    expect(squash(pages[1]!.text)).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
+    expect(await readRecoveryPackPdf(bytes)).toEqual(file);
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    try {
+      const pdf = await loading.promise;
+      const page = await pdf.getPage(2);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const context = canvas.getContext("2d");
+      await page.render({ canvas: canvas as never, canvasContext: context as never, viewport })
+        .promise;
+      const codes: string[] = [];
+      for (const [top, height] of [
+        [0, 550],
+        [550, canvas.height - 550],
+      ]) {
+        const pixels = context.getImageData(0, top!, canvas.width, height!);
+        codes.push(jsQR(pixels.data, canvas.width, height!)?.data ?? "");
+      }
+      expect(codes).toEqual(["https://rescue.venue.example/", "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ"]);
+    } finally {
+      await loading.destroy();
+    }
+  },
+);

@@ -4103,6 +4103,13 @@ async function bootServer(
   mountBackupRecoveryPackMakeApi(
     app,
     {
+      cloud: cloudConnection
+        ? {
+            connection: cloudConnection,
+            managementOrigin: config.managementOrigin,
+            isPrimary: cloudPrimary,
+          }
+        : undefined,
       db,
       nodeDb: store.node,
       ring,
