@@ -35,22 +35,6 @@ BEGIN
   WHERE new.id IS NOT old.id;
 END;
 --> statement-breakpoint
-CREATE TRIGGER products_ordering_check_insert
-BEFORE INSERT ON products
-FOR EACH ROW
-WHEN new.ordering NOT IN ('public', 'staff_only', 'not_sold_separately')
-BEGIN
-  SELECT raise(abort, 'a product''s ordering must be public, staff_only or not_sold_separately');
-END;
---> statement-breakpoint
-CREATE TRIGGER products_ordering_check_update
-BEFORE UPDATE OF ordering ON products
-FOR EACH ROW
-WHEN new.ordering NOT IN ('public', 'staff_only', 'not_sold_separately')
-BEGIN
-  SELECT raise(abort, 'a product''s ordering must be public, staff_only or not_sold_separately');
-END;
---> statement-breakpoint
 CREATE TRIGGER bill_payment_refunds_guard_update
 BEFORE UPDATE ON bill_payment_refunds
 FOR EACH ROW

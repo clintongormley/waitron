@@ -75,7 +75,7 @@ export interface ErrorParams {
   /** A direct dietary declaration is not one of the supported suitability labels. */
   "diet.declaration_invalid": Record<string, never>;
   /** A supplied contains-tag, or a contains list, is not valid. */
-  "diet.invalid_origin": { origin: string };
+  "diet.invalid_contains_tag": { tag: string };
   /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
   "diet.invalid_label": { field: string; value: string };
   /** A diet override both adds and removes the same contains-tag — a contradiction. */

@@ -1581,8 +1581,9 @@ describe("dashboard-app", () => {
     available: true,
     ordering: "public",
     allergens: null,
+    diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
     dietOverride: null,
-    manualAllergens: null,
+
     image: null,
     color: null,
     variants: [],
@@ -8566,8 +8567,9 @@ describe("the Products screen in the shell", () => {
     available: true,
     ordering: "public",
     allergens: null,
+    diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
     dietOverride: null,
-    manualAllergens: null,
+
     image: null,
     variants: [],
   }));

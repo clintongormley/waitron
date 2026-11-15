@@ -1,37 +1,9 @@
-import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { batches } from "./batches.js";
 import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
-
-/** The columns a write of a product's or variant's staff name sets: the name, and the folded key
- * {@link assertProductNamesFree} looks rows up by. */
-export function nameColumns(name: string): { name: string; nameKey: string } {
-  return { name, nameKey: foldName(name) };
-}
-
-/** Sets every product's and variant's `name_key` from its stored name. */
-export async function storeProductNameKeys(tx: Transaction): Promise<void> {
-  const rows = await tx.select({ id: products.id, name: products.name }).from(products);
-  // Folded here rather than in SQL: this engine's `lower()` folds ASCII letters only.
-  for (const batch of batches(rows))
-    await tx
-      .update(products)
-      .set({
-        nameKey: sql`case ${products.id} ${sql.join(
-          batch.map((row) => sql`when ${row.id} then ${foldName(row.name)}`),
-          sql` `,
-        )} end`,
-      })
-      .where(
-        inArray(
-          products.id,
-          batch.map((row) => row.id),
-        ),
-      );
-}
 
 /** A stored product or variant, as the unique-name rule reads it. */
 export interface StoredName {
@@ -74,18 +46,19 @@ async function assertProductNamesFree(
     .from(products)
     .where(
       and(
-        inArray(products.nameKey, keys),
         eq(products.active, true),
         parentId === null ? isNull(products.parentId) : eq(products.parentId, parentId),
         familyIds.length === 0 ? undefined : notInArray(products.id, [...familyIds]),
       ),
     );
-  const others = holders.map((row) => ({
-    name: row.name,
-    field: "",
-    changed: false,
-    counted: true,
-  }));
+  const others = holders
+    .filter((row) => keys.includes(foldName(row.name)))
+    .map((row) => ({
+      name: row.name,
+      field: "",
+      changed: false,
+      counted: true,
+    }));
   refuseNameClash([...others, ...entries]);
 }
 

@@ -1001,7 +1001,6 @@ CREATE TABLE `products` (
 	`category_id` text,
 	`course_id` text,
 	`name` text NOT NULL,
-	`name_key` text,
 	`customer_name` text,
 	`description` text,
 	`kitchen_name` text,
@@ -1016,21 +1015,22 @@ CREATE TABLE `products` (
 	`image` text,
 	`color` text,
 	`allergens` text,
-	`manual_allergens` text,
 	`diet_override` text,
-	`diet` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`parent_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "products_ordering_ck" CHECK("products"."ordering" in ('public', 'staff_only', 'not_sold_separately')),
+	CONSTRAINT "products_unit_price_ck" CHECK("products"."unit_price" is null or "products"."unit_price" >= 0),
+	CONSTRAINT "products_name_ck" CHECK(trim("products"."name") <> ''),
 	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
 	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "products_takeaway_vat_class_ck" CHECK("products"."takeaway_vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE INDEX `products_name_key_idx` ON `products` (`name_key`);--> statement-breakpoint
+CREATE INDEX `products_image_idx` ON `products` (`image`) WHERE "products"."image" is not null;--> statement-breakpoint
 CREATE INDEX `products_unit_idx` ON `products` (`unit_id`);--> statement-breakpoint
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
@@ -2986,22 +2986,6 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'a product''s id never changes')
   WHERE new.id IS NOT old.id;
-END;
---> statement-breakpoint
-CREATE TRIGGER products_ordering_check_insert
-BEFORE INSERT ON products
-FOR EACH ROW
-WHEN new.ordering NOT IN ('public', 'staff_only', 'not_sold_separately')
-BEGIN
-  SELECT raise(abort, 'a product''s ordering must be public, staff_only or not_sold_separately');
-END;
---> statement-breakpoint
-CREATE TRIGGER products_ordering_check_update
-BEFORE UPDATE OF ordering ON products
-FOR EACH ROW
-WHEN new.ordering NOT IN ('public', 'staff_only', 'not_sold_separately')
-BEGIN
-  SELECT raise(abort, 'a product''s ordering must be public, staff_only or not_sold_separately');
 END;
 --> statement-breakpoint
 CREATE TRIGGER bill_payment_refunds_guard_update

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { checkFailed } from "../constraint-target.js";
 import { CHECK_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
@@ -112,18 +113,118 @@ describe("menu — menu, taxonomy and priced items", () => {
     expect(col).toEqual({ name: "allergens", notnull: 0 });
   });
 
-  it("products carries the two nullable diet columns", async () => {
+  it("products carries only the nullable diet override", async () => {
     const cols = (await columnsOf(db, "products"))
       .filter((c) => ["diet_override", "diet"].includes(c.name))
       .sort((a, b) => a.name.localeCompare(b.name));
-    expect(cols).toEqual([
-      { name: "diet", notnull: 0 },
-      { name: "diet_override", notnull: 0 },
-    ]);
+    expect(cols).toEqual([{ name: "diet_override", notnull: 0 }]);
   });
 
   it("products carries a nullable image text column", async () => {
     const col = (await columnsOf(db, "products")).find((c) => c.name === "image");
     expect(col).toEqual({ name: "image", notnull: 0 });
+  });
+});
+
+describe("product declared checks", () => {
+  const insert = (id: string, name = "Tea", price = 100, ordering = "public") =>
+    suite.db.run(
+      sql`insert into products (id, name, unit_price, vat_class, ordering, created_at, updated_at) values (${id}, ${name}, ${price}, 'general', ${ordering}, ${AT}, ${AT})`,
+    );
+  it("refuses an ordering outside the three on insert, replace and update", async () => {
+    for (const ordering of ["public", "staff_only", "not_sold_separately"]) {
+      await insert(ordering, "Tea", 100, ordering);
+      await suite.db.run(sql`update products set ordering = ${ordering} where id = 'public'`);
+    }
+    for (const ordering of ["secret", "Public"]) {
+      expect(
+        checkFailed(
+          await captureError(() => insert("bad", "Tea", 100, ordering)),
+          "products_ordering_ck",
+        ),
+      ).toBe(true);
+      expect(
+        checkFailed(
+          await captureError(() =>
+            suite.db.run(sql`update products set ordering = ${ordering} where id = 'public'`),
+          ),
+          "products_ordering_ck",
+        ),
+      ).toBe(true);
+    }
+    expect(
+      checkFailed(
+        await captureError(() =>
+          suite.db.run(
+            sql`insert or replace into products (id,name,unit_price,vat_class,ordering,created_at,updated_at) values ('public','Tea',100,'general','secret',${AT},${AT})`,
+          ),
+        ),
+        "products_ordering_ck",
+      ),
+    ).toBe(true);
+    expect(suite.db.get(sql`select ordering from products where id = 'public'`)).toEqual({
+      ordering: "not_sold_separately",
+    });
+    await suite.db.run(
+      sql`insert into products (id,name,unit_price,vat_class,created_at,updated_at) values ('default','Tea',100,'general',${AT},${AT})`,
+    );
+    expect(suite.db.get(sql`select ordering from products where id = 'default'`)).toEqual({
+      ordering: "public",
+    });
+  });
+  it("refuses a negative price on insert and update, allows zero and variant inheritance", async () => {
+    await insert("parent", "Tea", 0);
+    expect(
+      checkFailed(await captureError(() => insert("bad", "Tea", -1)), "products_unit_price_ck"),
+    ).toBe(true);
+    expect(
+      checkFailed(
+        await captureError(() =>
+          suite.db.run(sql`update products set unit_price = -1 where id = 'parent'`),
+        ),
+        "products_unit_price_ck",
+      ),
+    ).toBe(true);
+    await suite.db.run(
+      sql`insert into products (id,parent_id,name,unit_price,created_at,updated_at) values ('variant','parent','Small',null,${AT},${AT})`,
+    );
+    expect(suite.db.all(sql`select id,unit_price from products order by id`)).toEqual([
+      { id: "parent", unit_price: 0 },
+      { id: "variant", unit_price: null },
+    ]);
+    await suite.db.run(sql`delete from products where id = 'variant'`);
+  });
+  it("refuses a blank name on insert and update", async () => {
+    await insert("valid");
+    for (const name of ["", "   "]) {
+      expect(checkFailed(await captureError(() => insert("bad", name)), "products_name_ck")).toBe(
+        true,
+      );
+      expect(
+        checkFailed(
+          await captureError(() =>
+            suite.db.run(sql`update products set name = ${name} where id = 'valid'`),
+          ),
+          "products_name_ck",
+        ),
+      ).toBe(true);
+    }
+    expect(suite.db.get(sql`select name from products where id = 'valid'`)).toEqual({
+      name: "Tea",
+    });
+  });
+  it("a lookup of products by photo uses products_image_idx", async () => {
+    const query = sql`explain query plan select 1 from products where image = 'unused.webp'`;
+    const details = () =>
+      suite.db
+        .all<{ detail: string }>(query)
+        .map((row) => row.detail)
+        .join(" ");
+    expect(details()).toMatch(/USING (?:COVERING )?INDEX products_image_idx/);
+    await suite.db.run(sql`drop index products_image_idx`);
+    expect(details()).toContain("SCAN products");
+    await suite.db.run(
+      sql`create index products_image_idx on products(image) where image is not null`,
+    );
   });
 });

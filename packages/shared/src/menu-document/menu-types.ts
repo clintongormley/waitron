@@ -120,13 +120,7 @@ export interface AvailableProduct {
   takeawayVatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
-  /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
-   * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`. Not part
-   * of the priceable projection. */
   diet: DietProfile | null;
-  /** The staff diet override (`products.dietOverride`) ALONE, or null when none — exposed distinctly
-   * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
-   * `manualAllergens`. */
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
   /** The product's DEFAULT kitchen course (`products.course_id`), or null when it has none. Not part

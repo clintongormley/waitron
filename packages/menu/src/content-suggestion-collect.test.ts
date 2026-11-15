@@ -839,7 +839,7 @@ describe("collecting what is missing", () => {
   it("leaves out an item Cloud would refuse, and a name or a category it would refuse, without refusing the rest", async () => {
     await inVenue(THREE, async (tx) => {
       const blankStaff = await product(tx, "Blank", { ca: "CLIENT-CA Blanc" });
-      await rename(tx, blankStaff, "   ");
+      await rename(tx, blankStaff, "\t");
       const longStaff = await product(tx, "Long", { ca: "CLIENT-CA Llarg" });
       await rename(tx, longStaff, "S".repeat(TEXT_LIMIT + 1));
       const edge = await product(tx, "Edge", { ca: "CLIENT-CA Vora" });

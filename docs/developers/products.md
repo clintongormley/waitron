@@ -53,16 +53,20 @@ checks permit both, and their displayed labels match. A held-group summary combi
 with matching display labels while retaining the individual line ids (`listOrderGroups`,
 `apps/server/src/order-groups.ts`). Choose different saved names if you need distinct labels.
 
-Each name write stores its folded `products.name_key`. Product and single-variant lookups
-compare that key within the relevant parent scope; a row with a null key is absent from those
-lookups. A whole-family save compares the submitted variant names directly. Configuration
-imports also compare names directly, grouping products separately from each product's variants
-(`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`). An
-import sets the keys through `storeProductNameKeys` in the menu module's `afterImport`;
-a bundle carrying a name key is refused. A product with no `active` value counts as active,
-the column's default. An import refuses an `active` value other than 0 or 1, a category or
-product name that is not text, or a product, category or section colour other than null or
-lowercase `#rrggbb`, with `setup.request_invalid` naming the column.
+Product and single-variant saves scan the active names in the same parent scope and compare
+`foldName` results. A whole-family save compares the submitted variant names directly.
+Configuration imports compare names directly too, grouping products separately from each
+product's variants (`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`).
+An import refuses an `active` value other than 0 or 1, a category or product name that is not
+text, or a product, category or section colour other than null or lowercase `#rrggbb`, with
+`setup.request_invalid` naming the column.
+
+You store one allergen declaration. Saving sorts cereal and nut kinds and removes repeats;
+`null` means you have not reviewed it, while `{}` means you reviewed it and declared none.
+The diet profile is calculated when read from the declared override over unknown vegan and
+vegetarian values; it is not stored separately (`overlayDietProfile`). Deleting a product or folder,
+or switching Active off in the product editor, records the product name, the variants archived
+with it and the person who acted in `activity_log`.
 
 The three resolvers, one per audience:
 
@@ -561,10 +565,9 @@ Its extras and options
 lists are always its parent's. Its Name, customer-facing name and prep station name are never inherited: a blank customer or
 prep station name falls back to the variant's own staff name (_The three names_, above).
 
-A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
-its own, and its published diet likewise until it sets a diet override of its own; once set, each keeps its own
-declaration or override independently of later parent edits
-(`republishOverlays`, `packages/menu/src/operations.ts`).
+A variant with no allergen declaration reads its parent's declaration. With no diet override,
+it reads its parent's override. Setting either keeps that declaration or override independent
+of later parent edits (`effectiveProductColumns`, `packages/menu/src/variant-fallback.ts`).
 
 ### Price
 

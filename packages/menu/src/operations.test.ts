@@ -11,7 +11,12 @@ import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
 import type { PricingUnit, VatClass } from "@waitron/shared";
-import { customerPresentationText } from "@waitron/shared";
+import {
+  overlayDietProfile,
+  UNDECLARED_DIET,
+  type DietOverride,
+  customerPresentationText,
+} from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { readDefaultMenuId } from "./operations.js";
 import {
@@ -780,11 +785,10 @@ describe("menu operations", () => {
       };
       await updateProduct(tx, p.id, { allergens: input });
       const [row] = await tx
-        .select({ allergens: products.allergens, manual: products.manualAllergens })
+        .select({ allergens: products.allergens })
         .from(products)
         .where(eq(products.id, p.id));
       expect(row!.allergens).toEqual({ nuts: { kinds: ["almonds", "walnuts"] } });
-      expect(row!.manual).toEqual(input);
     });
   });
 
@@ -814,6 +818,30 @@ describe("menu operations", () => {
         vatClass: "general",
       });
       expect(p.allergens).toBeNull();
+    });
+  });
+
+  it.each([null, {}])("keeps allergens %j through create and update", async (allergens) => {
+    await asVenue(async (tx) => {
+      const product = await createProduct(tx, {
+        categoryId: null,
+        name: "Reviewed tea",
+        unitId: null,
+        unitPrice: "1.00",
+        vatClass: "general",
+        ...(allergens === null ? {} : { allergens }),
+      });
+      expect(product.allergens).toEqual(allergens);
+      await updateProduct(tx, product.id, { allergens: { milk: {} } });
+      await updateProduct(tx, product.id, { allergens });
+      const [stored] = await tx
+        .select({ allergens: products.allergens })
+        .from(products)
+        .where(eq(products.id, product.id));
+      expect(stored!.allergens).toEqual(allergens);
+      expect((await listProducts(tx)).find((row) => row.id === product.id)!.allergens).toEqual(
+        allergens,
+      );
     });
   });
 
@@ -1013,14 +1041,10 @@ describe("menu operations", () => {
     });
   });
 
-  const readDiet = (tx: Transaction, id: string) =>
-    tx
-      .select({
-        diet: products.diet,
-        override: products.dietOverride,
-      })
-      .from(products)
-      .where(eq(products.id, id));
+  const readDiet = async (tx: Transaction, id: string) =>
+    (await listProducts(tx))
+      .filter((row) => row.id === id)
+      .map((row) => ({ diet: row.diet, override: row.dietOverride }));
 
   it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asVenue(async (tx) => {
@@ -1669,20 +1693,26 @@ describe("a variant's published allergens and diet", () => {
     }));
   });
 
-  /** A product's stored `allergens`/`diet`, and what a read through the fallback sees. */
   const published = (id: string) =>
     run(async (tx) => {
       const [row] = await tx
         .select({
           allergens: products.allergens,
-          diet: products.diet,
+          dietOverride: products.dietOverride,
           effectiveAllergens: effectiveProductColumns.allergens,
-          effectiveDiet: effectiveProductColumns.diet,
+          effectiveDietOverride: effectiveProductColumns.dietOverride,
         })
         .from(products)
         .leftJoin(parentProducts, parentJoin)
         .where(eq(products.id, id));
-      return row!;
+      const { effectiveDietOverride, ...own } = row!;
+      return {
+        ...own,
+        effectiveDiet: overlayDietProfile(
+          UNDECLARED_DIET,
+          effectiveDietOverride as DietOverride | null,
+        ),
+      };
     });
 
   it("a parent's change leaves a variant's own declaration and override as they are", async () => {
@@ -1699,7 +1729,7 @@ describe("a variant's published allergens and diet", () => {
     const diet = { vegan: "unknown", vegetarian: "unknown", contains: [], kosher: "yes" };
     expect(await published(variantId)).toEqual({
       allergens: { milk: {} },
-      diet,
+      dietOverride: { kosher: "yes" },
       effectiveAllergens: { milk: {} },
       effectiveDiet: diet,
     });
@@ -1714,9 +1744,9 @@ describe("a variant's published allergens and diet", () => {
     });
     expect(await published(variantId)).toEqual({
       allergens: null,
-      diet: null,
+      dietOverride: null,
       effectiveAllergens: parent.allergens,
-      effectiveDiet: parent.diet,
+      effectiveDiet: parent.effectiveDiet,
     });
     expect(parent.allergens).toEqual({
       nuts: { kinds: ["almonds" as const] },
@@ -1950,6 +1980,60 @@ describe("a product's own colour", () => {
         reads.mockRestore();
         writes.mockRestore();
       }
+    });
+  });
+});
+
+describe("declared product facts", () => {
+  const asVenue = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
+  const input = {
+    categoryId: null,
+    name: "Tea",
+    unitId: null,
+    unitPrice: "2.00",
+    vatClass: "general" as const,
+  };
+  it("refuses a negative price before the database does on create and update", async () => {
+    await asVenue(async (tx) => {
+      await expect(createProduct(tx, { ...input, unitPrice: "-1.00" })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "unitPrice" },
+      });
+      const product = await createProduct(tx, input);
+      await expect(updateProduct(tx, product.id, { unitPrice: "-1.00" })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "unitPrice" },
+      });
+    });
+  });
+  it("refuses a blank name before the database does on create and update", async () => {
+    await asVenue(async (tx) => {
+      await expect(createProduct(tx, { ...input, name: "  " })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "name" },
+      });
+      const product = await createProduct(tx, input);
+      await expect(updateProduct(tx, product.id, { name: "  " })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "name" },
+      });
+      await expect(
+        setProductVariants(
+          tx,
+          product.id,
+          [
+            {
+              name: "  ",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        ),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "variants.0.name" } });
     });
   });
 });

@@ -141,8 +141,9 @@ it.each<[number, number, "capped" | "page", number]>([
       available: true,
       ordering: "public",
       allergens: null,
+      diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
       dietOverride: null,
-      manualAllergens: null,
+
       image: null,
       variants: [],
     }));

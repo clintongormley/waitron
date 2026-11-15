@@ -8,6 +8,10 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "diet.invalid_contains_tag": {
+    en: "Choose a valid dietary contains tag",
+    es: "Elige una etiqueta dietética válida",
+  },
   "box_network.no_wifi": {
     en: "No Wi-Fi adapter is available. Connect an adapter and scan again.",
     es: "No hay adaptador Wi-Fi disponible. Conecta uno y busca de nuevo.",

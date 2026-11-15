@@ -6620,6 +6620,8 @@ pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.
 
 ### Products without menu ownership and configuration format 35 (2026-11-15, A1308 mn5)
 
+> Historical format: superseded by the format-36 note below.
+
 Your export no longer carries `products.menu_id`; menus offer products through `menu_items`.
 It uses format 35 and refuses a format-34 export as outdated. The pre-menu-free-product case in
 `apps/server/src/configuration-import.test.ts` checks that refusal.
@@ -6648,3 +6650,10 @@ guard and pointer.
 > resetting the clock", and 2026-11-11 14:34: "or AEAT refuses an invoice because of time"; no
 > hold, 2026-11-10 15:31: "We fix the clock we start sending correct invoices … No waiting";
 > devices, A1420 D9, the watcher's, 2026-11-10 17:28, not the owner's)
+
+### Declared product facts and configuration format 36 (2026-11-15, A1308 mn6)
+
+Your export carries one allergen declaration and the diet override. It no longer carries a folded
+product name, a separate manual declaration or a stored diet profile. Format 36 refuses a format-35
+export as outdated; the pre-product-declared-facts case in `apps/server/src/configuration-import.test.ts`
+checks that refusal.

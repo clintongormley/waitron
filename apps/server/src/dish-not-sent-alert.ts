@@ -76,7 +76,6 @@ async function recordDishesNotSent(
     origin: cfg.origin,
     saleId: brandSaleId(saleId),
     error: new AppError("route.dish_not_sent", {
-      // `products.name` is not null but may be blank.
       dishes: ids.map((id) => nameOf.get(id) || id).join(", "),
       workingOrderId,
       orderNumber: order!.orderNumber,

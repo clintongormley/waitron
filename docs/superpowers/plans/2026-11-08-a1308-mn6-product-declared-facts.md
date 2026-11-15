@@ -41,6 +41,41 @@ refused at every request boundary (`docs/backlog/catalogue.md:34-43`).
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2)
 
+## Dated corrections — watcher clearance, 2026-11-15 08:56
+
+The watcher cleared these two corrections in Lane E's `questions.md` at 08:56; this is
+watcher clearance, not a separate owner approval. Keep the existing name rule: case folds,
+accents remain distinct and NFC-equivalent spellings match. Task 2's example is therefore
+“Café con leche” versus “CAFÉ con LECHE”. The old NULL-key case permits a duplicate;
+port that documented gap to a raw insertion without a key and assert `product.name_taken`.
+Measurement, size stop and lane landing authority remain unchanged.
+
+The watcher also cleared the following on 2026-11-15 at 09:16–09:17:
+- The raw W175 fixture's diet now follows its override: vegan unknown, vegetarian yes,
+  contains `[]`; its published milk declaration remains, and the editor reads that same milk.
+  Parent-versus-own inheritance and all money values remain checked.
+- The operations inheritance helper reads the own `dietOverride` rather than a stored diet,
+  and keeps assertions on the effective computed profile.
+- The dashboard has no old diet wording to rename: add new English and Spanish wording.
+- The import test round-trips original names instead of stored keys; both duplicate refusals
+  and the supplied-retired-key refusal remain. That last test is a finish-line scan exception.
+- Removing the ordering triggers also shifts the two media trigger positions listed below;
+  their bodies, timing and events and every other position remain unchanged.
+
+At 09:26 the watcher also cleared removal of the two retired ordering-trigger entries from
+`scripts/migration-upgrade.test.ts` and their unused constant in
+`packages/db/src/trigger-refusals.ts`, after a search confirms no imports remain.
+
+Run-it review correction, 2026-11-15: these two trigger positions were already in the original
+prediction. The 09:17 edit duplicated them; the prediction lists each once again. No trigger
+body, timing, event or order is changed to resolve this documentation error.
+
+The watcher cleared the run-it corrections on 2026-11-15 at 09:51: preserve the existing
+create contract (omission means unreviewed; explicit null remains an update value), deduplicate
+archive ids before batching, group archived variants by parent, and add one bulk-folder case
+with real products. Parent-plus-variant selections and edited-bundle validation cases are
+left out under the campaign's unlikely-event rule. Archive documentation names its entry paths.
+
 ## What it builds
 
 1. **Measurement first** (tables-menu.md §8 item 1, Task 1): the name check by scan at 1,000

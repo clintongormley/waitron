@@ -32,7 +32,7 @@ import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 export type { MenuVariant } from "@waitron/shared";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
-import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
+import { assertFamilyNamesFree } from "./product-names.js";
 import "./errors.js";
 export type { ProductVariant, ProductVariantInput } from "@waitron/shared";
 
@@ -202,7 +202,9 @@ async function writeProductVariants(
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
   const checked: (EditorVariantWrite & { cents: number | null })[] = [];
-  for (const input of inputs) {
+  for (const [index, input] of inputs.entries()) {
+    if (!input.name.trim())
+      throw new AppError("product.invalid", { field: `variants.${index}.name` });
     if (input.id !== undefined) {
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
       seen.add(input.id);
@@ -265,7 +267,7 @@ async function writeProductVariants(
   for (const [index, input] of normalized.entries()) {
     if (input.id !== undefined && currentActive.get(input.id) === false) continue;
     const values = {
-      ...nameColumns(input.name),
+      name: input.name,
       customerName:
         input.customerName && Object.keys(input.customerName).length > 0
           ? input.customerName

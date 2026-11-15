@@ -1,5 +1,8 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import {
+  readActivityForSubject,
+  activityLog,
   categories,
   extraListItems,
   extraLists,
@@ -31,7 +34,7 @@ import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
 import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.js";
 
-import { setMainReportingCategory } from "./categories.js";
+import { createCategory, setMainReportingCategory } from "./categories.js";
 
 const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -736,4 +739,79 @@ it("lets an active variant reuse an archived variant's staff name while preservi
       ),
     ),
   ).rejects.toMatchObject({ code: "product.name_taken" });
+});
+
+describe("product archive history", () => {
+  it.each(["person-1", null])(
+    "records an archived product with its variants and person %s",
+    async (personId) => {
+      const f = await menusFixture(fx.db);
+      if (personId !== null)
+        await seedPerson(fx.db, { id: personId, displayName: "Archive manager" });
+      await app(async (tx) => {
+        const existing = await listProductVariants(tx, f.lemonade);
+        await setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            ...existing,
+            {
+              name: "Small",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        );
+      });
+      const variants = (await app((tx) => listProductVariants(tx, f.lemonade)))
+        .filter((v) => v.active)
+        .map((v) => v.id)
+        .sort();
+      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      const entries = await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        kind: "product.archived",
+        personId,
+        data: { name: "Lemonade", variantIds: variants },
+      });
+      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      expect(await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade })).toEqual(
+        entries,
+      );
+    },
+  );
+});
+
+it("records each product once when a bulk folder deletion also selects its products", async () => {
+  await menusFixture(fx.db);
+  const ids = Array.from(
+    { length: 1000 },
+    (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  );
+  const folder = await app((tx) => createCategory(tx, { name: "Bulk archive" }));
+  await app(async (tx) => {
+    for (let offset = 0; offset < ids.length; offset += 100)
+      await tx.insert(products).values(
+        ids.slice(offset, offset + 100).map((id, index) => ({
+          id,
+          name: `Archived dish ${offset + index}`,
+          categoryId: folder.id,
+          unitPrice: 100,
+          vatClass: "general",
+        })),
+      );
+    // Selecting the full set twice exposes repeats regardless of the folder query's row order.
+    await deleteProductItems(tx, { productIds: ids, categoryIds: [folder.id] }, "delete");
+  });
+  expect(await readActivityForSubject(fx.db, { kind: "product", id: ids.at(-1)! })).toHaveLength(1);
+  const events = await fx.db
+    .select({ subjectId: activityLog.subjectId })
+    .from(activityLog)
+    .where(eq(activityLog.kind, "product.archived"));
+  expect(events.map((row) => row.subjectId).sort()).toEqual(ids);
 });

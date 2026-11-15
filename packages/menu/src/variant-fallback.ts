@@ -77,9 +77,7 @@ export const effectiveProductColumns = {
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
   allergens: inherited(products.allergens, parentProducts.allergens),
-  manualAllergens: inherited(products.manualAllergens, parentProducts.manualAllergens),
   dietOverride: inherited(products.dietOverride, parentProducts.dietOverride),
-  diet: inherited(products.diet, parentProducts.diet),
   dietaryDeclarations: owned(products.dietaryDeclarations, parentProducts.dietaryDeclarations),
 };
 

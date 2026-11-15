@@ -70,9 +70,9 @@ describe("validateContainsTag (Task 4)", () => {
   it("accepts meat/fish only — an otherwise-valid origin is rejected", () => {
     expect(validateContainsTag("meat")).toBe("meat");
     expect(validateContainsTag("fish")).toBe("fish");
-    expect(() => validateContainsTag("plant")).toThrow(/diet.invalid_origin/);
-    expect(() => validateContainsTag("wombat")).toThrow(/diet.invalid_origin/);
-    expect(() => validateContainsTag(7)).toThrow(/diet.invalid_origin/);
+    expect(() => validateContainsTag("plant")).toThrow(/diet.invalid_contains_tag/);
+    expect(() => validateContainsTag("wombat")).toThrow(/diet.invalid_contains_tag/);
+    expect(() => validateContainsTag(7)).toThrow(/diet.invalid_contains_tag/);
   });
 });
 
@@ -92,10 +92,10 @@ describe("validateDietOverride (Task 4)", () => {
   });
   it("rejects a non-contains-tag in addContains/removeContains", () => {
     expect(() => validateDietOverride({ addContains: ["plant"] } as never)).toThrow(
-      /diet.invalid_origin/,
+      /diet.invalid_contains_tag/,
     );
     expect(() => validateDietOverride({ removeContains: "meat" } as never)).toThrow(
-      /diet.invalid_origin/,
+      /diet.invalid_contains_tag/,
     );
   });
   it("rejects a conflicting override with diet.add_remove_conflict", () => {
@@ -117,8 +117,8 @@ describe("diet refusals and the override's edges", () => {
 
   it("refuses a tag outside meat and fish, echoing the value", () => {
     expect(refusal(() => validateContainsTag("plant"))).toEqual({
-      code: "diet.invalid_origin",
-      params: { origin: "plant" },
+      code: "diet.invalid_contains_tag",
+      params: { tag: "plant" },
     });
   });
 
@@ -128,7 +128,7 @@ describe("diet refusals and the override's edges", () => {
     ).toEqual({ code: "diet.invalid_label", params: { field: "halal", value: "maybe" } });
     expect(
       refusal(() => validateDietOverride({ removeContains: "fish" } as unknown as DietOverride)),
-    ).toEqual({ code: "diet.invalid_origin", params: { origin: "fish" } });
+    ).toEqual({ code: "diet.invalid_contains_tag", params: { tag: "fish" } });
     expect(
       refusal(() => validateDietOverride({ addContains: ["fish"], removeContains: ["fish"] })),
     ).toEqual({ code: "diet.add_remove_conflict", params: { tag: "fish" } });

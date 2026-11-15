@@ -1578,7 +1578,9 @@ for (const locale of ["en", "es"] as const) {
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const { semantics, added } = madridWithAddedRows(
-          madridWithDroppedColumns(expected.seeded, { products: ["catalogue_id"] }),
+          madridWithDroppedColumns(expected.seeded, {
+            products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
+          }),
           historicalSeeded,
           ADDED_CATEGORIES[locale],
         );
@@ -1586,7 +1588,9 @@ for (const locale of ["en", "es"] as const) {
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;
       }
       expected[phase] = madridWithRenamedTables(expected[phase], { catalogues: "menus" });
-      expected[phase] = madridWithDroppedColumns(expected[phase], { products: ["catalogue_id"] });
+      expected[phase] = madridWithDroppedColumns(expected[phase], {
+        products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
+      });
       phases[phase]!.menus = phases[phase]!.catalogues!;
       delete phases[phase]!.catalogues;
       phases[phase] = Object.fromEntries(
