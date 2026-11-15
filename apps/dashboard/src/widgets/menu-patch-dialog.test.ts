@@ -505,6 +505,101 @@ it("stages a kitchen name, a VAT class and a picture", async () => {
   expect(form(el).querySelector("dashboard-image-upload")!.image).toBe("media:soup");
 });
 
+/** Lunch with Soup charged Reduced served here and No tax taken away. */
+function takeawayLunch(): MenuDocument {
+  const document = lunch();
+  document.offers["mi-soup"]!.takeawayVatClass = "zero";
+  return document;
+}
+
+async function mountTakeaway(api: DashboardApi = stubApi()): Promise<MenuPatchDialog> {
+  const { el } = await mountWidget<MenuPatchDialog>("dashboard-menu-patch-dialog", {
+    api,
+    menuId: "menu-lunch",
+    menuName: "Lunch Menu",
+    takeawayVat: true,
+    open: true,
+  });
+  await flush(el);
+  return el;
+}
+
+const combobox = (el: MenuPatchDialog, name: string) =>
+  form(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(`wt-combobox[name="${name}"]`)!;
+
+it.each([
+  ["a dish", "Soup"],
+  ["a variant", "Large"],
+  ["an extras item", "Bread"],
+] as const)(
+  "shows %s's two VAT classes as the values the live menu holds, with no same-as choice, where the region charges a takeaway class",
+  async (_kind, label) => {
+    const el = await mountTakeaway(
+      stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+    );
+    await pick(el, label);
+    expect(fieldNames(el).slice(-2)).toEqual(["tax", "takeaway-tax"]);
+    const served = combobox(el, "tax");
+    const away = combobox(el, "takeaway-tax");
+    expect(away.label).toBe("VAT when taken away");
+    expect(away.required).toBe(true);
+    expect([served.value, away.value]).toEqual(
+      label === "Soup" ? ["reduced", "zero"] : ["reduced", "reduced"],
+    );
+    expect(away.options.map(({ value }) => value)).toEqual(
+      served.options.map(({ value }) => value),
+    );
+    expect(away.options.some(({ label }) => label.includes("Same as"))).toBe(false);
+  },
+);
+
+it("stages a change to the served class alone, leaving the takeaway class as the live menu holds it", async () => {
+  const el = await mountTakeaway(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+  );
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "tax"), "general");
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "vatClass", value: "general" }]);
+  expect(combobox(el, "takeaway-tax").value).toBe("zero");
+});
+
+it("stages the takeaway class and lists each changed class under its own label for review", async () => {
+  const el = await mountTakeaway(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+  );
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "takeaway-tax"), "super_reduced");
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "takeawayVatClass", value: "super_reduced" }]);
+  expect(combobox(el, "tax").value).toBe("reduced");
+  await chooseOption(combobox(el, "tax"), "general");
+  await el.updateComplete;
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([
+    "Soup: VAT when taken away No tax → Super-reduced",
+    "Soup: VAT Reduced → General",
+  ]);
+});
+
+it("shows a takeaway class the patch refuses under its field", async () => {
+  const el = await mountTakeaway();
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "takeaway-tax"), "standard");
+  await el.updateComplete;
+  await press(el, "review");
+  expect(combobox(el, "takeaway-tax").error).toBe("Check this value.");
+  expect(combobox(el, "tax").error).toBe("");
+  expect(el.changes).toEqual([]);
+});
+
+it("shows one VAT class field where the region charges no takeaway class", async () => {
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }));
+  await pick(el, "Soup");
+  expect(form(el).querySelectorAll("wt-combobox")).toHaveLength(1);
+  expect(fieldNames(el).at(-1)).toBe("tax");
+});
+
 it("hands the picture chooser the venue's image library and no more", async () => {
   const api = stubApi();
   const el = await mount(api);

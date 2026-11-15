@@ -340,6 +340,10 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
   nombres.
 - Una sección: su nombre interno, su nombre para el cliente y su imagen.
 
+Si tu región grava de otra forma la comida para llevar, un plato, una variante y un extra también
+muestran **IVA para llevar**, con la clase que la carta publicada aplica cuando se lo llevan.
+Corrige cada clase por separado: cambiar una nunca cambia la otra.
+
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
 Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al
 precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes, que su formulario muestra con su precio y su clase de IVA; corregir el

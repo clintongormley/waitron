@@ -3877,3 +3877,27 @@ it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   },
 );
+
+it("tells the product list, details and editor whether the region charges a takeaway class", async () => {
+  const api = stubApi({
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "reduced",
+      defaultColor: null,
+      takeawayVat: true,
+    }),
+  });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+  await flush(el);
+  await list(el).updateComplete;
+  const details = el.shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
+    "dashboard-product-details",
+  )!;
+  const productList = list(el).shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
+    "dashboard-product-list",
+  )!;
+  expect([productList.takeawayVat, details.takeawayVat, editor(el).takeawayVat]).toEqual([
+    true,
+    true,
+    true,
+  ]);
+});

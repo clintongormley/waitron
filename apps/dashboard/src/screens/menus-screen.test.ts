@@ -10735,6 +10735,23 @@ describe("patching the live menu", () => {
     expect(dialog(el).open).toBe(true);
   });
 
+  it.each([true, false])(
+    "tells the patch dialog whether the region charges a takeaway class (%s)",
+    async (takeawayVat) => {
+      const el = await mountLunch(
+        currentLunch({
+          getMenuSettings: vi.fn().mockResolvedValue({
+            defaultProductVatClass: "general",
+            defaultColor: null,
+            takeawayVat,
+          }),
+        }),
+      );
+      await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+      expect(dialog(el).takeawayVat).toBe(takeawayVat);
+    },
+  );
+
   it("does not reopen the patch dialog on coming back to a menu left while it was open", async () => {
     const el = await mountLunch(currentLunch());
     await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());

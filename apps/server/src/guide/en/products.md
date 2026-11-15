@@ -324,6 +324,10 @@ change:
 - An options list's choice, and the name of an extras list or an options list: its three names.
 - A section: its internal name, customer-facing name and image.
 
+Where your region taxes takeaway food differently, a dish, a variant and an extra also show **VAT
+when taken away**, with the class the live menu charges when it is taken away. Correct each class
+on its own: changing one never changes the other.
+
 Customer-facing names and descriptions show a field for each content language. Choose or remove an
 image as you would in the product editor. A dish with variants is charged at each variant's own
 price and VAT class, so correct those on its variants, which its form lists with their price and VAT class; correcting the dish never changes them. A

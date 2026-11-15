@@ -54,13 +54,19 @@ const value: ProductEditorValue = {
   ],
 };
 
-async function mount(overrides: Partial<ProductEditorValue> = {}) {
+async function mount(overrides: Partial<ProductEditorValue> = {}, takeawayVat = false) {
   setLocale("en");
   return mountWidget<
-    HTMLElement & { open: boolean; value: ProductEditorValue; updateComplete: Promise<unknown> }
+    HTMLElement & {
+      open: boolean;
+      value: ProductEditorValue;
+      takeawayVat: boolean;
+      updateComplete: Promise<unknown>;
+    }
   >("dashboard-product-details", {
     open: true,
     value: { ...value, ...overrides },
+    takeawayVat,
     ...{
       categories: [{ id: "drinks", name: "Drinks staff", parentId: null, color: null }],
       units: [
@@ -191,6 +197,70 @@ describe("archived product details", () => {
     expect(el.shadowRoot?.textContent).toContain("Cup");
     expect(el.shadowRoot?.textContent).toContain("General");
     expect(el.shadowRoot?.textContent).toContain("Drinks staff");
+  });
+
+  const vatPairs = (el: HTMLElement) =>
+    [...el.shadowRoot!.querySelectorAll("dl > div")]
+      .map((field) => [
+        field.querySelector("dt")!.textContent,
+        field.querySelector("dd")!.textContent!.trim(),
+      ])
+      .filter(([label]) => label!.startsWith("VAT"));
+
+  it("shows the class charged taken away beside the served one where the region charges it", async () => {
+    const { el } = await mount({ takeawayVatClass: "general" }, true);
+    expect(vatPairs(el)).toEqual([
+      ["VAT", "Reduced"],
+      ["VAT when taken away", "General"],
+    ]);
+  });
+
+  it("shows an empty takeaway class as the served class it charges", async () => {
+    const { el } = await mount({}, true);
+    expect(vatPairs(el)).toEqual([
+      ["VAT", "Reduced"],
+      ["VAT when taken away", "Reduced"],
+    ]);
+  });
+
+  it.each([
+    ["its own served class", "super_reduced", "Super-reduced"],
+    ["its product's takeaway class", null, "No tax"],
+  ] as const)("shows a variant's empty takeaway class as %s", async (_case, vatClass, takeaway) => {
+    const { el } = await mount(
+      {
+        parentId: "parent",
+        unitId: null,
+        unitPrice: null,
+        vatClass,
+        takeawayVatClass: null,
+        primaryCategoryId: null,
+        inherited: {
+          name: "Parent staff",
+          unitPrice: "2.00",
+          unitId: "cup",
+          vatClass: "general",
+          takeawayVatClass: "zero",
+          primaryCategoryId: "drinks",
+          description: null,
+          image: null,
+          courseId: null,
+          allergens: null,
+          dietaryDeclarations: [],
+        },
+        variants: [],
+      },
+      true,
+    );
+    expect(vatPairs(el)).toEqual([
+      ["VAT", vatClass === null ? "General" : "Super-reduced"],
+      ["VAT when taken away", takeaway],
+    ]);
+  });
+
+  it("shows no takeaway class where the region does not charge one", async () => {
+    const { el } = await mount({ takeawayVatClass: "general" });
+    expect(vatPairs(el)).toEqual([["VAT", "Reduced"]]);
   });
 
   it.each(["close", "modal-close", "escape"])(
