@@ -194,6 +194,9 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) mainServerSilent = false;
   @property({ type: Boolean }) spareAnswering = false;
   @property({ type: Boolean }) mainServerRefused = false;
+  @property({ type: Boolean }) showCloudEmergency = false;
+  @property({ type: Boolean }) cloudEmergencyBusy = false;
+  @property({ type: Boolean }) cloudEmergencyRefused = false;
 
   @property({ attribute: false }) clockNotice?: StaffNotice;
   @property({ attribute: false }) storageNotices: readonly StaffNotice[] = [];
@@ -444,6 +447,9 @@ export class TillLockScreen extends LitElement {
       .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
       .refused=${this.mainServerRefused}
+      .showCloud=${this.showCloudEmergency}
+      .cloudBusy=${this.cloudEmergencyBusy}
+      .cloudRefused=${this.cloudEmergencyRefused}
     ></till-main-server-strip>`;
   }
 

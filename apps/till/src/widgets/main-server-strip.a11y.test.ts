@@ -17,6 +17,10 @@ afterEach(() => {
 });
 
 const STATES: [string, Partial<TillMainServerStrip>][] = [
+  ["Cloud is offered without a spare", { showCloud: true }],
+  ["Cloud is checking", { showCloud: true, cloudBusy: true }],
+  ["Cloud found the main", { showCloud: true, cloudRefused: true }],
+  ["spare and Cloud are both offered", { spareAnswering: true, showSwitch: true, showCloud: true }],
   ["the spare answers", { spareAnswering: true, showSwitch: true }],
   ["the switch was refused", { spareAnswering: true, showSwitch: true, refused: true }],
   ["no server answers", { spareAnswering: false, showSwitch: true }],

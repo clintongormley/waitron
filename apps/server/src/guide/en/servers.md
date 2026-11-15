@@ -107,6 +107,8 @@ clock check. An unfinished controlled handover offers its own progress page. If 
 answers, open its **Servers** link or switch it off and check again. If the copy cannot be
 verified against the declaration, stop and keep both boxes’ data intact.
 
+If emergency hosting is available for your venue, the strip also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
+
 ## Keep the failed box’s data {#old-box-returns}
 
 Use the new main box after it starts. Keep the failed box and its data for the return flow.
@@ -272,3 +274,7 @@ issuance date before using a saved copy. **Hide code** removes it from the card;
 screen does too. The address beside the revealed code belongs to that code.
 The card also lists people with permission and an authenticator, and people who need to set
 one up in their profile. The card does not start the venue.
+
+If the main box stops answering, keep the till open. When the red strip offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
+
+Have the emergency code, your Waitron password and an authenticator or recovery code ready. The dialog lists the roles allowed to start the venue; Cloud checks availability before continuing. The option stays hidden until Cloud has made emergency hosting available for your venue.

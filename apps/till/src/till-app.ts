@@ -43,6 +43,7 @@ import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/ven
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
 import "./widgets/main-server-strip.js";
+import "./widgets/cloud-emergency-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
@@ -2341,6 +2342,7 @@ export class TillApp extends LitElement {
   readonly #resumeLive = () => this.#live?.start();
   readonly #onPageHide = () => {
     this.#switchGeneration++;
+    this.#closeCloudEmergency();
     this.#pauseLive();
   };
 
@@ -2543,6 +2545,7 @@ export class TillApp extends LitElement {
     diag.record("info", "server-switch", { from, to });
     this.#switchGeneration++;
     this.cloudEmergency = undefined;
+    this.#closeCloudEmergency();
     this.operatorPersonId = "";
     this.#tabPerson = null;
     this.operatorName = "";
@@ -2559,7 +2562,10 @@ export class TillApp extends LitElement {
 
   readonly #onServerState = (): void => {
     this.#watchMainSilence();
-    if (this.#mainServerStrip() === undefined) this.mainServerRefused = false;
+    if (this.#mainServerStrip() === undefined) {
+      this.mainServerRefused = false;
+      this.#closeCloudEmergency();
+    }
     this.requestUpdate();
     this.#decideReload();
   };
@@ -2568,18 +2574,24 @@ export class TillApp extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) => location.assign(url);
 
   @state() private mainServerRefused = false;
+  @state() private cloudEmergencyBusy = false;
+  @state() private cloudEmergencyRefused = false;
+  @state() private cloudEmergencyOpen = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
   /** Moves on at `pagehide`, when the till is detached from the page or its router, and when its
    * server changes; voids a pending switch. */
   #switchGeneration = 0;
 
-  /** Present once the main server has been silent for `MAIN_SILENT_MS` at a venue with a spare. */
   #mainServerStrip(): { spareAnswering: boolean } | undefined {
     const since = this.router?.mainSilentSince ?? null;
     const spare = this.router?.spare;
-    if (since === null || spare === undefined || Date.now() - since < MAIN_SILENT_MS)
+    if (
+      since === null ||
+      (spare === undefined && this.cloudEmergency === undefined) ||
+      Date.now() - since < MAIN_SILENT_MS
+    )
       return undefined;
-    return { spareAnswering: spare.answering };
+    return { spareAnswering: spare?.answering ?? false };
   }
 
   /** Repaints when the silence the router reports reaches `MAIN_SILENT_MS`. */
@@ -2587,7 +2599,8 @@ export class TillApp extends LitElement {
     clearTimeout(this.#mainSilentTimer);
     this.#mainSilentTimer = undefined;
     const since = this.router?.mainSilentSince ?? null;
-    if (since === null || this.router?.spare === undefined) return;
+    if (since === null || (this.router?.spare === undefined && this.cloudEmergency === undefined))
+      return;
     const left = MAIN_SILENT_MS - (Date.now() - since);
     if (left > 0)
       this.#mainSilentTimer = setTimeout(() => {
@@ -2614,6 +2627,31 @@ export class TillApp extends LitElement {
     this.navigate(url.href);
   }
 
+  #closeCloudEmergency(): void {
+    this.cloudEmergencyOpen = false;
+    this.cloudEmergencyBusy = false;
+    this.cloudEmergencyRefused = false;
+  }
+
+  async #onStartInCloud(): Promise<void> {
+    const router = this.router;
+    const entrance = this.cloudEmergency;
+    if (!router || !entrance || this.cloudEmergencyBusy || this.#mainServerStrip() === undefined)
+      return;
+    const generation = this.#switchGeneration;
+    const current = () => generation === this.#switchGeneration && entrance === this.cloudEmergency;
+    this.cloudEmergencyBusy = true;
+    this.cloudEmergencyRefused = false;
+    try {
+      const answered = await router.probeEmergencyMain();
+      if (!current()) return;
+      if (answered) this.cloudEmergencyRefused = true;
+      else if (this.#mainServerStrip() !== undefined) this.cloudEmergencyOpen = true;
+    } finally {
+      if (current()) this.cloudEmergencyBusy = false;
+    }
+  }
+
   #subscribeRouter(): void {
     if (this.#subscribedRouter === this.router) return;
     this.#detach();
@@ -2625,6 +2663,7 @@ export class TillApp extends LitElement {
 
   #detach(): void {
     this.#switchGeneration++;
+    this.#closeCloudEmergency();
     clearTimeout(this.#mainSilentTimer);
     this.#mainSilentTimer = undefined;
     this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
@@ -4865,6 +4904,10 @@ export class TillApp extends LitElement {
     if (changed.has("activeTableId")) this.#rememberFloorReturnZone();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
+    if (changed.has("cloudEmergency")) {
+      this.#watchMainSilence();
+      this.#closeCloudEmergency();
+    }
     if (changed.has("frontDoor")) this.#decideReload();
     // `submitting`, `parking`, `placing` and `cardAttemptsOver` are state, so a request that settles
     // comes through here.
@@ -21310,7 +21353,11 @@ export class TillApp extends LitElement {
         .spareAnswering=${strip.spareAnswering}
         .showSwitch=${!this.deviceMode && this.permissions.includes("node.manage")}
         .refused=${this.mainServerRefused}
+        .showCloud=${this.cloudEmergency !== undefined}
+        .cloudBusy=${this.cloudEmergencyBusy}
+        .cloudRefused=${this.cloudEmergencyRefused}
         @switch-to-spare=${() => void this.#onSwitchToSpare()}
+        @start-in-cloud=${() => void this.#onStartInCloud()}
       ></till-main-server-strip>`;
     return this.router?.waiting
       ? html`<p class="banner" role="status">${t("server.waiting_promotion")}</p>`
@@ -22627,6 +22674,17 @@ export class TillApp extends LitElement {
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         ${this.#renderRefreshNotice("waiting")}
         ${this.#inShell() ? this.#renderServerNotice() : nothing}
+        ${
+          this.cloudEmergencyOpen && this.cloudEmergency !== undefined
+            ? html`<till-cloud-emergency-dialog
+                .entrance=${this.cloudEmergency}
+                @close-cloud-emergency=${() => this.#closeCloudEmergency()}
+                @open-cloud-emergency=${() => {
+                  if (this.cloudEmergency) this.navigate(this.cloudEmergency.address);
+                }}
+              ></till-cloud-emergency-dialog>`
+            : nothing
+        }
         <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
              override is in flight. It takes the eligible authorizers + the retry error as PROPS and emits
              override-confirm/override-cancel (wired on the app wrapper above) — the app owns the request. -->
@@ -23022,7 +23080,11 @@ export class TillApp extends LitElement {
                           .mainServerSilent=${this.#mainServerStrip() !== undefined}
                           .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}
                           .mainServerRefused=${this.mainServerRefused}
+                          .showCloudEmergency=${this.cloudEmergency !== undefined}
+                          .cloudEmergencyBusy=${this.cloudEmergencyBusy}
+                          .cloudEmergencyRefused=${this.cloudEmergencyRefused}
                           @switch-to-spare=${() => void this.#onSwitchToSpare()}
+                          @start-in-cloud=${() => void this.#onStartInCloud()}
                           .clockNotice=${this.pinClockNotice}
                           .storageNotices=${this.pinStorageNotices}
                           @check-again=${() => void this.router?.probeNow()}

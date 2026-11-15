@@ -649,11 +649,10 @@ follow, being reached over the internet (owner, 2026-10-29).
 Local selected-backup placement preserves an admitted spare's identity and records its archive
 source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue that files with
 Veri*Factu can join, with nothing fiscal written at the join. Cloud placement and the hosted start
-still wait for Cloud's half, and for A947's strip (built in slice 4c, shown only at a venue with a
-spare) to show at a venue with no spare too. The emergency-card adapter is built; its facts need
+still wait for Cloud's half. The emergency-card adapter is built; its facts need
 Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
-readiness; Cloud's code endpoint remains required. The till's outage entrance (part 2b), recovery-pack printing and
-hosted runtime remain open.
+readiness; Cloud's code endpoint remains required. The till entrance is built, including without a spare; recovery-pack printing and
+the hosted runtime remain open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The [part 2 plan](../superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.

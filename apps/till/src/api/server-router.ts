@@ -64,6 +64,7 @@ export class ServerRouter extends EventTarget {
   /** The node id the page origin's latest probe answered with; an entry the chart gives that id is
    * neither probed, drawn nor chosen while it holds. */
   #originNodeId: string | undefined;
+  #emergencyMainId: string | undefined;
   /** `url chart-term answered-term` triples already posted: a server is handed each held chart
    * once per answer, so a box that refused it while answering no term is handed it again once it
    * answers its own older term. */
@@ -87,7 +88,9 @@ export class ServerRouter extends EventTarget {
     this.#intervalMs = opts.intervalMs ?? 5_000;
     this.#timeoutMs = opts.timeoutMs ?? 3_000;
     this.#current = opts.origin;
-    this.#servers = this.#merge(this.#load());
+    const saved = this.#load();
+    this.#rememberEmergencyMain(saved);
+    this.#servers = this.#merge(saved);
   }
 
   get current(): string {
@@ -125,6 +128,59 @@ export class ServerRouter extends EventTarget {
     }
   }
 
+  async probeEmergencyMain(): Promise<boolean> {
+    const mainId = this.#emergencyMainId;
+    if (mainId === undefined) return false;
+    const urls = new Set([
+      this.#origin,
+      ...this.#servers
+        .filter((s) => s.nodeId === mainId || s.standing === "serving-primary")
+        .map((s) => s.url),
+    ]);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const answers = new Promise<boolean>((resolve) => {
+        void Promise.all(
+          [...urls].map(async (url) => {
+            try {
+              const fetchImpl = this.#fetch;
+              const response = await fetchImpl(`${url}/api/node`, {
+                signal: controller.signal,
+                cache: "no-store",
+              });
+              if (!response.ok) return false;
+              const body: unknown = await response.json();
+              const matched =
+                body !== null &&
+                typeof body === "object" &&
+                "nodeId" in body &&
+                body.nodeId === mainId;
+              if (matched) resolve(true);
+              return matched;
+            } catch {
+              return false;
+            }
+          }),
+        ).then(() => resolve(false));
+      });
+      return await Promise.race([
+        answers,
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), this.#timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  }
+
+  #rememberEmergencyMain(list: ServerEntry[]): void {
+    const id = list.find((s) => s.standing === "serving-primary")?.nodeId;
+    this.#emergencyMainId = typeof id === "string" && id !== "" ? id : undefined;
+  }
+
   #withStanding(standing: ServerStanding): Tracked | undefined {
     return this.#servers.find((s) => s.standing === standing);
   }
@@ -144,6 +200,7 @@ export class ServerRouter extends EventTarget {
   }
 
   setServers(list: ServerEntry[]): void {
+    this.#rememberEmergencyMain(list);
     this.#servers = this.#merge(list);
     this.#save(list);
     this.#syncTimer();

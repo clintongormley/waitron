@@ -16772,6 +16772,7 @@ describe("the main-server strip", () => {
     const { el, router } = await mount(bothServers, {
       getTill: vi.fn().mockResolvedValue({
         ...till,
+        cloudEmergency: { address: "https://emergency.example.test", roles: [] },
         servers: bothServers,
         formFactor: kdsFormFactor,
         capabilities: ["act-as-kds"],
@@ -16787,6 +16788,7 @@ describe("the main-server strip", () => {
     await silentFor(el, router, 20_000);
     expect(shellStrip(el)).not.toBeNull();
     expect(shellStrip(el)!.showSwitch).toBe(false);
+    expect(shellStrip(el)!.showCloud).toBe(true);
   });
 
   it("a press while the main server is silent opens the spare's switch page with the way back", async () => {
@@ -16899,6 +16901,98 @@ describe("the main-server strip", () => {
     expect(router.spare).toBeUndefined();
     expect(shellStrip(el)).toBeNull();
     expect(waitingLine(el)).toBeDefined();
+  });
+
+  const entrance = {
+    address: "https://emergency.example.test",
+    roles: [{ builtInKey: "admin" as const, name: null }],
+  };
+  const dialog = (el: TillApp) => el.shadowRoot!.querySelector("till-cloud-emergency-dialog");
+  const cloudPress = (strip: Strip) =>
+    strip.dispatchEvent(new CustomEvent("start-in-cloud", { bubbles: true, composed: true }));
+  const mountCloud = (servers = bothServers) =>
+    mount(servers, {
+      getTill: vi.fn().mockResolvedValue({ ...till, servers, cloudEmergency: entrance }),
+    });
+
+  it("offers Cloud on a locked one-box till only after 20 seconds of observed silence", async () => {
+    const { el, router } = await mountCloud([bothServers[0]!]);
+    await silentFor(el, router, 19_900);
+    expect(lockStrip(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(100);
+    await el.updateComplete;
+    expect(lockStrip(el)!.showCloud).toBe(true);
+    expect(lockStrip(el)!.spareAnswering).toBe(false);
+    cloudPress(lockStrip(el)!);
+    await settle(el);
+    expect(dialog(el)).not.toBeNull();
+  });
+
+  it.each([
+    { permissions: [] },
+    { permissions: ["payment.take"] },
+    { permissions: ["node.manage"] },
+  ])("offers Cloud to signed-in staff with $permissions permissions", async ({ permissions }) => {
+    const { el, router } = await mountCloud();
+    await signIn(el, permissions);
+    await silentFor(el, router, 20_000);
+    expect(shellStrip(el)!.showCloud).toBe(true);
+    expect(shellStrip(el)!.showSwitch).toBe(permissions.includes("node.manage"));
+  });
+
+  it("shows a neutral refusal when the main returns during the Cloud precheck", async () => {
+    const { el, router } = await mountCloud([bothServers[0]!]);
+    await silentFor(el, router, 20_000);
+    answering.main = true;
+    cloudPress(lockStrip(el)!);
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    await vi.waitFor(() => expect(lockStrip(el)!.cloudRefused).toBe(true));
+    await lockStrip(el)!.updateComplete;
+    expect(lockStrip(el)!.shadowRoot!.textContent).toContain(t("cloud_emergency.main_answering"));
+  });
+
+  it("does not open Cloud after the server changes during its busy precheck", async () => {
+    const { el, router, fetchImpl } = await mountCloud();
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    cloudPress(lockStrip(el)!);
+    await settle(el);
+    expect(lockStrip(el)!.cloudBusy).toBe(true);
+    router.dispatchEvent(
+      new CustomEvent("server-changed", { detail: { from: ORIGIN, to: SPARE } }),
+    );
+    failProbe();
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    expect(lockStrip(el)!.cloudBusy).toBe(false);
+  });
+
+  it("navigates only from Open here and closes the dialog on recovery or a cleared entrance", async () => {
+    const { el, router } = await mountCloud();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    cloudPress(lockStrip(el)!);
+    await settle(el);
+    expect(dialog(el)).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    dialog(el)!.dispatchEvent(
+      new CustomEvent("open-cloud-emergency", { bubbles: true, composed: true }),
+    );
+    expect(navigate).toHaveBeenCalledWith(entrance.address);
+    answering.main = true;
+    await router.probeNow();
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    answering.main = false;
+    await silentFor(el, router, 20_000);
+    cloudPress(lockStrip(el)!);
+    await settle(el);
+    expect(dialog(el)).not.toBeNull();
+    el.cloudEmergency = undefined;
+    await el.updateComplete;
+    expect(dialog(el)).toBeNull();
   });
 
   it("a press while the main server answers shows the refusal, does not navigate, and clears when it answers again", async () => {
