@@ -1394,14 +1394,6 @@ so that dish could land under the bar. Run it first (add the first dish of an em
 1024×768 and 390 px and check the line is wholly above the bar); fix only if it reproduces.
 
 
-## A1140. Splitting a counter order delivered to a table leaves the new bill with no delivery table.
-
-The split bill takes its table's name as its label but not its delivery table
-(`apps/server/src/bill-actions.ts`, `createOpenOrder` beside `orderTableLabel`), so since A797
-slice 8b its kitchen card reads "Counter #13 Terrace 4" where the original reads "#12 T4". Left
-open by slice 8b (its plan's D3): copy the delivery table on a split.
-
-
 ## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).
 
 Seen on a busy English bar

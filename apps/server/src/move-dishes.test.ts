@@ -53,6 +53,7 @@ import {
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
 import { readPaidQuantities } from "./bill-payments.js";
+import { releaseDeliveries } from "./delivery-release.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -510,6 +511,46 @@ describe("A803 move dishes: the moves that succeed", () => {
       ),
     );
     expect(note?.note).toBe("All together");
+  });
+
+  it("A1140 move dishes: a counter order delivered to a table splits to a new bill delivered to the same table", async () => {
+    const table = await v.table("Terrace 41");
+    const id = await counterOrder(v, "Burger", "Flan");
+    await v.db
+      .update(workingOrders)
+      .set({ deliveryTableId: table })
+      .where(eq(workingOrders.id, id));
+    const [burger] = await dishIds(id, "Burger");
+
+    const { billId } = await move(null, id, null, [burger!]);
+
+    const [made] = await v.db
+      .select({ deliveryTableId: workingOrders.deliveryTableId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    expect(made?.deliveryTableId).toBe(table);
+  });
+
+  it("A1140 move dishes: a counter order whose delivery table was removed keeps that table's name on the new bill", async () => {
+    const table = await v.table("Terrace 42");
+    const id = await counterOrder(v, "Burger", "Flan");
+    await v.db
+      .update(workingOrders)
+      .set({ deliveryTableId: table })
+      .where(eq(workingOrders.id, id));
+    await inTx(v, (tx) => releaseDeliveries(tx, table, "Terrace 42"));
+    const [burger] = await dishIds(id, "Burger");
+
+    const { billId } = await move(null, id, null, [burger!]);
+
+    const [made] = await v.db
+      .select({
+        deliveryTableId: workingOrders.deliveryTableId,
+        deliveryTableLabel: workingOrders.deliveryTableLabel,
+      })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    expect(made).toEqual({ deliveryTableId: null, deliveryTableLabel: "Terrace 42" });
   });
 
   it("A803 move dishes: a Burger cancelled with its charge kept moves with its cancellation", async () => {
