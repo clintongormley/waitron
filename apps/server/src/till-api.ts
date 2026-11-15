@@ -1806,9 +1806,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<TillSaleRequest>(c);
-      if (!Array.isArray(body.lines)) throw invalid("lines");
-      if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
-        throw invalid("tender");
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
@@ -1830,6 +1827,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       assertProfileAction(session.device, "take-orders");
       await assertRequestDevice(deps, c, session);
+      if (!Array.isArray(body.lines)) throw invalid("lines");
+      if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
+        throw invalid("tender");
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,

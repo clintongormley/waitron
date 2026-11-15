@@ -2408,6 +2408,8 @@ describe("POST /api/sales (session-guarded sale)", () => {
     [{ lines: null }, "lines"],
     [{ lines: [] }, "tender"],
     [{ lines: [], tender: null }, "tender"],
+    [{ lines: [], tender: [] }, "tender"],
+    [{ lines: [], tender: "cash" }, "tender"],
   ])("refuses malformed sale fields in %j as %s", async (body, field) => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
