@@ -383,14 +383,12 @@ async function withDepartmentContact(
     await body();
   } finally {
     await inTx(async (tx) => {
-      await tx
-        .update(departments)
-        .set({
-          receiptText: null,
-          receiptLogoImageId: null,
-          receiptLogoRasters: null,
-          receiptUpdatedAt: null,
-        });
+      await tx.update(departments).set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      });
       for (const row of original)
         await tx.update(departments).set(row).where(eq(departments.id, row.id));
     });
@@ -2556,14 +2554,12 @@ describe("the invoice at full payment", () => {
               .update(orderServiceContexts)
               .set({ departmentId: own!.id })
               .where(eq(orderServiceContexts.workingOrderId, billId));
-            await tx
-              .update(departments)
-              .set({
-                receiptText: null,
-                receiptLogoImageId: null,
-                receiptLogoRasters: null,
-                receiptUpdatedAt: null,
-              });
+            await tx.update(departments).set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            });
             if (contacts.own)
               await seedDepartmentReceipt(tx, own!.id, { email: "terrace@example.test" });
             if (contacts.fallback)
@@ -2587,14 +2583,12 @@ describe("the invoice at full payment", () => {
               .update(orderServiceContexts)
               .set({ departmentId: context!.departmentId })
               .where(eq(orderServiceContexts.workingOrderId, billId));
-            await tx
-              .update(departments)
-              .set({
-                receiptText: null,
-                receiptLogoImageId: null,
-                receiptLogoRasters: null,
-                receiptUpdatedAt: null,
-              });
+            await tx.update(departments).set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            });
             for (const row of original)
               await tx.update(departments).set(row).where(eq(departments.id, row.id));
             await tx.delete(departments).where(eq(departments.id, own!.id));

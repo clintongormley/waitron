@@ -2365,14 +2365,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         await body();
       } finally {
         await inTx(async (tx) => {
-          await tx
-            .update(departments)
-            .set({
-              receiptText: null,
-              receiptLogoImageId: null,
-              receiptLogoRasters: null,
-              receiptUpdatedAt: null,
-            });
+          await tx.update(departments).set({
+            receiptText: null,
+            receiptLogoImageId: null,
+            receiptLogoRasters: null,
+            receiptUpdatedAt: null,
+          });
           for (const row of original)
             await tx.update(departments).set(row).where(eq(departments.id, row.id));
         });

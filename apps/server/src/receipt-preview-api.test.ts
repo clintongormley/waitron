@@ -768,14 +768,12 @@ describe("POST /management-api/receipt-preview", () => {
 
 describe("the receipt preview's top block", () => {
   afterEach(async () => {
-    await suite.db
-      .update(departments)
-      .set({
-        receiptText: null,
-        receiptLogoImageId: null,
-        receiptLogoRasters: null,
-        receiptUpdatedAt: null,
-      });
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
 
     await suite.db.delete(mediaImages);
   });

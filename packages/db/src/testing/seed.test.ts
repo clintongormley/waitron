@@ -398,16 +398,14 @@ describe("seedDepartmentReceipt", () => {
   });
   it("replaces the receipt and clears the image and defaulted picture cache", async () => {
     await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
-    await suite.db
-      .insert(departments)
-      .values({
-        id: "receipt-department",
-        name: "Dining",
-        tradingName: "Dining",
-        receiptLogoImageId: "receipt-image",
-        receiptLogoRasters: rasters,
-        receiptText: { phone: "Old" },
-      });
+    await suite.db.insert(departments).values({
+      id: "receipt-department",
+      name: "Dining",
+      tradingName: "Dining",
+      receiptLogoImageId: "receipt-image",
+      receiptLogoRasters: rasters,
+      receiptText: { phone: "Old" },
+    });
     await seedDepartmentReceipt(suite.db, "receipt-department", { email: "dining@example.test" });
     expect(
       await suite.db
@@ -428,14 +426,12 @@ describe("seedDepartmentReceipt", () => {
     ]);
   });
   it("refuses a missing image before changing the receipt", async () => {
-    await suite.db
-      .insert(departments)
-      .values({
-        id: "receipt-department",
-        name: "Dining",
-        tradingName: "Dining",
-        receiptText: { phone: "Keep" },
-      });
+    await suite.db.insert(departments).values({
+      id: "receipt-department",
+      name: "Dining",
+      tradingName: "Dining",
+      receiptText: { phone: "Keep" },
+    });
     const before = await suite.db.select().from(departments);
     await expect(
       seedDepartmentReceipt(suite.db, "receipt-department", { logo: filename }, rasters),

@@ -1748,14 +1748,12 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     v.email.transport = false;
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.email_unavailable"));
     v.email.transport = true;
-    await suite.db
-      .update(departments)
-      .set({
-        receiptText: null,
-        receiptLogoImageId: null,
-        receiptLogoRasters: null,
-        receiptUpdatedAt: null,
-      });
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.email_unavailable"));
     expect(await deliveryRows(saleId)).toEqual([]);
   });
@@ -1883,14 +1881,12 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     expect(failing.status).toBe(200);
     expect(failing.body).toMatchObject({ actions: { email: null } });
     v.email.transport = true;
-    await suite.db
-      .update(departments)
-      .set({
-        receiptText: null,
-        receiptLogoImageId: null,
-        receiptLogoRasters: null,
-        receiptUpdatedAt: null,
-      });
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { email: null } });
   });
 
@@ -2163,14 +2159,12 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
       refusal(409, "invoice_delivery.email_unavailable"),
     );
     v.email.transport = true;
-    await suite.db
-      .update(departments)
-      .set({
-        receiptText: null,
-        receiptLogoImageId: null,
-        receiptLogoRasters: null,
-        receiptUpdatedAt: null,
-      });
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect(await retry(v, orderId, failed)).toEqual(
       refusal(409, "invoice_delivery.email_unavailable"),
     );
