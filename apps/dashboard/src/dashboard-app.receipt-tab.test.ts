@@ -184,6 +184,7 @@ it("a receipt refusal naming a field that lands while Details shows returns to R
     expect(strip.items.map(({ key, marked }) => [key, marked])).toEqual([
       ["details", undefined],
       ["service", undefined],
+      ["tables", undefined],
       ["receipt", "needs fixing"],
     ]);
     const email = receiptField(editor, "email");
