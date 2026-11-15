@@ -447,12 +447,10 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   it("order start defaults to counter for a department and null for a zone", async () => {
     const v = await orderStartPolicies();
-    await db.execute(sql`insert into department_sale_policies (department_id)
-      values (${v.departmentId})`);
     expect(
       (
-        await db.execute(sql`select order_start from department_sale_policies
-      where department_id = ${v.departmentId}`)
+        await db.execute(sql`select order_start from departments
+      where id = ${v.departmentId}`)
       ).rows,
     ).toEqual([{ order_start: "counter" }]);
     expect(
@@ -465,25 +463,26 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   it("order start stores table and counter independently on each policy", async () => {
     const v = await orderStartPolicies();
-    await db.execute(sql`insert into department_sale_policies (department_id, order_start)
-      values (${v.departmentId}, 'table')`);
+    await db.execute(
+      sql`update departments set order_start = 'table' where id = ${v.departmentId}`,
+    );
     await db.execute(sql`update floor_zones set order_start = 'counter' where id = ${v.zoneId}`);
     expect(
       (
         await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
-      from department_sale_policies p join floor_zones q on q.id = ${v.zoneId}
-      where p.department_id = ${v.departmentId}`)
+      from departments p join floor_zones q on q.id = ${v.zoneId}
+      where p.id = ${v.departmentId}`)
       ).rows,
     ).toEqual([{ department_start: "table", zone_start: "counter" }]);
-    await db.execute(sql`update department_sale_policies set order_start = 'counter'
-      where department_id = ${v.departmentId}`);
+    await db.execute(sql`update departments set order_start = 'counter'
+      where id = ${v.departmentId}`);
     await db.execute(sql`update floor_zones set order_start = 'table'
       where id = ${v.zoneId}`);
     expect(
       (
         await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
-      from department_sale_policies p join floor_zones q on q.id = ${v.zoneId}
-      where p.department_id = ${v.departmentId}`)
+      from departments p join floor_zones q on q.id = ${v.zoneId}
+      where p.id = ${v.departmentId}`)
       ).rows,
     ).toEqual([{ department_start: "counter", zone_start: "table" }]);
     await db.execute(sql`update floor_zones set order_start = null where id = ${v.zoneId}`);
@@ -501,38 +500,33 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       const v = await orderStartPolicies();
       const insert =
         policy === "department"
-          ? sql`insert into department_sale_policies (department_id, order_start)
-            values (${v.departmentId}, 'tab')`
+          ? sql`insert into departments (id, name, trading_name, created_at, order_start)
+            values ('invalid', 'Invalid', 'Invalid', '2026-11-15T00:00:00Z', 'tab')`
           : sql`update floor_zones set order_start = 'tab' where id = ${v.zoneId}`;
       const insertError = await captureError(() => withTransaction(db, (tx) => tx.execute(insert)));
       expect(isRefusal(insertError, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(insertError)).toContain(
-        policy === "department"
-          ? "department_sale_policies_order_start_ck"
-          : "floor_zones_order_start_ck",
+        policy === "department" ? "departments_order_start_ck" : "floor_zones_order_start_ck",
       );
       await db.execute(
         policy === "department"
-          ? sql`insert into department_sale_policies (department_id, order_start)
-            values (${v.departmentId}, 'table')`
+          ? sql`update departments set order_start = 'table' where id = ${v.departmentId}`
           : sql`update floor_zones set order_start = 'counter' where id = ${v.zoneId}`,
       );
       const update =
         policy === "department"
-          ? sql`update department_sale_policies set order_start = 'tab' where department_id = ${v.departmentId}`
+          ? sql`update departments set order_start = 'tab' where id = ${v.departmentId}`
           : sql`update floor_zones set order_start = 'tab' where id = ${v.zoneId}`;
       const updateError = await captureError(() => withTransaction(db, (tx) => tx.execute(update)));
       expect(isRefusal(updateError, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(updateError)).toContain(
-        policy === "department"
-          ? "department_sale_policies_order_start_ck"
-          : "floor_zones_order_start_ck",
+        policy === "department" ? "departments_order_start_ck" : "floor_zones_order_start_ck",
       );
       expect(
         (
           await db.execute(
             policy === "department"
-              ? sql`select order_start from department_sale_policies where department_id = ${v.departmentId}`
+              ? sql`select order_start from departments where id = ${v.departmentId}`
               : sql`select order_start from floor_zones where id = ${v.zoneId}`,
           )
         ).rows,
@@ -544,19 +538,18 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await orderStartPolicies();
     const error = await captureError(() =>
       withTransaction(db, (tx) =>
-        tx.execute(sql`insert into department_sale_policies (department_id, order_start)
-        values (${v.departmentId}, null)`),
+        tx.execute(sql`update departments set order_start = null where id = ${v.departmentId}`),
       ),
     );
     expect(engineErrorMessage(error)).toContain(
-      "NOT NULL constraint failed: department_sale_policies.order_start",
+      "NOT NULL constraint failed: departments.order_start",
     );
     expect(
       (
-        await db.execute(sql`select department_id from department_sale_policies
-      where department_id = ${v.departmentId}`)
+        await db.execute(sql`select order_start from departments
+      where id = ${v.departmentId}`)
       ).rows,
-    ).toEqual([]);
+    ).toEqual([{ order_start: "counter" }]);
   });
 
   /**

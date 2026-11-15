@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
-  departmentSalePolicies,
   invoiceSeries,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -590,28 +589,22 @@ describe("department-owned address and fiscal description", () => {
 });
 
 describe("receipt and printing policy transaction", () => {
-  it("an absent policy uses the established sale reader default until it is repaired", async () => {
+  it("reads the bare department's policy defaults before an authored receipt exists", async () => {
     const f = await fixture();
-    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
-      printTradingName: false,
-    });
-  });
-
-  it("reads the department creation policy even before an authored receipt exists", async () => {
-    const f = await fixture();
-    await suite.db.insert(departmentSalePolicies).values({ departmentId: f.id });
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
       printTradingName: true,
     });
   });
   it("saves receipt and policy while preserving the department's other service choices", async () => {
     const f = await fixture();
-    await suite.db.insert(departmentSalePolicies).values({
-      departmentId: f.id,
-      orderStart: "table",
-      paidWhen: "ticket_then_pay",
-      collectionNumber: "numbered",
-    });
+    await suite.db
+      .update(departments)
+      .set({
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+      })
+      .where(eq(departments.id, f.id));
     const receipt = { printAddress: false, operationDescription: "Dining service" };
     const policy = { printTradingName: false };
     await scoped((tx) => receipts.saveDepartmentReceiptSettings(tx, f.id, { receipt, policy }));
@@ -619,9 +612,15 @@ describe("receipt and printing policy transaction", () => {
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual(policy);
     expect(
       await suite.db
-        .select()
-        .from(departmentSalePolicies)
-        .where(eq(departmentSalePolicies.departmentId, f.id)),
+        .select({
+          departmentId: departments.id,
+          orderStart: departments.orderStart,
+          paidWhen: departments.paidWhen,
+          collectionNumber: departments.collectionNumber,
+          printTradingName: departments.printTradingName,
+        })
+        .from(departments)
+        .where(eq(departments.id, f.id)),
     ).toEqual([
       {
         departmentId: f.id,
@@ -657,10 +656,10 @@ describe("receipt and printing policy transaction", () => {
       ).toBe(true);
       expect(
         await suite.db
-          .select()
-          .from(departmentSalePolicies)
-          .where(eq(departmentSalePolicies.departmentId, f.id)),
-      ).toEqual([]);
+          .select({ printTradingName: departments.printTradingName })
+          .from(departments)
+          .where(eq(departments.id, f.id)),
+      ).toEqual([{ printTradingName: true }]);
     } finally {
       await suite.db.execute(sql`DROP TRIGGER test_receipt_policy_refusal`);
     }
