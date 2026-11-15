@@ -22,7 +22,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "diagnosis-bundle-"));
   entry = pathToFileURL(join(root, "fiscal-certificate-diagnosis.js"));
   await writeFile(join(root, "package.json"), '{"type":"module"}');
-}, 190_000);
+});
 afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
