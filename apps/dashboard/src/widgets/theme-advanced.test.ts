@@ -429,6 +429,9 @@ describe("what opens a section", () => {
     await outer.updateComplete;
     await sectionAt(el, "buttons").whenSettled();
     await nextFrame();
+    await expect
+      .poll(() => parseFloat(body.style.height) - body.scrollHeight)
+      .toBeGreaterThanOrEqual(0);
     const target = parseFloat(body.style.height);
     expect(target).toBeGreaterThan(800);
     await revealed;
