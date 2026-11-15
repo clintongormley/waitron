@@ -1,103 +1,89 @@
 # A1150: Live product declarations — implementation plan
 
-**Basis:** [published design](../specs/2026-11-15-a1150-live-product-declarations-design.md),
-commit `2f217370f582068be71dbc6b6f310c7f83ce3fa3`. Request in `docs/backlog.md` A1150
-and `~/waitron-campaign-j/queue.md`: “Allergens and diet labels come from the live product
-on every screen”. Claude reviewed the design; the watcher cleared it on 15 November at
-18:46. No owner approval of the design or plan is recorded. This plan awaits Claude review
-and watcher PLAN FOR APPROVAL clearance; this drafting involved source inspection only.
+**Basis:** [design](../specs/2026-11-15-a1150-live-product-declarations-design.md), published
+`2f217370f582068be71dbc6b6f310c7f83ce3fa3`; A1150 in `docs/backlog.md` and Lane J’s queue:
+“Allergens and diet labels come from the live product on every screen”. Claude reviewed the
+design. The watcher’s 15-November 18:46 clearance in Lane J’s `questions.md` says: “Take the
+stripping design and keep the current document format, recorded versions and the single hash:
+no migration, no second hash, no reset.” It also forbids transition guide text. No owner approval
+of this design or plan is recorded. This plan still needs Claude review and watcher clearance.
 
-**Finish line:** saving a product declaration changes every design-mapped live reader without
-republishing; sent till/history dishes and extras retain first-send capture. Held remains live
-until release. Prices, names, choices and recorded versions/hashes remain intact.
+**Finish line:** saving declarations updates all design-mapped live readers without publishing.
+Sent till/history dishes and extras retain first-send capture; held stays live until release.
+Keep prices, names, choices, four diet-filter meanings and recorded versions/hashes.
 
-**Proposed delivery for watcher clearance: one coherent PR**, including guides. Stripping and
-hydration must ship together; a layer-only split would leave inconsistent allergy information.
-Budget 165 active minutes through PR creation, with 15 minutes reserve, excluding outside waits:
-steps 1–4 approximately 40/35/45/45 minutes. Estimated changed lines: **360 production,
-460 behavioral tests, 40 test-support**, plus approximately 100 documentation lines. These are
-estimates, not caps. Beyond 1.5× the estimate, or if three hours appears unattainable, obtain
-watcher outside opinion before expanding; never land an incomplete boundary to meet the clock.
+**Two proposed, independently usable PRs:** 1 serves current declarations to new/reloaded till
+views, held retrieval and guest outputs; 2 refreshes already-open till lines and choice views.
+The same-version open-line snapshot gap remains until PR 2, as today; both finish before go-live.
+Guides ship with each behavior. Each slice has three active hours **including finish-branch
+reviews, fixes and the hook through PR creation**, excluding outside waits. Estimates of changed
+production/tests/support lines: PR 1 **300/400/40**, PR 2 **150/250/20**, plus about 70/30 docs.
+Beyond 1.5× a slice estimate, or an unattainable three-hour milestone, stop for watcher outside
+opinion; do not weaken a boundary or increase the budget yourself.
 
-## Implementation and owning tests
+## PR 1 — current declarations at every read
 
-For each behavior below: add/change the owning assertion, observe meaningful **FAIL**, make
-the minimal implementation, then observe **PASS** with a nonzero test count. Reuse fixtures;
-give published/live/captured declarations and parent/variant/extra different values. Repeat
-caller assertions only for different output or recovery.
+1. **Test first, then strip and hydrate.** Extend assertions in
+   `packages/menu/src/{menu-document,menu-allergen-warnings,menu-publication,menu-change-navigation,menu-patch}.test.ts`;
+   observe meaningful FAIL, implement minimally, observe PASS. Reuse distinguishable
+   published/live/captured and parent/variant/extra fixtures. Menu-document owns stripping,
+   batched inheritance, null/empty, missing rows and digest; publication owns declaration-only
+   status and unchanged recorded bytes/hashes. Warning policy stays advisory; change its stale-token
+   trigger to a publishable edit. Change-navigation retains destinations for publishable edits;
+   patches retain declaration exclusion. No repeated caller failure matrices.
+2. Change shared `src/menu-document/{menu-document-types,guest-menu}.ts` and `src/index.ts`;
+   menu `src/{menu-document,menu-navigation,menu-publication,operations,offered-modifiers,index}.ts`.
+   Extend `OverlayOfferField`/frozen extras; served types require declarations. Omit declarations
+   in `freezeOffer`; extend `readLiveRows`, `applyLiveFields` and `liveFieldsDigest` with effective
+   variant columns. Add `packages/menu/src/product-declarations.ts`: `productDeclarationValues`
+   shares the existing override-derived diet/validated declarations with `offerLineValues` and live
+   hydration; `extraDeclarationValues` shares the existing expanded extra labels with
+   `offered-modifiers.ts`. No new diet policy. Collect `BuiltMenu.unreviewed` from pre-freeze
+   offers for preview warnings, avoiding another live read.
+3. Require a hydrated document at `publicGuestMenu`, through one adapter over `applyLiveFields`.
+   **Preserve guest/paper membership and published names/prices:** if a live product is missing,
+   retain its published entry with unknown declarations (`null` allergens, empty declared labels,
+   unknown diet), never old declarations. This removes the initial draft’s unrelated omission.
+   In `apps/server/src/{guest-menu-api,line-nutrition,working-order}.ts`, hydrate all four producers
+   and batch held products/variants/extras even outside offers; never use filtered
+   `readLineNutrition` as the full profile. Existing `recordWorkingLineContexts` and set-lunch
+   writers keep consuming hydrated offers; held retrieval stops reading copied context nutrition.
+   `menu-allergen-workflow.test.ts` owns held outside-offer/null/variant reads;
+   `guest-menu-api.test.ts` owns Cloud/preview/old-paper/public output and missing-row behavior;
+   `cloud-guest-menu.test.ts` owns body reconciliation without publication. Keep sent capture,
+   replay, split, later-extra and missing-capture assertions in `sent-line-nutrition.test.ts`, and
+   existing `kitchen-allergy.reads.test.ts`/`kitchen-print.allergy.test.ts` live checks.
+4. Remove declaration change fields/labels in dashboard `widgets/menu-preview.ts` and
+   `i18n/strings.ts`. Adapt fixtures in shared `menu-document/{guest-menu,customer-menu-presentation}.test.ts`
+   and dashboard `widgets/{test-helpers.ts,menu-preview.test.ts,menu-preview-navigation.test.ts,menu-patch-draft.test.ts,menu-patch-dialog.test.ts,menu-patch-dialog.a11y.test.ts}`.
+   Preserve unrelated assertions. Update Products/Modifiers guide twins under
+   `apps/server/src/guide/{en,es}/` and developer `products.md`/`design-system.md`; describe live
+   declarations, not a transition. Keep A1150’s remaining open-view work in `docs/backlog.md`.
 
-1. **Strip and hydrate atomically.** Change
-   `packages/shared/src/menu-document/{menu-document-types,guest-menu}.ts`,
-   `packages/shared/src/index.ts`, and
-   `packages/menu/src/{menu-document,menu-navigation,menu-publication,index}.ts`.
-   Extend `OverlayOfferField`, frozen extra and served types; `freezeOffer` omits dish/variant
-   `allergens`, `diet`, `dietOverride`, `dietaryDeclarations` and extra `addAllergens`/`suitableFor`.
-   Extend batched `readLiveRows`/`applyLiveFields` and `liveFieldsDigest`, using
-   `variant-fallback.ts` effective columns. Keep `offerLineValues` diet derivation from live
-   `dietOverride`; labels retain direct-declaration expansion. Preserve null unreviewed versus
-   `{}` reviewed-empty, inheritance and independent extras. Require a hydrated document at
-   `publicGuestMenu` through one adapter over `applyLiveFields`; omit missing-product members
-   rather than restoring frozen declarations. Remove declaration
-   comparisons/navigation and `ProductChangeField` cases, including
-   `apps/dashboard/src/widgets/menu-preview.ts` labels. Hydrate working offers for warnings.
-   `packages/menu/src/menu-document.test.ts` owns stripping, inheritance, missing rows, batching,
-   digest changes and declaration-independent hash/diff; `menu-allergen-warnings.test.ts` owns
-   advisory active-variant/null policy. Change its stale-preview trigger to a publishable edit.
-   `menu-publication.test.ts` owns unchanged status for declaration-only edits after publishing
-   a stripped document and
-   preserved recorded bytes/hashes, including an earlier edition carrying old declarations;
-   `menu-navigation.test.ts` retains publishable-edit destinations. Keep A1151 exclusions in
-   `menu-patch.test.ts`. Adapt shared `guest-menu.test.ts` and dashboard
-   `widgets/{test-helpers.ts,menu-preview.test.ts,menu-preview-navigation.test.ts}` fixtures
-   without weakening unrelated assertions.
+## PR 2 — refresh open till views without editing orders
 
-2. **Complete server readers.** Change `apps/server/src/{guest-menu-api,line-nutrition,working-order}.ts`.
-   Hydrate all four `publicGuestMenu` producers: Cloud pages, manager preview, earlier-version
-   paper and public page. Reuse the live-row query pattern for held retrieval, batching chosen
-   product ids including extras outside current offers; bypass `readLineNutrition`'s filtered
-   display result. Return current diet/override/declarations without replacing stored sale facts.
-   `menu-allergen-workflow.test.ts` owns held retrieval beyond offers, including null/empty and
-   chosen variants. Keep `sent-line-nutrition.test.ts` capture/replay/split/later-extra/missing-capture
-   assertions. `guest-menu-api.test.ts` owns four outputs, old-paper prices/names and missing-row
-   handling. `cloud-guest-menu.test.ts` owns changed generated-body reconciliation without a
-   menu publication. Reuse `cloud-worker.ts`/`boot.ts` wiring unchanged. Retain kitchen live-read
-   coverage in `kitchen-allergy.reads.test.ts` and `kitchen-print.allergy.test.ts`.
+5. Test-first in `apps/till/src/state/menu-refresh.test.ts` (declaration-only replacement),
+   `till-app-menu-refresh.test.ts` (same-version counter/table/held/last-added wiring, no saves,
+   no price confirmation, stale requests), `menu-filter.test.ts` (all four filters),
+   `widgets/{menu-browser.nutrition,modifier-picker.allergens,basket.line-details}.test.ts`
+   (open info/choice/details, preserving sent captures). Change
+   `apps/till/src/{till-app,state/menu-refresh,state/working-order,widgets/menu-browser,widgets/basket}.ts`.
+   Reuse conversion, existing poll/digest and request/dialog guards. Update declarations separately
+   from price reconciliation, preserving line identity, selections, clean state and staged prices;
+   use display-only `draft-sync.ts` reshow where applicable. No new polling or client conversion.
+   Update Table service guide twins; remove completed A1150 backlog entries.
 
-3. **Refresh till displays without editing orders.** Change
-   `apps/till/src/{api/client,till-app,state/menu-refresh,state/working-order,widgets/menu-browser,widgets/basket}.ts`.
-   Reuse `menuOfferToTillProduct`, the existing menu-state poll/digest and request/dialog guards.
-   Apply declarations separately from price reconciliation even at the same version, to unsent
-   counter/table drafts, held/last-added lines and open information/choice views. Preserve line
-   identity, selections and prices; do not mark orders edited or save drafts. Reuse
-   `draft-sync.ts`'s display-only `reshow` where applicable. `state/menu-refresh.test.ts` owns
-   declaration-only replacement; `till-app-menu-refresh.test.ts` owns poll wiring, counter/table,
-   held/last-added, no-save/no-confirmation and stale-request recovery. Keep all four filter
-   meanings (vegan, vegetarian, no-meat, no-fish) in `menu-filter.test.ts`;
-   `widgets/menu-browser.nutrition.test.ts` owns open-view
-   refresh, `modifier-picker.allergens.test.ts` choices, and `basket.line-details.test.ts` detail
-   refresh with sent capture preserved.
+## Verification and limits
 
-4. **Guides and finish.** Update `apps/server/src/guide/{en,es}/{products,modifiers,table-service}.md`
-   and `docs/developers/{design-system,products}.md`: save without republishing, inheritance,
-   separate extras, Recorded when sent, live kitchen and reopening previews; retain anchors.
-   No transition guidance. Remove A1150 from `docs/backlog.md` when delivered. No migration,
-   compatibility layer, reset, second hash, tables, records, protocols, polling service or A1517
-   redesign; retain format 4 and the single full-document hash.
+Run every changed test file with `pnpm --filter <owning-package> exec vitest run <files>`,
+not whole packages. PR 1 also runs its retained server suites above and shared guest renderer;
+PR 2 runs its named till files. Both run server `guide-content.test.ts` and root
+`scripts/guide-links.test.ts`. After PR 1’s type changes run
+`pnpm --filter @waitron/shared --filter @waitron/menu --filter @waitron/dashboard --filter @waitron/server typecheck`;
+the normal hook later covers dependents. Review EN/ES, light/dark, phone/desktop displays.
 
-## Focused verification and review
-
-Run from the repository root, using only named files:
-
-```sh
-pnpm --filter @waitron/menu exec vitest run src/{menu-document,menu-allergen-warnings,menu-publication,menu-navigation,menu-patch}.test.ts
-pnpm --filter @waitron/shared exec vitest run src/menu-document/guest-menu.test.ts
-pnpm --filter @waitron/server exec vitest run src/{menu-allergen-workflow,sent-line-nutrition,guest-menu-api,cloud-guest-menu,kitchen-allergy.reads,kitchen-print.allergy,guide-content}.test.ts
-pnpm --filter @waitron/till exec vitest run src/state/menu-refresh.test.ts src/{till-app-menu-refresh,menu-filter}.test.ts src/widgets/{menu-browser.nutrition,modifier-picker.allergens,basket.line-details}.test.ts
-pnpm --filter @waitron/dashboard exec vitest run src/widgets/{menu-preview,menu-preview-navigation}.test.ts
-pnpm exec vitest run scripts/guide-links.test.ts
-```
-
-Resolve A1308 collisions on rebase. Run the normal push hook and require current-head CI;
-no whole-package local runs. Use the full safety-relevant `finish-branch` path: initial rebase,
-two Claude run-it reviews for the cross-package contract, then a fresh Claude read of fixes.
-PR creation is the three-hour milestone, not permission to merge.
+Use current A1308 `menuReleases` fixtures after rebase. Keep format 4, one full-document hash,
+all recorded documents and A1517 behavior; no migration, compatibility layer, reset, schema,
+protocol or second polling service. Each PR takes initial rebase, two Claude run-it reviews
+(cross-package contract), one fresh fixes read, the normal hook and current-head CI before land.
+This plan is source inspection, with no runtime verification claimed.
