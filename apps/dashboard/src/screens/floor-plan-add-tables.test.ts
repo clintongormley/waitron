@@ -465,14 +465,13 @@ it("a custom short name holding + is refused beside its field", async () => {
   expect(changes).toEqual([]);
 });
 
-it("automatic short names holding + are refused beside Prefix", async () => {
+it("automatic short names read a + in the prefix as a space", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
   await set(el, addField(el, "prefix"), "1+");
   expect(preview(el)).toBe("1+ 1");
   await pressAdd(el);
-  expect(addField(el, "prefix").error).toBe("Leave out +: it marks joined tables.");
-  expect(changes).toEqual([]);
+  expect(added(changes).map((t) => [t.label, t.shortName])).toEqual([["1+ 1", "1 1"]]);
 });
 
 async function atViewport(width: number, height: number): Promise<void> {

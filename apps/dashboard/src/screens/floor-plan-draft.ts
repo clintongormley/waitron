@@ -2,6 +2,7 @@ import {
   SHORT_NAME_MAX,
   createLabelComparator,
   proposeShortName,
+  refusesShortNamePlus,
   shortNameKey,
   shortNameLength,
 } from "@waitron/shared";
@@ -194,14 +195,6 @@ export type DraftProblem =
   | "short_name_repeated"
   | "parts_too_few";
 
-/** The till joins table names with "+" (`mergeLabel`), so a new one would read as a join. */
-export function refusesPlus(
-  table: Pick<DraftTable, "savedShortName"> | undefined,
-  shortName: string,
-): boolean {
-  return shortName.includes("+") && shortName !== table?.savedShortName;
-}
-
 export interface DraftCheck {
   key: string;
   problem: DraftProblem;
@@ -222,7 +215,8 @@ export function checkDraft(draft: FloorPlanDraft): DraftCheck | null {
     if (shortName === "") return { key: t.key, problem: "short_name_missing" };
     if (shortNameLength(shortName) > SHORT_NAME_MAX)
       return { key: t.key, problem: "short_name_too_long" };
-    if (refusesPlus(t, shortName)) return { key: t.key, problem: "short_name_plus" };
+    if (refusesShortNamePlus(shortName, t.savedShortName))
+      return { key: t.key, problem: "short_name_plus" };
     const earlier = shortNames.get(shortNameKey(shortName));
     if (earlier !== undefined)
       return {

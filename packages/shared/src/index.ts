@@ -79,6 +79,7 @@ export {
 export {
   isShortNameShaped,
   proposeShortName,
+  refusesShortNamePlus,
   SHORT_NAME_MAX,
   shortNameKey,
   shortNameLength,

@@ -104,7 +104,7 @@ describe("resolveShortNames", () => {
     expect(resolveShortNames(entries, none)).toEqual(["B1", "A1"]);
   });
 
-  it.each(["", "   ", "ABCDEF", "e\u0301".repeat(6)])(
+  it.each(["", "   ", "ABCDEF", "e\u0301".repeat(6), "1+2"])(
     "refuses %j as tables.0.shortName",
     (shortName) => {
       expect(refusal(() => resolveShortNames([{ label: "Terrace 1", shortName }], none))).toEqual({
@@ -113,6 +113,33 @@ describe("resolveShortNames", () => {
       });
     },
   );
+
+  it("keeps a sent short name holding + that the table already had", () => {
+    const stored = { label: "1+2", shortName: "1+2" };
+    expect(resolveShortNames([{ label: "1+2", shortName: "1+2", stored }], none)).toEqual(["1+2"]);
+  });
+
+  it("proposes a short name that reads + as a space", () => {
+    expect(resolveShortNames([{ label: "1+2" }], none)).toEqual(["1 2"]);
+  });
+
+  it("refuses a name holding + left with no short name, as the till would show it whole", () => {
+    const refused = { code: "floor_plan.invalid", params: { field: "tables.1.shortName" } };
+    expect(refusal(() => resolveShortNames([{ label: "T1" }, { label: " + " }], none))).toEqual(
+      refused,
+    );
+    expect(
+      refusal(() =>
+        resolveShortNames([{ label: "T1" }, { label: "1+2" }], new Map([["1 2", "1 2"]])),
+      ),
+    ).toEqual(refused);
+    const stored = { label: "1+2", shortName: "12" };
+    expect(
+      refusal(() =>
+        resolveShortNames([{ label: "T1" }, { label: "1+2", stored }], new Map([["12", "Bar 12"]])),
+      ),
+    ).toEqual(refused);
+  });
 
   it.each(["ABCDE", "e\u0301".repeat(5)])("keeps %j, five characters", (shortName) => {
     expect(resolveShortNames([{ label: "Terrace 1", shortName }], none)).toEqual([shortName]);

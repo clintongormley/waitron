@@ -397,7 +397,7 @@ async function checkSave(
     taken.shortNames,
   );
   // A table left with no short name is shown by its full name, so one this save adds or renames
-  // may not read as another zone's table. A table it leaves as stored is never refused.
+  // may not read as another zone's table. A table it leaves as stored is never refused here.
   tables.forEach((table, index) => {
     if (shortNames[index] !== null) return;
     const label = table.label.trim();

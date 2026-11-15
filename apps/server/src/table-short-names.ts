@@ -1,4 +1,10 @@
-import { AppError, isShortNameShaped, proposeShortName, shortNameKey } from "@waitron/shared";
+import {
+  AppError,
+  isShortNameShaped,
+  proposeShortName,
+  refusesShortNamePlus,
+  shortNameKey,
+} from "@waitron/shared";
 import "./errors.js";
 
 export interface ShortNameEntry {
@@ -11,7 +17,8 @@ export interface ShortNameEntry {
 /**
  * `taken` maps a short name's key to the full name of the table holding it. Kept values are
  * claimed first, then sent ones (refused when taken), then proposals (none when taken), so a sent
- * value never takes an untouched table's stored one and a proposal never displaces a chosen one.
+ * value never takes an untouched table's stored one and a proposal never displaces a chosen one. A
+ * table whose name holds "+" and is left with none is refused.
  */
 export function resolveShortNames(
   entries: readonly ShortNameEntry[],
@@ -42,7 +49,7 @@ export function resolveShortNames(
   entries.forEach((entry, index) => {
     if (entry.shortName === undefined) return;
     const value = entry.shortName.trim();
-    if (!isShortNameShaped(value)) {
+    if (!isShortNameShaped(value) || refusesShortNamePlus(value, entry.stored?.shortName)) {
       throw new AppError("floor_plan.invalid", { field: `tables.${index}.shortName` });
     }
     const holder = claimed.get(shortNameKey(value));
@@ -56,6 +63,15 @@ export function resolveShortNames(
     claim(index, value);
   });
 
-  for (const index of proposed) claim(index, proposeShortName(entries[index]!.label));
+  for (const index of proposed) {
+    const proposal = proposeShortName(entries[index]!.label);
+    if (proposal !== "") claim(index, proposal);
+  }
+  // The till shows a table with no short name by its full name, where a "+" would read as a join.
+  entries.forEach((entry, index) => {
+    if (result[index] === null && entry.label.includes("+")) {
+      throw new AppError("floor_plan.invalid", { field: `tables.${index}.shortName` });
+    }
+  });
   return result;
 }

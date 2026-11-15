@@ -1030,12 +1030,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   HTTP probe. Validate the missing fields and assert the domain refusal.
   [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
 
-- **A1112. The server, the API and a configuration file still accept a "+" in a short name.** The
-  dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table
-  already had it stored (`refusesPlus`, `apps/dashboard/src/screens/floor-plan-draft.ts`; A797 slice
-  2), because the till writes tables joined for today as "T1+T2".
-  [Detail](backlog/till.md#a1112-the-server-the-api-and-a-configuration-file-still-accept-a--in-a-short-name)
-
 - **Nothing covers the order screen's bar** (bundle of 2, size S, needs the owner). Holds A1211, A1212. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
 - **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**

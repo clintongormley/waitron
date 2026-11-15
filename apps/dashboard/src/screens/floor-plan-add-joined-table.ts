@@ -11,7 +11,12 @@ import {
   type LeaveReason,
   type WtModal,
 } from "@waitron/ui";
-import { SHORT_NAME_MAX, shortNameKey, shortNameLength } from "@waitron/shared";
+import {
+  SHORT_NAME_MAX,
+  refusesShortNamePlus,
+  shortNameKey,
+  shortNameLength,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -28,7 +33,6 @@ import {
   followName,
   freeTables,
   placeTable,
-  refusesPlus,
   seatCount,
   sendChange,
   tableName,
@@ -203,7 +207,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     if (shortName === "") return t("floor_plan_editor.short_name_missing");
     if (shortNameLength(shortName) > SHORT_NAME_MAX)
       return t("floor_plan_editor.short_name_too_long");
-    if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
+    if (refusesShortNamePlus(shortName)) return t("floor_plan_editor.short_name_plus");
     const holder = this.draft.tables.find(
       (table) => shortNameKey(table.shortName.trim()) === shortNameKey(shortName),
     );
