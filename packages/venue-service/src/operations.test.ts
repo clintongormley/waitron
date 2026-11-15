@@ -3558,6 +3558,8 @@ describe("combined settings operations", () => {
             paidWhen: "prepay",
             collectionNumber: "none",
             printTradingName: true,
+            dining: "eat_in",
+            diningStartsAs: "eat_in",
           },
         ],
         zones: [

@@ -589,6 +589,8 @@ export async function listSalePolicies(tx: Transaction) {
       paidWhen: departments.paidWhen,
       collectionNumber: departments.collectionNumber,
       printTradingName: departments.printTradingName,
+      dining: departments.dining,
+      diningStartsAs: departments.diningStartsAs,
     })
     .from(departments)
     .where(inArray(departments.id, [...departmentIds]));

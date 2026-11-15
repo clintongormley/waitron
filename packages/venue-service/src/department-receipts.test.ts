@@ -672,6 +672,8 @@ describe("receipt and printing policy transaction", () => {
           paidWhen: departments.paidWhen,
           collectionNumber: departments.collectionNumber,
           printTradingName: departments.printTradingName,
+          dining: departments.dining,
+          diningStartsAs: departments.diningStartsAs,
         })
         .from(departments)
         .where(eq(departments.id, f.id)),
