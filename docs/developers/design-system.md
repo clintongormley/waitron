@@ -230,7 +230,8 @@ and keeps `--wt-color-text`, `--wt-color-text-muted` and `--wt-color-danger` at 
 error under a selected row reads; the "lifted surface" test in
 `packages/ui-core/src/tokens/colors.test.ts` holds all three. The dragged row follows the pointer,
 held inside its list, and is drawn above the rows it covers. Each row it passes slides out of its
-way, and the row itself slides into its slot when released, both over `--wt-duration-move`. Under
+way, and the row itself slides into its slot when released, both over `--wt-duration-move`. Escape
+cancels a drag: the row goes back to where the drag started and nothing is saved. Under
 reduced motion (`prefers-reduced-motion: reduce`) passed and released rows land at once, while the
 dragged row still follows the pointer.
 

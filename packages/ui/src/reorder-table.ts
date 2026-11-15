@@ -109,7 +109,8 @@ export interface ReorderModel {
   /** `to` may be out of range (the pointer-drag path can pass -1); an implementation must ignore
    * it, as `reorder()` does. `via` says whether a key press or a pointer drag asked. */
   move(id: string, to: number, via: "key" | "pointer"): void;
-  /** Called once when a pointer drag of `id` ends, whether released or cancelled. */
+  /** Called once when a pointer drag of `id` ends, whether released or cancelled. Escape cancels:
+   * the row is first moved back to where the drag started, so the drop sees no move. */
   drop?(id: string): void;
   label(id: string): string;
   busy(): boolean;
@@ -121,7 +122,7 @@ export class ReorderController implements ReactiveController {
   readonly #model: ReorderModel;
   readonly #announceText: () => string;
   /** `grab` is how far below the row's top the pointer pressed; `y` is where the pointer is now. */
-  #drag: { id: string; pointerId: number; grab: number; y: number } | null = null;
+  #drag: { id: string; pointerId: number; grab: number; y: number; from: number } | null = null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
    * host does not move them. The id is a SCREEN SNAPSHOT taken at measurement time: the i-th `<tr>`
    * is `order()[i]` only while the rendered DOM matches the data, so binding the id here — rather
@@ -328,7 +329,13 @@ export class ReorderController implements ReactiveController {
     const row = (event.currentTarget as HTMLElement).closest("tr")!;
     this.#draggedRow = row;
     const grab = event.clientY - row.getBoundingClientRect().top;
-    this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY };
+    this.#drag = {
+      id,
+      pointerId: event.pointerId,
+      grab,
+      y: event.clientY,
+      from: this.#model.order().indexOf(id),
+    };
     this.#stopSlide(row);
     row.setAttribute("data-dragging", "");
     holdPageCursor();
@@ -378,8 +385,9 @@ export class ReorderController implements ReactiveController {
     if (event.key !== "Escape" || !this.#drag) return;
     event.preventDefault();
     event.stopPropagation();
-    const id = this.#drag.id;
+    const { id, from } = this.#drag;
     this.#endDrag();
+    if (this.#model.order().indexOf(id) !== from) this.#model.move(id, from, "pointer");
     this.#model.drop?.(id);
   };
 
