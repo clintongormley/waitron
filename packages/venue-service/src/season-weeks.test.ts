@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
+import {
+  addProductToMenu,
+  buildMenuDocument,
+  createCategory,
+  createMenu,
+  createProduct,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDayRanges,
   departmentDays,
+  menuPeriods,
+  readVenueClock,
   seasons,
   withTransaction,
   type Database,
@@ -14,7 +24,9 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { resolveZoneClosedDays } from "./day-resolver.js";
+import { readPlannedServiceGuides } from "./planned-service-guides.js";
 import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -23,10 +35,11 @@ import {
   readDepartmentSeasonWeeks,
   readZoneSeasonWeeks,
   saveSeasonWeeks,
+  seasonWeekList,
   writeDepartmentSeasonWeeks,
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
-import { readSeasons } from "./seasons.js";
+import { readSeasons, saveSeasons } from "./seasons.js";
 import type { ServiceRange } from "./service-day.js";
 import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";
@@ -112,6 +125,99 @@ const everySeason = <T>(value: T) => ({
   Summer: value,
   Autumn: value,
   Winter: value,
+});
+
+it("a saved empty zone week and an unsaved week give the same hours, guides and season split", async () => {
+  const v = await venue();
+  const other = await seedZone(db, { name: "Second room", displayOrder: 1 });
+  const stationId = await seedKitchenStation(db, { name: "Kitchen" });
+  await scoped(async (tx) => {
+    await configureZone(tx, { zoneId: other!.id, departmentId: v.departmentId });
+    const [period] = await tx.select().from(menuPeriods).where(eq(menuPeriods.id, v.lunch));
+    const categoryId = (await createCategory(tx, { name: "Meals" })).id;
+    const productId = (
+      await createProduct(tx, {
+        name: "Lunch plate",
+        categoryId,
+        unitPrice: "10",
+        pricingUnit: "each",
+        vatClass: "general",
+      })
+    ).id;
+    await addProductToMenu(tx, { menuId: period!.menuId, productId });
+    await replaceMenuWeek(
+      tx,
+      v.departmentId,
+      menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
+      AT,
+      1,
+    );
+  });
+  const { Autumn } = await seasonIds();
+  const snapshot = () =>
+    scoped(async (tx) => ({
+      hours: await readZoneClosedTimes(tx, "06:00"),
+      days: await resolveZoneClosedDays(
+        tx,
+        [v.zoneId, other!.id],
+        ["2030-10-08"],
+        await readVenueClock(tx),
+      ),
+      guides: await readPlannedServiceGuides(tx, [stationId], {
+        kind: "season",
+        seasonId: Autumn!,
+        cutover: "06:00",
+      }),
+    }));
+  const unsaved = await snapshot();
+  expect(unsaved.guides.stationRanges.get(stationId)?.get("2")).toEqual([
+    {
+      departmentId: v.departmentId,
+      ranges: [{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }],
+    },
+  ]);
+  await scoped((tx) => writeZoneSeasonWeeks(tx, v.zoneId, [Autumn!], [[], [], [], [], [], [], []]));
+  expect(await snapshot()).toEqual(unsaved);
+  await scoped(async (tx) => {
+    const list = await readSeasons(tx);
+    const weeks = await readZoneSeasonWeeks(tx);
+    expect(seasonWeekList(list, weeks.get(v.zoneId))).toEqual(
+      seasonWeekList(list, weeks.get(other!.id)),
+    );
+    await saveSeasons(
+      tx,
+      { save: [{ name: "Late autumn", startsOn: "10-15", colour: "grey" }], delete: [] },
+      AT,
+      1,
+    );
+    const split = await readSeasons(tx);
+    const after = await readZoneSeasonWeeks(tx);
+    expect(seasonWeekList(split, after.get(v.zoneId))).toEqual(
+      seasonWeekList(split, after.get(other!.id)),
+    );
+  });
+  const split = await snapshot();
+  await scoped((tx) =>
+    replaceZoneClosedWeek(tx, other!.id, closedWeek([]), 1, AT, { seasonId: Autumn! }),
+  );
+  await scoped((tx) =>
+    saveSeasonWeeks(tx, Autumn!, { zones: [{ zoneId: v.zoneId, days: closedWeek([]) }] }, AT, 1),
+  );
+  expect(await snapshot()).toEqual(split);
+  await scoped(async (tx) => {
+    for (const zoneId of [v.zoneId, other!.id])
+      await writeZoneSeasonWeeks(
+        tx,
+        zoneId,
+        [Autumn!],
+        [[], [], [{ startsAt: "13:00", endsAt: "16:00" }], [], [], [], []],
+      );
+  });
+  const closed = await snapshot();
+  expect(closed.days.get(v.zoneId)?.get("2030-10-08")).toEqual([
+    { startsAt: "13:00", endsAt: "16:00" },
+  ]);
+  expect(closed.guides.stationRanges.get(stationId)?.get("2")).toEqual([]);
 });
 
 describe("replaceMenuWeek writes season weeks", () => {
