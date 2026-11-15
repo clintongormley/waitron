@@ -548,59 +548,75 @@ describe("queue-pressure routing", () => {
     },
   );
 
-  it.each(["same", "reordered", "different id", "changed row"])(
-    "uses two agreeing short queued CI lists, or falls back for %s rows",
-    async (change) => {
-      const f = fixture(),
-        request = f.options.request,
-        pages = [],
-        reports = [],
-        outputs = [];
-      const runs = [
-        { ...f.run, head_repository: { id: 42 } },
-        { ...f.run, id: 52, head_repository: { id: 42 } },
-      ];
-      f.options.capacity = { observedAt: 1, slots: 6, serverRunning: 0, serverWaiting: 0 };
-      let reads = 0;
-      f.options.request = async (path, options) => {
-        if (path.includes("/workflows/ci.yml/runs?status=queued")) {
-          const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
-          pages.push(page);
-          if (page === 1) reads++;
-          if (reads > 2) throw new Error("Unexpected third enumeration");
-          let rows = runs.map((run) => ({ ...run }));
-          if (reads === 2) {
-            if (change === "reordered") rows.reverse();
-            if (change === "different id") rows[1] = { ...rows[1], id: 53 };
-            if (change === "changed row") rows[1] = { ...rows[1], run_attempt: 3 };
-          }
-          return { total_count: reads === 1 ? 3 : 4, workflow_runs: page === 1 ? rows : [] };
+  it.each([
+    "same",
+    "reordered",
+    "first count drift",
+    "second count drift",
+    "different id",
+    "changed row",
+  ])("uses two agreeing short queued CI lists, or falls back for %s rows", async (change) => {
+    const f = fixture(),
+      request = f.options.request,
+      pages = [],
+      reports = [],
+      outputs = [];
+    f.options.now = Date.parse("2026-11-15T12:00:00Z");
+    const runs = [
+      { ...f.run, head_repository: { id: 42 } },
+      { ...f.run, id: 52, head_repository: { id: 42 } },
+    ];
+    f.options.capacity = { observedAt: 1, slots: 6, serverRunning: 0, serverWaiting: 0 };
+    let reads = 0;
+    f.options.request = async (path, options) => {
+      if (path.includes("/workflows/ci.yml/runs?status=queued")) {
+        const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+        pages.push(page);
+        if (page === 1) reads++;
+        if (reads > 2) throw new Error("Unexpected third enumeration");
+        let rows = runs.map((run) => ({ ...run }));
+        if (reads === 2) {
+          if (change === "reordered") rows.reverse();
+          if (change === "different id") rows[1] = { ...rows[1], id: 53 };
+          if (change === "changed row") rows[1] = { ...rows[1], run_attempt: 3 };
         }
-        if (path.includes("/attempts/2/jobs?")) return { total_count: 0, jobs: [] };
-        return request(path, options);
-      };
-      await healthCommand("route", f.options, {
-        output: (line) => outputs.push(line),
-        report: (line) => reports.push(line),
-      });
-      expect(pages).toEqual([1, 2, 1, 2]);
-      if (change === "same" || change === "reordered") {
-        expect(outputs).toEqual(["server_route=server"]);
-        expect(reports.join("\n")).toContain("Stale queued CI inventory count");
-        expect(reports.join("\n")).toContain("run ids=50,52; rows=2; counts=3,4");
-        expect(reports.join("\n")).not.toContain("CI_ROUTE_BLIND");
-      } else {
-        expect(outputs).toEqual(["server_route=hosted"]);
-        expect(reports.join("\n")).toContain("CI_ROUTE_BLIND run=51 attempt=1");
-        expect(reports.join("\n")).not.toContain("Stale queued CI inventory count");
+        return {
+          total_count:
+            reads === 1
+              ? change === "first count drift" && page === 2
+                ? 2
+                : 3
+              : change === "second count drift" && page === 2
+                ? 5
+                : 4,
+          workflow_runs: page === 1 ? rows : [],
+        };
       }
-      expect(f.calls.some(([, options]) => options?.method)).toBe(false);
-      if (change === "same") {
-        reads = 0;
-        await expect(serverHealth(f.options)).rejects.toThrow("empty page after 2 of 4");
-      }
-    },
-  );
+      if (path.includes("/attempts/2/jobs?")) return { total_count: 0, jobs: [] };
+      return request(path, options);
+    };
+    await healthCommand("route", f.options, {
+      output: (line) => outputs.push(line),
+      report: (line) => reports.push(line),
+    });
+    expect(pages).toEqual([1, 2, 1, 2]);
+    if (["same", "reordered", "first count drift"].includes(change)) {
+      expect(outputs).toEqual(["server_route=server"]);
+      expect(reports.join("\n")).toContain("Stale queued CI inventory count");
+      expect(reports.join("\n")).toContain("run ids=50,52; rows=2; counts=3,4");
+      expect(reports.join("\n")).toContain("created>=2026-11-14T12:00:00.000Z");
+      expect(reports.join("\n")).not.toContain("CI_ROUTE_BLIND");
+    } else {
+      expect(outputs).toEqual(["server_route=hosted"]);
+      expect(reports.join("\n")).toContain("CI_ROUTE_BLIND run=51 attempt=1");
+      expect(reports.join("\n")).not.toContain("Stale queued CI inventory count");
+    }
+    expect(f.calls.some(([, options]) => options?.method)).toBe(false);
+    if (change === "same") {
+      reads = 0;
+      await expect(serverHealth(f.options)).rejects.toThrow("empty page after 2 of 4");
+    }
+  });
 
   it("uses two agreeing empty queued CI lists despite an inflated count", async () => {
     const f = fixture(),

@@ -247,8 +247,9 @@ Running-run lists and the standalone `check`, `recover`, `recover-planners` and
 The query omits old records without enumerating or logging their individual ids.
 Each list read restarts once from page 1 after an empty page before completion or a
 changed valid total. Routing alone accepts its queued CI-workflow list when both reads
-end short with identical row values, ignoring row order. It uses the second read and logs
-`Stale queued CI inventory count` with run IDs, row count and both advertised counts
+end on empty pages with identical row values, ignoring row order. The first read's empty
+page may change its count; a changing count within the second read still refuses. It uses the second read and logs
+`Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
 (watcher, 2026-11-15 15:10). Agreement cannot prove that GitHub omitted no run; natural
 workflow qualification remains open. Different short rows still select hosted. Every other
 list discards its earlier rows and retains strict count completeness. Duplicate/excess rows

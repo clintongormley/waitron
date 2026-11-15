@@ -32,7 +32,15 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
       new InventoryUnavailable("Duplicate server inventory"),
     );
     if (answer.total_count !== total && reread)
-      return inventory(request, path, key, limit, pageSize, false);
+      return inventory(
+        request,
+        path,
+        key,
+        limit,
+        pageSize,
+        false,
+        !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
+      );
     assert.equal(
       answer.total_count,
       total,
@@ -287,7 +295,9 @@ export async function serverRoute(options) {
       };
     }
   }
-  const state = await serverHealth(recent, unavailable, { report: options.report });
+  const state = await serverHealth(recent, unavailable, {
+    report: (message) => options.report?.(`${message}; created>=${since}`),
+  });
   if (state.stuck.length)
     return {
       route: "hosted",

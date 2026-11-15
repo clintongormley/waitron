@@ -411,8 +411,8 @@ The remaining work concerns live routing qualification and the action-repository
   watchdog dispatches trusted-main health recovery for untouched queued PR planners, with run/job skip reasons in its log;
   other stuck work is reported without moving runs. First-attempt PR planners use published
   spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list restarts once after an empty page or changed valid total. Only its queued
-  CI-workflow list accepts two agreeing short row sets and logs IDs, row count and both
-  advertised counts (watcher, 2026-11-15 15:10); different rows remain unknown. Natural
+  CI-workflow list accepts agreeing row sets ending on empty pages, provided the second
+  read's count stays consistent, and logs IDs, row count, starting counts and date cutoff (watcher, 2026-11-15 15:10); different rows remain unknown. Natural
   qualification of that exception at its actual workflow commit remains open.
   Routing uses date-bounded queued-run reads from the last 24 hours, so older records
   are absent from the server-side count and rows; all other lists retain count completeness. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
