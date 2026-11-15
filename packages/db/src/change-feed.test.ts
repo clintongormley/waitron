@@ -360,10 +360,7 @@ describe("removing the change feed", () => {
       return execute(query);
     }) as typeof suite.db.execute);
     try {
-      await expect(Promise.resolve().then(() => removeChangeFeed(suite.db))).rejects.toThrow(
-        "second drop refused",
-      );
-      spy.mockRestore();
+      await expect(removeChangeFeed(suite.db)).rejects.toThrow("second drop refused");
       expect(drops).toBe(2);
       expect(feedTriggers()).toEqual(before);
     } finally {
