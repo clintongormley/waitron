@@ -2057,8 +2057,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   A private person binding (`marta`, shown as Martha) remains in the protected
   `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.
-  Counter-group display text in `today-names.test.ts` and station display samples in
-  `former-numbers.test.ts` stay with A976.
   The published-menu sale fixture uses English private preparation and section names.
   Other split-suite comments and file names remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
@@ -2120,6 +2118,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
   The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
+  Local former-number station and today-name counter-group samples use English; accented group names (García birthday) and the Ana party name remain.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;

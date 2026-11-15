@@ -669,9 +669,9 @@ async function sentCount(orderId: string): Promise<number> {
 }
 
 describe("a table or group renamed for today, with dishes sent, as the kitchen sees it", () => {
-  it("renaming the seated group Fiesta to Fiesta 2 prints one MOVED slip from Fiesta to Fiesta 2", async () => {
+  it("renaming the seated group Celebration to Celebration 2 prints one MOVED slip from Celebration to Celebration 2", async () => {
     const { table, guests } = await seatedGroup();
-    const celebration = suffixed("Fiesta");
+    const celebration = suffixed("Celebration");
     await rename(table.c3!, celebration);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
     const celebration2 = `${celebration} 2`;
@@ -718,13 +718,13 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
 });
 
 describe("a counter order delivered to a table of a group that ends, as the kitchen sees it", () => {
-  it("a counter order delivered to Counter 6 prints one MOVED slip from Cumple Ana to Counter 6 when the unseated group ends by Back to saved place", async () => {
+  it("a counter order delivered to Counter 6 prints one MOVED slip from Anna birthday to Counter 6 when the unseated group ends by Back to saved place", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await post(
       `/api/tables/${table.t9!}/today/merge`,
       await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
     );
-    const annaBirthday = suffixed("Cumple Ana");
+    const annaBirthday = suffixed("Anna birthday");
     await rename(table.c6!, annaBirthday);
     await deliveredCounterOrder(zoneId, table.c6!);
 
@@ -777,8 +777,8 @@ async function unseatedGroup(name: string) {
 }
 
 describe("a counter order delivered to a table an action brings into or takes out of a named group, as the kitchen sees it", () => {
-  it("free Bar, with a counter order delivered to it, pushed onto the unseated group Fiesta by the floor's merge route prints one MOVED slip from Bar to Fiesta", async () => {
-    const celebration = suffixed("Fiesta");
+  it("free Bar, with a counter order delivered to it, pushed onto the unseated group Celebration by the floor's merge route prints one MOVED slip from Bar to Celebration", async () => {
+    const celebration = suffixed("Celebration");
     const { table, zoneId } = await unseatedGroup(celebration);
     await deliveredCounterOrder(zoneId, table.bar!);
 
@@ -795,9 +795,9 @@ describe("a counter order delivered to a table an action brings into or takes ou
     expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.bar!), celebration));
   });
 
-  it("the party at the group Fiesta joining free Counter 6, with a counter order delivered to it, merged into the group prints one MOVED slip from Counter 6 to Fiesta", async () => {
+  it("the party at the group Celebration joining free Counter 6, with a counter order delivered to it, merged into the group prints one MOVED slip from Counter 6 to Celebration", async () => {
     const { table, zoneId, guests } = await seatedGroup();
-    const celebration = suffixed("Fiesta");
+    const celebration = suffixed("Celebration");
     await rename(table.bar!, celebration);
     await deliveredCounterOrder(zoneId, table.c6!);
 
@@ -809,8 +809,8 @@ describe("a counter order delivered to a table an action brings into or takes ou
     expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.c6!), celebration));
   });
 
-  it("Table 9, with a counter order delivered to it, ticked off the unseated group Cumple by Split tables… prints one MOVED slip from Cumple to Table 9", async () => {
-    const birthday = suffixed("Cumple");
+  it("Table 9, with a counter order delivered to it, ticked off the unseated group Birthday by Split tables… prints one MOVED slip from Birthday to Table 9", async () => {
+    const birthday = suffixed("Birthday");
     const { table, zoneId } = await unseatedGroup(birthday);
     await deliveredCounterOrder(zoneId, table.t9!);
 
@@ -827,8 +827,8 @@ describe("a counter order delivered to a table an action brings into or takes ou
     expect(slips[0]!.join(" ")).toContain(fromTo(birthday, await labelOf(table.t9!)));
   });
 
-  it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Cumple to Table 9 and one for the party's bill from Cumple to Counter 6", async () => {
-    const birthday = suffixed("Cumple");
+  it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Birthday to Table 9 and one for the party's bill from Birthday to Counter 6", async () => {
+    const birthday = suffixed("Birthday");
     const { table, zoneId } = await unseatedGroup(birthday);
     const movedBillId = await counterOrder(v, "Burger");
     await post(`/api/bills/${movedBillId}/move`, {
