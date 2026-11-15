@@ -125,6 +125,15 @@ choose; later prints are copies"). Failing tests first: the route with a printer
 resolved; an unknown printer id refuses and issues nothing (no number used). The screen posts the
 chosen `printerId`. Size: about 60 production lines, 180 test lines.
 
+**Correction 2 replaced, 2026-11-15 (watcher, 04:54-stamped answer to lane L's DEVIATION): take the
+smaller way.** No printer choice in the dashboard dialog and no print at issue. Instead a
+replacement corrective's FIRST print, from a till's transaction view
+(`POST /api/transactions/:saleId/reprint`), is the original (`enqueueOriginalReceipt`, not
+`enqueueReceiptCopy`), and every later print is a copy. One original exists; the rest say duplicate.
+The success message after **Put this right** says where to print the original, in English and
+Spanish, and the guide says the same. This replaces correction 2 and the Task 2b text above; the
+first build of Task 2b (printer in the dialog, `fe04859713`) was dropped unpushed.
+
 ## Words used in this plan
 
 - **Full invoice (F1)**: an invoice that names the customer (tax number, name, address). The
