@@ -93,3 +93,13 @@ it("serves the literal emergency page only on a mirror, before operation lookup"
     200,
   );
 });
+
+it("serves an operation page whose address carries a query, as without one", async () => {
+  const app = await build(true);
+  const answer = await app.request(
+    `/handover/${OP}?back=${encodeURIComponent("https://waitron.local/tabs")}`,
+    { headers: { Accept: "text/html" } },
+  );
+  expect(answer.status).toBe(200);
+  expect(await answer.text()).toContain("./assets/app-123.js");
+});

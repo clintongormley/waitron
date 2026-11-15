@@ -125,14 +125,16 @@ export class SetupHandoverScreen extends LitElement {
     return this.emergency || this.status?.scenario === "emergency";
   }
   /** A till sends its own address; a box is named `box-<id>.<venue name>` and the till sits at the venue name. */
-  get #leaveHref(): string {
-    if (!this.#isEmergency) return "/";
+  get #back(): string | undefined {
     const page = new URL(this.pageUrl);
     const back = URL.parse(page.searchParams.get("back") ?? "");
     const venue = page.hostname.slice(page.hostname.indexOf(".") + 1);
     return back?.protocol === "https:" && page.hostname.includes(".") && back.hostname === venue
       ? back.href
-      : "/";
+      : undefined;
+  }
+  get #leaveHref(): string {
+    return (this.#isEmergency && this.#back) || "/";
   }
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
@@ -404,7 +406,12 @@ export class SetupHandoverScreen extends LitElement {
     const controller = this.#controller;
     this.operationId = operationId;
     this.declarationSaved = true;
-    history.replaceState(null, "", `/handover/${encodeURIComponent(operationId)}`);
+    const back = this.#back;
+    history.replaceState(
+      null,
+      "",
+      `/handover/${encodeURIComponent(operationId)}${back ? `?back=${encodeURIComponent(back)}` : ""}`,
+    );
     try {
       const status = await this.api.handoverStatus(operationId, controller?.signal);
       if (controller?.signal.aborted) return;
