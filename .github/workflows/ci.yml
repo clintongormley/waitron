@@ -4148,18 +4148,13 @@ jobs:
       actions: read
       pull-requests: read
     steps:
-      - name: Inspect direct controller-state access from this guest
+      - name: Hold the probe while capacity publication continues
+        env:
+          CAPACITY_CONTEXT: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
         run: |
-          echo "RUNNER_NAME=$RUNNER_NAME"
-          echo "RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT"
-          echo "Guest hostname: $(hostname)"
-          echo "Virtual machine product: $(cat /sys/class/dmi/id/product_name)"
-          for path in \
-            /opt/waitron-disposable-controller-d579-ui0210-cd3f18f077a3/config.json \
-            /var/lib/waitron-disposable-controller/states/d579-ui0210-cd3f18f077a3/ledger/state.json \
-            /opt/waitron-disposable-controller-d579-ui0210-cd3f18f077a3/deploy/disposable-tests/ci-status.py; do
-            if test -r "$path"; then echo "LOCAL_CONTROLLER_READABLE=$path"; else echo "LOCAL_CONTROLLER_NOT_READABLE=$path"; fi
-          done
+          echo "PROBE_CAPACITY_CONTEXT=$CAPACITY_CONTEXT"
+          echo "PROBE_FIRST_STEP_UTC=$(date -u +%FT%TZ)"
+          sleep 75
 
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
@@ -4237,8 +4232,11 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           SERVER_PROBE: ${{ inputs.server_probe }}
+          CAPACITY_CONTEXT: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
         run: |
           if [ "$SERVER_PROBE" = true ]; then
+            echo "DEPENDENT_CAPACITY_CONTEXT=$CAPACITY_CONTEXT"
+            echo "DEPENDENT_FIRST_STEP_UTC=$(date -u +%FT%TZ)"
             printf '%s' "$NEEDS" | jq -e '."server-probe".result == "success"'
             exit $?
           fi
