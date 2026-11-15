@@ -26,9 +26,11 @@ services:
       # deployment reached at another name — config.ts requires both in production precisely so a
       # live box cannot run with the wrong relying party. They are passed HERE because the image's
       # own ENV beats trading.env (box-env.ts merges the process environment last), so .env is the
-      # only place an operator can override them.
+      # only place an operator can override them. The venue domain is passed the same way: it is the
+      # domain a till's device cookie names.
       WAITRON_MANAGEMENT_RP_ID: ${WAITRON_MANAGEMENT_RP_ID:-waitron.local}
       WAITRON_MANAGEMENT_ORIGIN: ${WAITRON_MANAGEMENT_ORIGIN:-https://waitron.local}
+      WAITRON_VENUE_DOMAIN: ${WAITRON_VENUE_DOMAIN:-waitron.local}
       WAITRON_CLOUD_ORIGIN: ${WAITRON_CLOUD_ORIGIN:-}
       # Prepare uses the local card simulator unless an operator deliberately enables a configured
       # provider whose credential is restricted to its test environment.

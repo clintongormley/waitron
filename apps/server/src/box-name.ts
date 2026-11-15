@@ -2,9 +2,9 @@
  * The venue's mDNS name. The name the responder answers for, discovery advertises and the leaf's
  * SANs cover must agree, or the trust flow hits a certificate-hostname mismatch.
  *
- * Copies outside this process (the image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`,
- * compose's defaults, `waitron.sh`'s QR URL) are pinned to this line, read as text, by
- * `scripts/deploy-image-env.test.ts`.
+ * Copies outside this process (the image's `WAITRON_MANAGEMENT_RP_ID`, `WAITRON_MANAGEMENT_ORIGIN`
+ * and `WAITRON_VENUE_DOMAIN`, compose's defaults, `waitron.sh`'s QR URL) are pinned to this line,
+ * read as text, by `scripts/deploy-image-env.test.ts`.
  */
 export const BOX_HOSTNAME = "waitron.local";
 
