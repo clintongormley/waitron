@@ -14,7 +14,7 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
-import { menus, products } from "./menus.js";
+import { products } from "./menus.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -76,7 +76,6 @@ async function seed(db: Database): Promise<void> {
     operationDescription: "Hostelería",
   });
   DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
-  const [catA] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
   const [prodA] = await db
     .insert(products)
     .values({

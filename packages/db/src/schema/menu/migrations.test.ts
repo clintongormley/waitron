@@ -409,7 +409,7 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
       (
         await db
           .insert(products)
-          .values({  parentId, name, dietaryDeclarations: null })
+          .values({ parentId, name, dietaryDeclarations: null })
           .returning({ id: products.id })
       )[0]!.id;
     const soupBowlId = await productVariant(productId, "Soup bowl");

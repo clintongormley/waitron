@@ -10,7 +10,6 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { menus } from "./menus.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -67,7 +66,6 @@ describe("menu — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad vat_class on its own CHECK", async () => {
-    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const insertProduct = (vatClass: string): ReturnType<typeof sql> =>
       sql`insert into products (id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
     const vatError = await captureError(() => db.execute(insertProduct("bogus")));

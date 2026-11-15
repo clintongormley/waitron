@@ -9,7 +9,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { menus, products } from "./menus.js";
+import { products } from "./menus.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
@@ -129,7 +129,6 @@ describe("working_orders state machine (enforce_transition)", () => {
       operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
-    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [product] = await db
       .insert(products)
       .values({

@@ -8,7 +8,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { menus, products } from "./menus.js";
+import { products } from "./menus.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
 import { ticketItems } from "./ticket-items.js";
@@ -33,7 +33,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
-    const [catA] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
     const [prodA] = await db
       .insert(products)
       .values({
