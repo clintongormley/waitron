@@ -835,11 +835,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (left open by A758-7).** A simplified receipt keeps the count stored at payment.
   [Detail](backlog/till.md#a1033-a-full-invoices-later-copies-change-their-guests-line-when-a-bill-moves-to-the-counter-left-open-by-a758-7)
 
-- **A1030. Firing one held dish is refused on a merged-in party's paid bill (found by A758-7).**
-  `fireHeldLine` (`apps/server/src/order-groups.ts`) looks for the dish only among bills whose
-  `party_id` is the table's own party.
-  [Detail](backlog/till.md#a1030-firing-one-held-dish-is-refused-on-a-merged-in-partys-paid-bill-found-by-a758-7)
-
 - **What an open till picks up from a setup change** (bundle of 1, size S). Holds A787. [Detail](backlog/till.md#bundle-what-an-open-till-picks-up-from-a-setup-change)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
