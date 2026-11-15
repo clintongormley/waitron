@@ -247,7 +247,6 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
 /** The placeholder's meaning changes the moment the box is provisioned (the setup routes stop being
  * mounted), so it must be revalidated, never pinned. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
-/** Bounds memory consumed by one unauthenticated setup upload. */
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 

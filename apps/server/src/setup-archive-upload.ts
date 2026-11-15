@@ -99,10 +99,16 @@ export async function receiveSetupArchive(
       const refuse = (error: Error) => {
         parser.destroy(error);
       };
+      const fieldRefusal = (name: string) => invalid(options.exactFields ? "body" : name);
       parser.on("file", (name, stream) => {
-        if (name !== "artifact" || fileTask) {
+        if (name !== "artifact") {
           stream.resume();
-          refuse(invalid(name));
+          if (options.exactFields || options.fields?.includes(name)) refuse(fieldRefusal(name));
+          return;
+        }
+        if (fileTask) {
+          stream.resume();
+          refuse(fieldRefusal(name));
           return;
         }
         fileTask = pipeline(
@@ -117,8 +123,8 @@ export async function receiveSetupArchive(
         });
       });
       parser.on("field", (name, value, nameCut, valueCut) => {
-        if (nameCut || valueCut || fields.has(name) || name === "artifact")
-          return refuse(invalid(name));
+        if (name === "artifact") return refuse(fileTask ? fieldRefusal(name) : invalid(name));
+        if (nameCut || valueCut || fields.has(name)) return refuse(fieldRefusal(name));
         if (!options.fields?.includes(name)) {
           if (options.exactFields) refuse(invalid("body"));
           return;
@@ -140,6 +146,6 @@ export async function receiveSetupArchive(
     const error = isAppError(caught) ? caught : (fileError ?? caught);
     if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? "")) throw capacity();
     if (isAppError(error) || request.signal.aborted) throw error;
-    throw invalid();
+    throw invalid(options.exactFields ? "body" : "artifact");
   }
 }

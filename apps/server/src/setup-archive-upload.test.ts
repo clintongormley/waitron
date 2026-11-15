@@ -166,3 +166,25 @@ it("bounds multipart overhead independently of a small artifact", async () => {
   });
   expect(await readdir(dir)).toEqual([]);
 });
+it("keeps restore's ignored file fields while retaining its artifact", async () => {
+  const dir = await root();
+  const form = new FormData();
+  form.set("artifact", new Blob(["selected"]));
+  form.set("unused", new Blob(["ignored"]));
+  const copy = await receiveSetupArchive(request(form), dir, { fields: ["recoveryKey"] });
+  expect(await readFile(copy.artifactPath, "utf8")).toBe("selected");
+  await copy.dispose();
+});
+it.each(["duplicate", "oversized"])(
+  "keeps stage's body refusal for a %s request field",
+  async (kind) => {
+    const dir = await root();
+    const form = new FormData();
+    form.append("artifact", new Blob(["selected"]));
+    form.append("request", kind === "oversized" ? "x".repeat(131073) : "{}");
+    if (kind === "duplicate") form.append("request", "{}");
+    await expect(
+      receiveSetupArchive(request(form), dir, { fields: ["request"], exactFields: true }),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "body" } });
+  },
+);
