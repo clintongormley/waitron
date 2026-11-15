@@ -10,6 +10,8 @@ import {
   validateDatabaseEntries,
   type EntryValidationDeps,
   validateArtifact,
+  validateArtifactFile,
+  type ValidationFileDeps,
   type ValidationDeps,
   type ValidatedArtifact,
 } from "./restore.js";
@@ -103,8 +105,11 @@ export async function readRecoveryCopyPreview(
   }
 }
 
-export async function previewRecoveryArchive(deps: ValidationDeps): Promise<RecoveryBackupPreview> {
-  const copy = await validateArtifact(deps);
+export async function previewRecoveryArchive(
+  deps: ValidationDeps | ValidationFileDeps,
+): Promise<RecoveryBackupPreview> {
+  const copy =
+    "artifactPath" in deps ? await validateArtifactFile(deps) : await validateArtifact(deps);
   try {
     return await readRecoveryCopyPreview(copy, copy.sourceId, deps);
   } finally {

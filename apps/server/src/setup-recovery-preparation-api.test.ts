@@ -1,11 +1,14 @@
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Socket } from "node:net";
 import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
+import { AppError } from "@waitron/shared";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
 
+const receiveArchive = useSetupArchiveUpload();
 const sockets: TLSSocket[] = [];
 afterEach(() => {
   for (const socket of sockets.splice(0)) socket.destroy();
@@ -34,6 +37,7 @@ function fixture(extra: Partial<SetupDeps> = {}) {
     app,
     {
       environment: "preproduction",
+      receiveArchive,
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
       prepareRecovery: execute,
       ...extra,
@@ -175,6 +179,7 @@ it("stops reading an oversized streamed archive even without Content-Length", as
     app,
     {
       environment: "preproduction",
+      receiveArchive,
       prepareRecovery: execute,
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
     },
@@ -183,6 +188,7 @@ it("stops reading an oversized streamed archive even without Content-Length", as
       uploadLimit: 8,
       hold: () => undefined,
       busy: () => false,
+      setBusy: () => {},
       run: createErrorBoundary({ "setup.request_invalid": 400 }, "setup.restore_failed"),
     },
   );
@@ -259,7 +265,8 @@ it("stages a checked archive once for its restore event and answers only its id"
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(stageRecovery).toHaveBeenCalledWith("interactive-restore", {
     ...archiveSource,
-    artifact: new Uint8Array([7, 2, 9]),
+    kind: "archive-file",
+    artifactPath: expect.stringContaining("upload-"),
   });
   expect(JSON.stringify(log.mock.calls)).not.toContain("archive password");
 });
@@ -389,7 +396,7 @@ it("accepts a staged restore and restarts even when the staged copy cannot be de
 it("keeps the stage route unavailable without the first-setup host", async () => {
   const stageRecovery = vi.fn(async () => ({ stagedId }));
   const app = new Hono();
-  mountSetup(app, { environment: "preproduction", stageRecovery }, () => {});
+  mountSetup(app, { environment: "preproduction", receiveArchive, stageRecovery }, () => {});
   const response = await app.request(
     "/setup-api/recovery/stage",
     stageForm({ eventId: "e", source: archiveSource }),
@@ -398,4 +405,60 @@ it("keeps the stage route unavailable without the first-setup host", async () =>
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
   expect(stageRecovery).not.toHaveBeenCalled();
+});
+it("holds the shared upload gate through staging and releases it after refusal", async () => {
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const stageRecovery = vi.fn(async () => {
+    await waiting;
+    throw new AppError("recovery.passphrase_invalid", {});
+  });
+  const { app } = fixture({ stageRecovery });
+  const send = () =>
+    app.request(
+      "/setup-api/recovery/stage",
+      stageForm({ eventId: "interactive-restore", source: archiveSource }),
+      tls(),
+    );
+  const first = send();
+  await vi.waitFor(() => expect(stageRecovery).toHaveBeenCalledOnce());
+  let secondStatus: number | undefined;
+  const second = Promise.resolve(send()).then((response) => {
+    secondStatus = response.status;
+  });
+  try {
+    await expect.poll(() => secondStatus).toBe(409);
+  } finally {
+    release();
+    await first;
+    await second;
+  }
+  expect((await send()).status).toBe(422);
+  expect(stageRecovery).toHaveBeenCalledTimes(2);
+});
+it("releases the upload gate even when removing the received file fails", async () => {
+  const upload = {
+    artifactPath: "/owned/upload",
+    byteLength: 1,
+    fields: new Map([
+      ["request", JSON.stringify({ eventId: "interactive-restore", source: archiveSource })],
+    ]),
+    dispose: async () => {
+      throw new Error("cleanup failed");
+    },
+  };
+  const { app } = fixture({
+    stageRecovery: async () => ({ stagedId }),
+    receiveArchive: async () => upload,
+  });
+  const send = () =>
+    app.request(
+      "/setup-api/recovery/stage",
+      stageForm({ eventId: "interactive-restore", source: archiveSource }),
+      tls(),
+    );
+  expect((await send()).status).toBe(500);
+  expect((await send()).status).toBe(500);
 });

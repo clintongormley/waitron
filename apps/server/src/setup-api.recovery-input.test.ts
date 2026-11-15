@@ -1,3 +1,4 @@
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
 
+const receiveArchive = useSetupArchiveUpload();
 const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
 const operation = {
   binding: {
@@ -52,6 +54,7 @@ function setup(operations?: SetupDeps["operations"]) {
     app,
     {
       environment: "preproduction",
+      receiveArchive,
       stageRestore,
       stageBucketRestore,
       requestRestart,
@@ -110,7 +113,13 @@ it.each(["archive", "bucket", "cloud"])(
     } else {
       expect(stageRestore).toHaveBeenCalledWith(
         {
-          artifact: kind === "archive" ? new Uint8Array([1, 2, 3]) : new Uint8Array([7, 8]),
+          ...(kind === "archive"
+            ? {
+                kind: "archive-file",
+                artifactPath: expect.stringContaining("upload-"),
+                signal: expect.any(AbortSignal),
+              }
+            : { artifact: new Uint8Array([7, 8]) }),
           recoveryKey: kind === "archive" ? "archive-key" : "archive-cloud-key",
           environment: "preproduction",
           ...credentials,

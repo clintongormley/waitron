@@ -1,3 +1,4 @@
+import { receiveSetupArchive } from "../src/setup-archive-upload.js";
 import { seedModuleSettings } from "./module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPassword } from "@waitron/identity";
@@ -584,6 +585,8 @@ export function restoreApp(deps: Partial<SetupDeps> = {}) {
         coordinator: createFirstSetupCoordinator(),
         assertOtherAllowed: async () => {},
       },
+      receiveArchive: (request, options) =>
+        receiveSetupArchive(request, join(root, "received"), options),
       requestRestart() {},
       requestFromBox: () => seams.requestFromBox(),
       ...deps,

@@ -8,8 +8,10 @@ export interface RetainedHttpListener {
   close(): Promise<void>;
 }
 
-export async function retainHttpListener(host = "127.0.0.1"): Promise<RetainedHttpListener> {
-  const server = createServer((socket) => socket.destroy());
+export async function retainHttpListener(
+  host = "127.0.0.1",
+  server: Server = createServer((socket) => socket.destroy()),
+): Promise<RetainedHttpListener> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, host, resolve);

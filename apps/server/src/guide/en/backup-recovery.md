@@ -102,6 +102,11 @@ recovery service.
 Choose a box with enough free disk space for the recovered database and the temporary copies
 needed to open the backup.
 
+For a large backup, connect your device by cable or to the venue's network before uploading.
+Choose a file no larger than 4 GiB. Each upload must finish within five minutes: a 20 Mbit/s
+connection can send about 715 MiB, or a 100 Mbit/s connection about 3.49 GiB, before overhead.
+If the upload does not finish, keep your selected file, improve the connection and try again.
+
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
 date, node and server key. Check those details before continuing. Keep production and
 preproduction separate.

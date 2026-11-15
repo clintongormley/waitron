@@ -62,17 +62,23 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ type: Boolean }) oldBoxGone = false;
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
-  @state() private error?: "key" | "environment" | "file" | "kit" | "capacity" | "failed";
+  @state() private error?:
+    "key" | "environment" | "file" | "kit" | "capacity" | "interrupted" | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
   #staged?: StagedCopy;
   #prepare: NonNullable<SetupRecoveryAllocation["prepare"]> = async (request) => {
     const current = this.#previewCurrent;
     if (!current?.()) throw new Error("Selected recovery copy changed");
+    if (this.error === "interrupted") this.error = undefined;
     try {
       return await this.#stageAndPrepare(request, current);
     } catch (cause) {
-      if (current()) this.#endIfSetupConflict(cause);
+      if (current()) {
+        this.#endIfSetupConflict(cause);
+        if ((cause as ApiError | undefined)?.code === "restore.upload_interrupted")
+          this.error = "interrupted";
+      }
       throw cause;
     }
   };
@@ -262,19 +268,21 @@ export class SetupRecoveryCopy extends LitElement {
         const error = cause as ApiError | undefined;
         const field = error?.params?.field;
         this.error =
-          error?.code === "restore.archive_resource_limit"
-            ? "capacity"
-            : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
-              ? "key"
-              : error?.code === "restore.environment_mismatch" || field === "environment"
-                ? "environment"
-                : error?.code === "backup.artifact_invalid" ||
-                    error?.code === "backup.archive_invalid" ||
-                    field === "artifact"
-                  ? "file"
-                  : error?.code === "backup.stream_kit_invalid" || field === "kit"
-                    ? "kit"
-                    : "failed";
+          error?.code === "restore.upload_interrupted"
+            ? "interrupted"
+            : error?.code === "restore.archive_resource_limit"
+              ? "capacity"
+              : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
+                ? "key"
+                : error?.code === "restore.environment_mismatch" || field === "environment"
+                  ? "environment"
+                  : error?.code === "backup.artifact_invalid" ||
+                      error?.code === "backup.archive_invalid" ||
+                      field === "artifact"
+                    ? "file"
+                    : error?.code === "backup.stream_kit_invalid" || field === "kit"
+                      ? "kit"
+                      : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -319,6 +327,7 @@ export class SetupRecoveryCopy extends LitElement {
       kit: "restore.preview_kit_error",
       failed: "restore.preview_failed",
       capacity: "shell.restore.archive_resource_limit",
+      interrupted: "shell.restore.upload_interrupted",
     } as const;
     return html` ${
         preview === undefined

@@ -1054,11 +1054,14 @@ export type ValidationFileDeps = Omit<ValidationDeps, "artifact"> & {
 export async function validateArtifactFile(
   deps: ValidationFileDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
-  await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
-  const discard = () => rm(scratch, { recursive: true, force: true });
-  const plaintext = join(scratch, "plaintext");
+  let scratch: string | undefined;
+  const discard = async () => {
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+  };
   try {
+    await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+    scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
+    const plaintext = join(scratch, "plaintext");
     const sourceId = await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
     const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"));
     const inputs = await unpackArchiveFile(archive, scratch);
@@ -1078,6 +1081,8 @@ export async function validateArtifactFile(
     };
   } catch (error) {
     await discard();
+    if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? ""))
+      throw new AppError("restore.archive_resource_limit", {});
     throw error;
   }
 }

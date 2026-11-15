@@ -5173,7 +5173,7 @@ plaintext must never reach placement. Gzip is detected only after authentication
 accepted for the separate Cloud writer. Compressed output is limited to half the free scratch
 bytes above the 256 MiB start reserve, so unpacking can hold both the decoded archive and
 its extracted database. Unknown free space refuses validation of compressed input. Compressed plaintext is removed
-before unpacking. Uploaded ciphertext is snapshotted before the first asynchronous wait, so a caller's
+before unpacking. Buffer-supplied ciphertext is snapshotted before the first asynchronous wait, so a caller's
 later buffer changes cannot alter the checked bytes or source id. It is staged separately and removed as validation returns
 or throws; the returned database copy keeps its own cleanup. Capacity refusals use
 `restore.archive_resource_limit`, distinct from malformed-archive refusals. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
@@ -5190,7 +5190,16 @@ src/local-fs-backend.test.ts`.
 
 Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
 measure integrity checks or cryptographic throughput over a valid SQLite database that large.
-Managed Cloud's 512 MiB and setup upload's 256 MiB limits remain separate from this local file path.
+Managed Cloud retains its separate 512 MiB limit. The browser's preview, recovery stage and restore
+routes stream ciphertext into a private 0700 folder and 0600 file under `scratch/restore`, with a
+4 GiB input ceiling, a counted multipart overhead budget and the start's free-space reserve.
+They share the provisioning latch through receipt and validation; a restore keeps it until restart.
+The file validator authenticates ciphertext before decoding it. Publication moves and flushes the
+archive before writing the durable restore marker; input cleanup removes the upload folder.
+Node's 300-second receiving limit remains; client upload failures explain retrying over a cable
+or the venue network. The unused archive-preparation and emergency handover paths retain their
+256 MiB buffered reader. `setup-archive-upload.test.ts` exercises a real Node receiving timeout;
+`restore-full-disk.e2e.test.ts` exercises refusal and cleanup on its small filesystem.
 Capture reservations still use uncompressed estimates; a nearly full box may refuse a backup
 or prune older ones even when its compressed copy would fit. Raw uploads inherit the file
 metadata limits and briefly hold encrypted, plaintext and extracted copies on disk.

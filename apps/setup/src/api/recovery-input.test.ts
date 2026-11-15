@@ -92,3 +92,21 @@ it("keeps the selected source and isolation declarations in archive multipart re
     credentials.recoveryOperation,
   );
 });
+
+it.each(["timeout", "disconnect"])(
+  "explains an interrupted backup upload (%s) on every browser upload route",
+  async (failure) => {
+    const api = new SetupApi("", async () => {
+      if (failure === "disconnect") throw new TypeError("Failed to fetch");
+      return new Response("Request Timeout", { status: 408 });
+    });
+    const blob = new Blob(["encrypted"]);
+    for (const run of [
+      () => api.previewRestore(blob, "key", "preproduction"),
+      () => api.stageRecovery(blob, "key", "preproduction", "event"),
+      () => api.restore(blob, "key", "preproduction"),
+    ]) {
+      await expect(run()).rejects.toMatchObject({ code: "restore.upload_interrupted" });
+    }
+  },
+);

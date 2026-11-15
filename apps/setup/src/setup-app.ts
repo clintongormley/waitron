@@ -1873,17 +1873,19 @@ export class SetupApp extends LitElement {
             ? say(finishKey)
             : code === "restore.administrator_password_missing"
               ? say("shell.restore.administrator_password_missing")
-              : code === "restore.archive_resource_limit"
-                ? say("shell.restore.archive_resource_limit")
-                : code === "restore.environment_mismatch"
-                  ? say("shell.restore.environment_mismatch")
-                  : code === "restore.schema_too_new"
-                    ? say("shell.restore.other_version")
-                    : this.restoreInvalidField !== undefined
-                      ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
-                      : typeof code === "string"
-                        ? sayWith("shell.restore.staging_failed_code", { code })
-                        : say("shell.restore.staging_failed");
+              : code === "restore.upload_interrupted"
+                ? say("shell.restore.upload_interrupted")
+                : code === "restore.archive_resource_limit"
+                  ? say("shell.restore.archive_resource_limit")
+                  : code === "restore.environment_mismatch"
+                    ? say("shell.restore.environment_mismatch")
+                    : code === "restore.schema_too_new"
+                      ? say("shell.restore.other_version")
+                      : this.restoreInvalidField !== undefined
+                        ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+                        : typeof code === "string"
+                          ? sayWith("shell.restore.staging_failed_code", { code })
+                          : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }

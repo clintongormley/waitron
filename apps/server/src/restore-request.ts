@@ -180,6 +180,16 @@ export interface ArchiveRestoreRequest {
   recoveryContext?: RecoveryEntryContext;
 }
 
+export interface ArchiveFileRestoreRequest extends Omit<
+  ArchiveRestoreRequest,
+  "kind" | "artifact"
+> {
+  kind: "archive-file";
+  artifactPath: string;
+  signal?: AbortSignal;
+}
+export type ArchiveRequest = ArchiveRestoreRequest | ArchiveFileRestoreRequest;
+
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
 export interface StreamRestoreRequest {
   kind: "stream";
@@ -191,7 +201,7 @@ export interface StreamRestoreRequest {
   recoveryContext?: RecoveryEntryContext;
 }
 
-export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
+export type RestoreRequest = ArchiveRequest | StreamRestoreRequest;
 
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
@@ -199,6 +209,12 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   validate?: (request: R) => Promise<readonly string[] | void>,
 ): Promise<void> {
   if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
+  const archiveId = () =>
+    request.kind === "archive-file"
+      ? recoveryArchiveFileSourceId(request.artifactPath)
+      : request.kind === "stream"
+        ? recoveryStreamSourceId(request.databasePath, request.entries)
+        : Promise.resolve(recoveryArchiveSourceId(request.artifact));
   const checkSnapshot = async () => {
     if (request.kind === "stream") return undefined;
     const binding = await readSnapshotRecoveryBinding(stateDir, request);
@@ -211,8 +227,10 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       }
       assertSnapshotRecoveryArchive(
         binding.verification,
-        recoveryArchiveSourceId(request.artifact),
-        request.artifact.byteLength,
+        await archiveId(),
+        request.kind === "archive-file"
+          ? (await stat(request.artifactPath)).size
+          : request.artifact.byteLength,
       );
     }
     return binding;
@@ -238,14 +256,10 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     invalidRecoveryContext();
   const adminVerifiers = await validate?.(request);
   if (secret !== undefined && recoveryOperation !== undefined) {
-    assertSource(
-      recoveryOperation,
-      request.kind === "stream"
-        ? await recoveryStreamSourceId(request.databasePath, request.entries)
-        : recoveryArchiveSourceId(request.artifact),
-    );
+    assertSource(recoveryOperation, await archiveId());
   }
   const snapshot = await checkSnapshot();
+  if (request.kind === "archive-file") request.signal?.throwIfAborted();
   await publishRestoreFlow(
     stateDir,
     {
@@ -277,7 +291,13 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
         await flushPath(join(dir, STREAM_DB));
         await writeFileDurable(join(dir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
       } else {
-        await writeFileDurable(join(dir, ARTIFACT), request.artifact, 0o600);
+        if (request.kind === "archive-file") {
+          request.signal?.throwIfAborted();
+          await rename(request.artifactPath, join(dir, ARTIFACT));
+          await chmod(join(dir, ARTIFACT), 0o600);
+          await flushPath(join(dir, ARTIFACT));
+          await syncFolderHolding(request.artifactPath);
+        } else await writeFileDurable(join(dir, ARTIFACT), request.artifact, 0o600);
         await writeFileDurable(join(dir, KEY), request.recoveryKey, 0o600);
       }
       await writeFileDurable(

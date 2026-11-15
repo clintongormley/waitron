@@ -1,3 +1,4 @@
+import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import {
   suite,
@@ -51,7 +52,7 @@ vi.mock("./restore.js", async (original) => {
   const actual = await original<typeof import("./restore.js")>();
   return {
     ...actual,
-    validateArtifact: vi.fn(actual.validateArtifact),
+    validateArtifactFile: vi.fn(actual.validateArtifactFile),
     readArtifactNode: vi.fn(actual.readArtifactNode),
   };
 });
@@ -146,6 +147,7 @@ async function stagedHost(older = false) {
       environment: "preproduction",
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
       prepareRecovery: recovery,
+      receiveArchive: (request, options) => receiveSetupArchive(request, stagingDir, options),
       stageRecovery: recovery.stage,
       discardStagedRecovery: recovery.discard,
     },
@@ -249,7 +251,7 @@ describe("a staged backup for the restore's clock requests", () => {
 
   it("checks a backup from an older release once and takes the name through small JSON requests", async () => {
     const h = await stagedHost(true);
-    vi.mocked(restore.validateArtifact).mockClear();
+    vi.mocked(restore.validateArtifactFile).mockClear();
     const { stagedId } = await h.ok(h.stage());
     expect(stagedId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -272,7 +274,7 @@ describe("a staged backup for the restore's clock requests", () => {
       return h.ok(h.send(stagedId, { action: "select", comparisonId: compared.id }));
     });
     expect(selected).toMatchObject({ status: "selected" });
-    expect(restore.validateArtifact).toHaveBeenCalledTimes(1);
+    expect(restore.validateArtifactFile).toHaveBeenCalledTimes(1);
     expect(await sha(database)).toBe(before);
     expect(await readdir(join(h.stagingDir, "staged-recovery"))).toHaveLength(1);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(rows);
@@ -332,8 +334,8 @@ describe("a staged backup for the restore's clock requests", () => {
   it("leaves no rejection unhandled when the unused-hour timer cannot delete the copy", async () => {
     const h = await stagedHost();
     const actual = await vi.importActual<typeof import("./restore.js")>("./restore.js");
-    vi.mocked(restore.validateArtifact).mockImplementationOnce(async (deps) => ({
-      ...(await actual.validateArtifact(deps)),
+    vi.mocked(restore.validateArtifactFile).mockImplementationOnce(async (deps) => ({
+      ...(await actual.validateArtifactFile(deps)),
       discard: async () => {
         throw new Error("disk went away");
       },
