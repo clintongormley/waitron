@@ -277,3 +277,7 @@ stays unedited.
 **Watcher, 2026-11-15 18:33:** retain the committed real upgrade-copy record assertion.
 Its fiscal table and column names are the existing `VERIFACTU_NAMES` case: one counted
 `KEEPS_NON_ENGLISH` entry for `upgrade-sale.test.ts` (five findings), with its expected-list row.
+
+**Final cleanup count, 2026-11-15:** 117 debt-list paths are removed: the 114 cleared at
+18:20, then two CLI fixtures and the country-pack fixture whose only remaining non-English
+text belonged to the retired field cases. The rebased pin drops from 1,144 to 1,027.

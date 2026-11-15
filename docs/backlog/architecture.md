@@ -623,11 +623,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
 
 ## A976. Finish the server's English test-venue defaults.
 
-**2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
-operation-description references below no longer describe that venue field; recording helpers
-now pass their original description explicitly, and department receipts store theirs in
-`departments.operation_description`. Remaining language cleanup is tracked by the root
-English-only guard and its debt list.
+**2026-11-15, A1308 vb6:** the [fixture-field update above](#a913s-fix-items-general-code-english-only)
+also qualifies the historical operation-description references in this section.
 
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
