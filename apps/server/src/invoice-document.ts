@@ -1,4 +1,4 @@
-import { storedRecipientIdentifier } from "./invoice-selection.js";
+import { readInvoiceTyping } from "./invoice-typing.js";
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
@@ -147,22 +147,8 @@ async function readDocument(
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }
         : await readReceiptOrder(tx, sale.workingOrderId)),
-      invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1",
+      ...(await readInvoiceTyping(tx, sale)),
       issuer,
-      ...(sale.counterpartyTaxId === null
-        ? {}
-        : {
-            recipient: {
-              taxId: sale.counterpartyTaxId,
-              ...storedRecipientIdentifier(
-                sale.counterpartyIdentifierType,
-                sale.counterpartyIdentifierCountryCode,
-              ),
-              legalName: sale.counterpartyLegalName!,
-              countryCode: sale.counterpartyCountryCode!,
-              address: sale.counterpartyAddress!,
-            },
-          }),
       locale: sale.locale,
       namesLocale: sale.invoiceLocales[0]!,
       invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),

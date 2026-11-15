@@ -12,7 +12,7 @@ import {
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
+import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import { formatAmount, formatMoney } from "./receipt-money.js";
 
 describe("format-neutral invoice content", () => {
@@ -1638,6 +1638,95 @@ describe("the corrective invoice (R5)", () => {
       expect(lines).toContain(`1 ${dish} ${formatAmount("6.00", locale)}`);
       expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("4.96", locale)}`);
       expect(lines).toContain(`${label.vat} 21% ${formatMoney("1.04", locale)}`);
+    },
+  );
+
+  const SALE_DAY = "2026-11-03";
+  const joined = (lines: string[]) => lines.join(" ");
+
+  it.each([
+    ["58mm", "es-ES"],
+    ["80mm", "es-ES"],
+    ["58mm", "en-GB"],
+    ["80mm", "en-GB"],
+  ] as const)(
+    "prints a replacement's real day of sale when it is not the issue day, on %s in %s",
+    (paperWidth, locale) => {
+      const label = receiptLabelsFor(locale);
+      const lines = printed({ ...REPLACEMENT, saleDay: SALE_DAY }, paperWidth, locale);
+      const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      expect(joined(lines), lines.join("\n")).toContain(
+        `R/7 ${date(CORRECTIVE.issuedAt, locale, 60)} ${label.saleDate} ${receiptDay(SALE_DAY, locale)} ${label.replacesInvoiceInFull}`,
+      );
+    },
+  );
+
+  it("carries the real day of sale onto the A4 page's document", () => {
+    const document = buildReceiptDocument({
+      surface: "a4",
+      result: { ...REPLACEMENT, saleDay: SALE_DAY },
+      issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
+      receipt: {},
+      invoiceLocale: "en-GB",
+    });
+    expect(document.elements).toContainEqual({
+      kind: "amount",
+      caption: "Date of the sale",
+      amount: receiptDay(SALE_DAY, "en-GB"),
+      indent: 0,
+    });
+  });
+
+  // A replacement of a full invoice: the original's customer and lines, typed R4.
+  const FULL = FULL_INVOICE_DOCUMENT_FIXTURE.result;
+  const FULL_REPLACEMENT: ReceiptDocumentInput["result"] = {
+    ...FULL,
+    invoiceType: "R4",
+    invoiceNumber: "R/8",
+    issuedAt: "2026-08-20T09:15:00.000Z",
+    corrects: {
+      invoiceNumber: FULL.invoiceNumber,
+      issuedAt: FULL.issuedAt,
+      issuedOffsetMinutes: 120,
+      inFull: true,
+    },
+  };
+
+  it.each([
+    ["58mm", "es-ES"],
+    ["80mm", "es-ES"],
+    ["58mm", "en-GB"],
+    ["80mm", "en-GB"],
+  ] as const)(
+    "prints a replacement of a full invoice in the full layout, with its customer, on %s in %s",
+    (paperWidth, locale) => {
+      const label = receiptLabelsFor(locale);
+      const lines = printed({ ...FULL_REPLACEMENT, saleDay: "2026-08-17" }, paperWidth, locale);
+      const text = joined(lines);
+      const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      expect(text, lines.join("\n")).toContain(
+        [
+          label.correctiveInvoice,
+          `${label.invoiceHeading} R/8`,
+          `${label.date} ${receiptDateTime(FULL_REPLACEMENT.issuedAt, locale, 120)}`,
+          `${label.saleDate} ${receiptDay("2026-08-17", locale)}`,
+          label.replacesInvoiceInFull,
+          `FF/1 ${date(FULL.issuedAt, locale, 120)}`,
+          `${label.rectificationAmount} ${formatMoney("0.00", locale)}`,
+        ].join(" "),
+      );
+      expect(text).toContain(`${label.customer} ${FULL.recipient!.legalName}`);
+      expect(text).toContain(FULL.recipient!.taxId);
+      expect(text).toContain(label.pricesExcludeVat);
+      expect(text).toContain(`${label.taxableBase} 21% ${formatMoney("9.00", locale)}`);
+      const table = buildReceiptDocument({
+        result: FULL_REPLACEMENT,
+        issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: locale,
+        paperWidth,
+      }).elements.find((e) => e.kind === "table");
+      expect(table?.kind === "table" && table.table.header?.rate).toBe(label.rateColumn);
     },
   );
 

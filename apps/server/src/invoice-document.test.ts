@@ -37,6 +37,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
@@ -255,6 +256,23 @@ describe("stored invoice document projection", () => {
         taxpayerDomicile: taxpayerRow!.taxpayerDomicile,
       });
     }
+  });
+
+  it("types a replacement of a full invoice R4, naming the invoice it replaces in full", async () => {
+    const sale = await issue(venue.backend);
+    const replacement = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, sale.saleId, { replaces: true }),
+    );
+    const original = await read(venue.backend, sale.saleId);
+    const document = await read(venue.backend, replacement);
+    expect(document.result.invoiceType).toBe("R4");
+    expect(document.result.recipient).toEqual(original.result.recipient);
+    expect(document.result.corrects).toEqual({
+      invoiceNumber: original.result.invoiceNumber,
+      issuedAt: original.result.issuedAt,
+      issuedOffsetMinutes: 120,
+      inFull: true,
+    });
   });
 
   it("replays a paid discounted bill with its saved grouping and payment", async () => {

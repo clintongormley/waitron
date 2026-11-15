@@ -2,9 +2,18 @@ import { sql } from "drizzle-orm";
 import { validateCapabilities } from "@waitron/layouts";
 import jsQR from "jsqr";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { deviceProfiles, printers, printJobs, sales, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  invoiceSeries,
+  printers,
+  printJobs,
+  sales,
+  taxpayer,
+  withTransaction,
+} from "@waitron/db";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
@@ -24,7 +33,19 @@ beforeEach(async () => {
   v = await provisionBillVenue(suite.db);
 });
 
-async function issue(prepared: boolean) {
+const CUSTOMER = { taxId: "01234567L", legalName: "Cliente SL", countryCode: "ES" };
+const CUSTOMER_ADDRESS = "2 Main Street, 28013 Madrid, Madrid";
+
+async function issue(prepared: boolean, full = false) {
+  if (full) await v.db.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" });
+  const fullSeries = full
+    ? (
+        await v.db
+          .select({ id: invoiceSeries.id })
+          .from(invoiceSeries)
+          .where(and(eq(invoiceSeries.nodeId, v.cfg.nodeId), eq(invoiceSeries.purpose, "full")))
+      )[0]!.id
+    : undefined;
   const source: TrustedClock = {
     ...v.clock,
     now: () => ({ ...v.clock.now(), instant: new Date(AT), offsetMinutes: 0 }),
@@ -33,7 +54,8 @@ async function issue(prepared: boolean) {
     recordSale(tx, v.backend, {
       origin: v.cfg.origin,
       nodeId: v.cfg.nodeId,
-      seriesId: v.seriesId,
+      seriesId: fullSeries === undefined ? v.seriesId : brandSeriesId(fullSeries),
+      ...(full ? { counterparty: CUSTOMER, recipientAddress: CUSTOMER_ADDRESS } : {}),
       locale: "en-GB",
       invoiceLocales: ["en-GB"],
       operationDescription: "Restaurant service",
@@ -193,5 +215,49 @@ describe("the invoice a corrective names", () => {
       issuedOffsetMinutes: 0,
       ...extra,
     });
+  });
+
+  it("types a replacement of a full invoice R4, made out to the original's customer", async () => {
+    const sale = await issue(false, true);
+    const [original, ticket] = await withTransaction(v.db, async (tx) => {
+      const replacement = await insertCorrective(tx, sale.saleId, { replaces: true });
+      return [
+        await readTransactionReceipt(v.backend, tx, v.cfg, sale.saleId),
+        await readTransactionReceipt(v.backend, tx, v.cfg, replacement),
+      ];
+    });
+    expect(original.invoiceType).toBe("F1");
+    expect(ticket.invoiceType).toBe("R4");
+    expect(ticket.recipient).toEqual(original.recipient);
+    expect(ticket.recipient).toMatchObject({ taxId: CUSTOMER.taxId, address: CUSTOMER_ADDRESS });
+    expect(ticket.corrects).toEqual({
+      invoiceNumber: original.invoiceNumber,
+      issuedAt: AT,
+      issuedOffsetMinutes: 0,
+      inFull: true,
+    });
+  });
+
+  it("carries a replacement's real day of sale only when it differs from its own issue day", async () => {
+    const sale = await issue(false);
+    const other = await issue(false);
+    const [later, sameDay, plain] = await withTransaction(v.db, async (tx) => [
+        await readTransactionReceipt(
+          v.backend,
+          tx,
+          v.cfg,
+          await insertCorrective(tx, sale.saleId, { replaces: true, supplyDay: "2026-10-10" }),
+        ),
+        await readTransactionReceipt(
+          v.backend,
+          tx,
+          v.cfg,
+          await insertCorrective(tx, other.saleId, { replaces: true, supplyDay: "2026-10-14" }),
+        ),
+      await readTransactionReceipt(v.backend, tx, v.cfg, sale.saleId),
+    ]);
+    expect(later.saleDay).toBe("2026-10-10");
+    expect(sameDay).not.toHaveProperty("saleDay");
+    expect(plain).not.toHaveProperty("saleDay");
   });
 });

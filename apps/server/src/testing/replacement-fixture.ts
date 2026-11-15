@@ -6,13 +6,14 @@ import type { SaleId } from "@waitron/shared";
 
 /**
  * Inserts a corrective of `correctsSaleId` directly, numbered next in its node's rectificative
- * series: a replacement repeating the corrected sale's total, or, with `total`, an ordinary
- * corrective such as a refund of a replacement.
+ * series: a replacement repeating the corrected sale's total and customer (with `supplyDay`, the
+ * real day of the sale), or, with `total`, an ordinary corrective such as a refund of a
+ * replacement.
  */
 export async function insertCorrective(
   tx: Transaction,
   correctsSaleId: string,
-  change: { replaces: true } | { total: string },
+  change: { replaces: true; supplyDay?: string } | { total: string },
 ): Promise<SaleId> {
   const [corrected] = await tx.select().from(sales).where(eq(sales.id, correctsSaleId));
   const [series] = await tx
@@ -41,6 +42,17 @@ export async function insertCorrective(
       fiscalState: "recorded",
       correctsSaleId,
       replacesOriginal: replaces,
+      ...(replaces
+        ? {
+            supplyDay: change.supplyDay ?? null,
+            counterpartyTaxId: corrected!.counterpartyTaxId,
+            counterpartyLegalName: corrected!.counterpartyLegalName,
+            counterpartyCountryCode: corrected!.counterpartyCountryCode,
+            counterpartyIdentifierType: corrected!.counterpartyIdentifierType,
+            counterpartyIdentifierCountryCode: corrected!.counterpartyIdentifierCountryCode,
+            counterpartyAddress: corrected!.counterpartyAddress,
+          }
+        : {}),
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);

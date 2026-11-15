@@ -1,4 +1,3 @@
-import { storedRecipientIdentifier } from "./invoice-selection.js";
 import { eq } from "drizzle-orm";
 import {
   invoiceSeries,
@@ -26,6 +25,7 @@ import {
 import type { TradingContext } from "./trading-context.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
+import { readInvoiceTyping } from "./invoice-typing.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import {
@@ -81,21 +81,6 @@ export async function readTransactionReceipt(
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("sale.not_found", { saleId });
   const { sale } = issued;
-  const corrected =
-    sale.correctsSaleId === null
-      ? undefined
-      : (
-          await tx
-            .select({
-              code: invoiceSeries.code,
-              invoiceNumber: sales.invoiceNumber,
-              issuedAt: sales.issuedAt,
-              issuedOffsetMinutes: sales.issuedOffsetMinutes,
-            })
-            .from(sales)
-            .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-            .where(eq(sales.id, sale.correctsSaleId))
-        )[0]!;
   const rows = await tx
     .select()
     .from(saleLines)
@@ -134,9 +119,7 @@ export async function readTransactionReceipt(
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
-  const issuer: Partial<
-    Pick<TillSaleResult, "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes">
-  > = await readReceiptIssuer(backend, tx, brandSaleId(saleId));
+  const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId));
   const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;
   const groupId =
     sale.workingOrderId ??
@@ -156,31 +139,7 @@ export async function readTransactionReceipt(
           },
         }
       : {}),
-    ...(corrected === undefined
-      ? { invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1" }
-      : {
-          invoiceType: "R5",
-          corrects: {
-            invoiceNumber: formatInvoiceNumber(corrected.code, corrected.invoiceNumber),
-            issuedAt: new Date(corrected.issuedAt).toISOString(),
-            issuedOffsetMinutes: corrected.issuedOffsetMinutes,
-            ...(sale.replacesOriginal ? { inFull: true as const } : {}),
-          },
-        }),
-    ...(sale.counterpartyTaxId === null
-      ? {}
-      : {
-          recipient: {
-            taxId: sale.counterpartyTaxId,
-            ...storedRecipientIdentifier(
-              sale.counterpartyIdentifierType,
-              sale.counterpartyIdentifierCountryCode,
-            ),
-            legalName: sale.counterpartyLegalName!,
-            countryCode: sale.counterpartyCountryCode!,
-            address: sale.counterpartyAddress!,
-          },
-        }),
+    ...(issuer.invoiceType === undefined ? await readInvoiceTyping(tx, sale) : {}),
     issuedOffsetMinutes: sale.issuedOffsetMinutes,
     locale: sale.locale,
     namesLocale: sale.invoiceLocales[0]!,
