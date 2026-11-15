@@ -2678,9 +2678,18 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       })
       .from(departments);
     const policySnapshot = async () =>
-      (await suite.db.select().from(departments)).map(
-        ({ receiptText, receiptLogoImageId, receiptLogoRasters, receiptUpdatedAt, ...policy }) =>
-          policy,
+      (await suite.db.select().from(departments)).map((row) =>
+        Object.fromEntries(
+          Object.entries(row).filter(
+            ([key]) =>
+              ![
+                "receiptText",
+                "receiptLogoImageId",
+                "receiptLogoRasters",
+                "receiptUpdatedAt",
+              ].includes(key),
+          ),
+        ),
       );
     const policies = await policySnapshot();
     const framing = { x: 7500, y: 5000, zoom: 200 };
