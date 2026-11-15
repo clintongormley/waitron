@@ -332,6 +332,83 @@ it.each([
   expect(el.shadowRoot!.textContent).toContain("Calle Fiscal 8, 28014 Madrid, Madrid, España");
 });
 
+it.each([
+  ["en-GB", "Payments", "Card", /Tip\s€0\.50/],
+  ["es-ES", "Pagos", "Tarjeta", /Propina\s0,50\s€/],
+])("shows a bill payment's tip beside its amount in %s", async (locale, heading, card, tip) => {
+  setLocale(locale);
+  const tipped = {
+    ...detail,
+    payments: [{ ...detail.payments[0]!, applied: "5.00", tip: "0.50" }],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(tipped),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  const payments = [...el.shadowRoot!.querySelectorAll("section")].find(
+    (section) => section.querySelector("h3")?.textContent === heading,
+  )!;
+  const line = [...payments.querySelectorAll("li")].find((item) =>
+    item.textContent!.includes(card),
+  )!;
+  expect(line.textContent!.replace(/\s+/g, " ")).toMatch(tip);
+});
+
+it.each([
+  [
+    "en-GB",
+    "Payments",
+    /Refund\s€5\.00 · Tip returned\s€0\.50 · Refund completed · Dish never served/,
+  ],
+  [
+    "es-ES",
+    "Pagos",
+    /Devolución\s5,00\s€ · Propina devuelta\s0,50\s€ · Devolución completada · Dish never served/,
+  ],
+])("shows a refund's returned tip beside its amount in %s", async (locale, heading, refund) => {
+  setLocale(locale);
+  const refunded = {
+    ...detail,
+    payments: [
+      {
+        ...detail.payments[0]!,
+        applied: "5.00",
+        tip: "0.50",
+        refunds: [
+          {
+            applied: "5.00",
+            tip: "0.50",
+            state: "completed",
+            reason: "Dish never served",
+            createdAt: "2026-09-30T12:20:00Z",
+          },
+        ],
+      },
+    ],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(refunded),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  const payments = [...el.shadowRoot!.querySelectorAll("section")].find(
+    (section) => section.querySelector("h3")?.textContent === heading,
+  )!;
+  const line = [...payments.querySelectorAll("li div")].find((item) =>
+    item.textContent!.includes("Dish never served"),
+  )!;
+  expect(line.textContent!.replace(/\s+/g, " ")).toMatch(refund);
+});
+
 it("explains when a bill outside the session's scope cannot be opened", async () => {
   setLocale("en-GB");
   const api = {
