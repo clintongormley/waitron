@@ -589,3 +589,59 @@ describe("a raised quantity of a stored line", () => {
     expect(await linesOf(id)).toEqual(before);
   });
 });
+
+describe("extras added later to a stored dish", () => {
+  const revisionOf = async (id: string) =>
+    (
+      (await suite.db
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id))) as [{ revision: number }]
+    )[0].revision;
+  const addAvocado = async (v: MealVenue, id: string) => {
+    const [salad] = await linesOf(id);
+    return updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
+      expectedEdit: null,
+      lines: [
+        {
+          workingOrderLineId: salad!.id,
+          menuItemId: v.salad,
+          quantity: "1",
+          extras: [
+            { listId: v.avocado.listId, picks: [{ productId: v.avocado.productId, quantity: 1 }] },
+          ],
+        },
+      ],
+    });
+  };
+
+  it("carry the late mark of a dish sent after its period, without asking again", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id, lateSend);
+    await addAvocado(v, id);
+    expect(await linesOf(id)).toHaveLength(2);
+    expect(await marksOf(id)).toEqual([
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+    ]);
+    expect(lateSend.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("stay unmarked on a dish sent in its period, and are accepted after it without a confirmation", async () => {
+    at("13:50");
+    const v = await mealVenue();
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.salad, quantity: "1" }], id);
+    at("14:05");
+    await addAvocado(v, id);
+    expect(await linesOf(id)).toHaveLength(2);
+    expect(await marksOf(id)).toEqual([
+      { latePeriodName: null, lateConfirmedBy: null },
+      { latePeriodName: null, lateConfirmedBy: null },
+    ]);
+  });
+});

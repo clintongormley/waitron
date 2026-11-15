@@ -579,6 +579,7 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 const RECORDED_OFFER = Symbol("recordedOffer");
+const STORED_LATE = Symbol("storedLate");
 
 /**
  * Marks a requested line that prices a raised quantity of a stored line: after its period it is
@@ -611,6 +612,7 @@ export async function priceOrderLines(
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
+    [STORED_LATE]?: { periodName: string; confirmedBy: string };
     [STORED_RISE]?: true;
   } & LineExtras &
     RetainedCourseLine)[],
@@ -857,7 +859,7 @@ export async function priceOrderLines(
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const [index, line] of lines.entries()) {
-    const mark = marks.get(index);
+    const mark = marks.get(index) ?? line[STORED_LATE];
     const { offer } = line;
     const selection = selectMenuVariant(offer, line.variantId ?? null);
     const customerText = customerPresentationText(
@@ -5862,6 +5864,10 @@ async function applyLineEdits(
           .map(({ parent }) => parent.id),
       )
     : new Map<string, { offer: ZoneMenuOffer; versionId: string }>();
+  const lateSends = await VENUE_SERVICE.readLateSends(
+    tx,
+    plan.edits.filter(({ intent }) => intent.extras !== null).map(({ parent }) => parent.id),
+  );
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
@@ -6104,6 +6110,7 @@ async function applyLineEdits(
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
         ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
+        ...(lateSends.has(parent.id) ? { [STORED_LATE]: lateSends.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
     }
