@@ -1872,12 +1872,21 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   countdown (§6.5, "Every wait explains itself") — `node.promote` at the till, the venue name
   and certificate on the spare after promotion, the router's switch (no "print a new sheet" prompt:
   the owner dropped it, §6.7), and the card-payment ownership rule A764 asks for. Not fiscal, but it lands after 4b.
+  Built to [`2026-11-14-a947-4c-devices-follow.md`](../plans/2026-11-14-a947-4c-devices-follow.md)
+  (2026-11-15): a till or handheld shows the strip after 20 s and opens the spare's own switch page,
+  which links back to it; the till says "server" («servidor»), not «equipo»; no "ask for help" line
+  when the clocks differ. Moved to 4d (watcher, 2026-11-14 22:01): the dashboard's entry, the
+  spare's banner, the same-site cookie measurement and the switch's passkey.
 - **4d. Reaching the switch from any device.** The spare's switch page; the spare answering the
   venue's name with only that page while the main box is silent, and stopping when it answers; the
   QR labels; the switch page's explained waits, including the "no second clock" text on the
   spare's own screen (§6.5); passkeys checked against the venue's and both boxes' own origins; measured on the till
   hardware: two-part `.local` names, the name cache after the main box dies, and a passkey at each
   way in (§6.6). Not fiscal.
+  From 4c (2026-11-15): the dashboard reaches the switch by reloading (no dashboard strip), the
+  spare's own banner when the main box is silent, the #257 same-site cookie measurement in a real
+  browser on two `.local` names, and the switch's passkey (until then a password, plus a code when
+  one is enrolled).
 - **4e. The hand-over.** The main box fences on request, waits for answers already due, syncs, and
   reports its last change; the spare waits for exactly it. **Fiscal** (it fences a filing node).
 
