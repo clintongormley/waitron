@@ -400,26 +400,24 @@ describe("this device's own clock", () => {
     params: {},
   };
 
-  it("tells the device more than a minute off, while the box's time service is synchronised", async () => {
-    const off = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, "till-a");
-    expect(off.owner).toBe(DEVICE_CLOCK_NOTICE_OWNER);
-    expect(await off.source.read(CTX)).toEqual([WRONG]);
-  });
-
-  it("tells a device exactly a minute off nothing, nor one with no reading", async () => {
-    for (const id of ["till-b", "till-c"]) {
-      const source = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, id);
-      expect(await source.source.read(CTX)).toEqual([]);
-    }
-  });
-
-  it("tells a device off in the other direction too", async () => {
-    const source = await deviceClockNoticeSource(
-      { witnesses: () => [witness("till-a", -3_600_000)], status },
-      "till-a",
-    );
-    expect(await source.source.read(CTX)).toEqual([WRONG]);
-  });
+  it.each([
+    { name: "more than a minute off", witnesses: WITNESSES, id: "till-a", expected: [WRONG] },
+    { name: "exactly a minute off", witnesses: WITNESSES, id: "till-b", expected: [] },
+    { name: "with no reading", witnesses: WITNESSES, id: "till-c", expected: [] },
+    {
+      name: "off in the other direction",
+      witnesses: [witness("till-a", -3_600_000)],
+      id: "till-a",
+      expected: [WRONG],
+    },
+  ])(
+    "tells a device $name what the box's synchronised time service makes of it",
+    async ({ witnesses, id, expected }) => {
+      const off = await deviceClockNoticeSource({ witnesses: () => witnesses, status }, id);
+      expect(off.owner).toBe(DEVICE_CLOCK_NOTICE_OWNER);
+      expect(await off.source.read(CTX)).toEqual(expected);
+    },
+  );
 
   it("tells nobody while the time service is not synchronised or does not answer", async () => {
     for (const status of [

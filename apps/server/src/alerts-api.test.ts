@@ -49,12 +49,12 @@ import {
   sealedStateAlertSource,
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
-import type { ClockServiceStatus } from "./box-host-client.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { createAlertRegistry } from "./alerts.js";
+import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -784,19 +784,8 @@ describe("ongoing alert sources through the route", () => {
 
   it("waits for the box's time service without holding the write lock", async () => {
     const v = await seedVenueWithStaff();
-    let asked!: () => void;
-    const hostAsked = new Promise<void>((resolve) => (asked = resolve));
-    let answer!: (status: ClockServiceStatus) => void;
-    const hostAnswer = new Promise<ClockServiceStatus>((resolve) => (answer = resolve));
-    const reading = sharedClockServiceReading(
-      {
-        clockStatus: () => {
-          asked();
-          return hostAnswer;
-        },
-      },
-      () => NOW,
-    );
+    const held = heldClockStatus();
+    const reading = sharedClockServiceReading({ clockStatus: held.status }, () => NOW);
     const witnesses = createClockWitnessStore({
       wall: () => NOW.getTime(),
       monotonic: () => 0,
@@ -817,25 +806,14 @@ describe("ongoing alert sources through the route", () => {
         clockDisagreesAlertSource(witnesses, reading.read),
       ],
     });
-    const events: string[] = [];
     const response = get(appFor(registry), "/management-api/alerts", v.admin);
-    await hostAsked;
-    const write = db.withWriteLock(() => {
-      events.push("wrote");
-      return Promise.resolve();
-    });
-    // A free lock runs the write in this turn's microtasks; one held by the read cannot.
-    await new Promise((resolve) => setImmediate(resolve));
-    events.push("host answered");
-    answer({
+    await expectWriteRunsWhileHostHeld(db, held, {
       available: true,
       service: "on",
       unit: "systemd-timesyncd.service",
       synchronised: false,
       lastSyncAt: null,
     });
-    await write;
-    expect(events).toEqual(["wrote", "host answered"]);
     const res = await response;
     expect(res.status).toBe(200);
     const body = (await res.json()) as { alerts: { code: string }[] };

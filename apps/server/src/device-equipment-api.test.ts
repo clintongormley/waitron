@@ -1,5 +1,6 @@
 import { attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir, type networkInterfaces } from "node:os";
@@ -38,7 +39,6 @@ import {
 import { claimPrintJobs, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { printingAlertSource } from "./alert-sources.js";
-import type { ClockServiceStatus } from "./box-host-client.js";
 import {
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
@@ -1885,38 +1885,20 @@ describe("GET /api/device/equipment's notices", () => {
         uncertaintyMs: 0,
       },
     ];
-    let asked!: () => void;
-    const hostAsked = new Promise<void>((resolve) => (asked = resolve));
-    let answer!: (status: ClockServiceStatus) => void;
-    const hostAnswer = new Promise<ClockServiceStatus>((resolve) => (answer = resolve));
-    const status = () => {
-      asked();
-      return hostAnswer;
-    };
+    const held = heldClockStatus();
     const app = noticeApp([], {
       deviceSources: async (deviceId) => [
-        await deviceClockNoticeSource({ witnesses, status }, deviceId),
+        await deviceClockNoticeSource({ witnesses, status: held.status }, deviceId),
       ],
     });
-    const events: string[] = [];
     const body = read(app);
-    await hostAsked;
-    const write = suite.db.withWriteLock(() => {
-      events.push("wrote");
-      return Promise.resolve();
-    });
-    // A free lock runs the write in this turn's microtasks; one held by the read cannot.
-    await new Promise((resolve) => setImmediate(resolve));
-    events.push("host answered");
-    answer({
+    await expectWriteRunsWhileHostHeld(suite.db, held, {
       available: true,
       service: "on",
       unit: "systemd-timesyncd.service",
       synchronised: true,
       lastSyncAt: null,
     });
-    await write;
-    expect(events).toEqual(["wrote", "host answered"]);
     expect((await body).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
       { key: "clock.device_wrong", owner: DEVICE_CLOCK_NOTICE_OWNER },
     ]);
