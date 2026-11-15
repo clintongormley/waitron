@@ -82,10 +82,12 @@ it("walks past a manifest that only sets the module type to the package's own ma
 });
 
 it.each([
-  ["stripe 23.1.0", "stripe", ["cjs/stripe.cjs.node.js", "esm/stripe.esm.node.js"]],
-  ["nodemailer 10.3.1", "nodemailer", ["dist/cjs/nodemailer.js", "dist/esm/nodemailer.js"]],
-])("emits %s's licence for its CommonJS and ESM entries", (label, name, entries) => {
+  ["stripe", ["cjs/stripe.cjs.node.js", "esm/stripe.esm.node.js"]],
+  ["nodemailer", ["dist/cjs/nodemailer.js", "dist/esm/nodemailer.js"]],
+])("emits %s's licence for its CommonJS and ESM entries", (name, entries) => {
   const pkg = realpathSync(join(ROOT, "apps/server/node_modules", name));
+  const { version } = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
+  const label = `${name} ${version}`;
   for (const entry of entries) {
     const content = notices.bundledNpmNotices([join(pkg, entry)]);
     expect(
