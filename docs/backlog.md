@@ -500,8 +500,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
   or chosen on the till, and each order records which. One price either way. Fiscal: the owner lands it.
   Design approved by the owner on 14 November and planned the same day. PR 1 of 3 (products carry
-  a takeaway class; no sale uses it yet) is built; PR 2 (orders and filing) and PR 3 (screens, till,
-  printing, demo) are not.
+  a takeaway class) and PR 2 (each order records how it is sold, and its lines file at that way's
+  rate) are built; PR 3 (screens, till, printing, demo) is not.
   [Design](superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md),
   [plan](superpowers/plans/2026-11-14-a1522-eat-in-takeaway-vat.md)
 
