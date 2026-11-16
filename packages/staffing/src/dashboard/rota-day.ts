@@ -1,3 +1,4 @@
+import { dateFormat } from "@waitron/venue-service/dashboard/hours-view";
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -15,7 +16,7 @@ import {
   warnings,
   weekBreaches,
 } from "./rota-cards.js";
-import { dateFormat, utc } from "./format.js";
+import { utc } from "./format.js";
 import { hours } from "./rota-format.js";
 import { peopleInOrder, type Show, type Target } from "./rota-model.js";
 import { t } from "./strings.js";

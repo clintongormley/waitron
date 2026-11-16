@@ -1,3 +1,4 @@
+import { dateFormat, formatDate, dateAroundDay } from "@waitron/venue-service/dashboard/hours-view";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -5,7 +6,7 @@ import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
+import { addMonths, FIRST_MONTH, LAST_MONTH } from "@waitron/venue-service/dashboard/calendar-grid";
 import {
   SPECIAL_DAY_LINE,
   seasonTints,
@@ -16,20 +17,12 @@ import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { calendarDate, dateAroundDay, dateFormat, mondayFirst, utc } from "./format.js";
+import { mondayFirst, utc } from "./format.js";
 import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
 
-/** The months `parseCalendarMonth` accepts. */
-const FIRST_MONTH = `${String(CALENDAR_YEAR_MIN).padStart(4, "0")}-02`;
-const LAST_MONTH = `${String(CALENDAR_YEAR_MAX).padStart(4, "0")}-12`;
 const ALL = "all";
-
-function stepMonth(month: string, by: number): string {
-  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
-  return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
-}
 
 function sameSpecialDay(day: Day, neighbour: Day | undefined): boolean {
   return !!day.specialDay && day.specialDay.id === neighbour?.specialDay?.id;
@@ -404,7 +397,7 @@ export class StaffingMonthView extends LitElement {
       label: "staffing.month.previous" | "staffing.month.next",
       glyph: string,
     ) => {
-      const target = stepMonth(current, by);
+      const target = addMonths(current, by);
       const blocked = target < FIRST_MONTH || target > LAST_MONTH;
       return html`<wt-button
         variant="secondary"
@@ -474,7 +467,7 @@ export class StaffingMonthView extends LitElement {
     const { areas } = month;
     const chosen = this.#chosen(areas);
     const names = new Map(areas.map(({ area, name }) => [areaKey(area), name]));
-    const cellLabel = dateFormat({ weekday: "long", day: "numeric", month: "long" });
+    const cellLabel = { weekday: "long", day: "numeric", month: "long" } as const;
     const largest = Math.max(1, ...month.days.flatMap((day) => day.areas.map((a) => a.needed)));
     const tints = seasonTints(month.seasons);
     const weeks = Array.from({ length: month.days.length / 7 }, (_, row) =>
@@ -550,7 +543,7 @@ export class StaffingMonthView extends LitElement {
     };
     const monday = month.days[index - (index % 7)]!.date;
     return html`<calendar-day-box
-      .heading=${calendarDate(day.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+      .heading=${formatDate(day.date)}
       .name=${special?.name ?? ""}
       .nameKind=${special ? "special" : ""}
       .line=${line}
@@ -601,7 +594,7 @@ export class StaffingMonthView extends LitElement {
     names: Map<string, string>,
     largest: number,
     tints: Map<string, string>,
-    cellLabel: Intl.DateTimeFormat,
+    cellLabel: Intl.DateTimeFormatOptions & { day: "numeric" },
     {
       stop,
       joinsPrevious,

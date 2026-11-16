@@ -47,10 +47,6 @@ decision on how one grid with one time ruler shows dates with different changeov
 
 ## A711. Shared staffing painter code
 
-- `staffing-season-painter.ts` and `staffing-special-day-painter.ts` (under
-  `packages/staffing/src/dashboard/`) repeat the same lifecycle: the read and its re-read after a
-  save, the draft scope, Save and its refusal, the area picker and the staff-role dialog wiring. A
-  shared base class or controller could hold it.
 - Copied from venue-service rather than exported from `@waitron/venue-service/painter`: the season
   ‹ › stepper and its CSS; the staffing paint row's markup, which relies on `paintRowStyles`' class
   names; and the `--paint-grid-fill` height (staffing's `painter-parts.ts`, and venue-service's
@@ -97,23 +93,13 @@ A direct Node import fails the source guard. Extend the guard to runtime re-expo
 > rota stands. The Rota tab opens the week of the day last picked in the month, else the current
 > week.
 
-## A699. The Staffing month keeps its own copy of month stepping, and staffing its own date formatting
+## A699. Shared staffing popup and navigation parts
 
-`stepMonth` and the first and last month in
-`packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
-`add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
-and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
-both staffing painters use, copies `hours-view.ts`'s (the season tints are
-already shared through `@waitron/venue-service/dashboard/season-tint`). The same file's
-`dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
-because venue-service's `exports` map does not include `hours-view.ts` (A775). A763 added more
-copies of venue-service code that the map does not make reachable: `weekTitleParts` in `format.ts`
-(of `formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic (private to
-`CalendarDayBox` in `calendar-day-box.ts`, a file the map exports; the rota's version also places
-once per frame and again when its own size changes, which `CalendarDayBox` does not), with its own
-`flatParent` and `scrollTargets` (of `flat-tree.ts`, which the map does not export); and `rota-view.ts`'s
-swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
-limits, and these, into browser-safe venue-service files and export them.
+`rota-popup.ts` copies follow-and-close logic from `CalendarDayBox`, plus `flatParent` and
+`scrollTargets` from venue-service's unexported `flat-tree.ts`. The rota additionally places once
+per frame and when its own size changes. `rota-view.ts` also copies the swipe handling,
+`SWIPE_PX` and `PHONE_WIDTH` from `opening-hours-week.ts`. Share those browser-safe pieces without
+losing the rota's placement behaviour.
 
 ## A586. Each person's contract terms
 
@@ -311,14 +297,12 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Staffing painter shared parts
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M.
 
-- **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
-  formatting.**
-  [Detail](workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
-- **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
-  parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
-  would remove the copies. Left open by A585-4.
+- **A699. Shared staffing popup and navigation parts.**
+  [Detail](workforce.md#a699-shared-staffing-popup-and-navigation-parts)
+- **A711. Shared staffing painter chrome and date source.** The season stepper, paint-row markup,
+  grid height and covers line still copy venue-service; special-day dates come from its first area.
   [Detail](workforce.md#a711-shared-staffing-painter-code)
 
 ## Bundle: Colour chooser placement

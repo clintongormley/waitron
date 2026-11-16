@@ -7,6 +7,7 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import { DayPicker } from "./day-picking.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import { t } from "./strings.js";
+import { addMonths, FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
 
 /** What `add-dates` carries: the dates to add, in order, none of them already chosen. */
 export interface AddDates {
@@ -18,16 +19,8 @@ export interface RemoveDates {
   dates: LocalDate[];
 }
 
-/** The months the month read serves, so the host can read each month's taken dates. */
-const FIRST_MONTH = "0100-02";
-const LAST_MONTH = "9998-12";
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
-
-function stepMonth(month: string, by: number): string {
-  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
-  return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
-}
 
 function monthDates(month: string): LocalDate[] {
   const dates: LocalDate[] = [];
@@ -203,7 +196,7 @@ export class AddDatesCalendar extends LitElement {
   override render() {
     if (!this.month) return nothing;
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
-      const target = stepMonth(this.month, by);
+      const target = addMonths(this.month, by);
       return html`<wt-button
         variant="secondary"
         data-test=${test}
@@ -211,7 +204,7 @@ export class AddDatesCalendar extends LitElement {
         ?disabled=${target < FIRST_MONTH || target > LAST_MONTH}
         @click=${() => {
           // From the month at the click, so presses before a redraw add up.
-          const next = stepMonth(this.month, by);
+          const next = addMonths(this.month, by);
           if (next < FIRST_MONTH || next > LAST_MONTH) return;
           this.month = next;
           this.#emit("month-change", { month: next });

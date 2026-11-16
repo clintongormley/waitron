@@ -162,7 +162,7 @@ it.each([
   ["es", "sep"],
 ])("uses three-letter short months across Calendar dates in %s", (language, month) => {
   setLocale(language!);
-  expect(formatDate("2026-09-12")).toContain(month);
+  expect(formatDate("2026-09-12")).toMatch(new RegExp(`12 ${month} 2026$`));
   expect(formatMonthDay("09-12")).toBe(`12 ${month}`);
   expect(formatShortDate("2026-09-12", true)).toBe(`12 ${month} 2026`);
   expect(formatShortDate("2026-09-12", false)).toBe(`12 ${month}`);

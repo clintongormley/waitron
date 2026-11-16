@@ -1,4 +1,4 @@
-import { formatLocale } from "./format.js";
+import { formatLocale } from "@waitron/venue-service/dashboard/hours-view";
 
 const segmenters = new Map<string, Intl.Segmenter>();
 function letters(word: string, locale: string): string[] {
