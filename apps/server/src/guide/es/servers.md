@@ -147,8 +147,8 @@ una clave de cifrado o es distinta, elige **Parar** y vuelve a unir el servidor 
 de traspasar el local.
 
 Antes de detener las ventas, este servidor comprueba los datos del local. Si la comprobación rechaza
-el traspaso, elige **Parar** y sigue vendiendo aquí. Conserva este servidor y sus datos. Puedes volver
-a intentarlo si la comprobación no pudo terminar. Para un cambio urgente, sigue el
+el traspaso, elige **Parar** y sigue vendiendo aquí. Conserva este servidor y sus datos. Espera un minuto
+antes de volver a intentarlo. Para un cambio urgente, sigue el
 [procedimiento de emergencia](servers.md#emergency) con una copia de seguridad que funcione.
 
 Mantén los dos servidores conectados. La página de traspaso se abre en el servidor de reserva y sigue la

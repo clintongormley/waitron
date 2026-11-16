@@ -56,6 +56,7 @@ import {
   setNodeMode,
 } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mintBoxAuthority } from "./testing/box-authority.js";
@@ -418,26 +419,49 @@ describe("a valid start", () => {
   });
 
   it("a broken source reference refuses before offering and keeps this box selling", async () => {
+    logged.length = 0;
     await breakSourceReference();
 
     expect(await start()).toEqual(refusal(409, "handover.source_check_failed"));
 
     expect(exchanged).not.toContain(OFFER_PATH);
+    expect(logged).toContainEqual({
+      level: "warn",
+      message: "handover-source-start.check_failed",
+      detail: { reason: "negative_result" },
+    });
     await expectNothingRecorded();
   });
 
-  it("an unfinished source check refuses before offering and keeps selling", async () => {
-    const on = mount({
-      checkSource: async () => {
-        throw new Error("worker failed");
-      },
-    });
+  it.each([
+    ["worker failure", new Error("worker failed"), "unknown", "unfinished"],
+    [
+      "timeout",
+      new AppError("handover.copy_check_failed", { module: "core" }, { reason: "timeout" }),
+      "handover.copy_check_failed",
+      "timeout",
+    ],
+  ])(
+    "an unfinished source check (%s) refuses before offering and keeps selling",
+    async (_kind, failure, errorCode, reason) => {
+      logged.length = 0;
+      const on = mount({
+        checkSource: async () => {
+          throw failure;
+        },
+      });
 
-    expect(await start({}, on)).toEqual(refusal(409, "handover.source_check_failed"));
+      expect(await start({}, on)).toEqual(refusal(409, "handover.source_check_failed"));
 
-    expect(exchanged).not.toContain(OFFER_PATH);
-    await expectNothingRecorded(on);
-  });
+      expect(exchanged).not.toContain(OFFER_PATH);
+      expect(logged).toContainEqual({
+        level: "warn",
+        message: "handover-source-start.check_failed",
+        detail: { errorCode, reason },
+      });
+      await expectNothingRecorded(on);
+    },
+  );
 
   it("disconnecting during preflight ends the check without sending an offer", async () => {
     const authority = await mintBoxAuthority();
@@ -504,7 +528,7 @@ describe("a valid start", () => {
     } finally {
       request.destroy();
       finishCheck?.();
-      server.closeAllConnections?.();
+      if ("closeAllConnections" in server) server.closeAllConnections();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
@@ -1192,6 +1216,27 @@ describe("the same operation again", () => {
 
     expect(exchanged).toEqual([]);
     await expectAbandoned("handover.source_check_failed");
+  });
+
+  it("a prepared retry whose gate closes during preflight replays stepdown without an offer", async () => {
+    expect((await start()).status).toBe(200);
+    exchanged = [];
+    stepDownAfterOffer.mockClear();
+    const on = mount({
+      checkSource: async () => {
+        gate.close({ allowed: () => true });
+        return true;
+      },
+    });
+
+    expect(await start({}, on)).toEqual({
+      status: 500,
+      body: { error: { code: "server.internal" } },
+    });
+
+    expect(exchanged).toEqual([]);
+    expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);
+    expect(events().map((event) => event.kind)).toEqual(["offer"]);
   });
 
   it("a `prepared` one the spare has closed since is abandoned", async () => {

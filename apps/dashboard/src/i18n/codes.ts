@@ -1650,8 +1650,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Al servidor de reserva le falta una clave de cifrado necesaria para este local o tiene una distinta. Elige Parar y vuelve a unirlo al local antes de traspasarlo.",
   },
   "handover.source_check_failed": {
-    en: "The venue data did not pass the handover check. This box keeps selling. Choose Stop and follow the handover guide before trying again.",
-    es: "Los datos del local no han superado la comprobación del traspaso. Este servidor sigue vendiendo. Elige Parar y sigue la guía de traspaso antes de volver a intentarlo.",
+    en: "This box could not verify the venue data for handover. You can keep selling here. Choose Stop and follow the handover guide before trying again.",
+    es: "Este servidor no ha podido verificar los datos del local para el traspaso. Puedes seguir vendiendo aquí. Elige Parar y sigue la guía de traspaso antes de volver a intentarlo.",
   },
   "handover.settings_unreadable": {
     en: "This box could not read the settings needed for handover. Choose Stop, restart this box and check its start page before trying again.",

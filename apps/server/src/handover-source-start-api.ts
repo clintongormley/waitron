@@ -224,15 +224,22 @@ export function mountHandoverSourceStartApi(
 
   const checkSource = async (c: Context): Promise<void> => {
     let intact = false;
+    let failure: { errorCode: string; reason: "timeout" | "unfinished" } | undefined;
     try {
       intact = await (deps.checkSource ?? checkCopyIntegrity)(join(deps.venueDir, VENUE_FILE), {
         signal: c.req.raw.signal,
         limitMs: 30_000,
       });
     } catch (error) {
-      log("warn", "handover-source-start.check_failed", { errorCode: codeOf(error) });
+      failure = {
+        errorCode: codeOf(error),
+        reason: isAppError(error) && error.reason === "timeout" ? "timeout" : "unfinished",
+      };
     }
-    if (!intact) throw new AppError("handover.source_check_failed", {});
+    if (!intact) {
+      log("warn", "handover-source-start.check_failed", failure ?? { reason: "negative_result" });
+      throw new AppError("handover.source_check_failed", {});
+    }
   };
 
   const unreachable = (destinationNodeId: string): HandoverRefusal => ({
