@@ -1,7 +1,7 @@
 # Server test levers implementation plan
 
 **Goal:** Deliver measured test-only savings in unheld files and guards that follow the server shard matrix, in one PR.
-**Source:** Lane I SERVER-TEST-LEVERS, quoted in the review brief; `docs/backlog/ci.md` → “Server test time levers left after A1297”. Codex drafted this plan; Claude review and watcher clearance are pending.
+**Source:** Lane I SERVER-TEST-LEVERS, quoted in the review brief; `docs/backlog/ci.md` → “Server test time levers left after A1297”. Codex drafted this plan; Claude reviewed the corrections, and the watcher cleared it at 07:13 on 16 November in Lane I questions.md. No owner design approval is claimed.
 **Approach:** Reuse `test/fixture-salt.ts`, the archive-key cache, the host memo’s exact-input behaviour and existing workflow readers. Execute inline with `superpowers:executing-plans`, using TDD for new behaviour.
 
 ## Scope and measurement

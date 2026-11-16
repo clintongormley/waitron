@@ -1067,12 +1067,6 @@ these, which it did not build (local figures, 2 November 2026):
   load the host still pay the full derivation per check; moving the memo into a wider test setup
   must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.
 
-Guard gaps the review left:
-
-- `scripts/vitest-duration-sequencer.test.mjs` checks shard counts up to 24, so the next increase has
-  to raise that bound too.
-- Nothing compares the server coverage merge's expected blob count (25) with the shard count plus the
-  stream job; the download script refuses a wrong count only when CI runs.
 
 ## A1252: remaining server job time after the held-setup split
 
