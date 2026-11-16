@@ -1,6 +1,7 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
 import { ContentLanguageController, TickingClock, baseStyles } from "@waitron/ui";
+import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import {
   LitElement,
   type PropertyValues,
@@ -74,6 +75,14 @@ function cardLabel(card: PassCard): string {
   const first = card.orders[0];
   const table = first === undefined ? undefined : passOrderPlace(first);
   return table ? `${numbers} ${table}` : numbers;
+}
+
+type ScrollPositions = readonly (readonly [Element, number])[];
+
+function scrollPositions(element: Element): ScrollPositions {
+  return scrollAncestors(element)
+    .filter((target) => target instanceof Element)
+    .map((target) => [target, target.scrollTop] as const);
 }
 
 const REFRESH_MS = 15_000;
@@ -201,8 +210,8 @@ export class TillPassScreen extends LitElement {
   #failedRequest = 0;
   /** Set by a Fire with no answer only: a background read failing never scrolls a wall monitor. */
   #revealStale = false;
-  /** The refusal line's reveal, answering the page's scroll position it left. */
-  #leverRevealed?: Promise<number | undefined>;
+  /** Settles with the scroll positions just after the refusal line was scrolled into view. */
+  #leverRevealed?: Promise<ScrollPositions>;
   /** Card keys with a Fire out. */
   @state() private sending: ReadonlySet<string> = new Set();
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
@@ -365,24 +374,25 @@ export class TillPassScreen extends LitElement {
    * Waits for the board to redraw: its header, above the lines, can change height, and without
    * scroll anchoring that moves the line after it was scrolled into view.
    */
-  async #reveal(selector: string): Promise<number | undefined> {
+  async #reveal(selector: string): Promise<ScrollPositions> {
     await this.updateComplete;
     await this.renderRoot.querySelector("till-pass-board")?.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "nearest" });
-    return document.scrollingElement?.scrollTop;
+    const line = this.renderRoot.querySelector<HTMLElement>(selector);
+    line?.scrollIntoView({ block: "nearest" });
+    return line === null ? [] : scrollPositions(line);
   }
 
   /**
    * A refusal line drawn before this read answers is brought back into view after it redraws,
-   * unless the page has scrolled since it was revealed: the person moved it, or anchoring kept it.
+   * unless something scrolled since: the person, or the browser making up for a change above it.
    */
   async #reloadAfterPress(): Promise<void> {
     const refusal = this.leverError;
     await this.#reload();
     if (refusal === undefined || this.leverError !== refusal) return;
     await this.updateComplete;
-    const revealedAt = await this.#leverRevealed;
-    if (document.scrollingElement?.scrollTop === revealedAt)
+    const revealed = await this.#leverRevealed;
+    if (revealed?.every(([scroller, top]) => scroller.scrollTop === top))
       await this.#reveal("[data-lever-error]");
   }
 

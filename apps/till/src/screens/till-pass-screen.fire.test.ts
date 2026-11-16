@@ -5,6 +5,8 @@ import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
+import type { TillShell } from "../widgets/till-shell.js";
+import "../widgets/till-shell.js";
 import type {
   DeviceIdentity,
   DevicePassBoard,
@@ -101,13 +103,17 @@ async function flush(el: TillPassScreen): Promise<void> {
   }
 }
 
+const SCREEN_DEFAULTS: Partial<TillPassScreen> = {
+  runsPass: true,
+  deviceId: "dev-1",
+  serverOrigin: "https://box.local",
+  now: PASS_NOW,
+  reducedMotion: false,
+};
+
 async function mount(props: Partial<TillPassScreen>): Promise<TillPassScreen> {
   const { el } = await mountWidget<TillPassScreen>("till-pass-screen", {
-    runsPass: true,
-    deviceId: "dev-1",
-    serverOrigin: "https://box.local",
-    now: PASS_NOW,
-    reducedMotion: false,
+    ...SCREEN_DEFAULTS,
     ...props,
   });
   await flush(el);
@@ -676,9 +682,13 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
     boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
   const scroller = () => document.scrollingElement!;
 
-  async function pressLow(el: TillPassScreen, selector: string): Promise<void> {
+  async function pressLow(
+    el: TillPassScreen,
+    selector: string,
+    within: Element = scroller(),
+  ): Promise<void> {
     lowControl(el, selector).scrollIntoView({ block: "end" });
-    expect(scroller().scrollTop).toBeGreaterThan(0);
+    expect(within.scrollTop).toBeGreaterThan(0);
     await userEvent.click(lowControl(el, selector));
     await flush(el);
   }
@@ -688,6 +698,38 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
     const box = line!.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.bottom).toBeLessThanOrEqual(scroller().clientHeight);
+  }
+
+  function expectInViewOf(line: HTMLElement | null, within: HTMLElement): void {
+    expectInView(line);
+    const box = line!.getBoundingClientRect();
+    const frame = within.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+  }
+
+  /** The screen where the till puts it: the shell's body, or the drill-in over it; each scrolls. */
+  async function mountInShell(
+    slot: "body" | "drill",
+    props: Partial<TillPassScreen>,
+  ): Promise<{ el: TillPassScreen; within: HTMLElement }> {
+    const { el: shell } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "tablet-landscape",
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const el = document.createElement("till-pass-screen") as TillPassScreen;
+    Object.assign(el, SCREEN_DEFAULTS, props);
+    if (slot === "drill") el.slot = "drill";
+    shell.appendChild(el);
+    await shell.updateComplete;
+    await shell.updateComplete;
+    await flush(el);
+    const within = shell.shadowRoot!.querySelector<HTMLElement>(
+      slot === "drill" ? ".drill" : "main.body",
+    )!;
+    expect(getComputedStyle(within).overflowY).toBe("auto");
+    expect(within.scrollHeight).toBeGreaterThan(within.clientHeight);
+    return { el, within };
   }
 
   /** Turns off scroll anchoring, so a height change above the view moves what is on screen. */
@@ -790,6 +832,49 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
       expect(leverError(el)).not.toBeNull();
       expect(scroller().scrollTop).toBe(scrolledTo);
     });
+
+    for (const slot of ["body", "drill"] as const) {
+      it(`at ${width} px, in the shell's ${slot}, brings a Fire's refusal into view`, async () => {
+        await pageAt(width, height);
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+        });
+        const { el, within } = await mountInShell(slot, {
+          api,
+          deviceMode: true,
+          initialBoard: deviceBoard(longBoard),
+        });
+        await pressLow(el, '[data-pass-fire="group:g-12"]', within);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expectInViewOf(leverError(el), within);
+      });
+
+      it(`at ${width} px, in the shell's ${slot}, leaves it where the person scrolled it while a refused Fire's board read was out`, async () => {
+        await pageAt(width, height);
+        const read = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+        });
+        const { el, within } = await mountInShell(slot, {
+          api,
+          deviceMode: true,
+          initialBoard: deviceBoard(longBoard),
+        });
+        await pressLow(el, '[data-pass-fire="group:g-12"]', within);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expectInViewOf(leverError(el), within);
+
+        within.scrollTop = within.scrollHeight;
+        const scrolledTo = within.scrollTop;
+        expect(scrolledTo).toBeGreaterThan(0);
+        read.resolve(deviceBoard(longBoard));
+        await flush(el);
+        expect(leverError(el)).not.toBeNull();
+        expect(within.scrollTop).toBe(scrolledTo);
+      });
+    }
 
     it(`at ${width} px, brings the stale line into view when a Fire gets no answer`, async () => {
       await pageAt(width, height);
