@@ -65,22 +65,25 @@ it("records the editor without addresses and queues the old-address notice for o
   });
   expect(Date.parse(mail[0]!.notAfter) - Date.parse(mail[0]!.queuedAt)).toBe(86400000);
 });
-it.each(["own", "unchanged"])("queues and records nothing for an %s email", async (mode) => {
-  const { target, input } = await fixture(mode === "own");
-  await withTransaction(suite.db, (tx) =>
-    updatePersonDetails(tx, {
-      ...input,
-      email: mode === "unchanged" ? target.email! : input.email,
-    }),
-  );
-  expect(
-    await suite.db
-      .select()
-      .from(activityLog)
-      .where(sql`${activityLog.kind} = 'person.email_changed'`),
-  ).toEqual([]);
-  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
-});
+it.each(["own", "unchanged"])(
+  "queues no notice and records no email-change event for an %s email",
+  async (mode) => {
+    const { target, input } = await fixture(mode === "own");
+    await withTransaction(suite.db, (tx) =>
+      updatePersonDetails(tx, {
+        ...input,
+        email: mode === "unchanged" ? target.email! : input.email,
+      }),
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(sql`${activityLog.kind} = 'person.email_changed'`),
+    ).toEqual([]);
+    expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+  },
+);
 it("rolls back the email, log and queue together", async () => {
   const { target, input } = await fixture();
   await expect(

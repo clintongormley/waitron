@@ -145,7 +145,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     );
     expect(
       (await readActivityForPerson(suite.db, adminId, { kinds: ["dashboard.signed_out"] })).filter(
-        (entry) => entry.data.reason === "break_glass",
+        (entry) => entry.kind === "dashboard.signed_out" && entry.data.reason === "break_glass",
       ),
     ).toEqual([
       expect.objectContaining({
