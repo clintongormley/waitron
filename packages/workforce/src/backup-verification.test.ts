@@ -312,7 +312,10 @@ describe("complete captured workforce backup evidence", () => {
       .set(head)
       .where(sql`node_id=${retired}`);
     const [work] = await original.db.select().from(attendanceDayWork);
-    await restored.db.update(attendanceDayWork).set(work!).where(sql`id=${work!.id}`);
+    await restored.db
+      .update(attendanceDayWork)
+      .set(work!)
+      .where(sql`id=${work!.id}`);
     expect(await run()).toEqual(passed);
   });
   it.each([
