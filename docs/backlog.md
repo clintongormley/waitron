@@ -522,7 +522,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Fixed A4 presets offer browser Print / Save as PDF. The box delivers the published copy to Cloud and reports confirmation; mobile-data qualification remains. No ordering.
   [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 8, size M). [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 7, size M). [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
 - **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/menu.md#bundle-one-language-fallback-rule)
 

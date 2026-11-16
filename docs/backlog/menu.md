@@ -795,7 +795,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](menu.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
@@ -811,10 +811,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
   tab.
   [Detail](menu.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
-- **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
-  house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
-  slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
-  `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
 - **Products' full-screen Filters threshold remains unmeasured with the sidebar shown and tied to token sizes.**
   [Detail](menu.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**

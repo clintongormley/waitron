@@ -1682,8 +1682,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const rows = this.#restingColumnRows();
       const from = rows.findIndex((rest) => rest.row.dataset.columnRow === drag.key);
       const to = this.#columnDropIndex(rows);
+      const dragged = rows[from]?.row;
+      const drawnTop = dragged?.getBoundingClientRect().top;
       this.#endColumnDrag();
       if (from >= 0 && to >= 0) this.#moveColumn(drag.key, to - from);
+      if (dragged !== undefined && drawnTop !== undefined) {
+        void this.updateComplete.then(() => {
+          if (!this.chooserOpen || !dragged.isConnected) return;
+          const shift = drawnTop - dragged.getBoundingClientRect().top;
+          if (Math.abs(shift) < 0.5) return;
+          dragged.style.transform = `translateY(${shift}px)`;
+          void dragged.offsetHeight;
+          dragged.setAttribute("data-sliding", "");
+          dragged.style.removeProperty("transform");
+          void Promise.allSettled(dragged.getAnimations().map((slide) => slide.finished)).then(() =>
+            dragged.removeAttribute("data-sliding"),
+          );
+        });
+      }
       return;
     }
     this.#endColumnDrag();
