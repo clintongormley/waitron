@@ -7776,14 +7776,14 @@ async function mountPrices(client: Api = api()) {
 // Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
 // sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
 it.each([
-  ["en-GB", "12.50", "15.00", "", true],
-  ["es-ES", "12.50", "15.00", "", true],
-  ["en-GB", "1000.00", "9999.99", "", true],
-  ["es-ES", "1000.00", "9999.99", "", false],
-  ["es-ES", "1000.00", "9999.99", "Verdana", false],
+  ["en-GB", "12.50", "15.00", "12.50 – 15.00", "", true],
+  ["es-ES", "12.50", "15.00", "12,50 – 15,00", "", true],
+  ["en-GB", "1000.00", "9999.99", "1000.00 – 9999.99", "", true],
+  ["es-ES", "1000.00", "9999.99", "1000,00 – 9999,99", "", false],
+  ["es-ES", "1000.00", "9999.99", "1000,00 – 9999,99", "Verdana", false],
 ])(
-  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
-  async (locale, low, high, font, fits) => {
+  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s shown as %s, font %s)",
+  async (locale, low, high, placeholder, font, fits) => {
     await import("../dashboard-app.js");
     registerIcons(DASHBOARD_ICONS);
     const width = window.innerWidth,
@@ -7877,8 +7877,7 @@ it.each([
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const input = (key: string) =>
       rowOf(key).querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
-    // As typed into the field, with a point whatever the language.
-    expect(input("mi-lemonade").placeholder).toBe(`${low} – ${high}`);
+    expect(input("mi-lemonade").placeholder).toBe(placeholder);
     for (const key of [
       "mi-burger",
       "mi-lemonade",
