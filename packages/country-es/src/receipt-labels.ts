@@ -124,7 +124,7 @@ export const SPAIN_RECEIPT_LABELS = {
     refundNotice: "La factura original no cambia",
     refundReference: "Ref.",
     refundAmount: "Importe",
-    refundTip: "Propina",
+    refundTip: "Propina devuelta",
     refundTotal: "Devolución",
     sampleIssuerName: "Waitron - Recibo de muestra",
     sampleInvoiceNumber: "MUESTRA/1",

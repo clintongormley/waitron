@@ -15,9 +15,8 @@ import "./errors.js";
 import { createTable } from "./testing/live-table.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 
-// Joining and unjoining tables while a card refund of a bill is pending (bill payments design §5.2):
-// neither is refused, and neither changes what the bill charges.
 let venue: BillVenue;
 
 useVenueDb({
@@ -38,7 +37,11 @@ async function post(path: string, body: unknown): Promise<Answer> {
     await observedTableActionBody(
       venue.db,
       path,
-      await observedBillActionBody(venue.db, path, body),
+      await observedMoveBillBody(
+        venue.db,
+        path,
+        await observedBillActionBody(venue.db, path, body),
+      ),
     ),
   );
 }
@@ -182,6 +185,54 @@ const asking = [
 ] as const;
 
 describe("a pending card refund and the table actions", () => {
+  it("moves its guests to a free table while the refund stays pending", async () => {
+    const anna = await refundParty();
+    const before = await charges(anna.tabId);
+    const tableId = await freeTable();
+
+    const moved = await post(`/api/parties/${anna.partyId}/move`, {
+      toTableId: tableId,
+      expectedPartyRevision: revisionOf(anna.partyId),
+    });
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: anna.partyId, billIds: [anna.tabId] });
+    expect(partyOfBill(anna.tabId)).toBe(anna.partyId);
+    expect(
+      venue.db.all(sql`select table_id from party_tables
+        where party_id = ${anna.partyId} and left_at is null`),
+    ).toEqual([{ table_id: tableId }]);
+    const after = await charges(anna.tabId);
+    expect(after).toEqual(before);
+    expectPendingFigures(after);
+    await expectLocked(anna.tabId);
+  });
+
+  it("moves its whole bill to a free table while the refund stays pending", async () => {
+    const anna = await refundParty();
+    const before = await charges(anna.tabId);
+    const tableId = await freeTable();
+
+    const moved = await post(`/api/bills/${anna.tabId}/move`, {
+      to: { tableId },
+      expectedPartyRevision: revisionOf(anna.partyId),
+    });
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: expect.any(String), billId: anna.tabId });
+    const partyId = moved.json.partyId as string;
+    expect(partyId).not.toBe(anna.partyId);
+    expect(partyOfBill(anna.tabId)).toBe(partyId);
+    expect(
+      venue.db.all(sql`select table_id from party_tables
+        where party_id = ${partyId} and left_at is null`),
+    ).toEqual([{ table_id: tableId }]);
+    const after = await charges(anna.tabId);
+    expect(after).toEqual(before);
+    expectPendingFigures(after);
+    await expectLocked(anna.tabId);
+  });
+
   it("joins a free table: the bill charges the same and stays locked", async () => {
     const anna = await refundParty();
     const before = await charges(anna.tabId);

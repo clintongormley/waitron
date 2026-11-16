@@ -1138,11 +1138,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 
 
-- **A875. Check two writes the bill payments design says a pending card refund refuses.**
-  The owner's R7-1 ruling (2026-11-12) settles it: moving a bill or its guests changes nothing the bill charges, so it goes through.
-  Next: one route case each during a pending refund, then fix the design's wording. Read, not run.
-  [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
-
 - **The SumUp Solo experiments.** Still open after the 9 November cross-account session: signature-required
   cards, declined-card behavior, the statement/fee check, remaining connection
   probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
@@ -1199,10 +1194,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
   bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
   [Detail](backlog/payments.md#a793--tips-who-a-tip-belongs-to-how-it-is-shared-out-and-what-payroll-gets)
-
-- **A tip display gap** (found by A793's design, read): the Spanish refund slip says "Propina"
-  where the English says "Tip returned".
-  [Detail](backlog/payments.md#tip-display-gaps)
 
 - **Qualify concurrent reader status reads in a real browser against a silent provider, including
   the box’s HTTP/1.1 connection limit.** [Detail](backlog/payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
