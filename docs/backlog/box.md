@@ -14,8 +14,8 @@ applies today; behaviour is kept site by site. Raised by #2331's review.
 **First slice, SIGNIN-STEADY-CLOCK:** only `createPinThrottle`, `createPasswordThrottle`,
 `createPasswordResetCooldown`, `createAccountActionRateLimiter` and `createEnrolRateLimiter`.
 [Draft plan](../superpowers/plans/2026-11-16-signin-steady-clock.md), **NOT CLEARED**. Watcher queue
-authority is 2026-11-16 15:53; Claude plan review and watcher clearance of the changed test checks
-are still required. This records no owner plan approval and no implementation completion. When
+authority is 2026-11-16 15:53; Claude reviewed the draft; watcher clearance of the revised scope and changed test checks
+is still required. This records no owner plan approval and no implementation completion. When
 the slice is built, remove its rows from the open inventory and narrow this entry to what remains.
 
 ### Inventory scope
