@@ -222,6 +222,8 @@ export const venueEn = {
   "cert.refusal.unreadable": "Choose a valid .pfx or .p12 certificate file.",
   "cert.refusal.too_large": "This file is too large to be a certificate.",
   "cert.refusal.unavailable": "The box could not check this certificate. Try again.",
+  "cert.refusal.setup_stopped":
+    "Setup stopped after the invoice series were made. No invoice was issued. Select Reconnect, then Start again. Start again clears this unfinished setup so you can enter it again.",
   "cert.refusal.old_encryption": "Export the certificate again with modern encryption.",
   "cert.refusal.no_private_key": "Export the certificate again, including its private key.",
   "cert.refusal.expired": "This certificate has expired. Choose its replacement.",
@@ -486,6 +488,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.unreadable": "Elige un archivo de certificado .pfx o .p12 válido.",
   "cert.refusal.too_large": "Este archivo es demasiado grande para ser un certificado.",
   "cert.refusal.unavailable": "La caja no pudo comprobar este certificado. Inténtalo de nuevo.",
+  "cert.refusal.setup_stopped":
+    "La configuración se detuvo después de crear las series de facturas. No se emitió ninguna factura. Pulsa Reconectar y después Empezar de nuevo. Empezar de nuevo borra esta configuración incompleta para que puedas introducirla otra vez.",
   "cert.refusal.old_encryption": "Exporta el certificado de nuevo con un cifrado moderno.",
   "cert.refusal.no_private_key": "Exporta el certificado de nuevo, incluida su clave privada.",
   "cert.refusal.expired": "Este certificado ha caducado. Elige su sustituto.",

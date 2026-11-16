@@ -169,7 +169,7 @@ it("does not seal credentials when its opener is unavailable", async () => {
       sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, aeatCert()),
     ).rejects.toMatchObject({
       code: "setup.certificate_refused",
-      params: { field: "body", reason: "unavailable" },
+      params: { field: "body", reason: "setup_stopped" },
     });
   } finally {
     process.execPath = node;

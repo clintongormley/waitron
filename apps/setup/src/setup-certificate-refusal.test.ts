@@ -291,3 +291,56 @@ it("returns an unavailable fiscal check to the certificate form for retry withou
   expect(actions.error).toBe("The box could not check this certificate. Try again.");
   expect(pfxError(form.shadowRoot!)).toBeNull();
 });
+
+it("explains a stopped publication and offers the existing reconnect path to Start again", async () => {
+  const fixture = wizardApi({
+    offering: false,
+    intercept(path) {
+      if (path.endsWith("/provision"))
+        return Response.json(
+          {
+            error: {
+              code: "setup.certificate_refused",
+              params: { field: "body", reason: "setup_stopped" },
+            },
+          },
+          { status: 422 },
+        );
+    },
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  applyTokens(host);
+  mounted.push(host);
+  const app = new SetupApp();
+  app.api = fixture.api;
+  host.append(app);
+  await screen(app, "mode");
+  emit(app, "setup-patch", {
+    patch: {
+      mode: "live",
+      venue,
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+    },
+  });
+  emit(app, "setup-goto", { screen: "fiscal-test" });
+  const readiness = await screen(app, "fiscal-test");
+  await userEvent.click(readiness.shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!);
+  await expect
+    .poll(() => readiness.shadowRoot!.querySelector("[data-test=continue]"))
+    .not.toBeNull();
+  emit(app, "setup-goto", { screen: "review" });
+  await screen(app, "review");
+  emit(app, "provision-requested");
+  const stopped = await screen(app, "first-owner");
+  const actions = stopped.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-form-actions",
+  )!;
+  await actions.updateComplete;
+  const message = actions.shadowRoot!.querySelector("[data-error]")!.textContent;
+  expect(message).toContain(
+    "Setup stopped after the invoice series were made. No invoice was issued.",
+  );
+  expect(message).toContain("Start again clears this unfinished setup so you can enter it again.");
+  expect(stopped.querySelector("[data-test=reconnect-first]")).not.toBeNull();
+});

@@ -105,7 +105,7 @@ export async function sealAeatSecret(
   const cert = parseAeatCert(raw);
   const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
   if (!opened.ok && opened.reason === "unavailable")
-    throw new AppError("setup.certificate_refused", { field: "body", reason: "unavailable" });
+    throw new AppError("setup.certificate_refused", { field: "body", reason: "setup_stopped" });
 
   await withTransaction(deps.db, async (tx) => {
     await putCredential(tx, deps.ring, {

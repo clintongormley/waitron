@@ -19,6 +19,8 @@ asks you to confirm ownership again before you continue.
 
 If the box could not check the certificate, try **Next** again in setup or **Save** again in the replacement dialog. If the check repeatedly cannot finish, export the certificate again with modern encryption or choose another file.
 
+If setup stopped after creating the invoice series, use **Reconnect**, then **Start again**. Start again clears the unfinished setup so you can enter it again.
+
 ## Retry a check in Venue settings {#dashboard-check}
 
 Installing a replacement certificate asks for the [shared sign-in confirmation](staff.md#account-access).

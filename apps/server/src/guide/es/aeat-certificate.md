@@ -19,6 +19,8 @@ se te pedirá que confirmes de nuevo que eres quien inició la configuración an
 
 Si la caja no pudo comprobar el certificado, pulsa **Siguiente** de nuevo en la configuración o **Guardar** de nuevo en el diálogo de sustitución. Si la comprobación no consigue terminar tras varios intentos, exporta de nuevo el certificado con cifrado moderno o elige otro archivo.
 
+Si la configuración se detuvo después de crear las series de facturas, pulsa **Reconectar** y después **Empezar de nuevo**. Empezar de nuevo borra la configuración incompleta para que puedas introducirla otra vez.
+
 ## Repite una comprobación en Ajustes del local {#dashboard-check}
 
 Instalar un certificado sustituto pide la [confirmación de identidad compartida](staff.md#account-access).

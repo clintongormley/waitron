@@ -14,6 +14,7 @@ import {
   readNodeMembership,
   stampDeployment,
   invoiceSeries,
+  sales,
   type VenueDatabase,
 } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
@@ -1491,7 +1492,7 @@ it("the production command records a readable certificate against the committed 
   });
 });
 
-it("resumes the same production setup after the post-provision certificate opener is unavailable", async () => {
+it("stops production setup with an explicit Start again choice when its post-provision opener is unavailable", async () => {
   const f = await productionFixture(true);
   const real = certificateOpening.openCertificate;
   let refused = false;
@@ -1510,8 +1511,12 @@ it("resumes the same production setup after the post-provision certificate opene
     const before = await venue.db.select().from(invoiceSeries);
     expect(before).toHaveLength(3);
     expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
-    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
-    expect((await f.runtime.store.read())!.status).toBe("complete");
+    expect(f.output).toContain(
+      "Setup stopped after the invoice series were made. No invoice was issued. Open the box's setup page and choose Start again. It clears this unfinished setup so you can enter it again.",
+    );
+    expect(await venue.db.select().from(sales)).toEqual([]);
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(f.output.at(-1)).toBe("setup.attempt_conflict {}");
     expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
   } finally {
     opening.mockRestore();
