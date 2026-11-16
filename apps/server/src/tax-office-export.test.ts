@@ -37,10 +37,10 @@ import {
 } from "./testing/order-venue.js";
 import { mountTaxOfficeApi, type TaxOfficeApiDeps } from "./tax-office-api.js";
 import { ZIP_LIMITS, zipStream } from "./download-archive.js";
-import { confineTo, sessionHolding } from "./testing/session-holding.js";
+import { sessionHolding } from "./testing/session-holding.js";
 import { invoicePdfFileName, type SaleCopy } from "./orders-invoice-pdf.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
-import { renderTaxOfficeCsv, taxOfficeMonthEntries } from "./tax-office-export.js";
+import { renderTaxOfficeCsv } from "./tax-office-export.js";
 import type { TaxOfficeInvoice } from "./tax-office-list.js";
 
 vi.mock("./receipt-print.js", async (importOriginal) => {
@@ -430,20 +430,6 @@ describe("the month's export", () => {
     expect(drawn).toHaveLength(6);
   });
 
-  it("errors the stream when the person loses invoice.inspect before the end", async () => {
-    const counter = countingRender();
-    const inspector = await sessionHolding(db(), ["invoice.inspect"]);
-    const response = await exportMonth(mount({ render: counter.render }), "2026-01", {
-      cookie: inspector.cookie,
-    });
-    expect(response.status).toBe(200);
-    const reader = response.body!.getReader();
-    await readUntil(reader, () => counter.calls.length >= 1);
-    await confineTo(db(), inspector.personId, ["report.view"]);
-    expect(await drain(reader)).toMatchObject({ code: "authorization.not_permitted" });
-    expect(counter.calls).toHaveLength(6);
-  });
-
   it("refuses a second export while one runs, and serves the next once it ends", async () => {
     const counter = countingRender();
     const app = mount({ render: counter.render });
@@ -695,35 +681,6 @@ describe("the month's export", () => {
     }
     expect(Object.keys(await unzipped(await exportMonth(app, "2025-06")))).toHaveLength(2);
   });
-});
-
-it("errors when the last turn's authority names a different person from the first's", async () => {
-  const entries = taxOfficeMonthEntries(
-    {
-      db: db(),
-      backend: venue.backend,
-      tradingContext: venue.cfg,
-      render: () => Promise.reject(new Error("no invoice to render")),
-      stopIfAsked: () => {},
-      log: () => {},
-    },
-    {
-      month: "2025-06",
-      issued: { from: "2025-06-01", to: "2025-06-30", timeZone: "Europe/Madrid" },
-      language: "en",
-      venue: null,
-      authorizedBy: "00000000-0000-4000-8000-000000000002",
-      sessionId: managerDashboard.slice(`${MANAGEMENT_COOKIE}=`.length),
-      at: new Date(),
-    },
-  );
-  const names: string[] = [];
-  await expect(
-    (async () => {
-      for await (const entry of entries) names.push(entry.name);
-    })(),
-  ).rejects.toThrow("tax office authorisation named a different person after building");
-  expect(names).toEqual(["README.txt", "invoices.csv"]);
 });
 
 describe("the month's CSV and README", () => {

@@ -238,8 +238,6 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
           issued,
           language: toLanguage(locale),
           venue,
-          authorizedBy,
-          sessionId,
           at: new Date(),
         };
       }).catch((error: unknown) => {

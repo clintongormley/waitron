@@ -1,0 +1,223 @@
+import "./errors.js";
+import { randomUUID } from "node:crypto";
+import { createWriteStream, rmSync } from "node:fs";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
+import { codeOf, type Logger } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
+import { zipStream } from "./download-archive.js";
+import type { JobDefinition } from "./job-runner.js";
+import type { TaxOfficeMonth } from "./tax-office-export.js";
+
+export type MonthDownloadView =
+  | { status: "none" }
+  | { status: "building"; id: string; month: string }
+  | { status: "ready"; id: string; month: string; bytes: number; expiresAt: string }
+  | { status: "failed"; id: string; month: string };
+
+export const TAX_OFFICE_KEEP_MS = 3_600_000;
+export const TAX_OFFICE_ROOM_BYTES = 256 * 1024 ** 2;
+
+export interface TaxOfficeMonthBuilds {
+  view(personId: string): MonthDownloadView;
+  /** Synchronous, so two requests cannot both pass; throws tax_office.export_running (D3). */
+  claim(personId: string, month: string): { claimed: boolean; view: MonthDownloadView };
+  /** After the request's transaction commits: hands the build its inputs and wakes the job. */
+  begin(personId: string, month: TaxOfficeMonth): void;
+  /** The request's transaction failed after `claim`. */
+  release(personId: string): void;
+  file(personId: string): { id: string; path: string; bytes: number; month: string } | null;
+  /** The file was sent in full: deletes it and the record. A later id leaves the record alone. */
+  sent(personId: string, id: string): void;
+  job(): JobDefinition;
+}
+
+type Entries = AsyncIterable<{ name: string; content: string | Uint8Array }>;
+
+export interface TaxOfficeMonthBuildsDeps {
+  dir: string;
+  now: () => Date;
+  entries: (month: TaxOfficeMonth, stopIfAsked: () => void) => Entries;
+  changed: () => void;
+  wake: () => void;
+  log: Logger;
+  keepMs?: number;
+}
+
+type BuildRecord =
+  | {
+      status: "building";
+      id: string;
+      month: string;
+      input: TaxOfficeMonth | null;
+      started: boolean;
+    }
+  | { status: "ready"; id: string; month: string; bytes: number; until: number }
+  | { status: "failed"; id: string; month: string; until: number };
+
+export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxOfficeMonthBuilds {
+  const keepMs = deps.keepMs ?? TAX_OFFICE_KEEP_MS;
+  const records = new Map<string, BuildRecord>();
+  const pathOf = (id: string) => join(deps.dir, `${id}.zip`);
+
+  const viewOf = (record: BuildRecord | undefined): MonthDownloadView => {
+    if (record === undefined) return { status: "none" };
+    const { id, month } = record;
+    switch (record.status) {
+      case "building":
+        return { status: "building", id, month };
+      case "ready":
+        return {
+          status: "ready",
+          id,
+          month,
+          bytes: record.bytes,
+          expiresAt: new Date(record.until).toISOString(),
+        };
+      case "failed":
+        return { status: "failed", id, month };
+    }
+  };
+
+  const building = (): [string, Extract<BuildRecord, { status: "building" }>] | null => {
+    for (const [personId, record] of records)
+      if (record.status === "building") return [personId, record];
+    return null;
+  };
+
+  const forget = (personId: string, record: BuildRecord): void => {
+    if (records.get(personId) !== record) return;
+    records.delete(personId);
+    if (record.status === "ready") rmSync(pathOf(record.id), { force: true });
+    deps.changed();
+  };
+
+  async function build(
+    personId: string,
+    record: Extract<BuildRecord, { status: "building" }>,
+    input: TaxOfficeMonth,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const path = pathOf(record.id);
+    try {
+      await mkdir(deps.dir, { recursive: true });
+      const zip = zipStream(
+        deps.entries(input, () => signal.throwIfAborted()),
+        input.at,
+      );
+      await pipeline(
+        Readable.fromWeb(zip as WebReadableStream<Uint8Array>),
+        createWriteStream(path),
+      );
+      signal.throwIfAborted();
+      const { size } = await stat(path);
+      records.set(personId, {
+        status: "ready",
+        id: record.id,
+        month: record.month,
+        bytes: size,
+        until: deps.now().getTime() + keepMs,
+      });
+    } catch (error) {
+      await rm(path, { force: true });
+      if (signal.aborted) {
+        records.delete(personId);
+      } else {
+        deps.log("error", "tax_office.build_failed", {
+          errorCode: codeOf(error),
+          errorClass: error instanceof Error ? error.name : typeof error,
+        });
+        records.set(personId, {
+          status: "failed",
+          id: record.id,
+          month: record.month,
+          until: deps.now().getTime() + keepMs,
+        });
+      }
+    }
+    deps.changed();
+  }
+
+  async function expire(): Promise<Date | null> {
+    const at = deps.now().getTime();
+    let next: number | null = null;
+    for (const [personId, record] of [...records]) {
+      if (record.status === "building") continue;
+      if (record.until <= at) {
+        records.delete(personId);
+        if (record.status === "ready") await rm(pathOf(record.id), { force: true });
+        deps.changed();
+      } else if (next === null || record.until < next) {
+        next = record.until;
+      }
+    }
+    return next === null ? null : new Date(next);
+  }
+
+  const job: JobDefinition = {
+    name: "tax_office.month_zip",
+    applies: () => true,
+    minSleepMs: 1_000,
+    maxSleepMs: 3_600_000,
+    backoff: { firstMs: 60_000, maxMs: 3_600_000 },
+    async pass({ signal }) {
+      const current = building();
+      if (current !== null) {
+        const [personId, record] = current;
+        if (record.input !== null && !record.started) {
+          record.started = true;
+          await build(personId, record, record.input, signal);
+        }
+      }
+      return { nextDueAt: await expire() };
+    },
+  };
+
+  return {
+    view: (personId) => viewOf(records.get(personId)),
+    claim(personId, month) {
+      const current = building();
+      if (current !== null) {
+        const [holder, record] = current;
+        if (holder === personId && record.month === month)
+          return { claimed: false, view: viewOf(record) };
+        throw new AppError("tax_office.export_running", {});
+      }
+      const earlier = records.get(personId);
+      if (earlier?.status === "ready") rmSync(pathOf(earlier.id), { force: true });
+      const record: BuildRecord = {
+        status: "building",
+        id: randomUUID(),
+        month,
+        input: null,
+        started: false,
+      };
+      records.set(personId, record);
+      deps.changed();
+      return { claimed: true, view: viewOf(record) };
+    },
+    begin(personId, month) {
+      const record = records.get(personId);
+      if (record?.status !== "building") return;
+      record.input = month;
+      deps.wake();
+    },
+    release(personId) {
+      const record = records.get(personId);
+      if (record?.status === "building" && !record.started) forget(personId, record);
+    },
+    file(personId) {
+      const record = records.get(personId);
+      if (record?.status !== "ready") return null;
+      return { id: record.id, path: pathOf(record.id), bytes: record.bytes, month: record.month };
+    },
+    sent(personId, id) {
+      const record = records.get(personId);
+      if (record?.status === "ready" && record.id === id) forget(personId, record);
+    },
+    job: () => job,
+  };
+}

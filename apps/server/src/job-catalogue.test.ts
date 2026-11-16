@@ -18,6 +18,7 @@ describe("job catalogue", () => {
       "mail.send",
       "menu.activation",
       "payments.reconcile",
+      "tax_office.month_zip",
     ]);
     for (const entry of Object.values(JOB_CATALOGUE)) {
       if ("keepRunning" in entry.stepdown) expect(entry.stepdown.keepRunning.trim()).not.toBe("");
