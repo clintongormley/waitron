@@ -35,10 +35,18 @@ export function migrationSets(repoRoot: string): string[] {
  */
 export type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
 
-export function headSnapshot(repoRoot: string, set: string): HeadSnapshot {
+export function migrationJournal(
+  repoRoot: string,
+  set: string,
+): { idx: number; tag: string; when: number }[] | null {
   const journal = join(repoRoot, set, "meta", "_journal.json");
-  if (!existsSync(journal)) return { kind: "missing" };
-  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
+  if (!existsSync(journal)) return null;
+  return JSON.parse(readFileSync(journal, "utf8")).entries;
+}
+
+export function headSnapshot(repoRoot: string, set: string): HeadSnapshot {
+  const entries = migrationJournal(repoRoot, set);
+  if (entries === null) return { kind: "missing" };
   if (entries.length === 0) return { kind: "empty" };
   const head = Math.max(...entries.map((entry) => entry.idx));
   const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);

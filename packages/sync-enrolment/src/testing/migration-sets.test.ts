@@ -3,7 +3,13 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { filesUnder, headSnapshot, migrationSets, migrationSqlFiles } from "./migration-sets.js";
+import {
+  filesUnder,
+  headSnapshot,
+  migrationJournal,
+  migrationSets,
+  migrationSqlFiles,
+} from "./migration-sets.js";
 
 /** A throwaway repository root holding exactly the files a case writes into it. */
 function fixtureRoot(files: Record<string, string>): string {
@@ -21,7 +27,26 @@ afterAll(() => {
 });
 
 const journal = (...idx: number[]): string =>
-  JSON.stringify({ entries: idx.map((i) => ({ idx: i, tag: `${i}_x` })) });
+  JSON.stringify({ entries: idx.map((i) => ({ idx: i, tag: `${i}_x`, when: i + 1 })) });
+
+describe("migrationJournal", () => {
+  const set = join("packages", "p", "drizzle");
+
+  it("distinguishes a missing journal from an empty journal", () => {
+    const missing = fixtureRoot({ "packages/p/drizzle/0000_x.sql": "" });
+    const empty = fixtureRoot({ "packages/p/drizzle/meta/_journal.json": journal() });
+    expect(migrationJournal(missing, set)).toBeNull();
+    expect(migrationJournal(empty, set)).toEqual([]);
+  });
+
+  it("retains every entry's index, tag and timestamp in journal order", () => {
+    const root = fixtureRoot({ "packages/p/drizzle/meta/_journal.json": journal(2, 0) });
+    expect(migrationJournal(root, set)).toEqual([
+      { idx: 2, tag: "2_x", when: 3 },
+      { idx: 0, tag: "0_x", when: 1 },
+    ]);
+  });
+});
 
 describe("filesUnder", () => {
   it("lists regular files in nested directories, relative to the root and sorted", () => {

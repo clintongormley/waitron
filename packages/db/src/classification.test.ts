@@ -1,24 +1,21 @@
 import { triggerRaised } from "./constraint-target.js";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { tablesCreatedBy } from "@waitron/sync-enrolment";
+import { migrationSqlFiles } from "@waitron/sync-enrolment/testing/migration-sets.js";
 import { CORE_CHANGE_SOURCES, CORE_CLASSIFICATION } from "./classification.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
+const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
-/** The tables core's migrations LEAVE IN EXISTENCE — CREATEs minus later DROPs, a RENAME
- * counting as a drop of the old name and a create of the new, in filename order (`readdirSync`
- * does not sort). */
 function tablesInDrizzle(): Set<string> {
-  const files = readdirSync(DRIZZLE)
-    .filter((f) => f.endsWith(".sql"))
-    .sort()
-    .map((f) => readFileSync(join(DRIZZLE, f), "utf8"));
+  const files = migrationSqlFiles(REPO_ROOT, "packages/db/drizzle").map((file) =>
+    readFileSync(join(REPO_ROOT, file), "utf8"),
+  );
   return tablesCreatedBy(files);
 }
 

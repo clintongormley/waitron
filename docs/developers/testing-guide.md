@@ -770,6 +770,26 @@ copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
 lock files, the inline Node script in `deploy/waitron.sh`, and script and bench fixtures such as
 `apps/server/scripts/cloud-backup-fixture.ts`) keep their runtime's own limit.
 
+## A small coverage merge check does not qualify a package's worker limit
+
+On 16 November 2026, Node v26.13.0 and Vitest/coverage-v8 4.1.12, a disposable two-file
+fixture exercised the two sides of one ternary expression. Each arm passed two tests and
+reported the same branch map and counts, `[1, 1]`, with `--maxWorkers 1` and `--maxWorkers 2`.
+The two-worker arm recorded distinct processes with overlapping test intervals. Running only
+the first file reported `[1, 0]` and failed the fixture's 100% branch threshold.
+
+Those runs check this small complementary-branch merge. They do not recreate a package's
+intermittent coverage loss under concurrent workspace load. The installed worker's
+`onAfterRunFiles` collects coverage and sends it through `onAfterSuiteRun`; reading that path
+is not a measurement of lost branches. Keep per-package worker limits until you measure the
+relevant loaded-runner condition.
+
+For the older payments observation, run `git show edeb8346656cd0690a0155147d4ac358723d278e`.
+Its #558 receipt records 100% branch coverage for `store.ts` alone, 83.78% in a parallel full
+run, then 100% with one fork. The same receipt's 24 September 2026 recheck found 170/174
+branches at both one and six workers. These are historical observations, not a current
+qualification of the other packages.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is
@@ -2040,6 +2060,37 @@ own `process.stderr.write` was not tried. To see a passing test's output from an
 unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the output was hidden
 with either set and shown with neither; passing
 `--reporter=default` instead has not been measured.
+
+Vite has a separate browser-console forwarding path. A902's 14 November 2026 receipt used
+Vite 8.3.4 in `apps/till`:
+
+```sh
+pnpm exec vitest run src/till-app.test.ts -t 'does not leave the dialog busy when a step after the switch throws'
+```
+
+With `AI_AGENT` and `CLAUDECODE` set, the passing run printed a `[vite] (client) [Unhandled rejection]`
+TypeError about reading `approvedProfiles` from null, with its stack. With both variables unset,
+and again with every `CLAUDE*`, `AI_AGENT` and `CODEX*` variable unset, that Vite line was absent,
+but Vitest still printed a bare `PromiseRejectionEvent`. All those runs passed. The finishing
+review reported no printed rejection with both variables set and `server.forwardConsole: false`
+in the till configuration; that last result is the reviewer's report. Dashboard already disables
+forwarding. Whether the other browser packages should do so remains the owner's choice.
+
+## The setup optimizer comparison on Vite 8 was inconclusive
+
+On 16 November 2026, macOS, Node v26.13.0, Vite 8.3.8 and Vitest 4.1.12, two fresh-cache
+runs selected `apps/setup/src/main.popover.test.ts` and
+`apps/setup/src/widgets/test-helpers.a11y.test.ts`. Each passed nine tests. One retained setup's
+`optimizeDeps.include`; the other replaced only that list with `[]`. A temporary config imported
+the real setup configuration; each arm used a separate empty external `cacheDir`, unlike CI's
+normal cache location. Both ran through `scripts/run-with-deadline.mjs 180 --diagnostics`.
+
+Neither arm logged an unexpected test reload or an outdated optimized dependency. Optimizer
+metadata included `axe-core` and the popover polyfill in both; only the explicit-include arm
+listed `lit/directives/unsafe-html.js`. Metadata shows optimization, not execution of each
+entry. In particular, the startup case replaces the Popover startup function. This control
+therefore does not establish that the include list prevents a reload, or that removing it
+is sound for all setup files. Keep the includes. Dashboard, till and UI were not compared.
 
 ## A child that loads the Stripe SDK writes a line to its error output under Claude Code
 

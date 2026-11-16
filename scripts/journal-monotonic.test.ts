@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { migrationJournal } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Every migration set's journal must be strictly increasing in `when`. Drizzle decides what to
@@ -47,11 +48,11 @@ function journalPathOf(from: string): string {
   return join(resolve(join(ROOT, "packages/migrations"), from), "meta", "_journal.json");
 }
 
-/** A set's journal entries, or `[]` when the folder has moved — which the anchor below catches. */
 function journalEntries(from: string): JournalEntry[] {
-  const journalPath = journalPathOf(from);
-  if (!existsSync(journalPath)) return [];
-  return (JSON.parse(readFileSync(journalPath, "utf8")) as { entries: JournalEntry[] }).entries;
+  const set = relative(ROOT, resolve(join(ROOT, "packages/migrations"), from));
+  const entries = migrationJournal(ROOT, set);
+  expect(entries, `${set}: missing journal`).not.toBeNull();
+  return entries!;
 }
 
 /** Every entry whose `when` can never apply, in journal order. */
@@ -66,7 +67,6 @@ function outOfOrder(entries: JournalEntry[]): string[] {
 }
 
 describe("every migration set's journal is strictly increasing", () => {
-  // A set whose folder moves reads as zero entries, and zero entries are never out of order.
   it("discovers every set's journal (guards against a vacuous pass)", () => {
     for (const set of MANIFEST) {
       expect(existsSync(journalPathOf(set.from)), `${set.name}: no journal at ${set.from}`).toBe(

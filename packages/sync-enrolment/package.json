@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing/migration-sets.js": "./src/testing/migration-sets.ts"
   },
   "scripts": {
     "test": "vitest run",

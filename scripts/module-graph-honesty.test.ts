@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { stripSql } from "../packages/sync-enrolment/src/migration-tables.js";
 import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
@@ -103,16 +104,10 @@ function discoverDrizzlePackages(): DrizzlePackage[] {
   const discovered: DrizzlePackage[] = [];
   for (const [packageDir, moduleName] of packageDirToModule()) {
     const drizzleDir = join(PACKAGES_DIR, packageDir, "drizzle");
-    let entries: string[];
-    try {
-      entries = readdirSync(drizzleDir);
-    } catch {
-      // The vacuous-pass anchor's floor catches a discovery that silently found too few packages.
-      continue;
-    }
-    const sqls = entries
-      .filter((name) => name.endsWith(".sql"))
-      .map((name) => readFileSync(join(drizzleDir, name), "utf8"));
+    if (!existsSync(drizzleDir)) continue;
+    const sqls = migrationSqlFiles(REPO_ROOT, relative(REPO_ROOT, drizzleDir)).map((file) =>
+      readFileSync(join(REPO_ROOT, file), "utf8"),
+    );
     discovered.push({ moduleName, packageDir, sqls });
   }
   return discovered;

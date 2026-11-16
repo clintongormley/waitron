@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
+import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
@@ -868,21 +869,14 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "staffing_days_weekday_ck",
 ];
 
-/** Every migration set, applied into one database in the manifest's order, as the product does. */
+// Scan every SQL file, including files outside the product journal.
 function buildSchema() {
   const connection = new DatabaseSync(":memory:");
   for (const module of modulesWithSets(ALL_MODULES)) {
     const drizzleDir = join(PACKAGES_DIR, packageDirOf(module), "drizzle");
-    let entries;
-    try {
-      entries = readdirSync(drizzleDir);
-    } catch {
-      // A descriptor whose package ships no `drizzle/` directory. The anti-vacuity floors below
-      // catch a discovery that found too little.
-      continue;
-    }
-    for (const name of entries.filter((entry) => entry.endsWith(".sql")).sort()) {
-      for (const statement of readFileSync(join(drizzleDir, name), "utf8").split(
+    if (!existsSync(drizzleDir)) continue;
+    for (const file of migrationSqlFiles(REPO_ROOT, relative(REPO_ROOT, drizzleDir))) {
+      for (const statement of readFileSync(join(REPO_ROOT, file), "utf8").split(
         "--> statement-breakpoint",
       )) {
         const trimmed = statement.trim();
