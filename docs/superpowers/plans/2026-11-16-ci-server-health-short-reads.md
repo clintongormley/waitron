@@ -26,28 +26,35 @@ the driver continues that diagnosis separately, without claiming this repair sol
 Reuse the inventory reader, optional planner-discovery callback and existing API fixtures.
 No workflow, shared-script, controller, cache, record or cancellation-policy change.
 
-- [ ] **Red:** in the health suite, run real `healthCommand("check", …)` against
-      the captured 11-of-12 workflow shape and an observed old queued server job with
-      free capacity. Expect `SERVER STUCK` naming its run, strict job reads, the
-      shortfall diagnostic and no writes. Watch today's inventory-unavailable answer fail.
-- [ ] Cover the queued and in-progress scan requests, a partial observation without a
-      stall, and the existing reread finding a missing row. Keep existing full-server,
-      malformed/duplicate/excess/count-drift, strict jobs and cancellation assertions.
-- [ ] **Green:** generalize the optional discovery callback for `check` only. Accept
-      collected workflow rows at an empty page after the existing single immediate
-      reread, preserving stable-total validation. Keep planner diagnostic wording;
-      report check path/page/read/totals/count/IDs with the existing diagnostic builder.
-      A partial no-stall answer says it inspected returned rows and may omit other work.
-- [ ] Preserve default `serverHealth`, routing, `recover`, `probe`, completed-traffic
-      reads and all cancellation job checks. The opt-in never reaches a job inventory.
-      Request explicit watcher clearance for changing only `check`/`workflow_runs` in
-      `identifies the refused $key read in $command without writes` (health suite:1402).
+- [ ] **Red:** reproduce the captured queued list: 11 of 12 rows, missing target,
+      no observed stall. Assert that `check` inspects returned jobs and reports a
+      counted partial observation, not inventory-unavailable or global health.
+      This tolerance changes the actual capture's reporting, not its missed pickup.
+- [ ] One synthetic observed-stall case shows returned rows remain useful: an old
+      queued server job with free capacity produces the existing `SERVER STUCK`.
+      Preserve the single reread finding a missing row and complete-list behavior.
+- [ ] **Green:** pass the existing fourth-argument discovery callback to `check`'s
+      `serverHealth` call, enabled only for the **queued workflow-run list**. Keep
+      in-progress lists strict: missing running work would make the global stall
+      assertion unsound. Accept queued rows only after the existing reread ends empty
+      and short with stable totals. Let the caller choose the diagnostic prefix;
+      preserve the planner message bytes and existing metadata builder.
+- [ ] A partial success reports inspected/advertised counts and says unread runs may
+      contain waiting work. It never contains `No stalled server queue`; the step
+      remains green and the existing failed-run watcher does not alert on it.
+      A queued run with assigned work can still be omitted; this observation is limited.
+- [ ] Preserve default `serverHealth`, routing, `recover`, `probe`, strict job and
+      cancellation reads, full-server suppression and malformed/duplicate/excess/drift
+      refusals. The existing check/in-progress refusal test remains unchanged.
+      A short completed-history read can still prevent a global stall conclusion.
 - [ ] Run `pnpm exec vitest run scripts/ci-server-health.test.mjs scripts/ci-hosted-route.test.mjs`.
-      Read counts; unchanged baseline at 7558cfb36e passed 234 cases. Audit strict-standalone
-      prose across the listed docs. Keep broad routing qualification and A935 open;
-      fixtures establish no natural recovery or GitHub-internal cause.
+      The unchanged baseline passed 234 cases. Update strict-standalone prose in the
+      listed docs with a few sentences; retain the broad routing qualification and A935.
+      These fixtures prove neither natural recovery nor GitHub's internal cause.
 
-**Schedule proposal, separately cleared before implementation:** reuse the machine-local
+**Schedule proposal, separately cleared before implementation:** No, schedule alone is
+not enough. The existing hosted `server-queue-watchdog` dispatches health but depends
+on `changes`, so it cannot rescue a waiting planner (`ci.yml:4002,4160`). Reuse the machine-local
 `~/waitron-campaign-shared/watch-stalls.sh` server-stuck alarm. When its existing
 status-backed conditions find old waiting work, free slots and no recent admission,
 read Server health history. With no queued/running pass and none created for ten
@@ -59,7 +66,12 @@ Mac off and GitHub/API outages remain limits; schedule alone cannot guarantee ca
 | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [GitHub schedule docs](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), read 2026-11-16 | “The `schedule` event can be delayed”; “some queued jobs may be dropped.” | Keep an independent trigger available; this capture proves only the measured gap. |
 
-Expected physical additions plus deletions: production 30–60, tests 80–140, docs
-80–110, total 190–310; outside scope opinion above 465. One repair PR, focused tests,
+Expected physical additions plus deletions: production 5–20, tests 40–85, docs
+80–90 including this plan; total 125–195, outside scope opinion above 292.5.
+The product documentation needs about 15 changed lines; the rest is this plan. One repair PR, focused tests,
 required Claude run-it review/fixes read, signed commits, normal hook, current-head CI
 and authorised landing. Record changed test checks; preserve the qualification remainder.
+
+Claude reviewed the initial plan once (218 seconds). Driver revisions narrow the
+exception to queued discovery, preserve every existing refusal assertion, name the
+actual missing-target capture, and shrink the build. Watcher clearance is pending.
