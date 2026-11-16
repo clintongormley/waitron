@@ -1,27 +1,27 @@
-# A1092 — document the unreproduced partial kitchen queue
+# A1092 — keep the latest kitchen queue across a Spanish switch
 
-Reference: Lane F `~/waitron-campaign-f/queue.md`, KITCHEN-SCREEN-MISSING-ORDERS, watcher feed 2026-11-16 22:24; `RUNNER.md` governs execution.
-Queued fallback: “If several honest attempts do not reproduce it, write down exactly what was run and narrow the entry to what is left, docs-only, rather than guessing a fix.”
-Status: written by the separate GPT-6.1 Sol high-effort plan writer; awaits the sole Claude plan read and watcher clearance. No backlog edits before clearance; neither is owner approval.
+Lane F queue, KITCHEN-SCREEN-MISSING-ORDERS: the kitchen screen switched to Spanish must keep every queued order; reproduce first, find which read/redraw drops them, fix with a failing test first.
+Authority: watcher 2026-11-16 23:08 cleared the fix route after reproduction, requiring this smallest existing-read/snapshot replacement, one Claude re-read, then watcher clearance. No owner design approval is claimed; no product code is written yet.
+The sole Claude read rejected the docs-only proposal (`~/waitron-campaign-f/receipts/kitchen-screen-missing-orders-20261116/plan-review.md`); discard its unreproduced qualification.
 
-Finish line: readers can distinguish the historical report from the dated attempts that did not reproduce it. Keep A1092 open, with a short index entry linking to its evidence and remaining unknowns; claim no product improvement.
-Reuse the existing backlog index/detail structure and retained driver experiments; change no application code, tests, support or generated files.
-Files: this plan, `docs/backlog.md`, and `docs/backlog/kitchen.md` only. Forecast, including plan: documentation +35–55/−3–5 lines; production/tests/support/generated +0/−0 each.
+Reproduction supplied by the driver, base `8d65` after #3575: scratch real Chromium app test booted [2,4], refreshed to [1,2,4,7], then ES restored [2,4]; `arriving-red.log`: 1 failed, 1179 skipped. Scratch probe removed.
+Own `wa-wt` demo, native Station screen: load [1,2], send two orders, wait for [1,2,3,4], switch ES → [1,2]; fresh API still [1,2,3,4], reload restores all four, no page errors. Retained outside repo: `live-arriving.cjs` / `live-arriving-results.json` in the same receipts directory.
+This reproduces the historical shape, not its exact cause. Earlier fixed-queue probes could not expose arrivals; the held request was cancelled on remount and proved no late delivery.
 
-Retained evidence (driver experiments, 2026-11-16):
-- Base: clean main `8d65e53f22211cfc6eab8ddceda963b6b94d8873`, after #3575 landed; this does not establish what caused the historical report.
-- Temporary real Chromium redraw probe: fixed API queue [1,2,4,7], en-GB→es-ES→en-GB→es-ES at widths 390/1280; 2 passed. Probe removed, production/test tree clean. The first selector counted cards while Overview showed four dishes; selecting Waiting on each redraw corrected that control error.
-- Live own `wa-wt` demo slot 1, fresh isolated state: table parties 1/2/4/7, Bravas/Croquettes/Prawns/Omelette fired through public till API, no payment; actual order numbers [1,2,3,4]. Dedicated Station screen and real server, native language chooser, same switches and reload at 1280/390: all ten rendered card sets matched fresh `/api/device/station-screen` queue reads.
-- Held-refresh repeat: hold the existing 15-second refresh response from the real server, switch to Spanish before releasing it, then English/Spanish/reload at 1280/390; all ten card/API snapshots matched [1,2,3,4]. Driver opened Spanish desktop/phone captures: four cards present, lower cards scroll. This does not explain the historical loss.
-- Local receipts: `~/waitron-campaign-f/receipts/kitchen-screen-missing-orders-20261116/`, files `redraw-probe.txt`, `redraw-probe-final.log`, `live-probe.cjs`, `live-probe-results.json`, `held-probe.cjs`, `held-probe-results.json`; keep scripts/results outside the repository.
+Trace: `till-app.ts` clears `initialDeviceStation` at reboot, sets it from the boot read, and passes it through the kitchen body and station drill; each screen consumes it once. The locale-keyed shell remount therefore reuses the boot-only snapshot.
+Reuse that field as the latest successfully adopted raw `DeviceStationScreen`; preserve the cold-boot fast path, failures and newest-read checks. No new persistence, timer, read or queue model, nor extra read on locale change.
+Files: `apps/till/src/screens/till-station-screen.ts`, `apps/till/src/till-app.ts`, existing `apps/till/src/till-app.test.ts`, `docs/backlog.md`, this plan only.
+Out of scope: layout, words, other-language behaviour changes, pass screens and dark-screen alert. Guide actions are unchanged; no guides or new backlog detail.
 
-- [ ] After clearance, add `## A1092. Historical partial queue after Spanish switch` in `docs/backlog/kitchen.md`. Preserve the original 2026-10-25 observation: #2/#4 shown while the queue also held #1/#7; reload restored them; a second switch did not lose them; cause unknown and A789 slice 4 did not change the kitchen screen.
-- [ ] Add the dated experiments above, their exact scope and receipt paths. Record that `test -d ~/waitron-campaign-c/a789-4-shots/` returned status 1; original screenshots 60/61 are unavailable, and exact original station configuration, state and timing are unknown.
-- [ ] Name the evidence still needed: a repeatable mismatch, paired screen and station API queue at that moment, station/device configuration and dish states, selected view, and language/refresh/reload timing. Do not add instrumentation to obtain it in this item.
-- [ ] Shorten `docs/backlog.md` A1092 to the historical unreproduced partial queue and link to `backlog/kitchen.md#a1092-historical-partial-queue-after-spanish-switch`. Keep the report open; the queued deletion applies only to a completed fix.
+- [ ] After the Claude re-read and watcher clearance, add one real-app browser regression named `keeps the latest station queue across Spanish and English switches` in `till-app.test.ts`; mock only the server API boundary, never emit a synthetic snapshot event.
+- [ ] Boot queue [2,4], change the API reply to [1,2,7] (arrivals plus completed #4), advance the existing refresh and assert exactly [1,2,7] on rendered cards; switch ES then EN and assert that same set immediately after each redraw, before another refresh.
+- [ ] Reuse the interval pattern near `till-app.test.ts:24099`: fake only `setInterval`/`clearInterval`, advance 15,000 ms, flush updates, restore timers and language. Run `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'keeps the latest station queue across Spanish and English switches'`; require the card assertion to fail with stale [2,4] before production edits.
+- [ ] In `#adoptDeviceStation`, retain the raw answer and dispatch app-owned `station-screen-snapshot` with raw `DeviceStationScreen` detail, `bubbles: true`, `composed: true`, for adopted snapshots. Delete the misleading “later re-connect ... never reuses a stale initial” comment.
+- [ ] In `till-app.ts`'s existing outer `.app` delegation, handle `CustomEvent<DeviceStationScreen>`, stop propagation and assign its detail to `initialDeviceStation`. Detached old screens cannot bubble to that wrapper; keep existing newest-read admission unchanged.
+- [ ] Run the focused regression green. In a disposable copy, delete snapshot propagation and rerun it: require failure at the owning card assertion, then discard only that copy. No duplicate event microtest.
+- [ ] Keep existing station-screen cold-boot/no-extra-read, failed-refresh retention and older-response assertions. Run both full files: `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/screens/till-station-screen.test.ts`; inspect test counts and failures.
+- [ ] LOOK at the real own-demo screen in EN/ES, light/dark, widths 390/1280, with newly arrived and removed cards; compare rendered sets with fresh API reads across switches. Keep screenshots outside git.
+- [ ] After the fix passes, delete A1092 from `docs/backlog.md`; `docs/backlog/kitchen.md` has no A1092 detail to remove or create. Check `git diff --check` and changed paths.
 
-Verification and landing (driver, after clearance):
-- [ ] Run `git diff --check`; inspect the full changed prose against retained scripts/results and the original report. Use `git diff --name-only` plus `git status --short` to confirm only these docs paths changed; check that A1092 remains open and its detail link resolves.
-- [ ] No new test suite, browser rerun, instrumentation, speculative fix, layout, wording or language behaviour change; make no claim of “fixed”, “impossible” or “no current bug”, and do not attribute the historical report to scrolling or tab selection.
-- [ ] Use the docs-only workflow: signed `git commit -s`, acquire the lane's own landing lock, update main and fast-forward/push with normal hooks, run main's `pnpm install`, release only the acquired lock, and verify the landing's own CI result. No PR or built-code reviews.
-- [ ] Remove only this item's worktree/branch and own runtime state/processes; retain small text receipts and record the landed SHA and remaining open A1092 in lane progress.
+Forecast: production +12–25/−2–5, tests +45–75/−0, docs +25–40/−30–40 including this replacement and backlog deletion; support/generated 0. Stop for the watcher if a larger model is needed.
+Execution/landing: RUNNER already authorises finish/land. After clearance and implementation, use normal `finish-branch` whole-branch reviews (concurrency risk), hooks, scoped types, current-head CI and the lane landing lock; no extra owner approval. This correction performs no review, implementation, commit or landing.
