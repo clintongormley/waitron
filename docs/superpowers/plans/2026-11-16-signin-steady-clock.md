@@ -1,0 +1,35 @@
+# Sign-in limits on a steady clock
+
+**Draft, NOT CLEARED.** Watcher queue: 2026-11-16 15:53, quoted in this request. No owner plan approval. Parent obtains one Claude review and watcher clearance before building.
+
+**Finish line:** five in-memory limiter families ignore wall-clock steps; preserve limits, waits, windows, keys and refusal payloads. [Inventory/input trace](../../backlog/box.md#one-steady-clock-helper-instead-of-hand-written-clock-step-back-guards). One PR; exclude persisted timers, handover-emergency, fiscal/drain, other watches and #3528.
+
+1. Add `steadyNow(): number` returning `performance.now()` in `packages/shared/src/steady-clock.ts`; export through `packages/shared/src/index.ts`. Shared date/formatting helpers and fiscal's trusted-date clock do not fit. No framework/injection machinery.
+2. In P/W/A/E's `.ts` siblings, default existing `now` options to `steadyNow`. Change `createPinThrottle`'s private idle/sweeps, `createPasswordThrottle`'s entry/bucket/fold/sweeps, `createPasswordResetCooldown`, `createAccountActionRateLimiter`, `createEnrolRateLimiter`: remove backward-step guards; retain elapsed expiry. Keep exported `pinThrottleIdle`, `pinThrottleUnlockAt`, `pinThrottleRetryAfterSeconds` unchanged for persisted wall timestamps; reuse unlock/retry arithmetic. Keep bounds, overflow, in-flight exclusion, zero sentinels and read-only probes.
+3. Leave `packages/provisioning/src/first-setup-owner.ts:137–155,238–272` unchanged: steady `now` feeds `node-key-reissue`'s password throttle and creates/checks all purposes' five-minute grants.
+4. TDD: watch failures, implement minimally, rerun. Tests: `packages/shared/src/steady-clock.test.ts` and P/W/A/E. Control wall/steady clocks independently; prove default wiring, both wall-step directions, boundaries, retained streaks/caps and unchanged wall-helper policy. Preserve ordinary assertions.
+
+**Changed test checks for watcher clearance.** P: `packages/identity/src/pin-throttle.test.ts`; W: `packages/provisioning/src/password-throttle.test.ts`; A: `apps/server/src/account-rate-limit.test.ts`; E: `apps/server/src/enrol-rate-limit.test.ts`. Step wall time only. P60/W2 = `pin.throttled`/`password.throttled`, `retryAfterSeconds: 60`/`2`. Exact titles:
+
+| File: existing test name | Old checks → new checks |
+| --- | --- |
+| P: “forgets a wait whose last wrong PIN lies more than the longest wait ahead of the clock” | probe/check/post-failure: false/admitted/admitted → true/P60/P60 |
+| P: “forgets a wait one millisecond past the longest wait ahead, and keeps one at it” | lapsed false/admitted → true/P60; kept true stays; retry 120 → 60 |
+| P: “makes room by dropping a full slot's pairs stamped far ahead of the clock” | false/admitted → true/P60 for newcomer |
+| P: “answers as check would for a pair stamped far ahead in a full slot whose sweep stops short of it” | false/admitted unchanged: one failure; retain full-slot coverage |
+| P: “sweeps past a pair stamped a little ahead of the clock rather than stopping at it” | newcomer false/admitted → true/P60; existing fourth-failure wait stays 2 seconds |
+| W: “forgets a wait whose last wrong password lies more than the longest wait ahead of the clock” | probe/refused false → true; three free tries → W2; after two steady seconds next failure waits 4 seconds |
+| W: “forgets a wait one millisecond past the longest wait ahead, and keeps one at it” | lapsed false/false → true/true (W2); kept true stays; retry 62 → 2 |
+| W: “starts an address forgotten into its counter fresh when the counter lies far ahead of the clock” | probe/refused false/false → true/true (W2) |
+| W: “refuses no address stamped past the longest wait ahead, even where the sweep stops short of it” | false/false → true/true (W2) |
+| W: “sweeps past an address stamped a little ahead of the clock rather than stopping at it” | tracked 6 stays; tracked after newcomer 2 → 7 |
+| W: “skips a lapsed fold when the clock steps backward after its idle sweep” | W2 → admitted at steady 100,000; retain expired-fold coverage with forward idleness |
+| A: “opens a fresh window when the limiter's window started ahead of the clock” | both admitted → both `account_action.rate_limited` |
+| A: “lets a reset through whose wait ends more than the minute ahead of the clock” | second true → false |
+| E: “opens a fresh window when its window started ahead of the clock” | admitted → `device.join_rate_limited` |
+
+Keep equal-start/full-window/within-minute checks. Rename/strengthen P/E's “defaults the clock to Date.now when none is injected”. PR section: **Changed test checks**.
+
+5. Run `pnpm --filter @waitron/shared exec vitest run src/steady-clock.test.ts`; `pnpm --filter @waitron/identity exec vitest run src/pin-throttle.test.ts`; `pnpm --filter @waitron/provisioning exec vitest run src/password-throttle.test.ts src/first-setup-owner.test.ts src/first-setup-node-key.test.ts`; `pnpm --filter @waitron/server exec vitest run src/account-rate-limit.test.ts src/enrol-rate-limit.test.ts`. Read counts. Date the superseding pointer in `docs/developers/conventions-data.md`; narrow both backlogs when built. Parent owns auth `finish-branch` reviews, hook and current-head CI.
+
+**Changed-line estimate:** production 60–100; tests 200–300; support 0; prose 180–300 including inventory; total 440–700. Seek the watcher’s outside opinion before exceeding 1,050 total changed lines (1.5× the upper forecast), adding support machinery or widening scope. Drafting ran no tests.

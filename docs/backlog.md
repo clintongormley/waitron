@@ -1412,12 +1412,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **Finish the clock work: a check at every start and every change** (bundle of 3, 1 go-live, 2 important, size L, waits for another entry). Holds A798. [Detail](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 
 - **One steady-clock helper instead of hand-written clock-step-back guards** (owner, 2026-11-01,
-  answering #2331). Many timers, throttles and watches across the packages and apps each guard by
-  hand against the wall clock stepping back (for example `packages/identity/src/pin-throttle.ts`,
-  `apps/server/src/backup-schedule.ts`, `packages/fiscal-verifactu/src/drain.ts`). Move them onto one
-  shared helper that measures elapsed time on a steady clock. Start by listing every site
-  (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
-  applies today; behaviour is kept site by site. Raised by #2331's review, not yet designed.
+  answering #2331). Move elapsed timers onto one shared helper, keeping each site's policy.
+  The inventory and first slice's sign-in/account plan are drafted, not cleared or built.
+  [Detail and remaining-site inventory](backlog/box.md#one-steady-clock-helper-instead-of-hand-written-clock-step-back-guards).
 
 - **Closing a pay period trusts the box's clock.**
   [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)

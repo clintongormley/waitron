@@ -3,6 +3,148 @@
 The open entries are listed in [the backlog](../backlog.md), under "The box: backups, upgrades and recovery". This file holds
 their full text.
 
+## One steady-clock helper instead of hand-written clock-step-back guards
+
+**Ask (owner, 2026-11-01, answering #2331):** Many timers, throttles and watches across the packages
+and apps each guard by hand against the wall clock stepping back. Move them onto one shared helper
+that measures elapsed time on a steady clock. Start by listing every site
+(`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
+applies today; behaviour is kept site by site. Raised by #2331's review.
+
+**First slice, SIGNIN-STEADY-CLOCK:** only `createPinThrottle`, `createPasswordThrottle`,
+`createPasswordResetCooldown`, `createAccountActionRateLimiter` and `createEnrolRateLimiter`.
+[Draft plan](../superpowers/plans/2026-11-16-signin-steady-clock.md), **NOT CLEARED**. Watcher queue
+authority is 2026-11-16 15:53; Claude plan review and watcher clearance of the changed test checks
+are still required. This records no owner plan approval and no implementation completion. When
+the slice is built, remove its rows from the open inventory and narrow this entry to what remains.
+
+### Inventory scope
+
+Source inspection on 2026-11-16 at `99a2f741c6694f5b8914bcdf47fd863e341c12d1`, not runtime
+verification. Reproduced the driver's search with
+`git grep -n -i -E 'went backwards|step(s|ped)? back|backward' -- apps packages scripts ':!*.test.*' ':!*.spec.*'`:
+93 matching lines in 58 files, byte-for-byte equal to the supplied `site-search.txt` receipt.
+There are **41 files with clock-related code**, four related prose/type-description files, ten
+textual false-positive files and three support files. Multiple guards in one file share a row;
+the rules below name each. This is an inventory of this search, not a claim that it discovers
+every timer: split-line wording and guards with other words can be missed.
+
+The unrestricted root search, with the same test exclusions, has 475 matching lines in 248 files
+at that commit. Its additional 382 lines are 378 documentation matches and four matches in
+`CLAUDE.md`, `.github/workflows/ci.yml`, `deploy/README.md` and `deploy/waitron.sh`. These describe
+history, policy, version ordering or backward compatibility, not additional elapsed-time guards.
+The tables below account for the matched files and their exclusions.
+
+### First slice: current rules and clock inputs
+
+| Source | Current rule to preserve except for wall-clock steps |
+| --- | --- |
+| `packages/identity/src/pin-throttle.ts:62–179` | `Date.now` by default, injectable `opts.now`; three free failures, then 2/4/8/16/32/60-second waits, 15-minute idle reset, 2,000 pairs per slot and 60-second full-slot refusal. `pinThrottleIdle` also forgets a last touch more than 60 seconds ahead. Entry access, capacity sweep and read-only probe use it; sweeps continue past a still-live future entry. `check` refreshes an admitted held entry, not a refused one. |
+| `packages/provisioning/src/password-throttle.ts:62–213` | Injectable positional `now`, default `Date.now`; reuses PIN idle/unlock/retry rules for tracked entries, owned buckets and shared overflow. Three free failures, same capped waits/15-minute reset; at most 1,000 tracked addresses except those still in flight, which cannot be forgotten and refuse overlap with one second. Hashes normalized addresses under a process secret. Success clears its own history, never shared overflow; non-credential errors do not add failures. Fold/access/sweep/probe all apply the future-stamp rule. |
+| `apps/server/src/account-rate-limit.ts:15–59` | Two families, each injectable positional `now`, default `Date.now`. Reset/invitation spacing deletes a deadline at/before now or more than 60 seconds ahead; permits one call per normalized, hashed key per minute. The fixed-window flood guard resets at 60,000 ms or whenever now precedes its start; permits 30 per hashed subject and 300 globally, then `account_action.rate_limited`. |
+| `apps/server/src/enrol-rate-limit.ts:30–59` | Injectable `opts.now`, default `Date.now`; one counter per mounted surface. Allows 30 attempts per 60,000-ms window, refuses further attempts with `device.join_rate_limited`, and resets at the window boundary or on any reading before its start. |
+
+Constructor/export search followed through `packages/identity/src/index.ts:164–168`,
+`packages/provisioning/src/index.ts:102` and `apps/server/src/password-throttle.ts:1`:
+
+- PIN instances: `apps/server/src/till-api.ts:1292` and `payments-api.ts:418` take an optional
+  complete throttle from dependencies, otherwise construct the default. They do not pass their
+  fiscal/date clock into it. Test support in `testing/zone-payment-venue.ts:53` also uses the default.
+- Password defaults: `apps/server/src/management-api.ts:723–724`, `me-api.ts:129,148`,
+  `promote-api.ts:89`, `mirror-bundle-api.ts:127`, `setup-api.ts:1137`, `carry-on.ts:186`,
+  `handover-preparation.ts:167`, `handover-activation.ts:196`, `handover-emergency-api.ts:235`
+  and `boot.ts:4269`. Some accept a complete injected throttle; none supplies a wall-clock
+  function. `testing/two-box-takeover.ts:125` uses the default too. No call-site edit is proposed.
+- `packages/provisioning/src/first-setup-owner.ts:137–155,238–272` already defaults its `now`
+  to `performance.now()`. It passes that exact function to `createPasswordThrottle(now)`;
+  only `node-key-reissue` reconfirmation begins/finishes that throttle. The same function stamps
+  `expires: now() + 300000` on in-memory grants for all purposes and checks `now() < expires`.
+  Keep this injection and file unchanged. `first-setup-owner.test.ts:166–183` already checks
+  five elapsed minutes with wall time moved backwards; `first-setup-node-key.test.ts:473–485`
+  checks reissue throttling without changing the retained key. These were read, not run.
+- Account families: `apps/server/src/management-api.ts:725–730,906–909,945,972,1215,1306,1326`.
+  Password-reset spacing receives email; invitation spacing uses the existing person-id key.
+  Flood guards receive subjects/tokens and may be injected whole through dependencies. All default
+  constructions omit the clock. Keep their key selection, acknowledgements and route refusals.
+- Enrol defaults: `apps/server/src/device-api.ts:254`, `print-api.ts:485`,
+  `node-enrol-api.ts:41`; each accepts a whole test limiter or makes its own default.
+- **Persisted exception:** `apps/server/src/handover-emergency-api.ts:435–452` reads
+  `lastFailedAt` from `node.db`, compares it with `Date.now()`, and calls exported
+  `pinThrottleIdle`, `pinThrottleUnlockAt` and `pinThrottleRetryAfterSeconds`. Keep all three
+  exports' existing wall-clock arithmetic, values and boundary comparisons. Only in-memory
+  entry/bucket idle checks stop using the exported wall-clock idle predicate. This lane does not
+  edit that route or its persisted failure counter.
+
+`packages/shared/src/timing.ts` classifies kitchen age, `duration-format.ts` formats durations,
+and its time-zone/business-day helpers handle calendar time. None supplies an elapsed-time source
+in the shared-source search. `packages/fiscal/src/clock.ts` has an injected monotonic source but
+also trusted dates, persisted anchors and confidence. Existing direct `performance.now()` defaults
+in first-setup owner and `apps/server/src/clock-correction.ts:121` support a small source function,
+not importing the fiscal clock into these limiters. No additional injection machinery is proposed.
+
+### Other code sites: retain for later scope decisions
+
+These 37 files remain outside the first slice. A persisted date, ordering invariant or calendar
+rule is not made process-relative by replacing its clock read. Later slices must choose their
+scope and preserve the rules shown here before proposing any conversion.
+
+| Source and function/site | Rule read in the current code |
+| --- | --- |
+| `apps/print-agent/src/linux-devices.ts:91,132–156` (`sharedListing`, `recheckDue`, `pairedFor`) | Count forgets to order invalidation against running listings. Recheck after at least 30 seconds or when the last listing is more than 30 seconds ahead. Reuse paired devices only at age 0 through under 10 seconds, with unchanged forget count and a matching device; any future start prevents reuse. |
+| `apps/print-agent/src/server-ca.ts:82–87` (`refresh`) | Fetch at most once per hour with a pinned CA, every 10 seconds before the first CA; a previous fetch more than the applicable interval ahead makes another fetch due. |
+| `apps/server/src/alert-sources.ts:534–545` (`undeliveredInvoice`) | A queued A4 delivery whose persisted next attempt exceeds the ten-minute retry bound is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
+| `apps/server/src/backup-schedule.ts:68–75` (`longestFireAheadMs`) | Bound an interval fire by its interval; a calendar fire by the longest allowed weekday gap plus 25 hours. Supplies the sweep's backward-step bound, not an elapsed-clock read itself. |
+| `apps/server/src/backup-status.ts:80–101` (`freshness`) | Judge the newest own archive no more than `staleAfterMs` ahead. If none qualifies, report stale; otherwise stale only when its age exceeds that threshold. Archive mtimes are storage evidence, not process timestamps. |
+| `apps/server/src/backup-sweep.ts:484–513` (`runBackupSweep`) | Hold a computed fire fixed while sleeping; recompute only when now precedes computation AND the fire exceeds `longestFireAheadMs`. This avoids resetting a valid calendar fire on every wake. |
+| `apps/server/src/bill-refunds.ts:534–546` (refund recovery) | Resend only after lookup says none, outside the background loop, with provider support and age at least zero and strictly below its resend window. A persisted first send ahead of now prevents resending. |
+| `apps/server/src/cloud-snapshot-worker.ts:131–140` (`isDue`, `pendingExpired`) | A saved next deadline is due at/before now or more than 49 hours ahead. Abandon an unpublished capture at age at least one day or more than one day ahead. |
+| `apps/server/src/content-suggestion-runner.ts:163–170` (`step`) | Close a stored job as expired at age at least 24 hours or more than 24 hours ahead; otherwise it can continue to occupy the active run. |
+| `apps/server/src/discovery-listing.ts:1–12` (`withinTtl`, `isListed`) | Keep a report only within its TTL on either side, endpoints included. TTL is 45 seconds during an open discovery window, otherwise 15 seconds. Input is explicitly epoch milliseconds. |
+| `apps/server/src/invoice-delivery.ts:181–207` (`latestNextAttempt`, `deliveryDue`, `claimLapsed`) | Persisted retries at/before now or more than ten minutes ahead are due. A claim at least 60 seconds old or more than 60 seconds ahead has lapsed. |
+| `apps/server/src/join-requests.ts:33–58` (`lapsedAt`, `sweepLapsed`) | Delete pending requests strictly older than 15 minutes or strictly more than 15 minutes ahead; endpoints survive. These are persisted request dates. |
+| `apps/server/src/order-drafts.ts:1397–1426` (`takenOverFrom`) | Find latest takeover by append-only event `rowid`, not `created_at`; a backward clock must not reorder ownership history. Ordering, not a timer. |
+| `apps/server/src/page-test-pages.ts:10–14,60–74` (`settle`) | Product office-printer test pages, not test harness code. Waiting pages fail after five minutes, claims become unknown after a 60-second lease, completed outcomes disappear after ten minutes. Each also expires when its stamp is more than its own limit ahead. |
+| `apps/server/src/pairing-mode.ts:10,56–71` (`prune`) | Drop a hold at/before its end or when its end is more than its duration ahead (default three minutes). Empty holds clear open-since state; changes rearm the timer and notify. Also exposes absolute ISO times to consumers. |
+| `apps/server/src/print-api.ts:535,552–558` (`openDiscoveryUntil`) | Treat a discovery end more than its three-minute window ahead as closed (zero); feeds freshness and Pair/Forget availability. The same file constructs an enrol limiter but this discovery rule is outside the slice. |
+| `apps/server/src/printer-bluetooth-commands.ts:41–47,80–108` (`ended`, pruning) | Expire pending commands at their 120-second deadline or beyond that far ahead, results at 60 seconds similarly; a global sweep runs when its 60-second deadline ends or lies too far ahead. Remember expired forget commands separately. |
+| `apps/server/src/printer-probes.ts:12–29` (`current`) | Drop a probe at/before its deadline or when it ends more than 30 seconds ahead; return remaining milliseconds for survivors. |
+| `packages/fiscal-verifactu/src/certificate-record.ts:39–66` (`recordInstall`, `installsOf`) | Persist installation time as the greater of writer time and previous installation plus one millisecond. Keeps latest-install order across steps and node changes; not a wait. |
+| `packages/fiscal-verifactu/src/clock-corrected-incident.ts:27–43` (`recordCorrected`) | Before recording the next clock alert, mark each earlier open alert handled no earlier than its own detection, using the maximum of its date and the new detection. Persisted incident chronology. |
+| `packages/fiscal-verifactu/src/drain.ts:87–99,460–468` (`retryDue`, `claimStale`, `readGate`) | Retry at/before now or beyond the one-hour maximum backoff. Abandon a claim strictly over five minutes old or strictly more than five minutes ahead. A flow-control gate beyond its declared AEAT wait is reset and stored as one full wait from now, not sent immediately. |
+| `packages/fiscal/src/clock.ts:84–103,162–174` (trusted clock) | Reload compares wall time with saved anchor: negative delta reports a jump and carries zero elapsed time; otherwise carries wall delta. Subsequent negative monotonic delta clamps to zero. A newly trusted time may move backwards. Already uses injected steady time; retain date/confidence semantics. |
+| `packages/identity/src/account-action.ts:34–44,160–175,200–208,289–296,363–370` (`latestLiveExpiry`, action readers/sweep) | Reject/delete an unused action whose expiry exceeds now plus its purpose TTL (invitation 24 hours, reset/email change 30 minutes), as well as the normal expiry checks. Tokens/codes live in the database; this is distinct from request spacing. |
+| `packages/identity/src/google-oidc.ts:13–17,51–66,100–110` (`latestLiveExpiry`, state issue/consume) | Sweep states expiring before now or more than ten minutes ahead; consumption requires a future expiry no later than that bound. Persisted one-use state. |
+| `packages/identity/src/management-session.ts:11,73–75` (session validation) | Refuse `management_session.expired` when absolute distance from persisted last-seen time exceeds 30 minutes; equality is allowed. |
+| `packages/identity/src/passkey.ts:45–46,112–115` (challenge consumption) | Refuse `passkey.challenge_expired` when age exceeds five minutes or stamp is more than one minute ahead. Persisted challenge, not this slice; #3528 is separate work. |
+| `packages/identity/src/profile.ts:159,194–206` (TOTP enrollment completion) | Require a persisted enrollment expiry after now but no later than ten minutes ahead, plus the person/id match; missing/refused enrollment leads to `totp.invalid`. |
+| `packages/payments/src/reconciliation-schedule/derive.ts:104–166` (`derive`, `claimLapsed`, `retryDue`) | Reclaim a running ledger row strictly outside ±lease; retry at/before now or beyond `longestWaitMs`. Both feed the due-work list; stored dates remain shared inputs. |
+| `packages/payments/src/reconciliation-schedule/duty.ts:36–42` (`PeriodDuty` bounds) | Declares parked retry and maximum re-sweep intervals used to judge a stored successor due time. Contract prose tied to `run.ts`/`derive.ts`, not another clock reader. |
+| `packages/payments/src/reconciliation-schedule/run.ts:174–184,235–240` (`runOne`, `longestWait`) | Clamp a successful duty's requested re-sweep to the maximum of last backoff, parked retry and declared re-sweep. Without that clamp, the reader would treat it as a backward-step retry at every tick. |
+| `packages/print-agent/src/agent.ts:40,523–531` (`resendPageReports`) | Abandon an unsent page report only when absolute distance from its last alive stamp exceeds 120 seconds; otherwise resend. Host supplies the clock. |
+| `packages/printing/src/runtime.ts:50–76,99–102,111–122` (`dueNow`, drawer expiry, invoice selection) | A document claim strictly older than its 60-second lease or strictly more than 60 seconds ahead is reclaimable. Stale drawer jobs are ended rather than replayed. Receipt invoice selection also accepts the caller's upper retry bound for queued persisted deliveries. |
+| `packages/store/src/venue-holder.ts:37,79–87` (`isVenueHolderFresh`) | Heartbeat is fresh only strictly within ±30 seconds; either endpoint is stale. Heartbeat is a cross-process file rewritten by the holder, not process-local state. |
+| `packages/venue-service/src/hours-occurrences.ts:28–44` (`localTimeOccurrences`) | Return every UTC occurrence of a local minute: zero in a spring-forward gap, two in a backward zone-offset change. Calendar calculation, not a duration guard. |
+| `packages/workforce/src/chain.ts:109–118` (record writer) | Clamp recorded time to the stored chain high-water mark, then truncate to whole seconds for both storage and hash. Historical chain ordering, not elapsed time. |
+| `scripts/box/installer-network.mjs:99–106` (`nextNetworkStep`) | Refuse `installer_network.event_invalid` with `time-backwards` when event `atMs` precedes current state `atMs`. Pure state-transition input ordering; keep its event contract. |
+| `scripts/box/installer-policy.mjs:73,458–464` (`nextInstallerStep`) | Refuse `installer.event_invalid` with `time-backwards` for the same decreasing event-time input. Not an in-memory sign-in limiter. |
+
+### Related descriptions and excluded matches
+
+| File(s) from the 58-file search | Classification and rule/meaning |
+| --- | --- |
+| `apps/dashboard/src/api/client.ts:2225–2227` | Backup-evidence interface description: latest load failure is ordered by recording order, not wall dates. Server implementation is `apps/server/src/backup-settings-evidence.ts`; no duration guard here. |
+| `apps/dashboard/src/i18n/alert-messages.ts:289–291`; `packages/fiscal/src/errors.ts:10–12` | Wording/type declaration for the trusted clock's backward-jump report; associated with `packages/fiscal/src/clock.ts`, not two extra guards. |
+| `apps/server/src/guide/en/box-status.md:256–260` | Staff guidance for management sessions ending on steps larger than the 30-minute idle bound; describes the persisted session rule above. |
+| `apps/dashboard/src/i18n/strings.ts:458,4849`; `screens/dashboard-sales-screen.ts:59,291–296,330,497`; `screens/orders-screen.ts:48,191–203` | Three false positives: reversed From/To ranges and wording. No system-clock step. Paths beginning `screens/` here are under `apps/dashboard/src/`. |
+| `apps/dashboard/src/widgets/content-translations-window.ts:120–157` | False positive: native text-selection direction preserved across updates. |
+| `apps/till/src/till-app.ts:3087`; `apps/till/src/widgets/till-shell.ts:107` | Two false positives: menu navigation/layout stepping back, not time. |
+| `packages/adjustments/src/dashboard/adjustment-report-screen.ts:207,352–363,1081–1089`; `packages/adjustments/src/dashboard/strings.ts:107,273` | Two false positives: reversed report dates and their message/layout. |
+| `packages/ui/src/components/wt-data-table.ts:966–976,2902–2905` | False positive: Shift+Tab focus direction. |
+| `scripts/published-image-env.sh:31–45` | False positive: do not publish a version/tag backwards after misreading registry failure as absent image. |
+| `apps/server/src/testing/hour-test-clock.ts:11–42` | Test support: reject negative/non-finite advancement and move wall and monotonic fakes together. Not product timing despite surviving the filename exclusions. |
+| `packages/venue-service/src/testing/clock-change.ts:3–12` | Test support: locate real zone-offset transitions; backward repeats local minutes. |
+| `scripts/host-clock-measure.sh:141–154,440–460` | Host measurement support: exercise backward setting and inspect timesyncd's saved clock file. No product guard; do not run during this slice. |
+
 ## The box the customer buys probably doubles as a till, so the image ships a screen and a browser
 
 (owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
