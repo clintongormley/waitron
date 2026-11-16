@@ -40,10 +40,10 @@ const OFF: BackupStatusView = {
 };
 
 it.each([
-  ["en-GB", "Backups guide", "/help/en/backups#recovery-pack", true],
-  ["en-GB", "Backups guide", "/help/en/backups#recovery-pack", false],
-  ["es-ES", "Guía de copias de seguridad", "/help/es/backups#recovery-pack", true],
-  ["es-ES", "Guía de copias de seguridad", "/help/es/backups#recovery-pack", false],
+  ["en-GB", "Backups guide", "/help/en/backups", true],
+  ["en-GB", "Backups guide", "/help/en/backups", false],
+  ["es-ES", "Guía de copias de seguridad", "/help/es/backups", true],
+  ["es-ES", "Guía de copias de seguridad", "/help/es/backups", false],
 ] as const)(
   "offers the Backups guide (%s, %s, %s, manager %s)",
   async (locale, label, href, canManage) => {

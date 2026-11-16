@@ -43,14 +43,18 @@ describe.each([
   },
 ])("$app guide links", ({ app, links, src }) => {
   it.each(Object.entries(links))(
-    "%s names a page and section the server serves in every language",
-    (key, { page, section }) => {
+    "%s names a page and any section the server serves in every language",
+    (key, target) => {
+      const { page } = target;
+      const section = "section" in target ? target.section : undefined;
       expect(GUIDE_PAGES, `${key}: page "${page}"`).toContain(page);
       for (const lang of GUIDE_LANGUAGES) {
         const markdown = readGuide(guideRoot(), lang, page) ?? readGuide(guideRoot(), "en", page);
         expect(markdown, `${key}: ${lang}/${page}.md`).toBeDefined();
         const ids = renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id);
-        expect(ids, `${key}: section "${section}" in ${lang}/${page}`).toContain(section);
+        if (section !== undefined) {
+          expect(ids, `${key}: section "${section}" in ${lang}/${page}`).toContain(section);
+        }
       }
     },
   );

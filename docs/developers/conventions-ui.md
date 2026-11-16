@@ -371,13 +371,14 @@ landing listener (`apps/server/src/landing-app.ts`, certificate help and the `/l
 ### How the dashboard links a guide
 
 A dashboard link to a guide goes through `apps/dashboard/src/help-guide.ts`: `GUIDE_LINKS` names
-each section the dashboard links to, and `guideHref(key)` returns `/help/<en|es>/<page>#<section>`
-in the dashboard's current language (`es` or an `es-` locale gives `es`, anything else `en`). The
-screen hands that address to `wt-help-tooltip`'s `guide-href`, with the "Read more in the guide"
-words as `guide-label` (design-system.md, Help mode). On a box the dashboard is served by the
+each page and optional section the dashboard links to. `guideHref(key)` returns
+`/help/<en|es>/<page>`, adding `#<section>` only when the entry names one,
+in the dashboard's current language (`es` or an `es-` locale gives `es`, anything else `en`). Use
+that address in a visible guide link or hand it to `wt-help-tooltip`'s `guide-href`, with the
+"Read more in the guide" words as `guide-label` (design-system.md, Help mode). On a box the dashboard is served by the
 server, so `/help/…` is the same origin; in development the dashboard's Vite server sends `/help` to
 the server (`apps/dashboard/vite.config.ts`). Guard: `scripts/guide-links.test.ts`, weaker than its
-name: its first check renders each linked page in each language and finds the section, but its
+name: its first check renders each linked page in each language and finds any named section, but its
 second reads the dashboard's source as text for a quoted `/help/`, so a guide path built from parts
 passes it.
 
