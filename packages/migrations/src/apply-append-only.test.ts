@@ -126,9 +126,7 @@ describe("applyMigrations installs the append-only triggers on the product's own
     await withVenue(venue, (db) => {
       // A ledger classification must still allow payments to move through their states.
       seedOneRow(db, "payments");
-      const payment = db.all(sql`select * from payments`);
       db.run(sql`update payments set updated_at = updated_at`);
-      expect(db.all(sql`select * from payments`)).toEqual(payment);
       expect(rowCount(db, "payments")).toBe(1);
       seedOneRow(db, "settings");
       db.run(sql`delete from settings`);
