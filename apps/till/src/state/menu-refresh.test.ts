@@ -501,7 +501,13 @@ describe("lineBlock", () => {
 
   it("names an offered options list the line has no answer for", () => {
     const line = lineOf(burger, "v1", { extras: [pick("cheese", "1.00")] });
-    expect(lineBlock(line, burger)).toEqual({ reason: "choice_required", name: "list-cooked" });
+    const named = {
+      ...burger,
+      offeredModifiers: burger.offeredModifiers.map((list) =>
+        list.id === "list-cooked" ? { ...list, name: "Cooked" } : list,
+      ),
+    };
+    expect(lineBlock(line, named)).toEqual({ reason: "choice_required", name: "Cooked" });
   });
 
   describe("an extras list whose limits the line's picks break", () => {
@@ -514,12 +520,13 @@ describe("lineBlock", () => {
             { ...extraItem("cheese", "1.00"), maxQuantity: max },
             extraItem("bacon", "1.50"),
           ]),
+          name: "Extras",
           ...limits,
         },
         optionsList("list-cooked", [label("rare")], "rare"),
       ],
     });
-    const broken = { reason: "extras_limit", name: "list-extras" };
+    const broken = { reason: "extras_limit", name: "Extras" };
 
     it("counts a pick of two as two against the list's most", () => {
       const line = lineOf(burger, "v1", {
@@ -873,10 +880,13 @@ describe("refreshBasket", () => {
     const line = lineOf(lemonade, "v1");
     const withIce = {
       ...lemonade,
-      offeredModifiers: [optionsList("list-ice", [label("ice"), label("no-ice")], "ice")],
+      offeredModifiers: [
+        { ...optionsList("list-ice", [label("ice"), label("no-ice")], "ice"), name: "Ice" },
+      ],
     };
     const outcome = refreshBasket([line], [withIce], live);
-    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "list-ice", reason: "choice_required" }]);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "Ice", reason: "choice_required" }]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
   });
 
   it("blocks a line whose picks the live version's lower limit no longer allows, naming the list", () => {
@@ -890,10 +900,11 @@ describe("refreshBasket", () => {
     const [extras, cooked] = burger.offeredModifiers;
     const limited = {
       ...burger,
-      offeredModifiers: [{ ...extras!, maxPicks: 1 }, cooked!],
+      offeredModifiers: [{ ...extras!, maxPicks: 1, name: "Extras" }, cooked!],
     };
     const outcome = refreshBasket([line], [limited], live);
-    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "list-extras", reason: "extras_limit" }]);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "Extras", reason: "extras_limit" }]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
   });
 
   describe("a line whose dish the live version sells by a unit that takes no extras", () => {

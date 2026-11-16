@@ -2000,7 +2000,7 @@ export const en = {
   "basket_refresh.extra_removed": "{name} is no longer offered with this dish",
   "basket_refresh.unit_changed": "{name}: the quantity no longer fits its unit",
   "basket_refresh.choice_required": "{name} must now be chosen",
-  "basket_refresh.extras_limit": "{name}: the number of picks no longer fits",
+  "basket_refresh.extras_limit": "{name}: the number of extras no longer fits",
   "basket_refresh.confirm": "Update the order",
   "basket_refresh.pending": "The menu has changed. Review the changes before paying.",
   "basket_refresh.review": "Review changes",

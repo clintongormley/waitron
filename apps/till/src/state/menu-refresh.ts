@@ -25,7 +25,7 @@ export type BlockReason =
 
 export interface LineBlock {
   reason: BlockReason;
-  /** The dish, variant, extra or option label the reason is about. */
+  /** The dish, variant, extra, option label or list the reason is about. */
   name: string;
 }
 
