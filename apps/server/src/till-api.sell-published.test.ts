@@ -782,7 +782,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       const bacon = await createProduct(tx, {
         categoryId,
         name: "Bacon",
-        customerName: { [LOCALE]: "Beicon crujiente" },
+        customerName: { es: "Beicon crujiente" },
         kitchenName: "BCN",
         pricingUnit: "each",
         unitPrice: "2.00",

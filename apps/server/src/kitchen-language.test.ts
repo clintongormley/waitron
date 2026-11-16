@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeContentLanguages } from "@waitron/menu";
 import { readKitchenLanguage } from "./kitchen-language.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -24,8 +23,10 @@ describe("A964 venue language", () => {
     ["ca-ES-valencia", "en"],
   ])("uses saved %s as %s without rewriting it", async (defaultLanguage, expected) => {
     await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
-      await writeContentLanguages(tx, { defaultLanguage, languages: [defaultLanguage] });
+      await seedVenueSettings(tx, {
+        defaultContentLanguage: defaultLanguage,
+        contentLanguages: [defaultLanguage],
+      });
       const before = await tx.execute(
         sql`select json_extract(doc, '$.defaultContentLanguage') as default_language from settings where module = 'venue'`,
       );
