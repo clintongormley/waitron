@@ -71,9 +71,8 @@ their full text.
   the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
   `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
   Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
-  screen's own tests; its fixed mount passes `embedded` and
-  `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
-  test-only. The screens' `css`
+  screen's own tests; its fixed mount passes `embedded` and `canExitToCounter=false`, so its
+  standalone header, Back button and that property are likewise test-only. The screens' `css`
   templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
   allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
   confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the

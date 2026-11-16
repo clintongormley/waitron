@@ -22419,8 +22419,9 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Before login, or on a kitchen display, a pick only switches the UI: there is no session to save it
-   * to. Logged in, the preference is saved first and the UI switches only after that succeeds.
+   * Before login a pick only switches the UI: there is no session to save it to. A kitchen display also
+   * keeps it on the device. Logged in, the preference is saved first and the UI switches only after that
+   * succeeds.
    */
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
