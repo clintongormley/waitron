@@ -561,16 +561,14 @@ it("keeps a handheld's earlier card watched after the next guest's preview and a
   });
   const waiting = balanceOf({ reserved: "40.00", outstanding: "80.00", payments: [pending] });
   const getBillBalance = vi.fn().mockResolvedValue(balanceOf());
-  const previewBillPayment = vi
-    .fn()
-    .mockResolvedValue({
-      kind: "allocated",
-      choice: null,
-      applied: "40.00",
-      tip: "0.00",
-      charged: "40.00",
-      change: null,
-    });
+  const previewBillPayment = vi.fn().mockResolvedValue({
+    kind: "allocated",
+    choice: null,
+    applied: "40.00",
+    tip: "0.00",
+    charged: "40.00",
+    change: null,
+  });
   const takeBillPayment = vi.fn().mockImplementation(async () => {
     getBillBalance.mockResolvedValue(waiting);
     return { ...takenOf(pending, waiting), outcome: "timeout" };
@@ -580,15 +578,13 @@ it("keeps a handheld's earlier card watched after the next guest's preview and a
     getBillBalance,
     previewBillPayment,
     takeBillPayment,
-    getTill: vi
-      .fn()
-      .mockResolvedValue({
-        ...readerTill,
-        formFactor: "phone-portrait",
-        cardProvider: "sumup_cloud",
-        activeReaders: [{ id: "r2", name: "Reader", provider: "sumup_cloud" }],
-        defaultReaderId: "r2",
-      }),
+    getTill: vi.fn().mockResolvedValue({
+      ...readerTill,
+      formFactor: "phone-portrait",
+      cardProvider: "sumup_cloud",
+      activeReaders: [{ id: "r2", name: "Reader", provider: "sumup_cloud" }],
+      defaultReaderId: "r2",
+    }),
     getDeviceIdentity: vi
       .fn()
       .mockResolvedValue({ deviceId: "phone", name: "Phone", formFactor: "phone-portrait" }),
