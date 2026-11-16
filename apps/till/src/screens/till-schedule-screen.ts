@@ -36,8 +36,17 @@ const sameCover = (a: CoverDraft, b: CoverDraft) =>
 const sameAbsence = (a: AbsenceDraft, b: AbsenceDraft) =>
   a.kind === b.kind && a.startsOn === b.startsOn && a.endsOn === b.endsOn && a.note === b.note;
 
-type CoverErrors = Partial<Record<"shift" | "colleague", string>>;
-type AbsenceErrors = Partial<Record<"from" | "to", string>>;
+/** Keyed by the request field a message belongs to; any other key goes in the bottom message. */
+type Errors = Record<string, string>;
+const COVER_FIELDS: ReadonlySet<string> = new Set(["fromShiftId", "toPersonId"]);
+const ABSENCE_FIELDS: ReadonlySet<string> = new Set(["kind", "startsOn", "endsOn", "note"]);
+
+/** The till's client spreads the error's `params` onto what it throws, so `field` sits at the top. */
+function refusalFor(error: unknown, fields: ReadonlySet<string>): Errors {
+  const { code, field } = (error ?? {}) as { code?: unknown; field?: unknown };
+  const message = codeMessage(typeof code === "string" ? code : "server.internal");
+  return { [typeof field === "string" && fields.has(field) ? field : "refusal"]: message };
+}
 
 const NONE: ComboboxOption = { value: "", label: "—" };
 
@@ -211,8 +220,8 @@ export class TillScheduleScreen extends LitElement {
   @state() private absFrom = "";
   @state() private absTo = "";
   @state() private absNote = "";
-  @state() private coverRefusal = "";
-  @state() private absRefusal = "";
+  @state() private coverRefusals: Errors = {};
+  @state() private absRefusals: Errors = {};
 
   readonly #coverFeedback = new FormFeedback(this);
   readonly #absenceFeedback = new FormFeedback(this);
@@ -282,8 +291,8 @@ export class TillScheduleScreen extends LitElement {
     this.absNote = "";
     this.#coverFeedback.reset();
     this.#absenceFeedback.reset();
-    this.coverRefusal = "";
-    this.absRefusal = "";
+    this.coverRefusals = {};
+    this.absRefusals = {};
     this.busy = false;
     super.disconnectedCallback();
   }
@@ -371,7 +380,7 @@ export class TillScheduleScreen extends LitElement {
     ]);
   }
 
-  async #act(fn: () => Promise<void>, refused: (code: string) => void): Promise<void> {
+  async #act(fn: () => Promise<void>, refused: (error: unknown) => void): Promise<void> {
     if (!this.isConnected || this.busy) return;
     const connection = this.#connection;
     this.busy = true;
@@ -382,7 +391,7 @@ export class TillScheduleScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (!this.isConnected || connection !== this.#connection) return;
-      refused((error as { code?: string }).code ?? "server.internal");
+      refused(error);
     } finally {
       if (this.isConnected && connection === this.#connection) this.busy = false;
     }
@@ -391,25 +400,29 @@ export class TillScheduleScreen extends LitElement {
   #accept(swapId: string): void {
     void this.#act(
       () => this.api.acceptSwap(swapId),
-      (code) => (this.noticeCode = code),
+      (error) => (this.noticeCode = (error as { code?: string }).code ?? "server.internal"),
     );
   }
 
-  #coverErrors(): CoverErrors {
-    const errors: CoverErrors = {};
-    if (this.coverShiftId === "") errors.shift = t("schedule.cover_shift_required");
-    if (this.coverColleagueId === "") errors.colleague = t("schedule.cover_colleague_required");
+  #coverErrors(): Errors {
+    const errors: Errors = {};
+    if (this.coverShiftId === "") errors.fromShiftId = t("schedule.cover_shift_required");
+    if (this.coverColleagueId === "") errors.toPersonId = t("schedule.cover_colleague_required");
     return errors;
   }
 
-  #absenceErrors(): AbsenceErrors {
-    const errors: AbsenceErrors = {};
-    if (this.absFrom === "") errors.from = t("schedule.absence_from_required");
-    if (this.absTo === "") errors.to = t("schedule.absence_to_required");
+  #absenceErrors(): Errors {
+    const errors: Errors = {};
+    if (this.absFrom === "") errors.startsOn = t("schedule.absence_from_required");
+    if (this.absTo === "") errors.endsOn = t("schedule.absence_to_required");
     else if (this.absFrom !== "" && this.absTo < this.absFrom) {
-      errors.to = t("schedule.absence_to_before_from");
+      errors.endsOn = t("schedule.absence_to_before_from");
     }
     return errors;
+  }
+
+  #formErrors(feedback: FormFeedback, refusals: Errors, checks: Errors): Errors {
+    return { ...feedback.remaining(refusals), ...(feedback.attempted ? checks : {}) };
   }
 
   #focusFirstInvalid(feedback: FormFeedback, form: string): void {
@@ -417,19 +430,16 @@ export class TillScheduleScreen extends LitElement {
     if (container) void feedback.focus(container);
   }
 
-  #bottomMessage(feedback: FormFeedback, refusal: string, checked: Record<string, string>): string {
-    const refused = feedback.remaining({ refusal: refusal === "" ? "" : codeMessage(refusal) });
-    return feedback.message(
-      { ...refused, ...checked },
-      new Set(Object.keys(checked)),
-      t("form.fix_fields"),
-    );
+  #bottomMessage(feedback: FormFeedback, errors: Errors, fields: ReadonlySet<string>): string {
+    const marked = new Set(Object.keys(errors).filter((key) => fields.has(key)));
+    return feedback.message(errors, marked, t("form.fix_fields"));
   }
 
   #submitCover(): void {
     if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#coverScope).unchanged) return;
-    this.#coverFeedback.press("refusal");
+    this.#coverFeedback.press();
+    this.coverRefusals = {};
     if (Object.keys(this.#coverErrors()).length > 0) {
       this.#focusFirstInvalid(this.#coverFeedback, "cover");
       return;
@@ -441,15 +451,14 @@ export class TillScheduleScreen extends LitElement {
         await this.api.requestSwap(submitted);
         if (!this.isConnected || connection !== this.#connection) return;
         this.#coverFeedback.reset();
-        this.coverRefusal = "";
         if (sameCover(this.#coverDraft(), submitted)) {
           this.coverShiftId = "";
           this.coverColleagueId = "";
           this.#coverScope?.commit(this.#coverDraft());
         } else this.#coverScope?.commit(submitted);
       },
-      (code) => {
-        this.coverRefusal = code;
+      (error) => {
+        this.coverRefusals = refusalFor(error, COVER_FIELDS);
         this.#coverFeedback.newRefusal();
       },
     );
@@ -458,7 +467,8 @@ export class TillScheduleScreen extends LitElement {
   #submitAbsence(): void {
     if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#absenceScope).unchanged) return;
-    this.#absenceFeedback.press("refusal");
+    this.#absenceFeedback.press();
+    this.absRefusals = {};
     if (Object.keys(this.#absenceErrors()).length > 0) {
       this.#focusFirstInvalid(this.#absenceFeedback, "request-absence");
       return;
@@ -470,7 +480,6 @@ export class TillScheduleScreen extends LitElement {
         await this.api.requestAbsence(submitted);
         if (!this.isConnected || connection !== this.#connection) return;
         this.#absenceFeedback.reset();
-        this.absRefusal = "";
         if (sameAbsence(this.#absenceDraft(), submitted)) {
           this.absFrom = "";
           this.absTo = "";
@@ -478,8 +487,8 @@ export class TillScheduleScreen extends LitElement {
           this.#absenceScope?.commit(this.#absenceDraft());
         } else this.#absenceScope?.commit(submitted);
       },
-      (code) => {
-        this.absRefusal = code;
+      (error) => {
+        this.absRefusals = refusalFor(error, ABSENCE_FIELDS);
         this.#absenceFeedback.newRefusal();
       },
     );
@@ -632,8 +641,10 @@ export class TillScheduleScreen extends LitElement {
     const shifts = this.shifts ?? [];
     const colleagues = this.#colleagues();
     const save = saveActionState(this.#coverScope);
-    const errors = this.#coverFeedback.attempted ? this.#coverErrors() : {};
-    const marked = Object.keys(errors).length > 0;
+    const feedback = this.#coverFeedback;
+    const checks = feedback.attempted ? this.#coverErrors() : {};
+    const errors = this.#formErrors(feedback, this.coverRefusals, checks);
+    const marked = Object.keys(checks).length > 0;
     return html`<section class="cover">
       <h2>${t("schedule.cover_title")}</h2>
       <div class="form">
@@ -645,8 +656,9 @@ export class TillScheduleScreen extends LitElement {
           (value) => {
             this.coverShiftId = value;
             this.#coverScope?.changed();
+            feedback.dismiss("fromShiftId");
           },
-          { required: true, error: errors.shift ?? "" },
+          { required: true, error: errors.fromShiftId ?? "" },
         )}
         ${this.#dropdown(
           "cover-colleague",
@@ -662,12 +674,11 @@ export class TillScheduleScreen extends LitElement {
           (value) => {
             this.coverColleagueId = value;
             this.#coverScope?.changed();
+            feedback.dismiss("toPersonId");
           },
-          { required: true, error: errors.colleague ?? "" },
+          { required: true, error: errors.toPersonId ?? "" },
         )}
-        <wt-form-actions
-          .error=${this.#bottomMessage(this.#coverFeedback, this.coverRefusal, errors)}
-        >
+        <wt-form-actions .error=${this.#bottomMessage(feedback, errors, COVER_FIELDS)}>
           <wt-button
             class="cover-submit"
             variant=${save.variant}
@@ -737,8 +748,10 @@ export class TillScheduleScreen extends LitElement {
 
   #absenceForm() {
     const save = saveActionState(this.#absenceScope);
-    const errors = this.#absenceFeedback.attempted ? this.#absenceErrors() : {};
-    const marked = Object.keys(errors).length > 0;
+    const feedback = this.#absenceFeedback;
+    const checks = feedback.attempted ? this.#absenceErrors() : {};
+    const errors = this.#formErrors(feedback, this.absRefusals, checks);
+    const marked = Object.keys(checks).length > 0;
     return html`<section class="request-absence">
       <h2>${t("schedule.absence_title")}</h2>
       <div class="form">
@@ -750,7 +763,9 @@ export class TillScheduleScreen extends LitElement {
           (value) => {
             this.absKind = value as AbsenceKind;
             this.#absenceScope?.changed();
+            feedback.dismiss("kind");
           },
+          { error: errors.kind ?? "" },
         )}
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
@@ -758,7 +773,7 @@ export class TillScheduleScreen extends LitElement {
           name="abs-from"
           type="date"
           required
-          .error=${errors.from ?? ""}
+          .error=${errors.startsOn ?? ""}
           .label=${t("schedule.absence_from")}
           .value=${this.absFrom}
           @wt-change=${(e: Event) => {
@@ -766,6 +781,7 @@ export class TillScheduleScreen extends LitElement {
             if (!this.isConnected) return;
             this.absFrom = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("startsOn");
           }}
         ></wt-input>
         <wt-input
@@ -774,7 +790,7 @@ export class TillScheduleScreen extends LitElement {
           name="abs-to"
           type="date"
           required
-          .error=${errors.to ?? ""}
+          .error=${errors.endsOn ?? ""}
           .label=${t("schedule.absence_to")}
           .value=${this.absTo}
           @wt-change=${(e: Event) => {
@@ -782,12 +798,14 @@ export class TillScheduleScreen extends LitElement {
             if (!this.isConnected) return;
             this.absTo = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("endsOn");
           }}
         ></wt-input>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-note"
           name="abs-note"
+          .error=${errors.note ?? ""}
           .label=${t("schedule.absence_note")}
           .value=${this.absNote}
           @wt-change=${(e: Event) => {
@@ -795,11 +813,10 @@ export class TillScheduleScreen extends LitElement {
             if (!this.isConnected) return;
             this.absNote = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("note");
           }}
         ></wt-input>
-        <wt-form-actions
-          .error=${this.#bottomMessage(this.#absenceFeedback, this.absRefusal, errors)}
-        >
+        <wt-form-actions .error=${this.#bottomMessage(feedback, errors, ABSENCE_FIELDS)}>
           <wt-button
             class="abs-submit"
             variant=${save.variant}

@@ -415,4 +415,62 @@ describe("the forms contract", () => {
     expect(actions(el, "request-absence").error).toBe("");
     retry.resolve({ absenceId: "ab9" });
   });
+
+  // The till's client spreads the error's `params` onto what it throws, so `field` sits at the top.
+  it.each([
+    {
+      form: "cover" as const,
+      field: "fromShiftId",
+      marked: "cover-shift",
+      other: "cover-colleague",
+    },
+    { form: "request-absence" as const, field: "startsOn", marked: "abs-from", other: "abs-to" },
+  ])(
+    "a refusal naming $field goes under $marked, never disables the button, and changing that field clears it",
+    async ({ form, field, marked, other }) => {
+      const api = stubApi();
+      const refusal = { code: "management.request_invalid", field, status: 400 };
+      api.requestSwap.mockImplementationOnce(() => Promise.reject(refusal));
+      api.requestAbsence.mockImplementationOnce(() => Promise.reject(refusal));
+      const { el } = await mountLoaded(api);
+      const submit = form === "cover" ? "cover-submit" : "abs-submit";
+      if (form === "cover") {
+        await choose(el, "cover-shift", "s1");
+        await choose(el, "cover-colleague", "col1");
+      } else {
+        await type(el, "abs-from", "2026-06-01");
+        await type(el, "abs-to", "2026-06-03");
+      }
+      await press(el, submit);
+      await vi.waitFor(() =>
+        expect(fieldError(el, marked)).toBe(codeMessage("management.request_invalid")),
+      );
+      expect(fieldError(el, other)).toBe("");
+      expect(actions(el, form).error).toBe(t("form.fix_fields"));
+      expect(q(el, ".notice")).toBeNull();
+      expect(await state(el, submit)).toEqual(ready);
+      if (form === "cover") {
+        await choose(el, "cover-shift", "");
+        await choose(el, "cover-shift", "s1");
+      } else await type(el, "abs-from", "2026-06-02");
+      expect(fieldError(el, marked)).toBe("");
+      expect(actions(el, form).error).toBe("");
+    },
+  );
+
+  it("a refusal naming a field the form does not show stays in the bottom message", async () => {
+    const api = stubApi();
+    api.requestSwap.mockImplementationOnce(() =>
+      Promise.reject({ code: "management.request_invalid", field: "toShiftId", status: 400 }),
+    );
+    const { el } = await mountLoaded(api);
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    await press(el, "cover-submit");
+    await vi.waitFor(() =>
+      expect(actions(el, "cover").error).toBe(codeMessage("management.request_invalid")),
+    );
+    expect(fieldError(el, "cover-shift")).toBe("");
+    expect(fieldError(el, "cover-colleague")).toBe("");
+  });
 });
