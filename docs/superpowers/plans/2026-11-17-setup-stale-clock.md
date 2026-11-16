@@ -30,8 +30,9 @@ under `withFacts`, so box clock plus the host's time service — and only then r
 `prepare`. That `prepare` is unchanged: it still picks the newest reading at most 30 seconds old
 that admits a name, then the `selected` checks (`canSelectHour`, the name not already in a history,
 the box's time not earlier than the chosen minute). Nothing reuses a stale reading; no device's time
-is accepted without the person's confirmation (a `null` browser sample adds none); the 30-second
-limit is unchanged.
+is added by the fresh reading (a `null` browser sample adds none); the 30-second
+limit is unchanged. When the preparation was given its own `readClock` (test stand-ins), the fresh
+comparison is skipped: that reader replaces the held readings entirely.
 
 - Synchronised time service: Provision passes however long the person took.
 - Not synchronised, Provision within 30 seconds of a confirmed device reading: unchanged (the
@@ -44,18 +45,24 @@ limit is unchanged.
 **Tests (red first).**
 
 1. `packages/fiscal-verifactu/src/hour-setup-defaults.test.ts` (fake timers, real hosted
-   preparation): select with a reading, advance 31 s, activation `prepare` writes the allocation.
-   Red today with `clock_stale`. Second case: time service unavailable, device reading confirmed,
-   31 s later activation still refuses and writes nothing (control that no stale reading is used).
-2. `apps/server/src/first-fiscal-setup.e2e.test.ts`: the real routes, with the clock moved 31 s
-   between the recovery-pack confirmation and `/setup-api/provision`; answers 200 and the venue
-   exists. Red today with `clock_stale`.
+   preparation): (a) time service synchronised: select, advance 31 s, activation `prepare` writes
+   the allocation — red today with `clock_stale`; (b) time service unavailable, device reading
+   confirmed (`confirmed: true`), 31 s later activation refuses `second_clock_missing` and writes
+   nothing — today `clock_stale`, so the reason is the assertion that moves; (c) the same within
+   10 s still writes the allocation — guards against handing the fresh comparison's id to
+   `clocks.read`, which would hide the confirmed device reading behind the box-only one.
+2. `apps/server/src/first-fiscal-setup.e2e.test.ts`: one more row of the existing `it.each`, the
+   clock moved 31 s before `/setup-api/provision`; answers 200 and the venue exists. Red today with
+   `400 clock_stale` (reproduced by the plan's reader). The file's time-service stand-in always
+   answers synchronised, so this covers the synchronised case only.
 3. Golden huella and `inmutabilidad` unedited.
 
 **Out of scope, asked separately (WATCHER-NEEDED).** A box whose time service is not synchronised
-cannot get a second clock at Provision without the browser, so its first setup through the page
-still fails whenever the person takes more than 30 seconds, and the stuck page (grant consumed) is
-unchanged. Options: (a) at Provision, a reading the person confirmed stays usable while the box's
+cannot get a second clock at Provision without the browser. Since the steps between the series and
+Provision always take more than 30 seconds, its first setup through the page always fails, before
+and after this change. And any refusal at activation still leaves the page stuck, because the
+recovery-pack grant is consumed first — including a synchronised box whose `timedatectl` does not
+answer within 2 s (`hour-clock-time-service.ts:4`). Options: (a) at Provision, a reading the person confirmed stays usable while the box's
 own clock has not been stepped since (wall time moved with the steady clock, as `clock_corrected`
 already checks) and the process is the same, as a restore's start keeps the restore page's choice
 (CLAUDE.md §5) — server-only, small; (b) the page offers the time check again on a clock refusal and
