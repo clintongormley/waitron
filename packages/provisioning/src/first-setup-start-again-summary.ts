@@ -1,17 +1,25 @@
 import type { FirstSetupState } from "./first-setup-state.js";
 
-export type StartAgainSummary = {
-  readonly reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
-  readonly recoveryRecordDamaged?: true;
-  /** The setup database is present and some of it could not be read. */
-  readonly databaseUnreadable?: true;
-};
+export type StartAgainSummary =
+  | {
+      readonly reached: "unknown";
+      readonly recoveryRecordDamaged?: never;
+      readonly databaseUnreadable?: never;
+    }
+  | {
+      readonly reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
+      readonly recoveryRecordDamaged?: true;
+      /** The setup database is present and some of it could not be read. */
+      readonly databaseUnreadable?: true;
+    };
 
 const FINISHED = new Set(["committed", "publication", "complete"]);
 const STARTED = new Set(["activation-started", "uncertain"]);
 const NAMED = new Set(["candidates", "import", "consumption-intent"]);
 
-export function startAgainSummary(state: FirstSetupState): StartAgainSummary {
+export function startAgainSummary(
+  state: FirstSetupState,
+): Exclude<StartAgainSummary, { reached: "unknown" }> {
   const attempts = [state, ...state.previous];
   const kinds = new Set(attempts.flatMap((attempt) => attempt.history.map((event) => event.kind)));
   const has = (set: Set<string>) => [...set].some((kind) => kinds.has(kind));

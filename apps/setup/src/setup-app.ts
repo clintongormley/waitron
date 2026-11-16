@@ -293,9 +293,12 @@ const stopNotAccepted = (code: unknown) =>
   code === "setup.owner_required" || code === "setup.connection_insecure";
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 const wipeOffered = (inspection: FirstSetupInspection) =>
-  inspection.pair === "valid" &&
-  inspection.revision !== null &&
-  inspection.ownerGeneration !== null;
+  (inspection.setupRecordDamaged === true &&
+    inspection.revision === null &&
+    inspection.ownerGeneration === null) ||
+  (inspection.pair === "valid" &&
+    inspection.revision !== null &&
+    inspection.ownerGeneration !== null);
 /** Words for a setup request the box refused over a first setup this page does not hold. */
 function firstSetupHeldWords(
   code: unknown,
@@ -1392,8 +1395,7 @@ export class SetupApp extends LitElement {
   }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
     const inspection = this.firstInspection;
-    if (!inspection || inspection.revision === null || inspection.ownerGeneration === null)
-      throw { code: "setup.not_ready" };
+    if (!inspection || !wipeOffered(inspection)) throw { code: "setup.not_ready" };
     return {
       inspectionId: inspection.inspectionId,
       revision: inspection.revision,
@@ -2491,7 +2493,8 @@ export class SetupApp extends LitElement {
       @click=${() => void this.#openWipeConfirmation("start-again")}
       >${t.startAgain}</wt-button
     >`;
-    const noInvoiceFound = !missing && summary?.databaseUnreadable !== true;
+    const noInvoiceFound =
+      !missing && summary?.databaseUnreadable !== true && summary?.reached !== "unknown";
     const recoverBackup = html`<wt-button
       data-test="recover-backup"
       variant="secondary"
@@ -2511,6 +2514,10 @@ export class SetupApp extends LitElement {
     const startAgainConfirm = !confirmOpen
       ? nothing
       : html`${
+            summary.reached === "unknown"
+              ? html`<p data-test="setup-record-damaged">${t.setupRecordDamaged}</p>`
+              : nothing
+          }${
             summary.recoveryRecordDamaged === true
               ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
               : nothing

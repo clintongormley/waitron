@@ -511,7 +511,7 @@ export async function recordedStartAgainMove(
   roots: Roots,
 ): Promise<(StartAgainChoiceRecord & { setAside: Destinations }) | null> {
   const marker = await readStartAgainMarker(roots.venueDir);
-  if (marker === null) return null;
+  if (marker === null || marker.version === 2) return null;
   const records = await readStartAgainChoices(roots.stateDir, marker);
   const record = records.filter((each) => each.choice === "move").at(-1);
   return record?.setAside ? { ...record, setAside: record.setAside } : null;

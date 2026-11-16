@@ -19,8 +19,13 @@ export const formErrors = (app: SetupApp) =>
 /** The page's text and its forms' errors, which wt-form-actions draws in its own shadow root. */
 export const shown = (app: SetupApp) =>
   [app.shadowRoot!.textContent!, ...formErrors(app)].join("\n");
-export const namedSummary: StartAgainSummary = { reached: "named" };
-export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
+export const namedSummary: Exclude<StartAgainSummary, { reached: "unknown" }> = {
+  reached: "named",
+};
+export const damagedSummary: Exclude<StartAgainSummary, { reached: "unknown" }> = {
+  ...namedSummary,
+  recoveryRecordDamaged: true,
+};
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];

@@ -82,7 +82,7 @@ for (const locale of locales) {
   });
 }
 
-it("where the setup record's revision cannot be read: no Start again, and the page says deleting is not offered", async () => {
+it("where an invalid setup envelope has no revision: no Start again, and the page says deleting is not offered", async () => {
   const t = stringsFor("en-GB");
   const { app, requests } = await heldFixture({
     inspection: () => ({

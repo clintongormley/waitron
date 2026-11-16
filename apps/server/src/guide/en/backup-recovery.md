@@ -39,8 +39,10 @@ for invoices. Start again and Recover from backup still delete it.
 Neither is offered, and the page says why in the same words for both, if the setup already
 finished, or if the setup database holds an invoice or another record Waitron never deletes. If the
 box cannot confirm that deleting the setup is safe, the page says so and offers neither. That
-includes a setup whose own record cannot be read: then the only way out is to reinstall Waitron.
+includes an unreadable setup record unless the page offers the damaged-record confirmation below.
 Over a plain connection neither works: set up the secure connection first.
+
+If the setup’s own record is damaged, the page may offer a warned **Start again** or **Recover from backup** after checking that the database holds no sales or fiscal records. Waitron cannot tell whether that setup reached AEAT. Either choice deletes the setup database, including any menu or staff details, once you tick the confirmation and press the same button again. Choose **Cancel** to keep everything. After **Recover from backup**, you choose a backup to replace it.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my

@@ -16,6 +16,7 @@ import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/store";
+import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { stagedPath } from "./fs-atomic.js";
 import { removeAndSync } from "./folder-sync.js";
 import {
@@ -397,4 +398,38 @@ it("Start again empties prepared and keeps every module's retained history", asy
       prepared: [],
       retained: { archive: { names: [module] } },
     });
+});
+
+it("a damaged-record marker resumes deletion of unchanged files", async () => {
+  const roots = await box();
+  const ordinary = await startAgainMarkerFor(roots, attempt);
+  const { venueDir, stateDir, files, wal } = ordinary;
+  const marker = { version: 2 as const, venueDir, stateDir, files, wal };
+  await writeStartAgainMarker(roots, marker);
+  await finishStartAgainDeletion(roots);
+  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(false);
+  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+});
+
+it("a damaged-record marker without the setup fingerprint is refused", async () => {
+  const roots = await box();
+  const marker = await startAgainMarkerFor(roots, null);
+  marker.files = marker.files.filter((file) => file.name !== "flows/setup/record.json");
+  await expect(writeStartAgainMarker(roots, marker)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+});
+
+it("an interrupted damaged-record deletion refuses changed files and offers no Move", async () => {
+  const roots = await box();
+  const marker = await startAgainMarkerFor(roots, null);
+  await writeStartAgainMarker(roots, marker);
+  await writeFile(join(roots.stateDir, "flows/setup/record.json"), "changed record");
+  await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("attempt database bytes");
+  expect(await surveyStartAgainLeftovers(roots)).toMatchObject({ kind: "explain" });
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(true);
 });

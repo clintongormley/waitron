@@ -689,3 +689,20 @@ it("inspects a pair whose database is over the snapshot budget and changes neith
   expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(marker);
   expect((await readdir(f.stateDir)).sort()).toEqual(entries);
 });
+
+it.each([
+  ["{truncated", true],
+  ["null", false],
+  ["[]", false],
+  ["{}", false],
+])(
+  "classifies only syntax-damaged setup bytes (%s) as the warned way out",
+  async (bytes, damaged) => {
+    const f = await fixture();
+    await writeFile(join(f.stateDir, "flows/setup/record.json"), bytes);
+    const inspected = await f.service.inspectFirstSetupResolution();
+    expect(inspected.setupRecordDamaged === true).toBe(damaged);
+    expect(inspected.revision).toBeNull();
+    expect(inspected.ownerGeneration).toBeNull();
+  },
+);

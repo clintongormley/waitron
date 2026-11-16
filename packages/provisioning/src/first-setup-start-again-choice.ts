@@ -259,7 +259,7 @@ export async function assertStartAgainNotKept(roots: {
   venueDir: string;
 }): Promise<void> {
   const marker = await readStartAgainMarker(roots.venueDir);
-  if (marker === null) return;
+  if (marker === null || marker.version === 2) return;
   const records = await readStartAgainChoices(roots.stateDir, marker);
   if (records.some((record) => record.choice === "keep"))
     throw new AppError("setup.start_again_kept", {});

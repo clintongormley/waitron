@@ -41,7 +41,7 @@ referrals, not completed recovery experiments.
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
-| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; since 2026-11-16 the `attempt_invalid` words name reload, Reconnect, a new tab, Start again and Recover from backup instead of support; the repair page can still refuse Start again (A1158, A1159, A1161). |
+| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; since 2026-11-16 the `attempt_invalid` words name reload, Reconnect, a new tab, Start again and Recover from backup instead of support; the repair page can still refuse Start again (A1159, A1161). |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
@@ -488,9 +488,9 @@ the missing-database path is deleted.)
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record (A1158), the setup databases A1159 lists and the database-present case in A1161 still refuse.
+Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record (the historical A1158 case, addressed on 2026-11-16 under [setup-state](#setup-state)), the setup databases A1159 lists and the database-present case in A1161 still refuse.
 
-_2026-11-16, SETUP-ATTEMPT-INVALID-WORDING (queued by the watcher; the words are not owner-reviewed): the words no longer send the person to support. They now read "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything." (Spanish to match). Still open: after a reload or a new tab, the repair page can still refuse Start again for the causes in A1158, A1159 and A1161 (under [setup-state](#setup-state)). The rest of this entry records the earlier tree._
+_2026-11-16, SETUP-ATTEMPT-INVALID-WORDING (queued by the watcher; the words are not owner-reviewed): the words no longer send the person to support. They now read "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything." (Spanish to match). Still open: after a reload or a new tab, the repair page can still refuse Start again for the causes in A1159 and A1161 (under [setup-state](#setup-state)). The rest of this entry records the earlier tree._
 
 ### `shell.operation_conflict`
 
@@ -694,16 +694,9 @@ changes take their required review and existing protected-writer approvals.
 
 ### setup-state
 
+_2026-11-16, SETUP-RECORD-WAY-OUT: a syntax-damaged setup record now has a warned, confirmed Start again and Recover from backup after an independent database read finds no sales or fiscal records. AEAT history is unknown; menu and staff rows may be deleted. The [owner’s exception and deliberate exclusions](setup.md#decisions-and-deliberate-limits) preserve readable-record refusals and the other cases below._
+
 **Setup state refusals need a usable next step.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
-
-#### A1158: a damaged setup record still dead-ends Start again
-
-Left open by A1099. When an abandoned first setup's own record (`state/first-setup.json`)
-is damaged, Start again is refused before any warning can be shown. The claim marker was removed
-by A1308 fl7 (2026-11-13). The current repair-page case “a record that cannot be read offers
-neither, and says why” (`apps/setup/src/setup-app-resolution.test.ts`) checks an invalid inspection
-with no revision: both recovery actions stay disabled and send no request. Wanted: the same kind
-of warned way out A1042 gives a damaged recovery-key record.
 
 #### A1159: some setup databases the box cannot read still refuse Start again
 

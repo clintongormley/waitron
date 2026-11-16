@@ -301,7 +301,7 @@ it("offers Start again beside a missing database, and pressing it draws what the
 it.each([
   { name: "a readable record", inspected: {}, offered: true },
   {
-    name: "a record that cannot be read",
+    name: "a readable JSON record with an invalid setup envelope",
     inspected: { pair: "invalid", revision: null, ownerGeneration: null },
     offered: false,
   },
@@ -1251,7 +1251,7 @@ it("a connection check refused storage.disk_full keeps the connection-failure wo
   expect(q(app, "screen-first-owner")).toBeNull();
 });
 
-it("a record that cannot be read offers neither, and says why", async () => {
+it("a readable JSON record with an invalid setup envelope offers neither, and says why", async () => {
   const t = initialOwnerStrings.en;
   const { app, requests } = await mount({
     inspection: { pair: "invalid", revision: null, ownerGeneration: null },

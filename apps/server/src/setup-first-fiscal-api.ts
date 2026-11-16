@@ -92,11 +92,15 @@ function shownSummary(value: unknown): StartAgainSummary {
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
     (unreadable && shown.databaseUnreadable !== true) ||
-    !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string)
+    !["unknown", "claimed", "named", "fiscal-started", "fiscal-finished"].includes(
+      shown.reached as string,
+    ) ||
+    (shown.reached === "unknown" && (damaged || unreadable))
   )
     invalid();
+  if (shown.reached === "unknown") return { reached: "unknown" };
   return {
-    reached: shown.reached as StartAgainSummary["reached"],
+    reached: shown.reached as Exclude<StartAgainSummary["reached"], "unknown">,
     ...(damaged && { recoveryRecordDamaged: true as const }),
     ...(unreadable && { databaseUnreadable: true as const }),
   };
@@ -144,7 +148,8 @@ export function firstFiscalOwner(c: Context): FirstSetupOwnerAttempt {
     ownerGeneration: integer("X-Waitron-Setup-Generation"),
   };
 }
-function assertAttemptCounts(body: Record<string, unknown>) {
+function assertAttemptCounts(body: Record<string, unknown>, damaged = false) {
+  if (damaged && body.revision === null && body.ownerGeneration === null) return;
   if (
     ![body.revision, body.ownerGeneration].every(
       (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
@@ -153,13 +158,16 @@ function assertAttemptCounts(body: Record<string, unknown>) {
     invalid();
 }
 /** The body of a request naming only the attempt it acts on. */
-async function attemptReference(c: Context) {
+async function attemptReference(c: Context, allowDamaged?: () => Promise<boolean>) {
   const body = exact(await readFirstFiscalBody(c), ["inspectionId", "revision", "ownerGeneration"]);
-  assertAttemptCounts(body);
+  assertAttemptCounts(
+    body,
+    body.revision === null && body.ownerGeneration === null && (await allowDamaged?.()),
+  );
   return {
     inspectionId: text(body.inspectionId),
-    revision: body.revision as number,
-    ownerGeneration: body.ownerGeneration as number,
+    revision: body.revision as number | null,
+    ownerGeneration: body.ownerGeneration as number | null,
   };
 }
 export async function readFirstFiscalBody(c: Context, limit = 131072): Promise<unknown> {
@@ -702,7 +710,11 @@ export function mountFirstSetupResolutionApi(
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
-        const reference = await attemptReference(c);
+        const reference = await attemptReference(
+          c,
+          async () =>
+            (await host.resolution.inspectFirstSetupResolution()).setupRecordDamaged === true,
+        );
         try {
           return c.json(await diskFullOr(() => options.summary!(reference)));
         } catch (error) {
@@ -738,6 +750,9 @@ export function mountFirstSetupResolutionApi(
           "revision",
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
+          ...(Object.hasOwn(rawBody, "confirmDamagedSetupRecord")
+            ? ["confirmDamagedSetupRecord"]
+            : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
           ...(Object.hasOwn(rawBody, "confirmUnreadableDatabase")
             ? ["confirmUnreadableDatabase"]
@@ -751,7 +766,20 @@ export function mountFirstSetupResolutionApi(
           body.recoveryRecordDamagedShown !== true
         )
           invalid();
-        assertAttemptCounts(body);
+        assertAttemptCounts(
+          body,
+          body.revision === null &&
+            body.ownerGeneration === null &&
+            (await host.resolution.inspectFirstSetupResolution()).setupRecordDamaged === true,
+        );
+        const confirmDamagedSetupRecord = Object.hasOwn(body, "confirmDamagedSetupRecord")
+          ? { shown: shownSummary(exact(body.confirmDamagedSetupRecord, ["shown"]).shown) }
+          : undefined;
+        if (
+          confirmDamagedSetupRecord !== undefined &&
+          confirmDamagedSetupRecord.shown.reached !== "unknown"
+        )
+          invalid();
         const register = Object.hasOwn(body, "register")
           ? registerAnswer(body.register)
           : undefined;
@@ -765,9 +793,10 @@ export function mountFirstSetupResolutionApi(
           await diskFullOr(() =>
             options.startAgain!({
               inspectionId: text(body.inspectionId),
-              revision: body.revision as number,
-              ownerGeneration: body.ownerGeneration as number,
+              revision: body.revision as number | null,
+              ownerGeneration: body.ownerGeneration as number | null,
               register,
+              ...(confirmDamagedSetupRecord === undefined ? {} : { confirmDamagedSetupRecord }),
               ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
               ...(confirmUnreadableDatabase === undefined ? {} : { confirmUnreadableDatabase }),
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")

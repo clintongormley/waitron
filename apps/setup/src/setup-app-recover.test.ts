@@ -168,7 +168,7 @@ it.each(refusals)(
   },
 );
 
-it("where the wipe is not offered (a record that cannot be read), Recover from backup is drawn disabled like Start again", async () => {
+it("where the wipe is not offered (a readable JSON record with an invalid setup envelope), Recover from backup is drawn disabled like Start again", async () => {
   const { app, requests } = await wipeFixture({
     inspection: { pair: "invalid", revision: null, ownerGeneration: null },
   });
