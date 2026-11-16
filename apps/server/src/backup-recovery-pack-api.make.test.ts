@@ -1472,7 +1472,7 @@ it("bounds a status read to eight seconds and reports an unknown code", async ()
   const deadline = new AbortController();
   const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
   let rejectRead!: (error: unknown) => void;
-  cloud.connection.emergency = vi.fn(
+  cloud.connection.emergency = vi.fn<typeof cloud.connection.emergency>(
     (_origin, signal) =>
       new Promise((_resolve, reject) => {
         rejectRead = reject;

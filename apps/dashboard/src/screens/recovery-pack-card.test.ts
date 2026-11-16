@@ -1013,18 +1013,21 @@ it("does not call an unknown emergency code out of date or ask for another pack"
   expect(line(el)).not.toContain(t("recovery_pack.make_new"));
 });
 
-it.each(["en-GB", "es-ES"])("explains changed and missing emergency codes (%s)", async (locale) => {
-  setLocale(locale);
-  for (const reason of [
-    { part: "emergency", kind: "code_changed", at: MADE_AT },
-    { part: "emergency", kind: "code_missing" },
-  ] as const) {
-    const el = await mount(stubApi(status({ latest: latest(), reasons: [reason] })));
-    expect(line(el)).toContain(
-      reason.kind === "code_changed"
-        ? fill("recovery_pack.reason.emergency_changed", { date: DAYS[locale].made })
-        : t("recovery_pack.reason.emergency_missing"),
-    );
-    expect(line(el)).toContain(t("recovery_pack.make_new"));
-  }
-});
+it.each(["en-GB", "es-ES"] as const)(
+  "explains changed and missing emergency codes (%s)",
+  async (locale) => {
+    setLocale(locale);
+    for (const reason of [
+      { part: "emergency", kind: "code_changed", at: MADE_AT },
+      { part: "emergency", kind: "code_missing" },
+    ] as const) {
+      const el = await mount(stubApi(status({ latest: latest(), reasons: [reason] })));
+      expect(line(el)).toContain(
+        reason.kind === "code_changed"
+          ? fill("recovery_pack.reason.emergency_changed", { date: DAYS[locale].made })
+          : t("recovery_pack.reason.emergency_missing"),
+      );
+      expect(line(el)).toContain(t("recovery_pack.make_new"));
+    }
+  },
+);
