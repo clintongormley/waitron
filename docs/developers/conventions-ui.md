@@ -1391,7 +1391,7 @@ can refuse the start four ways:
   `unlisted file: venue/venue.db`.
 
 The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
-TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else the page shows the
+TLS (`isSecure`, `apps/server/src/encrypted-connection.ts`); over anything else the page shows the
 list and "Open this page over the box's secure connection to choose." `POST
 /recovery-api/start-again` is mounted only on that page. Until a Move has been recorded it refuses
 a request that is not TLS (403) or not from the page's own origin (403); once a Move has finished,

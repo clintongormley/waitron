@@ -117,7 +117,6 @@ export function mountConflictRecovery(app: Hono, ctx: ModuleRouteContext, log: L
     {
       "recovery.rate_limited": 429,
       "promotion.break_glass_invalid": 401,
-      "authorization.not_permitted": 403,
       "node.operation_page_required": 403,
       "node.read_only": 409,
       "sif.allocation_invalid": 409,

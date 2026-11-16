@@ -1,6 +1,7 @@
 // This catalog is browser-safe; unknown codes never carry the server's arbitrary text.
 export const REPORT_CODES: ReadonlySet<string> = new Set([
   "authorization.not_permitted",
+  "node.operation_page_required",
   "management_session.expired",
   "management_session.required",
   "password.invalid",
