@@ -653,9 +653,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Mark a new dish as urgent** — owner, 2026-09-27.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
 
-- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01).
-  [Detail](backlog/kitchen.md#the-dark-screen-alert-can-be-wrong)
-
 - **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).** —
   left open by the menus plan.
   [Detail](backlog/kitchen.md#changing-sent-lines-and-the-kitchen-screen-task-7c-710-and-the-kitchen-fixes-after-it)
