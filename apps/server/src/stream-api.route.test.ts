@@ -349,6 +349,7 @@ describe("stream settings routes", () => {
     "fresh_version_refused",
     "if_match_ignored",
     "delete_failed",
+    "batch_delete_refused",
   ] satisfies ProbeFailure[])(
     "Test refuses a bucket that fails with %s, naming it",
     async (reason) => {

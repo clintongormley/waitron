@@ -334,23 +334,26 @@ describe("stream-settings-panel: the bucket form", () => {
     },
   );
 
-  it("a failed Test shows the localised refusal and the failed check in words", async () => {
-    const api = stubApi({
-      testStreamBucket: vi.fn().mockRejectedValue({
-        code: "backup.stream_test_failed",
-        params: { reason: "create_only_ignored" },
-        status: 422,
-      }),
-    });
-    const { el } = await mount(api);
-    fillRequired(el);
-    await press(el, "test");
-    const alert = q(el, "[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("backup.stream_test_failed"));
-    expect(alert.textContent).toContain(t("stream.probe.create_only_ignored"));
-    expect(alert.textContent).not.toContain("create_only_ignored");
-    expect(q(el, "[data-test=test-passed]")).toBeNull();
-  });
+  it.each(["create_only_ignored", "batch_delete_refused"] as const)(
+    "a failed Test shows the localised refusal and the failed check, %s, in words",
+    async (reason) => {
+      const api = stubApi({
+        testStreamBucket: vi.fn().mockRejectedValue({
+          code: "backup.stream_test_failed",
+          params: { reason },
+          status: 422,
+        }),
+      });
+      const { el } = await mount(api);
+      fillRequired(el);
+      await press(el, "test");
+      const alert = q(el, "[role=alert]")!;
+      expect(alert.textContent).toContain(codeMessage("backup.stream_test_failed"));
+      expect(alert.textContent).toContain(t(`stream.probe.${reason}`));
+      expect(alert.textContent).not.toContain(reason);
+      expect(q(el, "[data-test=test-passed]")).toBeNull();
+    },
+  );
 
   it("a failed Test with a check it has no sentence for shows the refusal alone, never the reason's text", async () => {
     const api = stubApi({

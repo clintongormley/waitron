@@ -361,12 +361,6 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
 
 ## Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
-- Which real providers other than Amazon S3 lack S3's multi-object delete, and what each
-  answers, is not established; Amazon S3 answered batches of 1,000 and 5 keys with 200 and no
-  per-key errors on 2026-10-14 ([receipts](../receipts/a538/README.md), A538-10). A provider that
-  refuses it with a status other than 501 fails the day's prune (`stream.prune_failed`).
-  `probeBucket` deletes one object at a time, so it cannot reveal such a provider; having it
-  delete its test object through `deleteMany` would.
 - Amazon S3 is the only real provider's bucket the package has run against (the 2026-10-14
   rehearsal, [receipts](../receipts/a538/README.md), A538-10); the unit tests drive the real S3
   client over a scripted network, and the loop test drives it against versitygw.
@@ -1303,6 +1297,16 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Decisions and deliberate limits
 
+- **Only the bucket copy's Test and Save on the Backups screen delete their test file the way the
+  daily clean-up does, several files in one request** (campaign watcher, 2026-11-16 12:51, lane B
+  questions.md, PROBE-BATCH-DELETE). A provider that refuses that request with any answer but 501
+  is refused there: a 403 as `access_denied`, anything else as `batch_delete_refused`
+  (`settingsBucketProbe` in `apps/server/src/stream-api.ts`). The copy's start, its daily recheck
+  and the spare's check keep the one-file delete: a refused check at the copy's start is retried
+  until it passes, so such a bucket would get no backups at all, and the recheck would mark a
+  working copy's bucket unusable.
+  A bucket saved before this check, on such a provider, keeps copying, and each daily clean-up
+  that has old files to remove still fails (`stream.prune_failed`). Open to the owner.
 - **The Tax agency row on Box status shows the oldest unsent record's time ("Unsent since"), not
   when sends began failing** (campaign watcher, 2026-11-15 02:28, lane C questions.md; #3266).
   Nothing stores when sends began failing, and an incident's open time would cover only part of what

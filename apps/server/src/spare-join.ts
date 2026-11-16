@@ -224,7 +224,7 @@ function storeProbe(deps: SpareJoinDeps): Probe {
     const store = createS3ObjectStore(
       spareStoreBucket(open.pipe.loopbackUrl, link.accessKeyId, open.secretAccessKey),
     );
-    const result = await probeBucket(store, undefined, { signal }).catch(
+    const result = await probeBucket(store, undefined, {}, { signal }).catch(
       (error: unknown) => ({ ok: false, reason: codeOf(error) }) as const,
     );
     const reason = result.ok ? undefined : result.reason;

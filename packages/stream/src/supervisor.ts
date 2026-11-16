@@ -425,7 +425,7 @@ export class StreamSupervisor {
       this.#set("opening", null, null);
       let moving: Promise<unknown> = Promise.resolve();
       try {
-        const probe = await probeBucket(this.#store, undefined, { signal });
+        const probe = await probeBucket(this.#store, undefined, {}, { signal });
         signal.throwIfAborted();
         if (!probe.ok) {
           this.#noteBucketProblem(probe.reason);
@@ -772,7 +772,7 @@ export class StreamSupervisor {
     const mine = ++this.#checkSeq;
     const wanted = () => !signal.aborted && mine === this.#checkSeq;
     try {
-      const probe = await probeBucket(this.#store, undefined, { signal });
+      const probe = await probeBucket(this.#store, undefined, {}, { signal });
       if (!wanted()) return;
       this.#noteBucketProblem(probe.ok ? null : probe.reason);
     } catch (error) {

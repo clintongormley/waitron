@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
@@ -13,6 +14,8 @@ import { readPairLink } from "@waitron/node-db";
 import { AppError, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
+  createS3ObjectStore,
+  probeBucket,
   readBucketConfig,
   type BucketConfig,
   type ProbeResult,
@@ -108,6 +111,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // `packages/dashboard-kit/src/request.ts` bounds GETs only), so nothing else ends a check whose
 // answer stalls after its headers. The minute was not measured.
 const PROBE_LIMIT_MS = 60_000;
+
+// Only Test and Save delete as the daily prune does: the copy's start retries a refused check
+// until it passes, so a bucket already in use would get no new backups, not only a failing prune.
+export function settingsBucketProbe(
+  bucket: BucketConfig,
+  signal: AbortSignal,
+): Promise<ProbeResult> {
+  return probeBucket(createS3ObjectStore(bucket), randomUUID(), { batchDelete: true }, { signal });
+}
 
 export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.stream_failed");
