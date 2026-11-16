@@ -359,8 +359,8 @@ export class TillPassScreen extends LitElement {
 
   /**
    * The status lines sit above the columns, out of view after a press on a card low in a long one.
-   * Waits for the board: its header, above the lines, can change height when it redraws, and a
-   * browser without scroll anchoring (Safari before 27) leaves the line where the scroll put it.
+   * Waits for the board to redraw: its header, above the lines, can change height, and without
+   * scroll anchoring that moves the line after it was scrolled into view.
    */
   async #reveal(selector: string): Promise<void> {
     await this.updateComplete;

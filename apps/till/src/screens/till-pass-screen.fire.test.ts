@@ -690,7 +690,7 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
     expect(box.bottom).toBeLessThanOrEqual(scroller().clientHeight);
   }
 
-  /** Safari before 27 keeps the scroll position when content above the view changes height. */
+  /** Turns off scroll anchoring, so a height change above the view moves what is on screen. */
   async function withoutScrollAnchoring(run: () => Promise<void>): Promise<void> {
     document.documentElement.style.overflowAnchor = "none";
     try {
