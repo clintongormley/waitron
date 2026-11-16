@@ -14,6 +14,10 @@ updating, or reset the preproduction test installation. No upgrade gate or compa
 (source read only); deployment between stepdown and placement is not prevented by this change.
 Repeat this deployment limit in the PR description.
 
+Watcher correction, 10:47 after the build review: subtract reusable pages from that estimate.
+Use (page_count − freelist_count) × page_size in the same read; prove delete and reuse in WAL.
+No other design change or extra review wave.
+
 **Result:** refuse an undersized destination or different encryption keys before stepdown;
 the source keeps selling and the destination records no operation/event. Matching keys and room
 pass. Keep the later room check for growth and the existing stored-offer replay semantics.
@@ -45,7 +49,7 @@ database already occupies space. Acceptance needs **one additional copy plus flo
 
 2. **Sign the size and refuse before recording.** Add `readOfferCopyBytes(db: Database): number`
    in `S/handover-manifest.ts`: use the existing `db.all(sql...)` API to read
-   `pragma_page_count()` × `pragma_page_size()` in one statement as the current copy budget.
+   (`pragma_page_count()` − `pragma_freelist_count()`) × `pragma_page_size()` in one statement as the current copy budget.
    Prove it with WAL-backed data; no live-main-file stat alone, checkpoint, or offer-time archive.
    Sign top-level `copyBytes` in `S/handover-source-start-api.ts`, outside settings so growth
    does not trigger `settings_changed`.
@@ -59,8 +63,8 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    and both route status maps and the source's `OFFER_REFUSALS` whitelist. Preserve replay's
    early stored answer and source retry's original signed envelope, including its original size.
    **Tests:** `S/handover-manifest.test.ts`: “WAL-only growth is included in the offer copy budget”
-   (disable auto-checkpoint, commit growth, assert the main-file size stays unchanged and below
-   the logical-size estimate). `S/handover-destination-api.test.ts`: “one byte below two
+   (disable auto-checkpoint, commit growth, assert the main-file size stays unchanged while
+   the estimate grows; deleting and reusing pages changes the estimate rather than inflating it). `S/handover-destination-api.test.ts`: “one byte below two
    copies plus floor refuses without recording”, exact-boundary pass, `venueDir` being lower,
    neither reporting space, malformed sizes, old-shape offer refusal before recording, and replay
    after room disappears; assert the refusal log carries both amounts. The lower-folder case checks wiring. In

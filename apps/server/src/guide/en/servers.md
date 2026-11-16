@@ -130,7 +130,7 @@ A recent confirmation is reused; a recovery-code confirmation must be replaced w
 authenticator code. You need an account with a password, and that password and your current
 authenticator code, if set up, ready to sign in on the spare. A passkey cannot complete that step.
 
-If the spare refuses the offer for lack of space, choose **Stop**, make room on the spare and
+If the spare reports too little disk space when you hand over, choose **Stop**, make room on the spare and
 hand over again. The main box keeps selling. If an encryption key is missing or different, choose
 **Stop** and join the spare again before handing over.
 

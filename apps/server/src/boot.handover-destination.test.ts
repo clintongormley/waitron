@@ -62,6 +62,16 @@ vi.mock("./handover-source-api.js", async (importOriginal) => {
   return { ...actual, mountHandoverSourceApi: vi.fn(actual.mountHandoverSourceApi) };
 });
 
+const disk = vi.hoisted(() => ({ lowDir: null as string | null }));
+vi.mock("./free-bytes.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./free-bytes.js")>();
+  return {
+    ...actual,
+    freeBytes: (...args: Parameters<typeof actual.freeBytes>) =>
+      args[0] === disk.lowDir ? Promise.resolve(0) : actual.freeBytes(...args),
+  };
+});
+
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
@@ -85,6 +95,7 @@ let stallChartPost = false;
 let chartPostClosed: Promise<void> | undefined;
 
 afterEach(async () => {
+  disk.lowDir = null;
   await server?.close();
   server = undefined;
   stallChartPost = false;
@@ -439,6 +450,41 @@ describe("the spare's handover duty in a full start", () => {
         body: { error: { code: "password.throttled" } },
       });
   }, 120_000);
+
+  it("the offer checks the configured database folder after boot", async () => {
+    const { nodeId, binding } = await boot("mirror");
+    await vi.waitFor(async () => expect((await operation(nodeId, OP))?.state).toBe("abandoned"), {
+      timeout: 15000,
+    });
+    disk.lowDir = dirname(suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file);
+    const answer = await fetch(`http://127.0.0.1:${httpPort()}/api/node/handover/offer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        signEnvelope(
+          "stepdown",
+          {
+            binding: binding(LATER_OP) as unknown as CanonicalValue,
+            authorisedBy: AUTHORISER,
+            settings: (await readOfferSettings(
+              scratch!,
+              loadKeyRing(KEY_ENV),
+              "handover.settings_unreadable",
+              suite.db,
+            )) as unknown as CanonicalValue,
+            imageMigrations: imageMigrationsDigest(null),
+            copyBytes: 1024,
+          },
+          MAIN_BOX,
+        ),
+      ),
+    });
+    expect(answer.status).toBe(409);
+    expect(await answer.json()).toEqual({
+      error: { code: "handover.no_room_at_offer", params: {} },
+    });
+    expect(await operation(nodeId, LATER_OP)).toBeNull();
+  }, 60000);
 
   it("a mirror reads its open operation at boot, and an offer wakes it for the next", async () => {
     vi.mocked(mountHandoverSourceApi).mockClear();

@@ -1633,7 +1633,7 @@ this section records the remaining build and real-box qualification.
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
-  exists (decision D7); the two related risks in the detail stay open.
+  exists (decision D7); the bucket-copy risk in the detail stays open.
   [Detail](backlog/replication-cloud.md#a1273-the-shared-key-ring-has-no-rotation-path-to-the-spare)
 
 - **A1274: a box that handed over and then loses its node.db can start as a second main box.**

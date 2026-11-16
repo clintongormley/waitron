@@ -59,7 +59,8 @@ async function manifestItem(
 // Repacking and later sales can change the final size; acceptance checks the actual copy.
 export function readOfferCopyBytes(db: Database): number {
   const [row] = db.all<{ bytes: number }>(sql`
-    select page_count * page_size as bytes from pragma_page_count(), pragma_page_size()
+    select (page_count - freelist_count) * page_size as bytes
+    from pragma_page_count(), pragma_freelist_count(), pragma_page_size()
   `);
   return row.bytes;
 }

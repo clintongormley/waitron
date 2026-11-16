@@ -183,15 +183,33 @@ describe("buildNodeLocalManifest", () => {
   it("WAL-only growth is included in the offer copy budget", async () => {
     await primary.db.run(sql`pragma wal_autocheckpoint = 0`);
     const [{ file }] = primary.db.all<{ file: string }>(sql`pragma database_list`);
-    const before = (await stat(file)).size;
+    const fileBytes = (await stat(file)).size;
+    const before = manifest.readOfferCopyBytes(primary.db);
     try {
       await primary.db.run(sql`create table offer_budget_probe (payload blob)`);
       await primary.db.run(sql`insert into offer_budget_probe values (zeroblob(2000000))`);
       const budget = manifest.readOfferCopyBytes(primary.db);
-      expect((await stat(file)).size).toBe(before);
+      expect((await stat(file)).size).toBe(fileBytes);
       expect(budget).toBeGreaterThan(before);
     } finally {
       await primary.db.run(sql`drop table offer_budget_probe`);
+      await primary.db.run(sql`pragma wal_autocheckpoint = 1000`);
+    }
+  });
+
+  it("reusable pages left by WAL-backed deletion do not inflate the copy estimate", async () => {
+    await primary.db.run(sql`pragma wal_autocheckpoint = 0`);
+    try {
+      await primary.db.run(sql`create table offer_reuse_probe (payload blob)`);
+      await primary.db.run(sql`insert into offer_reuse_probe values (zeroblob(2000000))`);
+      const filled = manifest.readOfferCopyBytes(primary.db);
+      await primary.db.run(sql`delete from offer_reuse_probe`);
+      const emptied = manifest.readOfferCopyBytes(primary.db);
+      expect(filled - emptied).toBeGreaterThan(1900000);
+      await primary.db.run(sql`insert into offer_reuse_probe values (zeroblob(2000000))`);
+      expect(manifest.readOfferCopyBytes(primary.db)).toBe(filled);
+    } finally {
+      await primary.db.run(sql`drop table offer_reuse_probe`);
       await primary.db.run(sql`pragma wal_autocheckpoint = 1000`);
     }
   });

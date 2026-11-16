@@ -1698,8 +1698,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El disco de este servidor no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
   },
   "handover.no_room_at_offer": {
-    en: "The spare could not confirm room for two whole copies of the venue plus the startup reserve. This attempt has ended while the main box keeps selling. Choose Stop, make room on the spare, then hand over again.",
-    es: "El servidor de reserva no ha podido confirmar sitio para dos copias enteras del local más la reserva de arranque. Este intento ha terminado y el servidor principal sigue vendiendo. Elige Parar, haz sitio en el servidor de reserva y vuelve a traspasar el local.",
+    en: "The spare could not confirm room for two whole copies of the venue plus space kept free so the box can start. This attempt has ended while the main box keeps selling. Choose Stop, make room on the spare, then hand over again.",
+    es: "El servidor de reserva no ha podido confirmar sitio para dos copias enteras del local y el espacio que se mantiene libre para que el servidor pueda arrancar. Este intento ha terminado y el servidor principal sigue vendiendo. Elige Parar, haz sitio en el servidor de reserva y vuelve a traspasar el local.",
   },
   "handover.no_room_to_place": {
     en: "This box's disk has no room to put the accepted copy of the venue in place. It asks the old box to give up filing once there is room. The old box stays stopped.",

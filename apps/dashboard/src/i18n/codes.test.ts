@@ -1172,7 +1172,7 @@ it("offer-space and key refusals give truthful next steps in EN and ES", () => {
     [
       "en",
       "two whole copies",
-      "startup reserve",
+      "space kept free so the box can start",
       "keeps selling",
       "different",
       "join the spare again",
@@ -1180,7 +1180,7 @@ it("offer-space and key refusals give truthful next steps in EN and ES", () => {
     [
       "es",
       "dos copias enteras",
-      "reserva de arranque",
+      "espacio que se mantiene libre",
       "sigue vendiendo",
       "distinta",
       "vuelve a unirlo",
