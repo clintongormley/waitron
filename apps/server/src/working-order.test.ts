@@ -573,6 +573,33 @@ describe("a sold variant line carries its product and relative variant names", (
     ]);
   });
 
+  it("brings a held variant line back with the variant's own VAT class, and the variant's allergens as before", async () => {
+    const { cfg, zoneId, menuId } = await setupVenue();
+    const orderId = randomUUID();
+    await withTransaction(db, async (tx) => {
+      const seeded = await seedVariantOffer(tx, menuId);
+      await menu.updateProduct(tx, seeded.productId, { allergens: { milk: {} } });
+      await menu.updateProduct(tx, seeded.variantId, {
+        vatClass: "reduced",
+        allergens: { soybeans: {} },
+      });
+      await publishWorkingMenu(tx, menuId);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+    });
+    const held = await getHeldOrder({ db }, orderId);
+
+    expect(
+      held.lines.map((l) => [l.product?.vatClass, Object.keys(l.product?.allergens ?? {})]),
+    ).toEqual([["reduced", ["soybeans"]]]);
+  });
+
   it("names the variant's parent product and the offer on the tab line, as the retrieve screen maps them", async () => {
     const { cfg, zoneId, menuId } = await setupVenue();
     const orderId = randomUUID();

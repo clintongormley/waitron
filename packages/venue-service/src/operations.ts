@@ -1388,6 +1388,7 @@ export async function recordWorkingLineContexts(
   lines: readonly {
     workingOrderLineId: string;
     menuItemId: string;
+    variantId?: string;
     recorded?: { offer: ZoneMenuOffer; versionId: string };
     unit?: {
       id: string;
@@ -1443,6 +1444,7 @@ export async function recordWorkingLineContexts(
         });
       }
       const unitId = line.unit?.id ?? offer.unit.id;
+      const sold = offer.variants.find((variant) => variant.id === line.variantId) ?? offer;
       return {
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
@@ -1451,7 +1453,7 @@ export async function recordWorkingLineContexts(
         menuName: offer.menuName,
         departmentId: context.departmentId,
         departmentName: department.name,
-        categoryName: offer.category ?? "Uncategorised",
+        categoryName: sold.category ?? "Uncategorised",
         unitId,
         unitName: line.unit?.name ?? offer.unit.name,
         unitPrecision: line.unit?.precision ?? offer.unit.precision,
@@ -1460,10 +1462,10 @@ export async function recordWorkingLineContexts(
           seedKey: seedKeyById.get(unitId) ?? null,
         }),
         hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
-        vatClass: offer.vatClass,
-        allergens: offer.allergens,
-        diet: offer.diet,
-        dietOverride: offer.dietOverride,
+        vatClass: sold.vatClass,
+        allergens: sold.allergens,
+        diet: sold.diet,
+        dietOverride: sold.dietOverride,
         latePeriodName: line.late?.periodName ?? null,
         lateConfirmedBy: line.late?.confirmedBy ?? null,
       };

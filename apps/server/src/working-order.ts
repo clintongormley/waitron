@@ -654,6 +654,7 @@ export async function priceOrderLines(
   lineContexts: {
     workingOrderLineId: string;
     menuItemId: string;
+    variantId?: string;
     recorded?: { offer: ZoneMenuOffer; versionId: string };
     unit?: ExtraChild["unitContext"];
     late?: { periodName: string; confirmedBy: string };
@@ -843,6 +844,7 @@ export async function priceOrderLines(
         kind: "parent";
         recorded?: { offer: ZoneMenuOffer; versionId: string };
         productId: string;
+        variantId?: string;
         menuItemId: string;
         courseId: string | null;
         note: string | null;
@@ -975,6 +977,7 @@ export async function priceOrderLines(
       kind: "parent",
       recorded: line[RECORDED_OFFER],
       productId: selection.productId,
+      ...(line.variantId == null ? {} : { variantId: line.variantId }),
       menuItemId: line.menuItemId,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
@@ -1100,6 +1103,9 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
+    ...(meta.kind === "parent" && meta.variantId !== undefined
+      ? { variantId: meta.variantId }
+      : {}),
     ...(meta.recorded === undefined ? {} : { recorded: meta.recorded }),
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
     ...(meta.late !== undefined ? { late: meta.late } : {}),
@@ -3277,11 +3283,7 @@ export interface PricedTabRound {
   rows: WorkingOrderLineInsert[];
   /** Aligned with `rows`, as {@link priceOrderLines} answers it. */
   portionable: boolean[];
-  lineContexts: {
-    workingOrderLineId: string;
-    menuItemId: string;
-    unit?: ExtraChild["unitContext"];
-  }[];
+  lineContexts: Awaited<ReturnType<typeof priceOrderLines>>["lineContexts"];
   offers: ZoneOffers;
 }
 
