@@ -8,6 +8,7 @@ import {
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
+import { WtCombobox } from "@waitron/ui";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
   MenuSummary,
@@ -2424,4 +2425,33 @@ it("starts one stream with products before the modifier lists arrive", async () 
     el.remove();
     liveUpdates.stop();
   }
+});
+
+it("keeps the lists' columns and status filter widths on a redraw, then translates them", async () => {
+  setLocale("en");
+  const el = await mount();
+  const found = table(el, "extra-lists");
+  await found.updateComplete;
+  const filters = () => [...found.shadowRoot.querySelectorAll<WtCombobox>("wt-combobox")];
+  expect(filters().length).toBe(1);
+  await Promise.all(filters().map((filter) => filter.updateComplete));
+  const columns = found.columns;
+  const widths = vi.spyOn(
+    WtCombobox.prototype as unknown as { widthTexts(): string[] },
+    "widthTexts",
+  );
+  onTestFinished(() => widths.mockRestore());
+  for (let redraw = 0; redraw < 10; redraw++) {
+    el.requestUpdate();
+    await el.updateComplete;
+    await found.updateComplete;
+    await Promise.all(filters().map((filter) => filter.updateComplete));
+  }
+  expect(widths.mock.calls.length).toBe(0);
+  expect(found.columns).toBe(columns);
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  await found.updateComplete;
+  expect(found.columns[0]!.label).toBe("Nombre");
 });

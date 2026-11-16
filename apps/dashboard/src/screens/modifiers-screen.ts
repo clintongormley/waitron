@@ -34,7 +34,7 @@ import type {
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { countOf } from "../widgets/count-text.js";
 
@@ -391,7 +391,18 @@ export class ModifiersScreen extends LitElement {
       ></wt-button
     >`;
   }
+  #columnLists = new Map<Kind, { locale: string; list: DataTableColumn<ModifierList>[] }>();
+
   #columns(kind: Kind): DataTableColumn<ModifierList>[] {
+    const locale = currentLocale();
+    const cached = this.#columnLists.get(kind);
+    if (cached?.locale === locale) return cached.list;
+    const list = this.#buildColumns(kind);
+    this.#columnLists.set(kind, { locale, list });
+    return list;
+  }
+
+  #buildColumns(kind: Kind): DataTableColumn<ModifierList>[] {
     const detail: DataTableColumn<ModifierList> =
       kind === "extras"
         ? {

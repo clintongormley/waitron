@@ -5,6 +5,7 @@ import {
   UrlStateController,
   type WtButton,
   type WtFormActions,
+  WtCombobox,
 } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
@@ -14240,4 +14241,141 @@ it("chooses its default view after discovery fails and recovers without reloadin
   await flush(el);
   expect(api.listPrinters).toHaveBeenCalledOnce();
   expect(location.pathname).toBe("/manage/printers/view/queue");
+});
+
+describe("stable printer column inputs", () => {
+  type ColumnTable = HTMLElement & {
+    columns: {
+      key: string;
+      label: string;
+      filter?: { options: { value: string; label: string }[] };
+    }[];
+    updateComplete: Promise<unknown>;
+  };
+  const tableOf = (el: PrintersScreen, name: string) =>
+    q(el, `[data-test="${name}"]`) as ColumnTable;
+  const filtersOf = (found: ColumnTable) => [
+    ...found.shadowRoot!.querySelectorAll<WtCombobox>("wt-combobox"),
+  ];
+  const seenBy = (lastPrintAt: string): Printer => ({
+    ...printers[0]!,
+    lastPrintAgentId: "a1",
+    lastPrintAt,
+  });
+
+  it("keeps every table's columns and the filters' widths through ten redraws", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    await flush(el);
+    const tables = ["printers-table", "agents-table", "jobs-table"].map((name) =>
+      tableOf(el, name),
+    );
+    expect(tables.map((found) => filtersOf(found).length)).toEqual([2, 0, 2]);
+    const columns = tables.map((found) => found.columns);
+    const widths = vi.spyOn(
+      WtCombobox.prototype as unknown as { widthTexts(): string[] },
+      "widthTexts",
+    );
+    try {
+      for (let redraw = 0; redraw < 10; redraw++) {
+        el.requestUpdate();
+        await el.updateComplete;
+        for (const found of tables) {
+          await found.updateComplete;
+          await Promise.all(filtersOf(found).map((filter) => filter.updateComplete));
+        }
+      }
+      expect(
+        tables.map(
+          (found) =>
+            widths.mock.contexts.filter((filter) => filtersOf(found).includes(filter as WtCombobox))
+              .length,
+        ),
+      ).toEqual([0, 0, 0]);
+    } finally {
+      widths.mockRestore();
+    }
+    expect(tables.map((found, index) => found.columns === columns[index])).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("shows current printer data and agent choices, and translates, from kept columns", async () => {
+    const before = currentLocale();
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([seenBy("2026-09-26T13:00:00.000Z"), ...printers.slice(1)]),
+      }),
+      { liveData },
+    );
+    try {
+      setLocale("en-GB");
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      await selectTab(el, "printers");
+      await flush(el);
+      const found = tableOf(el, "printers-table");
+      const agentChoices = () =>
+        found.columns
+          .find((column) => column.key === "agent")!
+          .filter!.options.map(({ value }) => value);
+      expect(agentChoices()).toEqual(["a1", "unknown", "cloud"]);
+      expect(text(el, "[data-test=printer-last-seen-p1]")).toContain("2026-09-26 13:00");
+      const columns = found.columns;
+
+      vi.mocked(api.listPrinters).mockResolvedValue([
+        seenBy("2026-09-26T15:00:00.000Z"),
+        ...printers.slice(1),
+      ]);
+      liveData.refresh();
+      await vi.waitFor(() =>
+        expect(text(el, "[data-test=printer-last-seen-p1]")).toContain("2026-09-26 15:00"),
+      );
+      expect(found.columns).toBe(columns);
+
+      vi.mocked(api.listAgents).mockResolvedValue([
+        ...agents,
+        { ...agents[0]!, id: "a3", name: "Terrace agent" },
+      ]);
+      vi.mocked(api.listPrinters).mockResolvedValue([
+        seenBy("2026-09-26T15:00:00.000Z"),
+        printers[1]!,
+        { ...printers[2]!, lastPrintAgentId: "a3", lastPrintAt: "2026-09-26T16:00:00.000Z" },
+      ]);
+      liveData.refresh();
+      await vi.waitFor(() => expect(agentChoices()).toEqual(["a1", "a3", "cloud"]));
+      expect(text(el, "[data-test=printer-agent-p3]")).toBe("Terrace agent");
+
+      const jobs = tableOf(el, "jobs-table");
+      const jobPrinterChoices = () =>
+        jobs.columns
+          .find((column) => column.key === "printer")!
+          .filter!.options.map(({ label }) => label);
+      expect(jobPrinterChoices()).toEqual(["Kitchen"]);
+      vi.mocked(api.listPrinters).mockResolvedValue([
+        { ...seenBy("2026-09-26T15:00:00.000Z"), name: "Grill" },
+        ...printers.slice(1),
+      ]);
+      liveData.refresh();
+      await vi.waitFor(() => expect(jobPrinterChoices()).toEqual(["Grill"]));
+
+      expect(found.columns[0]!.label).toBe("Name");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await flush(el);
+      expect(found.columns[0]!.label).toBe("Nombre");
+      expect(tableOf(el, "agents-table").columns[0]!.label).toBe("Nombre");
+      expect(jobs.columns[0]!.label).toBe(es["printers.job_printer"]);
+    } finally {
+      setLocale(before);
+    }
+  });
 });
