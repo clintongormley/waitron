@@ -2,7 +2,7 @@
 
 **Ask:** “Check screens that watch after an awaited read: decide whether they should watch those types from the start, avoiding a replacement of the initial live stream after loading.” Recorded in `docs/backlog/dashboard.md`, A1227.
 
-**Status:** Sol-high author; driver checked; Claude approach review 267s (`receipts/a1227/plan-review.md`, external). Corrected; watcher clearance pending. No owner design approval.
+**Status:** Sol-high author; driver checked; Claude approach review 267s (`receipts/a1227/plan-review.md`, external). Corrected plan cleared by the watcher in campaign questions.md, 2026-11-16 07:47. No owner design approval.
 
 **Driver baseline:** Chromium, real `LiveData`/`LiveConnection`, fake EventSource transport: holding/releasing Approvals’ staff read produced **2 opens / 1 close**; expected-one assertion failed. External `receipts/a1227/baseline-chromium.log` and red patch retained.
 

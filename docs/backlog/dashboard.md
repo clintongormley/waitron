@@ -719,9 +719,3 @@ forms receive field messages from their parent screen.
   real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
   intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
   from code only; nobody has shown a real pointer can get there.
-
-
-## A1227. Check screens that add live subscriptions after an awaited read
-
-Check screens that watch after an awaited read: decide whether they should watch those types
-from the start, avoiding a replacement of the initial live stream after loading.

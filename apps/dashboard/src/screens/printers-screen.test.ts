@@ -10,6 +10,7 @@ import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  streamsOver,
   cleanupWidgets,
   dialogClosed,
   dialogMessageOf,
@@ -6612,7 +6613,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(text(el, "[data-test=printer-refresh-error]")).toContain(
       codeMessage("connection.failed"),
     );
-    expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
+    expect(api.listDiscoveredPrinters).toHaveBeenCalledOnce();
     vi.mocked(api.listPrinters).mockResolvedValue(printers);
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
@@ -14186,4 +14187,50 @@ describe("searching and filtering the printer tables", () => {
       t("categories.combobox_no_results"),
     ]);
   });
+});
+
+it("starts one stream with discovery before the printer lists arrive", async () => {
+  let finish!: (value: Printer[]) => void;
+  const liveData = new LiveData();
+  const { streams, liveUpdates } = streamsOver(liveData);
+  const api = stubApi({
+    liveData,
+    listPrinters: vi.fn(
+      () =>
+        new Promise((r) => {
+          finish = r;
+        }),
+    ),
+    listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredRegisteredNetwork),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  try {
+    liveUpdates.start();
+    await flush(el);
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"printer_discovery"');
+    finish(printers);
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-last-seen-p1]")).toContain("2023-11-14 22:13"),
+    );
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    el.remove();
+    liveUpdates.stop();
+  }
+});
+
+it("chooses the printer view even when the independent discovery read is refused", async () => {
+  history.replaceState(null, "", "/manage/printers");
+  const api = stubApi({
+    listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await vi.waitFor(() => expect(q(el, '[data-test="printers-table"]')).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+      codeMessage("connection.failed"),
+    ),
+  );
 });

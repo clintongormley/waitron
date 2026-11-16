@@ -1,7 +1,7 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
 import { ApprovalsScreen } from "./approvals-screen.js";
@@ -232,7 +232,7 @@ describe("approvals-screen — recovery after the server answers again", () => {
     );
     const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
     await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
-    expect(api.listPendingSwaps).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).toBeNull();
     liveData.refresh();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull(),
@@ -253,8 +253,8 @@ describe("approvals-screen — recovery after the server answers again", () => {
     host.appendChild(el);
     await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
     liveData.refresh();
-    await vi.waitFor(() => expect(api.listPendingSwaps).toHaveBeenCalledTimes(2));
-    expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPendingSwaps).toHaveBeenCalledTimes(3));
+    expect(api.listPendingAbsences).toHaveBeenCalledTimes(3);
     await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
   });
 
@@ -289,4 +289,36 @@ describe("approvals-screen — recovery after the server answers again", () => {
       expect(errorText(el)).toBe(codeMessage("connection.failed"));
     },
   );
+});
+
+it("starts one stream with both queues while names are pending, then shows named decisions", async () => {
+  let finish!: (value: PersonSummary[]) => void;
+  const liveData = new LiveData();
+  const { streams, liveUpdates } = streamsOver(liveData);
+  const api = stubApi({
+    liveData,
+    listStaff: vi.fn(
+      () =>
+        new Promise((r) => {
+          finish = r;
+        }),
+    ),
+  });
+  const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+  try {
+    liveUpdates.start();
+    await flush(el);
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"absences"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"shift_swaps"');
+    expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).toBeNull();
+    finish(staff);
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Ana"));
+    expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull();
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    el.remove();
+    liveUpdates.stop();
+  }
 });

@@ -2,7 +2,7 @@ import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
 import { MyScheduleScreen, scheduleWindow } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -415,7 +415,7 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
     });
     const { el } = await mount(api);
     await flush(el);
-    expect(api.listMyShifts).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
     for (const [list, loadingId] of [
       ["shifts", "loading"],
@@ -777,7 +777,7 @@ describe("my-schedule-screen — each list's own load failure", () => {
     expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
   });
 
-  it("retries the roster, and then the lists, after the roster read failed", async () => {
+  it("retries the roster and lists after the roster read failed", async () => {
     const api = stubApi({
       getStaffRoster: vi
         .fn()
@@ -789,7 +789,7 @@ describe("my-schedule-screen — each list's own load failure", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
     await flush(el);
     expect(api.getStaffRoster).toHaveBeenCalledTimes(2);
-    expect(api.listMyShifts).toHaveBeenCalledTimes(1);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
   });
@@ -807,7 +807,7 @@ describe("my-schedule-screen — each list's own load failure", () => {
     );
     const { el } = await mount(api);
     await flush(el);
-    expect(api.listMyShifts).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).toBeNull();
     liveData.invalidate([{ type: "persons", id: "col1" }]);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull(),
@@ -839,4 +839,36 @@ it("shows the module description in the shift label", async () => {
   expect(
     el.shadowRoot!.querySelector(".shift")?.textContent ?? el.shadowRoot!.textContent,
   ).not.toContain("· bar");
+});
+
+it("starts one stream with all lists before the roster, without showing unnamed swaps", async () => {
+  let finish!: (value: RosterEntry[]) => void;
+  const liveData = new LiveData();
+  const { streams, liveUpdates } = streamsOver(liveData);
+  const api = stubApi({
+    liveData,
+    getStaffRoster: vi.fn(
+      () =>
+        new Promise((r) => {
+          finish = r;
+        }),
+    ),
+  });
+  const { el } = await mount(api);
+  try {
+    liveUpdates.start();
+    await flush(el);
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"absences"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"roster_versions"');
+    expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).toBeNull();
+    finish(roster);
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Colleague"));
+    expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull();
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    el.remove();
+    liveUpdates.stop();
+  }
 });

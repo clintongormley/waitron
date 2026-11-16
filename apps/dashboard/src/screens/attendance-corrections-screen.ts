@@ -231,22 +231,25 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.readError = "";
     this.actionError = "";
     try {
-      await this.#queries.watch("lookups", this.#api.lookupsQuery(), async (value) => {
-        const first = this.lookups === null;
-        const previousPerson = this.personId;
-        this.lookups = value;
-        if (
-          !(this.hours?.people ?? value.people).some((person) => person.personId === this.personId)
-        )
-          this.personId = value.people[0]?.personId ?? "";
-        if (previousPerson !== this.personId) {
-          this.#queries.release("day");
-          this.view = null;
-          this.selectedItemId = null;
-          this.reading = false;
-        }
-        if (first) await this.#watchQueue();
-      });
+      await Promise.all([
+        this.#queries.watch("lookups", this.#api.lookupsQuery(), (value) => {
+          const previousPerson = this.personId;
+          this.lookups = value;
+          if (
+            !(this.hours?.people ?? value.people).some(
+              (person) => person.personId === this.personId,
+            )
+          )
+            this.personId = value.people[0]?.personId ?? "";
+          if (previousPerson !== this.personId) {
+            this.#queries.release("day");
+            this.view = null;
+            this.selectedItemId = null;
+            this.reading = false;
+          }
+        }),
+        this.#watchQueue(),
+      ]);
     } catch {
       /* QueryController publishes the read's failure. */
     }
@@ -656,7 +659,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   }
   override render() {
     const selected = this.#selected;
-    const disabled = this.#blocked || this.editorOpen;
+    const disabled = this.#blocked || this.editorOpen || !this.lookups;
     const ownDay = this.view?.personId === this.lookups?.viewer.personId;
     return html`<div class="screen">
       <h1>${t(this.mode === "hours" ? "hours.tab" : "attendance.queue_heading")}</h1>
@@ -694,12 +697,12 @@ export class AttendanceCorrectionsScreen extends LitElement {
         >
       </div>
       ${(!this.lookups && !this.readError) || this.reading || this.hoursReading ? html`<p role="status">${t("attendance.loading")}</p>` : nothing}
-      ${this.mode === "hours" ? this.#hoursRecord(disabled) : nothing}
+      ${this.mode === "hours" && this.lookups ? this.#hoursRecord(disabled) : nothing}
       ${(["waiting-manager", "waiting-worker", "disputed"] as const).map(
         (status) =>
           html`<section aria-label=${statusLabel(status)}>
             <h2>${statusLabel(status)}</h2>
-            ${this.queue
+            ${(this.lookups ? this.queue : [])
               .filter((item) => item.status === status)
               .map(
                 (item) =>

@@ -27,6 +27,7 @@ import {
   expectNoA11yViolations,
   menuDocument,
   mountWidget,
+  streamsOver,
 } from "./widgets/test-helpers.js";
 import {
   formMessageOf,
@@ -91,7 +92,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
 import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { es } from "./i18n/strings.js";
-import { LiveConnection, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { DashboardApi, type AlertView, type PersonSummary } from "./api/client.js";
@@ -6484,17 +6485,6 @@ it("starts live updates after authentication and stops them on logout and discon
 });
 
 describe("the first live stream", () => {
-  const streamsOver = (liveData: LiveData) => {
-    const streams: { url: string; close: ReturnType<typeof vi.fn> }[] = [];
-    const liveUpdates = new LiveConnection(liveData, {
-      open: (url) => {
-        const stream = Object.assign(new EventTarget(), { readyState: 0, close: vi.fn() });
-        streams.push({ url, close: stream.close });
-        return stream;
-      },
-    });
-    return { streams, liveUpdates };
-  };
   const resourcesOf = (url: string) => new URL(url, location.origin).searchParams.get("resources")!;
 
   it("opens once the screen is drawn, carrying the screen's resources", async () => {
