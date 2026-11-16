@@ -1139,6 +1139,7 @@ it("shows a Demo legal-name refusal above Next, leaving the venue name unmarked"
 
 it.each([
   ["seriesCode", "server_fields.series_code"],
+  ["fullSeriesCode", "server_fields.series_code"],
   ["rectificativeSeriesCode", "server_fields.series_code"],
 ] as const)(
   "shows a Demo refusal of the hidden %s above Next, and pressing Next tries again",

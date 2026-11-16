@@ -1012,6 +1012,7 @@ export class SetupApp extends LitElement {
       delete venue.taxId;
       delete venue.legalName;
       delete venue.seriesCode;
+      delete venue.fullSeriesCode;
       delete venue.rectificativeSeriesCode;
       delete venue.dayCutover;
       delete venue.invoiceLocales;

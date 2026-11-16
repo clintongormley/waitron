@@ -3465,6 +3465,7 @@ describe("A2 mode boundaries", () => {
           taxId: "B12345674",
           legalName: "Demo company",
           seriesCode: "FS",
+          fullSeriesCode: "FF",
           rectificativeSeriesCode: "FR",
           admin: { displayName: "Ada" },
           name: "Calle Mayor",
@@ -3477,6 +3478,9 @@ describe("A2 mode boundaries", () => {
       const draft = readDraft(el);
       expect(draft.venue?.taxId).toBeUndefined();
       expect(draft.venue?.legalName).toBeUndefined();
+      expect(draft.venue?.seriesCode).toBeUndefined();
+      expect(draft.venue?.fullSeriesCode).toBeUndefined();
+      expect(draft.venue?.rectificativeSeriesCode).toBeUndefined();
       expect(draft.venue?.admin?.displayName).toBe("Ada");
       expect(draft.venue?.addressLine1).toBe("Calle Mayor 1");
     },
