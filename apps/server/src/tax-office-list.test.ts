@@ -149,7 +149,13 @@ beforeAll(async () => {
   // The list route reads neither the fiscal seat nor the trading context.
   mountTaxOfficeApi(
     app,
-    { db, cfg: { nodeId }, backend: {} as FiscalBackend, tradingContext: {} as TradingContext },
+    {
+      db,
+      cfg: { nodeId },
+      backend: {} as FiscalBackend,
+      tradingContext: {} as TradingContext,
+      venueLocale: "es-ES",
+    },
     () => {},
   );
   inspector = (await sessionHolding(db, ["invoice.inspect"])).cookie;

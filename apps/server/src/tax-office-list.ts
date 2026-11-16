@@ -194,3 +194,14 @@ export async function listTaxOfficeInvoices(
       read.length > filter.limit && last !== undefined ? { at: last.issuedAt, id: last.id } : null,
   };
 }
+
+/** How many sales `listTaxOfficeInvoices` would answer for `issued` with no other filter. */
+export async function countTaxOfficeInvoices(
+  tx: Transaction,
+  issued: TaxOfficeFilter["issued"],
+): Promise<number> {
+  const { rows } = await tx.execute<{ n: number }>(
+    sql`select count(*) as n from sales s where ${sql.join(filterClauses({ issued, limit: 0 }), sql` and `)}`,
+  );
+  return rows[0]!.n;
+}

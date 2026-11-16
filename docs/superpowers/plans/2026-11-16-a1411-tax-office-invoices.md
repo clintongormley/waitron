@@ -366,6 +366,8 @@ test lines, the test helper included.
 **Files:** `tax-office-api.ts`, `tax-office-export.ts` (create), tests; the screen; i18n; the
 guide sections from Task 5.
 
+Amended 2026-11-16 (Task 8a): the route is `POST /management-api/tax-office/months/:month`, not GET, because the download writes its activity entry and the own-page check covers POSTs, as Task 3's review made the single PDF a POST.
+
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,
   `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included, each
   through `readSaleCopy` (Task 3b), so a ticket is ticket-width there too; the CSV

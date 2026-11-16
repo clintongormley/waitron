@@ -120,7 +120,7 @@ export interface InvoiceCustomerFilesDeps {
  * before `.pdf`; a suffixed name can be another invoice's own, so each is checked. Names are
  * compared ignoring letter case, because a case-insensitive disk unpacks `fa-1.pdf` and
  * `FA-1.pdf` as one file. */
-function uniquePdfPath(taken: Set<string>, code: string, number: number): string {
+export function uniquePdfPath(taken: Set<string>, code: string, number: number): string {
   const stem = invoicePdfFileName(code, number).slice(0, -".pdf".length);
   let path = `invoices/${stem}.pdf`;
   for (let suffix = 2; taken.has(path.toLowerCase()); suffix++) {

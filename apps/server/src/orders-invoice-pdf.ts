@@ -34,22 +34,32 @@ export async function readInvoiceForDownload(
   return { document: { ...document, duplicate: true }, fileName };
 }
 
-export type SaleCopy = { fileName: string } & (
+export type SaleCopy = { fileName: string; code: string; number: number } & (
   { kind: "invoice"; document: ReceiptDocumentInput } | { kind: "ticket"; drawing: TicketDrawing }
 );
 
-/**
- * Any issued sale as a duplicate in its original format, with the download recorded: a sale naming
- * no customer (an F2 or R5) as its selling device's receipt printer lays it out now (else
- * `DEFAULT_PRINTER`), or on A4 when that ticket cannot be drawn whole on one page (past the
- * decoder's limits, or taller than a PDF page may be); any other on A4. An unknown id is
- * `invoice_delivery.not_found`.
- */
+/** `copyOfSale` with the download recorded. */
 export async function readSaleCopy(
   tx: Transaction,
   deps: { backend: FiscalBackend; tradingContext: TradingContext },
   saleId: string,
   personId: string,
+): Promise<SaleCopy> {
+  const copy = await copyOfSale(tx, deps, saleId);
+  await tx.insert(invoicePdfDownloads).values({ saleId, personId });
+  return copy;
+}
+
+/**
+ * Any issued sale as a duplicate in its original format: a sale naming no customer (an F2 or R5)
+ * as its selling device's receipt printer lays it out now (else `DEFAULT_PRINTER`), or on A4 when
+ * that ticket cannot be drawn whole on one page (past the decoder's limits, or taller than a PDF
+ * page may be); any other on A4. An unknown id is `invoice_delivery.not_found`.
+ */
+export async function copyOfSale(
+  tx: Transaction,
+  deps: { backend: FiscalBackend; tradingContext: TradingContext },
+  saleId: string,
 ): Promise<SaleCopy> {
   const [sale] = await tx
     .select({
@@ -64,7 +74,11 @@ export async function readSaleCopy(
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
-  const fileName = await recordDownload(tx, sale, personId);
+  const named = {
+    fileName: invoicePdfFileName(sale.code, sale.number),
+    code: sale.code,
+    number: sale.number,
+  };
   if (sale.taxId === null) {
     const printer =
       (sale.deviceId === null
@@ -79,10 +93,10 @@ export async function readSaleCopy(
       printer,
     );
     const drawing = ticketDrawing(bytes, printer, new Date(sale.issuedAt));
-    if (drawing !== undefined) return { kind: "ticket", drawing, fileName };
+    if (drawing !== undefined) return { kind: "ticket", drawing, ...named };
   }
   const document = await readReceiptEmailDocument(deps.backend, tx, deps.tradingContext, saleId);
-  return { kind: "invoice", document: { ...document, duplicate: true }, fileName };
+  return { kind: "invoice", document: { ...document, duplicate: true }, ...named };
 }
 
 export function renderSaleCopy(copy: SaleCopy): Promise<Buffer> {

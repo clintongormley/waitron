@@ -3431,7 +3431,14 @@ async function bootServer(
   );
   mountTaxOfficeApi(
     app,
-    { db, cfg: { nodeId: dataNodeId }, backend: nodeBackend, tradingContext },
+    {
+      db,
+      cfg: { nodeId: dataNodeId },
+      backend: nodeBackend,
+      tradingContext,
+      venueLocale,
+      closed: handoverGate.closed,
+    },
     log,
   );
   mountOrdersApi(

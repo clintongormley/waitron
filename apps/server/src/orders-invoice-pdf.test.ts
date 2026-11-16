@@ -74,6 +74,7 @@ useVenueDb({
         cfg: { nodeId: venue.cfg.nodeId },
         backend: venue.backend,
         tradingContext: venue.cfg,
+        venueLocale: "es-ES",
       },
       () => {},
     );
