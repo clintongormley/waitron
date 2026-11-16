@@ -2,7 +2,7 @@
 
 **Estado del servidor** muestra en una sola página si cada parte del servidor funciona: las ventas,
 Hacienda, la copia en el bucket, las impresoras, los lectores de tarjetas, el reloj y el espacio en
-disco. También es donde se libera espacio cuando el disco del servidor se llena, y donde un gerente o administrador
+disco. También es donde se libera espacio cuando el disco del servidor se llena, y donde un encargado o administrador
 reinicia Waitron en el servidor cuando una alerta lo indica. Para leer el
 registro del servidor, usa **Diagnóstico**.
 
@@ -239,7 +239,7 @@ puede vender hasta que Waitron vuelva a arrancar, así que la página lo pregunt
 **Reiniciar** para seguir o **Parar** para dejarlo. Úsalo cuando una alerta lo indique. La página
 se pone al día sola cuando vuelve el servidor.
 
-Los gerentes y administradores pueden reiniciar el servidor.
+Los encargados y administradores pueden reiniciar el servidor.
 
 ## Pon la hora desde tu propio dispositivo {#clock-own-device}
 

@@ -167,7 +167,7 @@ destinos y aplícalos. Conserva las claves de recuperación y los archivos de co
 Si la campana o **Estado del servidor** indica que no se están limpiando las copias antiguas del
 bucket o del servidor en espera, se conservan esas copias. Waitron lo intenta cada día mientras la
 copia funciona con normalidad y retira el aviso cuando encuentra el marcador. Para pedir un
-marcador nuevo antes, un gerente o administrador puede
+marcador nuevo antes, un encargado o administrador puede
 usar **Estado del servidor**, **Reiniciar el servidor** cuando no estéis atendiendo. Esto inicia una
 copia completa con un marcador nuevo; los terminales dejan de vender durante el reinicio.
 

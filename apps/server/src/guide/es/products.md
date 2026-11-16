@@ -200,7 +200,7 @@ producto. **Abrir** aparece cuando la variante se ha guardado, y espera mientras
 cambios sin guardar, porque salir del producto los perdería: guarda primero el producto.
 
 **Archivar** en una variante guardada deja preparado un archivado permanente. La fila sigue visible
-con **Se archivará al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
+con **Se archiva al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
 cancelar ese cambio preparado. Una vez guardado, la caja deja de ofrecer la variante, se borran sus
 precios en las cartas y se conservan sus ventas pasadas. No puedes recuperarla. Una variante ya
 archivada no aparece en el editor. Para verla, activa **Mostrar archivados** en la lista de

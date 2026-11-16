@@ -12,7 +12,7 @@ La búsqueda y la ordenación por columnas abarcan a todas las personas que coin
 
 ## Nombres y datos de contacto {#staff-details}
 
-Como gerente, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
+Como encargado, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
 Su correo es su dirección de acceso. Cambiar el de otra persona requiere un permiso adicional, que solo tiene Admin de forma predeterminada.
 
 Elige **Idioma** y **Guardar** para fijar su idioma guardado. Si su panel sigue el idioma del
@@ -25,7 +25,7 @@ Si cambias aquí tu propia preferencia, la página actual mantiene su idioma.
 Mantén al menos un administrador activo que pueda entrar al panel con contraseña, Google o una
 llave de acceso. Un PIN solo permite entrar en la caja.
 
-Los gerentes pueden añadir personas y enviar su invitación, reenviar una invitación,
+Los encargados pueden añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
 nueva invitación si el correo está configurado; si Waitron no lo permite o no cambia nada,
@@ -132,7 +132,7 @@ alguien que ya no trabaja en el local la pide. En
 **Usuarios**, elige **Cualquier estado** en **Estado** si la persona está deshabilitada, abre el
 menú de su fila y elige **Descargar sus datos**. Recibes los mismos archivos que la persona
 obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió la persona o, si
-no eligió ninguno, en el idioma del local. Los gerentes no ven esta acción. Waitron no guarda una
+no eligió ninguno, en el idioma del local. Los encargados no ven esta acción. Waitron no guarda una
 lista de estas solicitudes, así que anota la solicitud y tu respuesta en los registros del local.
 El plazo de un mes para responder y las demás obligaciones del local están en
 [Protección de datos](data-protection.md#who-does-what).
@@ -149,7 +149,7 @@ que coinciden en los tres datos;
 pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada factura, un archivo
 `invoices.json` con el nombre, el identificador, su tipo y país emisor cuando existen y la dirección de cada una y todas las direcciones de correo
 a las que el servidor la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
-gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
+encargados no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
 registros del local. El plazo de un mes para responder y las demás obligaciones del local están en
 [Protección de datos](data-protection.md#who-does-what).
@@ -198,6 +198,6 @@ fichar. Elige la **Fecha** y pulsa **Corregir hora** junto a un fichaje, o **Fic
 También puedes añadir juntos la entrada y la salida que faltan, o el inicio y el fin de un descanso.
 
 Introduce las fechas y horas reales y un **Motivo**, y pulsa **Guardar** para registrar tu
-solicitud. Pide a otro supervisor, gerente o administrador que elija **Aprobar con PIN**,
+solicitud. Pide a otro supervisor, encargado o administrador que elija **Aprobar con PIN**,
 seleccione su nombre e introduzca su PIN. Si eres administrador, puedes aprobar tu propia
 solicitud. Consulta su estado en **Mis horas**.

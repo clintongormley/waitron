@@ -12,7 +12,7 @@ Antes de guardar o quitar el servidor de correo, confirma tu identidad en la ven
 En Preparación o En vivo, abre **Sistema → Correo**. Con el permiso de administración del equipo (Admin de forma predeterminada), elige **Configurar servidor
 de correo** o **Cambiar servidor de correo**, introduce los ajustes de tu proveedor y envía una prueba
 antes de guardar. Introduce de nuevo los datos de acceso al cambiar un servidor con autenticación;
-Waitron nunca muestra la contraseña guardada. Los gerentes pueden consultar los ajustes, pero no
+Waitron nunca muestra la contraseña guardada. Los encargados pueden consultar los ajustes, pero no
 guardarlos ni quitarlos.
 
 Los mensajes enviados por tu servidor guardado y la prueba de esta página muestran el nombre del
@@ -26,7 +26,7 @@ reales. Revisa el estado del correo de cuentas en esta página y el de las factu
 correo**: las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
 el servidor guardado.
 
-En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como gerente o administrador
+En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como encargado o administrador
 para abrir los mensajes guardados.
 
 ## Comprueba el resultado de la prueba {#test-results}

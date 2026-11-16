@@ -2165,7 +2165,7 @@ export const en = {
   "servers.remove": "Remove",
   "servers.remove_title": "Remove this spare?",
   "servers.remove_explanation":
-    "It will be marked removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
+    "This marks it removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
   "servers.declare_explanation":
     "Confirm that this spare is switched off and no other recovery is in progress.",
   "servers.declare_switched_off": "This spare is switched off",
@@ -4516,7 +4516,7 @@ export const es: Record<StringKey, string> = {
   "time.yesterday_at": "Ayer {time}",
   "zone_repair.sign_in": "Iniciar sesión como responsable",
   "zone_repair.sign_in_explanation":
-    "Para confirmar la zona horaria, inicia sesión con una cuenta que pueda configurar el local. Se cerrará tu sesión y se abrirá el inicio de sesión.",
+    "Para confirmar la zona horaria, inicia sesión con una cuenta que pueda configurar el local. Esto cierra tu sesión y abre el inicio de sesión.",
   "permission_sign_in.heading": "Identifícate para esta acción",
   "permission_sign_in.explanation":
     "Identificarte cambia la cuenta del panel. Vuelve a elegir el origen después de identificarte; la acción no se ejecutará automáticamente.",
@@ -5705,7 +5705,7 @@ export const es: Record<StringKey, string> = {
   "email.settings.remove_capture":
     "¿Quitar el servidor de correo guardado? El correo volverá a quedarse en el buzón de prueba de este servidor. Parar conserva la configuración.",
   "email.settings.remove_live":
-    "¿Quitar el servidor de correo guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor de correo. Las ventas continúan. Parar conserva la configuración.",
+    "¿Quitar el servidor de correo guardado? No se pueden enviar correos de cuentas ni facturas hasta que configures otro servidor de correo. Las ventas continúan. Parar conserva la configuración.",
   "email.settings.change": "Cambiar servidor de correo",
   "email.settings.set_up": "Configurar servidor de correo",
   "email.settings.unavailable":
@@ -5751,7 +5751,7 @@ export const es: Record<StringKey, string> = {
   "profile.email_sent":
     "La confirmación está en camino. Introduce el código que llegue a tu nueva dirección para confirmarla.",
   "profile.email_captured":
-    "La confirmación va a la bandeja de correo del servidor. Los gerentes y administradores pueden leerla.",
+    "La confirmación va a la bandeja de correo del servidor. Los encargados y administradores pueden leerla.",
   "profile.email_unconfigured":
     "No se ha podido enviar la confirmación porque el correo no está configurado. Una vez configurado, abre Tus datos, vuelve a introducir la nueva dirección y guarda.",
   "profile.email_admin_help":
@@ -6538,7 +6538,7 @@ export const es: Record<StringKey, string> = {
   "servers.remove": "Retirar",
   "servers.remove_title": "¿Retirar este servidor en espera?",
   "servers.remove_explanation":
-    "Se marcará como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
+    "Esto lo marca como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
   "servers.declare_explanation":
     "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
   "servers.declare_switched_off": "Este servidor en espera está apagado",
@@ -6882,7 +6882,7 @@ export const es: Record<StringKey, string> = {
   "person.confirm_reset_login":
     "Esto elimina todos los métodos de acceso actuales, cierra la sesión y envía una invitación nueva.",
   "person.confirm_reset_pin":
-    "Esto elimina el PIN actual. El usuario no podrá usar una caja hasta que configure uno nuevo.",
+    "Esto elimina el PIN actual. El usuario no puede usar una caja hasta que configure uno nuevo.",
   "person.confirm_disable": "Esto cierra la sesión y elimina todos sus métodos de acceso.",
   "person.confirm_enable": "Esto marca al usuario como pendiente y envía una invitación nueva.",
   "profile.disable_authenticator": "Desactivar autenticador",
@@ -7057,7 +7057,7 @@ export const es: Record<StringKey, string> = {
   "product.archive_variant_warning":
     "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
   "product.archived_badge": "Archivado",
-  "product.variant_archive_pending_badge": "Se archivará al guardar",
+  "product.variant_archive_pending_badge": "Se archiva al guardar",
   "product.keep_variant": "Conservar",
   "product.variant_archived_badge": "Archivada",
   "product.archived_notice":
@@ -7643,7 +7643,7 @@ export const es: Record<StringKey, string> = {
   "payments.bill.attest": "Registrar resultado confirmado",
   "payments.bill.attest_heading": "Registrar el resultado confirmado por el proveedor",
   "payments.bill.attest_body":
-    "Comprueba {order} en el panel del proveedor o consulta con su soporte. Un panel vacío o un total sin cambios no confirman un resultado. Registra solo lo que confirme el proveedor; tu nota y PIN de gerente quedarán en el registro de auditoría.",
+    "Comprueba {order} en el panel del proveedor o consulta con su soporte. Un panel vacío o un total sin cambios no confirman un resultado. Registra solo lo que confirme el proveedor; tu nota y PIN de encargado quedan en el registro de auditoría.",
   "payments.bill.outcome": "Resultado confirmado",
   "payments.bill.choose_outcome": "Elige un resultado",
   "payments.bill.received_option": "Pago recibido",
@@ -7651,10 +7651,10 @@ export const es: Record<StringKey, string> = {
   "payments.bill.failed_payment_option": "Pago no cobrado",
   "payments.bill.failed_refund_option": "Devolución no realizada",
   "payments.bill.note": "Nota de confirmación del proveedor",
-  "payments.bill.pin": "PIN de gerente",
+  "payments.bill.pin": "PIN de encargado",
   "payments.bill.outcome_required": "Elige el resultado que confirmó el proveedor.",
   "payments.bill.note_required": "Indica qué confirmó el proveedor.",
-  "payments.bill.pin_required": "Introduce tu PIN de gerente.",
+  "payments.bill.pin_required": "Introduce tu PIN de encargado.",
   "payments.bill.received": "Pago recibido. La cuenta se ha actualizado.",
   "payments.bill.not_charged": "Pago no cobrado. La cuenta se ha actualizado.",
   "payments.bill.completed": "Devolución completada. La cuenta se ha actualizado.",

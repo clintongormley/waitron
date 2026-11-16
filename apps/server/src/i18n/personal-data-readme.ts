@@ -163,7 +163,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds: "tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta.",
         use: "Sirve para gestionar el local, contactarte y decidir qué puedes hacer.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, también después de que te vayas; la protege con una contraseña que elige esa persona.",
+          "Un encargado o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, también después de que te vayas; la protege con una contraseña que elige esa persona.",
         ],
         kept: [
           "Tu perfil se queda en el servidor Waitron del local después de que se deshabilite tu cuenta: nada en el servidor lo borra.",
@@ -188,7 +188,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "tus contratos: el tipo de contrato, los minutos semanales contratados, las fechas de inicio y fin y la retribución.",
         use: "Sirve para gestionar tu contrato y tu retribución; tus minutos contratados son la base para calcular las horas extra.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tus contratos, con la retribución, también después de que te vayas.",
+          "Un encargado o un administrador puede descargar una exportación de la configuración que contiene tus contratos, con la retribución, también después de que te vayas.",
         ],
         kept: ["Nada en el servidor Waitron del local borra un contrato."],
       },
@@ -197,7 +197,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "tus turnos (sus horas y el estado del cuadrante en que está cada uno), la disponibilidad registrada para ti y los cambios de turno que pediste o te ofrecieron, con el nombre de la otra persona y de quien los decidió.",
         use: "Sirve para planificar el cuadrante.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu disponibilidad, también después de que te vayas.",
+          "Un encargado o un administrador puede descargar una exportación de la configuración que contiene tu disponibilidad, también después de que te vayas.",
         ],
         kept: [
           "Un turno solo se puede borrar mientras su cuadrante es un borrador o mientras no está en ningún cuadrante, y al borrarlo se borran los cambios de turno que lo ofrecen; nada en el servidor Waitron del local borra tu disponibilidad ni tus demás cambios de turno.",
@@ -211,7 +211,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "attendance.json": {
         holds:
-          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si el servidor preparó uno, las respuestas que diste tú o un supervisor, un gerente o un administrador y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) que registra el servidor para detectarlas.",
+          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si el servidor preparó uno, las respuestas que diste tú o un supervisor, un encargado o un administrador y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) que registra el servidor para detectarlas.",
         use: "Sirve para que tu registro de jornada esté completo.",
         sentTo: [
           "Los correos de aviso se envían a través del servicio de correo que configuró el local, si tiene uno.",
@@ -230,10 +230,10 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "los roles de personal que puedes cubrir y el área y el rol de personal de cada uno de tus turnos que tenga uno asignado.",
         use: "Sirve para planificar quién cubre cada área.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene los roles de personal que puedes cubrir, también después de que te vayas.",
+          "Un encargado o un administrador puede descargar una exportación de la configuración que contiene los roles de personal que puedes cubrir, también después de que te vayas.",
         ],
         kept: [
-          "Un rol de personal se te quita cuando un gerente o un administrador cambia quién lo tiene o borra el rol; el área y el rol de un turno se borran con el turno.",
+          "Un rol de personal se te quita cuando un encargado o un administrador cambia quién lo tiene o borra el rol; el área y el rol de un turno se borran con el turno.",
         ],
       },
       "time-record.pdf": {
@@ -241,7 +241,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "tu registro de jornada en este local: cuándo empezaste y terminaste de trabajar, tus descansos, cada corrección y decisión y los períodos cerrados, tal como lo muestra la exportación del registro de jornada.",
         use: "Se guarda como el registro del local de las horas que trabajaste.",
         sentTo: [
-          "Un gerente o un administrador puede descargar el registro de jornada, incluido el tuyo; el propio registro indica quién tiene derecho a verlo.",
+          "Un encargado o un administrador puede descargar el registro de jornada, incluido el tuyo; el propio registro indica quién tiene derecho a verlo.",
         ],
         kept: [
           "Nada en el servidor Waitron del local borra tu registro de jornada, y el servidor no permite cambiar ni borrar un asiento: una corrección se añade como un asiento nuevo.",
@@ -273,7 +273,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       "Los archivos .json son una copia legible por máquina que puedes llevar a otro servicio.",
     originHeading: "De dónde salen",
     origin:
-      "Tus datos los introdujiste tú o un supervisor, un gerente o un administrador del local, o se importaron al configurar el servidor Waitron del local; el resto se registró automáticamente mientras usabas Waitron.",
+      "Tus datos los introdujiste tú o un supervisor, un encargado o un administrador del local, o se importaron al configurar el servidor Waitron del local; el resto se registró automáticamente mientras usabas Waitron.",
     sentToHeading: "Quién más los recibe",
     backup:
       "Si el local tiene copias de seguridad, estas guardan una copia de toda la base de datos, incluidos estos datos, allí donde el local las tenga.",
