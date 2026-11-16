@@ -69,7 +69,7 @@ export const readerSettingFields = [
 ] as const;
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
-function stuckRefusalText(error: unknown): string {
+function paymentRefusalText(error: unknown): string {
   const code = codeOf(error);
   if (code === "payment.outcome_unknown") {
     const reason = (error as { params?: { reason?: unknown } }).params?.reason;
@@ -1988,7 +1988,7 @@ export class PaymentsScreen extends LitElement {
     } catch (error) {
       failedCheck = codeOf(error) === "server.internal";
       this.stuckResult = {
-        text: `${order}: ${failedCheck ? t("payments.stuck.failed") : stuckRefusalText(error)}`,
+        text: `${order}: ${failedCheck ? t("payments.stuck.failed") : paymentRefusalText(error)}`,
         refused: true,
         ...(failedCheck ? { evidence: row } : {}),
       };
@@ -2169,7 +2169,7 @@ export class PaymentsScreen extends LitElement {
     } catch (error) {
       if (!current()) return;
       showResult({
-        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : stuckRefusalText(error)}`,
+        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : paymentRefusalText(error)}`,
         refused: true,
       });
     }
