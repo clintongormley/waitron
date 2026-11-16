@@ -636,7 +636,7 @@ The remaining storage, input-validation and shared-form limits.
 
 ## Bundle: After A760 moves the bundle format: An import checks rows as a save does
 
-4 entries, size S.
+5 entries, size S.
 
 - **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
   spaces included, where a save through the dialog or the route trims it.
@@ -652,6 +652,10 @@ The remaining storage, input-validation and shared-form limits.
 - **A1074. A configuration import does not range-check a department's reminder minutes**, so a
   file could store a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
+- **The configuration export stops carrying `print_agents`** (`packages/db/src/configuration-transfer.ts`; watcher's choice, 2026-11-17 00:50,
+  waiting for the A1308 hold): an imported agent can only be the old box's, which never connects;
+  Add an agent offers it back and it then reads Never. Printing is unaffected. Evidence: lane B's
+  `imported-print-agent-evidence/notes.md` (IMPORTED-PRINT-AGENT, 2026-11-17).
 
 ## Bundle: Tabs selected visible
 

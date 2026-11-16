@@ -512,7 +512,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
+- **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 5, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
 
 - **Translate all followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
@@ -980,11 +980,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
-
-- **After a configuration import, Add an agent offers the old box's agent back, and it can never
-  connect.** Imported agents arrive switched off with their sign-in disabled; adding one back lists
-  a second agent with the box's name that reads Never. Printing is not affected: an imported printer
-  prints through the new box's own agent once it is added again (run on a dev stack, 2026-11-17).
 
 - **The virtual PDF printer.** Print-payload retention is handled by daily housekeeping; virtual PDF output remains.
   [Detail](backlog/printers.md#the-virtual-pdf-printer)
