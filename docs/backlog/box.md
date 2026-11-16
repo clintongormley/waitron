@@ -1349,10 +1349,8 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: Backups screen leftovers
 
-2 entries, size S.
+1 entry, size S, needs the owner.
 
-- **A cancelled folder in the Backups destination form (A639, #1695)** remains unreproduced.
-  [Detail](box.md#a-cancelled-folder-in-the-backups-destination-form-a639-1695)
 - **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
   the only retries are changing a setting or the box's next start. Letting it send the same settings
   again is an exception to the Forms rule that a save stays quiet until the draft changes (A331), so
@@ -1646,14 +1644,6 @@ step-name checks compare against hand-written lists, so a step added later is no
 (4) the bucket-settings setup and the setup/teardown block are repeated across the four
 `*.aws-rehearsal.test.ts` files and the local loop and pause tests — share them.
 
-## A cancelled folder in the Backups destination form (A639, #1695)
-
-A639's reviewer reported a folder typed in settings and then cancelled reappearing in Turn on
-backups, without being sent or counting as a change. It remains unreproduced. On 2026-11-15,
-`backup-screen.unsaved.test.ts`'s “Cancel does not carry a hidden edited folder into Turn on
-backups” passed against the current stored-settings flow without a cancellation fix. The original
-report's trigger remains unknown.
-
 ## 2026-10-23 A799 build authority and history selection
 
 **Cut 3, 23 October 2026:** restricted gzip framing, external-inventory checks,
@@ -1939,14 +1929,6 @@ migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md))
 Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
   `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
-
-## The bell's printer check reads every print job.
-
-`EXPLAIN QUERY PLAN` shows `SCAN
-  print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
-  status condition did not change the plan; why SQLite scans is not established. The bell pays it
-  on every read; the till's printer notices share one read per ten seconds. Left open by A798-B
-  slice 10.
 
 ## The email about a clock set before 28 October 2024 rarely leaves the box.
 

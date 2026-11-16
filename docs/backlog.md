@@ -1251,7 +1251,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **Recovery pack defaults and remaining card/command checks** (unconfirmed defaults, card reads/receipts, card inspection and command-path qualification). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
-- **Backups screen leftovers** (bundle of 2, 1 important, size S). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
+- **Backups screen leftovers** (bundle of 1, size S, needs the owner). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -1381,9 +1381,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The accountant's file is comma-separated in both languages, and a spreadsheet set to expect
   semicolons may open the Spanish file in one column.**
   [Detail](backlog/box.md#the-accountants-file-is-comma-separated-in-both-languages)
-
-- **The bell's printer check reads every print job.**
-  [Detail](backlog/box.md#the-bells-printer-check-reads-every-print-job)
 
 - **Does a SumUp Solo that is on but idle report itself offline?** The owner's unused Solo read
   `OFFLINE` (slice 10 plan P11), and SumUp's client maps anything but `ONLINE` to offline, so if an

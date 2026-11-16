@@ -801,26 +801,38 @@ it("a folder typed and then switched off is no change, and a status read keeps i
   expect(field(screen, "destination").value).toBe("/mnt/kept");
 });
 
+const copiesBucket = {
+  id: "bucket",
+  kind: "s3" as const,
+  endpoint: null,
+  region: "eu-west-1",
+  bucket: "copies",
+  prefix: "",
+  accessKeyId: "A",
+  namespace: "waitron/",
+  credentialPresent: true as const,
+};
+const bucketOnly: BackupStatusView = { ...on, destinations: [copiesBucket] };
+const bucketOnlyOff: BackupStatusView = { ...bucketOnly, enabled: false, storedDisabled: true };
+
+async function turnedOffElsewhere(
+  screen: Screen,
+  api: DashboardApi,
+  getBackupStatus: ReturnType<typeof vi.fn>,
+) {
+  getBackupStatus.mockResolvedValue(bucketOnlyOff);
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=apply]")).not.toBeNull();
+  await screen.updateComplete;
+}
+
 it("Cancel does not carry a hidden edited folder into Turn on backups", async () => {
-  const bucket = {
-    id: "bucket",
-    kind: "s3" as const,
-    endpoint: null,
-    region: "eu-west-1",
-    bucket: "copies",
-    prefix: "",
-    accessKeyId: "A",
-    namespace: "waitron/",
-    credentialPresent: true as const,
-  };
-  const saved = { ...on, destinations: [bucket] };
-  const disabled = { ...saved, enabled: false, storedDisabled: true };
-  const getBackupStatus = vi.fn().mockResolvedValue(saved);
-  const { screen } = await mount(saved, {
+  const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);
+  const { screen } = await mount(bucketOnly, {
     getBackupStatus,
     disableBackup: vi.fn(() => {
-      getBackupStatus.mockResolvedValue(disabled);
-      return Promise.resolve(disabled);
+      getBackupStatus.mockResolvedValue(bucketOnlyOff);
+      return Promise.resolve(bucketOnlyOff);
     }),
   });
   await click(screen, "edit-settings");
@@ -891,3 +903,50 @@ for (const source of ["settings", "stream"] as const)
       .toBe("BUTTON");
     expect(unload()).toBe(false);
   });
+
+it("Cancel does not carry a hidden edited folder into Turn on backups after another device turns backups off", async () => {
+  const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);
+  const { screen, api } = await mount(bucketOnly, { getBackupStatus });
+  await click(screen, "edit-settings");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]"))
+    .not.toBeNull();
+  await setFolderOn(screen, true);
+  await change(screen, "destination", "/tmp/x/cancelled");
+  await setFolderOn(screen, false);
+  await click(screen, "cancel-edit");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-settings]"))
+    .not.toBeNull();
+  await turnedOffElsewhere(screen, api, getBackupStatus);
+  await setFolderOn(screen, true);
+  expect(field(screen, "destination").value).toBe("");
+});
+
+it("another device turning backups off fills Turn on backups from the stored settings", async () => {
+  const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);
+  const { screen, api } = await mount(bucketOnly, { getBackupStatus });
+  await turnedOffElsewhere(screen, api, getBackupStatus);
+  expect(folderOn(screen)).toBe(false);
+  expect(field(screen, "archive-bucket-name").value).toBe("copies");
+  expect(unload()).toBe(false);
+});
+
+it("a stored-settings read keeps a Turn on backups draft the person changed", async () => {
+  const getBackupStatus = vi.fn().mockResolvedValue(bucketOnlyOff);
+  const { screen, api } = await mount(bucketOnlyOff, { getBackupStatus });
+  await expect.poll(() => field(screen, "archive-bucket-name")?.value).toBe("copies");
+  await change(screen, "archive-bucket-name", "typed");
+  expect(unload()).toBe(true);
+  getBackupStatus.mockResolvedValue({
+    ...bucketOnlyOff,
+    revision: "99999999-2222-4333-8444-555555555555",
+    retention: { count: 9, days: 30 },
+    keyFingerprint: "synthetic-fingerprint-9",
+  });
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect.poll(() => field(screen, "status").textContent).toContain("synthetic-fingerprint-9");
+  await screen.updateComplete;
+  expect(field(screen, "archive-bucket-name").value).toBe("typed");
+  expect(field(screen, "retain-count").value).toBe("7");
+});
