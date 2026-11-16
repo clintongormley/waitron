@@ -18,7 +18,7 @@ Left open:
 
 - Pass and pass-monitor screens reuse their boot boards after a language rebuild (source-only,
   not run: `till-app.ts`'s `initialDevicePass`/`initialDevicePassMonitor`, `till-pass-screen.ts`'s
-  `#initialConsumed`); post-load changes may disappear until the next read.
+  adopting `initialBoard` in `connectedCallback`); post-load changes may disappear until the next read.
 
 
 - A switched-off printer's printing problem keeps showing until the printer is switched on

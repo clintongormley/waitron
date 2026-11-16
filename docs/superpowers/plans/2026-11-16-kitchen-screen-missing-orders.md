@@ -27,3 +27,5 @@ Forecast: production +12–25/−2–5, tests +45–75/−0, docs +25–40/−30
 Execution/landing: RUNNER already authorises finish/land. After clearance and implementation, use normal `finish-branch` whole-branch reviews (concurrency risk), hooks, scoped types, current-head CI and the lane landing lock; no extra owner approval. Claude’s one corrected-plan re-read is complete; the driver has accepted the direct/read-count assertion. Watcher clearance remains pending; no implementation yet.
 
 Watcher clearance 2026-11-16 23:24: build as corrected, no further read or boot-clash guard. Add one source-only, unrun pass/pass-monitor seed note to the existing kitchen bundle; change no pass screen.
+
+Run-it correction 2026-11-16: publish the adopted display board, including its acknowledged-notice filter, and publish again after acknowledgement; raw replies can otherwise reintroduce a notice on remount. The existing app regression now clicks the native acknowledgement before switching language.

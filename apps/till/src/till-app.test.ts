@@ -2409,7 +2409,7 @@ describe("till-app", () => {
   });
 
   it("keeps the latest station queue across Spanish and English switches", async () => {
-    const { allergyQueue } = await import("../test/kitchen-allergy-fixtures.js");
+    const { allergyQueue, allergyNotice } = await import("../test/kitchen-allergy-fixtures.js");
     const previousLocale = currentLocale();
     const previousSize = { width: innerWidth, height: innerHeight };
     await page.viewport(1280, 900);
@@ -2430,7 +2430,8 @@ describe("till-app", () => {
           },
         ],
       }));
-      const answer = (numbers: number[]) => ({
+      const notice = { ...allergyNotice("removed"), stationId: "kitchen" };
+      const answer = (numbers: number[], notices: ReturnType<typeof allergyNotice>[] = []) => ({
         stations: [
           {
             id: "kitchen",
@@ -2438,7 +2439,7 @@ describe("till-app", () => {
             available: true,
             today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "open" },
             queue: queue.filter((group) => numbers.includes(group.orderNumber)),
-            notices: [],
+            notices,
           },
         ],
       });
@@ -2456,35 +2457,35 @@ describe("till-app", () => {
           kitchenScreens: [stationScreen],
         }),
         getDeviceStationScreen: read,
+        deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined),
       });
-      const shown = () => {
-        const boards = [
-          ...station(el)!.shadowRoot!.querySelectorAll<TillStationQueue>("till-station-queue"),
-        ];
-        return [
-          ...new Set(
-            boards.flatMap((board) =>
-              [...board.shadowRoot!.querySelectorAll<HTMLElement>("[data-order]")].map((card) =>
-                Number(card.dataset.order),
-              ),
-            ),
-          ),
-        ].sort((a, b) => a - b);
-      };
-      await flush(el, 8);
+      const board = () =>
+        station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      const shown = () =>
+        [...board().shadowRoot!.querySelectorAll<HTMLElement>("[data-order]")]
+          .map((card) => Number(card.dataset.order))
+          .sort((a, b) => a - b);
+      const noticeNode = () => board().shadowRoot!.querySelector(`[data-notice="${notice.id}"]`);
+      await flush(el);
       emit(shell(el)!, "wt-locale-selected", { code: "en-GB" });
-      await flush(el, 8);
+      await flush(el);
       expect(shown()).toEqual([2, 4]);
-      read.mockResolvedValue(answer([1, 2, 7]));
+      read.mockResolvedValue(answer([1, 2, 7], [notice]));
       vi.advanceTimersByTime(15_000);
-      await flush(el, 8);
+      await flush(el);
       expect(shown()).toEqual([1, 2, 7]);
+      expect(noticeNode()).not.toBeNull();
+      const acknowledge = board().shadowRoot!.querySelector<HTMLElement>("[data-acknowledge]")!;
+      acknowledge.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+      await flush(el);
+      expect(noticeNode()).toBeNull();
       for (const code of ["es-ES", "en-GB"]) {
         const reads = read.mock.calls.length;
         emit(shell(el)!, "wt-locale-selected", { code });
-        await flush(el, 8);
+        await flush(el);
         expect(currentLocale()).toBe(code);
         expect(shown()).toEqual([1, 2, 7]);
+        expect(noticeNode()).toBeNull();
         expect(read).toHaveBeenCalledTimes(reads);
       }
     } finally {

@@ -591,9 +591,13 @@ export class TillStationScreen extends LitElement {
         : station,
     );
     this.#readSucceeded(request);
+    this.#publishDeviceStation();
+  }
+
+  #publishDeviceStation(): void {
     this.dispatchEvent(
       new CustomEvent<DeviceStationScreen>("station-screen-snapshot", {
-        detail: answer,
+        detail: { stations: this.deviceStations },
         bubbles: true,
         composed: true,
       }),
@@ -788,6 +792,7 @@ export class TillStationScreen extends LitElement {
     this.deviceStations = this.deviceStations.map((station) =>
       worked(station) ? { ...station, notices: this.#unacknowledged(station.notices) } : station,
     );
+    if (this.deviceMode) this.#publishDeviceStation();
   }
 
   #canMove(): boolean {
