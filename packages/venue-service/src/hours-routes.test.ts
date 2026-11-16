@@ -27,7 +27,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -138,9 +138,9 @@ async function fixture(): Promise<Fixture> {
     };
   });
   await db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(made.expired)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(made.expired)));
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const cookie = (token: string) => `${MANAGEMENT_COOKIE}=${token}`;

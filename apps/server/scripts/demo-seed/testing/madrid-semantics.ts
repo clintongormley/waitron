@@ -354,7 +354,7 @@ export async function canonicalMadridSemantics(
       case "registro_sif":
         key = parts("node_id", "numero_instalacion");
         break;
-      case "management_sessions":
+      case "dashboard_sessions":
         key = parts("person_id", "created_at");
         break;
       case "device_profile_printers":
@@ -446,7 +446,7 @@ export async function canonicalMadridSemantics(
           row.password_hash = "verified:demo-password;refused:wrong-password";
         }
       }
-      if (table === "management_sessions") {
+      if (table === "dashboard_sessions") {
         if (typeof original.token_hash !== "string" || !/^[a-f0-9]{64}$/.test(original.token_hash))
           throw new Error("management token hash mismatch");
         row.token_hash = "generated:sha256";

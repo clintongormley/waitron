@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
+import { hashSessionToken, loginWithPin, tillSessions } from "@waitron/identity";
 import { PERSON_HEADER } from "@waitron/shared";
 import { mountDeviceApi } from "./device-api.js";
 import { mountTillApi } from "./till-api.js";
@@ -83,7 +83,7 @@ async function fixture() {
     const sessionOf = async (personId: string) => {
       const token = randomUUID();
       await suite.db
-        .insert(sessions)
+        .insert(tillSessions)
         .values({ deviceId: joined.deviceId, personId, tokenHash: hashSessionToken(token) });
       return `${jar}; ${SESSION_COOKIE}=${token}`;
     };

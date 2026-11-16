@@ -33,7 +33,7 @@ import {
   createPinThrottle,
   hashPin,
   hashSessionToken,
-  sessions,
+  tillSessions,
   type PinAttempts,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -106,7 +106,7 @@ beforeEach(async () => {
   personId = people[0]!.id;
   managerId = people[1]!.id;
   const [session] = await db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ personId, deviceId: device.deviceId, tokenHash: hashSessionToken(randomUUID()) })
     .returning();
   sessionId = session!.id;
@@ -373,7 +373,7 @@ describe("settled-tender refund command local transaction", () => {
       const t = await target();
       if (part === "permission") await setBuiltInRoleForTest(store.db, personId, "staff");
       if (part === "session")
-        await store.db.update(sessions).set({ endedAt: AT }).where(eq(sessions.id, sessionId));
+        await store.db.update(tillSessions).set({ endedAt: AT }).where(eq(tillSessions.id, sessionId));
       if (part === "device")
         await store.db
           .update(devices)

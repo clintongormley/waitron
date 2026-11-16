@@ -16,7 +16,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { registerModulePermissions, sessions } from "@waitron/identity";
+import { registerModulePermissions, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -129,8 +129,8 @@ async function accounting() {
 async function cancelAndRefund() {
   const [session] = await store.db
     .select()
-    .from(sessions)
-    .where(eq(sessions.personId, venue.supervisorId));
+    .from(tillSessions)
+    .where(eq(tillSessions.personId, venue.supervisorId));
   const refundBody = {
     submissionId: randomUUID(),
     tenderId,

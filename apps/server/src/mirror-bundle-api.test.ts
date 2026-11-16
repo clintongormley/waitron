@@ -1661,7 +1661,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       }
       const liveSessions = (
         await db.execute<{ n: number }>(
-          sql`select count(*) as n from management_sessions where ended_at is null`,
+          sql`select count(*) as n from dashboard_sessions where ended_at is null`,
         )
       ).rows[0]!.n;
       return {
@@ -1679,7 +1679,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         ...before,
         counts: {
           ...before.counts,
-          management_sessions: Number(before.counts["management_sessions"]) + 1,
+          dashboard_sessions: Number(before.counts["dashboard_sessions"]) + 1,
         },
       });
     }

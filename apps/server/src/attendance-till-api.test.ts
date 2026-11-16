@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { devices, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -271,7 +271,7 @@ describe("till attendance recorder admission", () => {
     expect(await suite.db.select().from(staffActivity)).toEqual([]);
     const opened = await login(api);
     expect(opened.status).toBe(200);
-    await suite.db.select().from(sessions).where(eq(sessions.deviceId, deviceId));
+    await suite.db.select().from(tillSessions).where(eq(tillSessions.deviceId, deviceId));
     expect(await suite.db.select().from(staffActivity)).toMatchObject([
       { personId: OPERATOR, lastAt: "2026-10-14T12:00:00.000Z" },
     ]);

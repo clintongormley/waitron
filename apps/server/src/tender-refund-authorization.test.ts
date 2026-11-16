@@ -29,7 +29,7 @@ import {
   hashPin,
   hashSessionToken,
   persons,
-  sessions,
+  tillSessions,
   type PinAttempts,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -91,7 +91,7 @@ beforeEach(async () => {
   personId = people[0]!.id;
   managerId = people[1]!.id;
   const [session] = await db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({
       personId,
       deviceId: device.deviceId,
@@ -254,7 +254,7 @@ async function scope(allowed: string[]) {
 describe("settled-tender refund authorization before reservation", () => {
   it("does not reserve after the session ended", async () => {
     const t = await target();
-    await store.db.update(sessions).set({ endedAt: AT }).where(eq(sessions.id, sessionId));
+    await store.db.update(tillSessions).set({ endedAt: AT }).where(eq(tillSessions.id, sessionId));
     await refused(t, "session.required");
   });
   it("records the operator's own authority before a cash reservation", async () => {
@@ -608,7 +608,7 @@ describe("settled-tender refund authorization before reservation", () => {
       watchDerivationsAndLock(store.db, PIN, () =>
         withTransaction(store.db, async (tx) => {
           if (change === "session")
-            await tx.update(sessions).set({ endedAt: AT }).where(eq(sessions.id, sessionId));
+            await tx.update(tillSessions).set({ endedAt: AT }).where(eq(tillSessions.id, sessionId));
           if (change === "operator")
             await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
           if (change === "approver")

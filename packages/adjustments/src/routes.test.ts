@@ -1024,7 +1024,7 @@ describe("adjustment report routes", () => {
     function nowIs(instant: string): void {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date(instant));
-      db.run(sql`update management_sessions set last_seen_at = ${instant}`);
+      db.run(sql`update dashboard_sessions set last_seen_at = ${instant}`);
     }
 
     it.each<[string, string, string, number]>([

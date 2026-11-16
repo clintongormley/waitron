@@ -9,8 +9,8 @@ import { devices } from "../devices.js";
  * (`packages/identity/src/session-token.ts`), so neither the row id nor the stored hash, read from
  * a copy of the database, signs anybody in.
  */
-export const sessions = table(
-  "sessions",
+export const tillSessions = table(
+  "till_sessions",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
@@ -24,8 +24,8 @@ export const sessions = table(
     endedAt: tsString("ended_at"),
   },
   (t) => [
-    index("sessions_open_idx").on(t.deviceId),
-    uniqueIndex("sessions_token_hash_uq").on(t.tokenHash),
-    check("sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
+    index("till_sessions_open_idx").on(t.deviceId),
+    uniqueIndex("till_sessions_token_hash_uq").on(t.tokenHash),
+    check("till_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
   ],
 );

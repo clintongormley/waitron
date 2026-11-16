@@ -19,7 +19,7 @@ import {
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { SIN_DATOS_BODY } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { startDiagnosticServer } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-fixtures.js";
-import { endManagementSession, managementSessions } from "@waitron/identity";
+import { endManagementSession, dashboardSessions } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
@@ -89,11 +89,11 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
       if (expiring) {
         await withTransaction(suite.db, async (tx) => {
           await tx
-            .update(managementSessions)
+            .update(dashboardSessions)
             .set({ lastSeenAt: new Date(Date.now() - 29 * 60_000).toISOString() });
         });
         const lastSeenAt = suite.db.all<{ last_seen_at: string }>(
-          sql`select last_seen_at from management_sessions`,
+          sql`select last_seen_at from dashboard_sessions`,
         )[0]!.last_seen_at;
         clock = new Date(Date.parse(lastSeenAt) + 30 * 60_000 - 900);
       }

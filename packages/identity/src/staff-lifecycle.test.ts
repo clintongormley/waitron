@@ -346,7 +346,7 @@ describe("invited person lifecycle", () => {
 
     // The COLUMN, not `ended_at is not null`, which answers 0 or 1 on this engine.
     const rows = await suite.db.execute<{ ended_at: string | null }>(
-      sql`select ended_at from sessions where id = ${tillSession.id}`,
+      sql`select ended_at from till_sessions where id = ${tillSession.id}`,
     );
     expect(rows.rows).toEqual([{ ended_at: expect.any(String) }]);
   });
@@ -443,7 +443,7 @@ describe("invited person lifecycle", () => {
 
 async function sessionEndedAt(sessionId: string): Promise<string | null> {
   const rows = await suite.db.execute<{ ended_at: string | null }>(
-    sql`select ended_at from sessions where id = ${sessionId}`,
+    sql`select ended_at from till_sessions where id = ${sessionId}`,
   );
   return rows.rows[0]!.ended_at;
 }

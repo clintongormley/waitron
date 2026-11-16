@@ -13,7 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { openVenueDatabase, orderGroups, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { PartyAllergyRead } from "@waitron/module";
 import { readPartyAllergy, setRoutingCell } from "@waitron/venue-service";
@@ -145,9 +145,9 @@ describe("A669 consideration through a server process restart", () => {
       );
       const token = randomUUID();
       await v.db
-        .update(sessions)
+        .update(tillSessions)
         .set({ tokenHash: hashSessionToken(token) })
-        .where(eq(sessions.id, v.operator.sessionId));
+        .where(eq(tillSessions.id, v.operator.sessionId));
       const requestCookie = await sessionCookieForTest(v.db, token);
       const command = {
         ...(path === "draft" ? { dining: "eat_in" } : {}),
@@ -327,9 +327,9 @@ describe("A669 submit HTTP assignments", () => {
               );
         const token = randomUUID();
         await v.db
-          .update(sessions)
+          .update(tillSessions)
           .set({ tokenHash: hashSessionToken(token) })
-          .where(eq(sessions.id, v.operator.sessionId));
+          .where(eq(tillSessions.id, v.operator.sessionId));
         const requestCookie = await sessionCookieForTest(v.db, token);
         const body = {
           ...(draft === null ? {} : { dining: "eat_in" }),

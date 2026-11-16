@@ -4,7 +4,7 @@ import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loginWithPin, persons, sessions } from "@waitron/identity";
+import { loginWithPin, persons, tillSessions } from "@waitron/identity";
 import {
   readChain,
   readChainHead,
@@ -156,9 +156,9 @@ describe("signed-in own till clock routes", () => {
       const holder = withTransaction(suite.db, async (tx) => {
         if (change === "session")
           await tx
-            .update(sessions)
+            .update(tillSessions)
             .set({ endedAt: instant.toISOString() })
-            .where(eq(sessions.id, venue.sessionId));
+            .where(eq(tillSessions.id, venue.sessionId));
         if (change === "profile")
           await tx
             .update(deviceProfiles)
@@ -404,9 +404,9 @@ describe("signed-in own till clock routes", () => {
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, venue.personId));
     await withTransaction(suite.db, (tx) =>
       tx
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: instant.toISOString() })
-        .where(eq(sessions.id, venue.sessionId)),
+        .where(eq(tillSessions.id, venue.sessionId)),
     );
     const ended = await request("in");
     expect(ended.status).toBe(401);

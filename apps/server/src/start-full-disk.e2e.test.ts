@@ -618,13 +618,13 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     app.request("/api/box/free-space", { method: "POST", headers: { cookie } });
   const lastSeen = () =>
     db.all<{ at: string }>(
-      sql`select last_seen_at as at from management_sessions where token_hash = ${hashSessionToken(manager.token)}`,
+      sql`select last_seen_at as at from dashboard_sessions where token_hash = ${hashSessionToken(manager.token)}`,
     )[0]!.at;
   /** Not through `withTransaction`, whose drain would deliver a change left waiting. */
   const seenAMinuteAgo = () => {
     const at = new Date(Date.now() - 60_000).toISOString();
     db.run(
-      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(manager.token)}`,
+      sql`update dashboard_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(manager.token)}`,
     );
     return at;
   };
@@ -719,11 +719,11 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       const person = await seedPerson(state === "staff" ? "staff" : "manager", `Theme ${state}`);
       if (state === "ended")
         db.run(
-          sql`update management_sessions set ended_at = ${new Date().toISOString()} where token_hash = ${hashSessionToken(person.token)}`,
+          sql`update dashboard_sessions set ended_at = ${new Date().toISOString()} where token_hash = ${hashSessionToken(person.token)}`,
         );
       if (state === "expired")
         db.run(
-          sql`update management_sessions set last_seen_at = '2020-01-01T00:00:00.000Z' where token_hash = ${hashSessionToken(person.token)}`,
+          sql`update dashboard_sessions set last_seen_at = '2020-01-01T00:00:00.000Z' where token_hash = ${hashSessionToken(person.token)}`,
         );
       if (state === "suspended")
         db.run(sql`update persons set status = 'suspended' where id = ${person.personId}`);
@@ -782,7 +782,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     const before = seenAMinuteAgo();
     const cashierBefore = new Date(Date.now() - 60_000).toISOString();
     db.run(
-      sql`update management_sessions set last_seen_at = ${cashierBefore} where token_hash = ${hashSessionToken(cashier.token)}`,
+      sql`update dashboard_sessions set last_seen_at = ${cashierBefore} where token_hash = ${hashSessionToken(cashier.token)}`,
     );
     db.run(sql`insert into change_log (id, payload) values ('bs7', '{"resource":"zz","id":"7"}')`);
     db.all(sql`pragma wal_checkpoint(truncate)`);
@@ -838,7 +838,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
 
   const lastSeenOf = (token: string) =>
     db.all<{ at: string }>(
-      sql`select last_seen_at as at from management_sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select last_seen_at as at from dashboard_sessions where token_hash = ${hashSessionToken(token)}`,
     )[0]!.at;
   const adminDownload = (personId: string) =>
     app.request(`/management-api/staff/${personId}/personal-data/export`, {
@@ -849,7 +849,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     const small = needDisk(ctx);
     const at = new Date(Date.now() - 60_000).toISOString();
     db.run(
-      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
+      sql`update dashboard_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
     );
     // With room on the disk a touch of the session would succeed, so only this check sees one.
     const roomy = await adminDownload(manager.personId);
@@ -876,7 +876,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     const small = needDisk(ctx);
     const at = new Date(Date.now() - 60_000).toISOString();
     db.run(
-      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
+      sql`update dashboard_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
     );
     db.run(sql`insert into change_log (id, payload) values ('bs6', '{"resource":"zz","id":"6"}')`);
     db.all(sql`pragma wal_checkpoint(truncate)`);
@@ -1705,7 +1705,7 @@ describe("a start on a real full disk", () => {
           sql`select last_seen_at as lastSeenAt from devices where id = ${venue.deviceId}`,
         )[0]!.lastSeenAt;
       const sessionCount = () =>
-        db.all<{ n: number }>(sql`select count(*) as n from sessions`)[0]!.n;
+        db.all<{ n: number }>(sql`select count(*) as n from till_sessions`)[0]!.n;
 
       const longAgo = "2020-01-01T00:00:00.000Z";
       small.unfill();
@@ -1726,7 +1726,7 @@ describe("a start on a real full disk", () => {
       expect(sessionCount()).toBe(before);
 
       const openSessions = () =>
-        db.all<{ n: number }>(sql`select count(*) as n from sessions where ended_at is null`)[0]!.n;
+        db.all<{ n: number }>(sql`select count(*) as n from till_sessions where ended_at is null`)[0]!.n;
       const signOut = (cookie: string) =>
         venue.app.request("/api/session", {
           method: "DELETE",

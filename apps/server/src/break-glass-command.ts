@@ -137,13 +137,13 @@ export async function runBreakGlassReset(deps: {
         // are `tsString`.
         const revokedAt = nowIso();
         await tx.execute(
-          sql`update management_account_actions set used_at=${revokedAt} where person_id=${targetId} and used_at is null`,
+          sql`update account_actions set used_at=${revokedAt} where person_id=${targetId} and used_at is null`,
         );
         await tx.execute(
-          sql`update management_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
+          sql`update dashboard_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
         await tx.execute(
-          sql`update sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
+          sql`update till_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
 
         const resets = resetPin ? "password, pin" : "password";

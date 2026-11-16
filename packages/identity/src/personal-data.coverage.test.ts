@@ -53,11 +53,11 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     in: ["device_id", "opened_at", "ended_at"],
     out: ["id", "person_id", "token_hash"],
   },
-  management_sessions: {
+  dashboard_sessions: {
     in: ["created_at", "last_seen_at", "ended_at", "proved_at", "proof_method"],
     out: ["id", "person_id", "token_hash"],
   },
-  management_account_actions: {
+  account_actions: {
     in: [
       "purpose",
       "target_email",

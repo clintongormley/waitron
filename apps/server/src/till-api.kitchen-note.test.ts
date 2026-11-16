@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId, PERSON_HEADER } from "@waitron/shared";
 import {
@@ -63,7 +63,7 @@ beforeEach(async () => {
   ({ deviceId, profileId } = await seedDevice(suite.db, { capabilities: ["take-orders"] }));
   token = randomUUID();
   const [session] = await suite.db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) })
     .returning();
   sessionId = session!.id;
@@ -300,9 +300,9 @@ describe("whole-order kitchen note routes", () => {
 
   it("refuses a signed-out session", async () => {
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
     await expectError(await request("PUT", path(), command()), 401, "session.required");
   });
 
@@ -470,9 +470,9 @@ describe("whole-order kitchen note routes", () => {
       try {
         if (change === "logout")
           await suite.db
-            .update(sessions)
+            .update(tillSessions)
             .set({ endedAt: new Date().toISOString() })
-            .where(eq(sessions.id, sessionId));
+            .where(eq(tillSessions.id, sessionId));
         else if (change === "revoke")
           await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
         else if (change === "profile")
@@ -575,9 +575,9 @@ describe("whole-order kitchen note routes", () => {
       capabilities: ["take-orders"],
     });
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ deviceId: handheld.deviceId })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
     requestCookie = await sessionCookieForTest(suite.db, token);
     const res = await request("PUT", path(true), command(true, { note: "n".repeat(2000) }));
     expect(res.status).toBe(200);

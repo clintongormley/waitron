@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, sessions, setProfileAdmission } from "@waitron/identity";
+import { hashPin, loginWithPin, tillSessions, setProfileAdmission } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import type { DeviceZoneSelectionInput } from "@waitron/module";
 import { VENUE_SERVICE } from "@waitron/venue-service";
@@ -255,9 +255,9 @@ describe("the device's zone preferences", () => {
         await checked.promise;
         if (change === "session")
           await suite.db
-            .update(sessions)
+            .update(tillSessions)
             .set({ endedAt: new Date().toISOString() })
-            .where(eq(sessions.id, f.session.id));
+            .where(eq(tillSessions.id, f.session.id));
         if (change === "device")
           await suite.db.update(devices).set({ active: false }).where(eq(devices.id, f.deviceId));
         if (change === "profile" || change === "profile-admission") {

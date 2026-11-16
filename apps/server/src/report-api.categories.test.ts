@@ -310,7 +310,7 @@ async function personLocale(cookie: string, locale: string | null): Promise<void
   const token = cookie.split("=")[1]!;
   await suite.db.execute(sql`
     update persons set locale = ${locale}
-    where id = (select person_id from management_sessions where token_hash = ${hashSessionToken(token)})`);
+    where id = (select person_id from dashboard_sessions where token_hash = ${hashSessionToken(token)})`);
 }
 
 async function jobsOn(printerId: string) {

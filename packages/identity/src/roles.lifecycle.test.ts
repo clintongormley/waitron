@@ -2,7 +2,7 @@ import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
   activityLog,
-  managementSessions,
+  dashboardSessions,
   outgoingMail,
   personRoles,
   roles,
@@ -386,7 +386,7 @@ it("requires fresh proof for lifecycle changes", async () => {
     code: "management_session.proof_required",
   });
   expect(await suite.db.select().from(activityLog)).toEqual([]);
-  expect(await suite.db.select().from(managementSessions)).toHaveLength(1);
+  expect(await suite.db.select().from(dashboardSessions)).toHaveLength(1);
 });
 
 it("folds case and Unicode accents for duplicate names while preserving the accent distinction", async () => {

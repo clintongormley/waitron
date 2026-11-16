@@ -268,7 +268,7 @@ describe("POST /api/box/retire", () => {
     } as unknown as SignedMembershipDocument);
     // The login's session row changes on every request; nothing else may.
     const before = [
-      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.db, ["dashboard_sessions"]),
       await tableSnapshot(suite.node),
     ];
     const app = buildApp(nodeId);
@@ -281,7 +281,7 @@ describe("POST /api/box/retire", () => {
       error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
     });
     expect([
-      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.db, ["dashboard_sessions"]),
       await tableSnapshot(suite.node),
     ]).toEqual(before);
   });

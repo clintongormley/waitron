@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { credentialRevision, putCredential } from "@waitron/credentials";
 import { taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { managementSessions } from "@waitron/identity";
+import { dashboardSessions } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -132,7 +132,7 @@ describe("certificate diagnosis parent", () => {
         if (failure === "permission")
           await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
         if (failure === "session")
-          await tx.update(managementSessions).set({ endedAt: new Date().toISOString() });
+          await tx.update(dashboardSessions).set({ endedAt: new Date().toISOString() });
       });
       const before = await rawState(suite.db);
       const runChild = vi.fn(f.deps.runChild);

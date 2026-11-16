@@ -6,7 +6,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   withPassiveManagementRead,
@@ -180,14 +180,14 @@ describe("authenticated working-time downloads", () => {
       const token = staffCookie.split("=")[1]!;
       if (kind === "ended")
         await suite.db
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ endedAt: new Date().toISOString() })
-          .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
       if (kind === "expired")
         await suite.db
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ lastSeenAt: "2020-01-01T00:00:00Z" })
-          .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
       if (kind === "suspended")
         await suite.db
           .update(persons)
@@ -316,14 +316,14 @@ describe("authenticated working-time downloads", () => {
   );
   it("keeps passive options from renewing inactivity while a deliberate download is active", async () => {
     const old = new Date(Date.now() - 60_000).toISOString();
-    await suite.db.update(managementSessions).set({ lastSeenAt: old });
+    await suite.db.update(dashboardSessions).set({ lastSeenAt: old });
     const response = await app.request(`${base("own")}-options`, {
       headers: { cookie: staffCookie, "x-waitron-live": "1" },
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ available: true, canExportAll: false });
     expect(
-      (await suite.db.select().from(managementSessions)).every((s) => s.lastSeenAt === old),
+      (await suite.db.select().from(dashboardSessions)).every((s) => s.lastSeenAt === old),
     ).toBe(true);
     const options = await app.request(`${base("own")}-options`, {
       headers: { cookie: managerCookie, "x-waitron-live": "1" },
@@ -334,8 +334,8 @@ describe("authenticated working-time downloads", () => {
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.personId, fixture.personId))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.personId, fixture.personId))
       )[0]!.lastSeenAt,
     ).not.toBe(old);
   });
@@ -469,14 +469,14 @@ describe("authenticated working-time downloads", () => {
         await withTransaction(suite.db, async (tx) => {
           if (kind === "expired")
             await tx
-              .update(managementSessions)
+              .update(dashboardSessions)
               .set({ lastSeenAt: "2020-01-01T00:00:00Z" })
-              .where(eq(managementSessions.personId, fixture.managerId));
+              .where(eq(dashboardSessions.personId, fixture.managerId));
           if (kind === "ended")
             await tx
-              .update(managementSessions)
+              .update(dashboardSessions)
               .set({ endedAt: new Date().toISOString() })
-              .where(eq(managementSessions.personId, fixture.managerId));
+              .where(eq(dashboardSessions.personId, fixture.managerId));
           if (kind === "suspended")
             await tx
               .update(persons)
@@ -511,7 +511,7 @@ it.each(["staff", "manager"] as const)(
   "options without a passive header do not renew %s inactivity",
   async (role) => {
     const old = new Date(Date.now() - 60_000).toISOString();
-    await suite.db.update(managementSessions).set({ lastSeenAt: old });
+    await suite.db.update(dashboardSessions).set({ lastSeenAt: old });
     const auth = role === "staff" ? staffCookie : managerCookie;
     const response = await app.request(`${base("own")}-options`, {
       headers: { cookie: auth },
@@ -519,7 +519,7 @@ it.each(["staff", "manager"] as const)(
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ available: true, canExportAll: role === "manager" });
     expect(
-      (await suite.db.select().from(managementSessions)).every((row) => row.lastSeenAt === old),
+      (await suite.db.select().from(dashboardSessions)).every((row) => row.lastSeenAt === old),
     ).toBe(true);
     expect((await ask("own", {}, auth)).status).toBe(200);
     const personId = role === "staff" ? fixture.personId : fixture.managerId;
@@ -527,8 +527,8 @@ it.each(["staff", "manager"] as const)(
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.personId, personId))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.personId, personId))
       )[0]!.lastSeenAt,
     ).not.toBe(old);
   },

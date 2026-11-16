@@ -29,7 +29,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, loginWithPin, sessions } from "@waitron/identity";
+import { hashPin, loginWithPin, tillSessions } from "@waitron/identity";
 import { cardReaders, payments, type PaymentState } from "@waitron/payments";
 import { AppError, deviceOrigin, type DeleteImpact, type ResourceIdentity } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -337,9 +337,9 @@ async function seed() {
   // An ended sign-in on Bar till, which the delete neither counts nor ends.
   await signIn(barTill);
   await suite.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: "2026-10-10T09:00:00.000Z" })
-    .where(eq(sessions.deviceId, barTill));
+    .where(eq(tillSessions.deviceId, barTill));
   await signIn(barTill);
   await signIn(pass);
 

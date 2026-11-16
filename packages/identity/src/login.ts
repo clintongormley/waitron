@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { devices, nowIso, sessions } from "@waitron/db";
+import { devices, nowIso, tillSessions } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { PersonAuthority } from "./authority.js";
@@ -45,13 +45,13 @@ export async function loginWithPin(
 
   const token = mintSessionToken();
   const [row] = await tx
-    .insert(sessions)
+    .insert(tillSessions)
     .values({
       personId: input.personId,
       deviceId: input.deviceId,
       tokenHash: hashSessionToken(token),
     })
-    .returning({ id: sessions.id });
+    .returning({ id: tillSessions.id });
   return {
     id: row!.id,
     token,
@@ -65,18 +65,18 @@ export async function loginWithPin(
 /** End every shift session still open on a device. */
 export async function endDeviceSessions(tx: Transaction, deviceId: string): Promise<void> {
   await tx
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+    .where(and(eq(tillSessions.deviceId, deviceId), isNull(tillSessions.endedAt)));
 }
 
 /** True if this call closed the session; false if it was already ended, or the token names no
  * session — a row id or a stored hash names none. */
 export async function endSession(tx: Transaction, token: string): Promise<boolean> {
   const updated = await tx
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)))
-    .returning({ id: sessions.id });
+    .where(and(eq(tillSessions.tokenHash, hashSessionToken(token)), isNull(tillSessions.endedAt)))
+    .returning({ id: tillSessions.id });
   return updated.length > 0;
 }

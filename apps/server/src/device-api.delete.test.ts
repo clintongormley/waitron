@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { devices, joinRequests, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashDeviceToken, hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
+import { hashDeviceToken, hashSessionToken, loginWithPin, tillSessions } from "@waitron/identity";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { payments } from "@waitron/payments";
 import type { DeleteImpact } from "@waitron/shared";
@@ -142,9 +142,9 @@ async function deviceRow(deviceId: string) {
 
 async function openSessionCount(deviceId: string): Promise<number> {
   const rows = await suite.db
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+    .select({ id: tillSessions.id })
+    .from(tillSessions)
+    .where(and(eq(tillSessions.deviceId, deviceId), isNull(tillSessions.endedAt)));
   return rows.length;
 }
 

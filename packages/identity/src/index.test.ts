@@ -33,7 +33,7 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key, its open-session index, and one foreign key, to its device", () => {
-    const config = getTableConfig(api.sessions);
+    const config = getTableConfig(api.tillSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
     expect(
@@ -44,9 +44,9 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
     ).toEqual([[["device_id"], "devices", "restrict"]]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("sessions_open_idx");
-    expect(indexNames).toContain("sessions_token_hash_uq");
-    expect(config.checks.map((c) => c.name)).toContain("sessions_token_hash_ck");
+    expect(indexNames).toContain("till_sessions_open_idx");
+    expect(indexNames).toContain("till_sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("till_sessions_token_hash_ck");
   });
 });
 
@@ -54,17 +54,17 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
  * It declares no foreign key to persons; `packages/db/src/schema/identity/management-sessions.ts`
  * says why.
  */
-describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
-    const config = getTableConfig(api.managementSessions);
+describe("dashboard_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares dashboard_sessions' primary key and its open-session index, and no foreign key", () => {
+    const config = getTableConfig(api.dashboardSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
     expect(config.foreignKeys).toEqual([]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("management_sessions_open_idx");
-    expect(indexNames).toContain("management_sessions_token_hash_uq");
-    expect(config.checks.map((c) => c.name)).toContain("management_sessions_token_hash_ck");
+    expect(indexNames).toContain("dashboard_sessions_open_idx");
+    expect(indexNames).toContain("dashboard_sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("dashboard_sessions_token_hash_ck");
   });
 });
 

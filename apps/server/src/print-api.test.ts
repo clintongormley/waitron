@@ -1059,7 +1059,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     });
     const seenAt = new Date(Date.now() - minutesIdle * 60_000).toISOString();
     await suite.db.execute(sql`
-      update management_sessions set last_seen_at = ${seenAt}
+      update dashboard_sessions set last_seen_at = ${seenAt}
       where token_hash = ${hashSessionToken(token)}`);
     return { cookie: `${MANAGEMENT_COOKIE}=${token}`, token };
   }
@@ -2271,7 +2271,7 @@ describe("mountPrintApi — management: test-print", () => {
         suite.db.execute(sql`
       update persons set locale = ${locale}
       where id = (
-        select person_id from management_sessions where token_hash = ${hashSessionToken(token)}
+        select person_id from dashboard_sessions where token_hash = ${hashSessionToken(token)}
       )`);
       await setLocale(personLocale);
       try {

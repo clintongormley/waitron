@@ -505,8 +505,8 @@ for (const locale of ["en", "es"] as const) {
       );
     });
     const seeded = await readMadridSemantics(suite.db);
-    expect(seeded.tables.management_sessions!.rows).toEqual(
-      provisioned.tables.management_sessions!.rows,
+    expect(seeded.tables.dashboard_sessions!.rows).toEqual(
+      provisioned.tables.dashboard_sessions!.rows,
     );
     expect(seeded.tables.products!.rows.length).toBeGreaterThan(45);
     const canonical = {
@@ -1195,12 +1195,12 @@ for (const locale of ["en", "es"] as const) {
           null,
         ],
         [
-          "management_sessions",
+          "dashboard_sessions",
           { name: "proved_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
         [
-          "management_sessions",
+          "dashboard_sessions",
           { name: "proof_method", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, sessions } from "@waitron/identity";
+import { persons, tillSessions } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { attendanceDayWork, timeEntries, WorkforceBackend } from "@waitron/workforce";
 import { createClockVenue, type ClockVenue } from "./testing/clock-venue.js";
@@ -17,9 +17,9 @@ beforeEach(async () => {
   instant = new Date("2026-01-05T08:00:00Z");
   venue = await createClockVenue(suite.db, () => instant);
   await suite.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ openedAt: instant.toISOString() })
-    .where(eq(sessions.id, venue.sessionId));
+    .where(eq(tillSessions.id, venue.sessionId));
 });
 
 function request(path: string, expectedEntryId: string | null = null) {

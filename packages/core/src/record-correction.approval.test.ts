@@ -5,9 +5,9 @@ import {
   CORE_MIGRATIONS,
   invoiceCorrections,
   invoiceSeries,
-  managementSessions,
+  dashboardSessions,
   sales,
-  sessions,
+  tillSessions,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -144,8 +144,8 @@ function approvalInvalid(invoiceCorrectionId: string, reason: string) {
 
 it("files on an open correction's approval with no session, recording its approver", async () => {
   const correctionId = await openCorrection();
-  expect(await suite.db.select().from(sessions)).toEqual([]);
-  expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  expect(await suite.db.select().from(tillSessions)).toEqual([]);
+  expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
   const result = await apply(correctionId);
   const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
   expect(approverId).not.toBe(requesterId);

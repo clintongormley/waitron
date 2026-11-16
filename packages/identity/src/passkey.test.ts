@@ -4,7 +4,7 @@ import {
   NOT_NULL_VIOLATION,
   refusalOn,
   withTransaction,
-  managementSessions,
+  dashboardSessions,
   persons,
   webauthnChallenges,
   webauthnCredentials,
@@ -653,7 +653,7 @@ describe("passkey authentication", () => {
 
   it("answers passkey.not_registered for a passkey left behind by a wiped database, under a user handle this database never issued", async () => {
     await seedPerson(suite.db, "admin");
-    const sessionsBefore = (await run((tx) => tx.select().from(managementSessions))).length;
+    const sessionsBefore = (await run((tx) => tx.select().from(dashboardSessions))).length;
     const begun = await beginAuth();
     const code = await codeOf(() =>
       run((tx) =>
@@ -669,7 +669,7 @@ describe("passkey authentication", () => {
       ),
     );
     expect(code).toBe("passkey.not_registered");
-    const opened = await run((tx) => tx.select().from(managementSessions));
+    const opened = await run((tx) => tx.select().from(dashboardSessions));
     expect(opened).toHaveLength(sessionsBefore);
   });
 
@@ -692,7 +692,7 @@ describe("passkey authentication", () => {
     );
     expect(chal).toHaveLength(1);
     const opened = await run((tx) =>
-      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+      tx.select().from(dashboardSessions).where(eq(dashboardSessions.personId, personId)),
     );
     expect(opened).toHaveLength(0);
   });
@@ -760,7 +760,7 @@ describe("passkey authentication", () => {
     );
 
     const opened = await run((tx) =>
-      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+      tx.select().from(dashboardSessions).where(eq(dashboardSessions.personId, personId)),
     );
     expect(opened).toHaveLength(0);
   });
@@ -806,7 +806,7 @@ describe("passkey authentication", () => {
     );
     expect(cred!.counter).toBe(4);
     const opened = await run((tx) =>
-      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+      tx.select().from(dashboardSessions).where(eq(dashboardSessions.personId, personId)),
     );
     expect(opened).toHaveLength(0);
   });
@@ -868,16 +868,16 @@ describe("what the browser's password manager is told about a signed-in person's
     const aged = new Date(Date.now() - 10 * 60_000).toISOString();
     await run((tx) =>
       tx
-        .update(managementSessions)
+        .update(dashboardSessions)
         .set({ lastSeenAt: aged })
-        .where(eq(managementSessions.personId, personId)),
+        .where(eq(dashboardSessions.personId, personId)),
     );
     await signals(token);
     const [row] = await run((tx) =>
       tx
-        .select({ lastSeenAt: managementSessions.lastSeenAt })
-        .from(managementSessions)
-        .where(eq(managementSessions.personId, personId)),
+        .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.personId, personId)),
     );
     expect(row!.lastSeenAt).toBe(aged);
   });
@@ -907,7 +907,7 @@ describe("checking the signed-in person's own passkey", () => {
       }),
     );
 
-  const sessionCount = async () => (await run((tx) => tx.select().from(managementSessions))).length;
+  const sessionCount = async () => (await run((tx) => tx.select().from(dashboardSessions))).length;
 
   async function enrolTotp(personId: string): Promise<string[]> {
     await run((tx) =>

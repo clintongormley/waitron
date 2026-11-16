@@ -15,7 +15,7 @@ import {
   persons,
   loginWithPin,
   registerModulePermissions,
-  sessions,
+  tillSessions,
 } from "@waitron/identity";
 import {
   attendanceQuestions,
@@ -224,9 +224,9 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended"] as const)(
     const valid = await command();
     if (kind === "ended")
       await suite.db
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: instant.toISOString() })
-        .where(eq(sessions.id, venue.sessionId));
+        .where(eq(tillSessions.id, venue.sessionId));
     if (kind === "disabled")
       await suite.db.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
     if (kind === "deleted")
@@ -412,9 +412,9 @@ it.each(["session", "admission", "device", "profile"] as const)(
     const holder = withTransaction(suite.db, async (tx) => {
       if (kind === "session")
         await tx
-          .update(sessions)
+          .update(tillSessions)
           .set({ endedAt: instant.toISOString() })
-          .where(eq(sessions.id, venue.sessionId));
+          .where(eq(tillSessions.id, venue.sessionId));
       if (kind === "admission")
         await tx
           .delete(deviceProfileAdmissionRoles)

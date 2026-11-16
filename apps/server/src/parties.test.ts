@@ -13,7 +13,7 @@ import {
   diningTables,
   sales,
   serviceCommands,
-  sessions,
+  tillSessions,
   parties,
   partyTables,
   saleSettlements,
@@ -1876,8 +1876,8 @@ describe("a bill closed as a deferred payment", () => {
     const paid = await seatedWith(venue, "House salad");
     const [session] = await venue.db
       .select()
-      .from(sessions)
-      .where(and(eq(sessions.deviceId, venue.deviceId), isNull(sessions.endedAt)));
+      .from(tillSessions)
+      .where(and(eq(tillSessions.deviceId, venue.deviceId), isNull(tillSessions.endedAt)));
     await takeBillPayment(
       {
         admission: testTradingAdmission(),

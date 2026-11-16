@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { nowIso, parties, partyTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
@@ -45,7 +45,7 @@ beforeEach(async () => {
   const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-orders"] });
   token = randomUUID();
   await suite.db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) });
   requestCookie = await sessionCookieForTest(suite.db, token);
   const zone = await createZone(suite.db, { name: "Tables" });

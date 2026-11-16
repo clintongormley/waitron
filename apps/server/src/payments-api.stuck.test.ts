@@ -1018,7 +1018,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     });
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
     await suite.db.execute(
-      sql`update sessions set ended_at = ${new Date().toISOString()} where id = ${tillSession}`,
+      sql`update till_sessions set ended_at = ${new Date().toISOString()} where id = ${tillSession}`,
     );
 
     const result = await send(v, "POST", resolvePath(paymentId));

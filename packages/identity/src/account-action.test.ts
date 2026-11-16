@@ -85,7 +85,7 @@ describe("management account actions", () => {
     const row = await suite.db.execute<{
       code_hash: string | null;
       code_expires_at: string | null;
-    }>(sql`select code_hash,code_expires_at from management_account_actions where id=${issued.id}`);
+    }>(sql`select code_hash,code_expires_at from account_actions where id=${issued.id}`);
     expect(row.rows).toEqual([{ code_hash: null, code_expires_at: null }]);
   });
 
@@ -134,7 +134,7 @@ describe("management account actions", () => {
       ),
     ).resolves.toBeNull();
     const attempts = await suite.db.execute<{ code_attempts: number }>(
-      sql`select code_attempts from management_account_actions where id = ${issued.id}`,
+      sql`select code_attempts from account_actions where id = ${issued.id}`,
     );
     expect(attempts.rows[0]!.code_attempts).toBe(1);
 
@@ -214,7 +214,7 @@ describe("management account actions", () => {
     const issued = await run((tx) => issueAccountAction(tx, { personId, purpose: "invitation" }));
 
     const stored = await suite.db.execute<{ token_hash: string; used_at: string | null }>(
-      sql`select token_hash, used_at from management_account_actions where id = ${issued.id}`,
+      sql`select token_hash, used_at from account_actions where id = ${issued.id}`,
     );
     expect(stored.rows[0]!.token_hash).not.toContain(issued.token);
     expect(stored.rows[0]!.used_at).toBeNull();
@@ -244,7 +244,7 @@ describe("management account actions", () => {
     );
     expect(verified.rows[0]!.email_verified_at).not.toBeNull();
     const sessions = await suite.db.execute<{ token_hash: string; ended_at: string | null }>(
-      sql`select token_hash, ended_at from management_sessions
+      sql`select token_hash, ended_at from dashboard_sessions
           where person_id = ${personId} order by created_at`,
     );
     expect(sessions.rows).toEqual(
@@ -261,7 +261,7 @@ describe("management account actions", () => {
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
     );
     await suite.db
-      .execute(sql`update management_sessions set proved_at = ${new Date().toISOString()}
+      .execute(sql`update dashboard_sessions set proved_at = ${new Date().toISOString()}
       where token_hash = ${hashSessionToken(session.token)}`);
     await run((tx) =>
       updatePersonDetails(tx, {
@@ -340,7 +340,7 @@ describe("management account actions", () => {
       },
     ]);
     expect(
-      suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
+      suite.db.all(sql`select id from account_actions where person_id=${personId}`),
     ).toEqual([]);
     const before = suite.db.all(sql`select id from outgoing_mail`);
     await run((tx) =>
@@ -376,7 +376,7 @@ describe("management account actions", () => {
       },
     ]);
     expect(
-      suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
+      suite.db.all(sql`select id from account_actions where person_id=${personId}`),
     ).toEqual([]);
   });
 
@@ -474,7 +474,7 @@ describe("management account actions", () => {
     const count = async () =>
       (
         await suite.db.execute<{ n: string }>(
-          sql`select cast(count(*) as text) as n from management_account_actions`,
+          sql`select cast(count(*) as text) as n from account_actions`,
         )
       ).rows[0]!.n;
     const before = await count();
@@ -487,11 +487,11 @@ describe("management account actions", () => {
     const ghostId = randomUUID();
     const error = await captureError(() =>
       run(async (tx) => {
-        await tx.execute(sql`insert into management_account_actions
+        await tx.execute(sql`insert into account_actions
           (id, person_id, purpose, token_hash, created_at, expires_at)
           values (${ghostId}, ${randomUUID()}, 'password_reset', ${"0".repeat(64)},
                   '2026-10-01T00:00:00.000Z', '2026-10-02T00:00:00.000Z')`);
-        await tx.execute(sql`delete from management_account_actions where id = ${ghostId}`);
+        await tx.execute(sql`delete from account_actions where id = ${ghostId}`);
       }),
     );
     expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
@@ -662,7 +662,7 @@ describe("issuing an account action refuses an account that cannot receive one",
       ).toBe("person.email_invalid");
     }
     const rows = await suite.db.execute<{ id: string }>(
-      sql`select id from management_account_actions where person_id = ${personId}`,
+      sql`select id from account_actions where person_id = ${personId}`,
     );
     expect(rows.rows).toEqual([]);
   });
@@ -680,7 +680,7 @@ describe("issuing an account action keeps a person's history of that purpose bou
     const targetEmail = purpose === "email_change" ? "elsewhere@x.com" : null;
     const expiresAt = state === "expired" ? "2026-10-01T11:00:00.000Z" : "2026-10-01T13:00:00.000Z";
     const usedAt = state === "used" ? "2026-10-01T10:30:00.000Z" : null;
-    await suite.db.execute(sql`insert into management_account_actions
+    await suite.db.execute(sql`insert into account_actions
       (id, person_id, purpose, target_email, token_hash, created_at, expires_at, used_at)
       values (${id}, ${personId}, ${purpose}, ${targetEmail}, ${randomBytes(32).toString("hex")},
               '2026-10-01T10:00:00.000Z', ${expiresAt}, ${usedAt})`);
@@ -693,7 +693,7 @@ describe("issuing an account action keeps a person's history of that purpose bou
   ): Promise<{ id: string; used_at: string | null }[]> {
     return (
       await suite.db.execute<{ id: string; used_at: string | null }>(
-        sql`select id, used_at from management_account_actions
+        sql`select id, used_at from account_actions
             where person_id = ${personId} and purpose = ${purpose} order by created_at, id`,
       )
     ).rows;
@@ -767,7 +767,7 @@ describe("inspecting an account action", () => {
       run((tx) => inspectAccountAction(tx, { token: issued.token, purpose: "password_reset" })),
     ).resolves.toEqual({ email: "inspect-reset@x.com", purpose: "password_reset" });
     const row = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(row.rows).toEqual([{ used_at: null }]);
   });
@@ -836,7 +836,7 @@ describe("completing an account action whose person changed after it was issued"
     );
     expect(after.rows).toEqual(before.rows);
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows).toEqual([{ used_at: null }]);
   });
@@ -887,7 +887,7 @@ describe("completing an account action whose person changed after it was issued"
     );
     expect(after.rows).toEqual(before.rows);
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows).toEqual([{ used_at: null }]);
   });
@@ -918,7 +918,7 @@ describe("completing an account action whose person changed after it was issued"
     }>(sql`select status, password_hash, pin_hash from persons where id = ${personId}`);
     expect(person.rows).toEqual([{ status: "pending", password_hash: null, pin_hash: null }]);
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows).toEqual([{ used_at: null }]);
   });
@@ -968,7 +968,7 @@ describe("completing an account action whose person changed after it was issued"
         run(async (tx) => {
           await tx.run(sql`pragma defer_foreign_keys = on`);
           await tx.run(
-            sql`update management_account_actions set person_id = ${ghost} where id = ${issued.id}`,
+            sql`update account_actions set person_id = ${ghost} where id = ${issued.id}`,
           );
           return completeAccountAction(tx, {
             token: issued.token,
@@ -1007,7 +1007,7 @@ describe("completing an account action whose person changed after it was issued"
       await suite.db.execute(sql`drop trigger tmp_skip_person_write`);
     }
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows).toEqual([{ used_at: null }]);
   });
@@ -1040,7 +1040,7 @@ describe("confirming an email change by code when the account moved on", () => {
     // `finally`.
     const { personId, issued } = await requestChange("claim-lost@x.com", "claim-lost-next@x.com");
     await suite.db.execute(
-      sql.raw(`create trigger tmp_skip_claim before update of used_at on management_account_actions
+      sql.raw(`create trigger tmp_skip_claim before update of used_at on account_actions
           for each row when old.id = ${quoteLiteral(issued.id)} begin select raise(ignore); end`),
     );
     try {
@@ -1066,7 +1066,7 @@ describe("confirming an email change by code when the account moved on", () => {
     ).resolves.toBeNull();
     expect(await emailsOf(personId)).toEqual({ email: "withdrawn@x.com", pending_email: null });
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows[0]!.used_at).not.toBeNull();
   });
@@ -1085,7 +1085,7 @@ describe("confirming an email change by code when the account moved on", () => {
       pending_email: "race-target@x.com",
     });
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued.id}`,
+      sql`select used_at from account_actions where id = ${issued.id}`,
     );
     expect(action.rows).toEqual([{ used_at: null }]);
   });
@@ -1207,7 +1207,7 @@ describe("an account action issued before a backward clock step", () => {
       issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }),
     );
     const rows = await suite.db.execute<{ id: string; used_at: string | null }>(
-      sql`select id, used_at from management_account_actions
+      sql`select id, used_at from account_actions
           where person_id = ${personId} and purpose = 'password_reset' order by used_at is null, id`,
     );
     expect(rows.rows).toEqual([
@@ -1222,7 +1222,7 @@ describe("an account action issued before a backward clock step", () => {
       issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }),
     );
     const rows = await suite.db.execute<{ id: string }>(
-      sql`select id from management_account_actions
+      sql`select id from account_actions
           where person_id = ${personId} and purpose = 'password_reset'`,
     );
     expect(rows.rows.map((row) => row.id)).toEqual([next.id]);

@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { previewCorrectionAmounts } from "@waitron/core";
-import { endDeviceSessions, endSession, loginWithPin, sessions } from "@waitron/identity";
+import { endDeviceSessions, endSession, loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -211,9 +211,9 @@ describe("a correction's connected card legs", () => {
       await inTx(v, (tx) => endDeviceSessions(tx, v.deviceId));
       expect(
         await v.db
-          .select({ id: sessions.id })
-          .from(sessions)
-          .where(and(eq(sessions.personId, v.adminId), isNull(sessions.endedAt))),
+          .select({ id: tillSessions.id })
+          .from(tillSessions)
+          .where(and(eq(tillSessions.personId, v.adminId), isNull(tillSessions.endedAt))),
       ).toEqual([]);
       const before = salesCount();
 

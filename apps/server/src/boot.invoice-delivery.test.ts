@@ -952,7 +952,7 @@ describe("queued account mail primary admission at real boot", () => {
             .toEqual([{ status: "sent" }, { status: "sent" }, { status: "sent" }]);
         } else {
           expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
-          expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
+          expect(suite.db.all(sql`select id from account_actions`)).toEqual([]);
           expect(
             suite.db.all(sql`select id from persons where email='invite-boot@example.test'`),
           ).toEqual([]);

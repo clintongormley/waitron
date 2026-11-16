@@ -45,7 +45,7 @@ import {
   listStaffAdmittedTo,
   loginWithPin,
   setPersonLocale,
-  sessions,
+  tillSessions,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { kindOfFormFactor } from "@waitron/layouts";
@@ -1396,9 +1396,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
               });
               if (deps.attendance !== undefined) {
                 const [stored] = await tx
-                  .select({ openedAt: sessions.openedAt })
-                  .from(sessions)
-                  .where(eq(sessions.id, opened.id));
+                  .select({ openedAt: tillSessions.openedAt })
+                  .from(tillSessions)
+                  .where(eq(tillSessions.id, opened.id));
                 await deps.attendance(tx, {
                   source: "session",
                   key: opened.id,

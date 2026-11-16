@@ -25,7 +25,7 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from products`);
   await suite.db.execute(sql`delete from units`);
   await suite.db.execute(sql`delete from menus`);
-  await suite.db.execute(sql`delete from management_sessions`);
+  await suite.db.execute(sql`delete from dashboard_sessions`);
   await suite.db.execute(sql`delete from persons`);
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {

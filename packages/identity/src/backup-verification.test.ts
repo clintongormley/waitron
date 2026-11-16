@@ -130,7 +130,7 @@ beforeEach(async () => {
       expiresAt: end,
       createdAt: old,
     });
-    await suite.db.insert(schema.sessions).values({
+    await suite.db.insert(schema.tillSessions).values({
       id: person,
       personId: person,
       deviceId: device,
@@ -139,12 +139,12 @@ beforeEach(async () => {
       endedAt: now,
     });
     await suite.db
-      .insert(schema.managementSessions)
+      .insert(schema.dashboardSessions)
       .values({ id: person, personId: person, tokenHash: digest, createdAt: old, lastSeenAt: now });
     await suite.db
       .insert(schema.recoveryCodes)
       .values({ id: person, personId: person, codeHash: digest, createdAt: old, usedAt: now });
-    await suite.db.insert(schema.managementAccountActions).values({
+    await suite.db.insert(schema.accountActions).values({
       id: person,
       personId: person,
       purpose: "password_reset",
@@ -372,11 +372,11 @@ describe("identity offline backup owner", () => {
     ["staff_roles", "hidden_at='2026-11-12T12:00:00.000Z'"],
     ["persons", "display_name='Changed'"],
     ["totp_enrollments", "expires_at='2026-10-21T00:00:00.000Z'"],
-    ["management_account_actions", "code_attempts=3"],
+    ["account_actions", "code_attempts=3"],
     ["webauthn_credentials", "counter=43"],
     ["recovery_codes", "used_at=null"],
-    ["sessions", "ended_at=null"],
-    ["management_sessions", "last_seen_at='2026-10-21T00:00:00.000Z'"],
+    ["till_sessions", "ended_at=null"],
+    ["dashboard_sessions", "last_seen_at='2026-10-21T00:00:00.000Z'"],
     ["webauthn_challenges", "challenge='AQIE'"],
     ["google_oidc_states", "nonce='AQIE'"],
     ["device_profile_admission_roles", "device_profile_id='other-profile'"],
@@ -389,10 +389,10 @@ describe("identity offline backup owner", () => {
     ["persons", "password_hash='scrypt$00$00'"],
     ["persons", "password_hash='scrypt$" + "gg".repeat(16) + "$" + "a".repeat(64) + "'"],
     ["recovery_codes", "code_hash='" + "z".repeat(64) + "'"],
-    ["sessions", "token_hash='" + "z".repeat(64) + "'"],
-    ["management_sessions", "token_hash='" + "z".repeat(64) + "'"],
-    ["management_account_actions", "code_hash='" + "z".repeat(64) + "'"],
-    ["management_account_actions", "token_hash='" + "z".repeat(64) + "'"],
+    ["till_sessions", "token_hash='" + "z".repeat(64) + "'"],
+    ["dashboard_sessions", "token_hash='" + "z".repeat(64) + "'"],
+    ["account_actions", "code_hash='" + "z".repeat(64) + "'"],
+    ["account_actions", "token_hash='" + "z".repeat(64) + "'"],
     ["webauthn_credentials", "public_key='AQID'"],
     ["webauthn_credentials", "credential_id='@bad'"],
     ["webauthn_credentials", "counter=-1"],
@@ -406,8 +406,8 @@ describe("identity offline backup owner", () => {
     expect(await run()).toEqual(verdict("invalid", "passed"));
   });
   it.each([
-    "sessions",
-    "management_sessions",
+    "till_sessions",
+    "dashboard_sessions",
     "totp_enrollments",
     "webauthn_challenges",
     "google_oidc_states",
@@ -443,11 +443,11 @@ describe("identity offline backup owner", () => {
     try {
       await expect(run()).resolves.toEqual(passed);
       expect(
-        original.db.all(sql`select code_attempts, used_at from management_account_actions`),
+        original.db.all(sql`select code_attempts, used_at from account_actions`),
       ).toEqual([{ code_attempts: 2, used_at: null }]);
       expect(original.db.all(sql`select used_at from recovery_codes`)).toEqual([{ used_at: now }]);
-      expect(original.db.all(sql`select count(*) as n from sessions`)).toEqual([{ n: 1 }]);
-      expect(original.db.all(sql`select count(*) as n from management_sessions`)).toEqual([
+      expect(original.db.all(sql`select count(*) as n from till_sessions`)).toEqual([{ n: 1 }]);
+      expect(original.db.all(sql`select count(*) as n from dashboard_sessions`)).toEqual([
         { n: 1 },
       ]);
       expect(fetcher).not.toHaveBeenCalled();
@@ -537,7 +537,7 @@ it.each(["not-json", '["usb",1]', '[""]'])(
   },
 );
 it("permits an absent optional email code", async () => {
-  damage("update management_account_actions set code_hash=null,code_expires_at=null");
+  damage("update account_actions set code_hash=null,code_expires_at=null");
   expect(await run()).toEqual(passed);
 });
 it("retains a legitimate pending Google link to a suspended person", async () => {

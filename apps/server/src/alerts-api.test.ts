@@ -869,7 +869,7 @@ describe("ongoing alert sources through the route", () => {
     // Age the session so a touch would visibly move its expiry.
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await db.execute(
-      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(sid)}`,
+      sql`update dashboard_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(sid)}`,
     );
     const expiryOf = () =>
       withTransaction(db, (tx) => resolveManagementSession(tx, sid, { touch: false }));

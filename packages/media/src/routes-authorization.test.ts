@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, type Database, mediaBlobs, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, dashboardSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { MEDIA_ROUTES } from "./routes.js";
 import { sampleImage } from "./testing/sample-image.js";
@@ -200,7 +200,7 @@ it("leaves the session's last activity where it was when an upload is refused as
   await seedTaxpayer(suite.db);
   const headers = await session("manager");
   const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  await suite.db.update(managementSessions).set({ lastSeenAt: earlier });
+  await suite.db.update(dashboardSessions).set({ lastSeenAt: earlier });
   const response = await mount(suite.db).request("/management-api/images", {
     method: "POST",
     headers,
@@ -208,6 +208,6 @@ it("leaves the session's last activity where it was when an upload is refused as
   });
   expect(response.status).toBe(422);
   expect(
-    await suite.db.select({ lastSeenAt: managementSessions.lastSeenAt }).from(managementSessions),
+    await suite.db.select({ lastSeenAt: dashboardSessions.lastSeenAt }).from(dashboardSessions),
   ).toEqual([{ lastSeenAt: earlier }]);
 });

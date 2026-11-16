@@ -44,7 +44,7 @@ describe("Google OpenID Connect state", () => {
   it("binds a link ceremony to the signed-in person and consumes state once", async () => {
     const owner = await openManagementSession(suite.db, "staff");
     await suite.db.run(
-      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(owner.token)}`,
+      sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(owner.token)}`,
     );
     const begun = await run((tx) =>
       beginGoogleLink(tx, {

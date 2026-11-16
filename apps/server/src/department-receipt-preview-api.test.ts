@@ -175,11 +175,11 @@ describe("replacement department receipt preview", () => {
   });
   it("keeps passive preview activity from extending the session", async () => {
     const lastSeenAt = new Date(Date.now() - 300_000).toISOString();
-    await suite.db.execute(sql`update management_sessions set last_seen_at = ${lastSeenAt}`);
+    await suite.db.execute(sql`update dashboard_sessions set last_seen_at = ${lastSeenAt}`);
     const seen = async () =>
       (
         await suite.db.execute<{ seen: string }>(
-          sql`select last_seen_at as seen from management_sessions order by id`,
+          sql`select last_seen_at as seen from dashboard_sessions order by id`,
         )
       ).rows;
     const before = await seen();

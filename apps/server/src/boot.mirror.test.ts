@@ -27,7 +27,7 @@ import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { deletePairLinkTx, loadKeyRing, writePairLinkTx } from "@waitron/credentials";
 import {
   persons,
-  managementSessions,
+  dashboardSessions,
   mintSessionToken,
   hashSessionToken,
   resolveManagementSession,
@@ -514,7 +514,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     expect(
       (await db.mirror.select().from(persons)).some((p) => p.id === MIRROR_VIEWER_PERSON_ID),
     ).toBe(false);
-    expect(await db.mirror.select().from(managementSessions)).toEqual([]);
+    expect(await db.mirror.select().from(dashboardSessions)).toEqual([]);
   }, 60_000);
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
@@ -735,7 +735,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
           displayName: "Old viewer",
           role: "admin",
         });
-        await tx.insert(managementSessions).values({
+        await tx.insert(dashboardSessions).values({
           id: MIRROR_VIEWER_SESSION_ID,
           personId: MIRROR_VIEWER_PERSON_ID,
           tokenHash: hashSessionToken(token),
@@ -781,7 +781,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     const personId = crypto.randomUUID();
     await withTransaction(db.mirror, async (tx) => {
       await seedPersons(tx, { id: personId, displayName: "Administrator", role: "admin" });
-      await tx.insert(managementSessions).values({ personId, tokenHash: hashSessionToken(token) });
+      await tx.insert(dashboardSessions).values({ personId, tokenHash: hashSessionToken(token) });
     });
     await expect(
       withTransaction(db.mirror, (tx) => resolveManagementSession(tx, token)),

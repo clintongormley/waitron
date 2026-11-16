@@ -8,7 +8,7 @@ import {
   deviceProfileAdmissionRoles,
   persons,
   registerModulePermissions,
-  sessions,
+  tillSessions,
 } from "@waitron/identity";
 import { WorkforceBackend, timeEntries, closePayPeriod } from "@waitron/workforce";
 import { deviceOrigin } from "@waitron/shared";
@@ -87,9 +87,9 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile"] as
   async (kind) => {
     if (kind === "ended")
       await suite.db
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: now.toISOString() })
-        .where(eq(sessions.id, venue.sessionId));
+        .where(eq(tillSessions.id, venue.sessionId));
     if (kind === "disabled")
       await suite.db.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
     if (kind === "deleted")
@@ -204,9 +204,9 @@ it.each(["session", "admission", "allowed"] as const)(
       await entered.promise;
       if (kind === "session")
         await suite.db
-          .update(sessions)
+          .update(tillSessions)
           .set({ endedAt: now.toISOString() })
-          .where(eq(sessions.id, venue.sessionId));
+          .where(eq(tillSessions.id, venue.sessionId));
       if (kind === "admission")
         await suite.db
           .delete(deviceProfileAdmissionRoles)

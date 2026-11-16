@@ -1,7 +1,7 @@
 import {
   CORE_MIGRATIONS,
   activityLog,
-  managementSessions,
+  dashboardSessions,
   outgoingMail,
   personRoles,
   persons,
@@ -174,9 +174,9 @@ it.each([
       .where(eq(roles.id, builtIns.manager));
   if (mode === "old-proof")
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ provedAt: new Date(Date.now() - 16 * 60000).toISOString() })
-      .where(eq(managementSessions.personId, actor.personId));
+      .where(eq(dashboardSessions.personId, actor.personId));
   expect(
     await refusalOf(() =>
       withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input)),

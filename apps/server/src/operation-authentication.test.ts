@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
@@ -68,8 +68,8 @@ describe("host-issued authority after fresh operator authentication", () => {
           expect(
             await suite.db
               .select()
-              .from(managementSessions)
-              .where(isNull(managementSessions.endedAt)),
+              .from(dashboardSessions)
+              .where(isNull(dashboardSessions.endedAt)),
           ).toEqual([]);
           return "operation committed";
         },
@@ -104,7 +104,7 @@ describe("host-issued authority after fresh operator authentication", () => {
         }, credentials),
       ).rejects.toMatchObject({ code: "password.invalid", params: {}, reason: expect.any(String) });
       expect(entered).toBe(false);
-      expect(await suite.db.select().from(managementSessions)).toEqual([]);
+      expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     },
   );
 
@@ -125,7 +125,7 @@ describe("host-issued authority after fresh operator authentication", () => {
         params: { permission: "node.manage" },
       });
       expect(entered).toBe(false);
-      expect(await suite.db.select().from(managementSessions)).toEqual([]);
+      expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     },
   );
 
@@ -144,7 +144,7 @@ describe("host-issued authority after fresh operator authentication", () => {
       params: { permission: "node.manage" },
     });
     expect(entered).toBe(false);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
   });
 
   it.each(["pending", "suspended"] as const)("refuses a %s administrator", async (status) => {
@@ -265,7 +265,7 @@ describe("host-issued authority after fresh operator authentication", () => {
     ).rejects.toThrow("activation refused");
     expect(readOperationAuthority(retained, binding)).toBeUndefined();
     expect(
-      await suite.db.select().from(managementSessions).where(isNull(managementSessions.endedAt)),
+      await suite.db.select().from(dashboardSessions).where(isNull(dashboardSessions.endedAt)),
     ).toEqual([]);
   });
 });

@@ -1702,6 +1702,44 @@ CREATE TABLE `handover_return_batches` (
 	CONSTRAINT "handover_return_batches_bounds_ck" CHECK(typeof("handover_return_batches"."batch_index") = 'integer' and typeof("handover_return_batches"."batch_count") = 'integer' and "handover_return_batches"."batch_index" >= 0 and "handover_return_batches"."batch_index" < "handover_return_batches"."batch_count" and "handover_return_batches"."batch_count" <= 9007199254740991)
 );
 --> statement-breakpoint
+CREATE TABLE `account_actions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`person_id` text NOT NULL,
+	`purpose` text NOT NULL,
+	`target_email` text,
+	`token_hash` text NOT NULL,
+	`code_hash` text,
+	`code_expires_at` text,
+	`code_attempts` integer DEFAULT 0 NOT NULL,
+	`created_at` text NOT NULL,
+	`expires_at` text NOT NULL,
+	`used_at` text,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "account_actions_purpose_ck" CHECK("account_actions"."purpose" in ('invitation', 'password_reset', 'email_change')),
+	CONSTRAINT "account_actions_target_email_ck" CHECK(("account_actions"."purpose" = 'email_change') = ("account_actions"."target_email" is not null)),
+	CONSTRAINT "account_actions_token_hash_ck" CHECK(length("account_actions"."token_hash") = 64),
+	CONSTRAINT "account_actions_code_hash_ck" CHECK("account_actions"."code_hash" is null or length("account_actions"."code_hash") = 64),
+	CONSTRAINT "account_actions_code_attempts_ck" CHECK("account_actions"."code_attempts" >= 0),
+	CONSTRAINT "account_actions_expiry_ck" CHECK("account_actions"."expires_at" > "account_actions"."created_at")
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `account_actions_token_hash_uq` ON `account_actions` (`token_hash`);--> statement-breakpoint
+CREATE INDEX `account_actions_person_idx` ON `account_actions` (`person_id`,`purpose`);--> statement-breakpoint
+CREATE TABLE `dashboard_sessions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`token_hash` text NOT NULL,
+	`person_id` text NOT NULL,
+	`created_at` text NOT NULL,
+	`last_seen_at` text NOT NULL,
+	`ended_at` text,
+	`proved_at` text,
+	`proof_method` text,
+	CONSTRAINT "dashboard_sessions_token_hash_ck" CHECK(length("dashboard_sessions"."token_hash") = 64),
+	CONSTRAINT "dashboard_sessions_proof_method_ck" CHECK("dashboard_sessions"."proof_method" in ('password', 'passkey', 'recovery-code'))
+);
+--> statement-breakpoint
+CREATE INDEX `dashboard_sessions_open_idx` ON `dashboard_sessions` (`person_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `dashboard_sessions_token_hash_uq` ON `dashboard_sessions` (`token_hash`);--> statement-breakpoint
 CREATE TABLE `device_profile_admission_roles` (
 	`device_profile_id` text NOT NULL,
 	`staff_role_id` text NOT NULL,
@@ -1722,44 +1760,6 @@ CREATE TABLE `google_oidc_states` (
 	CONSTRAINT "google_oidc_states_state_hash_ck" CHECK(length("google_oidc_states"."state_hash") = 64)
 );
 --> statement-breakpoint
-CREATE TABLE `management_account_actions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`person_id` text NOT NULL,
-	`purpose` text NOT NULL,
-	`target_email` text,
-	`token_hash` text NOT NULL,
-	`code_hash` text,
-	`code_expires_at` text,
-	`code_attempts` integer DEFAULT 0 NOT NULL,
-	`created_at` text NOT NULL,
-	`expires_at` text NOT NULL,
-	`used_at` text,
-	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "management_account_actions_purpose_ck" CHECK("management_account_actions"."purpose" in ('invitation', 'password_reset', 'email_change')),
-	CONSTRAINT "management_account_actions_target_email_ck" CHECK(("management_account_actions"."purpose" = 'email_change') = ("management_account_actions"."target_email" is not null)),
-	CONSTRAINT "management_account_actions_token_hash_ck" CHECK(length("management_account_actions"."token_hash") = 64),
-	CONSTRAINT "management_account_actions_code_hash_ck" CHECK("management_account_actions"."code_hash" is null or length("management_account_actions"."code_hash") = 64),
-	CONSTRAINT "management_account_actions_code_attempts_ck" CHECK("management_account_actions"."code_attempts" >= 0),
-	CONSTRAINT "management_account_actions_expiry_ck" CHECK("management_account_actions"."expires_at" > "management_account_actions"."created_at")
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `management_account_actions_token_hash_uq` ON `management_account_actions` (`token_hash`);--> statement-breakpoint
-CREATE INDEX `management_account_actions_person_idx` ON `management_account_actions` (`person_id`,`purpose`);--> statement-breakpoint
-CREATE TABLE `management_sessions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`token_hash` text NOT NULL,
-	`person_id` text NOT NULL,
-	`created_at` text NOT NULL,
-	`last_seen_at` text NOT NULL,
-	`ended_at` text,
-	`proved_at` text,
-	`proof_method` text,
-	CONSTRAINT "management_sessions_token_hash_ck" CHECK(length("management_sessions"."token_hash") = 64),
-	CONSTRAINT "management_sessions_proof_method_ck" CHECK("management_sessions"."proof_method" in ('password', 'passkey', 'recovery-code'))
-);
---> statement-breakpoint
-CREATE INDEX `management_sessions_open_idx` ON `management_sessions` (`person_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `management_sessions_token_hash_uq` ON `management_sessions` (`token_hash`);--> statement-breakpoint
 CREATE TABLE `person_roles` (
 	`person_id` text NOT NULL,
 	`role_id` text NOT NULL,
@@ -1837,19 +1837,6 @@ CREATE TABLE `roles` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `roles_built_in_key_uq` ON `roles` (`built_in_key`) WHERE "roles"."built_in_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `roles_name_folded_uq` ON `roles` (`name_folded`) WHERE "roles"."name_folded" is not null;--> statement-breakpoint
-CREATE TABLE `sessions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`token_hash` text NOT NULL,
-	`person_id` text NOT NULL,
-	`device_id` text NOT NULL,
-	`opened_at` text NOT NULL,
-	`ended_at` text,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "sessions_token_hash_ck" CHECK(length("sessions"."token_hash") = 64)
-);
---> statement-breakpoint
-CREATE INDEX `sessions_open_idx` ON `sessions` (`device_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `sessions_token_hash_uq` ON `sessions` (`token_hash`);--> statement-breakpoint
 CREATE TABLE `staff_roles` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -1861,6 +1848,19 @@ CREATE TABLE `staff_roles` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `staff_roles_name_key` ON `staff_roles` (`name`) WHERE "staff_roles"."hidden_at" is null;--> statement-breakpoint
+CREATE TABLE `till_sessions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`token_hash` text NOT NULL,
+	`person_id` text NOT NULL,
+	`device_id` text NOT NULL,
+	`opened_at` text NOT NULL,
+	`ended_at` text,
+	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "till_sessions_token_hash_ck" CHECK(length("till_sessions"."token_hash") = 64)
+);
+--> statement-breakpoint
+CREATE INDEX `till_sessions_open_idx` ON `till_sessions` (`device_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `till_sessions_token_hash_uq` ON `till_sessions` (`token_hash`);--> statement-breakpoint
 CREATE TABLE `totp_enrollments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

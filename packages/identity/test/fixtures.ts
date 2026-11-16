@@ -101,7 +101,7 @@ export async function openFreshManagementSession(
 ): Promise<{ personId: string; token: string }> {
   const session = await openManagementSession(db, role);
   await withTransaction(db, (tx) =>
-    tx.execute(sql`update management_sessions
+    tx.execute(sql`update dashboard_sessions
     set proved_at = ${new Date().toISOString()} where token_hash = ${hashSessionToken(session.token)}`),
   );
   return session;

@@ -13,7 +13,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { hashPin, hashSessionToken, sessions } from "@waitron/identity";
+import { hashPin, hashSessionToken, tillSessions } from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -74,9 +74,9 @@ async function till(
   });
   const token = randomUUID();
   const [session] = await db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ deviceId: device.deviceId, personId, tokenHash: hashSessionToken(token) })
-    .returning({ id: sessions.id });
+    .returning({ id: tillSessions.id });
   noteSessionPerson(token, personId);
   return {
     profileId: profile!.id,
@@ -344,9 +344,9 @@ async function pausedClose(cookie: string, billId: string, body: unknown) {
 const revocations = {
   "the person signs out": (tx: Transaction, till: Till) =>
     tx
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, till.sessionId)),
+      .where(eq(tillSessions.id, till.sessionId)),
   "the device is switched off": (tx: Transaction, till: Till) =>
     tx.update(devices).set({ active: false }).where(eq(devices.id, till.deviceId)),
   "Deferred close is taken off the profile": (tx: Transaction, till: Till) =>

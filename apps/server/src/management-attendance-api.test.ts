@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -53,8 +53,8 @@ beforeEach(async () => {
     managementId = (
       await tx
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)))
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(session.token)))
     )[0]!.id;
     managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     staffCookie = `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: venue.personId })).token}`;
@@ -201,16 +201,16 @@ it("proposes with the authenticated manager, then the worker accepts with origin
 it("keeps passive reads from extending a management session, but explicit reads do", async () => {
   const old = new Date(Date.now() - 60_000).toISOString();
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: old })
-    .where(eq(managementSessions.id, managementId));
+    .where(eq(dashboardSessions.id, managementId));
   expect((await request("lookups", undefined, managerCookie, true)).status).toBe(200);
   expect(
     (
       await suite.db
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.id, managementId))
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.id, managementId))
     )[0]!.lastSeenAt,
   ).toBe(old);
   expect((await request("lookups")).status).toBe(200);
@@ -218,8 +218,8 @@ it("keeps passive reads from extending a management session, but explicit reads 
     (
       await suite.db
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.id, managementId))
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.id, managementId))
     )[0]!.lastSeenAt,
   ).not.toBe(old);
 });
@@ -265,13 +265,13 @@ it.each(["ended", "expired"] as const)(
   async (kind) => {
     const body = await proposal();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set(
         kind === "ended"
           ? { endedAt: new Date().toISOString() }
           : { lastSeenAt: "2020-01-01T00:00:00Z" },
       )
-      .where(eq(managementSessions.id, managementId));
+      .where(eq(dashboardSessions.id, managementId));
     const before = await suite.db.select().from(timeEntries);
     for (const path of paths) {
       const response = await request(route(path), path === "commands" ? body : undefined);

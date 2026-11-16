@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
@@ -183,9 +183,9 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
       const tokenHash = hashSessionToken(v.managerCookie.split("=")[1]!);
       await withTransaction(suite.db, async (tx) => {
         await tx
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ lastSeenAt: "1970-01-01T00:00:00.000Z" })
-          .where(eq(managementSessions.tokenHash, tokenHash));
+          .where(eq(dashboardSessions.tokenHash, tokenHash));
       });
       const stub = stubReader();
       const { app, verbosity } = mountApp(stub.reader);
@@ -201,9 +201,9 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
       expect(verbosity.current()).toBe("info");
       expect(verbosity.revertsAt()).toBeNull();
       const [session] = await suite.db
-        .select({ lastSeenAt: managementSessions.lastSeenAt })
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, tokenHash));
+        .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, tokenHash));
       expect(session).toEqual({ lastSeenAt: "1970-01-01T00:00:00.000Z" });
     });
 
@@ -211,9 +211,9 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
       const v = await setupVenue();
       const tokenHash = hashSessionToken(v.managerCookie.split("=")[1]!);
       const [session] = await suite.db
-        .select({ personId: managementSessions.personId })
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, tokenHash));
+        .select({ personId: dashboardSessions.personId })
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, tokenHash));
       await withTransaction(suite.db, async (tx) => {
         await tx
           .update(persons)

@@ -17,7 +17,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { allergyLineTicks, kitchenNotices, partyAllergyGuests } from "@waitron/venue-service";
 import type { KitchenAllergyBlock } from "@waitron/module";
@@ -51,9 +51,9 @@ export async function kitchenFixture(db: Database) {
   await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await db
-    .update(sessions)
+    .update(tillSessions)
     .set({ tokenHash: hashSessionToken(token) })
-    .where(eq(sessions.id, v.operator.sessionId));
+    .where(eq(tillSessions.id, v.operator.sessionId));
   noteSessionPerson(token, v.operator.personId);
   const tableId = await v.table("Atomic kitchen");
   const party = await seat(v, tableId);

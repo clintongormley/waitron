@@ -312,7 +312,7 @@ describe("the join window's holds", () => {
     // aged here is the management session's own `last_seen_at`.
     const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
     await suite.db.execute(sql`
-      update management_sessions set last_seen_at = ${sessionSeenAt}
+      update dashboard_sessions set last_seen_at = ${sessionSeenAt}
       where token_hash = ${hashSessionToken(token)}`);
     const session = () =>
       withTransaction(suite.db, (tx) => resolveManagementSession(tx, token, { touch: false }));
@@ -343,7 +343,7 @@ describe("the join window's holds", () => {
     clock += 60_000;
     const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.db.execute(sql`
-      update management_sessions set last_seen_at = ${sessionSeenAt}
+      update dashboard_sessions set last_seen_at = ${sessionSeenAt}
       where token_hash = ${hashSessionToken(token)}`);
     const response = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
       cookie: venue.managerCookie,

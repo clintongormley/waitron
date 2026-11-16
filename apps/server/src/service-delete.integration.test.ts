@@ -504,7 +504,7 @@ async function mounted() {
 }
 async function completeSnapshot(tx: Transaction) {
   const tables = await tx.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+    sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'dashboard_sessions' order by name`,
   );
   const result: Record<string, unknown[]> = {};
   for (const { name } of tables.rows)

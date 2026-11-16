@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { deviceInvoiceRevisions, invoiceSeries, pagePrinters, printers, sales } from "@waitron/db";
-import { persons, sessions, resolveManagementSession, holds } from "@waitron/identity";
+import { persons, tillSessions, resolveManagementSession, holds } from "@waitron/identity";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { formatInvoiceNumber } from "@waitron/core";
 import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
@@ -52,13 +52,13 @@ export async function authorizeDocumentDelivery(
   let seesHistory = true;
   if (authority.surface === "till") {
     const [session] = await tx
-      .select({ personId: persons.id, deviceId: sessions.deviceId })
-      .from(sessions)
-      .innerJoin(persons, eq(persons.id, sessions.personId))
+      .select({ personId: persons.id, deviceId: tillSessions.deviceId })
+      .from(tillSessions)
+      .innerJoin(persons, eq(persons.id, tillSessions.personId))
       .where(
         and(
-          eq(sessions.id, authority.sessionId),
-          isNull(sessions.endedAt),
+          eq(tillSessions.id, authority.sessionId),
+          isNull(tillSessions.endedAt),
           eq(persons.status, "active"),
         ),
       );

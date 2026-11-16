@@ -262,7 +262,7 @@ async function settingsSnapshot(fx: Awaited<ReturnType<typeof settingsFixture>>)
 async function rawSettingsSnapshot() {
   return withTransaction(db, async (tx) => {
     const tables = await tx.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'dashboard_sessions' order by name`,
     );
     const rows: Record<string, unknown[]> = {};
     for (const { name } of tables.rows)

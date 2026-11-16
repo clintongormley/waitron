@@ -10,7 +10,7 @@ import { withTransaction } from "@waitron/db";
 import {
   endManagementSession,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -315,18 +315,18 @@ describe("the invoice customer download", () => {
   it("changes no row, not the administrator's last-seen time nor a waiting change", async () => {
     const admin = await ownAdmin();
     suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(admin.token)))
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(admin.token)))
       .run();
     suite.db.run(
       sql`insert into change_log (id, payload) values ('ic1', '{"resource":"zz","id":"1"}')`,
     );
     const lastSeen = () =>
       suite.db
-        .select({ lastSeenAt: managementSessions.lastSeenAt })
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, hashSessionToken(admin.token)))
+        .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(admin.token)))
         .get()!.lastSeenAt;
     const changes = () => suite.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
     const before = lastSeen();

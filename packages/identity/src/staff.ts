@@ -11,9 +11,9 @@ import {
   personRoles,
   roles,
   persons,
-  managementSessions,
-  managementAccountActions,
-  sessions,
+  dashboardSessions,
+  accountActions,
+  tillSessions,
   webauthnChallenges,
   webauthnCredentials,
   recoveryCodes,
@@ -176,22 +176,22 @@ export async function authorizePersonLoginChange(
 
 async function invalidatePersonAccountActions(tx: Transaction, personId: string): Promise<void> {
   await tx
-    .update(managementAccountActions)
+    .update(accountActions)
     .set({ usedAt: nowIso() })
     .where(
-      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
+      and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)),
     );
 }
 
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
   await tx
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(sessions.personId, personId), isNull(sessions.endedAt)));
+    .where(and(eq(tillSessions.personId, personId), isNull(tillSessions.endedAt)));
   await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
+    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)));
   await invalidatePersonAccountActions(tx, personId);
 }
 
@@ -354,9 +354,9 @@ export async function clearPersonPin(
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
   await tx
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(sessions.personId, settleId(input.personId)), isNull(sessions.endedAt)));
+    .where(and(eq(tillSessions.personId, settleId(input.personId)), isNull(tillSessions.endedAt)));
 }
 
 export async function resetPersonLogin(

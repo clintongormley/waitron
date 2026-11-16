@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
@@ -131,7 +131,7 @@ async function waits(): Promise<unknown[]> {
 async function snapshot(): Promise<unknown[][]> {
   const tables = [
     sql`select * from envios order by registro_id`,
-    sql`select * from management_sessions order by token_hash`,
+    sql`select * from dashboard_sessions order by token_hash`,
     sql`select * from persons order by id`,
   ];
   const rows: unknown[][] = [];
@@ -199,9 +199,9 @@ describe("POST /management-api/fiscal-outbox/retry", () => {
 
   it("refuses an expired session", async () => {
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 31 * 60_000).toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.token)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.token)));
     await expectRefused({}, manager.cookie, 401, "management_session.expired");
   });
 

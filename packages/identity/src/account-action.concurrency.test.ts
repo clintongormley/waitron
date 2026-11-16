@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   withTransaction,
-  managementAccountActions,
+  accountActions,
   outgoingMail,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -34,13 +34,13 @@ beforeEach(async () => {
 
 async function liveActions(purpose: string): Promise<number> {
   const rows = await suite.db
-    .select({ id: managementAccountActions.id })
-    .from(managementAccountActions)
+    .select({ id: accountActions.id })
+    .from(accountActions)
     .where(
       and(
-        eq(managementAccountActions.personId, personId),
-        eq(managementAccountActions.purpose, purpose),
-        isNull(managementAccountActions.usedAt),
+        eq(accountActions.personId, personId),
+        eq(accountActions.purpose, purpose),
+        isNull(accountActions.usedAt),
       ),
     );
   return rows.length;

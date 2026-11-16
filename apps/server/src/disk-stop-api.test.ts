@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncidentOnce } from "@waitron/core";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
@@ -105,16 +105,16 @@ async function handleAll(): Promise<void> {
 /** Not through `withTransaction`, whose drain would deliver a change a case left waiting. */
 async function setLastSeen(person: Person, at: Date): Promise<void> {
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: at.toISOString() })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(person.token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(person.token)));
 }
 
 async function lastSeen(person: Person): Promise<string> {
   const [row] = await suite.db
-    .select({ lastSeenAt: managementSessions.lastSeenAt })
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(person.token)));
+    .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(person.token)));
   return row!.lastSeenAt;
 }
 

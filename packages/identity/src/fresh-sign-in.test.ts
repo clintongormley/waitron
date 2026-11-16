@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, managementSessions, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, dashboardSessions, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { codeOf, openManagementSession } from "../test/fixtures.js";
@@ -23,9 +23,9 @@ it.each([
 ] as const)("judges session proof %s", async (provedAt, code) => {
   const { token } = await openManagementSession(suite.db, "admin");
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ provedAt })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   const check = () => withTransaction(suite.db, (tx) => requireFreshManagementSignIn(tx, token));
   if (code === "") await expect(check()).resolves.toMatchObject({ personId: expect.any(String) });
   else expect(await codeOf(check)).toBe(code);
@@ -35,15 +35,15 @@ it("proof reuse neither extends the window nor proves another browser, and logou
   const { token, personId } = await openManagementSession(suite.db, "admin");
   const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ provedAt: "2026-11-09T11:59:00.000Z" })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   for (let i = 0; i < 2; i++)
     await withTransaction(suite.db, (tx) => requireFreshManagementSignIn(tx, token));
   const [row] = await suite.db
     .select()
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   expect(row!.provedAt).toBe("2026-11-09T11:59:00.000Z");
   expect(await codeOf(() => requireFreshManagementSignIn(suite.db, other.token))).toBe(
     "management_session.proof_required",
@@ -62,9 +62,9 @@ it.each([
 ] as const)("handover requires proof without recovery codes: %s", async (proofMethod, code) => {
   const { token } = await openManagementSession(suite.db, "admin");
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ provedAt: "2026-11-09T11:59:00.000Z", proofMethod })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   const check = () =>
     withTransaction(suite.db, (tx) =>
       requireFreshManagementSignIn(tx, token, { allowRecoveryCode: false }),

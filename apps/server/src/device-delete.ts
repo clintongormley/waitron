@@ -15,7 +15,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { endDeviceSessions, sessions } from "@waitron/identity";
+import { endDeviceSessions, tillSessions } from "@waitron/identity";
 import { IN_PROGRESS_PAYMENT_STATES, cardReaders, payments } from "@waitron/payments";
 import { named } from "./delete-impact.js";
 import { releaseDevice } from "./device-equipment.js";
@@ -74,9 +74,9 @@ async function deviceDeleteRules(
   );
 
   const openSessions = await tx
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(and(eq(sessions.deviceId, id), isNull(sessions.endedAt)));
+    .select({ id: tillSessions.id })
+    .from(tillSessions)
+    .where(and(eq(tillSessions.deviceId, id), isNull(tillSessions.endedAt)));
   const heldPrinters = await tx
     .select({ id: printers.id, name: printers.name })
     .from(printerHolders)

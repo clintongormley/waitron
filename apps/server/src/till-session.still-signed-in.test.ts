@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { devices, nowIso, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assertStillSignedIn } from "./till-session.js";
 import { openTillSession, seedSessionDevice } from "./testing/session-device.js";
@@ -50,7 +50,7 @@ describe("assertStillSignedIn", () => {
   });
 
   it("refuses session.required when the session has ended", async () => {
-    await suite.db.update(sessions).set({ endedAt: nowIso() }).where(eq(sessions.id, sessionId));
+    await suite.db.update(tillSessions).set({ endedAt: nowIso() }).where(eq(tillSessions.id, sessionId));
     await expect(check()).rejects.toMatchObject({ code: "session.required" });
   });
 

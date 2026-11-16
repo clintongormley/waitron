@@ -8,7 +8,7 @@ import { recordIncident } from "@waitron/core";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   withPassiveManagementRead,
@@ -90,16 +90,16 @@ function get(app: Hono, path: string, cookie?: string, passive = false) {
 /** Not through `withTransaction`, whose drain would deliver a change a case left waiting. */
 async function setLastSeen(person: Person, at: Date): Promise<void> {
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: at.toISOString() })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(person.token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(person.token)));
 }
 
 async function lastSeen(person: Person): Promise<string> {
   const [row] = await suite.db
-    .select({ lastSeenAt: managementSessions.lastSeenAt })
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(person.token)));
+    .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(person.token)));
   return row!.lastSeenAt;
 }
 
@@ -237,9 +237,9 @@ describe.each([
   it("refuses an ended session", async () => {
     await withTransaction(suite.db, (tx) =>
       tx
-        .update(managementSessions)
+        .update(dashboardSessions)
         .set({ endedAt: new Date().toISOString() })
-        .where(eq(managementSessions.tokenHash, hashSessionToken(manager.token))),
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.token))),
     );
     await expectRefused(manager.cookie, 401, "management_session.required");
   });

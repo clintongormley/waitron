@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { kitchenStations, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import type { DeviceKitchenScreen, KitchenAllergyBlock } from "@waitron/module";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
@@ -48,9 +48,9 @@ async function fixture() {
   await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ tokenHash: hashSessionToken(token) })
-    .where(eq(sessions.id, v.operator.sessionId));
+    .where(eq(tillSessions.id, v.operator.sessionId));
   noteSessionPerson(token, v.operator.personId);
   const party = await seat(v, await v.table("Kitchen HTTP"));
   await inTx(v, async (tx) =>

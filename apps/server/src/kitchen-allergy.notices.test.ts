@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import {
   createExtraList,
@@ -78,9 +78,9 @@ beforeEach(async () => {
   await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ tokenHash: hashSessionToken(token) })
-    .where(eq(sessions.id, v.operator.sessionId));
+    .where(eq(tillSessions.id, v.operator.sessionId));
   cookie = await sessionCookieForTest(v.db, token);
   const [station] = await v.db
     .select()

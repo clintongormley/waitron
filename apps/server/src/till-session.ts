@@ -15,7 +15,7 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   hashSessionToken,
-  sessions,
+  tillSessions,
   sightingDue,
   type Permission,
 } from "@waitron/identity";
@@ -90,13 +90,13 @@ export async function openSessionPerson(
   deviceId?: string,
 ): Promise<string | null> {
   const [found] = await db
-    .select({ personId: sessions.personId })
-    .from(sessions)
+    .select({ personId: tillSessions.personId })
+    .from(tillSessions)
     .where(
       and(
-        eq(sessions.tokenHash, hashSessionToken(token)),
-        deviceId === undefined ? undefined : eq(sessions.deviceId, deviceId),
-        isNull(sessions.endedAt),
+        eq(tillSessions.tokenHash, hashSessionToken(token)),
+        deviceId === undefined ? undefined : eq(tillSessions.deviceId, deviceId),
+        isNull(tillSessions.endedAt),
       ),
     );
   return found?.personId ?? null;
@@ -138,18 +138,18 @@ export async function signedInPersonOn(
 async function readSessionRow(tx: Database | Transaction, token: string, c: Context) {
   const [found] = await tx
     .select({
-      id: sessions.id,
-      personId: sessions.personId,
-      deviceId: sessions.deviceId,
+      id: tillSessions.id,
+      personId: tillSessions.personId,
+      deviceId: tillSessions.deviceId,
       active: devices.active,
       lastSeenAt: devices.lastSeenAt,
       ...deviceBindingColumns,
     })
-    .from(sessions)
+    .from(tillSessions)
     // Always matches: `device_id` is NOT NULL with a RESTRICT foreign key.
-    .innerJoin(devices, eq(devices.id, sessions.deviceId))
+    .innerJoin(devices, eq(devices.id, tillSessions.deviceId))
     .innerJoin(deviceProfiles, deviceProfileJoin)
-    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+    .where(and(eq(tillSessions.tokenHash, hashSessionToken(token)), isNull(tillSessions.endedAt)));
   if (found === undefined) throw new AppError("session.required", {});
   if (!found.active) throw new AppError("device.unauthorized", {});
   const refusal = personRefusal(c, found.personId);
@@ -248,14 +248,14 @@ export async function assertStillSignedIn(
   ids: { deviceId: string; sessionId: string; personId: string },
 ): Promise<void> {
   const [session] = await tx
-    .select({ id: sessions.id })
-    .from(sessions)
+    .select({ id: tillSessions.id })
+    .from(tillSessions)
     .where(
       and(
-        eq(sessions.id, ids.sessionId),
-        eq(sessions.deviceId, ids.deviceId),
-        eq(sessions.personId, ids.personId),
-        isNull(sessions.endedAt),
+        eq(tillSessions.id, ids.sessionId),
+        eq(tillSessions.deviceId, ids.deviceId),
+        eq(tillSessions.personId, ids.personId),
+        isNull(tillSessions.endedAt),
       ),
     );
   if (session === undefined) throw new AppError("session.required", {});

@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, sessions, setProfileAdmission } from "@waitron/identity";
+import { persons, tillSessions, setProfileAdmission } from "@waitron/identity";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import { endSessionsNotAdmitted } from "./device.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
@@ -167,9 +167,9 @@ describe("Find a bill list routes", () => {
     }
     await inTx(venue, (tx) =>
       tx
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: "2026-10-15T22:00:00.000Z" })
-        .where(eq(sessions.deviceId, venue.deviceId)),
+        .where(eq(tillSessions.deviceId, venue.deviceId)),
     );
     for (const path of [...paths, `/api/bills/${id}`])
       expect(await get(path)).toMatchObject({

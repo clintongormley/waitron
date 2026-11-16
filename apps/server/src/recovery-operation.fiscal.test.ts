@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, managementSessions } from "@waitron/identity";
+import { persons, dashboardSessions } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
@@ -307,7 +307,7 @@ describe("recovery-key fiscal attribution", () => {
     });
     expect(JSON.stringify(audit)).not.toContain(recoveryKey);
     expect(await suite.db.select().from(persons)).toEqual([]);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     const role = await readNodeMode(suite.node, target.nodeId);
     expect(role.mode).toBe("primary");
     const before = await snapshot();
@@ -436,7 +436,7 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     const audit = (await suite.db.execute(sql`select approval from fiscal_allocations`)).rows;
     expect(JSON.parse(audit[0]!.approval as string)).toEqual(approval);
     expect(await suite.db.select().from(persons)).toEqual([]);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     const role = await readNodeMode(suite.node, target.nodeId);
     expect(role.mode).toBe("primary");
     expect(role.singletonRole).toBe("primary");

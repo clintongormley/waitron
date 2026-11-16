@@ -61,7 +61,7 @@ useVenueDb({
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     const [session] = db.all<{ id: string }>(
-      sql`select id from sessions where person_id = ${venue.operatorId} and ended_at is null`,
+      sql`select id from till_sessions where person_id = ${venue.operatorId} and ended_at is null`,
     );
     sessionId = session!.id;
   },

@@ -19,7 +19,7 @@ import {
   hashPin,
   hashSessionToken,
   loginWithPin,
-  sessions,
+  tillSessions,
   persons,
   startManagementSession,
 } from "@waitron/identity";
@@ -383,7 +383,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
       return (
         await liveFixture(port, async (db) =>
           db.execute<{ seen: string }>(
-            sql`update management_sessions set last_seen_at = ${staleSeenAt} where token_hash = ${hashSessionToken(session.token)} returning last_seen_at as seen`,
+            sql`update dashboard_sessions set last_seen_at = ${staleSeenAt} where token_hash = ${hashSessionToken(session.token)} returning last_seen_at as seen`,
           ),
         )
       ).rows[0]!.seen;
@@ -391,7 +391,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     const seen = async (): Promise<string> =>
       (
         await sharedDb.execute<{ seen: string }>(
-          sql`select last_seen_at as seen from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
+          sql`select last_seen_at as seen from dashboard_sessions where token_hash = ${hashSessionToken(session.token)}`,
         )
       ).rows[0]!.seen;
     const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
@@ -485,7 +485,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
         })
         .where(eq(departments.id, departmentId));
       await db.delete(departments).where(eq(departments.id, departmentId));
-      await db.execute(sql`delete from management_sessions where person_id = ${personId}`);
+      await db.execute(sql`delete from dashboard_sessions where person_id = ${personId}`);
       await db.execute(sql`delete from persons where id = ${personId}`);
     });
   }
@@ -2360,7 +2360,7 @@ describe("startServer, against a migrated venue directory", () => {
       if (bookingId !== undefined) {
         await sharedDb.delete(bookings).where(eq(bookings.id, bookingId));
       }
-      await sharedDb.execute(sql`delete from management_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(sql`delete from dashboard_sessions where person_id = ${person!.id}`);
       await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
     }
   }, 60_000);
@@ -3233,7 +3233,7 @@ describe("the dev-device header reaches the live device routes only under devMod
     } finally {
       await withTransaction(sharedDb, async (tx) => {
         await tx.delete(absences).where(eq(absences.personId, person!.id));
-        await tx.delete(sessions).where(eq(sessions.personId, person!.id));
+        await tx.delete(tillSessions).where(eq(tillSessions.personId, person!.id));
         await tx.delete(persons).where(eq(persons.id, person!.id));
       });
     }
@@ -3513,7 +3513,7 @@ describe("the dev-device header reaches the live device routes only under devMod
       });
     } finally {
       await server.close();
-      await sharedDb.execute(sql`delete from management_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(sql`delete from dashboard_sessions where person_id = ${person!.id}`);
       await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
     }
   }, 60_000);

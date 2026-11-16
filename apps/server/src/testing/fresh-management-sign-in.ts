@@ -1,4 +1,4 @@
-import { managementSessions, type Transaction } from "@waitron/db";
+import { dashboardSessions, type Transaction } from "@waitron/db";
 import { hashSessionToken } from "@waitron/identity";
 import { eq } from "drizzle-orm";
 
@@ -10,10 +10,10 @@ export async function setFreshManagementSignIn(
 ): Promise<void> {
   const token = cookieOrToken.includes("=") ? cookieOrToken.split("=")[1]! : cookieOrToken;
   await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({
       provedAt: fresh ? new Date().toISOString() : null,
       proofMethod: fresh ? proofMethod : null,
     })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
 }

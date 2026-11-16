@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTransaction, managementSessions, persons } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, dashboardSessions, persons } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isUuid } from "@waitron/shared";
@@ -500,7 +500,7 @@ describe("loginManagerById", () => {
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
     const sessions = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from management_sessions where person_id = ${personId}`,
+      sql`select count(*) as n from dashboard_sessions where person_id = ${personId}`,
     );
     expect(sessions.rows[0]!.n).toBe(0);
   });
@@ -567,15 +567,15 @@ describe("authorizeManager", () => {
     const aged = new Date(Date.now() - 10 * 60_000).toISOString();
     await run((tx) =>
       tx.execute(
-        sql`update management_sessions set last_seen_at = ${aged} where token_hash = ${hashSessionToken(session.token)}`,
+        sql`update dashboard_sessions set last_seen_at = ${aged} where token_hash = ${hashSessionToken(session.token)}`,
       ),
     );
     const lastSeen = () =>
       run(async (tx) => {
         const [row] = await tx
-          .select({ lastSeenAt: managementSessions.lastSeenAt })
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
+          .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(session.token)));
         return row!.lastSeenAt;
       });
     await run((tx) =>

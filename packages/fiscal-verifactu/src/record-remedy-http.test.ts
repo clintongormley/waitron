@@ -9,7 +9,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -266,9 +266,9 @@ it.each([
 
 it("requires the shared confirmation before an enabled remedy changes records", async () => {
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ provedAt: null })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);

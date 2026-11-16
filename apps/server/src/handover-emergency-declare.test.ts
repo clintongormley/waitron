@@ -19,7 +19,7 @@ import {
 import { signDocumentBody } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { managementSessions, persons, webauthnCredentials } from "@waitron/identity";
+import { dashboardSessions, persons, webauthnCredentials } from "@waitron/identity";
 import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
@@ -462,7 +462,7 @@ it("records a signed declaration before answering, then replays without asking t
     "emergency_declared",
   );
   expect(
-    await placed.venue.select({ endedAt: managementSessions.endedAt }).from(managementSessions),
+    await placed.venue.select({ endedAt: dashboardSessions.endedAt }).from(dashboardSessions),
   ).toEqual([{ endedAt: expect.any(String) }]);
   expect(await s.post()).toEqual(first);
   expect(external.calls).toBe(1);

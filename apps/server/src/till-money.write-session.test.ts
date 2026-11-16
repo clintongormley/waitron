@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
 import { billRefundIsLive, resumeCardRefund } from "./bill-refunds.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
-import { loginWithPin, sessions } from "@waitron/identity";
+import { loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -197,22 +197,22 @@ function refusalFor(change: Revocation) {
 }
 async function revoke(change: Revocation) {
   if (change === "missing session")
-    await suite.db.delete(sessions).where(eq(sessions.id, sessionId));
+    await suite.db.delete(tillSessions).where(eq(tillSessions.id, sessionId));
   else if (change === "wrong person")
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ personId: venue.operatorId })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
   else if (change === "other device")
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ deviceId: venue.device2Id })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
   else if (change === "signed out")
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
   else
     await suite.db
       .update(devices)

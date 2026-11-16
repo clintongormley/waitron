@@ -23,7 +23,7 @@ import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import {
-  managementAccountActions,
+  accountActions,
   outgoingMail,
   roles,
   withTransaction,
@@ -258,7 +258,7 @@ async function holdWriteLock(): Promise<{ release: () => Promise<void> }> {
 
 async function resetTokensFor(personId: string): Promise<number> {
   const rows = await suite.db.execute<{ id: string }>(
-    sql`select id from management_account_actions
+    sql`select id from account_actions
         where person_id = ${personId} and purpose = 'password_reset'`,
   );
   return rows.rows.length;
@@ -923,7 +923,7 @@ describe("Management API staff + session routes", () => {
     expect(sent[2]!.email).toBe("pending-resend@x.com");
     expect(sent[2]!.code).toBeUndefined();
     const hiddenCodes = await suite.db.execute<{ count: string }>(
-      sql`select cast(count(*) as text) as count from management_account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
+      sql`select cast(count(*) as text) as count from account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
     );
     expect(hiddenCodes.rows[0]!.count).toBe("0");
   });
@@ -1115,7 +1115,7 @@ describe("Management API staff + session routes", () => {
     });
     expect(await repeated.json()).toEqual({ invitationSent: false });
     expect(
-      suite.db.all(sql`select used_at from management_account_actions
+      suite.db.all(sql`select used_at from account_actions
       where person_id=${staffId}`),
     ).toEqual([{ used_at: expect.any(String) }]);
     await app.flushMail();
@@ -1136,7 +1136,7 @@ describe("Management API staff + session routes", () => {
       headers: { cookie },
     });
     expect(await invitation.json()).toEqual({ invitationSent: true, delivery: "queued" });
-    await suite.db.insert(managementAccountActions).values({
+    await suite.db.insert(accountActions).values({
       personId: staffId,
       purpose: "password_reset",
       tokenHash: "a".repeat(64),
@@ -1145,7 +1145,7 @@ describe("Management API staff + session routes", () => {
     const queuedBefore = await suite.db.select().from(outgoingMail);
     expect(queuedBefore).toHaveLength(1);
     expect(
-      suite.db.all(sql`select used_at from management_account_actions
+      suite.db.all(sql`select used_at from account_actions
       where person_id=${staffId}`),
     ).toEqual([{ used_at: null }]);
 
@@ -1160,11 +1160,11 @@ describe("Management API staff + session routes", () => {
       where id=${staffId}`),
     ).toEqual([{ status: "pending", password_hash: null, pin_hash: null }]);
     expect(
-      suite.db.all(sql`select ended_at from sessions where person_id=${staffId}
-      union all select ended_at from management_sessions where person_id=${staffId}`),
+      suite.db.all(sql`select ended_at from till_sessions where person_id=${staffId}
+      union all select ended_at from dashboard_sessions where person_id=${staffId}`),
     ).toEqual([{ ended_at: expect.any(String) }, { ended_at: expect.any(String) }]);
     expect(
-      suite.db.all(sql`select used_at from management_account_actions
+      suite.db.all(sql`select used_at from account_actions
       where person_id=${staffId}`),
     ).toEqual([{ used_at: expect.any(String) }]);
     expect(await suite.db.select().from(outgoingMail)).toEqual(queuedBefore);
@@ -2314,7 +2314,7 @@ describe("Management API — fresh sign-in for people changes", () => {
       const snapshot = async () => ({
         people: await suite.db.select().from(persons),
         memberships: (await suite.db.execute(sql`select * from person_roles`)).rows,
-        actions: (await suite.db.execute(sql`select * from management_account_actions`)).rows,
+        actions: (await suite.db.execute(sql`select * from account_actions`)).rows,
         mail: (await suite.db.execute(sql`select * from outgoing_mail`)).rows,
       });
       await withTransaction(suite.db, async (tx) => {
@@ -3082,7 +3082,7 @@ it("rechecks person.admin authority lost after the invitation preflight", async 
     expect(
       (
         await suite.db.execute(
-          sql`select id from management_account_actions where person_id = ${staffId}`,
+          sql`select id from account_actions where person_id = ${staffId}`,
         )
       ).rows,
     ).toEqual([]);
@@ -3417,7 +3417,7 @@ describe("queued invitation answers", () => {
           "pending",
         );
         expect(
-          suite.db.all(sql`select id from management_account_actions where person_id=${id}`),
+          suite.db.all(sql`select id from account_actions where person_id=${id}`),
         ).toEqual([]);
         const managerId = suite.db.get<{ id: string }>(
           sql`select id from persons where email='owner@example.test'`,
@@ -3551,7 +3551,7 @@ describe("queued account requests", () => {
               },
             ],
       );
-      expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
+      expect(suite.db.all(sql`select id from account_actions`)).toEqual([]);
     },
   );
 });

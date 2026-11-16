@@ -57,7 +57,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal, PERSON_HEADER } from "@waitron/shared";
-import { deviceProfileAdmissionRoles, loginWithPin, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, loginWithPin, tillSessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   deleteDeviceProfile,
@@ -3218,9 +3218,9 @@ describe("a device's approved profiles and switching its active one", () => {
 
   async function openSessionsOn(deviceId: string): Promise<string[]> {
     const rows = await suite.db
-      .select({ personId: sessions.personId })
-      .from(sessions)
-      .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+      .select({ personId: tillSessions.personId })
+      .from(tillSessions)
+      .where(and(eq(tillSessions.deviceId, deviceId), isNull(tillSessions.endedAt)));
     return rows.map((row) => row.personId).sort();
   }
 
@@ -3898,9 +3898,9 @@ describe("a device's approved profiles and switching its active one", () => {
       const s = await switchable(app, venue);
       const me = await signIn(s);
       const [session] = await suite.db
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(eq(sessions.personId, me.personId));
+        .select({ id: tillSessions.id })
+        .from(tillSessions)
+        .where(eq(tillSessions.personId, me.personId));
       const input = {
         deviceId: s.deviceId,
         sessionId: session!.id,
@@ -3908,14 +3908,14 @@ describe("a device's approved profiles and switching its active one", () => {
         profileId: s.to,
       };
       await suite.db
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: new Date().toISOString() })
-        .where(eq(sessions.id, session!.id));
+        .where(eq(tillSessions.id, session!.id));
       const ended = await captureCode(() =>
         withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),
       );
       expect(ended).toBe("session.required");
-      await suite.db.update(sessions).set({ endedAt: null }).where(eq(sessions.id, session!.id));
+      await suite.db.update(tillSessions).set({ endedAt: null }).where(eq(tillSessions.id, session!.id));
       await suite.db.update(devices).set({ active: false }).where(eq(devices.id, s.deviceId));
       const revoked = await captureCode(() =>
         withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),

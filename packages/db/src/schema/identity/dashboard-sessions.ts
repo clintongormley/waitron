@@ -8,8 +8,8 @@ import { enumCheck, enumText, id, label, newId, nowIso, table, tsString } from "
  * callers' rule alone; nothing in the database refuses a DELETE. The row stores only the cookie
  * token's hash (`packages/identity/src/session-token.ts`).
  */
-export const managementSessions = table(
-  "management_sessions",
+export const dashboardSessions = table(
+  "dashboard_sessions",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
@@ -25,9 +25,9 @@ export const managementSessions = table(
   },
   (t) => [
     // For the writes that end a person's open sessions.
-    index("management_sessions_open_idx").on(t.personId),
-    uniqueIndex("management_sessions_token_hash_uq").on(t.tokenHash),
-    check("management_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
-    check("management_sessions_proof_method_ck", enumCheck(t.proofMethod)),
+    index("dashboard_sessions_open_idx").on(t.personId),
+    uniqueIndex("dashboard_sessions_token_hash_uq").on(t.tokenHash),
+    check("dashboard_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
+    check("dashboard_sessions_proof_method_ck", enumCheck(t.proofMethod)),
   ],
 );

@@ -8,7 +8,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret, managementSessions, persons } from "@waitron/identity";
+import { hashSecret, dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
@@ -64,7 +64,7 @@ it("collects with scoped key authority before the local transaction and still cr
   expect(result).toBe("committed");
   expect(readOperationAuthority(authorityAfter, binding)).toBeUndefined();
   expect(await suite.db.select().from(persons)).toEqual([]);
-  expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
 });
 
 it("refuses a changed key after outside collection and before entering the local operation", async () => {

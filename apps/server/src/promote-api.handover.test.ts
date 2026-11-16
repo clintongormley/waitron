@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { sha256Hex, signEnvelope, type HandoverBinding } from "@waitron/handover";
-import { hashSecret, managementSessions } from "@waitron/identity";
+import { hashSecret, dashboardSessions } from "@waitron/identity";
 import {
   canonicalize,
   endorseKey,
@@ -362,7 +362,7 @@ async function answersTo(attempts: Record<string, Attempt>): Promise<Record<stri
   return answered;
 }
 
-const sessions = () => suite.db.select().from(managementSessions);
+const sessions = () => suite.db.select().from(dashboardSessions);
 
 async function recorded(): Promise<{ operations: unknown[]; events: unknown[] }> {
   return {

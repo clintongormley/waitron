@@ -21,7 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   startManagementSession,
-  managementSessions,
+  dashboardSessions,
   registerModulePermissions,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -80,9 +80,9 @@ beforeEach(async () => {
       result.push(`${MANAGEMENT_COOKIE}=${session.token}`);
       if (result.length === 3)
         await tx
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
-          .where(eq(managementSessions.personId, person!.id));
+          .where(eq(dashboardSessions.personId, person!.id));
     }
     return result as [string, string, string];
   });
@@ -135,7 +135,7 @@ function send(method: string, url: string, cookie: string | undefined = manager,
 }
 async function rows(tx: Transaction) {
   const tables = await tx.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+    sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'dashboard_sessions' order by name`,
   );
   const allTables: Record<string, unknown[]> = {};
   for (const { name } of tables.rows)

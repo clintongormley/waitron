@@ -161,7 +161,7 @@ function post(cookie?: string) {
     }),
   });
 }
-const sessions = () => suite.db.all(sql`select * from management_sessions order by id`);
+const sessions = () => suite.db.all(sql`select * from dashboard_sessions order by id`);
 
 describe("certificate diagnosis ownership at real boot", () => {
   it("registers the optional route on a non-filing box but refuses work without session activity", async () => {
