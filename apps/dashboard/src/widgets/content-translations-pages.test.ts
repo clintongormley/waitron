@@ -1165,10 +1165,11 @@ it("keeps the first suggestion page summary across a continuation without a run"
     finishedAt: "2026-11-16T10:00:00Z",
     opened: false,
   };
-  const { run: _run, ...continuation } = suggestions();
+  const continuation = suggestions();
+  delete continuation.run;
   api.suggestions
     .mockResolvedValueOnce({ ...suggestions("s-100"), run })
-    .mockResolvedValueOnce(continuation as ContentSuggestionRead);
+    .mockResolvedValueOnce(continuation);
   await reader.open();
   await reader.nextSuggestions();
   expect(reader.suggestions?.run).toEqual(run);
