@@ -394,7 +394,7 @@ export class TillLockScreen extends LitElement {
         ${
           this.loggedOutByOther
             ? html`<p class="clock status" role="status" data-logged-out-by-other>
-                ${t("lock.logged_out_by_other")}
+                ${t("login.logged_out_by_other")}
               </p>`
             : nothing
         }

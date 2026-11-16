@@ -864,8 +864,8 @@ describe("the till through its real client", () => {
     await vi.waitFor(() => expect(loggedOutLine(el)).not.toBeNull());
 
     expect(loggedOutLine(el)!.getAttribute("role")).toBe("status");
-    expect(loggedOutLine(el)!.textContent!.trim()).toBe(t("lock.logged_out_by_other"));
-    expect(t("lock.logged_out_by_other")).toBe(
+    expect(loggedOutLine(el)!.textContent!.trim()).toBe(t("login.logged_out_by_other"));
+    expect(t("login.logged_out_by_other")).toBe(
       "You have been logged out because somebody else has logged in on this device.",
     );
   });

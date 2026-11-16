@@ -2208,10 +2208,12 @@ kitchen-screen request from any other device is refused.
 
 When a request named a person and comes back with that refusal, whatever its status, the till locks
 to the sign-in screen once and keeps that person's unsaved lines for their next sign-in, without
-signing out the device's session, which belongs to someone else. While the till is locked this way
-it shows no error from the refused sign-in's requests. A refusal for a request sent under an earlier
-sign-in, the same person's included, or through a client the till no longer holds, does not lock
-it: that request fails with its usual error.
+signing out the device's session, which belongs to someone else. The sign-in screen then says "You
+have been logged out because somebody else has logged in on this device." (the owner's words,
+2026-11-07). While the till is locked this way it shows no error from the refused sign-in's
+requests. A refusal for a request sent under an earlier sign-in, the same person's included, or
+through a client the till no longer holds, does not lock it: that request fails with its usual
+error.
 
 A sign-out (`DELETE /api/session`) is sent once the person's saves have finished, and names, in the
 same header, the person signed in on that tab when the sign-out began. None is sent if a later
