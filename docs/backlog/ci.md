@@ -328,7 +328,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
   [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
-  the remaining crash-helper salt and wider memo work stays open.
+  the remaining wider memo work stays open.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
 - **Finish reusing fixed-secret hashes in remaining server test setup.**
   [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
@@ -911,11 +911,9 @@ once per file and tests about hashing. Find candidates with `rg -l 'hashPin\(|ha
 -g '*.test.ts' -g '**/testing/**'`, then inspect their call sites.
 
 Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
-`src/bill-payments-api.test.ts`, plus the shared `src/testing/handover-placed-copy.ts`.
-Also inspect the unconverted repeated setup in `src/workforce-api.gate-sweep.test.ts`,
-`src/personal-data-export-api.workforce.test.ts`, `src/till-api.availability.test.ts`
-and `src/device-zones-api.test.ts`; they were outside the cleared twelve-file pass. The two staged-hour salt helpers remain in
-[the existing speed-up entry](#server-test-time-levers-left-after-a1297).
+`src/bill-payments-api.test.ts`, `src/personal-data-export-api.workforce.test.ts`
+and `src/device-zones-api.test.ts`. Convert their stored-secret setup after the sign-in
+refactor lands; keep their real sign-in and verification calls.
 
 
 ## `packages/db`'s static mutants are not in its mutation score
@@ -1034,9 +1032,6 @@ these, which it did not build (local figures, 2 November 2026):
   recorded, or 0.3%; three times that, for a slower CI machine, is still under 1%. The 5% bar would need
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
-- **The remaining random salts in test setup:** `src/testing/staged-hour-crash.ts` still draws one
-  per call. Reuse `apps/server/test/fixture-salt.ts` there when that path and its consumers are
-  unheld; keep the existing crypto checks.
 - **Recovery-key checks outside the host and staged-restore fixtures still derive repeatedly.**
   Moving the memo into wider test setup
   must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.
