@@ -308,8 +308,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Qualify live AEAT
   reconciliation, production TLS and a till payment through a booted restored server. A restore
   through the restore page still needs the box's internet time at the start that places the
-  backup; [A1420 PR 3b1 and 3b2](superpowers/plans/2026-11-13-a1420-restore-series-check.md)
-  remove that, and once they land the end-to-end test drops its internet stand-in. Of Task 8's
+  backup when the box was switched off or restarted, or its clock stepped, after the restore page confirmed the time (since
+  A1420 PR 3b1 the start reuses the page's time check otherwise);
+  [A1420 PR 3b2](superpowers/plans/2026-11-13-a1420-restore-series-check.md) removes that, and
+  once it lands the end-to-end test drops its internet stand-in. Of Task 8's
   disputed production remedies, the corrective invoice (the replacement) is built to file as an R5
   "S" (owner's answers A–E, 2026-11-14) and offered on the case dialog for a simplified invoice refused for a future date; the others stay disabled
   pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's

@@ -55,6 +55,7 @@ import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import type { SetupClockSetter } from "./setup-clock-set.js";
 import { timeServiceReader } from "./clock-service-reading.js";
+import { bootReader } from "./boot-reader.js";
 import "./errors.js";
 
 interface BaseOptions {
@@ -72,6 +73,7 @@ interface BaseOptions {
   selected: RecoveryBackupPreview;
   testClock?: ModuleOperationHost["testClock"];
   timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
+  readBoot?: ModuleOperationHost["readBoot"];
   /** Recovery states already read from this same unchanging database, keyed by node and binding. */
   rememberedStates?(): Map<string, unknown> | undefined;
   /** Sets the box's clock for the restore page, where nobody signs in. */
@@ -240,6 +242,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
       ...scoped,
       testClock: options.testClock,
       timeServiceSynchronised: options.timeServiceSynchronised ?? timeServiceReader(),
+      readBoot: options.readBoot ?? bootReader().readBoot,
       ...(setBoxClock === undefined
         ? {}
         : {
@@ -303,6 +306,7 @@ export function createInteractiveRecoveryPreparation(options: {
   testClock?: ModuleOperationHost["testClock"];
   setBoxClock?: SetupClockSetter;
   timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
+  readBoot?: ModuleOperationHost["readBoot"];
 }) {
   const requests = new AsyncLocalStorage<{
     db: Database;

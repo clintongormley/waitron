@@ -21,6 +21,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { timeServiceReader } from "./clock-service-reading.js";
+import { bootReader } from "./boot-reader.js";
 import type { NodeId } from "@waitron/shared";
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 const boxHost = vi.hoisted(() => ({
@@ -288,7 +289,7 @@ it("exposes the configured opaque preparation store to a module without interpre
   expect(retained).toEqual({ public: "opaque" });
 });
 
-describe("every host the server builds asks the box's time service, afresh at each reading", () => {
+describe("every host the server builds asks the box's time service, afresh at each reading, and, for a restore, its boot", () => {
   const binding = {
     module: "captured",
     action: "restore",
@@ -307,7 +308,7 @@ describe("every host the server builds asks the box's time service, afresh at ea
         },
       },
     });
-    return { module, read: () => seen.host!.timeServiceSynchronised!() };
+    return { module, read: () => seen.host!.timeServiceSynchronised!(), host: () => seen.host! };
   };
   let scratch: string;
   beforeEach(async () => {
@@ -338,6 +339,7 @@ describe("every host the server builds asks the box's time service, afresh at ea
       }),
     "a restore's (its page, its start and the restore command)": (
       module: ReturnType<typeof capturing>["module"],
+      readBoot?: ModuleOperationHost["readBoot"],
     ) =>
       createSelectedRecoveryPreparation({
         stateDir: join(scratch, "state"),
@@ -355,6 +357,7 @@ describe("every host the server builds asks the box's time service, afresh at ea
           oldMachineOffline: true,
           noParallelRecovery: true,
         }),
+        readBoot,
       }),
   };
   it.each(Object.entries(builders))("%s host reads the box's host service", async (_, build) => {
@@ -377,6 +380,19 @@ describe("every host the server builds asks the box's time service, afresh at ea
       expect(await read()).toBe(false);
     },
   );
+  it("a restore's host reads the box's boot by default", () => {
+    const { module, host } = capturing();
+    builders["a restore's (its page, its start and the restore command)"](module);
+    const boot = host().readBoot!();
+    expect(boot.id).toBe(bootReader().readBoot().id);
+    expect(Number.isFinite(boot.ms)).toBe(true);
+  });
+  it("a restore's host handed a boot reader answers that reader's reading", () => {
+    const { module, host } = capturing();
+    const reading = { id: "handed-boot", ms: 4321 };
+    builders["a restore's (its page, its start and the restore command)"](module, () => reading);
+    expect(host().readBoot!()).toEqual(reading);
+  });
   it("a host handed a reader asks that reader, not the default host service", async () => {
     const { module, read } = capturing();
     const handed = { clockStatus: vi.fn(async () => clockServiceAnswer(true)) };

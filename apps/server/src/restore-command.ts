@@ -43,6 +43,7 @@ import {
   type ValidatedArtifact,
 } from "./restore.js";
 import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
+import type { BootReading } from "./boot-reader.js";
 import "./errors.js";
 import {
   createRecoveryRestoreRunner,
@@ -71,6 +72,8 @@ interface CommandDeps {
   withModuleOperations?: RestoreOperationRunner;
   /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreTarget}. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
+  /** Absent, the box's own boot reading. */
+  readBoot?: () => BootReading;
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
@@ -396,6 +399,7 @@ async function selectedRecoveryRunner(
     operation,
     secret: deps.env.WAITRON_NODE_RECOVERY_KEY,
     context: { selectedSourceId: sourceId, oldBoxGone, soleRecovery: true },
+    readBoot: deps.readBoot,
   });
 }
 

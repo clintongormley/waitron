@@ -139,6 +139,91 @@ it("exposes an hour only after its complete bound intent is persisted", async ()
   });
 });
 
+it("stores the boot reading in the intent but never hands it out", async () => {
+  const f = fixture();
+  const boot = { bootId: "b1", uptimeMs: 1000 };
+  const announced: unknown[] = [];
+  const engine = createHourSelection({
+    withState: f.store,
+    read: async () => f.facts,
+    monotonicNow: () => 0,
+    readBoot: () => boot,
+    onNewIntent: (selection) => announced.push(selection),
+  });
+  const result = await withOperationAuthority(binding, "administrator", (authority) =>
+    engine.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
+  );
+  expect(f.writes[0]).toMatchObject({
+    entries: [expect.objectContaining({ boot: { ...boot, wallMs: instant } })],
+  });
+  expect(result).toMatchObject({ status: "selected" });
+  expect(result).not.toHaveProperty("boot");
+  expect(announced).toHaveLength(1);
+  expect(announced[0]).not.toHaveProperty("boot");
+});
+
+it("a repeated select keeps its chosen hour, and stores the boot reading it judged after a restart", async () => {
+  const f = fixture();
+  let boot = { bootId: "b1", uptimeMs: 1000 };
+  const announced: unknown[] = [];
+  const engine = () =>
+    createHourSelection({
+      withState: f.store,
+      read: async () => f.facts,
+      monotonicNow: () => 0,
+      readBoot: () => boot,
+      onNewIntent: (selection) => announced.push(selection),
+    });
+  const select = () =>
+    withOperationAuthority(binding, "administrator", (authority) =>
+      engine().select({ binding, authority, comparisonId: "comparison", confirmed: true }),
+    );
+  const first = await select();
+  boot = { bootId: "b1", uptimeMs: 31_000 };
+  f.at(instant + 30_000, 0);
+  expect(await select()).toEqual(first);
+  expect(f.writes).toHaveLength(1);
+  boot = { bootId: "b2", uptimeMs: 5000 };
+  f.at(instant + 60_000, 0);
+  const again = await select();
+  expect(again).toEqual(first);
+  expect(again).not.toHaveProperty("boot");
+  expect(announced).toHaveLength(1);
+  expect(f.writes).toHaveLength(2);
+  expect(f.writes[1]).toEqual({
+    version: 1,
+    entries: [
+      {
+        ...(f.writes[0] as { entries: object[] }).entries[0],
+        boot: { bootId: "b2", uptimeMs: 5000, wallMs: instant + 60_000 },
+      },
+    ],
+  });
+});
+
+it("a preview or a selected read after a restart leaves the stored boot reading alone", async () => {
+  const f = fixture();
+  let boot = { bootId: "b1", uptimeMs: 1000 };
+  const engine = createHourSelection({
+    withState: f.store,
+    read: async () => f.facts,
+    monotonicNow: () => 0,
+    readBoot: () => boot,
+  });
+  await withOperationAuthority(binding, "administrator", (authority) =>
+    engine.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
+  );
+  boot = { bootId: "b2", uptimeMs: 5000 };
+  f.at(instant + 60_000, 0);
+  await withOperationAuthority(binding, "administrator", (authority) =>
+    engine.preview({ binding, authority }),
+  );
+  await withOperationAuthority(binding, "administrator", (authority) =>
+    engine.selected({ binding, authority }),
+  );
+  expect(f.writes).toHaveLength(1);
+});
+
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 
 const synchronised = (at = instant) =>
@@ -621,6 +706,20 @@ it("refuses an out-of-range persisted intent with the domain error", async () =>
   await f.run();
   const value = structuredClone(f.value) as { entries: { issuedAt: string }[] };
   value.entries[0]!.issuedAt = "2025-12-31T23:59:59.999Z";
+  f.value = value;
+  await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
+});
+it.each([
+  ["no reading", null],
+  ["no boot id", { bootId: "", uptimeMs: 1000, wallMs: instant }],
+  ["no uptime", { bootId: "b1", uptimeMs: NaN, wallMs: instant }],
+  ["a negative uptime", { bootId: "b1", uptimeMs: -1000, wallMs: instant }],
+  ["no wall time", { bootId: "b1", uptimeMs: 1000, wallMs: Infinity }],
+])("refuses a persisted intent whose boot reading has %s", async (_case, boot) => {
+  const f = fixture();
+  await f.run();
+  const value = structuredClone(f.value) as { entries: { boot?: unknown }[] };
+  value.entries[0]!.boot = boot;
   f.value = value;
   await expect(f.run()).rejects.toMatchObject(refusal("history_invalid"));
 });

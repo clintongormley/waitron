@@ -48,6 +48,16 @@ interface Intent extends EntryBase {
   kind: "intent";
   identity: string;
   issuedAt: string;
+  /**
+   * The boot id and uptime read just after the box clock reading the select admitted, which
+   * `wallMs` holds.
+   */
+  boot?: SelectBoot;
+}
+export interface SelectBoot {
+  bootId: string;
+  uptimeMs: number;
+  wallMs: number;
 }
 interface Wait extends EntryBase {
   kind: "wait";
@@ -137,7 +147,15 @@ function parseState(value: unknown): Entry[] {
         !Number.isFinite(Date.parse(entry.issuedAt)) ||
         Date.parse(entry.issuedAt) < EPOCH_MS ||
         Date.parse(entry.issuedAt) >= END_MS ||
-        encodeMinuteIdentity(Date.parse(entry.issuedAt)) !== entry.identity
+        encodeMinuteIdentity(Date.parse(entry.issuedAt)) !== entry.identity ||
+        (entry.boot !== undefined &&
+          !(
+            record(entry.boot) &&
+            text(entry.boot.bootId) &&
+            Number.isFinite(entry.boot.uptimeMs) &&
+            (entry.boot.uptimeMs as number) >= 0 &&
+            Number.isFinite(entry.boot.wallMs)
+          ))
       )
         return refuse("history_invalid");
       if (
@@ -233,7 +251,9 @@ function fingerprint(entry: EntryBase): string {
   ]);
 }
 function material(intent: Intent) {
-  return { status: "selected" as const, ...structuredClone(intent) };
+  const selected = { status: "selected" as const, ...structuredClone(intent) };
+  delete selected.boot;
+  return selected;
 }
 
 function resumedIntent(entries: readonly Entry[]) {
@@ -295,13 +315,27 @@ export function chosenHourIssuedAtMs(
   state: { readonly value: unknown; readonly history: unknown },
   binding: OperationBinding,
 ): number | undefined {
-  const intent = resumedIntent(
+  const intent = chosenIntent(state, binding);
+  return intent === undefined ? undefined : Date.parse(intent.issuedAt);
+}
+function chosenIntent(
+  state: { readonly value: unknown; readonly history: unknown },
+  binding: OperationBinding,
+) {
+  return resumedIntent(
     retainedEntries(state).filter(
       (entry) =>
         entry.binding.module === binding.module && entry.binding.eventId === binding.eventId,
     ),
   );
-  return intent === undefined ? undefined : Date.parse(intent.issuedAt);
+}
+
+/** The boot reading the select stored with the hour chosen for `binding`'s event, if any. */
+export function chosenHourBoot(
+  state: { readonly value: unknown; readonly history: unknown },
+  binding: OperationBinding,
+): SelectBoot | undefined {
+  return chosenIntent(state, binding)?.boot;
 }
 
 export function createHourSelection(options: {
@@ -309,6 +343,8 @@ export function createHourSelection(options: {
   read(binding: OperationBinding, comparisonId?: string): Promise<HourSelectionFacts>;
   readCommitted?(binding: OperationBinding): Promise<Omit<HourSelectionFacts, "clock">>;
   monotonicNow(): number;
+  /** Read right after the box clock reading this select admitted, which `wallMs` records. */
+  readBoot?(): Omit<SelectBoot, "wallMs"> | undefined;
   onNewIntent?(selection: ReturnType<typeof material>): void;
 }) {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
@@ -449,7 +485,25 @@ export function createHourSelection(options: {
         authorize();
         entries.push(entry);
       };
-      if (intent !== undefined) return material(intent);
+      if (intent !== undefined) {
+        const boot = persist ? options.readBoot?.() : undefined;
+        // A restart voids the stored reading. On the same boot it stays true, and is kept.
+        if (boot !== undefined && original!.boot?.bootId !== boot.bootId) {
+          const refreshed: Intent = { ...original!, boot: { ...boot, wallMs: now } };
+          authorize();
+          await state.replace(
+            {
+              version: 1,
+              entries: structuredClone(
+                entries.map((entry) => (entry === original ? refreshed : entry)),
+              ),
+            },
+            "intent",
+          );
+          authorize();
+        }
+        return material(intent);
+      }
       // A recorded wait stays current for a minute past its target; a later select gets its own.
       const currentWait =
         latestWait !== undefined && now <= latestWait.targetMs + WAIT_REUSE_MS
@@ -519,6 +573,8 @@ export function createHourSelection(options: {
         issuedAt: new Date(now).toISOString(),
       };
       if (!persist) return { ...material(selected), status: "preview" as const };
+      const boot = options.readBoot?.();
+      if (boot !== undefined) selected.boot = { ...boot, wallMs: now };
       await write(selected);
       options.onNewIntent?.(material(selected));
       return material(selected);

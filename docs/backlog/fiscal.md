@@ -351,9 +351,10 @@ fencing belong to A1342 (landed) and A1418.
 
 Extend the old-backup/new-hardware exercise (`apps/server/src/restore-missing-history.e2e.test.ts`)
 to the production HTTPS connection and fresh device pairing. A restore through the restore page
-still needs the box's internet time at the start that places the backup;
-[A1420 PR 3b1 and 3b2](../superpowers/plans/2026-11-13-a1420-restore-series-check.md) remove that,
-and once they land the end-to-end test drops its internet stand-in. Keep the administrator
+still needs the box's internet time at the start that places the backup when the box was switched
+off or restarted, or its clock stepped, after the restore page confirmed the time (since A1420 PR 3b1 the start reuses the page's
+time check otherwise); [A1420 PR 3b2](../superpowers/plans/2026-11-13-a1420-restore-series-check.md)
+removes that, and once it lands the end-to-end test drops its internet stand-in. Keep the administrator
 approval, cookie admission, recovered-series and retired counter checks. The loopback HTTP
 qualification in #2449 is not a production TLS result.
 

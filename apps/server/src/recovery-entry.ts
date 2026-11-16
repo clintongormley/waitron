@@ -9,6 +9,7 @@ import {
   type RestoreOperationRunner,
   type ValidatedArtifact,
 } from "./restore.js";
+import type { BootReading } from "./boot-reader.js";
 import "./errors.js";
 
 export interface RecoveryEntryContext {
@@ -49,6 +50,7 @@ export async function createRecoveryEntryRunner(options: {
   secret: unknown;
   context: RecoveryEntryContext;
   timeServiceSynchronised?: () => Promise<boolean>;
+  readBoot?: () => BootReading;
 }): Promise<RestoreOperationRunner> {
   await assertNoStartAgainDeletion(options.venueDir);
   const { operation, copy, context } = options;
@@ -65,6 +67,7 @@ export async function createRecoveryEntryRunner(options: {
     node,
     selected,
     timeServiceSynchronised: options.timeServiceSynchronised,
+    readBoot: options.readBoot,
     database() {
       throw new AppError("module.operation_invalid", { module: operation.binding.module });
     },

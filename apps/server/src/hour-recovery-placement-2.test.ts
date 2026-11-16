@@ -10,6 +10,7 @@ import {
   agreeInternet,
   interactiveHost,
   clock,
+  boot,
 } from "../test/hour-recovery-host.js";
 import { selectPastWaits } from "./testing/hour-test-clock.js";
 import { Socket } from "node:net";
@@ -251,6 +252,7 @@ describe("selected-hour admission before archive placement", () => {
 
   it("refreshes again when the same reconstructed runner retries refused clock admission", async () => {
     const f = await archiveHost();
+    boot.id = "after-switch-off";
     const reconstructed = createSelectedRecoveryPreparation(f.options);
     const runner = reconstructed.runner(f.outcome.input, { refresh: true });
     await expect(
@@ -427,6 +429,7 @@ describe("selected-hour admission before archive placement", () => {
       const allocations = await suite.db.select().from(fiscalAllocations);
       const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
       const journal = await readModulePreparationHistory(f.roots, binding.module);
+      if (reason === "offline") boot.id = "after-switch-off";
       if (reason !== "offline")
         external.internet.mockImplementation(async () => ({
           source: "internet",

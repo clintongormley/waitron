@@ -408,6 +408,72 @@ it("a device's agreeing time counts for a restore only once the person confirms 
   });
 });
 
+type Boot = { id: string | null; ms: number };
+/** Selects with the internet clock agreeing, then starts in a new process without it. */
+async function startAfterSelect(
+  select: Boot | undefined,
+  start: Boot | undefined,
+  wallMs: number,
+  /** Moves the box's clock while the select reads the boot, after it judged the clock. */
+  stepAtBootReadMs = 0,
+) {
+  const f = fixture();
+  let boot = select;
+  let step = stepAtBootReadMs;
+  if (select !== undefined)
+    f.host.readBoot = () => {
+      vi.setSystemTime(Date.now() + step);
+      step = 0;
+      return boot!;
+    };
+  return withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const selected = await selectAfterWait(FISCAL_OPERATIONS.configure!(f.host), operation);
+    expect(selected.status).toBe("selected");
+    vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => ({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
+    }));
+    boot = start;
+    vi.setSystemTime(Date.now() + wallMs);
+    monotonic = 500;
+    const restarted = FISCAL_OPERATIONS.configure!({ ...f.host });
+    await restarted.resumeRecovery!(operation);
+    return restarted.prepare({ ...operation, input: selected.input }, async () => "admitted");
+  });
+}
+
+it("a restore's start without an internet clock reuses the page's select on the same boot", async () => {
+  await expect(
+    startAfterSelect({ id: "b1", ms: 1000 }, { id: "b1", ms: 61_000 }, 60_000),
+  ).resolves.toBe("admitted");
+});
+
+it.each<[string, Boot | undefined, Boot | undefined, number]>([
+  ["the box was switched off", { id: "b1", ms: 1000 }, { id: "b2", ms: 61_000 }, 60_000],
+  ["the clock was stepped", { id: "b1", ms: 1000 }, { id: "b1", ms: 61_000 }, 62_000],
+  ["the host reads no boot", undefined, undefined, 60_000],
+  ["the select had no boot id", { id: null, ms: 1000 }, { id: null, ms: 61_000 }, 60_000],
+  ["the start has no boot id", { id: "b1", ms: 1000 }, { id: null, ms: 61_000 }, 60_000],
+  ["the select read no uptime", { id: "b1", ms: NaN }, { id: "b1", ms: 61_000 }, 60_000],
+  ["the select read a negative uptime", { id: "b1", ms: -1000 }, { id: "b1", ms: 59_000 }, 60_000],
+  ["the start read a negative uptime", { id: "b1", ms: 1000 }, { id: "b1", ms: -59_000 }, -60_000],
+])(
+  "a restore's start without an internet clock waits for a second clock when %s",
+  async (_case, select, start, wallMs) => {
+    await expect(startAfterSelect(select, start, wallMs)).rejects.toMatchObject(
+      refusal("second_clock_missing"),
+    );
+  },
+);
+
+it("a restore's start without an internet clock waits for a second clock when the clock was stepped after the select judged it", async () => {
+  await expect(
+    startAfterSelect({ id: "b1", ms: 1000 }, { id: "b1", ms: 61_000 }, 60_000, 3_600_000),
+  ).rejects.toMatchObject(refusal("second_clock_missing"));
+});
+
 it.each(["readRecoveryFacts", "withPreparationState"] as const)(
   "requires host capability %s before using recovery",
   async (missing) => {
