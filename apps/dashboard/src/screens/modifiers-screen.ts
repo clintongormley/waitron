@@ -391,14 +391,20 @@ export class ModifiersScreen extends LitElement {
       ></wt-button
     >`;
   }
-  #columnLists = new Map<Kind, { locale: string; list: DataTableColumn<ModifierList>[] }>();
+  #columnLists = new Map<
+    Kind,
+    { locale: string; names: unknown; list: DataTableColumn<ModifierList>[] }
+  >();
 
+  /** Rebuilt when the extras' names change too: the table keeps each row's search text while its
+   * rows and columns stay the same, and those names come from the products, not the row. */
   #columns(kind: Kind): DataTableColumn<ModifierList>[] {
     const locale = currentLocale();
+    const names = kind === "extras" ? this.#itemNamesByList : null;
     const cached = this.#columnLists.get(kind);
-    if (cached?.locale === locale) return cached.list;
+    if (cached?.locale === locale && cached.names === names) return cached.list;
     const list = this.#buildColumns(kind);
-    this.#columnLists.set(kind, { locale, list });
+    this.#columnLists.set(kind, { locale, names, list });
     return list;
   }
 
