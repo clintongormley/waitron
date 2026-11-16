@@ -8,8 +8,8 @@
 >
 > **Root control:** Claude found `scripts/append-only-triggers.test.ts:207–209` accepts a DELETE
 > of payments as its writable-ledger control. The delete refusal requires using an allowed
-> timestamp UPDATE instead, retaining both assertions. This named scripts-guard port awaits the
-> watcher's explicit answer to the lane's root-control question; do not edit that test until cleared.
+> timestamp UPDATE instead, retaining both assertions. Watcher 16 November 07:40 explicitly
+> cleared this exact SQL-only port; name it in the PR's Changed test checks section.
 > Add it to Task 1's failing/green runs. The declared-delete/refusal inventory stays unchanged.
 >
 > **Consumer inventory:** Keep only redundant cleanup removals still present after pa1. Include
