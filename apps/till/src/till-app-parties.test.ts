@@ -11255,6 +11255,34 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(doneText(el)).toBeNull();
   });
 
+  it.each([
+    ["bill.payments_received", "cancel_credit.refused_payments"],
+    ["order.payment_in_flight", "cancel_credit.refused_payment_in_flight"],
+  ] as const)(
+    "a cancel refused with %s after the approver's PIN closes the PIN prompt and shows the payment sentence in the dialog",
+    async (code, key) => {
+      let sends = 0;
+      const server = billServer(async () => {
+        sends++;
+        throw sends === 1
+          ? { code: "authorization.not_permitted", status: 403 }
+          : { code, status: 409 };
+      });
+      const { el } = await openCancel(server);
+      await typeReason(el, "Wrong table");
+      await confirmCancel(el);
+
+      emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+      await flush(el, 6);
+
+      expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+      expect(approval(el)).toBeNull();
+      expect(dialog(el)).not.toBeNull();
+      expect(bottom(el)).toBe(t(key));
+      expect(doneText(el)).toBeNull();
+    },
+  );
+
   it("Cancel on the PIN prompt closes it, leaves the dialog open and sends nothing more", async () => {
     const server = billServer(async () => {
       throw { code: "authorization.not_permitted", status: 403 };
