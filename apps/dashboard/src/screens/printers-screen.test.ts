@@ -7986,6 +7986,26 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
   });
 
+  it("shows the running action and retry seconds when another Bluetooth operation refuses Pair", async () => {
+    const { el } = await mountPairing([barPrinter], {
+      pairBluetooth: vi.fn().mockRejectedValue({
+        code: "printer.bluetooth_command_busy",
+        params: { kind: "forget", seconds: 87 },
+      }),
+    });
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    const message = await bottomOf(el, footerOf("pair-printer-modal"));
+    expect(message).toContain("La desvinculación");
+    expect(message).toContain("87");
+    expect(message).toContain("inténtalo de nuevo entonces");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
+  });
+
   it("never keeps the PIN once the dialog closes", async () => {
     let answer!: (value: unknown) => void;
     const pair = vi.fn().mockImplementation(
@@ -9493,6 +9513,21 @@ describe("printers-screen Bluetooth pairing", () => {
       await forget(el);
       expect(text(el, "[role=alert]")).toBe(codeMessage("printer.bluetooth_not_paired"));
       expect(q(el, sel("printer-command-p4"))).toBeNull();
+      expect(isDisabled(el, sel("forget-pairing-p4"))).toBe(false);
+    });
+
+    it("shows the running action and retry seconds when another Bluetooth operation refuses Unpair", async () => {
+      const { el } = await mountForget([[reported]], {
+        forgetBluetoothPairing: vi.fn().mockRejectedValue({
+          code: "printer.bluetooth_command_busy",
+          params: { kind: "pair", seconds: 87 },
+        }),
+      });
+      await forget(el);
+      const message = text(el, "[role=alert]");
+      expect(message).toContain("El emparejamiento");
+      expect(message).toContain("87");
+      expect(message).toContain("inténtalo de nuevo entonces");
       expect(isDisabled(el, sel("forget-pairing-p4"))).toBe(false);
     });
 

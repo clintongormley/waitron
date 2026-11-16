@@ -491,6 +491,8 @@ describe("the print-agent image and its compose wiring", () => {
   it("smokes the agent's Bluetooth sender under that profile", () => {
     expect(IMAGE_SMOKE).toContain("python3 /app/rfcomm-send.py 66:55:44:33:22:11 1 5");
     expect(IMAGE_SMOKE).toContain("[Errno 13]");
+    expect(IMAGE_SMOKE).toContain("sdptool search --bdaddr 66:55:44:33:22:11 SP");
+    expect(IMAGE_SMOKE).toContain("Permission denied|Operation not permitted");
   });
 
   it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {

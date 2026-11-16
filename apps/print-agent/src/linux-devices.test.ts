@@ -873,6 +873,19 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     return { devices, paired, release: () => release() };
   }
 
+  it("refreshes a shared listing started before Unpair before reporting its pairing inventory", async () => {
+    const { devices, paired, release } = heldListing([{ mac: PRINTER }], []);
+    const checked = devices.checkBluetooth();
+    await devices.forgetBluetooth(PRINTER);
+    const listed = devices.pairedBluetooth();
+    const visible = devices.visibleDevices();
+    release();
+    await checked;
+    expect(await listed).toEqual([]);
+    expect((await visible).filter((entry) => entry.transport === "bluetooth")).toEqual([]);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
   it("does not join a listing that was already running when this agent forgot the printer", async () => {
     const { devices, paired, release } = heldListing([{ mac: PRINTER }], []);
     const listed = devices.pairedBluetooth();

@@ -17,6 +17,60 @@ function address(i: number): string {
 }
 
 describe("printer Bluetooth commands", () => {
+  it.each([
+    ["pair", A, "1234"],
+    ["forget", A, undefined],
+    ["pair", B, "0000"],
+  ] as const)("refuses a different operation while Pair runs (%s %s %s)", (kind, address, pin) => {
+    const { clock, commands } = store();
+    commands.enqueue("agent-1", "pair", A, "0000");
+    clock.now += 30_001;
+    expect(() => commands.enqueue("agent-1", kind, address, pin)).toThrowError(
+      expect.objectContaining({
+        code: "printer.bluetooth_command_busy",
+        params: { kind: "pair", seconds: 90 },
+      }),
+    );
+    expect(commands.current("agent-1")).toEqual([
+      { id: "c1", kind: "pair", address: A, pin: "0000" },
+    ]);
+    commands.accept("agent-1", [{ id: "c1", ok: false, reason: "wrong_pin" }]);
+    expect(commands.enqueue("agent-1", kind, address, pin)).toMatchObject({
+      id: "c2",
+      kind,
+      address,
+      state: "pending",
+    });
+  });
+
+  it("correlates an expired Unpair until committed acceptance, only for its issuing agent", () => {
+    const { clock, commands } = store();
+    commands.enqueue("agent-1", "forget", A);
+    clock.now += 120_000;
+    const outcomes = [{ id: "c1", ok: true }];
+    expect(commands.current("agent-1")).toEqual([]);
+    commands.accept("agent-2", outcomes);
+    expect(commands.unpaired("agent-2", outcomes)).toEqual([]);
+    expect(commands.unpaired("agent-1", [{ id: "unknown", ok: true }])).toEqual([]);
+    expect(commands.unpaired("agent-1", [{ id: "c1", ok: false }])).toEqual([]);
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([A]);
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([A]);
+    commands.accept("agent-1", outcomes);
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([]);
+  });
+
+  it("bounds expired Unpair identities across all agents, evicting the oldest", () => {
+    const { clock, commands } = store();
+    for (let i = 1; i <= 9; i++) {
+      commands.enqueue(`agent-${i}`, "forget", address(i));
+      clock.now += 120_000;
+      commands.current(`agent-${i}`);
+    }
+    expect(commands.unpaired("agent-1", [{ id: "c1", ok: true }])).toEqual([]);
+    expect(commands.unpaired("agent-2", [{ id: "c2", ok: true }])).toEqual([address(2)]);
+    expect(commands.unpaired("agent-9", [{ id: "c9", ok: true }])).toEqual([address(9)]);
+  });
+
   it("resends a pending pair with its PIN on every pull until the outcome arrives, then stops", () => {
     const { commands } = store();
     const status = commands.enqueue("agent-1", "pair", A, "0000");
@@ -68,8 +122,8 @@ describe("printer Bluetooth commands", () => {
   it("sends a pair without a PIN as none, and never attaches a PIN to a forget", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "pair", A);
-    commands.enqueue("agent-1", "forget", B, "1234");
-    const sent = commands.current("agent-1");
+    commands.enqueue("agent-2", "forget", B, "1234");
+    const sent = [...commands.current("agent-1"), ...commands.current("agent-2")];
     expect(sent).toEqual([
       { id: "c1", kind: "pair", address: A },
       { id: "c2", kind: "forget", address: B },
@@ -94,11 +148,9 @@ describe("printer Bluetooth commands", () => {
   it("drops a success's error, and records a failure that sent no error with none", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);
+    commands.accept("agent-1", [{ id: "c1", ok: true, error: "ignored on success" }]);
     commands.enqueue("agent-1", "forget", B);
-    commands.accept("agent-1", [
-      { id: "c1", ok: true, error: "ignored on success" },
-      { id: "c2", ok: false },
-    ]);
+    commands.accept("agent-1", [{ id: "c2", ok: false }]);
     expect(commands.latest("agent-1", A)).toEqual({
       id: "c1",
       kind: "forget",
@@ -113,7 +165,7 @@ describe("printer Bluetooth commands", () => {
     });
   });
 
-  it("returns the existing pending command for an exact duplicate", () => {
+  it("returns the exact duplicate without extending its deadline, then admits the next operation", () => {
     const { clock, commands } = store();
     const first = commands.enqueue("agent-1", "pair", A, "0000");
     clock.now += 30_000;
@@ -121,56 +173,13 @@ describe("printer Bluetooth commands", () => {
       ...first,
       expiresInMs: 90_000,
     });
-    expect(commands.enqueue("agent-1", "forget", B)).toMatchObject({ id: "c2" });
-    expect(commands.enqueue("agent-1", "forget", B)).toMatchObject({ id: "c2" });
     expect(commands.current("agent-1")).toEqual([
       { id: "c1", kind: "pair", address: A, pin: "0000" },
-      { id: "c2", kind: "forget", address: B },
     ]);
-    // A duplicate does not extend the original command's life.
     clock.now += 90_000;
-    expect(commands.current("agent-1")).toEqual([{ id: "c2", kind: "forget", address: B }]);
-  });
-
-  it("replaces a pending pair under a new id when the operator retypes a different PIN", () => {
-    const { clock, commands } = store();
-    commands.enqueue("agent-1", "pair", A, "0000");
-    clock.now += 30_000;
-    const retyped = commands.enqueue("agent-1", "pair", A, "1234");
-    expect(retyped).toEqual({
-      id: "c2",
-      kind: "pair",
-      address: A,
-      state: "pending",
-      expiresInMs: 120_000,
-    });
-    expect(commands.current("agent-1")).toEqual([
-      { id: "c2", kind: "pair", address: A, pin: "1234" },
-    ]);
-    commands.accept("agent-1", [{ id: "c1", ok: false, error: "wrong PIN" }]);
-    expect(commands.latest("agent-1", A)).toEqual(retyped);
-    // The replacement's life starts at the retype.
-    clock.now += 119_999;
-    expect(commands.current("agent-1")).toHaveLength(1);
-    commands.enqueue("agent-1", "pair", A);
-    expect(commands.current("agent-1")).toEqual([{ id: "c3", kind: "pair", address: A }]);
-  });
-
-  it("replaces the opposite operation for the same address and ignores the replaced id", () => {
-    const { commands } = store();
-    commands.enqueue("agent-1", "pair", A, "0000");
-    const forget = commands.enqueue("agent-1", "forget", A);
-    expect(forget).toEqual({
-      id: "c2",
-      kind: "forget",
-      address: A,
-      state: "pending",
-      expiresInMs: 120_000,
-    });
-    expect(commands.current("agent-1")).toEqual([{ id: "c2", kind: "forget", address: A }]);
-    commands.accept("agent-1", [{ id: "c1", ok: true }]);
-    expect(commands.latest("agent-1", A)).toEqual(forget);
-    expect(commands.current("agent-1")).toHaveLength(1);
+    expect(commands.current("agent-1")).toEqual([]);
+    expect(commands.enqueue("agent-1", "forget", B)).toMatchObject({ id: "c2" });
+    expect(commands.enqueue("agent-1", "forget", B)).toMatchObject({ id: "c2" });
   });
 
   it("shows a new command, not the previous result, once the same address is queued again", () => {
@@ -185,27 +194,6 @@ describe("printer Bluetooth commands", () => {
       state: "pending",
       expiresInMs: 120_000,
     });
-  });
-
-  it("holds at most eight pending addresses per agent and refuses a ninth distinct one", () => {
-    const { clock, commands } = store();
-    for (let i = 1; i <= 8; i++) commands.enqueue("agent-1", "forget", address(i));
-    expect(() => commands.enqueue("agent-1", "forget", address(9))).toThrowError(
-      expect.objectContaining({ code: "printer.bluetooth_command_busy", params: {} }),
-    );
-    // Same address — duplicate or opposite operation — is not a ninth address.
-    expect(commands.enqueue("agent-1", "forget", address(1))).toMatchObject({ id: "c1" });
-    expect(commands.enqueue("agent-1", "pair", address(2), "0000")).toMatchObject({ id: "c9" });
-    expect(commands.current("agent-1")).toHaveLength(8);
-
-    commands.accept("agent-1", [{ id: "c1", ok: true }]);
-    expect(commands.enqueue("agent-1", "forget", address(9))).toMatchObject({ id: "c10" });
-    expect(() => commands.enqueue("agent-1", "forget", address(10))).toThrowError(
-      expect.objectContaining({ code: "printer.bluetooth_command_busy" }),
-    );
-
-    clock.now += 120_000;
-    expect(commands.enqueue("agent-1", "forget", address(10))).toMatchObject({ id: "c11" });
   });
 
   it("expires a pending command 120 seconds after it was queued, with no result", () => {
@@ -248,28 +236,28 @@ describe("printer Bluetooth commands", () => {
 
   it("keeps each agent's commands, outcomes, results and bound apart", () => {
     const { commands } = store();
-    for (let i = 1; i <= 8; i++) commands.enqueue("agent-1", "forget", address(i));
+    commands.enqueue("agent-1", "forget", address(1));
     const other = commands.enqueue("agent-2", "pair", address(1), "9999");
     expect(other).toEqual({
-      id: "c9",
+      id: "c2",
       kind: "pair",
       address: address(1),
       state: "pending",
       expiresInMs: 120_000,
     });
     expect(commands.current("agent-2")).toEqual([
-      { id: "c9", kind: "pair", address: address(1), pin: "9999" },
+      { id: "c2", kind: "pair", address: address(1), pin: "9999" },
     ]);
-    expect(commands.current("agent-1").map((command) => command.id)).not.toContain("c9");
+    expect(commands.current("agent-1").map((command) => command.id)).not.toContain("c2");
 
     commands.accept("agent-2", [{ id: "c1", ok: true }]);
-    commands.accept("agent-1", [{ id: "c9", ok: true }]);
-    expect(commands.current("agent-1")).toHaveLength(8);
+    commands.accept("agent-1", [{ id: "c2", ok: true }]);
+    expect(commands.current("agent-1")).toHaveLength(1);
     expect(commands.current("agent-2")).toHaveLength(1);
     expect(commands.latest("agent-1", address(1))).toMatchObject({ id: "c1", state: "pending" });
-    expect(commands.latest("agent-2", address(1))).toMatchObject({ id: "c9", state: "pending" });
+    expect(commands.latest("agent-2", address(1))).toMatchObject({ id: "c2", state: "pending" });
 
-    commands.accept("agent-2", [{ id: "c9", ok: true }]);
+    commands.accept("agent-2", [{ id: "c2", ok: true }]);
     expect(commands.latest("agent-2", address(1))).toMatchObject({ state: "succeeded" });
     expect(commands.latest("agent-1", address(1))).toMatchObject({ state: "pending" });
     expect(commands.latest("agent-3", address(1))).toBeUndefined();
@@ -312,12 +300,10 @@ describe("printer Bluetooth commands", () => {
     const { commands } = store();
     const pin = "Zq7#Pw";
     commands.enqueue("agent-1", "pair", A, pin);
+    commands.accept("agent-1", [{ id: "c1", ok: false, error: `Pair failed for PIN ${pin}` }]);
     commands.enqueue("agent-1", "pair", B, pin);
-    commands.accept("agent-1", [
-      { id: "c1", ok: false, error: `Pair failed for PIN ${pin}` },
-      // The PIN straddles the length bound, so bounding first would keep its first characters.
-      { id: "c2", ok: false, error: `${"x".repeat(497)}${pin}` },
-    ]);
+    // The PIN straddles the length bound, so bounding first would keep its first characters.
+    commands.accept("agent-1", [{ id: "c2", ok: false, error: `${"x".repeat(497)}${pin}` }]);
     for (const address of [A, B]) {
       const failed = commands.latest("agent-1", address);
       expect(failed).toMatchObject({ state: "failed", error: PIN_WITHHELD });
@@ -346,26 +332,11 @@ describe("printer Bluetooth commands", () => {
     expect(commands.latest("agent-1", A)).not.toHaveProperty("expiresInMs");
   });
 
-  it("holds as many pending commands as the agent does, and keeps that many results", () => {
-    const { commands } = store();
-    for (let i = 1; i <= BLUETOOTH_COMMAND_LIMIT; i++) {
-      commands.enqueue("agent-1", "forget", address(i));
-    }
-    expect(() =>
-      commands.enqueue("agent-1", "forget", address(BLUETOOTH_COMMAND_LIMIT + 1)),
-    ).toThrowError(expect.objectContaining({ code: "printer.bluetooth_command_busy" }));
-    const ids = commands.current("agent-1").map(({ id }) => ({ id, ok: true }));
-    commands.accept("agent-1", ids);
-    for (let i = 1; i <= BLUETOOTH_COMMAND_LIMIT; i++) {
-      expect(commands.latest("agent-1", address(i))).toMatchObject({ state: "succeeded" });
-    }
-  });
-
   it("drops an idle agent's expired entries once a call about another agent comes a minute on", () => {
     const { clock, commands } = store();
-    commands.enqueue("agent-idle", "forget", A);
     commands.enqueue("agent-idle", "forget", B);
-    commands.accept("agent-idle", [{ id: "c2", ok: true }]);
+    commands.accept("agent-idle", [{ id: "c1", ok: true }]);
+    commands.enqueue("agent-idle", "forget", A);
     expect(commands.agentsHeld()).toBe(1);
     clock.now += 120_000;
     commands.current("agent-busy");
@@ -380,10 +351,9 @@ describe("printer Bluetooth commands", () => {
     ["a millisecond past its limit", 1, false],
   ])("drops a pending command ending further ahead than its limit (%s)", (_case, back, kept) => {
     const { clock, commands } = store();
-    for (let i = 1; i <= BLUETOOTH_COMMAND_LIMIT; i++)
-      commands.enqueue("agent-1", "pair", address(i), "0000");
+    commands.enqueue("agent-1", "pair", address(1), "0000");
     clock.now -= back;
-    expect(commands.current("agent-1")).toHaveLength(kept ? BLUETOOTH_COMMAND_LIMIT : 0);
+    expect(commands.current("agent-1")).toHaveLength(kept ? 1 : 0);
     if (!kept)
       expect(
         commands.enqueue("agent-1", "forget", address(BLUETOOTH_COMMAND_LIMIT + 1)),
@@ -428,10 +398,11 @@ describe("printer Bluetooth commands", () => {
   it("uses the real clock and random ids by default", () => {
     const commands = createPrinterBluetoothCommands();
     const first = commands.enqueue("agent-1", "forget", A);
-    const second = commands.enqueue("agent-1", "forget", B);
+    const second = commands.enqueue("agent-2", "forget", B);
     expect(first.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(second.id).not.toBe(first.id);
-    expect(commands.current("agent-1")).toHaveLength(2);
+    expect(commands.current("agent-1")).toHaveLength(1);
+    expect(commands.current("agent-2")).toHaveLength(1);
   });
 
   it("reads Date.now at each call by default, so a replaced clock reaches it", () => {
@@ -453,9 +424,9 @@ describe("printer Bluetooth commands", () => {
     const C = address(3);
     const D = address(4);
     commands.enqueue("agent-1", "forget", A);
-    commands.enqueue("agent-1", "forget", B);
-    commands.enqueue("agent-1", "pair", C, "0000");
-    commands.enqueue("agent-2", "forget", D);
+    commands.enqueue("agent-2", "forget", B);
+    commands.enqueue("agent-3", "pair", C, "0000");
+    commands.enqueue("agent-4", "forget", D);
     const outcomes = [
       { id: "c1", ok: true },
       { id: "c2", ok: false, error: "refused" },
@@ -465,7 +436,7 @@ describe("printer Bluetooth commands", () => {
     ];
 
     expect(commands.unpaired("agent-1", outcomes)).toEqual([A]);
-    expect(commands.unpaired("agent-2", outcomes)).toEqual([D]);
+    expect(commands.unpaired("agent-4", outcomes)).toEqual([D]);
     expect(commands.unpaired("agent-3", outcomes)).toEqual([]);
     expect(commands.latest("agent-1", A)).toMatchObject({ state: "pending" });
 
@@ -473,20 +444,15 @@ describe("printer Bluetooth commands", () => {
     expect(commands.unpaired("agent-1", outcomes)).toEqual([]);
   });
 
-  it("judges an unpairing reported twice in one batch by its first outcome, as accept settles it", () => {
+  it.each([false, true])("judges duplicated Unpair outcomes by the first answer (%s)", (ok) => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);
-    commands.enqueue("agent-1", "forget", B);
     const outcomes = [
-      { id: "c1", ok: false, error: "refused" },
-      { id: "c1", ok: true },
-      { id: "c2", ok: true },
-      { id: "c2", ok: false, error: "refused" },
+      { id: "c1", ok },
+      { id: "c1", ok: !ok },
     ];
-
-    expect(commands.unpaired("agent-1", outcomes)).toEqual([B]);
+    expect(commands.unpaired("agent-1", outcomes)).toEqual(ok ? [A] : []);
     commands.accept("agent-1", outcomes);
-    expect(commands.latest("agent-1", A)).toMatchObject({ state: "failed" });
-    expect(commands.latest("agent-1", B)).toMatchObject({ state: "succeeded" });
+    expect(commands.latest("agent-1", A)).toMatchObject({ state: ok ? "succeeded" : "failed" });
   });
 });

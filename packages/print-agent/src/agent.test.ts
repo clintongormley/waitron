@@ -2499,7 +2499,7 @@ describe("createAgent — Bluetooth commands", () => {
     [new Error("bluetoothctl: not found"), "bluetoothctl: not found"],
     ["no adapter", "no adapter"],
   ])(
-    "a paired listing that throws (%s) is logged and sent as none, and the reply's job still prints",
+    "a paired listing that throws (%s) is omitted, logged, and the reply's job still prints",
     async (thrown, logged) => {
       const sink = new FakeSink();
       const host = fakeHost({
@@ -2512,7 +2512,7 @@ describe("createAgent — Bluetooth commands", () => {
       });
       const c = client({ pullJobs: scripted(reply({ jobs: [job("j1")] })) });
       await createAgent({ host, client: c }).runOnce();
-      expect(sentOn(c, 0).pairedBluetooth).toStrictEqual([]);
+      expect(sentOn(c, 0)).not.toHaveProperty("pairedBluetooth");
       expect(host.logs).toContain(
         `warn paired bluetooth listing failed ${JSON.stringify({ error: logged })}`,
       );
@@ -2521,14 +2521,14 @@ describe("createAgent — Bluetooth commands", () => {
     },
   );
 
-  it("a paired listing that throws synchronously is still sent as none", async () => {
+  it("a paired listing that throws synchronously is omitted", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     host.pairedBluetooth = () => {
       throw new Error("sync");
     };
     const c = client();
     await createAgent({ host, client: c }).runOnce();
-    expect(sentOn(c, 0).pairedBluetooth).toStrictEqual([]);
+    expect(sentOn(c, 0)).not.toHaveProperty("pairedBluetooth");
     expect(host.statuses.at(-1)?.phase).toBe("running");
   });
 

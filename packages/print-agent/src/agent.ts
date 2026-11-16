@@ -267,7 +267,7 @@ export function createAgent(opts: AgentOptions): Agent {
     return failed;
   }
 
-  async function listPairedBluetooth(): Promise<PairedBluetoothDevice[]> {
+  async function listPairedBluetooth(): Promise<PairedBluetoothDevice[] | undefined> {
     try {
       const paired = await host.pairedBluetooth();
       lastPairedFailure = undefined;
@@ -278,7 +278,7 @@ export function createAgent(opts: AgentOptions): Agent {
         host.log.warn("paired bluetooth listing failed", { error: message });
       }
       lastPairedFailure = message;
-      return [];
+      return undefined;
     }
   }
 
@@ -760,7 +760,7 @@ export function createAgent(opts: AgentOptions): Agent {
     const inventory = {
       visible,
       scanned,
-      pairedBluetooth,
+      ...(pairedBluetooth === undefined ? {} : { pairedBluetooth }),
       bluetoothOutcomes: sentOutcomes,
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),

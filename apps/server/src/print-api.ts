@@ -813,7 +813,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const scanned = screenScanned(body.scanned);
       const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
       const bluetoothOutcomes = screenBluetoothOutcomes(body.bluetoothOutcomes);
-      const unpaired = bluetoothCommands.unpaired(agentId, bluetoothOutcomes);
+      const unpaired = bluetoothCommands.unpaired(
+        agentId,
+        bluetoothOutcomes,
+        pairedBluetooth.map((entry) => entry.localKey),
+      );
 
       const now = Date.now();
       // A succeeded unpairing ends this agent's earlier paired report, so the device is no longer
@@ -855,6 +859,23 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       };
       for (const v of visible) remember(v, "visibleAt");
       for (const s of scanned) remember(s, "scannedAt");
+      // Only a complete snapshot can say a previously paired address is absent.
+      if (
+        Array.isArray(body.pairedBluetooth) &&
+        pairedBluetooth.length === body.pairedBluetooth.length
+      ) {
+        const paired = new Set(pairedBluetooth.map((entry) => entry.localKey));
+        for (const [key, entry] of discovered) {
+          if (
+            entry.agentId === agentId &&
+            entry.transport === "bluetooth" &&
+            !paired.has(entry.localKey!)
+          ) {
+            rememberDescription(key);
+            discovered.set(key, { ...entry, pairedAt: undefined, pairedPrinterLike: undefined });
+          }
+        }
+      }
       for (const { printerLike: pairedPrinterLike, ...p } of pairedBluetooth) {
         const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);

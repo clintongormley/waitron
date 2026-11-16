@@ -11,6 +11,9 @@ Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Empa
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
 abre el diálogo del nombre: elige **Añadir**.
 
+Espera a que termine el emparejamiento o la desvinculación antes de iniciar otra solicitud
+en el mismo agente de impresión.
+
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
 

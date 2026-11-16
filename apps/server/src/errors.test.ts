@@ -158,10 +158,10 @@ describe("the printer Bluetooth error codes carry their declared params", () => 
     }
   });
 
-  it("constructs printer.bluetooth_command_busy with no params", () => {
-    const error = new AppError("printer.bluetooth_command_busy", {});
+  it("constructs printer.bluetooth_command_busy with the running action and remaining seconds", () => {
+    const error = new AppError("printer.bluetooth_command_busy", { kind: "pair", seconds: 87 });
     expect(error.code).toBe("printer.bluetooth_command_busy");
-    expect(error.params).toEqual({});
+    expect(error.params).toEqual({ kind: "pair", seconds: 87 });
   });
 });
 

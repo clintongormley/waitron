@@ -18,7 +18,7 @@ export interface AgentInventory {
   setupPort?: number;
   visible: VisibleDevice[];
   scanned: DiscoveredDevice[];
-  pairedBluetooth: PairedBluetoothDevice[];
+  pairedBluetooth?: PairedBluetoothDevice[];
   bluetoothOutcomes: BluetoothCommandOutcome[];
 }
 

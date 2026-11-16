@@ -425,6 +425,20 @@ describe("createClient — pullJobs", () => {
     expect(JSON.parse(init.body as string)).toEqual(inventory);
   });
 
+  it("keeps an omitted paired snapshot distinct from a successful empty one on the wire", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: [] }));
+    const client = createClient({ fetch: fetchImpl });
+    const inventory = { visible: [], scanned: [], bluetoothOutcomes: [] };
+    await client.pullJobs(URL_A, "a1.secret", inventory);
+    await client.pullJobs(URL_A, "a1.secret", { ...inventory, pairedBluetooth: [] });
+    expect(JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string)).not.toHaveProperty(
+      "pairedBluetooth",
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[1]![1]!.body as string).pairedBluetooth).toEqual([]);
+  });
+
   it("skips a server entry without a string url and keeps a url-only entry without a nodeId", async () => {
     const client = createClient({
       fetch: vi.fn().mockResolvedValue(
