@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type {
   DeviceIdentity,
@@ -569,4 +569,47 @@ describe("A773 pass screen: Fire", () => {
       expect(leverError(el)).toBeNull();
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     }));
+});
+
+describe("A773 pass screen: the refreshed line after a Fire low in a long column", () => {
+  afterEach(resetPage);
+
+  const longBoard = passBoard({
+    toFire: Array.from({ length: 12 }, (_, index) =>
+      fireCard({
+        key: `group:g-${index + 1}`,
+        target: { kind: "group", partyId: "p-1", groupId: `g-${index + 1}` },
+      }),
+    ),
+  });
+
+  for (const [width, height] of [
+    [1024, 768],
+    [390, 844],
+  ] as const) {
+    it(`at ${width} px, brings the line into view when a Fire scrolled down to is refused as changed`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      const scroller = document.scrollingElement!;
+      fireButton(el, "group:g-12")!.scrollIntoView({ block: "end" });
+      expect(scroller.scrollTop).toBeGreaterThan(0);
+      await userEvent.click(fireButton(el, "group:g-12")!);
+      await flush(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      const line = tableChanged(el)!.getBoundingClientRect();
+      expect(line.top).toBeGreaterThanOrEqual(0);
+      expect(line.bottom).toBeLessThanOrEqual(scroller.clientHeight);
+
+      fireButton(el, "group:g-12")!.scrollIntoView({ block: "end" });
+      const scrolledBack = scroller.scrollTop;
+      el.requestUpdate();
+      await flush(el);
+      expect(tableChanged(el)).not.toBeNull();
+      expect(scroller.scrollTop).toBe(scrolledBack);
+    });
+  }
 });

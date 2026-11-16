@@ -1,7 +1,15 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
 import { ContentLanguageController, TickingClock, baseStyles } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import {
+  LitElement,
+  type PropertyValues,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { t } from "../i18n/t.js";
@@ -15,7 +23,7 @@ import {
 import "../widgets/stale-since.js";
 import "../widgets/pass-board.js";
 import "../widgets/kitchen-columns-dialog.js";
-import { passColumnNames } from "../widgets/pass-board.js";
+import { type TillPassBoard, passColumnNames } from "../widgets/pass-board.js";
 import { type PassMode, passOrderPlace } from "../state/pass-view.js";
 import {
   type ColumnKey,
@@ -190,6 +198,7 @@ export class TillPassScreen extends LitElement {
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
   #appliedRequest = 0;
+  #failedRequest = 0;
   /** Card keys with a Fire out. */
   @state() private sending: ReadonlySet<string> = new Set();
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
@@ -310,7 +319,7 @@ export class TillPassScreen extends LitElement {
       if (request < this.#appliedRequest || !this.#isCurrent(boardId)) return;
       this.#appliedRequest = request;
       this.#adoptBoard(result);
-      this.stale = false;
+      if (request > this.#failedRequest) this.stale = false;
       this.#lastGoodAt = new Date();
       this.tableChanged = this.#tableChangedNext;
       this.#tableChangedNext = null;
@@ -323,8 +332,24 @@ export class TillPassScreen extends LitElement {
         this.dispatchEvent(
           new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
         );
-      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
+      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) {
+        this.stale = true;
+        this.#failedRequest = Math.max(this.#failedRequest, request);
+      }
     }
+  }
+
+  override updated(changed: PropertyValues): void {
+    if (changed.has("tableChanged") && changed.get("tableChanged") == null && this.tableChanged)
+      void this.#revealTableChanged();
+  }
+
+  /** The line sits above the columns, out of view after a press on a card low in a long one. */
+  async #revealTableChanged(): Promise<void> {
+    await this.renderRoot.querySelector<TillPassBoard>("till-pass-board")?.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLElement>("[data-table-changed]")
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   #adoptBoard(read: DevicePassBoard): void {
