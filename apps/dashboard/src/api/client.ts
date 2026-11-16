@@ -2675,6 +2675,8 @@ export interface OrderDeliveries {
 const CARD_PROVIDER_READ_LIMIT_MS = 50_000;
 /** Keep above the battery deadline in apps/server/src/alert-sources.ts; no shared constant enforces it. */
 const ALERTS_READ_LIMIT_MS = 55_000;
+/** Without a limit a write never times out, and a pairing that never answers would lock both dialogs. */
+const DEVICE_ACCEPT_LIMIT_MS = 30_000;
 
 export interface ThemeView {
   readonly id: string;
@@ -4127,6 +4129,7 @@ export class DashboardApi {
       `/management-api/device-join-requests/${id}/accept`,
       "POST",
       input,
+      { timeLimitMs: DEVICE_ACCEPT_LIMIT_MS },
     );
   }
 

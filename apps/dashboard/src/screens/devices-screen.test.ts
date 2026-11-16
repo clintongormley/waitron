@@ -4487,6 +4487,34 @@ describe("add a device", () => {
     expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
   });
 
+  it("lets both dialogs close again once a Pair save gives up waiting", async () => {
+    let giveUp!: (reason: unknown) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockReturnValue(new Promise((_r, reject) => (giveUp = reject))),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+    const dismissible = (id: string): boolean =>
+      (q(el, `[data-test=${id}]`) as HTMLElement & { dismissible: boolean }).dismissible;
+    expect([dismissible("pair-modal"), dismissible("add-device-modal")]).toEqual([false, false]);
+
+    giveUp({ code: "connection.timed_out" });
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("connection.timed_out"),
+      ),
+    );
+    expect([dismissible("pair-modal"), dismissible("add-device-modal")]).toEqual([true, true]);
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
+  });
+
   it("lets a Pair save that is under way decide the outcome: Escape and Cancel wait for it", async () => {
     let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
     const api = stubApi({

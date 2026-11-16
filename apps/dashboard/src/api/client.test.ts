@@ -1841,6 +1841,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Pass screen", profileId: "dp1" }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2866,6 +2867,31 @@ describe("the card readers' outside-provider reads", () => {
     expect(out.settled).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1_000);
     expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+  });
+});
+
+describe("accepting a device's pairing", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("gives up on an accept that never answers at 30 seconds", async () => {
+    const neverAnswers = vi.fn<FetchLike>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    let settled: { error: unknown } | undefined;
+    new DashboardApi("", neverAnswers)
+      .acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1" })
+      .catch((error: unknown) => (settled = { error }));
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toEqual({ error: { code: "connection.timed_out" } });
   });
 });
 
