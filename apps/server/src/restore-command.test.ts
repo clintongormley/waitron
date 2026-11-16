@@ -749,7 +749,7 @@ describe("waitron-restore restore --from-bucket", () => {
     ],
     [
       new AppError("restore.stream_integrity_failed", {}),
-      "restore failed: restore.stream_integrity_failed — the downloaded copy could not be checked; try again, or choose another backup",
+      "restore failed: restore.stream_integrity_failed — the downloaded copy did not pass its checks; try again, or choose another backup",
     ],
     [
       new AppError("restore.stream_state_missing", { nodeId: "n1" }),

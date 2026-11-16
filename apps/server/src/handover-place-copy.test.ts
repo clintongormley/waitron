@@ -1323,6 +1323,13 @@ describe("placeAcceptedCopyAtStart", () => {
       await opened.close();
       const placedDigest = sha(b.live);
       expect(placedDigest).not.toBe(acceptedDigest);
+      const before = readFileSync(b.accepted);
+      const after = readFileSync(b.live);
+      const changed = [...before.keys()].filter((offset) => before[offset] !== after[offset]);
+      expect(changed).toEqual([18, 19, 27, 95]);
+      const normalized = Buffer.from(after);
+      for (const offset of changed) normalized[offset] = before[offset]!;
+      expect(createHash("sha256").update(normalized).digest("hex")).toBe(acceptedDigest);
       expect(statSync(b.live).size).toBe(acceptedBytes);
       expect(tableNames(b.live)).toContain("placed");
       rmSync(b.accepted);

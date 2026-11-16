@@ -4,9 +4,15 @@ import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { encodeRecoveryKit } from "@waitron/stream";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
+import { prepareStreamRestore } from "./restore-stream.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
+
+vi.mock("./restore-stream.js", { spy: true });
 
 const receiveArchive = useSetupArchiveUpload();
 const sockets: TLSSocket[] = [];
@@ -516,5 +522,49 @@ it("refuses an upload before the setup queue while configuration staging is busy
     release();
     await first;
     await second;
+  }
+});
+
+it("keeps the request cancellation through the bucket preparation service", async () => {
+  const reason = new Error("request closed");
+  const signal = AbortSignal.abort(reason);
+  const download = vi.mocked(prepareStreamRestore).mockImplementation(async (deps) => {
+    deps.signal?.throwIfAborted();
+    throw new Error("download was not cancelled");
+  });
+  const service = createSetupRecoveryPreparation({
+    stateDir: "/unused/state",
+    venueDir: "/unused/venue",
+    stagingDir: "/unused/staging",
+    modules: [],
+    migrationsRoot: null,
+    coordinator: createFirstSetupCoordinator(),
+    bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
+  });
+  const kit = encodeRecoveryKit({
+    version: 2,
+    streamId: "d0000000-0000-4000-8000-000000000002",
+    recoveryKey: "synthetic-recovery-key",
+    pointerSignerPublicKey: generateNodeKeyPair().publicKey,
+    bucket: {
+      region: "local",
+      bucket: "copy",
+      prefix: "",
+      accessKeyId: "unused",
+      secretAccessKey: "unused",
+    },
+  });
+  try {
+    await expect(
+      service(
+        { kind: "bucket", kit, environment: "preproduction" },
+        preparation,
+        undefined,
+        { onBox: true },
+        signal,
+      ),
+    ).rejects.toBe(reason);
+  } finally {
+    download.mockRestore();
   }
 });

@@ -170,7 +170,7 @@ export const shellEn = {
   "shell.bucket.pointer_invalid":
     "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
   "shell.bucket.integrity_failed":
-    "The downloaded copy could not be checked. Try again, or choose another backup. Nothing on this server was changed.",
+    "The downloaded copy did not pass its checks. Try again, or choose another backup. Nothing on this server was changed.",
   "shell.bucket.state_missing":
     "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
   "shell.bucket.identity_unknown":
@@ -400,7 +400,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.pointer_invalid":
     "El registro del bucket de su copia más reciente está dañado, así que no se puede reconstruir a partir de él. No se ha cambiado nada.",
   "shell.bucket.integrity_failed":
-    "No se ha podido comprobar la copia descargada. Inténtalo de nuevo o elige otra copia de seguridad. No se ha cambiado nada en este servidor.",
+    "La copia descargada no ha superado las comprobaciones. Inténtalo de nuevo o elige otra copia de seguridad. No se ha cambiado nada en este servidor.",
   "shell.bucket.state_missing":
     "La copia del bucket no guarda los ajustes cifrados del servidor anterior, así que no se puede reconstruir a partir de ella.",
   "shell.bucket.identity_unknown":

@@ -1895,3 +1895,37 @@ it("retries closed folders on its timer while another copy comparison is still p
     vi.mocked(readdir).mock.calls.filter(([path]) => path === join(r.stateDir, "handover")),
   ).toEqual([]);
 });
+
+it("shares one sweep between startup and the independent cleanup timer", async () => {
+  const r = await rig();
+  const real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  let entered!: () => void;
+  let release!: () => void;
+  const began = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let listings = 0;
+  vi.mocked(readdir).mockImplementation(async (...args) => {
+    if (args[0] === join(r.stateDir, "handover")) {
+      listings += 1;
+      entered();
+      await held;
+    }
+    return real.readdir(...args);
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const duty = (await r.start())!;
+  try {
+    await began;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(listings).toBe(1);
+  } finally {
+    release();
+    await duty.stop();
+    vi.useRealTimers();
+    vi.mocked(readdir).mockImplementation(real.readdir);
+  }
+});

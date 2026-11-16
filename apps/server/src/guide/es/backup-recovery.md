@@ -230,7 +230,7 @@ Si la copia no tiene ningún administrador activo con contraseña, elige otra co
 
 ## Si una recuperación se interrumpe {#resume}
 
-Si no se ha podido comprobar la copia descargada, inténtalo de nuevo o elige otra copia de seguridad.
+Si la copia descargada no ha superado las comprobaciones, inténtalo de nuevo o elige otra copia de seguridad.
 
 Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.
 

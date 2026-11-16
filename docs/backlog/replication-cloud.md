@@ -586,7 +586,10 @@ Slice 3.
   the start refuses `handover.accepted_copy_missing`. The real placement case “cannot identify an
   opened accepted copy by its signed size and empty summaries alone” in `handover-place-copy.test.ts`
   confirms the refusal for the placed file and a different valid file with the same signed size
-  and empty summaries. Those fields do not establish identity; recognition remains open.
+  and empty summaries. In this fixture, opening changes only bytes 18, 19, 27 and 95; replacing
+  those bytes with the accepted file's bytes recovers its signed digest. Recognition using those
+  fields remains to be qualified through a real start and its WAL; the fixture alone does not
+  establish what may be ignored after a killed start.
   Left open by A1018 Slice 5 (Ruling R53).
 
 ## Bundle: Remaining setup and failover gaps
@@ -672,7 +675,10 @@ Slice 3.
 Restore, spare-copy and emergency handover use the same provisional, unmeasured thirty-minute
 SQLite integrity budget as controlled handover, plus up to five seconds waiting for worker stop.
 This bounds the caller's wait, not native execution or file closure; other module checks and the
-backup download are outside it. A closed HTTP connection aborts its check; retry the request.
+backup download are outside it. A check that needs longer than the budget will be refused on
+another attempt too. A closed HTTP connection aborts its check; retry the request. Discarding an
+attempt can leave its deleted file's space held until native work ends; another attempt needs
+room for a fresh copy meanwhile.
 Closed-folder cleanup retries independently every sixty seconds, skipping files whose integrity
 worker still runs. `handover-fetch.test.ts` covers a worker exit and failed removal while a live
 comparison remains pending, and stopping the timer.
