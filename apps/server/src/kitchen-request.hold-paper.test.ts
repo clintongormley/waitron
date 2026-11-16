@@ -48,6 +48,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import "./errors.js";
 
 const AT = "2026-03-14T12:00:00.000Z";
@@ -358,6 +359,60 @@ describe("A773 hold paper: extras off and moves", () => {
       .where(eq(ticketItems.workingOrderLineId, lineId));
     return item!;
   };
+
+  it("reprints a Requested dish once on its existing HOLD paper with its original time", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.grill]);
+      const { groups } = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, true)], release: "hold" }],
+      });
+      await tx.update(printJobs).set({ status: "done" });
+      await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
+      vi.setSystemTime(new Date(LATER));
+      await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        groups[0]!.id,
+        await partyArgs(tx, venue),
+      );
+      const before = await slips(tx, venue);
+      const itemsBefore = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, venue.party.tabId),
+      );
+      expect(itemsBefore).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            stationId: venue.stations.grill,
+            requestedAt: LATER,
+            firedAt: null,
+          }),
+        ]),
+      );
+      vi.setSystemTime(new Date("2026-03-14T12:10:00.000Z"));
+
+      await reprintOrderTickets(tx, venue.cfg, venue.party.tabId);
+
+      const after = await slips(tx, venue);
+      for (const name of ["grill", "pass"]) {
+        const reprinted = after[name]!.slice(before[name]!.length);
+        expect(reprinted).toHaveLength(1);
+        expect(reprinted[0]![0]).toBe("*** REPRINT 13:10 ***");
+        expect(reprinted[0]![1]).toBe("*** HOLD ***");
+        expect(reprinted[0]!.filter((text) => text === "1 x BURG")).toHaveLength(1);
+        expect(reprinted[0]).toContain("13:00");
+        expect(reprinted[0]).not.toContain("13:05");
+      }
+      expect(after.fryer).toEqual(before.fryer);
+      expect(
+        await ticketItemsWithBill(tx).where(
+          eq(workingOrderLines.workingOrderId, venue.party.tabId),
+        ),
+      ).toEqual(itemsBefore);
+    });
+  });
 
   it("taking the chips off a Requested burger tells Grill on its HOLD paper and cancels the chips on Fryer's", async () => {
     const venue = await fresh();

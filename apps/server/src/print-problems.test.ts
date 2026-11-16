@@ -53,6 +53,7 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 
@@ -996,6 +997,37 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       },
     ]);
     expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBe(true);
+  });
+
+  it("keeps a failed HOLD ticket's problem while waiting for the pass until its reprint prints", async () => {
+    const v = await holdingVenue();
+    const table4 = await seated(v, "Table 4");
+    const { groups } = await submit(v, table4.partyId, [
+      { release: "hold", lines: [line(v, "burger")] },
+    ]);
+    const hold = (await jobsAt(v.kitchenPrinterId))[0]!;
+    await setJob(hold.id, exhausted);
+    await inTx((tx) => setStationsWaitForPass(tx, true, [v.kitchenStationId]));
+    await inTx(async (tx) =>
+      fireGroup(tx, v.cfg, table4.partyId, groups[0]!.id, await command(table4.partyId)),
+    );
+
+    expect(await problemsOf(table4.partyId)).toEqual([
+      {
+        workingOrderId: table4.tabId,
+        stationId: v.kitchenStationId,
+        stationName: "Kitchen",
+        since: await createdAtOf(hold.id),
+      },
+    ]);
+    expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(true);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
+    const reprint = (await jobsAt(v.kitchenPrinterId)).at(-1)!;
+    expect(reprint.id).not.toBe(hold.id);
+    expect(await problemsOf(table4.partyId)).toHaveLength(1);
+    await setJob(reprint.id, { status: "done" });
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(false);
   });
 
   it("is reprinted under REPRINT and HOLD on a party with nothing fired, and clears once that prints", async () => {

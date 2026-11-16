@@ -1830,9 +1830,17 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
  */
 async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string[]) {
   return tx
-    .select({ id: ticketItems.id, workingOrderId: workingOrderLines.workingOrderId })
+    .select({
+      id: ticketItems.id,
+      workingOrderId: workingOrderLines.workingOrderId,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+    })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(
       orderGroupHoldStations,
       and(
@@ -2457,7 +2465,7 @@ interface ReprintPart {
 
 /**
  * What a Reprint of each of `orderIds` prints: every fired item across every round, and the held
- * items of each still-held group at the stations that have its HOLD paper, marked HOLD.
+ * items on recorded HOLD paper, including those waiting for the pass, marked HOLD.
  */
 async function readReprintParts(
   tx: Transaction,
@@ -2482,9 +2490,16 @@ async function readReprintParts(
     );
   const onHold = await readOnHoldTickets(tx, orderIds);
   const onPaper = await onHeldPaper(tx, onHold);
-  const held = onHold
-    .filter(onPaper)
-    .map(({ holdPrintedAt, ...item }) => ({ ...item, sentAt: holdPrintedAt }));
+  const heldItems = new Map(
+    [...onHold.filter(onPaper), ...(await readWaitingOnHoldPaper(tx, orderIds))].map((item) => [
+      item.id,
+      item,
+    ]),
+  );
+  const held = [...heldItems.values()].map(({ holdPrintedAt, ...item }) => ({
+    ...item,
+    sentAt: holdPrintedAt,
+  }));
   const byOrder = (
     rows: readonly (Omit<FiredItem, "sentAt"> & {
       workingOrderId: string;
@@ -2644,7 +2659,7 @@ export interface PrintProblem {
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
  * bill and station, on the same printer, queued after it has printed, itself or through a resend
  * ({@link printedOrResent}): only a reprint carries every dish still fired on the bill, and the
- * held dishes of each still-held group at the stations that have its HOLD paper, so a later round's
+ * held dishes on recorded HOLD paper, including those waiting for the pass, so a later round's
  * ticket printing clears nothing, and another printer's paper says nothing of this one's. It is no
  * problem either once a Reprint of the bill would link nothing on that printer to that station, were
  * the printer switched on ({@link readReprintTargets}), as when its dishes there are voided or the

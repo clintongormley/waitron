@@ -1,6 +1,6 @@
 # Held dish reprint implementation plan
 
-**Status:** Claude first read (161 seconds) and one correction read complete; all findings taken. The watcher directed “build A1369 only” at 22:45 on 2026-11-16 in lane H’s `questions.md`; this final corrected plan is submitted for clearance. Sol drafted it; the driver corrected it. No owner design approval is claimed.
+**Status:** Claude first read (161 seconds) and one correction read complete; all findings taken. The watcher directed “build A1369 only” at 22:45 on 2026-11-16 in lane H’s `questions.md`; the watcher cleared this final corrected plan at 22:49 in the same file. Sol drafted it; the driver corrected it. No owner design approval is claimed.
 **Ask:** HELD-DISH-REPRINT in lane H's `queue.md` (watcher 2026-11-16 22:25/22:26), A1369 and Task 6 point 3 in `docs/backlog/kitchen.md`.
 **Finish line:** reprinting a bill includes its requested dishes still waiting for the pass on existing HOLD paper, with the existing HOLD mark and original send time. Fired and ordinary held dishes keep their current output. One PR, no table changes.
 
