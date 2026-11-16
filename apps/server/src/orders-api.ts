@@ -26,6 +26,7 @@ import {
 import { queryFlag, resolveVenueClock } from "./report-api.js";
 import {
   DEFAULT_ORDER_PAGE_SIZE,
+  FILTER_TEXT_MAX,
   ORDER_STATUS_FILTERS,
   listOrderStaff,
   listOrders,
@@ -69,14 +70,12 @@ const run = createErrorBoundary(STATUS, "orders.failed");
 // A reprint names its printer only in the body's `printerId`.
 const runReprint = createErrorBoundary({ ...STATUS, "printer.not_found": 400 }, "orders.failed");
 
-const TEXT_MAX = 100;
-
 const invalid = (field: string) => new AppError("management.request_invalid", { field });
 
 function optionalText(raw: string | undefined, field: string): string | undefined {
   if (raw === undefined) return undefined;
   const trimmed = raw.trim();
-  if (trimmed.length > TEXT_MAX) throw invalid(field);
+  if (trimmed.length > FILTER_TEXT_MAX) throw invalid(field);
   return trimmed === "" ? undefined : trimmed;
 }
 

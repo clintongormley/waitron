@@ -3,13 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## The server holds two separate 100-character limits for text a request sends
-
-`SEARCH_MAX`
-(`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
-Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
-the same limit and, if so, share one constant.
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
