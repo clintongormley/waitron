@@ -54,11 +54,11 @@ const tapAt = (x: number, y: number, id = 1) => {
   up(id, x, y);
 };
 
-function pointerAt(type: string, timeStamp: number, clientX = 10): void {
+function pointerAt(type: string, timeStamp: number, clientX = 10, pointerId = 1): void {
   const event = new PointerEvent(type, {
     bubbles: true,
     composed: true,
-    pointerId: 1,
+    pointerId,
     pointerType: "mouse",
     button: 0,
     clientX,
@@ -204,6 +204,98 @@ describe("Gestures", () => {
     expect(handlers.longPress).toHaveBeenCalledTimes(held ? 1 : 0);
     expect(called(["holdStart", "longPress", "tap"])).toEqual([]);
   });
+
+  it("a 650 ms press released elsewhere before a queued hold timer runs holds where it was pressed", () => {
+    pointerAt("pointerdown", 1000, 10);
+    pointerAt("pointerup", 1650, 30);
+    expect(handlers.holdStart).toHaveBeenCalledTimes(1);
+    expect(handlers.holdStart).toHaveBeenCalledWith({
+      target: b,
+      x: 10,
+      y: 10,
+      pointerType: "mouse",
+    });
+    expect(handlers.longPress).toHaveBeenCalledTimes(1);
+    expect(handlers.longPress).toHaveBeenCalledWith({
+      target: b,
+      x: 30,
+      y: 10,
+      pointerType: "mouse",
+    });
+    vi.runAllTimers();
+    expect(handlers.holdStart).toHaveBeenCalledTimes(1);
+    expect(called(["holdStart", "longPress"])).toEqual([]);
+    expect(gestures.active).toBe(false);
+  });
+
+  it.each([
+    { duration: 499, held: false },
+    { duration: 700, held: true },
+  ])("a $duration ms press that moves before a queued hold timer runs", ({ duration, held }) => {
+    pointerAt("pointerdown", 1000);
+    pointerAt("pointermove", 1000 + duration, 30);
+    if (held) {
+      expect(handlers.holdStart).toHaveBeenCalledTimes(1);
+      expect(handlers.holdStart).toHaveBeenCalledWith({
+        target: b,
+        x: 10,
+        y: 10,
+        pointerType: "mouse",
+      });
+      expect(handlers.holdDrag).toHaveBeenCalledWith({
+        target: b,
+        x: 30,
+        y: 10,
+        pointerType: "mouse",
+        dx: 20,
+        dy: 0,
+      });
+      expect(handlers.pan).not.toHaveBeenCalled();
+    } else {
+      expect(handlers.pan).toHaveBeenCalledWith({ dx: 20, dy: 0 });
+      expect(handlers.holdStart).not.toHaveBeenCalled();
+    }
+    pointerAt("pointerup", 1100 + duration, 30);
+    vi.runAllTimers();
+    expect(handlers.holdStart).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(handlers.holdDrop).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(handlers.pan).toHaveBeenCalledTimes(held ? 0 : 1);
+    expect(called(["holdStart", "holdDrag", "holdDrop", "pan"])).toEqual([]);
+    expect(gestures.active).toBe(false);
+  });
+
+  it.each([
+    { duration: 499, held: false },
+    { duration: 700, held: true },
+  ])(
+    "a second pointer $duration ms into a press, before a queued hold timer runs",
+    ({ duration, held }) => {
+      pointerAt("pointerdown", 1000);
+      pointerAt("pointerdown", 1000 + duration, 110, 2);
+      if (held) {
+        expect(handlers.holdStart).toHaveBeenCalledTimes(1);
+        expect(handlers.holdStart).toHaveBeenCalledWith({
+          target: b,
+          x: 10,
+          y: 10,
+          pointerType: "mouse",
+        });
+        expect(handlers.cancel).toHaveBeenCalledTimes(1);
+        expect(handlers.holdStart.mock.invocationCallOrder[0]).toBeLessThan(
+          handlers.cancel.mock.invocationCallOrder[0]!,
+        );
+      } else {
+        expect(handlers.holdStart).not.toHaveBeenCalled();
+        expect(handlers.cancel).not.toHaveBeenCalled();
+      }
+      pointerAt("pointermove", 1100 + duration, 210, 2);
+      expect(handlers.pinch).toHaveBeenCalledWith({ ratio: 2, x: 110, y: 10, dx: 50, dy: 0 });
+      vi.runAllTimers();
+      expect(handlers.holdStart).toHaveBeenCalledTimes(held ? 1 : 0);
+      expect(handlers.cancel).toHaveBeenCalledTimes(held ? 1 : 0);
+      expect(called(["holdStart", "cancel", "pinch"])).toEqual([]);
+    },
+  );
 
   it.each([false, true])(
     "does not restart a recognized hold at release (dragged: %s)",
