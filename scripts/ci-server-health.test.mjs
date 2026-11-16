@@ -1435,6 +1435,30 @@ describe("scheduled PR planner recovery", () => {
     ).toEqual([1, 2, 1, 2].map((page) => path + suffix + page));
     expect(calls.filter(([, options]) => options?.method)).toEqual([]);
   });
+  it.each(["excess", "changed"])("locates the %s-count refusal", async (kind) => {
+    const f = planner(),
+      reports = [];
+    f.options.request = (path, options) => {
+      if (!path.includes("/jobs?")) return f.request(path, options);
+      const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+      return {
+        total_count: kind === "excess" ? 0 : page === 1 ? 2 : 3,
+        jobs: [{ ...f.job, id: page === 1 ? 124 : 123 }],
+      };
+    };
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    const context =
+      kind === "excess"
+        ? "page=1; read=1; starting_total=0; reply_total=0; rows=1; ids=124; page_ids=124"
+        : "page=2; read=2; starting_total=2; reply_total=3; rows=2; ids=123,124; page_ids=123";
+    expect(reports.join("\n")).toContain(
+      "Incomplete server inventory; path=/repos/fixture/waitron/actions/runs/12/attempts/1/jobs?per_page=30&",
+    );
+    expect(reports.join("\n")).toContain(context);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
   it("reports a malformed count without printing nonnumeric count or id values", async () => {
     const f = planner(),
       reports = [],
@@ -1453,7 +1477,7 @@ describe("scheduled PR planner recovery", () => {
       },
     );
     expect(reports.join("\n")).toContain(
-      "Incomplete server inventory; path=/repos/fixture/waitron/actions/runs/12/attempts/1/jobs?per_page=30&page=1; page=1; read=1; starting_total=invalid; reply_total=invalid; rows=0; ids=; page_ids=",
+      "Incomplete server inventory; path=/repos/fixture/waitron/actions/runs/12/attempts/1/jobs?per_page=30&page=1; page=1; read=1; starting_total=none; reply_total=invalid; rows=0; ids=; page_ids=",
     );
     expect(reports.join("\n")).not.toContain("private-");
     expect(calls.filter(([, options]) => options?.method)).toEqual([]);

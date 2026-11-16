@@ -24,7 +24,7 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
           : "invalid";
       return new InventoryUnavailable(
         `${message}; path=${requestPath}; page=${page}; read=${reread ? 1 : 2}; ` +
-          `starting_total=${Number.isSafeInteger(total) ? total : "invalid"}; ` +
+          `starting_total=${total ?? "none"}; ` +
           `reply_total=${Number.isSafeInteger(answer.total_count) ? answer.total_count : "invalid"}; ` +
           `rows=${entries.length}; ids=${ids(entries)}; page_ids=${ids(answer[key])}`,
       );
