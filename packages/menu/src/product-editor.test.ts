@@ -1111,11 +1111,19 @@ describe("optional product customer translations", () => {
   it("keeps canonical disabled translations supplied when creating a product and a variant", async () => {
     const saved = await save(null, {
       ...input,
-      customerName: { fr: "FR coffee" },
-      variants: [{ ...input.variants[0]!, customerName: { fr: "FR small coffee" } }],
+      customerName: { fr: "FR coffee", "es-ES": "Regional coffee" },
+      variants: [
+        {
+          ...input.variants[0]!,
+          customerName: { fr: "FR small coffee", "es-ES": "Regional small coffee" },
+        },
+      ],
     });
-    expect(saved.customerName).toEqual({ fr: "FR coffee" });
-    expect(saved.variants[0]!.customerName).toEqual({ fr: "FR small coffee" });
+    expect(saved.customerName).toEqual({ fr: "FR coffee", "es-ES": "Regional coffee" });
+    expect(saved.variants[0]!.customerName).toEqual({
+      fr: "FR small coffee",
+      "es-ES": "Regional small coffee",
+    });
   });
 
   it.each([null, {}, { en: "Coffee changed" }])(
@@ -1182,7 +1190,7 @@ describe("optional product customer translations", () => {
     expect((await read(saved.id)).customerName).toEqual({ en: "Coffee", es: "ES coffee" });
   });
 
-  it.each([{ ES: "ES coffee" }, { "es-ES": "ES coffee" }, { en: "é".repeat(2048) + "a" }])(
+  it.each([{ ES: "ES coffee" }, { "es-es": "ES coffee" }, { en: "é".repeat(2048) + "a" }])(
     "refuses noncanonical or oversized customer text: %j",
     async (customerName) => {
       await expect(save(null, { ...input, customerName, variants: [] })).rejects.toMatchObject({

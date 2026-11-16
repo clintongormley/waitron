@@ -29,7 +29,7 @@ it("keeps required enabled languages while freely choosing a default", async () 
 it.each([
   { defaultLanguage: "en", languages: [] },
   { defaultLanguage: "en", languages: ["es"] },
-  { defaultLanguage: "en", languages: ["en", "en-GB"] },
+  { defaultLanguage: "en", languages: ["en", "en-US", "en-us"] },
   {
     defaultLanguage: contentLanguageChoices("en")[0]!.code,
     languages: contentLanguageChoices("en")

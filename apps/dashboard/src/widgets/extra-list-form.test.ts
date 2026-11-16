@@ -1113,7 +1113,7 @@ it("falls every blank language back to the default language's name on the closed
   });
 });
 
-it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back as stored when another field changes", async () => {
+it("keeps disabled regional names out of the main fields and preserves them when another field changes", async () => {
   const stored = { "en-GB": "Make it yours", "es-ES": "Añádele algo" };
   const { el, host } = await mount({ value: { ...addons, customerName: stored } });
   const submitted = record(host);
@@ -1122,13 +1122,13 @@ it("reads customer-facing names stored under regional codes into the fields, the
     ["en", "es"].map(
       (locale) => field<HTMLElementTagNameMap["wt-input"]>(el, `customer-name-${locale}`).value,
     ),
-  ).toEqual(["Make it yours", "Añádele algo"]);
+  ).toEqual(["", ""]);
   expect(namesShown(el)).toEqual({
     line: [
-      { label: "EN", value: "Make it yours" },
-      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "ES", value: "Add-ons", placeholder: true },
     ],
-    hints: ["", ""],
+    hints: ["Add-ons", "Add-ons"],
   });
   expectSaveQuiet(el);
   await type(el, "kitchen-name", "XTR");
@@ -1136,19 +1136,19 @@ it("reads customer-facing names stored under regional codes into the fields, the
   expect(submitted[0]!.customerName).toEqual(stored);
 });
 
-it("falls a blank language back to a default-language name stored under a regional code", async () => {
+it("ignores a regional-only name when the main and default names are blank", async () => {
   const { el } = await mount({ value: { ...addons, customerName: { "en-GB": "Make it yours" } } });
 
   expect(namesShown(el)).toEqual({
     line: [
-      { label: "EN", value: "Make it yours" },
-      { label: "ES", value: "Make it yours", placeholder: true },
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "ES", value: "Add-ons", placeholder: true },
     ],
-    hints: ["", "Make it yours"],
+    hints: ["Add-ons", "Add-ons"],
   });
 });
 
-it("saves an edited name under its language's plain code, dropping that language's regional key", async () => {
+it("saves an edited main name while keeping its separately stored regional names", async () => {
   const { el, host } = await mount({
     value: { ...addons, customerName: { "en-GB": "Make it yours", "es-ES": "Añádele algo" } },
   });
@@ -1156,7 +1156,11 @@ it("saves an edited name under its language's plain code, dropping that language
 
   await type(el, "customer-name-en", "Your way");
   await click(el, "save");
-  expect(submitted[0]!.customerName).toEqual({ en: "Your way", "es-ES": "Añádele algo" });
+  expect(submitted[0]!.customerName).toEqual({
+    en: "Your way",
+    "en-GB": "Make it yours",
+    "es-ES": "Añádele algo",
+  });
 });
 
 it("never falls a blank default language back to another language's name on the closed line", async () => {

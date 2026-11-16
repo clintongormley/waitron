@@ -20,8 +20,9 @@ it("uses the site default rather than the first stored translation", () => {
   expect(localizedName({ en: "Bread", es: "Pan" })).toBe("Pan");
 });
 
-it("resolves a FULL invoice-locale-tag map (the receipt/invoice path, es-ES)", () => {
+it("resolves an explicitly enabled regional content map", () => {
   setLocale("es-ES");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en", "es-ES", "en-GB"] });
   // "en-GB" first, so a lookup falling back to the first value would return the wrong name.
   expect(localizedName({ "en-GB": "Latte", "es-ES": "Café con leche" })).toBe("Café con leche");
 });
@@ -32,8 +33,9 @@ it("resolves a SHORT language-subtag map (the catalogue path, es)", () => {
   expect(localizedName({ en: "Coffee", es: "Café" })).toBe("Café");
 });
 
-it("prefers the FULL tag over the short subtag when both are present", () => {
+it("prefers an enabled region over its main language when both have names", () => {
   setLocale("es-ES");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en", "es-ES"] });
   expect(localizedName({ "es-ES": "Café con leche", es: "Café" })).toBe("Café con leche");
 });
 

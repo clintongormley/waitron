@@ -516,42 +516,42 @@ it("falls every blank language back to the default language's name in the visibl
   });
 });
 
-it("shows regional-code customer names in the fields and saves them back as stored when another field changes", async () => {
+it("keeps disabled regional names out of the main fields and preserves them when another field changes", async () => {
   const stored = { "en-GB": "How would you like it?", "es-ES": "¿En qué punto?" };
   const { el, host } = await mount({ value: { ...cooked, customerName: stored } });
   const submitted = record(host);
 
   expect(["en", "es"].map((locale) => field(el, `customer-name-${locale}`).value)).toEqual([
-    "How would you like it?",
-    "¿En qué punto?",
+    "",
+    "",
   ]);
   expect(namesShown(el)).toEqual({
     line: [
-      { label: "EN", value: "How would you like it?" },
-      { label: "ES", value: "¿En qué punto?" },
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "ES", value: "Cooked", placeholder: true },
     ],
-    hints: ["", ""],
+    hints: ["Cooked", "Cooked"],
   });
   await type(el, "kitchen-name", "CK");
   await click(el, "save");
   expect(submitted[0]!.customerName).toEqual(stored);
 });
 
-it("falls a blank language back to a default-language name stored under a regional code", async () => {
+it("ignores a regional-only name when the main and default names are blank", async () => {
   const { el } = await mount({
     value: { ...cooked, customerName: { "en-GB": "How would you like it?" } },
   });
 
   expect(namesShown(el)).toEqual({
     line: [
-      { label: "EN", value: "How would you like it?" },
-      { label: "ES", value: "How would you like it?", placeholder: true },
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "ES", value: "Cooked", placeholder: true },
     ],
-    hints: ["", "How would you like it?"],
+    hints: ["Cooked", "Cooked"],
   });
 });
 
-it("saves an edited name under its language's plain code, dropping that language's regional key", async () => {
+it("saves an edited main name while keeping its separately stored regional names", async () => {
   const { el, host } = await mount({
     value: {
       ...cooked,
@@ -562,7 +562,11 @@ it("saves an edited name under its language's plain code, dropping that language
 
   await type(el, "customer-name-en", "How done?");
   await click(el, "save");
-  expect(submitted[0]!.customerName).toEqual({ en: "How done?", "es-ES": "¿En qué punto?" });
+  expect(submitted[0]!.customerName).toEqual({
+    en: "How done?",
+    "en-GB": "How would you like it?",
+    "es-ES": "¿En qué punto?",
+  });
 });
 
 it("never falls a blank default language back to another language's name in the visible fields", async () => {
