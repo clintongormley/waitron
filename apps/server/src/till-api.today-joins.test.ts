@@ -12,14 +12,32 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { diningTables, tableMerges, partyTables, workingOrders, todayColumns } from "@waitron/db";
+import { floorLabelSuffix } from "./testing/floor-label.js";
+import {
+  diningTables,
+  tableMerges,
+  partyTables,
+  partyTableLabels,
+  workingOrders,
+  todayColumns,
+  todaySet,
+} from "@waitron/db";
+import { kitchenNotices } from "@waitron/venue-service";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
+import { withMovedSlips } from "./moved-slips.js";
 import { partyRevision } from "./parties.js";
-import { inTx, setupPartyVenue, tableRow, type PartyVenue } from "./testing/party-venue.js";
+import {
+  inTx,
+  order,
+  seat as seatParty,
+  setupPartyVenue,
+  tableRow,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import {
   mergeOf,
   plannedZone,
@@ -1006,5 +1024,82 @@ describe("a party change that changes a room answers its revision", () => {
       billIds: [await onlyBill(split.partyId)],
       zoneRevisions: { [zoneId]: read + 1 },
     });
+  });
+});
+
+describe("a group's other tables join a party in number order", () => {
+  /**
+   * Three tables in one free group, labelled so that neither id order nor plain text order is
+   * number order: the lowest id is Counter 10, then Counter 4, then Counter 3. Table x stands apart
+   * in the same room.
+   */
+  async function counterGroup() {
+    const { a, b, c, x } = await tables(
+      { key: "a", x: 0 },
+      { key: "b", x: 20 },
+      { key: "c", x: 40 },
+      { key: "x", x: 80 },
+    );
+    await freeMerge(c!, b!);
+    await freeMerge(a!, b!);
+    const suffix = floorLabelSuffix();
+    const [low, mid, high] = [a!, b!, c!].sort();
+    const label = {
+      c10: `Counter 10 ${suffix}`,
+      c4: `Counter 4 ${suffix}`,
+      c3: `Counter 3 ${suffix}`,
+    };
+    await inTx(v, async (tx) => {
+      await tx.update(diningTables).set({ label: label.c10 }).where(eq(diningTables.id, low!));
+      await tx.update(diningTables).set({ label: label.c4 }).where(eq(diningTables.id, mid!));
+      await tx.update(diningTables).set({ label: label.c3 }).where(eq(diningTables.id, high!));
+    });
+    return { c10: low!, c4: mid!, c3: high!, x: x!, label };
+  }
+
+  const labelsOf = (partyId: string) =>
+    inTx(v, async (tx) => (await partyTableLabels(tx, [partyId])).get(partyId));
+
+  it("a party seated at one table of the group holds it first, then the others by number", async () => {
+    const { c3, label } = await counterGroup();
+
+    const p = await seat(c3);
+
+    expect(await labelsOf(p)).toEqual([label.c3, label.c4, label.c10]);
+  });
+
+  it("a party joining one table of the group takes the others after it, by number", async () => {
+    const { c4, x, label } = await counterGroup();
+    const p = await seat(x);
+
+    await ok(
+      join(p, { tableId: c4, expectedPartyRevision: await revision(p), otherPartyId: null }),
+    );
+
+    expect((await labelsOf(p))!.slice(1)).toEqual([label.c4, label.c3, label.c10]);
+  });
+
+  it("a MOVED notice names a party seated at the group's tables by number", async () => {
+    const { c3, label } = await counterGroup();
+    const { partyId, tabId } = await seatParty(v, c3);
+    await order(v, tabId, "Burger");
+    const window = `Window ${floorLabelSuffix()}`;
+
+    await inTx(v, (tx) =>
+      withMovedSlips(tx, v.cfg, { parties: [partyId] }, async () => {
+        await tx
+          .update(diningTables)
+          .set(todaySet({ name: window }))
+          .where(eq(diningTables.id, c3));
+      }),
+    );
+
+    const notices = await inTx(v, (tx) =>
+      tx
+        .select({ movedTo: kitchenNotices.movedTo })
+        .from(kitchenNotices)
+        .where(and(eq(kitchenNotices.workingOrderId, tabId), eq(kitchenNotices.kind, "moved"))),
+    );
+    expect(notices).toEqual([{ movedTo: [window, label.c4, label.c10].join(", ") }]);
   });
 });
