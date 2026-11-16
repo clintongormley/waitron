@@ -1075,16 +1075,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **Tap to pay restore** (bundle of 1, size M, needs the owner). [Detail](backlog/payments.md#bundle-tap-to-pay-restore)
 
-- **A user guide for the till's payment sheet** (left open by A796). No guide under
-  `apps/server/src/guide/` covers it.
-
-
-- **A796 does not hold a bill across phones while a payment is out.** The hold is the phone's own:
-  "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses
-  Wi-Fi mid-payment", and default 7). The server is unchanged, so another phone can start a
-  payment on the same bill meanwhile.
-
-
 - **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
   built.** Start by reading what the SumUp Solo actually does on a signature-required card,
   because if the reader owns the whole step there may be nothing for us to build.

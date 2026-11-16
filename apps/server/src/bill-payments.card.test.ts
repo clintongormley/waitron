@@ -973,6 +973,43 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     expect((await paymentRows(venue, billId)).map((row) => row.method)).toEqual(["card"]);
   });
 
+  it("refuses another phone's stale Whole bill while a card reserves part of it", async () => {
+    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
+    const request = { kind: "share", shareOf: 1, method: "card", entry: "reader" } as const;
+    const seen = await send(
+      venue.app,
+      venue.cookie2,
+      "POST",
+      `/api/working-orders/${billId}/payments/preview`,
+      request,
+    );
+    expect(seen.json).toMatchObject({ applied: "70.00", tip: "0.00" });
+    const card = await heldCard(billId, "30.00");
+    const calls = venue.card.collectCalls.length;
+    try {
+      const refused = await pay(
+        billId,
+        { ...request, applied: "70.00", tip: "0.00" },
+        { cookie: venue.cookie2 },
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.json).toMatchObject({
+        code: "bill.allocation_changed",
+        params: { preview: { kind: "allocated", applied: "40.00", tip: "0.00" } },
+      });
+      expect(venue.card.collectCalls.length).toBe(calls);
+      expect(await paymentRows(venue, billId)).toMatchObject([{ state: "pending", applied: 3000 }]);
+    } finally {
+      card.release();
+      await card.answer;
+    }
+    expect((await balance(billId)).json).toMatchObject({
+      received: "30.00",
+      reserved: "0.00",
+      outstanding: "40.00",
+    });
+  });
+
   it.each([
     ["the €30.00 card captured first", 0],
     ["the €40.00 card captured first", 1],
