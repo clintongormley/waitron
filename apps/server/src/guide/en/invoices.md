@@ -37,7 +37,6 @@ An inspector can have their own sign-in when the box's email is set up
   invitation; see [Account access](staff.md#account-access).
 - They sign in at the venue or, with [remote access](servers.md#remote-access) on, through
   Waitron Cloud.
+- They can choose **Download** beside the dates to save a month's invoices, each as a copy, with
+  a spreadsheet of them.
 - When the visit ends, disable their account in **Users**.
-
-The inspector can also choose **Download** beside the dates to save a month's invoices, each as
-its copy, with a spreadsheet of them.

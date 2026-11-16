@@ -168,7 +168,8 @@ export class TaxOfficeScreen extends LitElement {
   /** An Open that failed; kept apart from a read's message so neither clears the other. */
   @state() private actionError = "";
   @state() private opening: ReadonlySet<string> = new Set();
-  @state() private downloadingMonth = false;
+  /** The `YYYY-MM` being downloaded: the month pressed, which a later Issued from change does not move. */
+  @state() private downloadingMonth: string | null = null;
   #read = 0;
   /** The filter of the read last sent, so the address change this screen writes does not send it twice. */
   #requested?: string;
@@ -338,8 +339,8 @@ export class TaxOfficeScreen extends LitElement {
 
   async #downloadMonth(): Promise<void> {
     const month = this.#month();
-    if (month === null || this.downloadingMonth) return;
-    this.downloadingMonth = true;
+    if (month === null || this.downloadingMonth !== null) return;
+    this.downloadingMonth = month;
     this.actionError = "";
     try {
       const file = await this.api.downloadTaxOfficeMonth(month);
@@ -352,33 +353,33 @@ export class TaxOfficeScreen extends LitElement {
     } catch (error) {
       this.actionError = codeMessage(codeOf(error));
     } finally {
-      this.downloadingMonth = false;
+      this.downloadingMonth = null;
     }
   }
 
   #monthAction() {
-    const month = this.#month();
-    const name =
-      month === null
-        ? ""
-        : new Intl.DateTimeFormat(currentLocale(), {
-            month: "long",
-            year: "numeric",
-            timeZone: "UTC",
-          }).format(new Date(`${month}-01T00:00:00Z`));
+    const busy = this.downloadingMonth;
+    const month = busy ?? this.#month();
+    const label = (key: StringKey, yearMonth: string) =>
+      fill(key, {
+        month: new Intl.DateTimeFormat(currentLocale(), {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(`${yearMonth}-01T00:00:00Z`)),
+      });
     return html`<wt-button
       data-test="download-month"
       variant=${month === null ? "secondary" : "primary"}
       ?disabled=${month === null}
-      ?loading=${this.downloadingMonth}
+      ?loading=${busy !== null}
       @click=${() => void this.#downloadMonth()}
       >${
-        month === null
-          ? t("tax_office.download_no_month")
-          : fill(
-              this.downloadingMonth ? "tax_office.downloading_month" : "tax_office.download_month",
-              { month: name },
-            )
+        busy !== null
+          ? label("tax_office.downloading_month", busy)
+          : month === null
+            ? t("tax_office.download_no_month")
+            : label("tax_office.download_month", month)
       }</wt-button
     >`;
   }
