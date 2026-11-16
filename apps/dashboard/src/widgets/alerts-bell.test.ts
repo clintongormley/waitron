@@ -86,7 +86,7 @@ describe("dashboard-alerts-bell", () => {
     });
     const item = qa(el, "li")[0]!.textContent!.replace(/\s+/g, " ");
     expect(item).toContain(
-      "Translations ready: 1050 suggestions are waiting for review. 88 couldn't be done this time.",
+      "Translations ready: 1,050 suggestions are waiting for review. 88 couldn't be done this time.",
     );
     expect(item).toContain("Notice · Translations");
     expect(item).not.toContain("content.suggestions_ready_partly");

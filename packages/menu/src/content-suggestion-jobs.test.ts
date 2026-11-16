@@ -500,10 +500,17 @@ it("a job ended after some pages counts what it never received as failed", async
   expect(await app(readSuggestionRun)).toMatchObject({ state: "expired", failed: 2 });
 });
 
-it("a job ended before any page keeps its counts", async () => {
-  await seedSuggestionVenue(suite.db);
-  const job = await runningJob(suite.db);
-  await app((tx) => recordSuggestionJobProgress(tx, job.id, { done: 1, failed: 1 }));
-  await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
-  expect((await app(allJobs))[0]).toMatchObject({ done: 1, failed: 1, failedRefs: [] });
-});
+it.each(["submitting", "running"] as const)(
+  "a %s job ended before any page counts all sent items as lost",
+  async (state) => {
+    const venue = await seedSuggestionVenue(suite.db);
+    const job = await (state === "running" ? runningJob : startedJob)(suite.db);
+    await app((tx) => recordSuggestionJobProgress(tx, job.id, { done: 1, failed: 1 }));
+    await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
+    expect((await app(allJobs))[0]).toMatchObject({
+      done: 0,
+      failed: 3,
+      failedRefs: [ref(venue.bread), ref(venue.wine), ref(venue.cheese)].sort(),
+    });
+  },
+);

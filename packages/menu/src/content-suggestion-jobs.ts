@@ -139,8 +139,7 @@ export async function recordSuggestionJobEnded(
   const nothingToRelease =
     state === "expired" || failure === "not_connected" || failure === "rejected";
   const [job] = await tx.select().from(jobs).where(eq(jobs.id, jobId));
-  // A job with no item accounted for yet keeps the counts of its last status reading.
-  const counts = job && job.collectedRefs.length > 0 ? lostCounted(job) : {};
+  const counts = job ? lostCounted(job) : {};
   await tx
     .update(jobs)
     .set({
