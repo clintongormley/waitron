@@ -1850,7 +1850,6 @@ export class ProductEditor extends LitElement {
   private renderModifiers() {
     const unit = this.units.find((candidate) => candidate.id === this.draft.unitId);
     const noExtras =
-      this.draft.unitId !== null &&
       unit !== undefined &&
       !takesExtras({
         hardwareUnit: unit.hardwareUnit ?? null,

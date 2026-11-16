@@ -64,7 +64,9 @@ describe("unit operations", () => {
       ),
     );
     expect(made).toHaveProperty("hardwareUnit", null);
-    await run((tx) => tx.run(sql`update units set hardware_unit = 'g' where id = ${made.id}`));
+    await run(async (tx) =>
+      tx.run(sql`update units set hardware_unit = 'g' where id = ${made.id}`),
+    );
     const off = await run((tx) => updateUnit(tx, made.id, { measure: false }, "en"));
     const { measure: _measure, ...unmeasured } = made;
     expect(off).toEqual({ ...unmeasured, hardwareUnit: "g" });
