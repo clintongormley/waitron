@@ -243,6 +243,7 @@ export class WtColourChooser extends LitElement {
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
     const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
+    const columnsBefore = group.dataset.columns;
     // Set here, not through render(): the line count below reads this layout at once.
     group.dataset.columns = "4";
     if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
@@ -254,6 +255,9 @@ export class WtColourChooser extends LitElement {
     const maxLeft = Math.max(0, innerWidth - popup.getBoundingClientRect().width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     popup.style.top = `${placement.top}px`;
+    // A change of columns moves every tile, so the kept scroll position can hide the chosen one.
+    if (group.dataset.columns !== columnsBefore)
+      this.tabStop()?.scrollIntoView({ block: "nearest" });
   }
 
   private readonly onWindowResize = (): void => this.positionPopup();

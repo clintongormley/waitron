@@ -1225,10 +1225,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing
   keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
 
-- **Modifiers' Status and Printers' Agent/Printer Status filters still receive column lists built
-  during render** (A370 caller audit, code reading only). Their redraw work was not measured in this
-  item. Next: measure it before deciding whether to retain those lists. Left open by A370 (#1393).
-
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -1300,8 +1296,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A700. A failed Opening hours read also hides the Calendar's other views.**
   [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
-
-- **Colour chooser placement** (bundle of 1, size S). [Detail](backlog/workforce.md#bundle-colour-chooser-placement)
 
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
   that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.

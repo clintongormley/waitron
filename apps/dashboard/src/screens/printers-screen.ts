@@ -43,7 +43,7 @@ import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
@@ -177,6 +177,12 @@ type DetailEditErrors = Record<keyof DetailEditValues, string>;
 
 /** One row of the printers table: a receipt printer or an A4 printer, stored apart. */
 type PrinterTableRow = { kind: "receipt"; printer: Printer } | { kind: "a4"; row: PagePrinterRow };
+
+type PrinterFilterOptions = NonNullable<DataTableColumn<PrinterTableRow>["filter"]>["options"];
+
+function printerRowId(r: PrinterTableRow): string {
+  return r.kind === "receipt" ? r.printer.id : r.row.id;
+}
 
 function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
@@ -2684,8 +2690,20 @@ export class PrintersScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #renderAgentsSection(): TemplateResult {
-    const columns: DataTableColumn<PrintAgentRow>[] = [
+  #agentColumnLocale = "";
+  #agentColumnList: DataTableColumn<PrintAgentRow>[] = [];
+
+  #agentColumns(): DataTableColumn<PrintAgentRow>[] {
+    const locale = currentLocale();
+    if (locale !== this.#agentColumnLocale) {
+      this.#agentColumnLocale = locale;
+      this.#agentColumnList = this.#buildAgentColumns();
+    }
+    return this.#agentColumnList;
+  }
+
+  #buildAgentColumns(): DataTableColumn<PrintAgentRow>[] {
+    return [
       {
         key: "name",
         label: t("printers.name"),
@@ -2729,6 +2747,9 @@ export class PrintersScreen extends LitElement {
         cell: (a) => this.#agentActions(a),
       },
     ];
+  }
+
+  #renderAgentsSection(): TemplateResult {
     return html`<section>
       ${this.#unreadTable(
         this.agents.every((agent) => !agent.active) && this.#queries.failing("listAgents"),
@@ -2757,7 +2778,7 @@ export class PrintersScreen extends LitElement {
             filtersCloseLabel=${t("table.filters_close")}
             aria-label=${t("printers.agents_title")}
             .rows=${this.agents.filter((agent) => agent.active)}
-            .columns=${columns}
+            .columns=${this.#agentColumns()}
             .rowKey=${(a: PrintAgentRow) => a.id}
             .loading=${this.loading}
             .loadingMessage=${t("printers.table_loading")}
@@ -3781,34 +3802,35 @@ export class PrintersScreen extends LitElement {
     </div>`;
   }
 
-  #renderPrintersSection(): TemplateResult {
-    const seen = new Map(this.printers.map((p) => [p.id, this.#printerObservation(p)]));
-    const pages = this.#testPages;
-    const rows: PrinterTableRow[] = [
-      ...this.printers.map((printer) => ({ kind: "receipt" as const, printer })),
-      ...this.pagePrinters.map((row) => ({ kind: "a4" as const, row })),
-    ];
-    const idOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.id : r.row.id);
-    const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
-    const paperOf = (r: PrinterTableRow) =>
-      r.kind === "receipt" ? r.printer.paperWidth : r.row.media;
-    // The agent filter chooses by agent id, or by one of these codes where no agent is named, so a
-    // saved choice survives a language change and two agents sharing a name stay two choices.
-    const agentOf = (r: PrinterTableRow): { id: string; name: string } => {
-      if (r.kind === "a4")
-        return r.row.agentId !== null && r.row.agentName !== null
-          ? { id: r.row.agentId, name: r.row.agentName }
-          : { id: "gone", name: t("printers.invoice_printer_agent_gone") };
-      if (r.printer.transport === "cloud_poll") return { id: "cloud", name: "—" };
-      const observed = seen.get(r.printer.id);
-      return observed !== undefined && observed.agentName !== null
-        ? { id: observed.agentId, name: observed.agentName }
-        : { id: "unknown", name: t("printers.agent_unknown") };
-    };
-    const agentNameOf = (r: PrinterTableRow) => agentOf(r).name;
+  /** Who last saw each receipt printer, as of the latest draw; the kept columns' cells read it. */
+  #seenPrinters = new Map<
+    string,
+    Pick<DiscoveredPrinter, "agentId" | "agentName" | "lastSeenAt"> | undefined
+  >();
+  #printerColumnKey = "";
+  #printerColumnList: DataTableColumn<PrinterTableRow>[] = [];
+
+  // The agent filter chooses by agent id, or by one of these codes where no agent is named, so a
+  // saved choice survives a language change and two agents sharing a name stay two choices.
+  #printerAgentOf(r: PrinterTableRow): { id: string; name: string } {
+    if (r.kind === "a4")
+      return r.row.agentId !== null && r.row.agentName !== null
+        ? { id: r.row.agentId, name: r.row.agentName }
+        : { id: "gone", name: t("printers.invoice_printer_agent_gone") };
+    if (r.printer.transport === "cloud_poll") return { id: "cloud", name: "—" };
+    const observed = this.#seenPrinters.get(r.printer.id);
+    return observed !== undefined && observed.agentName !== null
+      ? { id: observed.agentId, name: observed.agentName }
+      : { id: "unknown", name: t("printers.agent_unknown") };
+  }
+
+  #printerAgentOptions(rows: PrinterTableRow[]): PrinterFilterOptions {
+    // Until the printers agents have seen are read, those printers count as "unknown"; no
+    // options keeps a saved agent choice waiting rather than letting the table drop it.
+    if (this.loading) return [];
     const agentChoices = new Map<string, string>();
     for (const row of rows) {
-      const agent = agentOf(row);
+      const agent = this.#printerAgentOf(row);
       if (!agentChoices.has(agent.id)) agentChoices.set(agent.id, agent.name);
     }
     const agentFallbacks = ["gone", "unknown", "cloud"];
@@ -3819,7 +3841,31 @@ export class PrintersScreen extends LitElement {
         ? `${name} (${host})`
         : name;
     };
-    const columns: DataTableColumn<PrinterTableRow>[] = [
+    return [
+      ...agentLabels.map(([value, name]) => ({ value, label: agentLabel(value, name) })),
+      ...agentFallbacks
+        .filter((id) => agentChoices.has(id))
+        .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
+    ];
+  }
+
+  #printerColumns(rows: PrinterTableRow[]): DataTableColumn<PrinterTableRow>[] {
+    const agentOptions = this.#printerAgentOptions(rows);
+    const key = JSON.stringify([currentLocale(), agentOptions]);
+    if (key !== this.#printerColumnKey) {
+      this.#printerColumnKey = key;
+      this.#printerColumnList = this.#buildPrinterColumns(agentOptions);
+    }
+    return this.#printerColumnList;
+  }
+
+  #buildPrinterColumns(agentOptions: PrinterFilterOptions): DataTableColumn<PrinterTableRow>[] {
+    const idOf = printerRowId;
+    const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
+    const paperOf = (r: PrinterTableRow) =>
+      r.kind === "receipt" ? r.printer.paperWidth : r.row.media;
+    const agentNameOf = (r: PrinterTableRow) => this.#printerAgentOf(r).name;
+    return [
       {
         key: "name",
         label: t("printers.name"),
@@ -3833,7 +3879,7 @@ export class PrintersScreen extends LitElement {
               @click=${(event: Event) =>
                 this.#showPrinterStatus(idOf(r), event.currentTarget as HTMLElement)}
               >${nameOf(r)}</wt-button
-            >${r.kind === "a4" ? pages.noteFor(r.row) : r.printer.active ? nothing : html`<div part="printer-meta" data-test=${`printer-add-again-${r.printer.id}`}>${t("printers.add_again_hint")}</div>`}`,
+            >${r.kind === "a4" ? this.#testPages.noteFor(r.row) : r.printer.active ? nothing : html`<div part="printer-meta" data-test=${`printer-add-again-${r.printer.id}`}>${t("printers.add_again_hint")}</div>`}`,
       },
       {
         key: "paper",
@@ -3878,17 +3924,8 @@ export class PrintersScreen extends LitElement {
           multiple: {
             countLabel: (count) => fill("printers.filter_agent_count", { count: String(count) }),
           },
-          value: (r) => agentOf(r).id,
-          // Until the printers agents have seen are read, those printers count as "unknown"; no
-          // options keeps a saved agent choice waiting rather than letting the table drop it.
-          options: this.loading
-            ? []
-            : [
-                ...agentLabels.map(([value, name]) => ({ value, label: agentLabel(value, name) })),
-                ...agentFallbacks
-                  .filter((id) => agentChoices.has(id))
-                  .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
-              ],
+          value: (r) => this.#printerAgentOf(r).id,
+          options: agentOptions,
         },
         cell: (r) => {
           if (r.kind === "a4")
@@ -3897,7 +3934,7 @@ export class PrintersScreen extends LitElement {
             >`;
           const p = r.printer;
           return html`<span data-test=${`printer-agent-${p.id}`}> ${agentNameOf(r)} </span
-            >${this.#seenStatus(p.id, seen.get(p.id))}`;
+            >${this.#seenStatus(p.id, this.#seenPrinters.get(p.id))}`;
         },
       },
       {
@@ -3946,6 +3983,15 @@ export class PrintersScreen extends LitElement {
               : nothing,
       },
     ];
+  }
+
+  #renderPrintersSection(): TemplateResult {
+    this.#seenPrinters = new Map(this.printers.map((p) => [p.id, this.#printerObservation(p)]));
+    const pages = this.#testPages;
+    const rows: PrinterTableRow[] = [
+      ...this.printers.map((printer) => ({ kind: "receipt" as const, printer })),
+      ...this.pagePrinters.map((row) => ({ kind: "a4" as const, row })),
+    ];
     return html`<section>
       ${this.#unreadTable(
         rows.length === 0 &&
@@ -3975,8 +4021,8 @@ export class PrintersScreen extends LitElement {
             filtersCloseLabel=${t("table.filters_close")}
             aria-label=${t("printers.list_title")}
             .rows=${rows}
-            .columns=${columns}
-            .rowKey=${(r: PrinterTableRow) => `${r.kind}:${idOf(r)}`}
+            .columns=${this.#printerColumns(rows)}
+            .rowKey=${(r: PrinterTableRow) => `${r.kind}:${printerRowId(r)}`}
             .loading=${this.loading}
             .loadingMessage=${t("printers.table_loading")}
             .emptyMessage=${t("printers.no_printers")}
@@ -4093,15 +4139,32 @@ export class PrintersScreen extends LitElement {
     void this.#scan();
   }
 
-  #renderJobsSection(): TemplateResult {
-    const printerNameOf = (j: PrintJobRow) =>
-      this.printers.find((p) => p.id === j.printerId)?.name ?? j.printerName;
-    const jobPrinters = new Map(this.jobs.map((j) => [j.printerId, printerNameOf(j)]));
-    const columns: DataTableColumn<PrintJobRow>[] = [
+  #jobColumnKey = "";
+  #jobColumnList: DataTableColumn<PrintJobRow>[] = [];
+
+  #jobPrinterName(j: PrintJobRow): string {
+    return this.printers.find((p) => p.id === j.printerId)?.name ?? j.printerName;
+  }
+
+  #jobColumns(): DataTableColumn<PrintJobRow>[] {
+    const jobPrinters = new Map(this.jobs.map((j) => [j.printerId, this.#jobPrinterName(j)]));
+    const printerOptions = [...jobPrinters].map(([value, label]) => ({ value, label }));
+    const key = JSON.stringify([currentLocale(), printerOptions]);
+    if (key !== this.#jobColumnKey) {
+      this.#jobColumnKey = key;
+      this.#jobColumnList = this.#buildJobColumns(printerOptions);
+    }
+    return this.#jobColumnList;
+  }
+
+  #buildJobColumns(
+    printerOptions: { value: string; label: string }[],
+  ): DataTableColumn<PrintJobRow>[] {
+    return [
       {
         key: "printer",
         label: t("printers.job_printer"),
-        searchValue: printerNameOf,
+        searchValue: (j) => this.#jobPrinterName(j),
         filter: {
           label: t("printers.job_printer"),
           allLabel: t("printers.filter_printer_all"),
@@ -4109,7 +4172,7 @@ export class PrintersScreen extends LitElement {
             countLabel: (count) => fill("printers.filter_printer_count", { count: String(count) }),
           },
           value: (j) => j.printerId,
-          options: [...jobPrinters].map(([value, label]) => ({ value, label })),
+          options: printerOptions,
         },
         cell: (j) => {
           const printer = this.printers.find((p) => p.id === j.printerId);
@@ -4200,6 +4263,9 @@ export class PrintersScreen extends LitElement {
           </div>`,
       },
     ];
+  }
+
+  #renderJobsSection(): TemplateResult {
     return html`<section>
       ${this.#unreadTable(
         this.jobs.length === 0 && this.#queries.failing("listRecentJobs"),
@@ -4229,7 +4295,7 @@ export class PrintersScreen extends LitElement {
               filtersCloseLabel=${t("table.filters_close")}
               aria-label=${t("printers.jobs_title")}
               .rows=${this.jobs}
-              .columns=${columns}
+              .columns=${this.#jobColumns()}
               .rowKey=${(j: PrintJobRow) => j.id}
               .loading=${this.loading}
               .loadingMessage=${t("printers.table_loading")}
