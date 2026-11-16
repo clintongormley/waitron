@@ -95,6 +95,7 @@ it("examines 100 stored rows then the remaining one without repeating ids", asyn
   expect(first.next).toBe([...stored].sort((a, b) => a.id.localeCompare(b.id))[99]!.id);
   const second = await list({ after: first.next!, configuration: first.configuration });
   expect(second.suggestions).toHaveLength(1);
+  expect(Object.hasOwn(second, "run")).toBe(false);
   expect(second.next).toBeNull();
   expect([...first.suggestions, ...second.suggestions].map((view) => view.id).sort()).toEqual(
     stored.map((row) => row.id).sort(),

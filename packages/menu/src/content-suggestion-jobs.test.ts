@@ -1,3 +1,4 @@
+import { contentLanguageChoices } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
@@ -77,6 +78,26 @@ it("starts a run as one submitting job holding the body and what it sent", async
     [ref(venue.bread), ref(venue.wine), ref(venue.cheese)].sort(),
   );
   expect((await app(readActiveSuggestionJob))?.id).toBe(jobs[0]!.id);
+});
+
+it.each([20, 21])("starts only within the 20-language limit: %i", async (count) => {
+  await seedSuggestionVenue(suite.db);
+  const languages = [
+    "en",
+    ...contentLanguageChoices("en")
+      .map(({ code }) => code)
+      .filter((code) => code !== "en"),
+  ].slice(0, count);
+  await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages }));
+  if (count === 21) {
+    await expect(app((tx) => startSuggestionRun(tx, context))).rejects.toMatchObject({
+      code: "content.suggestion_languages_limit",
+      params: { limit: 20 },
+    });
+    expect(await app(allJobs)).toEqual([]);
+  } else {
+    expect(await app((tx) => startSuggestionRun(tx, context))).toMatchObject({ state: "sending" });
+  }
 });
 
 it("a new job has no collect position and nothing accounted for", async () => {
@@ -500,10 +521,17 @@ it("a job ended after some pages counts what it never received as failed", async
   expect(await app(readSuggestionRun)).toMatchObject({ state: "expired", failed: 2 });
 });
 
-it("a job ended before any page keeps its counts", async () => {
-  await seedSuggestionVenue(suite.db);
-  const job = await runningJob(suite.db);
-  await app((tx) => recordSuggestionJobProgress(tx, job.id, { done: 1, failed: 1 }));
-  await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
-  expect((await app(allJobs))[0]).toMatchObject({ done: 1, failed: 1, failedRefs: [] });
-});
+it.each(["submitting", "running"] as const)(
+  "a %s job ended before any page counts all sent items as lost",
+  async (state) => {
+    const venue = await seedSuggestionVenue(suite.db);
+    const job = await (state === "running" ? runningJob : startedJob)(suite.db);
+    await app((tx) => recordSuggestionJobProgress(tx, job.id, { done: 1, failed: 1 }));
+    await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
+    expect((await app(allJobs))[0]).toMatchObject({
+      done: 0,
+      failed: 3,
+      failedRefs: [ref(venue.bread), ref(venue.wine), ref(venue.cheese)].sort(),
+    });
+  },
+);

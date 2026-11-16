@@ -69,6 +69,27 @@ describe("a word-list placeholder", () => {
   });
 });
 
+describe("a count placeholder", () => {
+  it.each([
+    ["en-GB", "1,050"],
+    ["es-ES", "1.050"],
+  ])("groups counts in %s without changing an order identifier", (locale, grouped) => {
+    expect(
+      alertWords(
+        { en: "{count:count} suggestions; order {order}", es: "{count:count} ES; order {order}" },
+        { count: 1050, order: 1050 },
+        locale,
+      ),
+    ).toBe(`${grouped} ${locale === "en-GB" ? "suggestions" : "ES"}; order 1050`);
+  });
+
+  it("keeps a text value unchanged and shows a missing count as a dash", () => {
+    const words = { en: "{count:count}", es: "{count:count}" };
+    expect(alertWords(words, { count: "1050" }, "en-GB")).toBe("1050");
+    expect(alertWords(words, {}, "en-GB")).toBe("—");
+  });
+});
+
 describe("a money placeholder", () => {
   it("writes a decimal amount as euros, where the alert's language writes the sign", () => {
     const params = { amount: "1279.50", expected: "9", count: "2.50" };

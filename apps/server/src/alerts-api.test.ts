@@ -42,6 +42,7 @@ import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
   awaitingCertAlertSource,
+  contentSuggestionsAlertSource,
   backupAlertSource,
   batteryAlertSource,
   firstStartAlertSource,
@@ -883,4 +884,24 @@ describe("ongoing alert sources through the route", () => {
     expect((await get(app, "/management-api/alerts", v.manager)).status).toBe(200);
     expect(Date.parse((await expiryOf()).expiresAt)).toBeGreaterThan(Date.parse(before));
   });
+});
+
+it("the translation notice source releases the sale write queue before reading", async () => {
+  const v = await seedVenueWithStaff();
+  const held = heldClockStatus();
+  const source = contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] });
+  const read = source.read;
+  source.read = async (context) => {
+    await held.status();
+    return read(context);
+  };
+  const registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] });
+  const response = get(appFor(registry), "/management-api/alerts", v.manager);
+  try {
+    await expectWriteRunsWhileHostHeld(db, held, clockServiceAnswer(false));
+  } finally {
+    const result = await response;
+    expect(result.status).toBe(200);
+    expect((await result.json()).alerts).toEqual([]);
+  }
 });

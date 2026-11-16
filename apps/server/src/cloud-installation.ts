@@ -373,6 +373,14 @@ export function installationClient(
       const needsRenew = leaseExpiry(c.lease) <= Date.now() + 600000;
       await prepare(needsRenew ? "renew" : "configuration");
       await exchange(signal);
+      if (
+        needsRenew &&
+        !c.revoked &&
+        !c.view?.services.some((s) => s.service === "content_translation")
+      ) {
+        await prepare("configuration");
+        await exchange(signal);
+      }
     },
     async ensureLease(signal?: AbortSignal) {
       if (c.pending) await exchange(signal);

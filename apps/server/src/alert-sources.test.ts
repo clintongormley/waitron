@@ -1,18 +1,31 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { contentSuggestionJobs, contentSuggestions, markSuggestionRunOpened } from "@waitron/menu";
+import {
+  contentSuggestionJobs,
+  contentSuggestions,
+  markSuggestionRunOpened,
+  recordSuggestionJobEnded,
+  resolveTranslationCells,
+  writeContentLanguages,
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   printAgents,
   printJobs,
   printers,
+  products,
   kitchenStations,
   type Database,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  seedTaxpayer,
+  seedVenue,
+  seedVenueSettings,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
@@ -1690,17 +1703,35 @@ async function seedSuggestionJob(
   return id;
 }
 
-/** `count` suggestions with text, which are what the notice counts, and one placeholder, which is not. */
+/** Live missing names with matching baselines, plus one placeholder. */
 async function seedWaiting(jobId: string, count: number): Promise<void> {
-  for (let i = 0; i < count; i++)
-    await suite.db.insert(contentSuggestions).values({
-      jobId,
-      kind: "product",
-      itemId: `p${i}`,
-      language: "en",
-      text: `CLIENT-en ${i}`,
-      expected: `token-${i}`,
-    });
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] });
+    for (let i = 0; i < count; i++) {
+      await tx.insert(products).values({
+        id: `p${i}`,
+        name: `STAFF ${i}`,
+        kitchenName: `KITCHEN ${i}`,
+        unitPrice: 300,
+        vatClass: "reduced",
+      });
+      const { cells } = await resolveTranslationCells(
+        tx,
+        [{ kind: "product", id: `p${i}`, language: "en", field: "name" }],
+        { fallbackLanguage: "en", required: [] },
+      );
+      await tx.insert(contentSuggestions).values({
+        jobId,
+        kind: "product",
+        itemId: `p${i}`,
+        language: "en",
+        text: `CLIENT-en ${i}`,
+        expected: cells[0]!.expected,
+      });
+    }
+  });
   await suite.db.insert(contentSuggestions).values({
     jobId,
     kind: "product",
@@ -1713,15 +1744,17 @@ async function seedWaiting(jobId: string, count: number): Promise<void> {
 }
 
 function readNotice() {
-  return withTransaction(suite.db, (tx) => contentSuggestionsAlertSource().read({ tx, now: NOW }));
+  return withTransaction(suite.db, (tx) =>
+    contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] }).read({ tx, now: NOW }),
+  );
 }
 
 describe("contentSuggestionsAlertSource", () => {
   it("belongs to the content area and needs menu.manage", () => {
-    const source = contentSuggestionsAlertSource();
+    const source = contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] });
     expect(source.area).toBe("content");
     expect(source.permission).toBe("menu.manage");
-    expect(source.readOutsideTransaction).toBeUndefined();
+    expect(source.readOutsideTransaction).toBe(true);
   });
 
   it("raises nothing before any run", async () => {
@@ -1825,11 +1858,10 @@ describe("contentSuggestionsAlertSource", () => {
     const runId = randomUUID();
     const sent = { "product:p0": ["en"], "product:p1": ["en"], "product:p2": ["en"] };
     const first = await seedSuggestionJob({ runId, sent, runTotal: 6, total: 3, done: 3 });
-    await seedSuggestionJob({
+    const second = await seedSuggestionJob({
       runId,
       position: 2,
-      state: "failed",
-      failure: "provider",
+      state: "running",
       sent: { "product:p3": ["en"], "product:p4": ["en"], "product:p5": ["en"] },
       runTotal: null,
       total: 0,
@@ -1837,11 +1869,20 @@ describe("contentSuggestionsAlertSource", () => {
       finishedAt: "2026-09-15T11:40:00.000Z",
     });
     await seedWaiting(first, 3);
+    await withTransaction(suite.db, (tx) =>
+      recordSuggestionJobEnded(
+        tx,
+        second,
+        "failed",
+        "provider",
+        new Date("2026-09-15T11:40:00.000Z"),
+      ),
+    );
     expect(await readNotice()).toEqual([
       {
         key: "content.suggestions_ready",
-        code: "content.suggestions_ready",
-        params: { count: 3, failed: 0 },
+        code: "content.suggestions_ready_partly",
+        params: { count: 3, failed: 3 },
         severity: "notice",
         since: "2026-09-15T11:40:00.000Z",
         screen: "content-languages",
@@ -1921,4 +1962,31 @@ describe("contentSuggestionsAlertSource", () => {
     await withTransaction(suite.db, (tx) => markSuggestionRunOpened(tx));
     expect(await readNotice()).toEqual([]);
   });
+});
+
+it("counts the offered name in a mixed notice and drops it when none remain", async () => {
+  await seedWaiting(await seedSuggestionJob(), 3);
+  await suite.db.update(products).set({ active: false }).where(eq(products.id, "p0"));
+  await suite.db
+    .update(products)
+    .set({ customerName: { en: "CLIENT Saved" } })
+    .where(eq(products.id, "p1"));
+  expect(await readNotice()).toEqual([
+    {
+      key: "content.suggestions_ready",
+      code: "content.suggestions_ready",
+      params: { count: 1, failed: 0 },
+      severity: "notice",
+      since: FINISHED,
+      screen: "content-languages",
+    },
+  ]);
+  expect(
+    await contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] }).read({
+      tx: suite.db,
+      now: NOW,
+    }),
+  ).toEqual(await readNotice());
+  await suite.db.update(products).set({ active: false }).where(eq(products.id, "p2"));
+  expect(await readNotice()).toEqual([]);
 });

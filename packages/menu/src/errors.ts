@@ -47,6 +47,7 @@ declare module "@waitron/shared" {
     "content.suggestion_consent_required": Record<string, never>;
     /** Cloud refused the job at the venue's spending cap; `fits` is how many items would fit. */
     "content.suggestion_limit_reached": { fits: number };
+    "content.suggestion_languages_limit": { limit: number };
     /** Cloud accepted the job but the translation provider failed for all of it. */
     "content.suggestion_service_unavailable": Record<string, never>;
     /** Cloud no longer holds the job's results, or holds no such job for this installation. */

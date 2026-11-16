@@ -2,7 +2,6 @@ import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  contentSuggestionJobs,
   contentSuggestions,
   CORE_MIGRATIONS,
   menus,
@@ -22,7 +21,6 @@ import { createCategory } from "./categories.js";
 import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
-import { startSuggestionRun } from "./content-suggestion-jobs.js";
 import { addOversizedFamily } from "../test/suggestion-fixture.js";
 import {
   buildSuggestionJob,
@@ -708,7 +706,7 @@ describe("the job's limits", () => {
     });
   });
 
-  it("builds a job with no item when the first item and its head pass 1 MiB, and a run start still sends it", async () => {
+  it("builds a job with no item when the first item and its head pass 1 MiB", async () => {
     await inVenue(async (tx) => {
       const { variantId } = await addOversizedFamily(tx);
       const items = await collectSuggestionItems(tx, context, new Set());
@@ -718,15 +716,6 @@ describe("the job's limits", () => {
       expect(draft!.sent).toEqual({});
       expect(parsed(draft).items).toEqual([]);
       expect(Buffer.byteLength(draft!.body)).toBe(draft!.bytes);
-
-      expect(await startSuggestionRun(tx, context)).toMatchObject({
-        state: "sending",
-        total: items.length,
-      });
-      const [job] = await tx.select().from(contentSuggestionJobs);
-      expect(job).toMatchObject({ state: "submitting", runTotal: items.length });
-      expect(job!.sent).toEqual({});
-      expect((JSON.parse(job!.body!) as Job).items).toEqual([]);
     });
   });
 

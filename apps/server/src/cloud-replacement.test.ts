@@ -473,7 +473,7 @@ it("resumes a replacement that was never stopped after the connection file is de
   await replacement.resume();
   expect((await connection.status()).registration).toEqual(registration);
   await connection.refresh();
-  expect(sent()).toEqual(["renew"]);
+  expect(sent()).toEqual(["renew", "configuration"]);
   expect((await connection.status()).installation?.state).toBe("active");
 });
 

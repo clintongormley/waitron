@@ -3318,7 +3318,12 @@ export class DashboardApi {
   }
 
   discardContentSuggestion(id: string): Promise<{ deleted: string }> {
-    return this.#request(`/management-api/content-suggestions/${encodeURIComponent(id)}`, "DELETE");
+    return this.#request(
+      `/management-api/content-suggestions/${encodeURIComponent(id)}`,
+      "DELETE",
+      undefined,
+      { timeLimitMs: 30_000 },
+    );
   }
 
   saveContentTranslations(batch: TranslationBatch): Promise<{ saved: TranslationCell[] }> {

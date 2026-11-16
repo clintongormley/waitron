@@ -3,7 +3,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { contentSuggestions, optionLabels, optionLists, products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
+import {
+  resolveTranslationTargets,
+  readTranslationSettings,
+} from "./content-translation-targets.js";
 import type { TranslationCellEdit } from "./content-translation-types.js";
 type TranslationBatch = { edits: TranslationCellEdit[] };
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -12,6 +15,7 @@ import { BATCH_SIZE } from "./batches.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
 import { recordSuggestionJobReleased, startSuggestionRun } from "./content-suggestion-jobs.js";
 import {
+  countOfferedSuggestions,
   discardContentSuggestion,
   listContentSuggestions,
   storeSuggestionPage,
@@ -525,4 +529,80 @@ it("carries the current staff name and parent editor for notes outside the trans
     name: "STAFF Rare",
     parent: { id: ids.list, name: "STAFF Doneness" },
   });
+});
+
+it("counts only offered names, including surviving earlier-run text", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    storeSuggestionPage(
+      tx,
+      job.id,
+      {
+        state: "done",
+        cursor: 0,
+        nextCursor: null,
+        failed: [],
+        results: [result(ref(venue.bread), { es: "CLIENT Bread" })],
+      },
+      context,
+    ),
+  );
+  const ids = await app((tx) => addPlainProducts(tx, venue.menuId, 7));
+  const cells = (
+    await app((tx) =>
+      resolveTranslationCells(
+        tx,
+        ids.map((id) => ({ kind: "product", id, language: "en", field: "name" })),
+        context,
+      ),
+    )
+  ).cells;
+  await app(async (tx) => {
+    await tx.update(contentSuggestions).set({ jobId: null });
+    await tx.insert(contentSuggestions).values(
+      cells.map((cell, index) => ({
+        kind: "product" as const,
+        itemId: cell.id,
+        language: "en",
+        text: index === 6 ? "   " : "CLIENT Name",
+        expected: index === 0 ? "{}" : cell.expected,
+        placeholder: index === 4,
+        ...(index === 5 ? { fixField: "en", fixWrong: "Old", fixRight: "New" } : {}),
+      })),
+    );
+    await tx.update(products).set({ active: false }).where(eq(products.id, ids[1]!));
+    await tx.delete(products).where(eq(products.id, ids[2]!));
+    await tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT Default", en: "CLIENT Filled" } })
+      .where(eq(products.id, ids[3]!));
+    await tx.insert(contentSuggestions).values({
+      kind: "product",
+      itemId: venue.cheese,
+      language: "fr",
+      text: "CLIENT Disabled",
+      expected: "{}",
+    });
+  });
+  expect((await page()).run).toMatchObject({ waiting: 1 });
+  await app((tx) =>
+    tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT Default", es: "CLIENT Filled" } })
+      .where(eq(products.id, venue.bread)),
+  );
+  expect((await page()).run).toMatchObject({ waiting: 0 });
+});
+
+it("serves queued event-loop work before an offered count completes", async () => {
+  await storedVenue();
+  const settings = await app((tx) => readTranslationSettings(tx, context));
+  let served = false;
+  const pending = countOfferedSuggestions(suite.db, settings);
+  setImmediate(() => {
+    served = true;
+  });
+  expect(await pending).toBe(6);
+  expect(served).toBe(true);
 });

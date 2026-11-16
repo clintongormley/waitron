@@ -148,7 +148,6 @@ const UNMARKED_SLOTS: readonly string[] = [
   "device",
   "dishes",
   "externalRef",
-  "failed",
   "hostEnvironment",
   "hours",
   "invoice",
@@ -326,6 +325,7 @@ it("names only registered word lists in its word-list slots, variants and words 
               m[1] !== "bytes" &&
               m[1] !== "minute" &&
               m[1] !== "duration" &&
+              m[1] !== "count" &&
               !Object.hasOwn(ALERT_WORDS, m[1]!),
           )
           .map((m) => `${code}: ${m[0]}`),
@@ -580,16 +580,20 @@ it("says the first and last day the deleted backups were taken when they span se
 
 it("says how many Translate all suggestions wait, and how many could not be done", () => {
   expect(alertMessage("content.suggestions_ready", { count: 1050, failed: 0 }, "en")).toBe(
-    "Translations ready: 1050 suggestions are waiting for review.",
+    "Translations ready: 1,050 suggestions are waiting for review.",
   );
   expect(alertMessage("content.suggestions_ready", { count: 1050, failed: 0 }, "es")).toBe(
-    "Traducciones listas: 1050 sugerencias pendientes de revisar.",
+    "Traducciones listas: 1.050 sugerencias pendientes de revisar.",
   );
-  expect(alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 88 }, "en")).toBe(
-    "Translations ready: 1050 suggestions are waiting for review. 88 couldn't be done this time.",
+  expect(
+    alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 1088 }, "en"),
+  ).toBe(
+    "Translations ready: 1,050 suggestions are waiting for review. 1,088 couldn't be done this time.",
   );
-  expect(alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 88 }, "es")).toBe(
-    "Traducciones listas: 1050 sugerencias pendientes de revisar. 88 no se han podido hacer esta vez.",
+  expect(
+    alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 1088 }, "es"),
+  ).toBe(
+    "Traducciones listas: 1.050 sugerencias pendientes de revisar. 1.088 no se han podido hacer esta vez.",
   );
 });
 

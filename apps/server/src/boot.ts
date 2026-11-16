@@ -3851,6 +3851,7 @@ async function bootServer(
   correction.addAnchor(clockWatch);
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
   const paymentsEnabled = enabledAtStart.some((module) => module.name === "payments");
+  const translationContext = translationContextFor({ venueLocale, contentLanguageRules });
   const serverAlertSources: AlertSource[] = [
     jobFailingAlertSource({ views: () => jobRunner.views(), now }),
     clockSyncAlertSource({
@@ -3877,7 +3878,7 @@ async function bootServer(
     ),
     clockUnconfirmedAlertSource(startClockWaits),
     printingAlertSource(),
-    contentSuggestionsAlertSource(),
+    contentSuggestionsAlertSource(translationContext),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
       stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
@@ -4117,7 +4118,6 @@ async function bootServer(
     },
     log,
   );
-  const translationContext = translationContextFor({ venueLocale, contentLanguageRules });
   const suggestionRunner = cloudConnection
     ? createContentSuggestionRunner({
         db,

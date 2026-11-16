@@ -513,12 +513,12 @@ export const ALERT_MESSAGES: Readonly<
   },
   "reader.offline": { en: "“{reader}” is offline.", es: "«{reader}» está sin conexión." },
   "content.suggestions_ready": {
-    en: "Translations ready: {count} suggestions are waiting for review.",
-    es: "Traducciones listas: {count} sugerencias pendientes de revisar.",
+    en: "Translations ready: {count:count} suggestions are waiting for review.",
+    es: "Traducciones listas: {count:count} sugerencias pendientes de revisar.",
   },
   "content.suggestions_ready_partly": {
-    en: "Translations ready: {count} suggestions are waiting for review. {failed} couldn't be done this time.",
-    es: "Traducciones listas: {count} sugerencias pendientes de revisar. {failed} no se han podido hacer esta vez.",
+    en: "Translations ready: {count:count} suggestions are waiting for review. {failed:count} couldn't be done this time.",
+    es: "Traducciones listas: {count:count} sugerencias pendientes de revisar. {failed:count} no se han podido hacer esta vez.",
   },
 };
 

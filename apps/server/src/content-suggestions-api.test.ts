@@ -19,7 +19,7 @@ import {
   type TranslationItemPage,
 } from "@waitron/menu";
 import { eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, contentLanguageChoices } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
 import { mountMenuApi } from "./menu-api.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
@@ -504,4 +504,24 @@ it("uses the staff origin for a remote suggestion run and refuses another origin
   expect((await sendRemote("https://attacker.test")).status).toBe(403);
   expect((await sendRemote("https://staff.example.test")).status).toBe(200);
   expect(await inTx((tx) => readActiveSuggestionJob(tx))).toMatchObject({ state: "submitting" });
+});
+
+it("refuses 21 content languages locally without waking the runner", async () => {
+  await inTx((tx) =>
+    writeContentLanguages(tx, {
+      defaultLanguage: "en",
+      languages: [
+        "en",
+        ...contentLanguageChoices("en")
+          .map(({ code }) => code)
+          .filter((code) => code !== "en"),
+      ].slice(0, 21),
+    }),
+  );
+  const response = await send(mount(), "POST", JOBS, { body: "{}" });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "content.suggestion_languages_limit", params: { limit: 20 } },
+  });
+  expect(wake).not.toHaveBeenCalled();
 });

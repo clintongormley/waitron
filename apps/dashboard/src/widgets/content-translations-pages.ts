@@ -84,7 +84,9 @@ function updatedPage(
 export class TranslationPages {
   drafts: TranslationDrafts;
   page: TranslationItemPage | null = null;
-  suggestions: ContentSuggestionRead | null = null;
+  suggestions:
+    (ContentSuggestionRead & { run: NonNullable<ContentSuggestionRead["run"]> | null }) | null =
+    null;
   readError: unknown = null;
   suggestionError: unknown = null;
   #config: ContentLanguages;
@@ -380,7 +382,10 @@ export class TranslationPages {
         this.page = updatedPage(this.page, refreshed.cells);
       }
       this.#suggestionAfter = after;
-      this.suggestions = page;
+      this.suggestions = {
+        ...page,
+        run: page.run === undefined ? (this.suggestions?.run ?? null) : page.run,
+      };
       this.suggestionError = null;
       this.drafts.suggest(page.suggestions);
     } catch (error) {

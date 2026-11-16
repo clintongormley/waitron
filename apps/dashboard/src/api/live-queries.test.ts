@@ -169,6 +169,8 @@ it.each([
   ["listAlerts", [], "incidents"],
   ["listAlerts", [], "content_suggestion_jobs"],
   ["listAlerts", [], "content_suggestions"],
+  ["listAlerts", [], "products"],
+  ["listAlerts", [], "settings.venue"],
   ["getContentSuggestions", [], "content_suggestions"],
   ["getContentSuggestions", [], "content_suggestion_jobs"],
   ["getContentTranslationGaps", [], "menus"],
@@ -299,6 +301,17 @@ it("refreshes the open alerts passively and when incidents change", async () => 
     { type: "incidents" },
     { type: "content_suggestion_jobs" },
     { type: "content_suggestions" },
+    ...[
+      "settings.venue",
+      "products",
+      "option_lists",
+      "option_labels",
+      "extra_lists",
+      "sections",
+      "section_members",
+      "menus",
+      "units",
+    ].map((type) => ({ type })),
   ]);
   expect(query.refreshMs).toBe(60_000);
   await query.read();

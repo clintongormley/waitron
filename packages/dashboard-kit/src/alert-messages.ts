@@ -5,7 +5,8 @@ import { GENERIC_ALERT } from "./strings.js";
 
 export { formatBytes };
 
-/** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
+/** `{name}` is filled with the param as it is; `{name:count}` groups a number in the alert's language;
+ * `{name:money}` writes a decimal-string param as
  * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
  * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
  * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
@@ -102,6 +103,11 @@ function fillSlots(
     /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
     (_match, name: string, kind: string | undefined) => {
       const value = Object.hasOwn(params, name) ? params[name] : undefined;
+      if (kind === "count") {
+        return typeof value === "number"
+          ? new Intl.NumberFormat(l, { useGrouping: true }).format(value)
+          : formatParam(value);
+      }
       if (kind === "money") {
         return typeof value === "string" && DECIMAL.test(value)
           ? formatMoney(value, l)

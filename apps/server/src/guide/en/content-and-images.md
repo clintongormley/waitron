@@ -92,8 +92,8 @@ staging the correction in this editor. An out-of-date fix cannot replace your ow
 correction to a staff name takes you to its existing editor. Use **All names** to find corrections
 on items that have no missing translations. When Translate all stops, even part-way through,
 the alerts bell tells you how many suggestions are waiting for review. The
-Cloud request limit remains 20 languages; this editor does not split a
-larger language set into smaller requests.
+box asks you to reduce your enabled content languages before starting Translate all if you
+have more than 20. Choose **Delete** in a language's menu to remove it from the enabled list.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.
