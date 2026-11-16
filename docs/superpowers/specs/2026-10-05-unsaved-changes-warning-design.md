@@ -16,6 +16,8 @@ Capture a detached baseline once per editor identity. A background read must not
 
 > **2026-10-15, A713 and A717:** the till's Guests, Split a table and party name windows deliberately follow a value stored on another till while they are open: the baseline moves to it, and an untouched field moves with it.
 
+> **2026-11-16, A730:** the floor's Rename window follows a name stored on another till the same way.
+
 Read-only views, unchanged or reverted forms, successful saves and existing automatic saves are exempt. Search, report and preview controls that do not author a staged write are exempt. Explicitly submitted credential and payment-input forms receive the same protection before submission, but W69 never adds a confirmation to the submission itself. Acknowledgements in safety confirmations remain those confirmations, without another discard question.
 
 ## One shared mechanism, with owners supplying the meaning

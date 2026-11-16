@@ -252,6 +252,7 @@ interface RenameShown {
   table: TableState;
   heading: string;
   normalName: string;
+  savedValue: string;
 }
 
 interface Renaming {
@@ -1962,6 +1963,7 @@ export class TillFloorScreen extends LitElement {
       table,
       heading: t("floor.rename_title").replace("{table}", () => name),
       normalName: members === null ? table.label : normalGroupName(members),
+      savedValue: (members === null ? table.today?.name : table.today?.joinName) ?? "",
     };
   }
 
@@ -1972,6 +1974,7 @@ export class TillFloorScreen extends LitElement {
     return html`<till-today-name-dialog
       .heading=${shown.heading}
       .value=${renaming.value}
+      .savedValue=${shown.savedValue}
       .normalName=${shown.normalName}
       .busy=${renaming.sent !== null}
       .refusal=${renaming.refusal}

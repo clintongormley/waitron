@@ -795,12 +795,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   floor join that needs seats asks for them before its first request and sends once.
   [Detail](backlog/till.md#a666-a-floor-join-that-moves-tables-together-is-sent-once-without-seats)
 
-- **A730 — The floor's Rename window may keep comparing against the name it opened with after the
-  name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**
-  **Next action:** probe it in real Chromium; if Save compares against the old name, follow the
-  stored name as `party-name-dialog.ts` does.
-  [Detail](backlog/till.md#a730-the-floors-rename-window-may-keep-comparing-against-the-name-it-opened-with)
-
 - **A559. The till's full-invoice dialog changes width when an error appears.** Left open by A231q.
   [Detail](backlog/till.md#a559-the-tills-full-invoice-dialog-changes-width-when-an-error-appears)
 

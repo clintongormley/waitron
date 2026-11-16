@@ -29,6 +29,8 @@ export interface TodayNameRefusal {
   field?: string;
 }
 
+const sameName = (a: string, b: string): boolean => a.trim() === b.trim();
+
 @customElement("till-today-name-dialog")
 export class TillTodayNameDialog extends LitElement {
   static override styles = [
@@ -47,6 +49,8 @@ export class TillTodayNameDialog extends LitElement {
   @property() heading = "";
   /** Today's name, empty when the table or group has none. */
   @property() value = "";
+  /** Today's name as last stored, when the holder follows it while the window is open. */
+  @property({ attribute: false }) savedValue: string | undefined;
   /** What the table or group is called with no name of its own today. */
   @property() normalName = "";
   @property({ type: Boolean }) busy = false;
@@ -59,6 +63,7 @@ export class TillTodayNameDialog extends LitElement {
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   #baseline?: string;
+  #storedChanged = false;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
@@ -68,20 +73,37 @@ export class TillTodayNameDialog extends LitElement {
     this.requestUpdate();
   }
 
-  override willUpdate(changed: PropertyValues): void {
+  override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.refusalDismissed = false;
-    if (!this.isConnected || !this.active || this.#scope) return;
-    this.#baseline ??= this.value;
+    if (changed.has("savedValue")) this.#storedChanged = true;
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (this.#storedChanged) this.#followStored();
+  }
+
+  #track(): void {
+    this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => a.trim() === b.trim(),
+      equal: sameName,
       restore: (value) => (this.value = value),
     });
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+  }
+
+  /** A name stored elsewhere while the window is open becomes what Save compares against, and
+   * replaces the field only while the field still reads the previous stored name. */
+  #followStored(): void {
+    this.#storedChanged = false;
+    const stored = this.savedValue;
+    if (stored === undefined || sameName(stored, this.#baseline!)) return;
+    if (sameName(this.value, this.#baseline!)) this.value = stored;
+    this.#baseline = stored;
+    this.#scope!.commit(stored);
   }
 
   override disconnectedCallback(): void {
