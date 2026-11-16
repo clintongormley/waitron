@@ -1396,3 +1396,30 @@ it("keeps a clicked station row anchored while its date heading is above a phone
   await userEvent.keyboard("{Escape}");
   expect(focused()).toBe(heading);
 });
+
+it.each([
+  "/manage/opening-hours/view/week/station/s1/week/2026-12-09",
+  "/manage/opening-hours/view/week/week/2026-12-09?station=s1",
+])("Year drops a station filter from %s", async (address) => {
+  const { el } = await mount(address);
+  const pushed = pushedPaths();
+  await userEvent.click(yearLink(el, 2026));
+  await expect.poll(() => yearView(el)?.model).toBeDefined();
+  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+  expect(location.search).toBe("");
+  expect(pushed().at(-1)).toBe("/manage/opening-hours/view/year/year/2026");
+  history.back();
+  await expect.poll(() => week(el)?.model).toBeDefined();
+  history.forward();
+  await expect.poll(() => yearView(el)?.model).toBeDefined();
+  yearView(el)!.dispatchEvent(
+    new CustomEvent("year-month-open", {
+      detail: { date: "2026-12-01" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => monthView(el)?.model).toBeDefined();
+  expect(monthView(el)!.station).toBeUndefined();
+  expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+});

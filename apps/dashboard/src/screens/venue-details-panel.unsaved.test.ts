@@ -18,9 +18,11 @@ class VenueDetailsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   addressProvider?: AddressLookupProvider;
+  readOnly = false;
   override render() {
     return html`<dashboard-venue-details-panel
         .api=${this.api}
+        .readOnly=${this.readOnly}
         .addressProvider=${this.addressProvider}
       ></dashboard-venue-details-panel>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
@@ -383,3 +385,26 @@ it.each(["succeeds", "is refused"] as const)(
     ).toBe(false);
   },
 );
+
+it("drops an edited draft when the panel becomes read-only and reopens cleanly", async () => {
+  const { app, panel, writes } = await mount();
+  await change(panel, "addressLine1", "Discard this street");
+  expect(unload()).toBe(true);
+  app.readOnly = true;
+  app.requestUpdate();
+  await app.updateComplete;
+  await panel.updateComplete;
+  expect(unload()).toBe(false);
+  expect(await leave(app)).toBe("proceeded");
+  expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(writes).toEqual([]);
+  app.readOnly = false;
+  app.requestUpdate();
+  await app.updateComplete;
+  await panel.updateComplete;
+  expect(panel.shadowRoot!.querySelector("[data-test=edit]")).not.toBeNull();
+  click(panel, "edit");
+  await panel.updateComplete;
+  expect(field(panel, "addressLine1").value).toBe("Calle Mayor 1");
+  expect(unload()).toBe(false);
+});

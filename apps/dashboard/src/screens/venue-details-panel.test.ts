@@ -9,7 +9,7 @@ import {
   reattachAfterDetachedUpdate,
 } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, VenueDetailsModel, VenueDetailWrite } from "../api/client.js";
 import "./venue-details-panel.js";
 
@@ -124,7 +124,8 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
   expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
-  expect(q(el, "[data-test=locked-notes]")?.textContent?.split("setup")).toHaveLength(2);
+  for (const name of ["province", "postalCode"])
+    expect(q(el, `[data-test=reason-${name}]`)?.textContent?.split("setup")).toHaveLength(2);
   expect(field(el, "venueName").required).toBe(true);
   expect(q(el, "wt-help-tooltip")).toBeNull();
 });
@@ -247,7 +248,7 @@ it("a first sale updates locks without discarding the proposed clock value", asy
   r.set(locked);
   await r.notify(el, "sales");
   expect(field(el, "timeZone").value).toBe("UTC");
-  expect(q(el, "[data-test=locked-notes]")?.textContent).toContain("sales");
+  expect(q(el, "[data-test=reason-timeZone]")?.textContent).toContain("sales");
   await click(el, "[data-test=acknowledge]");
   await click(el, "[data-test=save]");
   expect(r.api.patchVenueDetails).toHaveBeenCalledWith({
@@ -650,7 +651,7 @@ it.each([
 it.each([
   ["en-GB", "Locked: the venue has recorded sales.", "recorded sales"],
   ["es", "Bloqueado: el local tiene ventas registradas.", "ventas registradas"],
-])("says the sales lock once, at the card's foot (%s)", async (locale, sentence, stem) => {
+])("says the sales lock once beneath each affected field (%s)", async (locale, sentence, stem) => {
   setLocale(locale);
   const r = rig();
   const el = await editing(r.api);
@@ -662,10 +663,12 @@ it.each([
     locked.policy[key] = { decision: "refuse", reasons: ["sales"] };
   r.set(locked);
   await r.notify(el, "sales");
-  const all = el.shadowRoot!.textContent ?? "";
-  expect(count(all, stem)).toBe(1);
-  const notes = [...el.shadowRoot!.querySelectorAll("[data-test=locked-notes] > p")].map(text);
-  expect(notes.filter((note) => note === sentence)).toHaveLength(1);
+  for (const name of ["city", "timeZone"]) {
+    const note = q(el, `[data-test=reason-${name}]`)!;
+    expect(count(text(note), stem)).toBe(1);
+    expect(text(note)).toBe(sentence);
+  }
+  expect(q(el, "[data-test=reason-dayCutover]")).toBeNull();
 });
 
 it("puts a sales-lock refusal from the server beside its field in words that read on their own", async () => {
@@ -789,7 +792,7 @@ it("paints the open Venue card's action row in the card's colour inside the page
   );
 });
 
-it("says the lock and the address note once at the foot of an unchanged form, and marks the locked time zone", async () => {
+it("keeps the address note at the foot and the lock reason beneath the time zone", async () => {
   setLocale("en-GB");
   const locked = venueDetailsFixture();
   locked.hasSales = true;
@@ -797,7 +800,9 @@ it("says the lock and the address note once at the foot of an unchanged form, an
   const el = await editing(rig(locked).api);
   const foot = q(el, "[data-test=form-foot]")!;
   expect(foot.nextElementSibling?.localName).toBe("wt-form-actions");
-  expect(count(text(foot), "Locked: the venue has recorded sales.")).toBe(1);
+  expect(
+    count(text(q(el, "[data-test=reason-timeZone]")), "Locked: the venue has recorded sales."),
+  ).toBe(1);
   expect(count(text(foot), "copies of earlier sales")).toBe(1);
   expect(count(el.shadowRoot!.textContent ?? "", "copies of earlier sales")).toBe(1);
   expect(text(q(el, "[data-test=locked-timeZone]"))).toBe("Europe/Madrid · locked");
@@ -1104,4 +1109,44 @@ it("a save's answer arriving after a newer Retry read never replaces what Retry 
   await flush(el);
   expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Newer street");
   followUp.resolve(venueDetailsFixture({ addressLine1: "Newer street" }));
+});
+
+it.each([
+  ["en-GB", "business_day_history"],
+  ["es", "business_day_history"],
+  ["en-GB", "sales"],
+  ["en-GB", "orders"],
+  ["en-GB", "daily_close"],
+] as const)("explains the %s %s lock beneath its own row", async (locale, reason) => {
+  setLocale(locale);
+  const locked = venueDetailsFixture();
+  locked.policy.timeZone = { decision: "refuse", reasons: [reason] };
+  const el = await editing(rig(locked).api);
+  const row = q(el, "[data-test=locked-timeZone]")!;
+  const note = row.parentElement!.nextElementSibling!;
+  expect(note?.textContent?.trim()).toBe(t(`venue_details.${reason}`));
+  expect(note?.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    row.getBoundingClientRect().bottom,
+  );
+  const province = q(el, "[data-test=locked-province]")!;
+  expect(province.parentElement!.nextElementSibling?.textContent?.trim()).toBe(
+    t("venue_details.geography_context"),
+  );
+});
+
+it.each(["en-GB", "es"])("explains a business-day-history save refusal in %s", async (locale) => {
+  setLocale(locale);
+  const { api } = rig();
+  vi.mocked(api.patchVenueDetails).mockRejectedValue({
+    code: "venue.detail_locked",
+    params: { field: "timeZone", reason: "business_day_history" },
+  });
+  const el = await editing(api);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  await click(el, "[data-test=acknowledge]");
+  await click(el, "[data-test=save]");
+  expect(field(el, "timeZone").error).toBe(t("venue_details.business_day_history"));
+  expect(actions(el).error).toBe(t("form.fix_fields"));
+  expect(save(el).disabled).toBe(false);
 });

@@ -1,6 +1,6 @@
 # Calendar and Venue leftovers — implementation plan
 
-**Authority:** Lane D watcher queued CALENDAR-VENUE-LEFTOVERS, 2026-11-16 14:09 (`~/waitron-campaign-d/queue.md`). Owner authorizes finish/land, not this design. Claude reviews; watcher clears; then inline TDD, one PR.
+**Authority:** Lane D watcher queued CALENDAR-VENUE-LEFTOVERS, 2026-11-16 14:09 (`~/waitron-campaign-d/queue.md`). Owner authorizes finish/land, not this design. Claude reviewed the approach (227 seconds); watcher cleared this plan and Forms scope at 2026-11-16 14:26 in `~/waitron-campaign-d/questions.md`: “Take the station fix. Yes to the Forms scope … Nothing beyond that panel. Build now.” Inline TDD, one PR.
 
 **Smallest usable result:** open day boxes keep their content on screen; addresses reflect accepted Calendar input; Venue explains its time-zone lock and releases discarded drafts when read-only.
 

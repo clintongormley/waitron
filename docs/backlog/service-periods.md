@@ -137,18 +137,6 @@ code, not run again here.
 
 ## Loose ends left by A720.
 
-- Look at a picked, focused today in the Month. `--wt-focus-offset` and
-  `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
-  on today, picked and focused, the focus ring covers the outer half of the wider picked ring
-  (`opening-hours-month.ts`). Check in both themes that this combination reads well.
-- The day box should re-place itself when its content changes. `calendar-day-box` measures its
-  content only in `show()` and on a scroll or resize, so each host (Opening hours'
-  `placeDayBox`, Staffing's month) must wait for every pending redraw first; A720 Part 5's first
-  version placed it one redraw early, off screen. Have the box re-place itself while open
-  whenever its own content changes.
-- An ignored `to` stays in the address bar. A special-day address whose `to` is earlier than its
-  date, malformed, or more than 365 days after it opens the new day on its first date alone
-  (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`.
 - Try the Calendar's long press on a real phone. The long press that opens the special-day
   editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
   under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
@@ -157,15 +145,6 @@ code, not run again here.
   `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
   themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
   uses the commands.
-
-## Loose ends left by A755 (#1809).
-
-- The Venue card says nothing about a time zone locked by a past business-day change. The server
-  gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
-  `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
-- A896. The Venue details panel's Venue card keeps an open draft's unsaved-changes protection
-  when it turns read-only. The Defaults card drops its draft when it turns
-  read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
 
 ## Loose ends left by A506-4 (#1597).
 

@@ -568,6 +568,9 @@ describe("a run picked on the Year", () => {
     const painter = await shownPainter(whole.el);
     expect(painter.lastDate).toBe("2027-01-01");
     expect(chips(painter)).toHaveLength(366);
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
+    );
     whole.el.remove();
     const longer = await mount(
       "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-03",
@@ -585,6 +588,23 @@ describe("a run picked on the Year", () => {
     expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
     expect(chips(painter)).toEqual(["2026-01-01"]);
   });
+
+  it.each(["2025-12-31", "bad-date", "2027-01-02"])(
+    "removes an ignored range end %s from the address without pushing history",
+    async (to) => {
+      const replaced = vi.spyOn(history, "replaceState");
+      const pushed = vi.spyOn(history, "pushState");
+      const { el } = await mount(
+        `/manage/opening-hours/view/special-day/date/2026-01-01/to/${to}?keep=yes#dates`,
+      );
+      const painter = await shownPainter(el);
+      expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
+      expect(replaced).toHaveBeenCalledTimes(2);
+      expect(pushed).not.toHaveBeenCalled();
+    },
+  );
 
   it("a run in the year 9999 read from an address opens whole", async () => {
     const { el } = await mount(
