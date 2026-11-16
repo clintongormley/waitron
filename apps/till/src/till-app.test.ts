@@ -819,7 +819,8 @@ async function ringCoffee(
 
 beforeEach(() => {
   for (const key of Object.keys(localStorage))
-    if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
+    if (key.startsWith("waitron.zoneMenu.") || key.startsWith("waitron.kitchenDisplayLanguage."))
+      localStorage.removeItem(key);
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
   drafts.bills.add("wo-7");
@@ -2310,6 +2311,57 @@ describe("till-app", () => {
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
     expect(currentLocale()).toBe("en-GB");
+  });
+
+  describe("a kitchen display's language", () => {
+    /** An enrolled kitchen display whose venue speaks English. */
+    const mountDisplay = (deviceId: string) =>
+      mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "en-GB",
+          formFactor: kdsFormFactor,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId,
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+      });
+
+    /** Picks `code` on `deviceId`'s display, then takes that display away, as a reload does. */
+    async function pickOn(deviceId: string, code: string) {
+      const { el } = await mountDisplay(deviceId);
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      emit(shell(el)!, "wt-locale-selected", { code });
+      await expect.poll(() => currentLocale()).toBe(code);
+      el.remove();
+      setLocale("en-GB");
+    }
+
+    it("keeps a language picked on the display across a reload", async () => {
+      await pickOn("dev-1", "es-ES");
+      const { el } = await mountDisplay("dev-1");
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("keeps the pick to the display it was made on", async () => {
+      await pickOn("dev-1", "es-ES");
+      const { el } = await mountDisplay("dev-2");
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("falls back to the venue's language when the stored pick is no longer offered", async () => {
+      localStorage.setItem("waitron.kitchenDisplayLanguage.dev-1", "fr-FR");
+      const { el } = await mountDisplay("dev-1");
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+    });
   });
 
   it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and for a till starts the PIN-screen poll, then a separate signed-in poll", async () => {

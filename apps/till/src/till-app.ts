@@ -3026,9 +3026,36 @@ export class TillApp extends LitElement {
   #preLoginLocale(): string {
     if (!this.#venueLocaleReady)
       return this.#browserLocale ?? this.#browserLocaleVenue ?? this.#venueLocale;
-    return !this.deviceMode && this.#browserLocaleVenue === this.#venueLocale
+    if (this.deviceMode) return this.#storedDisplayLanguage() ?? this.#venueLocale;
+    return this.#browserLocaleVenue === this.#venueLocale
       ? (this.#browserLocale ?? this.#venueLocale)
       : this.#venueLocale;
+  }
+
+  /** A kitchen display has no session to save a language to, so it keeps its pick itself. */
+  #displayLanguageKey(): string | null {
+    return this.deviceId === undefined ? null : `waitron.kitchenDisplayLanguage.${this.deviceId}`;
+  }
+
+  #storedDisplayLanguage(): string | undefined {
+    const key = this.#displayLanguageKey();
+    if (key === null) return undefined;
+    try {
+      const code = localStorage.getItem(key);
+      return this.#localeList?.find((each) => each.code === code)?.code;
+    } catch {
+      return undefined;
+    }
+  }
+
+  #saveDisplayLanguage(code: string): void {
+    const key = this.#displayLanguageKey();
+    if (key === null) return;
+    try {
+      localStorage.setItem(key, code);
+    } catch {
+      /* Site data may be blocked; the pick then lasts until reload. */
+    }
   }
 
   #tableToResume?: { personId: string; tableId: string; partyId: string };
@@ -5232,7 +5259,7 @@ export class TillApp extends LitElement {
         this.#sayIfSwitched(from);
         this.deviceMode = true;
         this.#kitchenSetupPoll.start();
-        if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
+        if (this.#preLoginChoice === undefined) setLocale(this.#preLoginLocale());
         this.#setScreen("station");
         this.#onHistory();
       }
@@ -22399,6 +22426,7 @@ export class TillApp extends LitElement {
     const { code } = event.detail;
     if (this.screen === "lock" || this.deviceMode) {
       if (this.operatorName === "") this.#preLoginChoice = code;
+      if (this.deviceMode) this.#saveDisplayLanguage(code);
       this.#lockLanguagePicks += 1;
       setLocale(code);
       return;
