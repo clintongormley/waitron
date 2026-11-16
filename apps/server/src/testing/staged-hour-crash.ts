@@ -34,7 +34,7 @@ import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
 import { packArchive } from "../backup-archive.js";
-import { encryptArtifact } from "../artifact-cipher.js";
+import { sealFixtureArtifact } from "../../test/fixture-salt.js";
 import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
@@ -183,7 +183,7 @@ export async function stagedHourCrash(
       },
     ];
     await db.archiveTo(databasePath);
-    const artifact = encryptArtifact(
+    const artifact = sealFixtureArtifact(
       packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
       encryptionKey,
     );

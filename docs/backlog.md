@@ -1622,7 +1622,7 @@ For package distribution and the four-minute target, use the
 packing, use their [cost-table refresh instructions](developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 
 
-- **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). Crash-helper salts and wider memo adoption remain; fixed-secret work covers held, unconverted and uninspected setup, including four further inspected repeated fixtures. [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
+- **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). Wider memo adoption remains; fixed-secret work covers held, unconverted and uninspected setup. [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the

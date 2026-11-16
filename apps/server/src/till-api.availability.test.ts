@@ -16,7 +16,8 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/menu";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -79,7 +80,7 @@ beforeEach(async () => {
     const [staff] = await seedPersons(tx, {
       displayName: "Waiter",
       role: "staff",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
     });
     const session = await loginWithPin(tx, {
       deviceId: v.cfg.origin.deviceId,

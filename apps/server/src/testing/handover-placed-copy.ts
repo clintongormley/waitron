@@ -27,7 +27,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { signEnvelope } from "@waitron/handover";
-import { hashPassword } from "@waitron/identity";
+import { fixturePasswordHash } from "./known-secret-hashes.js";
 import { endorseKey, signDocumentBody, type SignedMembershipDocument } from "@waitron/membership";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import {
@@ -182,7 +182,7 @@ export function placedSpareFixture(boxes: {
       id: ADMIN,
       displayName: "Administrator",
       role: "admin",
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: fixturePasswordHash(PASSWORD),
       email: ADMIN_EMAIL,
     });
     await firstSetupOnM1();

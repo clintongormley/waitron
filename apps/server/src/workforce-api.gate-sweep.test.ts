@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { nowIso, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { absences, rosterVersions, shiftSwaps, shifts } from "@waitron/workforce";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -54,8 +55,8 @@ async function setupVenue(): Promise<Venue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -68,12 +69,12 @@ async function setupVenue(): Promise<Venue> {
     // `$defaultFn` generator on this engine, which a raw insert never reaches.
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     const [stf] = await seedPersons(tx, {
       displayName: "The Clerk",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "staff",
     });
     const mSes = await startManagementSession(tx, {
