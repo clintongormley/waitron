@@ -1,8 +1,8 @@
 import "./errors.js";
-import { inspectsInvoicesOnly, readPersonAuthority, type PersonAuthority } from "./authority.js";
+import { authorityForRoles, inspectsInvoicesOnly, type PersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
-import { nowIso, managementSessions, persons } from "@waitron/db";
+import { nowIso, managementSessions, personRoles, persons, roles } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
@@ -43,8 +43,9 @@ export async function startManagementSession(
   return { token, personId: input.personId };
 }
 
+/** The live session and the person's roles, in one read. */
 async function readManagementSession(tx: Database | Transaction, token: string) {
-  const [row] = await tx
+  const rows = await tx
     .select({
       sessionRowId: managementSessions.id,
       personId: managementSessions.personId,
@@ -53,15 +54,21 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
       email: persons.email,
       displayName: persons.displayName,
       locale: persons.locale,
+      roleId: roles.id,
+      builtInKey: roles.builtInKey,
+      permissions: roles.permissions,
     })
     .from(managementSessions)
     .innerJoin(persons, eq(persons.id, managementSessions.personId))
+    .leftJoin(personRoles, eq(personRoles.personId, managementSessions.personId))
+    .leftJoin(roles, eq(roles.id, personRoles.roleId))
     .where(
       and(
         eq(managementSessions.tokenHash, hashSessionToken(token)),
         isNull(managementSessions.endedAt),
       ),
     );
+  const row = rows[0];
   if (row === undefined) throw new AppError("management_session.required", {});
   // Mirrored: a backward clock step past the idle timeout ends the session as a forward one does.
   if (Math.abs(Date.now() - Date.parse(row.lastSeenAt)) > IDLE_TIMEOUT_MS) {
@@ -71,7 +78,10 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
     throw new AppError("person.suspended", { personId: row.personId });
   }
   if (row.status !== "active") throw new AppError("management_session.required", {});
-  return row;
+  const held = rows.flatMap(({ roleId, builtInKey, permissions }) =>
+    roleId === null || permissions === null ? [] : [{ id: roleId, builtInKey, permissions }],
+  );
+  return { ...row, authority: authorityForRoles(row.personId, held) };
 }
 
 function refuseUnadmittedInspector(authority: PersonAuthority, admitInspector?: boolean): void {
@@ -91,7 +101,7 @@ export async function resolveManagementSession(
   options: { touch?: boolean; admitInspector?: boolean } = {},
 ) {
   const row = await readManagementSession(tx, token);
-  const authority = await readPersonAuthority(tx, row.personId);
+  const { authority } = row;
   refuseUnadmittedInspector(authority, options.admitInspector);
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
@@ -127,6 +137,5 @@ export async function endManagementSession(tx: Transaction, token: string): Prom
 /** Refuses what `resolveManagementSession` refuses, a session holding `invoice.inspect` alone
  * included, without stamping its activity. */
 export async function checkManagementSession(db: Database, token: string): Promise<void> {
-  const row = await readManagementSession(db, token);
-  refuseUnadmittedInspector(await readPersonAuthority(db, row.personId));
+  refuseUnadmittedInspector((await readManagementSession(db, token)).authority);
 }

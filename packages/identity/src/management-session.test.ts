@@ -325,6 +325,29 @@ describe("a session holding invoice.inspect alone", () => {
     await expect(checkManagementSession(suite.db, other.token)).resolves.toBeUndefined();
   });
 
+  it("is re-checked by the live stream in one read that counts every role the person holds", async () => {
+    const { token, personId } = await sessionHolding(["invoice.inspect"]);
+    const select = vi.spyOn(suite.db, "select");
+    try {
+      await expect(checkManagementSession(suite.db, token)).rejects.toMatchObject(refusal);
+      expect(select).toHaveBeenCalledTimes(1);
+    } finally {
+      select.mockRestore();
+    }
+    await run(async (tx) => {
+      const name = `Also ${crypto.randomUUID()}`;
+      const [role] = await tx
+        .insert(roles)
+        .values({ name, nameFolded: name.toLowerCase(), permissions: ["report.view"] })
+        .returning({ id: roles.id });
+      await tx.insert(personRoles).values({ personId, roleId: role!.id });
+    });
+    await expect(checkManagementSession(suite.db, token)).resolves.toBeUndefined();
+    const roleless = await sessionHolding([]);
+    await run((tx) => tx.delete(personRoles).where(eq(personRoles.personId, roleless.personId)));
+    await expect(checkManagementSession(suite.db, roleless.token)).resolves.toBeUndefined();
+  });
+
   it("is served inside a route that admits it", async () => {
     const { token, personId } = await sessionHolding(["invoice.inspect"]);
     const session = await withInspectorAdmitted(() =>
