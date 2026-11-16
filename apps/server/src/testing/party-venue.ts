@@ -135,6 +135,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),

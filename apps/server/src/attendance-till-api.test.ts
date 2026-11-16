@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -6,7 +6,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { devices, newId, withTransaction } from "@waitron/db";
+import { devices, persons, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tillSessions } from "@waitron/identity";
@@ -38,12 +38,11 @@ const suite = useVenueDb({
 let v: PartyVenue, cookie: string, deviceId: string;
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await seedPersons(suite.db, {
-    id: OPERATOR,
-    displayName: "Worker",
-    pinHash: fixturePinHash("1234"),
-    role: "admin",
-  });
+  await suite.db
+    .update(persons)
+    .set({ displayName: "Worker", pinHash: fixturePinHash("1234") })
+    .where(eq(persons.id, OPERATOR));
+  await setBuiltInRoleForTest(suite.db, OPERATOR, "admin");
   const [device] = await suite.db
     .select()
     .from(devices)

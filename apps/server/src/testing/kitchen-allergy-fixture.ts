@@ -47,8 +47,8 @@ export type KitchenCaller = "edit" | "groups" | "draft" | "release" | "move";
 export const kitchenCallers: KitchenCaller[] = ["edit", "groups", "draft", "release", "move"];
 
 export async function kitchenFixture(db: Database) {
-  const v = await setupPartyVenue(db);
   await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
+  const v = await setupPartyVenue(db);
   const token = randomUUID();
   await db
     .update(tillSessions)

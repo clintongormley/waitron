@@ -49,6 +49,23 @@ const captured: CanonicalMadridSemantics = {
     },
   },
 };
+
+it.each([
+  ["sessions", "till_sessions"],
+  ["management_sessions", "dashboard_sessions"],
+  ["management_account_actions", "account_actions"],
+])("renames captured %s row identities", (oldName, newName) => {
+  const source = structuredClone(captured);
+  source.tables[oldName!] = {
+    columns: [],
+    foreignKeys: [],
+    rows: { [`@${oldName}:["person"]`]: { id: `@${oldName}:["person"]`, person_id: "person" } },
+  };
+  const result = madridWithRenamedTables(source, { [oldName!]: newName! });
+  expect(result.tables[newName!]!.rows).toEqual({
+    [`@${newName}:["person"]`]: { id: `@${newName}:["person"]`, person_id: "person" },
+  });
+});
 it("renames a table, every key targeting it, nested identities and document hashes", () => {
   const original = structuredClone(captured);
   const result = madridWithRenamedTables(captured, { catalogues: "menus" });

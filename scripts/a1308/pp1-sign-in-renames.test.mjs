@@ -118,7 +118,7 @@ it("keeps unrelated session properties, inner bindings and excluded files", () =
   );
 });
 
-it("renames account-only SQL, text fixtures and imports beside attendance export keys", () => {
+it("renames account-only SQL and attendance imports while retaining frozen evidence", () => {
   const root = fixture({
     "apps/server/src/account-mail.test.ts": "sql`select * from management_account_actions`;",
     "packages/country-es/test-fixtures/demo/original-exporter.ts.txt":
@@ -133,7 +133,7 @@ it("renames account-only SQL, text fixtures and imports beside attendance export
     "sql`select * from account_actions`;",
   );
   expect(read(root, "packages/country-es/test-fixtures/demo/original-exporter.ts.txt")).toBe(
-    'case "dashboard_sessions": break;',
+    'case "management_sessions": break;',
   );
   expect(read(root, "apps/server/src/attendance-export-api.test.ts")).toBe(
     'import { dashboardSessions } from "@waitron/db"; section("sessions"); select(dashboardSessions);',
@@ -152,12 +152,14 @@ it("previews without writing and changes no bytes on a second write", () => {
   expect(read(root, "packages/db/src/classification.ts")).toBe('["till_sessions"]');
 });
 
-it("ports table-name templates, demo keys and the mutation scheduler's schema paths", () => {
+it("ports templates and schema paths while retaining captured demo keys", () => {
   const root = fixture({
     "apps/server/src/day.ts": "const source = sql`sessions`; sql`from sessions where id = ${id}`;",
     "packages/db/mutation-costs.json":
       '{"src/schema/identity/sessions.ts":1,"src/schema/identity/management-sessions.ts":2,"src/schema/identity/management-account-actions.ts":3}',
     "packages/country-es/test-fixtures/demo/madrid-before-move.en.json": '{"sessions":[]}',
+    "apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts":
+      'const tableRenames = { management_sessions: "dashboard_sessions" };',
     "apps/server/src/unused.ts": "const unchanged = 1;",
   });
   run({ root, write: true });
@@ -170,9 +172,23 @@ it("ports table-name templates, demo keys and the mutation scheduler's schema pa
     "src/schema/identity/account-actions.ts": 3,
   });
   expect(read(root, "packages/country-es/test-fixtures/demo/madrid-before-move.en.json")).toBe(
-    '{"till_sessions":[]}',
+    '{"sessions":[]}',
   );
   expect(read(root, "apps/server/src/unused.ts")).toBe("const unchanged = 1;");
+  expect(read(root, "apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts")).toBe(
+    'const tableRenames = { management_sessions: "dashboard_sessions" };',
+  );
+});
+
+it("renames database snapshot table keys while preserving device impact keys", () => {
+  const root = fixture({
+    "apps/server/src/device-delete.db.test.ts":
+      'const snapshot = { sessions: [] }; snapshot.sessions; [["sessions", "device_id"]]; const impact = { key: "sessions" };',
+  });
+  run({ root, write: true });
+  expect(read(root, "apps/server/src/device-delete.db.test.ts")).toBe(
+    'const snapshot = { till_sessions: [] }; snapshot.till_sessions; [["till_sessions", "device_id"]]; const impact = { key: "sessions" };',
+  );
 });
 
 it("the CLI previews by default and writes only with --write", async () => {

@@ -36,7 +36,7 @@ const pairs = [
   ["managementAccountActions", "accountActions"],
 ];
 const excluded =
-  /^(?:packages\/store\/|apps\/dashboard\/|packages\/workforce-es\/src\/record-export|packages\/workforce\/src\/record-schema\.test\.ts|scripts\/a1308\/pp1-sign-in-renames\.)/;
+  /^(?:packages\/store\/|apps\/dashboard\/|packages\/workforce-es\/src\/record-export|packages\/workforce\/src\/record-schema\.test\.ts|packages\/country-es\/test-fixtures\/demo\/(?:madrid-before-move\.|original-exporter\.)|apps\/server\/scripts\/demo-seed\/(?:seed\.madrid-baseline\.test\.ts|testing\/madrid-renamed-tables\.)|scripts\/a1308\/pp1-sign-in-renames\.)/;
 function tableModule(specifier, path) {
   return (
     ["@waitron/db", "@waitron/identity", "@waitron/db/schema/identity.js"].includes(specifier) ||
@@ -99,14 +99,17 @@ function rewrite(path, text) {
   const edits = [];
   function visit(node) {
     const parent = node.parent;
+    const snapshot = path === "apps/server/src/device-delete.db.test.ts";
     if (
-      literals.has(path) &&
+      (literals.has(path) || snapshot) &&
       ts.isIdentifier(node) &&
       node.text === "sessions" &&
       ts.isPropertyAssignment(parent) &&
       parent.name === node
     )
       edits.push([node.getStart(source), node.end, "till_sessions"]);
+    if (snapshot && ts.isPropertyAccessExpression(node) && node.name.text === "sessions")
+      edits.push([node.name.getStart(source), node.name.end, "till_sessions"]);
     if (ts.isIdentifier(node) && node.text === "sessions") {
       let rename = false;
       if (ts.isPropertyAccessExpression(parent) && parent.name === node)
@@ -140,7 +143,7 @@ function rewrite(path, text) {
         "$1$2till_sessions",
       );
       if (
-        (literals.has(path) || /madrid-before-move\.(?:en|es|manifest)\.json$/.test(path)) &&
+        (literals.has(path) || (snapshot && ts.isArrayLiteralExpression(parent))) &&
         node.text === "sessions"
       )
         next = raw.replace("sessions", "till_sessions");
@@ -166,8 +169,6 @@ function rewrite(path, text) {
     .replace(/\bmanagement-sessions(\.[jt]s)\b/g, "dashboard-sessions$1")
     .replace(/\bmanagement-account-actions(\.[jt]s)\b/g, "account-actions$1")
     .replace(/\bsessions_(open_idx|token_hash_uq|token_hash_ck)\b/g, "till_sessions_$1");
-  if (/madrid-before-move\.(?:en|es|manifest)\.json$/.test(path))
-    next = next.replace(/"sessions"/g, '"till_sessions"');
   const collisions = pairs.filter(
     ([oldName, target]) =>
       declarations.has(target) &&

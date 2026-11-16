@@ -113,7 +113,7 @@ export async function canonicalMadridSemantics(snapshot: MadridSemantics): Promi
       case "floor_reset_tables": key=parts("zone_id","table_id"); break;
       case "invoice_series": key=parts("node_id","code","purpose"); break;
       case "registro_sif": key=parts("node_id","numero_instalacion"); break;
-      case "dashboard_sessions": key=parts("person_id","created_at"); break;
+      case "management_sessions": key=parts("person_id","created_at"); break;
       case "device_profile_printers": key=parts("device_profile_id","role","position"); break;
       case "product_modifiers": key=parts("product_id","sort"); break;
       case "routing_cells": key=parts("location_id","category_id","product_id","zone_id"); break;
@@ -171,7 +171,7 @@ export async function canonicalMadridSemantics(snapshot: MadridSemantics): Promi
           row.password_hash="verified:demo-password;refused:wrong-password";
         }
       }
-      if(table==="dashboard_sessions") {
+      if(table==="management_sessions") {
         if(typeof original.token_hash!=="string" || !/^[a-f0-9]{64}$/.test(original.token_hash)) throw new Error("management token hash mismatch");
         row.token_hash="generated:sha256";
       }

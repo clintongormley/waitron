@@ -32,8 +32,8 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 let v: PartyVenue;
 
 beforeEach(async () => {
-  v = await setupPartyVenue(suite.db);
   await seedPersons(suite.db, { id: OPERATOR, displayName: "Kitchen note author" });
+  v = await setupPartyVenue(suite.db);
 });
 
 describe("initial kitchen notes on ordering paths", () => {

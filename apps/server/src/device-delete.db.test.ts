@@ -106,8 +106,8 @@ const ENDED = "<ended>";
 function withEndedSessions(snap: Snapshot, deviceId: string, open: Set<unknown>): Snapshot {
   return {
     ...snap,
-    sessions: byJson(
-      snap.sessions!.map((row) => {
+    till_sessions: byJson(
+      snap.till_sessions!.map((row) => {
         if (row.device_id !== deviceId || !open.has(row.id)) return row;
         expect(typeof row.ended_at).toBe("string");
         return { ...row, ended_at: ENDED };
@@ -123,8 +123,8 @@ function afterDelete(before: Snapshot, deviceId: string): Snapshot {
     devices: byJson(
       before.devices!.map((row) => (row.id === deviceId ? { ...row, active: 0 } : row)),
     ),
-    sessions: byJson(
-      before.sessions!.map((row) =>
+    till_sessions: byJson(
+      before.till_sessions!.map((row) =>
         row.device_id === deviceId && row.ended_at === null ? { ...row, ended_at: ENDED } : row,
       ),
     ),
@@ -141,7 +141,7 @@ function afterDelete(before: Snapshot, deviceId: string): Snapshot {
 const openSessionIds = (snap: Snapshot, deviceId: string) =>
   new Set(
     snap
-      .sessions!.filter((row) => row.device_id === deviceId && row.ended_at === null)
+      .till_sessions!.filter((row) => row.device_id === deviceId && row.ended_at === null)
       .map((row) => row.id),
   );
 
@@ -664,7 +664,7 @@ describe("the device delete impact", () => {
     expect(passRows(before, "devices", "id")).toHaveLength(1);
     for (const [table, column] of [
       ["devices", "id"],
-      ["sessions", "device_id"],
+      ["till_sessions", "device_id"],
       ["printer_holders", "device_id"],
       ["card_readers", "held_by_device_id"],
       ["device_made_here_stations", "device_id"],

@@ -8697,7 +8697,7 @@
         ],
         "rows": {}
       },
-      "account_actions": {
+      "management_account_actions": {
         "columns": [
           {
             "name": "id",
@@ -8791,7 +8791,7 @@
         ],
         "rows": {}
       },
-      "dashboard_sessions": {
+      "management_sessions": {
         "columns": [
           {
             "name": "id",
@@ -15296,7 +15296,7 @@
         ],
         "rows": {}
       },
-      "till_sessions": {
+      "sessions": {
         "columns": [
           {
             "name": "id",
@@ -28176,7 +28176,7 @@
           }
         }
       },
-      "account_actions": {
+      "management_account_actions": {
         "columns": [
           {
             "name": "id",
@@ -28270,7 +28270,7 @@
         ],
         "rows": {}
       },
-      "dashboard_sessions": {
+      "management_sessions": {
         "columns": [
           {
             "name": "id",
@@ -28317,8 +28317,8 @@
         ],
         "foreignKeys": [],
         "rows": {
-          "@dashboard_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]": {
-            "id": "@dashboard_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]",
+          "@management_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]": {
+            "id": "@management_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]",
             "token_hash": "generated:sha256",
             "person_id": "@persons:[\"owner@example.test\"]",
             "created_at": "2026-10-08T10:00:00.000Z",
@@ -34925,7 +34925,7 @@
           }
         }
       },
-      "till_sessions": {
+      "sessions": {
         "columns": [
           {
             "name": "id",
@@ -50027,7 +50027,7 @@
           }
         }
       },
-      "account_actions": {
+      "management_account_actions": {
         "columns": [
           {
             "name": "id",
@@ -50121,7 +50121,7 @@
         ],
         "rows": {}
       },
-      "dashboard_sessions": {
+      "management_sessions": {
         "columns": [
           {
             "name": "id",
@@ -50168,8 +50168,8 @@
         ],
         "foreignKeys": [],
         "rows": {
-          "@dashboard_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]": {
-            "id": "@dashboard_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]",
+          "@management_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]": {
+            "id": "@management_sessions:[\"@persons:[\\\"owner@example.test\\\"]\",\"2026-10-08T10:00:00.000Z\"]",
             "token_hash": "generated:sha256",
             "person_id": "@persons:[\"owner@example.test\"]",
             "created_at": "2026-10-08T10:00:00.000Z",
@@ -66071,7 +66071,7 @@
           }
         }
       },
-      "till_sessions": {
+      "sessions": {
         "columns": [
           {
             "name": "id",

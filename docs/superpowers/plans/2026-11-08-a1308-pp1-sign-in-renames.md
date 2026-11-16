@@ -6,6 +6,9 @@
 > non-administrators during fresh provision; its seeded administrator and dashboard session stay.
 > Watcher 18:28 cleared the reset wording: prior backups are refused; configuration format 45 stays
 > unchanged because none of the renamed sign-in tables is exported.
+> Watcher 18:44 cleared retaining the frozen Madrid captures and porting the names/person keys
+> through the existing Madrid adapters. These adapters retain their source-side names, so the
+> rename script leaves them alone; their current-table references are ported by hand.
 
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development

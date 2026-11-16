@@ -40,8 +40,8 @@ useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
-    v = await setupPartyVenue(db);
     await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
+    v = await setupPartyVenue(db);
   },
 });
 afterEach(() => vi.restoreAllMocks());

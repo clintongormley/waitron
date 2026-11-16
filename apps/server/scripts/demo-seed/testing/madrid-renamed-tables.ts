@@ -25,7 +25,11 @@ export function madridWithRenamedTables(
     const parts = JSON.parse(value.slice(colon + 1)) as unknown[];
     return `@${renames[table] ?? table}:${stable(parts.map((part) => (typeof part === "string" ? alias(part) : part)))}`;
   };
-  if (Object.hasOwn(renames, "catalogues") || Object.hasOwn(renames, "menus")) {
+  if (
+    ["catalogues", "menus", "sessions", "management_sessions", "management_account_actions"].some(
+      (name) => Object.hasOwn(renames, name),
+    )
+  ) {
     recomputeMadridHashes(result, { alias });
     result.tables = Object.fromEntries(
       Object.entries(result.tables).sort(([a], [b]) => a.localeCompare(b)),
