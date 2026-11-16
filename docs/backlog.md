@@ -306,8 +306,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   vouched for has taken over. A box restored from backup keeps the old box's id, so nothing stops
   the old box after a restore; A1418 part 1, still a plan, adds a check for a venue of one box.
   Qualify live AEAT
-  reconciliation, production TLS and a till payment through a booted restored server. A restore's
-  start that cannot confirm its time waits for a person to confirm it (A1420 PR 3b2). Of Task 8's
+  reconciliation, production TLS and a till payment through a booted restored server. Of Task 8's
   disputed production remedies, the corrective invoice (the replacement) is built to file as an R5
   "S" (owner's answers A–E, 2026-11-14) and offered on the case dialog for a simplified invoice refused for a future date; the others stay disabled
   pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's

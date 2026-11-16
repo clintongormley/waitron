@@ -350,9 +350,7 @@ fencing belong to A1342 (landed) and A1418.
 ### Qualify offline recovery through production TLS
 
 Extend the old-backup/new-hardware exercise (`apps/server/src/restore-missing-history.e2e.test.ts`)
-to the production HTTPS connection and fresh device pairing. A restore's start that cannot confirm
-its time waits for a person to confirm it
-([A1420 PR 3b2](../superpowers/plans/2026-11-13-a1420-restore-series-check.md)). Keep the administrator
+to the production HTTPS connection and fresh device pairing. Keep the administrator
 approval, cookie admission, recovered-series and retired counter checks. The loopback HTTP
 qualification in #2449 is not a production TLS result.
 
