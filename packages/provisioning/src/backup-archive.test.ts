@@ -13,6 +13,38 @@ describe("backup archive", () => {
     expect(out.map((e) => e.name)).toEqual(entries.map((e) => e.name));
     expect(Buffer.from(out[1].bytes).equals(Buffer.from(entries[1].bytes))).toBe(true);
   });
+  it("packs the allowed entry count with a name at the UTF-8 byte limit", () => {
+    const entries = Array.from({ length: 4096 }, (_, index) => ({
+      name: index === 0 ? "é".repeat(2048) : String(index),
+      bytes: new Uint8Array(),
+    }));
+    const restored = unpackArchive(packArchive(entries));
+    expect(restored).toHaveLength(4096);
+    expect(restored[0].name).toBe("é".repeat(2048));
+    expect(restored[4095].name).toBe("4095");
+  });
+
+  it("refuses too many entries before packing", () => {
+    const entries = Array.from({ length: 4097 }, () => ({ name: "x", bytes: new Uint8Array() }));
+    expect(() => packArchive(entries)).toThrowError(
+      expect.objectContaining({
+        code: "backup.archive_invalid",
+        params: { reason: "entry_count_too_large" },
+      }),
+    );
+  });
+
+  it("bounds a packed name by UTF-8 bytes rather than characters", () => {
+    expect(() =>
+      packArchive([{ name: "é".repeat(2048) + "x", bytes: new Uint8Array() }]),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "backup.archive_invalid",
+        params: { reason: "name_too_large" },
+      }),
+    );
+  });
+
   it("handles an empty entry and an empty archive", () => {
     expect(unpackArchive(packArchive([]))).toEqual([]);
     const out = unpackArchive(packArchive([{ name: "empty", bytes: new Uint8Array(0) }]));

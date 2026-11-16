@@ -6,6 +6,8 @@ export type ArchiveEntry = { name: string; bytes: Uint8Array };
 
 const MAGIC = Buffer.from("WBA1"); // Waitron Backup Archive, format 1
 const VERSION = 1;
+export const ARCHIVE_MAX_ENTRIES = 4096;
+export const ARCHIVE_MAX_NAME_BYTES = 4096;
 const HEADER_BYTES = MAGIC.length + 1 + 4;
 // nameLen(4) + dataLen(8), with an empty name and empty data.
 const MIN_ENTRY_BYTES = 4 + 8;
@@ -14,6 +16,8 @@ const MIN_ENTRY_BYTES = 4 + 8;
  * [ nameLen(u32 LE) | name(utf8) | dataLen(u64 LE) | data ]*`. It does no encryption itself; the
  * caller encrypts the whole container. */
 export function packArchive(entries: ArchiveEntry[]): Buffer {
+  if (entries.length > ARCHIVE_MAX_ENTRIES)
+    throw new AppError("backup.archive_invalid", { reason: "entry_count_too_large" });
   const header = Buffer.alloc(MAGIC.length + 1 + 4);
   MAGIC.copy(header, 0);
   header.writeUInt8(VERSION, MAGIC.length);
@@ -21,6 +25,8 @@ export function packArchive(entries: ArchiveEntry[]): Buffer {
   const parts: Buffer[] = [header];
   for (const entry of entries) {
     const name = Buffer.from(entry.name, "utf8");
+    if (name.length > ARCHIVE_MAX_NAME_BYTES)
+      throw new AppError("backup.archive_invalid", { reason: "name_too_large" });
     const data = Buffer.from(entry.bytes.buffer, entry.bytes.byteOffset, entry.bytes.byteLength);
     const nameLen = Buffer.alloc(4);
     nameLen.writeUInt32LE(name.length, 0);
