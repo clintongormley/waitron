@@ -156,31 +156,34 @@ describe("dashboard payment PIN attempts take turns", () => {
       });
     },
   );
-});
 
-it.each(targets)(
-  "$route keeps an early permission refusal when permission is granted at its write lock",
-  async ({ route }) => {
-    const v = await setup("staff");
-    watchDerivations("4321");
-    const control = await v.send(route, { pin: "4321" });
-    expect(control.status).toBe(403);
-    expect(watchedDerivationCount()).toBe(0);
-    await watchedOrder();
-    watchDerivations("4321", () => withTransaction(suite.db, async () => {}));
-    const response = await whileChangingOnLockRequest(
-      suite.db,
-      (tx) => setBuiltInRoleForTest(tx, v.personId, "manager"),
-      () => v.send(route, { pin: "4321" }),
-    );
-    const order = await watchedOrder();
-    expect({ status: response.status, derivations: watchedDerivationCount(), order }).toEqual({
-      status: 403,
-      derivations: 0,
-      order: [],
-    });
-    expect(await response.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
-    });
-  },
-);
+  it.each(targets)(
+    "$route requires a new request after an early permission refusal and grant",
+    async ({ route, code, param }) => {
+      const v = await setup("staff");
+      watchDerivations("4321");
+      const control = await v.send(route, { pin: "4321" });
+      expect(control.status).toBe(403);
+      expect(watchedDerivationCount()).toBe(0);
+      await watchedOrder();
+      watchDerivations("4321", () => withTransaction(suite.db, async () => {}));
+      const response = await whileChangingOnLockRequest(
+        suite.db,
+        (tx) => setBuiltInRoleForTest(tx, v.personId, "manager"),
+        () => v.send(route, { pin: "4321" }),
+      );
+      const order = await watchedOrder();
+      expect({ status: response.status, derivations: watchedDerivationCount(), order }).toEqual({
+        status: 403,
+        derivations: 0,
+        order: [],
+      });
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
+      });
+      const retry = await v.send(route, { pin: "4321" });
+      expect(retry.status).toBe(404);
+      expect(await retry.json()).toEqual({ error: { code, params: { [param]: v.id } } });
+    },
+  );
+});
