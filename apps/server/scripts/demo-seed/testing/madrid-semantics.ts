@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
+import { EACH_UNIT_ID } from "@waitron/menu";
 
 type Cell = null | string | number | Uint8Array;
 export type MadridRow = Record<string, Cell>;
@@ -219,7 +220,7 @@ export async function canonicalMadridSemantics(
   const alias = (id: Cell): unknown => {
     if (typeof id !== "string" || !UUID.test(id)) return id;
     // A product without a stored unit publishes this fixed virtual Each id.
-    if (id === "00000000-0000-0000-0000-000000000001") return id;
+    if (id === EACH_UNIT_ID) return id;
     const cached = aliases.get(id);
     if (cached) return cached;
     const entry = ids.get(id);

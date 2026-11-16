@@ -892,6 +892,26 @@ export async function createProductSkippingNameCheck(
   return insertProduct(tx, input, false);
 }
 
+type UnitAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; unit: SellableUnit };
+
+async function resolveUnitAction(
+  tx: Transaction,
+  unitId: string | null | undefined,
+  pricingUnit: PricingUnit | undefined,
+): Promise<UnitAction> {
+  if (unitId === null) return { kind: "clear" };
+  if (unitId !== undefined) return { kind: "set", unit: await getSellableUnit(tx, unitId) };
+  if (pricingUnit === undefined) return { kind: "keep" };
+  if (pricingUnit === "each") return { kind: "clear" };
+  if (pricingUnit === "weight") {
+    const kg = await getSeededUnit(tx, "kg");
+    if (kg === null) throw new AppError("product.invalid", { field: "unitId" });
+    return { kind: "set", unit: kg };
+  }
+  // Any other legacy value is refused at the boundary, not silently treated as weight.
+  throw new AppError("product.invalid", { field: "pricingUnit" });
+}
+
 async function insertProduct(
   tx: Transaction,
   input: CreateProductInput,
@@ -900,23 +920,9 @@ async function insertProduct(
   if (!input.name.trim()) throw new AppError("product.invalid", { field: "name" });
   if (stringToCents(input.unitPrice) < 0)
     throw new AppError("product.invalid", { field: "unitPrice" });
-  if (input.unitId === undefined && input.pricingUnit === undefined) {
-    throw new AppError("product.invalid", { field: "unitId" });
-  }
-  let selectedUnit: SellableUnit | null;
-  if (input.unitId === null) {
-    selectedUnit = null;
-  } else if (input.unitId !== undefined) {
-    selectedUnit = await getSellableUnit(tx, input.unitId); // 404s an unknown unit
-  } else if (input.pricingUnit === "each") {
-    selectedUnit = null;
-  } else if (input.pricingUnit === "weight") {
-    selectedUnit = await getSeededUnit(tx, "kg"); // legacy weight → the retained kg seed
-    if (selectedUnit === null) throw new AppError("product.invalid", { field: "unitId" });
-  } else {
-    // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
-    throw new AppError("product.invalid", { field: "pricingUnit" });
-  }
+  const unitAction = await resolveUnitAction(tx, input.unitId, input.pricingUnit);
+  if (unitAction.kind === "keep") throw new AppError("product.invalid", { field: "unitId" });
+  const selectedUnit = unitAction.kind === "set" ? unitAction.unit : null;
   const takeawayVatClass = input.takeawayVatClass ?? null;
   if (takeawayVatClass !== null && !VAT_CLASSES.includes(takeawayVatClass))
     throw new AppError("product.invalid", { field: "takeawayVatClass" });
@@ -1112,24 +1118,7 @@ async function patchProduct(
     dietaryDeclarations === undefined || dietaryDeclarations === null
       ? dietaryDeclarations
       : validateDietaryDeclarations(dietaryDeclarations);
-  type UnitAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; unit: SellableUnit };
-  let unitAction: UnitAction;
-  if (unitId === null) {
-    unitAction = { kind: "clear" };
-  } else if (unitId !== undefined) {
-    unitAction = { kind: "set", unit: await getSellableUnit(tx, unitId) };
-  } else if (pricingUnit === undefined) {
-    unitAction = { kind: "keep" };
-  } else if (pricingUnit === "each") {
-    unitAction = { kind: "clear" };
-  } else if (pricingUnit === "weight") {
-    const kg = await getSeededUnit(tx, "kg");
-    if (kg === null) throw new AppError("product.invalid", { field: "unitId" });
-    unitAction = { kind: "set", unit: kg };
-  } else {
-    // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
-    throw new AppError("product.invalid", { field: "pricingUnit" });
-  }
+  const unitAction = await resolveUnitAction(tx, unitId, pricingUnit);
   await tx
     .update(products)
     .set({
