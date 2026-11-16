@@ -504,7 +504,7 @@ describe("the bill attestation's Record", () => {
 });
 
 const HELD = {
-  holdId: "h-1",
+  paymentId: "h-1",
   paymentRef: "pi_57",
   provider: "acme",
   orderNumber: 57,

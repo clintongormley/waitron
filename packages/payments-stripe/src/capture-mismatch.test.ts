@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { fullDiskOnCaptureAlert } from "@waitron/payments/test/capture-alert-disk.js";
 import { randomUUID } from "node:crypto";
@@ -86,6 +87,7 @@ it("records actual Stripe amounts", async () => {
 });
 
 it("continues processor reads even when an old alert exists", async () => {
+  await seedPerson(suite.db, { id: audit.personId, displayName: "Manager" });
   const { make, attempt, row, params } = await setup();
   const key = await attempt("succeeded", 1200);
   await withTransaction(suite.db, (tx) =>

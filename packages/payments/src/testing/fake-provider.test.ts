@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, captureError } from "@waitron/db";
@@ -23,14 +24,11 @@ import {
 import type { Seeded } from "../../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
 beforeEach(async () => {
-  // Child before parent: a `payment_refunds` row points at its payment. A resolved payment stays:
-  // its `payment_resolutions` row is append-only.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(
-    sql`delete from payments where id not in (select payment_id from payment_resolutions)`,
-  );
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
 });
 
 async function seedTaxpayer(): Promise<Seeded> {
@@ -462,9 +460,9 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
 
   function resolutionsOf(paymentRef: string) {
     return suite.db.execute<Record<string, unknown>>(
-      sql`select r.person_id, r.outcome, r.cancelled_at_provider, r.provider_status, r.resolved_at
-            from payment_resolutions r join payments p on p.id = r.payment_id
-           where p.provider = 'fake' and p.payment_ref = ${paymentRef}`,
+      sql`select p.resolved_by as person_id, p.resolution_outcome as outcome, p.resolution_cancelled_at_provider as cancelled_at_provider, p.resolution_provider_status as provider_status, p.resolved_at as resolved_at
+            from payments p
+           where p.resolution_outcome is not null and p.provider = 'fake' and p.payment_ref = ${paymentRef}`,
     );
   }
 
@@ -506,7 +504,7 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
       const provider = new FakePaymentProvider(suite.db);
       provider.scriptAbandonedAttempt(answer);
       await suite.db.execute(
-        sql`create trigger refuse_resolutions before insert on payment_resolutions
+        sql`create trigger refuse_resolutions before update of resolution_outcome on payments when old.resolution_outcome is null and new.resolution_outcome is not null
           begin select raise(abort, 'probe: resolution refused'); end`,
       );
       try {

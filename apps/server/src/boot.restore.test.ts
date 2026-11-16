@@ -785,8 +785,8 @@ describe("startServer — the append-only watch in trading mode", () => {
     ["dropped", [`drop trigger ${UPDATE};`], { missing: [UPDATE], altered: [] }, false],
     [
       "dropped while Payments is Off",
-      ["drop trigger payment_holds_append_only_update;"],
-      { missing: ["payment_holds_append_only_update"], altered: [] },
+      ["drop trigger sales_append_only_update;"],
+      { missing: ["sales_append_only_update"], altered: [] },
       true,
     ],
   ] as const) {

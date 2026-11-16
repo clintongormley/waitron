@@ -1,12 +1,12 @@
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { refundsPaused } from "./bill-refunds.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
-import { findPaymentByBillPayment, paymentResolutions } from "@waitron/payments";
+import { findPaymentByBillPayment } from "@waitron/payments";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import {
@@ -115,21 +115,13 @@ export async function settleFromProviderRow(
     await failBillPayment(tx, billPaymentId, now, undefined);
     return { settled: "failed" };
   }
-  if (provided.state === "failed") {
-    const [resolved] = await tx
-      .select({ id: paymentResolutions.id })
-      .from(paymentResolutions)
-      .where(
-        and(
-          eq(paymentResolutions.paymentId, provided.id),
-          eq(paymentResolutions.outcome, "failed"),
-          isNull(paymentResolutions.personId),
-        ),
-      );
-    if (resolved !== undefined) {
-      await failBillPayment(tx, billPaymentId, now, undefined);
-      return { settled: "failed" };
-    }
+  if (
+    provided.state === "failed" &&
+    provided.resolutionOutcome === "failed" &&
+    provided.resolvedBy === null
+  ) {
+    await failBillPayment(tx, billPaymentId, now, undefined);
+    return { settled: "failed" };
   }
   // An unaudited failure can be an uncertain charge (SumUp's not-found checkout).
   if (!CHARGED.has(provided.state)) return { settled: "left", providerState: provided.state };

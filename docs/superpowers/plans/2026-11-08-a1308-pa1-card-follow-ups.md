@@ -1,5 +1,30 @@
 # A1308 pa1: a card payment's follow-ups become columns on its own row — implementation plan
 
+> **Correction cleared by the watcher, 16 November 2026 03:59:** A739 shipped
+> [memory-only slips](2026-11-10-a739-memory-only-card-slips.md), whose opening authority records
+> the owner's replacement decision. Its retired Cut B context tables and `payment_context_id`
+> are not prerequisites or guard columns. Every existing payment column, set-once guard, fold,
+> reader-preservation check and measurement remains in scope. This is watcher clearance, not a
+> new owner approval of this plan.
+
+> **Measurement 5 fallback cleared by the watcher, 16 November 2026 05:51:** confirmed
+> captures can differ from their requested amount (existing `capture-mismatch.test.ts`); omit
+> `amount` from fixed columns, and explain the capture reason at
+> the trigger. Guard and helper controls use `provider` instead of `amount`. Existing capture
+> assertions stay unchanged. The watcher corrected its requested-amount instruction at 05:55:
+> `requested_amount` is set once (null → original amount), then held fixed, because both capture
+> and fail first record it in `resolveAttempting`; no writer changes.
+
+> **Current-consumer corrections cleared by the watcher, 16 November 2026:** the 06:05
+> clearance retires only tests of append-only triggers on the removed tables and ports newer
+> clock, provider, backup and inventory consumers; generic boot protections remain. At 06:15,
+> completion and one review-fixes pass were cleared up to a hard stop of 1,750 counted lines.
+> At 06:17, `bill_payment_id` became set-once: short-capture recovery first links an existing
+> payment to its contribution (`till-sale.ts`, introduced by `de3a1d847e`, 9 November).
+> Existing short-capture, money and invoice assertions remain unchanged. The recovery read
+> names its planned partial index and writes its fixed captured predicate literally; the
+> box-image SQLite probe reproduced the wider index choice without the hint.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
@@ -162,7 +187,6 @@ adjustments files. If the build order puts this area's move first, the move goes
 | Activity-log kinds for card readers, profile reader lists and adjustment reasons (`tables-fiscal.md` §3 "To `activity_log`") | follow-ups, not built in A1308 (README §5 U11) |
 | The card follow-up job that merges the card payment check loop and card refund recovery | the job runner, batch 3 (`jobs.md`) |
 | A state machine for `payments.state` in the trigger | not built: the design asks for set-once columns; the state rules stay in `store.ts`'s `WHERE` clauses |
-| A739 Cut B's `order_payment_contexts` and `bill_payment_slip_copies` | the orders area: on `feat/a739-payment-window` both are in core (`packages/db/src/classification.ts`); only `payments.payment_context_id` is this area's, written at insert and kept unchanged |
 | Personal-data export of the new person columns | A980 (`apps/server/src/personal-data-actions.coverage.test.ts:7-8` says other modules' actor columns are its backlog point) |
 
 ## Files
@@ -315,7 +339,7 @@ waitron_change_<t>_{insert,update,delete}` for the same three tables (no longer 
 and `changed trigger waitron_change_payments_update.when`, whose `new:` clause is the `old:` one plus
 eleven `new."<column>" is not old."<column>"` terms.
 
-**260 lines.** If A739 Cut B's `payments.payment_context_id` is at base, nothing about it changes.
+**260 lines.**
 
 ## Stop points (beyond rules §5)
 
@@ -323,20 +347,15 @@ eleven `new."<column>" is not old."<column>"` terms.
    fallback is below, and the watcher confirms it before it is taken). A test set-up refused is
    not this result: it is rewritten with `liftPaymentGuard` and listed; one not in the table under
    **Files** is added to that table in the PR description.
-2. A739 Cut B is not on `main` (rules §8: it lands before this area), or its tables landed in the
-   payments set rather than core. Then the manifest's payments `appendOnlyTables` must keep
-   `bill_payment_slip_copies` (this plan sets it to `[]`, pa3 to `["payment_refunds"]`): stop and
-   ask for the fold-in. Also a stop: `git grep -n -E "paymentContextId|payment_context_id"` finds
-   it in any `update`/`.set(` (it must be written at insert only).
-3. `pnpm --filter @waitron/server migration-baseline rebuild --set payments` refuses the trigger
+2. `pnpm --filter @waitron/server migration-baseline rebuild --set payments` refuses the trigger
    file (1a's parser), or 1a's guard reports the starting migration does not end with it.
-4. A test outside this plan's lists fails for a reason tied to the three tables.
+3. A test outside this plan's lists fails for a reason tied to the three tables.
 
 ## Needs
 
 - **Outside this area:** slice 1a (rebuild command, per-set trigger files); 4b (deletes
   `payment_policy` and the `accepted_offline`/`settled`/`declined` states from the same set); A739
-  Cut B (rules §8; it changes `payments`). Not the refunds slice (decision D2, coordinator review
+  memory-only slips (the correction above). Not the refunds slice (decision D2, coordinator review
   2026-11-08).
 - **In this area:** none.
 - **Not at the same time as:** any other slice changing the payments set (rules §7).
@@ -347,13 +366,7 @@ eleven `new."<column>" is not old."<column>"` terms.
 
 - [ ] **Step 1:** In a throwaway worktree of the base (`git worktree add --detach <dir> <base-sha>`,
   `pnpm install`), from `apps/server`: `pnpm protection-list list --out <empty absolute dir A>`.
-- [ ] **Step 2:** `git grep -n payment_context_id -- packages/payments/src/schema/payments.ts`:
-  note whether A739 Cut B's column is there (Task 1's trigger lists it), and
-  `git grep -n -E "paymentContextId|payment_context_id" -- apps packages ':!**/drizzle/**'` shows
-  it only in schema, inserts and reads (stop point 2). `git grep -n -E
-  'order_payment_contexts|bill_payment_slip_copies' -- 'packages/*/src/classification.ts'` names
-  `packages/db/src/classification.ts` (core); any other file is stop point 2.
-- [ ] **Step 3:** Confirm the cites in **Files** still say what this plan says (rules §5.1).
+- [ ] **Step 2:** Confirm the cites in **Files** still say what this plan says (rules §5.1).
 
 ### Task 1: measurement 5 — the guard on today's writers (early)
 
@@ -390,8 +403,8 @@ and the set-ups in **Files**' table.
 - [ ] **Step 1: Write the failing tests** in `payments-guard.test.ts` (`useVenueDb` with
   `CORE_MIGRATIONS, PAYMENTS_MIGRATIONS`, a captured payment seeded with `../../test/seed.js`):
   - `it.each` "refuses a change to <column>" over `working_order_id`, `source`, `device_id`,
-    `node_id`, `provider`, `payment_ref`, `amount`, `created_at`, `bill_payment_id` (and
-    `payment_context_id` when Task 0 found it): a raw `update payments set <column> = <other>`
+    `node_id`, `provider`, `payment_ref`, `amount`, `created_at`, `bill_payment_id`:
+    a raw `update payments set <column> = <other>`
     raises, `expect(triggerRaised(error, PAYMENT_CHANGE_REFUSAL)).toBe(true)`.
   - `it.each` "sets <column> once" over `sale_id`, `reader_id`, `reconcile_remediated_at`: null →
     value succeeds; value → other value and value → null each raise `PAYMENT_CHANGE_REFUSAL`.
@@ -427,8 +440,7 @@ BEGIN
 END;
 ```
 
-  Add `AND new.payment_context_id IS old.payment_context_id` after `bill_payment_id` if Task 0
-  found that column. Run the rebuild command for `payments`; run the test: PASS.
+  Run the rebuild command for `payments`; run the test: PASS.
 - [ ] **Step 3b: the helper and the set-ups.** Write `liftPaymentGuard` with its test ("restores the
   guard: after the write, a change to `amount` is refused again"; "restores it when the write
   throws"). Rewrite each set-up in **Files**' table to wrap its update in it.
@@ -444,9 +456,12 @@ pnpm --filter @waitron/payments-sumup test
 pnpm --filter @waitron/server exec vitest run src/till-sale-reconciliation.test.ts src/bill-payments.test.ts src/bill-payments.card.test.ts src/bill-payments-loop.test.ts src/bill-payments-api.test.ts src/payments-api.test.ts src/payments-api.stuck.test.ts src/pending-card-recovery.test.ts src/pending-card-loop.test.ts src/card-charged-not-recorded.test.ts src/placed-order-one-payment.test.ts src/parked-table-payments.test.ts src/attendance-integrated-payments.test.ts src/attendance-whole-payments.test.ts src/till-api.fiscal-sale-paths.test.ts
 ```
 
-  Control (proves the probe can see a failure): temporarily change `associatePaymentWithSale` to
-  set `readerId: "00000000-0000-4000-8000-000000000000"` unconditionally, rerun
-  `src/store.test.ts`, see the refusal, revert.
+  Control (corrected after Claude's run-it review, 16 November): temporarily replace the
+  reader-preserving `coalesce` in `associatePaymentWithSale` with this request's `readerId`.
+  Run `pnpm --filter @waitron/server exec vitest run src/till-sale-integrated.db.test.ts -t
+  "a recovery Pay on another reader settles and keeps reader A"`, observe
+  `a payment cannot make that change`, then revert. The old invented-reader/store control
+  fails only a foreign key and does not measure this guard; the real-reader/store run passes.
   Run the set-up suites in **Files**' table too. **Pass:** no product writer is refused. A refusal
   raised by a test's own set-up statement is not the measurement's result: rewrite it with
   `liftPaymentGuard` and list it (stop point 1). **Failing result:** a product writer is refused →

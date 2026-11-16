@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { eq } from "drizzle-orm";
+import { payments } from "@waitron/payments";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -7,12 +10,7 @@ import {
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
 } from "@waitron/shared";
-import {
-  PAYMENTS_MIGRATIONS,
-  getPaymentByRef,
-  insertAttempting,
-  recordResolution,
-} from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, getPaymentByRef, insertAttempting } from "@waitron/payments";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
 import type { NodeId } from "@waitron/shared";
@@ -24,6 +22,12 @@ import {
 } from "@waitron/payments/test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 
 const AT = new Date("2026-07-24T10:00:00Z");
 
@@ -56,15 +60,16 @@ describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the o
         amount: decimal("10.00"),
       });
       const row = await getPaymentByRef(tx, key);
-      await recordResolution(tx, {
-        paymentId: row!.id,
-        workingOrderId: s.workingOrderId,
-        personId: "22222222-2222-4222-8222-222222222222",
-        outcome: "failed",
-        cancelledAtProvider: true,
-        providerStatus: "requires_payment_method",
-        resolvedAt: AT,
-      });
+      await tx
+        .update(payments)
+        .set({
+          resolvedBy: "22222222-2222-4222-8222-222222222222",
+          resolutionOutcome: "failed",
+          resolutionCancelledAtProvider: true,
+          resolutionProviderStatus: "requires_payment_method",
+          resolvedAt: AT.toISOString(),
+        })
+        .where(eq(payments.id, row!.id));
     });
     const client = new FakeStripeDevice();
     await providerFor(client).collect(collectParams(s));

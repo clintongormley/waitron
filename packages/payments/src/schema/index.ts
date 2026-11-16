@@ -8,7 +8,7 @@ export { cardReaders } from "./card-readers.js";
 export { deviceCardReaders } from "./device-card-readers.js";
 export { deviceProfileCardReaders } from "./device-profile-card-readers.js";
 export { cardReaderHolders } from "./card-reader-holders.js";
-export { paymentResolutionOutcome, paymentResolutions } from "./payment-resolutions.js";
-export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./payment-holds.js";
 export { runState, scheduledRuns } from "./scheduled-runs.js";
 export type { RunState } from "./scheduled-runs.js";
+
+export { paymentResolutionOutcome, paymentHoldOutcome } from "./payments.js";

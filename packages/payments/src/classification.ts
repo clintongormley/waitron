@@ -1,4 +1,4 @@
-import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
@@ -11,9 +11,6 @@ const STATE = "manager configuration / live service; copied to a standby, never 
 export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("payments", "ledger", LEDGER),
   classify("payment_refunds", "ledger", LEDGER),
-  appendOnly("payment_resolutions", "ledger", LEDGER),
-  appendOnly("payment_holds", "ledger", LEDGER),
-  appendOnly("payment_hold_outcomes", "ledger", LEDGER),
 
   classify("card_readers", "state", STATE),
   classify("device_card_readers", "state", STATE),

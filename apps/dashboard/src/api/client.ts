@@ -2472,7 +2472,7 @@ export interface StuckBillPaymentRow {
 /** A card payment the provider paid out at a different amount, held until a manager records what
  * was done with it. */
 export interface HeldPaymentRow {
-  holdId: string;
+  paymentId: string;
   paymentRef: string;
   provider: string;
   orderNumber: number;

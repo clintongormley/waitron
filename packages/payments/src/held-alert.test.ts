@@ -228,7 +228,7 @@ describe("refreshHeldAlert", () => {
     await withTransaction(suite.db, async (tx) => {
       const [hold] = await listOpenHolds(tx);
       await recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "kept",
         note: null,
         personId: MANAGER,
@@ -252,7 +252,7 @@ describe("refreshHeldAlert", () => {
       const holds = await listOpenHolds(tx);
       const second = holds.find((hold) => hold.paymentRef !== first.paymentRef)!;
       await recordHoldOutcome(tx, {
-        holdId: second.holdId,
+        paymentId: second.paymentId,
         outcome: "refunded_at_provider",
         note: null,
         personId: MANAGER,
@@ -280,7 +280,7 @@ describe("refreshHeldAlert", () => {
       const holds = await listOpenHolds(tx);
       const second = holds.find((hold) => hold.paymentRef !== first.paymentRef)!;
       await recordHoldOutcome(tx, {
-        holdId: second.holdId,
+        paymentId: second.paymentId,
         outcome: "kept",
         note: null,
         personId: MANAGER,

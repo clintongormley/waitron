@@ -16,12 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
-import {
-  insertCapturedPayment,
-  insertFailedPayment,
-  payments,
-  recordResolution,
-} from "@waitron/payments";
+import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import {
   centsToDecimal,
@@ -339,15 +334,16 @@ describe("the loop's own edges", () => {
           .select({ id: payments.id })
           .from(payments)
           .where(eq(payments.paymentRef, paymentRef));
-        await recordResolution(tx, {
-          paymentId: provided!.id,
-          workingOrderId: billId,
-          personId: automatic ? null : venue.adminId,
-          outcome: "failed",
-          cancelledAtProvider: true,
-          providerStatus: "canceled",
-          resolvedAt: venue.clock.now().instant,
-        });
+        await tx
+          .update(payments)
+          .set({
+            resolvedBy: automatic ? null : venue.adminId,
+            resolutionOutcome: "failed",
+            resolutionCancelledAtProvider: true,
+            resolutionProviderStatus: "canceled",
+            resolvedAt: venue.clock.now().instant.toISOString(),
+          })
+          .where(eq(payments.id, provided!.id));
       });
       await settle();
       expect(await stateOf(id)).toBe(automatic ? "failed" : "pending");

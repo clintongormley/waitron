@@ -8,7 +8,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { PaymentsScreen } from "./payments-screen.js";
 
 const HELD: HeldPaymentRow = {
-  holdId: "h-1",
+  paymentId: "h-1",
   paymentRef: "pi_57",
   provider: "stripe-terminal",
   orderNumber: 57,

@@ -5,6 +5,7 @@ import {
   devices,
   enumCheck,
   enumType,
+  flag,
   id,
   label,
   money,
@@ -12,6 +13,7 @@ import {
   nodes,
   nowIso,
   originChecks,
+  persons,
   saleSourceColumn,
   sales,
   table,
@@ -33,6 +35,9 @@ export const paymentState = enumType([
   "failed",
   "initiated",
 ]);
+
+export const paymentResolutionOutcome = enumType(["captured", "failed"]);
+export const paymentHoldOutcome = enumType(["refunded_at_provider", "kept"]);
 
 const externalProviderType = enumType(["connected_account", "other"]);
 
@@ -84,6 +89,17 @@ export const payments = table(
     /** The bill payment this attempt charges for (bill payments design §2.4); null for a payment
      * of a whole order. Unique where set. */
     billPaymentId: id("bill_payment_id"),
+    resolutionOutcome: paymentResolutionOutcome("resolution_outcome"),
+    resolutionCancelledAtProvider: flag("resolution_cancelled_at_provider"),
+    resolutionProviderStatus: label("resolution_provider_status"),
+    resolvedBy: id("resolved_by"),
+    resolvedAt: tsString("resolved_at"),
+    holdProviderAmount: money("hold_provider_amount"),
+    heldAt: tsString("held_at"),
+    holdOutcome: paymentHoldOutcome("hold_outcome"),
+    holdNote: label("hold_note"),
+    holdDecidedBy: id("hold_decided_by"),
+    holdDecidedAt: tsString("hold_decided_at"),
   },
   (t) => [
     unique("payments_provider_ref_key").on(t.provider, t.paymentRef),
@@ -125,6 +141,51 @@ export const payments = table(
     index("payments_reader_idx").on(t.readerId),
     // The reconcile sweep's filter: one provider's rows over a settled_at window.
     index("payments_reconcile_idx").on(t.provider, t.settledAt),
+    foreignKey({
+      columns: [t.resolvedBy],
+      foreignColumns: [persons.id],
+      name: "payments_resolved_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.holdDecidedBy],
+      foreignColumns: [persons.id],
+      name: "payments_hold_decided_by_fk",
+    }).onDelete("restrict"),
+    index("payments_open_hold_idx")
+      .on(t.heldAt)
+      .where(sql`${t.heldAt} is not null and ${t.holdOutcome} is null`),
+    index("payments_unfiled_resolution_idx")
+      .on(t.workingOrderId)
+      .where(
+        sql`${t.resolutionOutcome} = 'captured' and ${t.resolvedBy} is null and ${t.saleId} is null`,
+      ),
+    check("payments_resolution_outcome_ck", enumCheck(t.resolutionOutcome)),
+    check(
+      "payments_resolution_cancelled_ck",
+      sql`${t.resolutionCancelledAtProvider} is null or ${t.resolutionCancelledAtProvider} = 0 or ${t.resolutionOutcome} = 'failed'`,
+    ),
+    check(
+      "payments_resolution_fields_ck",
+      sql`(${t.resolutionOutcome} is null) = (${t.resolvedAt} is null) and (${t.resolutionOutcome} is null) = (${t.resolutionCancelledAtProvider} is null) and (${t.resolutionOutcome} is not null or (${t.resolutionProviderStatus} is null and ${t.resolvedBy} is null))`,
+    ),
+    check(
+      "payments_hold_amount_ck",
+      sql`${t.holdProviderAmount} is null or ${t.holdProviderAmount} > 0`,
+    ),
+    check(
+      "payments_hold_fields_ck",
+      sql`(${t.holdProviderAmount} is null) = (${t.heldAt} is null)`,
+    ),
+    check("payments_hold_outcome_ck", enumCheck(t.holdOutcome)),
+    check("payments_hold_note_ck", sql`${t.holdNote} is null or length(trim(${t.holdNote})) > 0`),
+    check(
+      "payments_hold_outcome_fields_ck",
+      sql`(${t.holdOutcome} is null) = (${t.holdDecidedBy} is null) and (${t.holdOutcome} is null) = (${t.holdDecidedAt} is null) and (${t.holdOutcome} is null or ${t.heldAt} is not null) and (${t.holdOutcome} is not null or ${t.holdNote} is null)`,
+    ),
+    check(
+      "payments_hold_or_remediation_ck",
+      sql`${t.heldAt} is null or ${t.reconcileRemediatedAt} is null`,
+    ),
     check("payments_amount_ck", sql`${t.amount} > 0`),
     check("payments_card_last4_ck", sql`${t.cardLast4} is null or length(${t.cardLast4}) = 4`),
     check(

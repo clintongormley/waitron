@@ -1,7 +1,8 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import Stripe from "stripe";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -13,6 +14,12 @@ import { StripeTerminalProvider } from "./provider.js";
 import { stripeClient } from "./stripe-client.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 
 describe("unknown Stripe payments through the installed HTTP client", () => {
   it.each(["succeeded", "canceled"] as const)(
@@ -84,8 +91,11 @@ describe("unknown Stripe payments through the installed HTTP client", () => {
             ?.state,
         ).toBe(status === "succeeded" ? "captured" : "failed");
         expect(
-          (await suite.db.execute(sql`select person_id, provider_status from payment_resolutions`))
-            .rows,
+          (
+            await suite.db.execute(
+              sql`select resolved_by as person_id, resolution_provider_status as provider_status from payments where resolution_outcome is not null`,
+            )
+          ).rows,
         ).toEqual([{ person_id: null, provider_status: status }]);
         expect(calls).toEqual([
           "POST /v1/payment_intents",

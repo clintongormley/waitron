@@ -1390,7 +1390,7 @@ export class PaymentsScreen extends LitElement {
     this.billBusy = true;
     const order = this.#heldOrder(row);
     try {
-      await this.api.recordHeldOutcome(row.holdId, {
+      await this.api.recordHeldOutcome(row.paymentId, {
         outcome: outcome as HeldOutcome,
         ...(note ? { note } : {}),
         pin,
@@ -1675,7 +1675,7 @@ export class PaymentsScreen extends LitElement {
 
   #renderHeldRow(row: HeldPaymentRow): TemplateResult {
     const order = this.#heldOrderAndTime(row);
-    return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
+    return html`<li class="stuck" data-test=${`held-payment-${row.paymentId}`}>
       <div class="stuck-body">
         ${this.#heldOrderLine(row)}
         <p class="held-amounts">
@@ -1688,7 +1688,7 @@ export class PaymentsScreen extends LitElement {
       </div>
       <wt-button
         variant="secondary"
-        data-test=${`record-held-${row.holdId}`}
+        data-test=${`record-held-${row.paymentId}`}
         aria-label=${`${t("payments.held.record")}: ${order}`}
         ?disabled=${this.billBusy}
         @click=${() => this.#openHeldAction(row)}

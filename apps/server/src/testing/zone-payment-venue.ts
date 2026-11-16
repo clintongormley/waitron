@@ -124,7 +124,6 @@ export async function zonePaymentVenue(db: Database) {
         "tender_refunds",
         "payments",
         "payment_refunds",
-        "payment_resolutions",
         "sales",
         "tenders",
         "sale_settlements",

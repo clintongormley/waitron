@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { withTransaction, workingOrders } from "@waitron/db";
-import { paymentResolutions, payments } from "@waitron/payments";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { withTransaction, workingOrders, type Transaction } from "@waitron/db";
+import { payments } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { storedDeviceOrigin } from "./request-config.js";
@@ -33,31 +33,35 @@ export interface AutomaticCardRecoveryDeps extends TillSaleDeps {
   pool: Pick<CardProviderPool, "get">;
 }
 
-export async function recoverAutomaticCardPayments(
-  deps: AutomaticCardRecoveryDeps,
-): Promise<{ filed: number; errors: { paymentId: string; error: string }[] }> {
-  deps.admission.require();
-  const pending = await withTransaction(deps.db, (tx) =>
+export function unfiledAutomaticResolutions(tx: Transaction) {
+  return (
     tx
       .select({
-        id: payments.id,
-        provider: payments.provider,
-        orderId: payments.workingOrderId,
+        id: sql<string>`${payments.id}`,
+        provider: sql<string>`${payments.provider}`,
+        orderId: sql<string>`${payments.workingOrderId}`,
       })
-      .from(payments)
-      .innerJoin(paymentResolutions, eq(paymentResolutions.paymentId, payments.id))
+      // The box collects no planner statistics; keep this sweep on its partial index.
+      .from(sql`${payments} indexed by payments_unfiled_resolution_idx`)
       .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
       .where(
         and(
-          eq(paymentResolutions.outcome, "captured"),
-          isNull(paymentResolutions.personId),
+          sql`${payments.resolutionOutcome} = 'captured'`,
+          isNull(payments.resolvedBy),
           eq(payments.state, "captured"),
           isNull(payments.saleId),
           isNull(payments.billPaymentId),
           inArray(workingOrders.status, ["open", "placed"]),
         ),
-      ),
+      )
   );
+}
+
+export async function recoverAutomaticCardPayments(
+  deps: AutomaticCardRecoveryDeps,
+): Promise<{ filed: number; errors: { paymentId: string; error: string }[] }> {
+  deps.admission.require();
+  const pending = await withTransaction(deps.db, unfiledAutomaticResolutions);
   let filed = 0;
   const errors: { paymentId: string; error: string }[] = [];
   for (const candidate of pending) {

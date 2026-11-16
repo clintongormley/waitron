@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -16,6 +17,12 @@ import type { Seeded } from "../test/seed.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 
 // Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
 // refused with `FOREIGN KEY constraint failed`.
@@ -925,8 +932,7 @@ describe("orphan remediation", () => {
     await reconcilePayments(deps(report), PERIOD, new Date("2026-07-26T12:00:00Z"));
 
     const { rows } = await suite.db.execute<{ provider_amount: number; found_at: string }>(sql`
-      select h.provider_amount, h.found_at from payment_holds h
-      join payments p on p.id = h.payment_id where p.payment_ref = 'p1'`);
+      select p.hold_provider_amount as provider_amount, p.held_at as found_at from payments p where p.held_at is not null and p.payment_ref = 'p1'`);
     expect(rows).toEqual([{ provider_amount: 1250, found_at: NOW.toISOString() }]);
   });
 
@@ -1042,7 +1048,7 @@ describe("orphan remediation", () => {
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     await reconcilePayments(deps(new FakeSettlementReport([settlement()])), PERIOD, NOW);
-    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    const { rows } = await suite.db.execute(sql`select id from payments where held_at is not null`);
     expect(rows).toEqual([]);
   });
 
@@ -1063,7 +1069,7 @@ describe("orphan remediation", () => {
       "payment.reconcile_drift",
       "payment.reconcile_orphan",
     ]);
-    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    const { rows } = await suite.db.execute(sql`select id from payments where held_at is not null`);
     expect(rows).toEqual([]);
   });
 
@@ -1098,7 +1104,7 @@ describe("orphan remediation", () => {
         remediation: "amountDrifted",
       },
     ]);
-    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    const { rows } = await suite.db.execute(sql`select id from payments where held_at is not null`);
     expect(rows).toEqual([]);
   });
 
@@ -1145,7 +1151,7 @@ describe("orphan remediation", () => {
     const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "kept",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",

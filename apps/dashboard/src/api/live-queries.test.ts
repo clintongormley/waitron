@@ -245,8 +245,6 @@ it.each([
   ["listStuckBillPayments", [], "bill_payments"],
   ["listStuckBillPayments", [], "payments"],
   ["listStuckBillPayments", [], "payment_refunds"],
-  ["listHeldPayments", [], "payment_holds"],
-  ["listHeldPayments", [], "payment_hold_outcomes"],
   ["listHeldPayments", [], "payments"],
   ["listHeldPayments", [], "working_orders"],
   ["listStuckBillRefunds", [], "bill_payments"],

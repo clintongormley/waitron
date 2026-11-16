@@ -1,7 +1,8 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,6 +18,12 @@ import { StripeTerminalProvider } from "./provider.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 const now = new Date("2026-10-16T18:30:00Z");
 
 function provider(client: FakeStripe): StripeTerminalProvider {
@@ -81,7 +88,11 @@ describe("Stripe unknown outcomes", () => {
     expect((await row(refs[0]!))?.state).toBe("captured");
     expect((await row(refs[1]!))?.state).toBe("failed");
     expect(
-      (await suite.db.execute(sql`select count(*) as n from payment_resolutions`)).rows,
+      (
+        await suite.db.execute(
+          sql`select count(*) as n from payments where resolution_outcome is not null`,
+        )
+      ).rows,
     ).toEqual([{ n: 2 }]);
   });
 
@@ -190,7 +201,7 @@ describe("Stripe unknown outcomes", () => {
     });
     expect((await row(paymentRef))?.state).toBe(test.expected);
     const { rows } = await suite.db.execute(
-      sql`select person_id, outcome from payment_resolutions`,
+      sql`select resolved_by as person_id, resolution_outcome as outcome from payments where resolution_outcome is not null`,
     );
     expect(rows).toEqual(
       test.expected === "attempting" ? [] : [{ person_id: null, outcome: test.expected }],
@@ -281,7 +292,7 @@ describe("Stripe unknown outcomes", () => {
       }),
     );
     await suite.db.execute(
-      sql`create trigger a764_refuse_resolution before insert on payment_resolutions begin select raise(abort, 'audit refused'); end`,
+      sql`create trigger a764_refuse_resolution before update of resolution_outcome on payments when old.resolution_outcome is null and new.resolution_outcome is not null begin select raise(abort, 'audit refused'); end`,
     );
     try {
       await expect(

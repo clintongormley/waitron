@@ -1,3 +1,4 @@
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedDeviceProfiles,
@@ -2305,8 +2306,10 @@ describe("payment slip persisted capture facts", () => {
       const [savedSale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
       expect(savedSale!.locale).toBe(saved);
       const settledAt = new Date(2026, 8, 12, 9, 5).toISOString();
-      await suite.db.execute(
-        sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+      await liftPaymentGuard(suite.db, () =>
+        suite.db.execute(
+          sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+        ),
       );
       const ask = () =>
         app.request(`/api/sales/${id}/payment-slip`, {
@@ -2358,8 +2361,10 @@ describe("payment slip persisted capture facts", () => {
       const cookie = await login(app, cfg, operatorId);
       const id = await ringSale(app, cookie, each.menuItemId, "card");
       // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
-      await suite.db.execute(
-        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
+      await liftPaymentGuard(suite.db, () =>
+        suite.db.execute(
+          sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
+        ),
       );
       const res = await app.request(`/api/sales/${id}/payment-slip`, {
         method: "POST",
@@ -2391,8 +2396,10 @@ describe("payment slip persisted capture facts", () => {
       await suite.db.execute(
         sql`insert into card_readers (id, provider, provider_ref, name, active, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', 1, ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
       );
-      await suite.db.execute(
-        sql`update payments set provider = 'sumup', reader_id = (select id from card_readers where name = 'Counter' limit 1) where working_order_id = ${id}`,
+      await liftPaymentGuard(suite.db, () =>
+        suite.db.execute(
+          sql`update payments set provider = 'sumup', reader_id = (select id from card_readers where name = 'Counter' limit 1) where working_order_id = ${id}`,
+        ),
       );
       const response = await app.request(`/api/sales/${id}/payment-slip`, {
         method: "POST",
@@ -2432,8 +2439,10 @@ describe("payment slip persisted capture facts", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId, "card");
-    await suite.db.execute(
-      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+      ),
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
       method: "POST",
@@ -2464,8 +2473,8 @@ describe("payment slip with nothing to print", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId, "card");
-    await suite.db.execute(
-      sql`update payments set provider = 'sumup' where working_order_id = ${id}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(sql`update payments set provider = 'sumup' where working_order_id = ${id}`),
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
       method: "POST",
@@ -2482,8 +2491,10 @@ describe("payment slip with nothing to print", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId, "card");
-    await suite.db.execute(
-      sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
+      ),
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
       method: "POST",
@@ -2858,8 +2869,10 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   async function cardSaleWithCapture(app: Hono, cookie: string, item: string) {
     const id = await ringSale(app, cookie, item, "card");
-    await suite.db.execute(
-      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+      ),
     );
     return id;
   }

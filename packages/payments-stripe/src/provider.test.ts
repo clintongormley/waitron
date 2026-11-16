@@ -1,10 +1,12 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { payments } from "@waitron/payments";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, devices, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -24,7 +26,6 @@ import {
   insertAttempting,
   insertCapturedPayment,
   listAttempting,
-  recordResolution,
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { PaymentRow } from "@waitron/payments";
@@ -45,6 +46,12 @@ import {
 import type { DeviceOrigin, NodeId } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 
 const noSleep = (): Promise<void> => Promise.resolve();
 /** For a hand-built client whose test never reads or cancels a PaymentIntent, nor refunds with a
@@ -996,9 +1003,9 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
 
   function resolutionsOf(paymentId: string) {
     return suite.db.execute<Record<string, unknown>>(
-      sql`select working_order_id, person_id, outcome, cancelled_at_provider, provider_status,
+      sql`select working_order_id, resolved_by as person_id, resolution_outcome as outcome, resolution_cancelled_at_provider as cancelled_at_provider, resolution_provider_status as provider_status,
                  resolved_at
-            from payment_resolutions where payment_id = ${paymentId}`,
+            from payments where resolution_outcome is not null and id = ${paymentId}`,
     );
   }
 
@@ -1062,7 +1069,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       if (ref !== null && intent !== undefined) fake.setIntent(ref, intent);
       const row = await abandonedRow(ref);
       await suite.db.execute(
-        sql`create trigger refuse_resolutions before insert on payment_resolutions
+        sql`create trigger refuse_resolutions before update of resolution_outcome on payments when old.resolution_outcome is null and new.resolution_outcome is not null
           begin select raise(abort, 'probe: resolution refused'); end`,
       );
       try {
@@ -1101,15 +1108,16 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     cancelledAtProvider: boolean,
   ): Promise<void> {
     await withTransaction(suite.db, (tx) =>
-      recordResolution(tx, {
-        paymentId: row.paymentId,
-        workingOrderId: row.workingOrderId,
-        personId: "22222222-2222-4222-8222-222222222222",
-        outcome: "failed",
-        cancelledAtProvider,
-        providerStatus: null,
-        resolvedAt: NOW,
-      }),
+      tx
+        .update(payments)
+        .set({
+          resolvedBy: "22222222-2222-4222-8222-222222222222",
+          resolutionOutcome: "failed",
+          resolutionCancelledAtProvider: cancelledAtProvider,
+          resolutionProviderStatus: null,
+          resolvedAt: NOW.toISOString(),
+        })
+        .where(eq(payments.id, row.paymentId)),
     );
   }
 
@@ -1204,15 +1212,16 @@ describe("StripeTerminalProvider.collect for a bill payment", () => {
     const p = await collectParams();
     const stuck = await abandonedRow("pi_cancelled", p);
     await withTransaction(suite.db, (tx) =>
-      recordResolution(tx, {
-        paymentId: stuck.paymentId,
-        workingOrderId: p.workingOrderId,
-        personId: MANAGER,
-        outcome: "failed",
-        cancelledAtProvider: true,
-        providerStatus: null,
-        resolvedAt: NOW,
-      }),
+      tx
+        .update(payments)
+        .set({
+          resolvedBy: MANAGER,
+          resolutionOutcome: "failed",
+          resolutionCancelledAtProvider: true,
+          resolutionProviderStatus: null,
+          resolvedAt: NOW.toISOString(),
+        })
+        .where(eq(payments.id, stuck.paymentId)),
     );
     const billPaymentId = await seedBillPayment(suite.db, p._seeded);
 

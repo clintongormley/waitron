@@ -1,3 +1,4 @@
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -5,7 +6,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -52,7 +53,6 @@ import {
   insertCapturedPayment,
   insertFailedPayment,
   recordRefund,
-  paymentResolutions,
   payments,
   stampAttemptingRef,
   type CardProviderContribution,
@@ -436,7 +436,7 @@ describe("A1381 manager collection ownership", () => {
       const whole = await strandPayment(v, orderId, { status: "requires_payment_method" });
       const billOrderId = await openOrder(v);
       const bill = await strandBillPayment(v, billOrderId, { kind: "failed" });
-      await suite.db.update(payments).set({ nodeId: null });
+      await liftPaymentGuard(suite.db, () => suite.db.update(payments).set({ nodeId: null }));
       const wholeList = await send(v, "GET", "/management-api/payments/stuck");
       expect(wholeList.status).toBe(200);
       expect(
@@ -875,13 +875,13 @@ async function orderOf(id: string): Promise<{ status: string; mark: string | nul
 async function resolutionsFor(paymentId: string) {
   return suite.db
     .select({
-      personId: paymentResolutions.personId,
-      workingOrderId: paymentResolutions.workingOrderId,
-      outcome: paymentResolutions.outcome,
-      cancelledAtProvider: paymentResolutions.cancelledAtProvider,
+      personId: payments.resolvedBy,
+      workingOrderId: payments.workingOrderId,
+      outcome: payments.resolutionOutcome,
+      cancelledAtProvider: payments.resolutionCancelledAtProvider,
     })
-    .from(paymentResolutions)
-    .where(eq(paymentResolutions.paymentId, paymentId));
+    .from(payments)
+    .where(and(eq(payments.id, paymentId), isNotNull(payments.resolutionOutcome)));
 }
 
 // --- the list -------------------------------------------------------------------------------
@@ -979,8 +979,10 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       amountReceived: 150,
     });
     // A source with no device: the sale tables accept it, but only a device starts a payment.
-    await suite.db.execute(
-      sql`update payments set source = 'demo_seed', device_id = null where id = ${paymentId}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set source = 'demo_seed', device_id = null where id = ${paymentId}`,
+      ),
     );
     const retrieve = vi.spyOn(v.client, "retrievePaymentIntent");
 
@@ -1484,7 +1486,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       status: "requires_payment_method",
     });
     await suite.db.execute(
-      sql`create trigger refuse_resolutions before insert on payment_resolutions
+      sql`create trigger refuse_resolutions before update of resolution_outcome on payments when old.resolution_outcome is null and new.resolution_outcome is not null
           begin select raise(abort, 'probe: resolution refused'); end`,
     );
     let res: Response;
@@ -2770,10 +2772,12 @@ describe("provider-confirmed partial-refund release", () => {
     const key = { provider: provider.provider, paymentRef: randomUUID() };
     await withTransaction(suite.db, async (tx) => {
       if (bill)
-        await tx
-          .update(payments)
-          .set({ ...key, externalRef: "partial-txn" })
-          .where(eq(payments.billPaymentId, bill));
+        await liftPaymentGuard(tx, () =>
+          tx
+            .update(payments)
+            .set({ ...key, externalRef: "partial-txn" })
+            .where(eq(payments.billPaymentId, bill)),
+        );
       else
         await insertCapturedPayment(tx, {
           ...key,
@@ -2934,10 +2938,12 @@ describe("provider-confirmed partial-refund release", () => {
         if (problem === "evidence changed")
           evidence.refunds.push({ providerRefundRef: "later", amount: decimal("0.10") });
         if (problem === "another box")
-          await suite.db
-            .update(payments)
-            .set({ nodeId: await seedNode(suite.db) })
-            .where(eq(payments.id, payment.id));
+          await liftPaymentGuard(suite.db, async () =>
+            suite.db
+              .update(payments)
+              .set({ nodeId: await seedNode(suite.db) })
+              .where(eq(payments.id, payment.id)),
+          );
         if (problem === "permission lost")
           await suite.db
             .update(persons)
@@ -3203,10 +3209,12 @@ describe("provider-confirmed partial-refund release", () => {
 
   it("does not release another box's charge", async () => {
     const { v, payment, lookup } = await partial();
-    await suite.db
-      .update(payments)
-      .set({ nodeId: await seedNode(suite.db) })
-      .where(eq(payments.id, payment.id));
+    await liftPaymentGuard(suite.db, async () =>
+      suite.db
+        .update(payments)
+        .set({ nodeId: await seedNode(suite.db) })
+        .where(eq(payments.id, payment.id)),
+    );
     const result = await send(v, "POST", releasePath(payment.id));
     expect(result.status).toBe(409);
     expect((await errorOf(result)).code).toBe("payment.not_stuck");

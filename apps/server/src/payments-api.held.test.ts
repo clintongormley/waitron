@@ -138,9 +138,9 @@ async function aHeldPayment(
       }),
     ).toBe("written");
     const [hold] = suite.db.all<{ id: string }>(
-      sql`select id from payment_holds where payment_id = ${payment.id}`,
+      sql`select id from payments where id = ${payment.id} and held_at is not null`,
     );
-    return { holdId: hold!.id, paymentRef, orderNumber };
+    return { paymentId: hold!.id, paymentRef, orderNumber };
   });
 }
 
@@ -169,8 +169,8 @@ function list(v: Venue, cookie = v.managerCookie) {
   return v.app.request("/management-api/payments/held", { headers: { cookie } });
 }
 
-function outcomePath(holdId: string) {
-  return `/management-api/payments/held/${holdId}/outcome`;
+function outcomePath(paymentId: string) {
+  return `/management-api/payments/held/${paymentId}/outcome`;
 }
 
 function post(v: Venue, path: string, body: unknown, cookie = v.managerCookie) {
@@ -186,8 +186,13 @@ async function errorOf(res: Response) {
 }
 
 function outcomeRows() {
-  return suite.db.all<{ hold_id: string; outcome: string; note: string | null; person_id: string }>(
-    sql`select hold_id, outcome, note, person_id from payment_hold_outcomes order by recorded_at, id`,
+  return suite.db.all<{
+    payment_id: string;
+    outcome: string;
+    note: string | null;
+    person_id: string;
+  }>(
+    sql`select id as payment_id, hold_outcome as outcome, hold_note as note, hold_decided_by as person_id from payments where hold_outcome is not null order by hold_decided_at, id`,
   );
 }
 
@@ -216,7 +221,7 @@ describe("GET /management-api/payments/held", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       {
-        holdId: earlier.holdId,
+        paymentId: earlier.paymentId,
         paymentRef: earlier.paymentRef,
         provider: "stripe",
         orderNumber: earlier.orderNumber,
@@ -225,7 +230,7 @@ describe("GET /management-api/payments/held", () => {
         providerAmount: "1.21",
       },
       {
-        holdId: later.holdId,
+        paymentId: later.paymentId,
         paymentRef: later.paymentRef,
         provider: "stripe",
         orderNumber: later.orderNumber,
@@ -254,7 +259,7 @@ describe("GET /management-api/payments/held", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       expect.objectContaining({
-        holdId: held.holdId,
+        paymentId: held.paymentId,
         orderNumber: held.orderNumber,
         label: "Terrace 4",
       }),
@@ -278,7 +283,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     const { earlier, later } = await twoHeld(v);
     const [before] = heldAlerts();
 
-    const res = await post(v, outcomePath(earlier.holdId), {
+    const res = await post(v, outcomePath(earlier.paymentId), {
       outcome: "refunded_at_provider",
       note: "  Refunded 10.89 in the Stripe dashboard  ",
       pin: "1234",
@@ -287,15 +292,15 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     expect(res.status).toBe(200);
     expect(outcomeRows()).toEqual([
       {
-        hold_id: earlier.holdId,
+        payment_id: earlier.paymentId,
         outcome: "refunded_at_provider",
         note: "Refunded 10.89 in the Stripe dashboard",
         person_id: v.managerId,
       },
     ]);
-    expect(((await (await list(v)).json()) as { holdId: string }[]).map((h) => h.holdId)).toEqual([
-      later.holdId,
-    ]);
+    expect(
+      ((await (await list(v)).json()) as { paymentId: string }[]).map((h) => h.paymentId),
+    ).toEqual([later.paymentId]);
     expect(heldAlerts()).toEqual([
       { id: before!.id, refs: [earlier.paymentRef, later.paymentRef], handledBy: v.managerId },
       { id: expect.any(String), refs: [later.paymentRef], handledBy: null },
@@ -314,11 +319,11 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       refreshHeldAlert(tx, sink, { now: new Date("2026-10-17T03:00:00.000Z"), by: null }),
     );
 
-    const res = await post(v, outcomePath(held.holdId), { outcome: "kept", pin: "1234" });
+    const res = await post(v, outcomePath(held.paymentId), { outcome: "kept", pin: "1234" });
 
     expect(res.status).toBe(200);
     expect(outcomeRows()).toEqual([
-      { hold_id: held.holdId, outcome: "kept", note: null, person_id: v.managerId },
+      { payment_id: held.paymentId, outcome: "kept", note: null, person_id: v.managerId },
     ]);
     expect(await (await list(v)).json()).toEqual([]);
     expect(heldAlerts()).toEqual([
@@ -330,7 +335,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     const v = await setup();
     const { earlier } = await twoHeld(v);
 
-    const res = await post(v, outcomePath(earlier.holdId), {
+    const res = await post(v, outcomePath(earlier.paymentId), {
       outcome: "kept",
       note: "   ",
       pin: "1234",
@@ -342,7 +347,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
 
   describe("refuses, writing nothing", () => {
     async function refused(
-      body: (held: { holdId: string }) => { path?: string; body: unknown; cookie?: "staff" },
+      body: (held: { paymentId: string }) => { path?: string; body: unknown; cookie?: "staff" },
     ) {
       const v = await setup();
       const { earlier } = await twoHeld(v);
@@ -350,7 +355,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const req = body(earlier);
       const res = await post(
         v,
-        req.path ?? outcomePath(earlier.holdId),
+        req.path ?? outcomePath(earlier.paymentId),
         req.body,
         req.cookie === "staff" ? v.staffCookie : v.managerCookie,
       );
@@ -379,11 +384,14 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const { earlier } = await twoHeld(v);
       const alertsBefore = heldAlerts();
       for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
-        const wrong = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "9999" });
+        const wrong = await post(v, outcomePath(earlier.paymentId), {
+          outcome: "kept",
+          pin: "9999",
+        });
         expect(wrong.status).toBe(401);
       }
 
-      const res = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "1234" });
+      const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: "1234" });
 
       expect(res.status).toBe(429);
       expect((await errorOf(res)).code).toBe("pin.throttled");
@@ -427,7 +435,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       expect(res.status).toBe(404);
       expect(await errorOf(res)).toEqual({
         code: "payment.hold_not_found",
-        params: { holdId: unknown },
+        params: { paymentId: unknown },
       });
     });
 
@@ -443,7 +451,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     it("a second outcome for the same hold", async () => {
       const v = await setup();
       const { earlier } = await twoHeld(v);
-      const first = await post(v, outcomePath(earlier.holdId), {
+      const first = await post(v, outcomePath(earlier.paymentId), {
         outcome: "kept",
         note: "first",
         pin: "1234",
@@ -452,7 +460,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const outcomesBefore = outcomeRows();
       const alertsBefore = heldAlerts();
 
-      const res = await post(v, outcomePath(earlier.holdId), {
+      const res = await post(v, outcomePath(earlier.paymentId), {
         outcome: "refunded_at_provider",
         pin: "1234",
       });
@@ -460,7 +468,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       expect(res.status).toBe(409);
       expect(await errorOf(res)).toEqual({
         code: "payment.hold_already_recorded",
-        params: { holdId: earlier.holdId },
+        params: { paymentId: earlier.paymentId },
       });
       expect(outcomeRows()).toEqual(outcomesBefore);
       expect(heldAlerts()).toEqual(alertsBefore);
@@ -480,12 +488,12 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     const { earlier } = await twoHeld(v);
     watchDerivationsAndLock(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
 
-    const res = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "1234" });
+    const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: "1234" });
 
     expect(res.status).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
     expect(outcomeRows()).toEqual([
-      { hold_id: earlier.holdId, outcome: "kept", note: null, person_id: v.managerId },
+      { payment_id: earlier.paymentId, outcome: "kept", note: null, person_id: v.managerId },
     ]);
   });
 
@@ -496,7 +504,7 @@ describe("the held payment outcome checks the manager's PIN before the write loc
 
     const res = await post(
       v,
-      outcomePath(earlier.holdId),
+      outcomePath(earlier.paymentId),
       { outcome: "kept", pin: "5678" },
       v.staffCookie,
     );
@@ -510,7 +518,7 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     const { earlier } = await twoHeld(v);
     watchDerivationsAndLock(suite.db, "1234", anotherWriter);
 
-    const res = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: 1234 });
+    const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: 1234 });
 
     expect(res.status).toBe(401);
     expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });

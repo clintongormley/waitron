@@ -67,12 +67,7 @@ export type {
   RefundAuditRow,
   SettledInitiated,
 } from "./store.js";
-export {
-  countProviderCancelledResolutions,
-  recordAttemptResolution,
-  recordResolution,
-} from "./resolutions.js";
-export type { NewPaymentResolution } from "./resolutions.js";
+export { countProviderCancelledResolutions, recordAttemptResolution } from "./resolutions.js";
 export { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 export type { HoldOutcome, OpenHold } from "./holds.js";
 export { refreshHeldAlert } from "./held-alert.js";
@@ -151,8 +146,6 @@ export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.j
 export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
-export { paymentResolutions } from "./schema/payment-resolutions.js";
-export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 export { runState, scheduledRuns } from "./schema/scheduled-runs.js";
 export type { RunState } from "./schema/scheduled-runs.js";
 export type { DutyOutcome, PeriodDuty, RunPeriod } from "./reconciliation-schedule/duty.js";
@@ -171,3 +164,7 @@ export {
 } from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";
 export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS } from "./settings.js";
+
+export { PAYMENT_CHANGE_REFUSAL } from "./trigger-refusals.js";
+
+export { paymentResolutionOutcome, paymentHoldOutcome } from "./schema/payments.js";

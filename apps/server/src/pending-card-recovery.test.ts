@@ -8,12 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { drawerOpens, sales, withTransaction, workingOrders } from "@waitron/db";
-import {
-  getPaymentByRef,
-  insertCapturedPayment,
-  payments,
-  recordResolution,
-} from "@waitron/payments";
+import { getPaymentByRef, insertCapturedPayment, payments } from "@waitron/payments";
 import { AppError, decimal } from "@waitron/shared";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -21,6 +16,7 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { payWorkingOrderIntegratedOrchestration as pay } from "./testing/whole-payment-fixture.js";
 import * as tillSale from "./till-sale.js";
 import { withAutomaticCardRecovery, withPendingSweep } from "./boot.js";
+import * as recovery from "./pending-card-recovery.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
@@ -61,15 +57,16 @@ async function retained(venue: BillVenue, manual = false, issued = false, placed
       settledAt: venue.clock.now().instant,
     });
     const payment = (await getPaymentByRef(tx, { provider: "stripe", paymentRef }))!;
-    await recordResolution(tx, {
-      paymentId: payment.id,
-      workingOrderId: id,
-      personId: manual ? venue.adminId : null,
-      outcome: "captured",
-      cancelledAtProvider: false,
-      providerStatus: "succeeded",
-      resolvedAt: venue.clock.now().instant,
-    });
+    await tx
+      .update(payments)
+      .set({
+        resolvedBy: manual ? venue.adminId : null,
+        resolutionOutcome: "captured",
+        resolutionCancelledAtProvider: false,
+        resolutionProviderStatus: "succeeded",
+        resolvedAt: venue.clock.now().instant.toISOString(),
+      })
+      .where(eq(payments.id, payment.id));
   });
   return { id, paymentRef };
 }
@@ -438,8 +435,23 @@ describe("automatic card capture recovery", () => {
     expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
     expect(collect).toHaveBeenCalledTimes(1);
     expect(await suite.db.select().from(drawerOpens)).toEqual([]);
-    expect((await suite.db.execute(sql`select person_id from payment_resolutions`)).rows).toEqual([
-      { person_id: null },
-    ]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select resolved_by as person_id from payments where resolution_outcome is not null`,
+        )
+      ).rows,
+    ).toEqual([{ person_id: null }]);
   });
+});
+
+it("the unfiled-resolution sweep reads by index", async () => {
+  const rows = await withTransaction(suite.db, (tx) =>
+    tx.execute<{ detail: string }>(
+      sql`explain query plan ${recovery.unfiledAutomaticResolutions(tx).getSQL()}`,
+    ),
+  );
+  const details = rows.rows.map((row) => row.detail).join("\n");
+  expect(details).toContain("USING INDEX payments_unfiled_resolution_idx");
+  expect(details).not.toContain("SCAN payments");
 });

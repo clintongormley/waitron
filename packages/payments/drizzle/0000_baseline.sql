@@ -38,29 +38,6 @@ CREATE TABLE `device_profile_card_readers` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_card_readers_profile_default_key` ON `device_profile_card_readers` (`device_profile_id`) WHERE "device_profile_card_readers"."is_default" = 1;--> statement-breakpoint
-CREATE TABLE `payment_hold_outcomes` (
-	`id` text PRIMARY KEY NOT NULL,
-	`hold_id` text NOT NULL,
-	`outcome` text NOT NULL,
-	`note` text,
-	`person_id` text NOT NULL,
-	`recorded_at` text NOT NULL,
-	FOREIGN KEY (`hold_id`) REFERENCES `payment_holds`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "payment_hold_outcomes_outcome_ck" CHECK("payment_hold_outcomes"."outcome" in ('refunded_at_provider', 'kept')),
-	CONSTRAINT "payment_hold_outcomes_note_ck" CHECK("payment_hold_outcomes"."note" is null or length(trim("payment_hold_outcomes"."note")) > 0)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `payment_hold_outcomes_hold_key` ON `payment_hold_outcomes` (`hold_id`);--> statement-breakpoint
-CREATE TABLE `payment_holds` (
-	`id` text PRIMARY KEY NOT NULL,
-	`payment_id` text NOT NULL,
-	`provider_amount` integer NOT NULL,
-	`found_at` text NOT NULL,
-	FOREIGN KEY (`payment_id`) REFERENCES `payments`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "payment_holds_provider_amount_ck" CHECK("payment_holds"."provider_amount" > 0)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `payment_holds_payment_key` ON `payment_holds` (`payment_id`);--> statement-breakpoint
 CREATE TABLE `payment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
@@ -77,23 +54,6 @@ CREATE TABLE `payment_refunds` (
 );
 --> statement-breakpoint
 CREATE INDEX `payment_refunds_payment_idx` ON `payment_refunds` (`payment_id`);--> statement-breakpoint
-CREATE TABLE `payment_resolutions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`payment_id` text NOT NULL,
-	`working_order_id` text NOT NULL,
-	`person_id` text,
-	`outcome` text NOT NULL,
-	`cancelled_at_provider` integer NOT NULL,
-	`provider_status` text,
-	`resolved_at` text NOT NULL,
-	FOREIGN KEY (`payment_id`) REFERENCES `payments`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "payment_resolutions_outcome_ck" CHECK("payment_resolutions"."outcome" in ('captured', 'failed')),
-	CONSTRAINT "payment_resolutions_cancelled_ck" CHECK("payment_resolutions"."cancelled_at_provider" = 0 or "payment_resolutions"."outcome" = 'failed')
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `payment_resolutions_payment_key` ON `payment_resolutions` (`payment_id`);--> statement-breakpoint
-CREATE INDEX `payment_resolutions_working_order_idx` ON `payment_resolutions` (`working_order_id`);--> statement-breakpoint
 CREATE TABLE `payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -119,12 +79,34 @@ CREATE TABLE `payments` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`bill_payment_id` text,
+	`resolution_outcome` text,
+	`resolution_cancelled_at_provider` integer,
+	`resolution_provider_status` text,
+	`resolved_by` text,
+	`resolved_at` text,
+	`hold_provider_amount` integer,
+	`held_at` text,
+	`hold_outcome` text,
+	`hold_note` text,
+	`hold_decided_by` text,
+	`hold_decided_at` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`reader_id`) REFERENCES `card_readers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`resolved_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`hold_decided_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "payments_resolution_outcome_ck" CHECK("payments"."resolution_outcome" in ('captured', 'failed')),
+	CONSTRAINT "payments_resolution_cancelled_ck" CHECK("payments"."resolution_cancelled_at_provider" is null or "payments"."resolution_cancelled_at_provider" = 0 or "payments"."resolution_outcome" = 'failed'),
+	CONSTRAINT "payments_resolution_fields_ck" CHECK(("payments"."resolution_outcome" is null) = ("payments"."resolved_at" is null) and ("payments"."resolution_outcome" is null) = ("payments"."resolution_cancelled_at_provider" is null) and ("payments"."resolution_outcome" is not null or ("payments"."resolution_provider_status" is null and "payments"."resolved_by" is null))),
+	CONSTRAINT "payments_hold_amount_ck" CHECK("payments"."hold_provider_amount" is null or "payments"."hold_provider_amount" > 0),
+	CONSTRAINT "payments_hold_fields_ck" CHECK(("payments"."hold_provider_amount" is null) = ("payments"."held_at" is null)),
+	CONSTRAINT "payments_hold_outcome_ck" CHECK("payments"."hold_outcome" in ('refunded_at_provider', 'kept')),
+	CONSTRAINT "payments_hold_note_ck" CHECK("payments"."hold_note" is null or length(trim("payments"."hold_note")) > 0),
+	CONSTRAINT "payments_hold_outcome_fields_ck" CHECK(("payments"."hold_outcome" is null) = ("payments"."hold_decided_by" is null) and ("payments"."hold_outcome" is null) = ("payments"."hold_decided_at" is null) and ("payments"."hold_outcome" is null or "payments"."held_at" is not null) and ("payments"."hold_outcome" is not null or "payments"."hold_note" is null)),
+	CONSTRAINT "payments_hold_or_remediation_ck" CHECK("payments"."held_at" is null or "payments"."reconcile_remediated_at" is null),
 	CONSTRAINT "payments_amount_ck" CHECK("payments"."amount" > 0),
 	CONSTRAINT "payments_card_last4_ck" CHECK("payments"."card_last4" is null or length("payments"."card_last4") = 4),
 	CONSTRAINT "payments_card_entry_mode_ck" CHECK("payments"."card_entry_mode" is null or "payments"."card_entry_mode" in ('contactless','chip','swipe','unknown')),
@@ -140,6 +122,8 @@ CREATE INDEX `payments_working_order_idx` ON `payments` (`working_order_id`);-->
 CREATE INDEX `payments_sale_idx` ON `payments` (`sale_id`);--> statement-breakpoint
 CREATE INDEX `payments_reader_idx` ON `payments` (`reader_id`);--> statement-breakpoint
 CREATE INDEX `payments_reconcile_idx` ON `payments` (`provider`,`settled_at`);--> statement-breakpoint
+CREATE INDEX `payments_open_hold_idx` ON `payments` (`held_at`) WHERE "payments"."held_at" is not null and "payments"."hold_outcome" is null;--> statement-breakpoint
+CREATE INDEX `payments_unfiled_resolution_idx` ON `payments` (`working_order_id`) WHERE "payments"."resolution_outcome" = 'captured' and "payments"."resolved_by" is null and "payments"."sale_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX `payments_provider_ref_key` ON `payments` (`provider`,`payment_ref`);--> statement-breakpoint
 CREATE TABLE `scheduled_runs` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -163,3 +147,40 @@ CREATE TABLE `scheduled_runs` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `scheduled_runs_key` ON `scheduled_runs` (`duty`,`period_from`,`generation`);
+--> statement-breakpoint
+CREATE TRIGGER payments_guard_update
+BEFORE UPDATE ON payments
+FOR EACH ROW
+BEGIN
+  -- Resolving an attempt first records requested_amount; confirmed capture may change amount.
+  SELECT raise(abort, 'a payment cannot make that change')
+  WHERE NOT (
+    new.id IS old.id
+    AND new.working_order_id IS old.working_order_id
+    AND new.source IS old.source
+    AND new.device_id IS old.device_id
+    AND new.node_id IS old.node_id
+    AND new.provider IS old.provider
+    AND new.payment_ref IS old.payment_ref
+    AND (old.requested_amount IS NULL OR new.requested_amount IS old.requested_amount)
+    AND new.created_at IS old.created_at
+    -- Short-capture recovery first links a whole-order payment to its bill contribution.
+    AND (old.bill_payment_id IS NULL OR new.bill_payment_id IS old.bill_payment_id)
+    AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id)
+    AND (old.reader_id IS NULL OR new.reader_id IS old.reader_id)
+    AND (old.reconcile_remediated_at IS NULL
+      OR new.reconcile_remediated_at IS old.reconcile_remediated_at)
+    AND (old.resolution_outcome IS NULL OR (
+      new.resolution_outcome IS old.resolution_outcome
+      AND new.resolution_cancelled_at_provider IS old.resolution_cancelled_at_provider
+      AND new.resolution_provider_status IS old.resolution_provider_status
+      AND new.resolved_by IS old.resolved_by
+      AND new.resolved_at IS old.resolved_at))
+    AND (old.held_at IS NULL OR (
+      new.held_at IS old.held_at AND new.hold_provider_amount IS old.hold_provider_amount))
+    AND (old.hold_outcome IS NULL OR (
+      new.hold_outcome IS old.hold_outcome AND new.hold_note IS old.hold_note
+      AND new.hold_decided_by IS old.hold_decided_by
+      AND new.hold_decided_at IS old.hold_decided_at))
+  );
+END;

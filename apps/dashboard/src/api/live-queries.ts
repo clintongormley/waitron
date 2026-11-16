@@ -159,7 +159,7 @@ export const QUERY_DEPENDENCIES = {
     "devices",
   ],
   listAbandonedRefunds: ["payments", "payment_refunds", "working_orders"],
-  listHeldPayments: ["payment_holds", "payment_hold_outcomes", "payments", "working_orders"],
+  listHeldPayments: ["payments", "working_orders"],
   listStuckBillRefunds: [
     "bill_payment_refunds",
     "bill_payments",

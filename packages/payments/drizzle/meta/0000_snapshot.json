@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "50bf3e63-605d-45c6-90a0-d0bf59a8e2a9",
+  "id": "a95fe3e6-6601-4595-a8c9-c9485aaef7eb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_reader_holders": {
@@ -288,154 +288,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "payment_hold_outcomes": {
-      "name": "payment_hold_outcomes",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "hold_id": {
-          "name": "hold_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "payment_hold_outcomes_hold_key": {
-          "name": "payment_hold_outcomes_hold_key",
-          "columns": [
-            "hold_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "payment_hold_outcomes_hold_fk": {
-          "name": "payment_hold_outcomes_hold_fk",
-          "tableFrom": "payment_hold_outcomes",
-          "tableTo": "payment_holds",
-          "columnsFrom": [
-            "hold_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "payment_hold_outcomes_outcome_ck": {
-          "name": "payment_hold_outcomes_outcome_ck",
-          "value": "\"payment_hold_outcomes\".\"outcome\" in ('refunded_at_provider', 'kept')"
-        },
-        "payment_hold_outcomes_note_ck": {
-          "name": "payment_hold_outcomes_note_ck",
-          "value": "\"payment_hold_outcomes\".\"note\" is null or length(trim(\"payment_hold_outcomes\".\"note\")) > 0"
-        }
-      }
-    },
-    "payment_holds": {
-      "name": "payment_holds",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "payment_id": {
-          "name": "payment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "provider_amount": {
-          "name": "provider_amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "found_at": {
-          "name": "found_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "payment_holds_payment_key": {
-          "name": "payment_holds_payment_key",
-          "columns": [
-            "payment_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "payment_holds_payment_fk": {
-          "name": "payment_holds_payment_fk",
-          "tableFrom": "payment_holds",
-          "tableTo": "payments",
-          "columnsFrom": [
-            "payment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "payment_holds_provider_amount_ck": {
-          "name": "payment_holds_provider_amount_ck",
-          "value": "\"payment_holds\".\"provider_amount\" > 0"
-        }
-      }
-    },
     "payment_refunds": {
       "name": "payment_refunds",
       "columns": {
@@ -537,123 +389,6 @@
         "payment_refunds_state_ck": {
           "name": "payment_refunds_state_ck",
           "value": "\"payment_refunds\".\"state\" in ('succeeded', 'failed')"
-        }
-      }
-    },
-    "payment_resolutions": {
-      "name": "payment_resolutions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "payment_id": {
-          "name": "payment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "working_order_id": {
-          "name": "working_order_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cancelled_at_provider": {
-          "name": "cancelled_at_provider",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "provider_status": {
-          "name": "provider_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "resolved_at": {
-          "name": "resolved_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "payment_resolutions_payment_key": {
-          "name": "payment_resolutions_payment_key",
-          "columns": [
-            "payment_id"
-          ],
-          "isUnique": true
-        },
-        "payment_resolutions_working_order_idx": {
-          "name": "payment_resolutions_working_order_idx",
-          "columns": [
-            "working_order_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "payment_resolutions_payment_fk": {
-          "name": "payment_resolutions_payment_fk",
-          "tableFrom": "payment_resolutions",
-          "tableTo": "payments",
-          "columnsFrom": [
-            "payment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "payment_resolutions_working_order_fk": {
-          "name": "payment_resolutions_working_order_fk",
-          "tableFrom": "payment_resolutions",
-          "tableTo": "working_orders",
-          "columnsFrom": [
-            "working_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "payment_resolutions_outcome_ck": {
-          "name": "payment_resolutions_outcome_ck",
-          "value": "\"payment_resolutions\".\"outcome\" in ('captured', 'failed')"
-        },
-        "payment_resolutions_cancelled_ck": {
-          "name": "payment_resolutions_cancelled_ck",
-          "value": "\"payment_resolutions\".\"cancelled_at_provider\" = 0 or \"payment_resolutions\".\"outcome\" = 'failed'"
         }
       }
     },
@@ -827,6 +562,83 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "resolution_outcome": {
+          "name": "resolution_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolution_cancelled_at_provider": {
+          "name": "resolution_cancelled_at_provider",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolution_provider_status": {
+          "name": "resolution_provider_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolved_by": {
+          "name": "resolved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_provider_amount": {
+          "name": "hold_provider_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "held_at": {
+          "name": "held_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_outcome": {
+          "name": "hold_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_note": {
+          "name": "hold_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_decided_by": {
+          "name": "hold_decided_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_decided_at": {
+          "name": "hold_decided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -875,6 +687,22 @@
             "settled_at"
           ],
           "isUnique": false
+        },
+        "payments_open_hold_idx": {
+          "name": "payments_open_hold_idx",
+          "columns": [
+            "held_at"
+          ],
+          "isUnique": false,
+          "where": "\"payments\".\"held_at\" is not null and \"payments\".\"hold_outcome\" is null"
+        },
+        "payments_unfiled_resolution_idx": {
+          "name": "payments_unfiled_resolution_idx",
+          "columns": [
+            "working_order_id"
+          ],
+          "isUnique": false,
+          "where": "\"payments\".\"resolution_outcome\" = 'captured' and \"payments\".\"resolved_by\" is null and \"payments\".\"sale_id\" is null"
         },
         "payments_provider_ref_key": {
           "name": "payments_provider_ref_key",
@@ -963,11 +791,73 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "payments_resolved_by_fk": {
+          "name": "payments_resolved_by_fk",
+          "tableFrom": "payments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "resolved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "payments_hold_decided_by_fk": {
+          "name": "payments_hold_decided_by_fk",
+          "tableFrom": "payments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "hold_decided_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "payments_resolution_outcome_ck": {
+          "name": "payments_resolution_outcome_ck",
+          "value": "\"payments\".\"resolution_outcome\" in ('captured', 'failed')"
+        },
+        "payments_resolution_cancelled_ck": {
+          "name": "payments_resolution_cancelled_ck",
+          "value": "\"payments\".\"resolution_cancelled_at_provider\" is null or \"payments\".\"resolution_cancelled_at_provider\" = 0 or \"payments\".\"resolution_outcome\" = 'failed'"
+        },
+        "payments_resolution_fields_ck": {
+          "name": "payments_resolution_fields_ck",
+          "value": "(\"payments\".\"resolution_outcome\" is null) = (\"payments\".\"resolved_at\" is null) and (\"payments\".\"resolution_outcome\" is null) = (\"payments\".\"resolution_cancelled_at_provider\" is null) and (\"payments\".\"resolution_outcome\" is not null or (\"payments\".\"resolution_provider_status\" is null and \"payments\".\"resolved_by\" is null))"
+        },
+        "payments_hold_amount_ck": {
+          "name": "payments_hold_amount_ck",
+          "value": "\"payments\".\"hold_provider_amount\" is null or \"payments\".\"hold_provider_amount\" > 0"
+        },
+        "payments_hold_fields_ck": {
+          "name": "payments_hold_fields_ck",
+          "value": "(\"payments\".\"hold_provider_amount\" is null) = (\"payments\".\"held_at\" is null)"
+        },
+        "payments_hold_outcome_ck": {
+          "name": "payments_hold_outcome_ck",
+          "value": "\"payments\".\"hold_outcome\" in ('refunded_at_provider', 'kept')"
+        },
+        "payments_hold_note_ck": {
+          "name": "payments_hold_note_ck",
+          "value": "\"payments\".\"hold_note\" is null or length(trim(\"payments\".\"hold_note\")) > 0"
+        },
+        "payments_hold_outcome_fields_ck": {
+          "name": "payments_hold_outcome_fields_ck",
+          "value": "(\"payments\".\"hold_outcome\" is null) = (\"payments\".\"hold_decided_by\" is null) and (\"payments\".\"hold_outcome\" is null) = (\"payments\".\"hold_decided_at\" is null) and (\"payments\".\"hold_outcome\" is null or \"payments\".\"held_at\" is not null) and (\"payments\".\"hold_outcome\" is not null or \"payments\".\"hold_note\" is null)"
+        },
+        "payments_hold_or_remediation_ck": {
+          "name": "payments_hold_or_remediation_ck",
+          "value": "\"payments\".\"held_at\" is null or \"payments\".\"reconcile_remediated_at\" is null"
+        },
         "payments_amount_ck": {
           "name": "payments_amount_ck",
           "value": "\"payments\".\"amount\" > 0"
