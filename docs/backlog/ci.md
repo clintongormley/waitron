@@ -1012,13 +1012,13 @@ selection count and the screenshot before retrying.
 
 Use `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
 for the remaining repeated stored-secret setup; keep hashing-subject tests and real sign-in
-checks unchanged. Find candidates with `rg -l 'hashPin\(|hashPassword\(' apps/server
+checks unchanged. Another inspected subset is needed: the broad search also includes setup run
+once per file and tests about hashing. Find candidates with `rg -l 'hashPin\(|hashPassword\(' apps/server
 -g '*.test.ts' -g '**/testing/**'`, then inspect their call sites.
 
 Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
 `src/bill-payments-api.test.ts` and `src/attendance-till-api.test.ts`, plus the shared
-`src/testing/handover-placed-copy.ts`. These were held by other branches during the bounded
-fixed-secret setup pass. The two staged-hour salt helpers remain in
+`src/testing/handover-placed-copy.ts`. The two staged-hour salt helpers remain in
 [the existing speed-up entry](#server-test-time-levers-left-after-a1297).
 
 
@@ -1182,8 +1182,9 @@ these, which it did not build (local figures, 2 November 2026):
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
 - **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
-  `src/testing/staged-hour-crash.ts` still draw one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
-  there, under coverage and mutation.
+  `src/testing/staged-hour-crash.ts` still draw one per call. Reuse the existing
+  `apps/server/test/fixture-salt.ts` helper there when those paths and their consumers are unheld;
+  keep the existing crypto checks.
 - **The recovery-key memo lives in `apps/server/test/hour-recovery-host.ts` only.** Files that do not
   load the host still pay the full derivation per check; moving the memo into a wider test setup
   must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.

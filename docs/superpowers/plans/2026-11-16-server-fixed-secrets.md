@@ -1,7 +1,8 @@
 # Server fixed-secret test setup
 
 Separate Codex Sol/high draft for RUNNER, 16 November 2026. Driver checked the draft;
-Claude review and watcher clearance are pending. The owner authorises implementation and landing
+see the dated execution note below for Claude review and watcher clearance. The owner
+authorises implementation and landing
 through the campaign queue; this plan has no separate owner approval.
 
 **Ask:** “Other server test files still hash fixed PINs and passwords on every test”
