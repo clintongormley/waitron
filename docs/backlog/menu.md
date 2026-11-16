@@ -867,6 +867,8 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 ## Bundle: Each unit literal
 
 1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
+The other entry, the copied pricing-unit fallback and the till's own copy of the Each id, was
+fixed by #3502.
 
 - **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
   A918 slice 4, #2141).** `packages/menu/src/units.ts:26-34` is never written into a venue, but the
