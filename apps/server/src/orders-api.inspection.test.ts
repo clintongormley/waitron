@@ -104,4 +104,11 @@ describe("a session holding only invoice.inspect", () => {
     );
     expect(reprint.status).toBe(202);
   });
+
+  it("leaves a session holding invoice.inspect beside report.view seeing the list", async () => {
+    const manager = await sessionHolding(["invoice.inspect", "report.view"]);
+    const list = await send(venue.orders, manager, "GET", "/management-api/orders");
+    expect(list.status).toBe(200);
+    expect((list.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(billId);
+  });
 });

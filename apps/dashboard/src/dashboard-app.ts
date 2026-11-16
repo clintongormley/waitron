@@ -2405,7 +2405,7 @@ export class DashboardApp extends LitElement {
     return this.#sessionPermissions.includes(item.requiresPermission ?? "venue.view");
   }
 
-  /** A session holding `invoice.inspect` alone sees the tax office's invoices and no venue page. */
+  /** A session holding `invoice.inspect` alone: its navigation shows no Orders and no venue screen. */
   #confinedToInvoices(): boolean {
     return (
       this.#sessionPermissions.length === 1 && this.#sessionPermissions[0] === "invoice.inspect"

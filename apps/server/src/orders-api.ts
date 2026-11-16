@@ -155,6 +155,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
     const session = await resolveManagementSession(tx, sessionId);
     const { permissions } = session.authority;
     if (permissions.size === 1 && permissions.has("invoice.inspect"))
+      // The session holds this permission and nothing else; holding only it is the refusal's reason.
       throw new AppError("authorization.not_permitted", { permission: "invoice.inspect" });
     return session;
   };

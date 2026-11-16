@@ -4480,6 +4480,8 @@ describe("dashboard-app", () => {
       expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).toBeNull();
       expect(mySchedule(el)).toBeNull();
       expect(["/manage/orders", "/manage/my-schedule"]).not.toContain(location.pathname);
+      expect(location.pathname).toMatch(/^\/manage\/alerts(\/|$)/);
+      expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).not.toBeNull();
     },
   );
 
