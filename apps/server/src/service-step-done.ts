@@ -1,11 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { parties, partyTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import {
-  readStepCompletions,
-  readTableStepRules,
-  recordStepCompletions,
-} from "@waitron/venue-service";
+import { readStepCompletions, recordStepCompletions } from "@waitron/venue-service";
 import { CLOCK_AHEAD_MS, stepsClearedByDone } from "./service-step-reckoning.js";
 import { readStepFacts } from "./service-step-signals.js";
 import { assertSubjectZones } from "./zone-access.js";
@@ -67,39 +63,47 @@ export async function markServiceStepDone(
 }
 
 /**
- * Done travels with a bill only to a party with no dishes of its own (one just opened at a free
- * table or by a split), never onto a seated table or in a combine, where it would hide the
- * receiving party's own due step. `to` gets `from`'s latest Done of each step of `tableIds`'
- * departments that a serving starts, one row per step: the dishes it takes keep their serving
- * times, so without it such a step would be asked again. A step that follows another needs none,
- * as the arrival counts as `to`'s first order and clears it.
+ * Done travels with a bill only to the party the move or split opens for it, never to a party
+ * already seated or in a combine, where it would hide that party's own due step. `to` gets
+ * `from`'s latest Done of each step a serving starts, as the dishes it takes keep their serving
+ * times; with no dish arrived it gets none. Each is recorded before `to`'s first order, the
+ * arrival, so that order clears every step following it, however far ahead its Done was stamped.
  */
 export async function carryDoneWithBill(
   tx: Transaction,
   from: string,
   to: string,
-  tableIds: readonly string[],
+  tableId: string,
 ): Promise<void> {
-  const carried = new Set<string>();
-  for (const { rules } of (await readTableStepRules(tx, tableIds)).values()) {
-    for (const rule of rules) {
-      if (rule.start === "course_served" || rule.start === "all_served") carried.add(rule.id);
-    }
-  }
+  const [party] = await tx
+    .select({ openedAt: parties.openedAt })
+    .from(parties)
+    .where(eq(parties.id, to));
+  const table = (
+    await readStepFacts(tx, [{ partyId: to, openedAt: party!.openedAt, tableIds: [tableId] }])
+  ).get(tableId);
+  const firstOrderAt = table?.facts.firstOrderAt ?? null;
+  if (table === undefined || firstOrderAt === null) return;
+  const carried = new Set(
+    table.rules
+      .filter((rule) => rule.start === "course_served" || rule.start === "all_served")
+      .map((rule) => rule.id),
+  );
   if (carried.size === 0) return;
-  const fromLatest = new Map<string, { doneAt: string; doneBy: string }>();
+  const fromLatest = new Map<string, { doneAt: number; doneBy: string }>();
   for (const row of await readStepCompletions(tx, [from])) {
     if (!carried.has(row.stepId)) continue;
+    const doneAt = Date.parse(row.doneAt);
     const kept = fromLatest.get(row.stepId);
-    if (kept === undefined || Date.parse(row.doneAt) > Date.parse(kept.doneAt))
-      fromLatest.set(row.stepId, row);
+    if (kept === undefined || doneAt > kept.doneAt)
+      fromLatest.set(row.stepId, { doneAt, doneBy: row.doneBy });
   }
   await recordStepCompletions(
     tx,
     [...fromLatest].map(([stepId, { doneAt, doneBy }]) => ({
       partyId: to,
       stepId,
-      doneAt,
+      doneAt: new Date(Math.min(doneAt, firstOrderAt - 1)).toISOString(),
       doneBy,
     })),
   );

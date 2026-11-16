@@ -1,4 +1,5 @@
-import { seedZone } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
+import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -28,6 +29,8 @@ import { createCourse } from "./kitchen.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { fireGroup } from "./order-groups.js";
+import { insertPartyBill } from "./parties.js";
+import { markServiceStepDone } from "./service-step-done.js";
 import {
   readStepFacts,
   readTableSteps,
@@ -1398,7 +1401,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     });
   }
 
-  describe("a Done on a step a serving started travels with the bill", () => {
+  describe("a Done on a step a serving started, when its bill moves, splits or combines", () => {
     async function servedAndDone(v: PartyVenue, markDone: boolean) {
       const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
       const [dessert, anything, takeOrder, another] = await setSteps(v, await tablesDepartment(v), [
@@ -1420,7 +1423,16 @@ describe("a party whose dishes arrived from another table or the counter", () =>
             { partyId: from.partyId, stepId: another!, doneAt, doneBy: OPERATOR },
           ]),
         );
+      await untilPast(Date.parse(doneAt));
       return { from, dessert: dessert!, anything: anything!, doneAt };
+    }
+
+    /**
+     * A carried Done is recorded before the arrival, so a move made in the millisecond these
+     * fixtures write their Done at would move it back; a move after a tapped Done comes later.
+     */
+    async function untilPast(at: number): Promise<void> {
+      while (Date.now() <= at) await new Promise((resolve) => setTimeout(resolve, 1));
     }
 
     /** The live steps a serving started; the repeat counted from the arrival always shows. */
@@ -1671,10 +1683,120 @@ describe("a party whose dishes arrived from another table or the counter", () =>
             },
           ]),
         );
+        await untilPast(servedAt + 1);
 
         const { partyId, tableId } = await carryToFreeTable(v, how, from);
 
         expect(await liveAt(v, partyId, tableId)).toEqual([]);
+      });
+    }
+
+    /** "Anything else?" starts when all is served and "Coffee?" when it is done. */
+    async function anythingThenCoffee(v: PartyVenue) {
+      const [anything, , drinks] = await setSteps(v, await tablesDepartment(v), [
+        { name: "Anything else?", start: "all_served", courseId: null, minutes: 0, key: "any" },
+        { name: "Coffee?", start: "after_step", afterStepKey: "any", courseId: null, minutes: 0 },
+        { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 1 },
+      ]);
+      const from = await partyWith(v, "Table 1", "fire");
+      const servedAt = await serve(v, from.billId, "Water");
+      return { anything: anything!, drinks: drinks!, from, servedAt };
+    }
+
+    async function recordDone(v: PartyVenue, partyId: string, stepId: string, at: number) {
+      await inTx(v, (tx) =>
+        recordStepCompletions(tx, [
+          { partyId, stepId, doneAt: new Date(at).toISOString(), doneBy: OPERATOR },
+        ]),
+      );
+    }
+
+    async function namesLiveAt(v: PartyVenue, partyId: string, tableId: string) {
+      return ((await liveAt(v, partyId, tableId)) ?? []).map((step) => step.name);
+    }
+
+    it("split off with nothing selected, the new party gets no Done and is not asked a follow-on", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { anything, from, servedAt } = await anythingThenCoffee(v);
+      await recordDone(v, from.partyId, anything, servedAt + 1);
+      const tableId = await v.table("Empty split");
+      const joining = await commandFor(v, from.partyId);
+      await inTx(v, (tx) => joinTables(tx, v.cfg, from.partyId, tableId, joining));
+      const splitting = await commandFor(v, from.partyId);
+
+      const split = await inTx(v, (tx) =>
+        splitTable(tx, v.cfg, from.partyId, tableId, null, splitting),
+      );
+
+      expect(await namesLiveAt(v, split.partyId, tableId)).toEqual([]);
+      expect(await doneRows(v, split.partyId)).toEqual([]);
+    });
+
+    it("an empty bill moved to a free table takes no Done and is not asked a follow-on", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { anything, from, servedAt } = await anythingThenCoffee(v);
+      await recordDone(v, from.partyId, anything, servedAt + 1);
+      const empty = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, from.partyId));
+
+      const { partyId, tableId } = await carryToFreeTable(v, "move", {
+        partyId: from.partyId,
+        billId: empty,
+      });
+
+      expect(await namesLiveAt(v, partyId, tableId)).toEqual([]);
+      expect(await doneRows(v, partyId)).toEqual([]);
+    });
+
+    for (const how of ["move", "split"] as const) {
+      it(`${how}: a Done in the same millisecond as the arrival still lets the arrival clear its follow-on`, async () => {
+        const v = await setupPartyVenue(suite.db);
+        const { anything, from, servedAt } = await anythingThenCoffee(v);
+        const instant = servedAt + 10 * MINUTE;
+        await recordDone(v, from.partyId, anything, instant);
+
+        vi.useFakeTimers({ toFake: ["Date"], now: instant });
+        try {
+          const { partyId, tableId } = await carryToFreeTable(v, how, from);
+
+          expect((await factsOf(v, partyId, tableId)).firstOrderAt).toBe(instant);
+          expect(await namesLiveAt(v, partyId, tableId)).toEqual(["Drinks?"]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it(`${how}: a Done recorded ahead of the clock still lets the arrival clear its follow-on`, async () => {
+        const v = await setupPartyVenue(suite.db);
+        const { anything, drinks, from } = await anythingThenCoffee(v);
+        const ordered = await lastOrderAt(v, from.partyId);
+        await recordDone(v, from.partyId, drinks, ordered + MINUTE);
+        const [profile] = await seedDeviceProfiles(v.db, {
+          name: `Till ${randomUUID()}`,
+          formFactor: "till",
+          capabilities: [...CAPABILITY_FLAGS],
+        });
+        const due = ordered + 2 * MINUTE;
+        const marked = await inTx(v, (tx) =>
+          markServiceStepDone(tx, {
+            deviceProfileId: profile!.id,
+            partyId: from.partyId,
+            stepId: drinks,
+            dueAt: due,
+            personId: OPERATOR,
+            nowMs: due - 5_000,
+          }),
+        );
+        expect(marked.cleared).toContain(anything);
+
+        vi.useFakeTimers({ toFake: ["Date"], now: due - 4_000 });
+        try {
+          const { partyId, tableId } = await carryToFreeTable(v, how, from);
+
+          expect((await factsOf(v, partyId, tableId)).firstOrderAt).toBe(due - 4_000);
+          expect(await namesLiveAt(v, partyId, tableId)).toEqual(["Drinks?"]);
+        } finally {
+          vi.useRealTimers();
+        }
       });
     }
 

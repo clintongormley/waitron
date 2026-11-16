@@ -279,7 +279,7 @@ async function moveBillOnce(
     if (source !== null) {
       await copyWaitingGroups(tx, source.id, partyId, waitingLineIds, options.operatorId, activity);
       await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
-      await carryDoneWithBill(tx, source.id, partyId, [destination.tableId]);
+      await carryDoneWithBill(tx, source.id, partyId, destination.tableId);
     }
     result = { partyId, billId };
   } else {
