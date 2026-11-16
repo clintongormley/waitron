@@ -10,6 +10,7 @@ import { AppError } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import {
+  chosenHourBoot,
   createHourSelection,
   type HourSelectionFacts,
   type HourSelectionStore,
@@ -17,7 +18,12 @@ import {
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
-import { createSetupHourClock, setBoxClockFrom } from "./hour-setup-clock.js";
+import {
+  bootStanding,
+  createSetupHourClock,
+  selectionBoot,
+  setBoxClockFrom,
+} from "./hour-setup-clock.js";
 import "./errors.js";
 
 type SelectionOptions = Parameters<typeof createHourSelection>[0];
@@ -148,9 +154,11 @@ export function createHostedHourPreparation(
     monotonic: monotonicNow,
     timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
   });
+  const standing = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
     monotonicNow,
+    readBoot: () => selectionBoot(host),
     read: async (binding, comparisonId) => {
       const facts = await host.readSetupFacts!(binding);
       const clock =
@@ -185,8 +193,13 @@ export function createHostedHourPreparation(
     ): Promise<T> {
       // The series step's reading is usually over 30 seconds old by Provision.
       if (options.readClock === undefined)
-        await withFacts(operation.binding, (facts) =>
-          clocks.compare(facts.contextKey, null, { onBox: true }),
+        await withFacts(operation.binding, (facts, state) =>
+          clocks.compare(
+            facts.contextKey,
+            null,
+            { onBox: true },
+            standing(chosenHourBoot(state, operation.binding), 0, 0),
+          ),
         );
       return preparation.prepare(operation, run);
     },

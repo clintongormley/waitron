@@ -71,6 +71,52 @@ export async function setBoxClockFrom(
   if (host.setBoxClock === undefined) return { status: "refused", reason: "host_unavailable" };
   return host.setBoxClock({ ...binding }, structuredClone(measured.request));
 }
+/** The box's boot id and uptime for a select to keep with its hour, when the host can read them. */
+export function selectionBoot(host: ModuleOperationHost) {
+  const boot = host.readBoot?.();
+  return boot === undefined || boot.id === null || !(Number.isFinite(boot.ms) && boot.ms >= 0)
+    ? undefined
+    : { bootId: boot.id, uptimeMs: boot.ms };
+}
+/** A time kept with `kept`'s boot reading, still standing while the box ran on unstepped on the
+ * same boot: `offsetMs` from the box's clock, give or take `uncertaintyMs`. */
+export function bootStanding(
+  host: ModuleOperationHost,
+  wall: () => number,
+  monotonicNow: () => number,
+) {
+  return (
+    kept: { bootId: string | null; uptimeMs: number; wallMs: number } | undefined,
+    offsetMs: number,
+    uncertaintyMs: number,
+  ): HourClockObservation | undefined => {
+    const boot = host.readBoot?.();
+    if (
+      kept === undefined ||
+      kept.bootId === null ||
+      !(Number.isFinite(kept.uptimeMs) && kept.uptimeMs >= 0) ||
+      boot === undefined ||
+      boot.id !== kept.bootId ||
+      !(Number.isFinite(boot.ms) && boot.ms >= 0)
+    )
+      return undefined;
+    const wallMs = wall();
+    const measured = monotonicNow();
+    const instantMs = kept.wallMs + boot.ms - kept.uptimeMs;
+    // The 1-second figure `clock_corrected` uses for a stepped clock.
+    if (!(Math.abs(wallMs - instantMs) <= 1000)) return undefined;
+    return {
+      source: "browser",
+      result: "usable",
+      instantMs: instantMs + offsetMs,
+      uncertaintyMs,
+      wallStartedMs: wallMs,
+      wallFinishedMs: wallMs,
+      monotonicStartedMs: measured,
+      monotonicFinishedMs: measured,
+    };
+  };
+}
 export function createSetupHourClock(deps: ClockDependencies = {}) {
   const wall = deps.wall ?? Date.now;
   const monotonic = deps.monotonic ?? (() => performance.now());

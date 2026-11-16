@@ -125,24 +125,6 @@ it("the bound runtime retains its recovery document after restart and prepares o
       { ...f.staged.ref, kept: true },
       fresh,
     );
-    await expect(attempt(restarted)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "clock_stale" },
-    });
-    await restarted.preparation.prepare(
-      f.ownerAttempt,
-      f.module,
-      {
-        action: "compare-clocks",
-        browser: null,
-      },
-      { onBox: true },
-    );
-    await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
-      f.ownerAttempt,
-      { ...f.staged.ref, kept: true },
-      await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
-    );
     await expect(attempt(restarted)).resolves.toBe("prepared");
     await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
   } finally {
@@ -383,6 +365,13 @@ describe("every host the server builds asks the box's time service, afresh at ea
   it("a restore's host reads the box's boot by default", () => {
     const { module, host } = capturing();
     builders["a restore's (its page, its start and the restore command)"](module);
+    const boot = host().readBoot!();
+    expect(boot.id).toBe(bootReader().readBoot().id);
+    expect(Number.isFinite(boot.ms)).toBe(true);
+  });
+  it("the first setup's host reads the box's boot", () => {
+    const { module, host } = capturing();
+    builders["the first setup's"](module);
     const boot = host().readBoot!();
     expect(boot.id).toBe(bootReader().readBoot().id);
     expect(Number.isFinite(boot.ms)).toBe(true);

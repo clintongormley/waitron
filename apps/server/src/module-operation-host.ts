@@ -13,6 +13,7 @@ import { venueFiscalSelection, createFirstSetupRuntime } from "@waitron/provisio
 import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
 import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
 import { timeServiceReader } from "./clock-service-reading.js";
+import { bootReader } from "./boot-reader.js";
 export { createModuleOperationHost } from "@waitron/provisioning";
 
 export function createFirstSetupModuleHost(options: {
@@ -40,6 +41,7 @@ export function createFirstSetupModuleHost(options: {
   const runtime = createFirstSetupRuntime({
     ...options,
     timeServiceSynchronised: options.timeServiceSynchronised ?? timeServiceReader(),
+    readBoot: bootReader().readBoot,
     readPublicEvidence: async (binding) => evidence.current?.read(binding),
   });
   const { coordinator, store, owner, resolution, modules, bootId, keys, recoveryDelivery } =

@@ -245,3 +245,41 @@ it.each([
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
   },
 );
+it.each([
+  ["the box ran on unchanged", "boot-1", () => {}, true],
+  ["not after its clock was stepped", "boot-1", () => vi.setSystemTime(Date.now() + 5_000), false],
+  ["not after a restart", "boot-1", (boot: { id: string | null }) => (boot.id = "boot-2"), false],
+  ["not when the boot id cannot be read", null, () => {}, false],
+] as const)(
+  "without a time service, a confirmed device time counts two minutes later while %s",
+  async (_label, bootId, change: (boot: { id: string | null }) => unknown, writes) => {
+    outside.internet.mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
+    });
+    const boot: { id: string | null } = { id: bootId };
+    const f = fixture({ readBoot: () => ({ id: boot.id, ms: performance.now() + 5_000_000 }) });
+    const selected = await selectAfterSettle(
+      f,
+      async () => {
+        const challenge = await f.preparation.clockChallenge(binding);
+        return f.preparation.compareClocks(
+          binding,
+          { challengeId: challenge.id, instantMs: Date.now() },
+          { onBox: false },
+        );
+      },
+      true,
+    );
+    vi.advanceTimersByTime(120_000);
+    change(boot);
+    if (writes) await activate(f, selected.input);
+    else
+      await expect(activate(f, selected.input)).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "second_clock_missing" },
+      });
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
+  },
+);
