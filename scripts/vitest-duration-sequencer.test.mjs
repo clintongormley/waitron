@@ -300,7 +300,7 @@ describe("apps/server's wiring", () => {
     expect(paths.length).toBeGreaterThan(0);
     const sorted = [...paths].sort();
     const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-    const job = workflow.split("\n  test-server:\n")[1]?.split(/\n  [\w-]+:/)[0];
+    const job = workflow.split("\n  test-server:\n")[1]?.split(/\n {2}[\w-]+:/)[0];
     const matrix = job?.match(/^\s+shard: \[([^\]]+)\]/m);
     expect(matrix).toBeDefined();
     expect(matrix).not.toBeNull();
