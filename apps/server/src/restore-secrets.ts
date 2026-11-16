@@ -261,11 +261,14 @@ export async function clearRestoreSecretFiles(stateDir: string, log: Logger): Pr
       return;
     }
     const targets = [...REQUIRED_BACKUP_STATE, ...OPTIONAL_BACKUP_STATE];
-    if ((await info(MODULE_RECORDS_DIR))?.isDirectory()) {
+    const records = await info(MODULE_RECORDS_DIR);
+    if (records?.isDirectory()) {
       for (const entry of await readdir(join(stateDir, MODULE_RECORDS_DIR))) {
         const name = entry.replace(/(?:\.incoming\.tmp|\.restore-previous|\.incoming|\.tmp)$/, "");
         if (/^[a-z][a-z0-9-]*\.json$/.test(name)) targets.push(`${MODULE_RECORDS_DIR}/${name}`);
       }
+    } else if (records) {
+      log("warn", "restore.secrets.working_kept", { file: MODULE_RECORDS_DIR });
     }
     for (const rel of new Set(targets)) {
       const parent = dirname(rel);

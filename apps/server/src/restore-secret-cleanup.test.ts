@@ -78,6 +78,9 @@ it("keeps working files whose live target is missing and never follows discovere
   expect(await readFile(join(root, "tls/server.pem.tmp"), "utf8")).toBe("external key");
   expect(await readFile(join(root, "outside/sample.json.incoming"), "utf8")).toBe("external key");
   expect(log).toHaveBeenCalledWith("warn", "restore.secrets.working_kept", expect.any(Object));
+  expect(log).toHaveBeenCalledWith("warn", "restore.secrets.working_kept", {
+    file: "module-records",
+  });
 });
 
 it("keeps a linked TLS folder and logs that its keys were not swept", async () => {
