@@ -85,7 +85,7 @@ import {
 import type { PassRow } from "./pass-card.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { needsMoving, tableInService, floorZones } from "@waitron/db";
+import { needsMoving, tableInService, floorZones, readVenueClock } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import {
@@ -131,6 +131,7 @@ import { requireMakeAtStation } from "./dead-ends.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { offeredKey } from "@waitron/venue-service";
+import { venueMomentAt } from "@waitron/reporting";
 import type { RetainedCourseLine } from "./retained-course.js";
 import "./errors.js";
 import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
@@ -1978,9 +1979,10 @@ export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
 
 /**
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
- * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by an earlier send. Its
- * menu is the one it was stored from; the department is that of the order's zone now; a lunch
- * course is judged by its lunch's product.
+ * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by
+ * an earlier send. Its menu is the one it was stored from; it is judged by the department of the
+ * order's zone now, then by the one it was stored in ({@link unplacedLateDishes}); a lunch course is
+ * judged by its lunch's product.
  */
 export async function lateUnsentDishes(
   tx: Transaction,
@@ -2129,9 +2131,10 @@ async function judgeLateUnsent(
 
 /**
  * The late ones of stored lines whose menu the order's department neither sells nor ended today,
- * judged by the department they were stored in. A menu neither department sells now or ended today
- * was taken off its period since: no row names that period, so such a line is late under its menu's
- * name, and only on the business day its order was opened, as no line records when it was added.
+ * judged by the department they were stored in. When that one neither sells the menu now nor ended
+ * it today, or is gone, no stored row names the period the line was taken under, so the line is late
+ * under its menu's name, and only on the business day its order was opened, as no line records when
+ * it was added.
  */
 async function unplacedLateDishes(
   tx: Transaction,
@@ -2191,10 +2194,10 @@ async function openedToday(tx: Transaction, orderId: string, now: Date): Promise
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
   if (order === undefined) return false;
-  const today = (await VENUE_SERVICE.readServiceDay(tx, now)).businessDay;
+  const clock = await readVenueClock(tx);
+  const today = venueMomentAt(now, clock)?.businessDay;
   return (
-    today !== null &&
-    (await VENUE_SERVICE.readServiceDay(tx, new Date(order.openedAt))).businessDay === today
+    today !== undefined && venueMomentAt(new Date(order.openedAt), clock)?.businessDay === today
   );
 }
 

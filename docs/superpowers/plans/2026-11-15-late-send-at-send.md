@@ -78,7 +78,8 @@ today is judged by today's periods alone, so placed before today's period sellin
 on a day none sells it) it is sent unasked and unmarked (a counter order left parked overnight is
 not a real event; owner rule "real events only"); "earlier" is the order's opening day, as no line
 records when it was added. A dish whose period's menu was changed later the same day is asked about under its menu's name, not its period's: no stored row names the period
-(review finding, 2026-11-16).
+(review finding, 2026-11-16). A dish whose period was moved later the same day is asked about as
+"<menu> has ended".
 A course released from a hold is judged only if it reaches a station (its make-at choice, or
 routing): no column records that a no-preparation course was sent on hold, so a no-preparation
 course changed into a held lunch before the period ended is not asked (nothing prints for it), and

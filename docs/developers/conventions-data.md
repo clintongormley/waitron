@@ -747,8 +747,8 @@ An unmarked extra on a dish already marked was stored after the dish was judged,
 its own, by its dish's product, and a refusal names its dish's line. A dish whose menu the order's
 department neither sells now nor lists as ended today is judged by the department its context
 records (`working_line_contexts.department_id`): not late if that department sells the menu now,
-late by that department's period if it ended there today. Otherwise the timetable changed since the
-dish was stored (its period's menu replaced, for one), and no stored row names the period: if the
+late by that department's period if it ended there today. Otherwise (its period's menu replaced or its period moved since
+the dish was stored, or that department gone) no stored row names the period: if the
 order was opened (`working_orders.opened_at`) on the current business day, the dish is late under
 its menu's recorded name (`menu_name`), which the refusal and the mark carry in place of a period's
 name; no line records when it was added, so the order's opening day stands for it. Placing a
