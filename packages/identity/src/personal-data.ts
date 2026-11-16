@@ -75,7 +75,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .from(recoveryCodes)
       .where(eq(recoveryCodes.personId, personId));
 
-    const dashboardSessions = await tx
+    const dashboardSessionRows = await tx
       .select({
         openedAt: managementSessions.createdAt,
         lastSeenAt: managementSessions.lastSeenAt,
@@ -145,7 +145,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
           lastUsedAt,
         })),
         recoveryCodes: codes,
-        dashboardSessions,
+        dashboardSessions: dashboardSessionRows,
         deviceSessions,
         accountEmails,
         unfinishedSetups: [
