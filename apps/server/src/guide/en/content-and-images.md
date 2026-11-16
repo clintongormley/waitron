@@ -38,7 +38,7 @@ For regional wording, open a main language's ⋮ menu and choose **Add regional 
 For example, keep **English** for your London menu, add **English (United States)**, and write
 **chips** in English and **fries** in the US field for one dish. Leave its other US fields blank:
 they use their English names. The guest menu uses the US wording only when US English is selected;
-Plain English keeps **chips**. Edit regional names in the product and menu
+Other English requests keep **chips**. Edit regional names in the product and menu
 editors. **Edit translations** and **Translate all** cover the main languages.
 
 A language Waitron keeps enabled for your region is marked **Required** and has no **Delete**, and
