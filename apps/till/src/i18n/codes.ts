@@ -257,6 +257,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those guests already have that table. Choose another table",
     es: "Esa mesa ya es de estos clientes. Elige otra mesa",
   },
+  "tab.line_not_found": {
+    en: "This dish is no longer on this bill",
+    es: "Este plato ya no está en esta cuenta",
+  },
   "service_step.not_found": {
     en: "This step no longer exists",
     es: "Este paso ya no existe",

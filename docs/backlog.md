@@ -105,10 +105,9 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
-**4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
+**4. Released by the hold, once A760 lands.** Build order: A446 pre-bill,
 close the day, then A947 and its handover bundles.
 
-- [The pay window, after A739](backlog/till.md#bundle-the-pay-window-after-a739)
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 - [Series and module-preparation gaps at handover](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 - [Finish the clock work: a check at every start and every change](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
@@ -759,8 +758,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1360. The demo's Counter device says "This device isn't set up — ask to join this venue" under
   the Demo banner (seen in A803 slice 4c's LOOK).** On every screen after sign-in. The words are
   main's (`apps/till/src/i18n/codes.ts`); why it shows was not looked into.
-
-- **The pay window, after A739** (bundle of 4, 2 go-live, 2 important, size M, waits for another entry). Holds A1191, A1266, A1300, A1291. [Detail](backlog/till.md#bundle-the-pay-window-after-a739)
 
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
 

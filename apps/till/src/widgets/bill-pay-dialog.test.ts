@@ -186,12 +186,55 @@ it.each([false, true])(
     await click(el, "[data-pay-continue]");
     expect(requests).toEqual([
       {
-        choice: { kind: "contribution", amount: "30.00" },
+        choice: { kind: "whole" },
         pay: { method: "cash", tendered: "40.00" },
       },
     ]);
   },
 );
+
+it("groups twelve portions and keeps only selected members that remain on the bill", async () => {
+  const portions = Array.from({ length: 12 }, (_, n) => ({
+    ...tiramisu,
+    lineNo: n + 1,
+    portionKey: "same-dessert",
+  }));
+  const el = await mount({ lines: portions });
+  expect(offered(el)).toHaveLength(1);
+  expect(offered(el)[0]).toContain("×12");
+  await pick(el, "line", "1");
+  expect(text(root(el).querySelector("[data-units='1']"))).toBe("1");
+  await click(el, "[data-units-more='1']");
+  expect(text(root(el).querySelector("[data-units='1']"))).toBe("2");
+  await type(el, "tendered", "20");
+  const asked = capture<PayRequest>(el, "bill-pay-preview");
+  await click(el, "[data-pay-continue]");
+  expect(asked[0]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 1 }, { lineNo: 2 }] });
+  el.lines = portions.slice(1);
+  await el.updateComplete;
+  expect(offered(el)).toHaveLength(1);
+  expect(text(root(el).querySelector("[data-units='2']"))).toBe("1");
+  await click(el, "[data-pay-continue]");
+  expect(asked[1]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2 }] });
+  expect(field(el, "tendered")!.value).toBe("20");
+});
+
+it("caps a selected quantity and drops paid or departed picks on a successful refresh", async () => {
+  const el = await mount();
+  await pick(el, "line", "1");
+  await pick(el, "line", "2");
+  await type(el, "tendered", "50");
+  el.lines = [beers, tiramisu];
+  el.balance = balanceOf({ paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "2.000" }] });
+  await el.updateComplete;
+  const asked = capture<PayRequest>(el, "bill-pay-preview");
+  await click(el, "[data-pay-continue]");
+  expect(asked[0]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2, units: 1 }] });
+  el.balance = balanceOf({ paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "3.000" }] });
+  await el.updateComplete;
+  expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+  expect(field(el, "tendered")!.value).toBe("50");
+});
 
 it.each([null, balanceOf({ outstanding: "0.00", reserved: "120.00" })])(
   "waits for an owing balance before a desktop Whole bill card",
@@ -1823,7 +1866,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
   });
 
-  it("asks for what is left, read when Continue is pressed, on the card reader", async () => {
+  it("asks the server for the whole current bill on the card reader", async () => {
     const el = await handheld({ balance: balanceOf({ outstanding: "80.00" }) });
     const asked = capture<PayRequest>(el, "bill-pay-preview");
     el.balance = balanceOf({ outstanding: "62.40" });
@@ -1832,7 +1875,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
     expect(asked).toEqual([
       {
-        choice: { kind: "contribution", amount: "62.40" },
+        choice: { kind: "whole" },
         pay: { method: "card" },
         card: { entry: "reader" },
       },
@@ -1890,7 +1933,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
     expect(asked).toEqual([
       {
-        choice: { kind: "contribution", amount: "120.00" },
+        choice: { kind: "whole" },
         pay: { method: "card" },
         card: { entry: "reader" },
       },
@@ -1939,7 +1982,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
     expect(asked).toEqual([
       {
-        choice: { kind: "contribution", amount: "120.00" },
+        choice: { kind: "whole" },
         pay: { method: "card" },
         card: {
           entry: "manual",
@@ -1964,7 +2007,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     await click(el, "[data-pay-card-ask-take]");
     expect(asked).toEqual([
       {
-        choice: { kind: "contribution", amount: "120.00" },
+        choice: { kind: "whole" },
         pay: { method: "card" },
         card: { entry: "manual" },
       },

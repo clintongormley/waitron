@@ -28,10 +28,12 @@ import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { PayLine, PayRefusal } from "../widgets/bill-pay-dialog.js";
+import { tabLinePortionKey } from "./portion-groups.js";
 
 /** What the operator chose to pay. A pick with no `units` is the whole line. An equal share names
  * only how many people are still to pay: the server works out the share and the preview shows it. */
 export type PayChoice =
+  | { kind: "whole" }
   | { kind: "items"; picks: { lineNo: number; units?: number }[] }
   | { kind: "contribution"; amount: string }
   | { kind: "share"; shareOf: number };
@@ -41,7 +43,7 @@ export const BILL_PAY_WAYS = [
   { way: "share", label: "bill_pay.way_share" },
   { way: "items", label: "bill_pay.way_items" },
   { way: "whole", label: "bill_pay.way_whole" },
-] as const satisfies readonly { way: PayChoice["kind"] | "whole"; label: StringKey }[];
+] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
 
 /** A payment's state, as its row names it. */
 export const PAYMENT_STATES: Record<BillPaymentView["state"], StringKey> = {
@@ -97,7 +99,12 @@ export function paymentAsk(
         }
       : choice.kind === "contribution"
         ? { kind: "contribution", amount: choice.amount, method: pay.method, expectedEdit }
-        : { kind: "share", shareOf: choice.shareOf, method: pay.method, expectedEdit };
+        : {
+            kind: "share",
+            shareOf: choice.kind === "whole" ? 1 : choice.shareOf,
+            method: pay.method,
+            expectedEdit,
+          };
   if (pay.method === "cash") ask.tendered = pay.tendered;
   if (pay.addedTip !== undefined) ask.addedTip = pay.addedTip;
   if (allocation !== undefined) ask.choice = allocation;
@@ -355,11 +362,13 @@ export function payLines(lines: readonly TabLine[], name: (line: TabLine) => str
     .map((line) => {
       const extras = lines.filter((row) => row.parentLineNo === line.lineNo);
       const total = toScale(sumDecimals([line, ...extras].map(tabLineGross)), MONEY_SCALE);
+      const portionKey = tabLinePortionKey(line, lines);
       return {
         lineNo: line.lineNo,
         name: name(line),
         quantity: trimQuantity(line.quantity),
         total,
+        ...(portionKey === null ? {} : { portionKey }),
         unitTotal:
           extras.length === 0 && moreThanOneWholeUnit(line)
             ? divideDecimal(total, decimal(line.quantity), MONEY_SCALE)

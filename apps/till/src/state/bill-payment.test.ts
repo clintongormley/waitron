@@ -30,6 +30,15 @@ describe("isLatestSend", () => {
 });
 
 describe("paymentAsk", () => {
+  it("asks for the whole current bill as one share without an opening amount", () => {
+    expect(paymentAsk({ kind: "whole" }, { method: "card", addedTip: "0" })).toEqual({
+      expectedEdit: null,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      addedTip: "0",
+    });
+  });
   it("asks for whole lines without a quantity, and for units of a line as a whole-number quantity", () => {
     expect(
       paymentAsk(
