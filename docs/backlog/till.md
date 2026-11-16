@@ -108,20 +108,6 @@ their full text.
   that `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md
   §4's unanchored-include trap); neither was tested.
 
-## Seating a booking at a table in a zone that is not a table-tab zone has no bookings test
-
-- `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
-  table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
-  it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
-  and `routes.ts`'s `STATUS` map has no entry for that code, so it answers 400 by default.
-  The server accepts an empty contact name; only the dashboard form
-  refuses one. `seatBooking`'s `status = 'booked'` condition on its final update cannot fire
-  while every caller goes through `withTransaction` (read, not run). Test titles in
-  `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
-  `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
-  `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
-  commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
-
 ## The booking state refusal describes a state move even when editing
 
 - **OPEN, carried from A394-18's run-it review.**
@@ -129,35 +115,6 @@ their full text.
   "can't move to that state now". An edit of a seated, completed, cancelled or no-show booking
   now uses this code too. Choose wording that covers both edits and lifecycle actions, then
   update English and Spanish and pin both messages in the bookings wording tests.
-
-## The bookings seat picker keeps a table it no longer offers
-
-**The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
-bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
-picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
-let a live refresh empty the table list: the dropdown showed no options and the value `""`, and
-confirming still called `seatBooking("bk-1", { tableId: "t-1" })`. The same test found no way to
-reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that branch, and the
-`?? ""` in `#onSeatClick` (after its own early return for an empty table list), are two of the
-three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
-does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
-may make one or both of those branches reachable, or show they can go.
-
-## A booking or a seated party can count more than 999 guests
-
-- **A booking or a seated party can count more than 999 guests, which a simplified receipt
-  recorded since A663 Part 3b never prints (found by Part 3b).** `createBooking` and
-  `updateBooking` refuse only a party size of 0 or less (`booking.invalid`,
-  `packages/bookings/src/bookings.ts`), and seating a booking hands that size to `seatTable`
-  (`apps/server/src/parties.ts`) as the party's guest count without a bound; the `parties` table's
-  check asks only for 1 or more. The till's own guest-count fields, and the count stored for a
-  simplified receipt (`sale_receipt_guests`), take a whole number from 1 to 999
-  (`isValidGuestCount`, `packages/shared/src/guest-count.ts`). A full invoice, and a sale recorded
-  before Part 3b, read the party's count with no bound (`readReceiptGuests`). When a sale is
-  recorded for a party above 999 with no count chosen, its simplified receipt stores "no line"
-  instead of the party's count (`storableDefault` in `recordReceiptGuests`,
-  `apps/server/src/receipt-guests.ts`), so that receipt prints no guests line where Part 3a would
-  have printed one. Decide whether bookings and parties take the same 1 to 999 bound.
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
@@ -2179,23 +2136,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   the board's card reader stops leaving out a dish made at the till, or a bill collected or
   abandoned on a two-bill group card, and none has a ticket that survives with nothing left to make.
   [Detail](till.md#pin-the-pass-boards-live-dish-filter)
-
-## Bundle: Bookings loose ends
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Seating a booking at a table in a zone that is not a table-tab zone has no bookings test** —
-  found by #574 while pruning comments (`packages/bookings`). The server accepts an empty contact
-  name; only the dashboard form refuses one.
-  [Detail](till.md#seating-a-booking-at-a-table-in-a-zone-that-is-not-a-table-tab-zone-has-no-bookings-test)
-- **The bookings seat picker keeps a table it no longer offers** — OPEN (found 2026-09-23, writing
-  bookings' coverage tests, PR #503). **Next action:** decide what the picker does when its tables
-  change under it (re-pick the first, or close) and fix it test-first.
-  [Detail](till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
-- **A booking or a seated party can count more than 999 guests, which a simplified receipt
-  recorded since A663 Part 3b never prints** (found by Part 3b). Bookings refuse only a party size
-  below 1, and seating one passes it on unchecked; the guests count stored for such a receipt is
-  bounded 1 to 999, so such a party's simplified receipt prints no guests line. [Detail](till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
 
 ## Bundle: Floor plan editor at phone width
 

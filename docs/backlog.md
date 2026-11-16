@@ -890,8 +890,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     checking against the current tree.
     [Detail](backlog/till.md#ui-package-notes-left-by-the-comments-sweep)
 
-- **Bookings loose ends** (bundle of 3, size S). [Detail](backlog/till.md#bundle-bookings-loose-ends)
-
 - **Cash handed back for a voided cash sale is recorded nowhere** — OPEN (found 2026-09-24 by #605).
   A void writes no payment or refund row, so if staff give a customer cash back, the void's day
   shows a drawer shortfall at cash-up. **Owner decision 2026-09-25:** keep it here and decide it
