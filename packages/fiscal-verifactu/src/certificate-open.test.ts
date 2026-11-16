@@ -70,7 +70,7 @@ it("keeps a UTF-8 passphrase when stdin splits inside its character", async () =
     const script = `
     const iterator = process.stdin[Symbol.asyncIterator].bind(process.stdin);
     process.stdin[Symbol.asyncIterator] = async function* () {
-      for await (const chunk of {[Symbol.asyncIterator]:iterator}) { yield chunk; process.stderr.write("read"); }
+      for await (const chunk of {[Symbol.asyncIterator]:iterator}) { yield chunk; process.stderr.write("__WAITRON_STDIN_CHUNK_READ__"); }
     };
     await import(${JSON.stringify(new URL("./certificate-open-entry.ts", import.meta.url).href)});
   `;
@@ -85,9 +85,20 @@ it("keeps a UTF-8 passphrase when stdin splits inside its character", async () =
     });
     const closed = once(child, "close");
     try {
-      const consumed = once(child.stderr, "data");
+      const consumed = new Promise<void>((resolve) => {
+        let seen = "";
+        child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+          seen += chunk;
+          if (seen.includes("__WAITRON_STDIN_CHUNK_READ__")) resolve();
+        });
+      });
       child.stdin.write(input.subarray(0, split));
-      await consumed;
+      await Promise.race([
+        consumed,
+        closed.then(() => {
+          throw new Error("child closed before consuming input");
+        }),
+      ]);
       child.stdin.end(input.subarray(split));
       await closed;
       expect(JSON.parse(output)).toMatchObject({ ok: true });

@@ -6819,7 +6819,7 @@ returning certificate details, a local file refusal, or an unavailable check. Pa
 arguments and logs; the parent waits for child closure after a forced stop. The ordinary and
 hostile-MAC-cost cases in `certificate-open.test.ts` exercise the source entry;
 `fiscal-certificate-diagnosis-bundle.test.ts` opens through the built host and sibling child.
-A launch failure or deadline leaves backup verification unavailable, rather than invalid, and
+A launch failure, deadline or unusable child reply leaves backup verification unavailable, rather than invalid, and
 refuses sealing before its transaction; setup and renewal offer a retry without marking a bad field.
 This bounds admission only. Accepted PFX material still reaches the existing parent mTLS path
 in `certificate-install.ts` and `aeat-transport.ts`; diagnosis and filing transport are unchanged.

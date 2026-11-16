@@ -168,7 +168,8 @@ export class SetupCertScreen extends LitElement {
         this.#selectedFile = form.selectedFile;
         this.#pendingFile = form.pendingFile;
         this.fileReadFailed = form.fileReadFailed;
-        this.feedback.reset();
+        this.feedback.attempted = false;
+        this.requestUpdate();
       },
     });
     this.#scope?.commit(this.#baseline);

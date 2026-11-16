@@ -17,7 +17,7 @@ private key and modern encryption. The export instructions are on the certificat
 If a certificate is refused while finishing an interrupted setup, correct it first. Setup then
 asks you to confirm ownership again before you continue.
 
-If the box could not check the certificate, try **Next** again in setup or **Save** again in the replacement dialog. Keep the same file and passphrase unless a field asks you to correct them.
+If the box could not check the certificate, try **Next** again in setup or **Save** again in the replacement dialog. If the check repeatedly cannot finish, export the certificate again with modern encryption or choose another file.
 
 ## Retry a check in Venue settings {#dashboard-check}
 

@@ -46,3 +46,16 @@ describe("setup certificate local validation", () => {
     }
   });
 });
+
+it("maps an unavailable setup check to the whole request", async () => {
+  const node = process.execPath;
+  try {
+    process.execPath = "/nonexistent/waitron-node";
+    await expect(secret.validate(body(candidate.pfx))).rejects.toMatchObject({
+      code: "setup.certificate_refused",
+      params: { field: "body", reason: "unavailable" },
+    });
+  } finally {
+    process.execPath = node;
+  }
+});

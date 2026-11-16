@@ -334,6 +334,8 @@ The setup-test network-target issue below remains separate open work.
 
 ## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN
 
+The owner chose “Leave it for now” on 2026-11-16 (relayed by the watcher at 02:25), accepting the exposure during first setup on the venue’s own network. The authentication fix remains deferred.
+
 While a box is in setup mode, `POST /setup-api/email-test` without the setup
 owner's header (`apps/server/src/setup-first-fiscal-api.ts:182-184`) reaches a route that checks no
 sign-in, takes the recipient from the request's `venue.admin.email` and connects to whatever host and

@@ -1,3 +1,4 @@
+import * as certificateOpening from "@waitron/fiscal-verifactu/src/certificate-open.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1488,4 +1489,31 @@ it("the production command records a readable certificate against the committed 
     personId: null,
     kind: "sello",
   });
+});
+
+it("resumes the same production setup after the post-provision certificate opener is unavailable", async () => {
+  const f = await productionFixture(true);
+  const real = certificateOpening.openCertificate;
+  let refused = false;
+  const opening = vi
+    .spyOn(certificateOpening, "openCertificate")
+    .mockImplementation(async (...args) => {
+      if (!refused && (await venue.db.select().from(invoiceSeries)).length > 0) {
+        refused = true;
+        return { ok: false, reason: "unavailable" };
+      }
+      return real(...args);
+    });
+  try {
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(refused).toBe(true);
+    const before = await venue.db.select().from(invoiceSeries);
+    expect(before).toHaveLength(3);
+    expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+    expect((await f.runtime.store.read())!.status).toBe("complete");
+    expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+  } finally {
+    opening.mockRestore();
+  }
 });
