@@ -3936,6 +3936,20 @@ describe("A773 no dispatch state — group readiness", () => {
     expect(await snapshot(v, s.partyId)).toEqual(before);
   });
 
+  it("reads a fired group with nothing for the kitchen ready while its dishes wait", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const group = (await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water")] }]))
+      .groups[0]!;
+    expect(await groupTickets(group.id)).toEqual([]);
+    const before = await snapshot(v, s.partyId);
+
+    const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+    expect(read.ready).toBe(true);
+    expect(await snapshot(v, s.partyId)).toEqual(before);
+  });
+
   it("does not report a fired group ready while its kitchen dish beside the water is not ready", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -4045,11 +4059,13 @@ describe("the pass by group (D1)", () => {
     expect(await snapshot(v, s.partyId)).toEqual(before);
   });
 
-  it("reads ready a fired group with nothing for the kitchen while its dishes wait", async () => {
+  it("reads a fired group with nothing for the kitchen ready before and after its Ready press", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const { groups } = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water")] }]);
     expect(await groupTickets(groups[0]!.id)).toEqual([]);
+    expect(groups[0]!.ready).toBe(true);
+    expect((await groupsOf(s.partyId)).groups[0]!.ready).toBe(true);
 
     await ready(s.partyId, groups[0]!.id);
 
