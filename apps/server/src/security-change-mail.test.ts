@@ -4,49 +4,22 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
+import { SECURITY_CHANGE_EMAIL_WORDS } from "./i18n/security-change-email.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { runMailPass } from "./mail-sender.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const queuedAt = new Date("2026-11-13T12:00:00Z");
 const changes = [
-  ["password_changed", "Your password was changed.", "Se cambió tu contraseña."],
-  [
-    "passkey_added",
-    "A passkey was added to your account.",
-    "Se añadió una llave de acceso a tu cuenta.",
-  ],
-  [
-    "passkey_removed",
-    "A passkey was removed from your account.",
-    "Se eliminó una llave de acceso de tu cuenta.",
-  ],
-  [
-    "authenticator_set_up",
-    "An authenticator was set up for your account.",
-    "Se configuró un autenticador para tu cuenta.",
-  ],
-  [
-    "authenticator_removed",
-    "The authenticator was removed from your account.",
-    "Se eliminó el autenticador de tu cuenta.",
-  ],
-  [
-    "recovery_codes_regenerated",
-    "Your recovery codes were regenerated.",
-    "Se regeneraron tus códigos de recuperación.",
-  ],
-  ["email_changed", "Your sign-in email address was changed.", "Se cambió tu correo de acceso."],
-  [
-    "google_connected",
-    "Google sign-in was connected to your account.",
-    "Se conectó el acceso con Google a tu cuenta.",
-  ],
-  [
-    "google_disconnected",
-    "Google sign-in was disconnected from your account.",
-    "Se desconectó el acceso con Google de tu cuenta.",
-  ],
+  ["password_changed", "Your password was changed."],
+  ["passkey_added", "A passkey was added to your account."],
+  ["passkey_removed", "A passkey was removed from your account."],
+  ["authenticator_set_up", "An authenticator was set up for your account."],
+  ["authenticator_removed", "The authenticator was removed from your account."],
+  ["recovery_codes_regenerated", "Your recovery codes were regenerated."],
+  ["email_changed", "Your sign-in email address was changed."],
+  ["google_connected", "Google sign-in was connected to your account."],
+  ["google_disconnected", "Google sign-in was disconnected from your account."],
 ] as const;
 
 async function queue(change: string, locale: string | null = "en-GB") {
@@ -88,7 +61,7 @@ async function deliver(venueLocale = "en-GB") {
 }
 
 it.each(
-  changes.flatMap(([change, en, es]) => [
+  changes.flatMap(([change, en]) => [
     {
       change,
       locale: "en-GB",
@@ -98,8 +71,12 @@ it.each(
     {
       change,
       locale: "es-ES",
-      subject: "Cambió la seguridad de tu cuenta",
-      text: `Corner Bistro: ${es} Cambio realizado el 13 nov 2026, 13:00.\n\nSi no has sido tú, entra, elimina cualquier método de acceso que no reconozcas y cambia tu contraseña; si no puedes entrar, pide a un administrador del local que restablezca tu acceso.`,
+      subject: SECURITY_CHANGE_EMAIL_WORDS.es.subject,
+      text: SECURITY_CHANGE_EMAIL_WORDS.es.text(
+        "Corner Bistro",
+        SECURITY_CHANGE_EMAIL_WORDS.es.changes[change],
+        "13 nov 2026, 13:00",
+      ),
     },
   ]),
 )(
@@ -132,8 +109,8 @@ it("uses the current address and venue language at claim, without sending to a s
   const send = await deliver("es-ES");
   expect(send).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
     to: "current@example.test",
-    subject: "Cambió la seguridad de tu cuenta",
-    text: expect.stringContaining("Se cambió tu contraseña."),
+    subject: SECURITY_CHANGE_EMAIL_WORDS.es.subject,
+    text: expect.stringContaining(SECURITY_CHANGE_EMAIL_WORDS.es.changes.password_changed),
   });
 });
 
