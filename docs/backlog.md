@@ -393,6 +393,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
   The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB;
   Cloud transfers and configuration imports keep their separate buffers.
+  Cloud snapshot streaming waits for a Cloud decision on its 512 MiB object limit and
+  256 MiB verification scratch limit, alongside Cloud's TEST-CLOUD-AWS work.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**

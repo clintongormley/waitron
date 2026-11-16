@@ -294,6 +294,44 @@ whole-file reads are separate work:
   Configuration transfer retains its separate buffer.
   These are transfer limits and buffers, not ordinary-start database admission.
 
+**Cloud transfer work waits for Cloud's receiving and verification limits.** On 16 November
+2026, Cloud revision `45cfc4eb6e35291ab0c5e161ab0871c8f97a0b40` caps encrypted objects at
+512 MiB (`packages/backups/src/object-transfer.ts`, `MAX_OBJECT_BYTES`, and the metadata check
+in `catalogue.ts`). Its bound verification container allows at most 256 MiB for the whole
+scratch folder (`bound-container-verifier.ts`), including extracted database files. The verifier
+child separately caps its encrypted input at 256 MiB (`waitron-data-verify-child.mjs`).
+Waitron's current verification bundle decodes gzip before extraction
+(`apps/server/src/backup-verification-archive.ts`); compressed transfer alone does not remove
+Cloud's scratch limit. The deployed verifier image was not exercised by this probe.
+
+Run from that Cloud checkout with Node 26.13.0:
+
+```sh
+node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
+import { stageReadable } from './packages/backups/src/object-transfer.ts';
+import { createBoundContainerWaitronVerifier } from './packages/backups/src/bound-container-verifier.ts';
+const control = await stageReadable(Readable.from([Buffer.from('x')]), 1);
+assert.equal(control.receipt.size, 1);
+await control.dispose();
+await assert.rejects(stageReadable(Readable.from([]), 536870913), { message: 'backup.object_invalid' });
+await assert.rejects(createBoundContainerWaitronVerifier({
+  image: 'sha256:' + 'a'.repeat(64), owner: 'lane-j-size-probe',
+  controller: { scope: 'probe', async reclaim() {}, async create() { throw Error('must not run'); }, async remove() {} },
+  scratchMiB: 257,
+}), { message: 'backup.verifier_configuration' });
+JS
+```
+
+The one-byte control succeeded. The declared 536,870,913-byte object was refused with
+`backup.object_invalid` before reading its body; `scratchMiB: 257` was refused with
+`backup.verifier_configuration` before Docker ran. These check the receiving and configuration
+boundaries, not a large archive restore. The watcher parked the Waitron change on 16 November
+2026 pending a Cloud decision on both limits, alongside lane K's TEST-CLOUD-AWS. The watcher
+also recorded that Cloud backups currently run only in test mode, with no real venue sending
+them; this probe did not inspect deployment or venue use.
+
 Measured on 14 November 2026 with bench revision `95e668a747`: 30 days at 250 bills
 a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
 (1,209.70 MiB). Scaling that artifact by 12 for the bench's 360-day year gives
