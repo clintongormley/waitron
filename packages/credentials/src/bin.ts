@@ -56,24 +56,30 @@ export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo):
   }
 }
 
-/** The real stdio, including the one refusal that only makes sense against a terminal. */
-const processIo: CliIo = {
-  stdout: (line) => process.stdout.write(`${line}\n`),
-  stderr: (line) => process.stderr.write(`${line}\n`),
-  readStdin: async () => {
-    if (process.stdin.isTTY) {
-      // No piped input and no --file: waiting would hang on a stream that never sees EOF.
-      process.stderr.write(
-        "refusing to wait on an interactive terminal for the credential payload " +
-          "— pipe it in, or pass --file <path>\n",
-      );
-      throw new Error("stdin is a TTY");
-    }
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-    return Buffer.concat(chunks).toString("utf8");
-  },
-};
+/** The process's stdio, including the one refusal that only makes sense against a terminal. */
+export function processIo(proc: {
+  stdin: NodeJS.ReadableStream & { isTTY?: boolean };
+  stdout: NodeJS.WritableStream;
+  stderr: NodeJS.WritableStream;
+}): CliIo {
+  return {
+    stdout: (line) => proc.stdout.write(`${line}\n`),
+    stderr: (line) => proc.stderr.write(`${line}\n`),
+    readStdin: async () => {
+      if (proc.stdin.isTTY) {
+        // No piped input and no --file: waiting would hang on a stream that never sees EOF.
+        proc.stderr.write(
+          "refusing to wait on an interactive terminal for the credential payload " +
+            "— pipe it in, or pass --file <path>\n",
+        );
+        throw new Error("stdin is a TTY");
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of proc.stdin) chunks.push(chunk as Buffer);
+      return Buffer.concat(chunks).toString("utf8");
+    },
+  };
+}
 
 // Run only when invoked directly: an import would otherwise run the command with the importing
 // process's argv and environment.
@@ -81,5 +87,5 @@ if (
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
-  process.exitCode = await runBin(process.argv.slice(2), process.env, processIo);
+  process.exitCode = await runBin(process.argv.slice(2), process.env, processIo(process));
 }

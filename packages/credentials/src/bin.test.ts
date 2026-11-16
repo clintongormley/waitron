@@ -3,9 +3,10 @@
 // holds the vault to the venue file.
 import { spawn } from "node:child_process";
 import { sql } from "drizzle-orm";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -15,7 +16,7 @@ import {
   venueCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
-import { runBin } from "./bin.js";
+import { processIo, runBin } from "./bin.js";
 import type { CliIo } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
 import { sealNodeSigningKeyTx } from "./node-signing-key.js";
@@ -101,6 +102,20 @@ describe("waitron-credentials against a real venue directory", () => {
     expect(await storedPurposes()).toEqual(["payments.stripe"]);
   });
 
+  it("reads the payload from the file --file names, not from stdin", async () => {
+    const file = join(venueDir, "stripe.json");
+    await writeFile(file, STRIPE_JSON);
+    const h = capture("not json");
+    const code = await runBin(
+      ["set", "--purpose", "payments.stripe", "--file", file],
+      { ...KEY_ENV, WAITRON_VENUE_DIR: venueDir },
+      h.io,
+    );
+    expect(code).toBe(0);
+    expect(h.err).toEqual([]);
+    expect(await storedPurposes()).toEqual(["payments.stripe"]);
+  });
+
   it("reads that credential back on a second invocation, and never prints its value", async () => {
     const h = capture();
     const code = await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: venueDir }, h.io);
@@ -120,6 +135,15 @@ describe("waitron-credentials against a real venue directory", () => {
     const h = capture();
     expect(await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: "" }, h.io)).toBe(2);
     expect(h.err.join("\n")).toContain("WAITRON_VENUE_DIR");
+  });
+
+  it("prints only the class name of a failure that is not a domain refusal, and returns 1", async () => {
+    const file = join(venueDir, "not-a-folder");
+    await writeFile(file, "");
+    const h = capture();
+    const code = await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: file }, h.io);
+    expect(code).toBe(1);
+    expect(h.err).toEqual([expect.stringMatching(/^unexpected failure \(\w+\)$/)]);
   });
 
   it("reports a broken key ring by its domain code, without opening the venue", async () => {
@@ -233,4 +257,38 @@ setTimeout(() => { db.exec("commit"); db.close(); }, 1000);`;
       writer.kill("SIGKILL");
     }
   }, 20_000);
+});
+
+describe("processIo", () => {
+  function fakeProcess(isTTY: boolean) {
+    const out: string[] = [];
+    const err: string[] = [];
+    const stdout = new PassThrough().on("data", (c: Buffer) => out.push(c.toString()));
+    const stderr = new PassThrough().on("data", (c: Buffer) => err.push(c.toString()));
+    const stdin = Object.assign(new PassThrough(), { isTTY });
+    return { proc: { stdin, stdout, stderr }, out, err };
+  }
+
+  it("writes each line to its own stream", () => {
+    const { proc, out, err } = fakeProcess(false);
+    const io = processIo(proc);
+    io.stdout("to out");
+    io.stderr("to err");
+    expect(out).toEqual(["to out\n"]);
+    expect(err).toEqual(["to err\n"]);
+  });
+
+  it("reads the whole of a piped stdin", async () => {
+    const { proc } = fakeProcess(false);
+    const read = processIo(proc).readStdin();
+    proc.stdin.write('{"a":');
+    proc.stdin.end('"b"}');
+    expect(await read).toBe('{"a":"b"}');
+  });
+
+  it("refuses to wait on a terminal for the payload, and says how to give it one", async () => {
+    const { proc, err } = fakeProcess(true);
+    await expect(processIo(proc).readStdin()).rejects.toThrow("stdin is a TTY");
+    expect(err.join("")).toContain("pass --file <path>");
+  });
 });
