@@ -56,8 +56,9 @@ const BARE_NUMBER = /^\d{1,9}$/;
 // The issue date as filed: the issue instant moved by the offset filed with it.
 const ISSUE_DATE = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
 
-// As the filing types each record: a corrective is R4 when it names a customer, else R5; a full
-// invoice replacing tickets is F3; otherwise F1 when it names a customer, else F2.
+// As the filing types each record: a corrective is R4 when it names a customer (only a replacement
+// of a full invoice does), else R5; a full invoice replacing tickets is F3; otherwise F1 when it
+// names a customer, else F2. `tax-office-list.kinds.e2e.test.ts` pins one filed sale of each kind.
 const KIND = sql`case
   when s.corrects_sale_id is not null
     then case when s.counterparty_tax_id is not null then 'R4' else 'R5' end

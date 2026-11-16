@@ -311,7 +311,6 @@ export class TaxOfficeScreen extends LitElement {
         link.download = pdfFileName(invoice.number);
         link.click();
       }
-      // The new tab reads the file after this returns; a minute is ample for it to load.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
       this.actionError = codeMessage(codeOf(error));

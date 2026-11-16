@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: **draft for the watcher**. Written at main `e98aaa981d`.
+Status: **PR 1 (Tasks 1–5) built; PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
 2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
 2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
@@ -89,7 +89,7 @@ write.
 - **D3. Search fields** (RIVA art. 63.3, quoted in the research): one text box matching series and
   number (`SERIES/N` exactly, or a bare number), customer name (the house text search,
   `packages/shared/src/text-search.ts`: accents and case ignored, every word but the last must match
-  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, venue calendar days); the default is the browser's current month, which differs from the venue's only near midnight at a month's end when the browser is in another time zone;
+  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, venue calendar days); the default is the browser's current month, which differs from the venue's around a month's change, for as many hours as the browser's and the venue's time zones are apart;
   operation date from–to (optional): the sale's `supply_day` where set, otherwise its issue day,
   since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (typed
   as a number); amount (exact euros compared as numbers, not text, matching the
@@ -120,7 +120,9 @@ write.
   and no other permission is refused every `/management-api/orders*` route with
   `authorization.not_permitted`, and its nav hides Orders and the own-schedule landing; it lands on
   Invoices. Tested route by route (Task 1).
-- **Q1 (owner). How does an inspector sign in?** Default: at the venue a manager opens Invoices on
+- **Q1 (owner). How does an inspector sign in?** Answered 2026-11-16 08:57 (owner, relayed in lane L's
+  questions.md, "## WATCHER 2026-11-16 08:57"): "We just create a user with the relevant permissions, send
+  the email, just like any other user" — the default below stands. Default: at the venue a manager opens Invoices on
   their own sign-in (works without the internet); for an inspector's own sign-in, the manager
   creates an ordinary person with an email and a role holding only "See invoices for the tax
   office", and disables that person afterwards. Cost: a new person's first password arrives only by
