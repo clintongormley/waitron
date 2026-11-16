@@ -288,6 +288,68 @@ describe("ClockingController", () => {
     expect(f.settled).not.toHaveBeenCalled();
   });
 
+  it("a read answering for another person shows a failed read, not that person's clock", async () => {
+    const f = fixture();
+    f.api.getClockState.mockResolvedValue(clock("working", "luis-in", "luis"));
+    await f.controller.start("ana");
+    expect(f.snapshot()).toMatchObject({ state: null, reading: false, error: "read" });
+  });
+
+  it("a write answering for another person is settled from a fresh read of this person's clock, never from that answer", async () => {
+    const f = fixture();
+    await f.controller.start("ana");
+    f.api.clockIn.mockResolvedValue(clock("working", "luis-in", "luis"));
+    f.api.getClockState.mockResolvedValue(clock("working", "ana-in"));
+    await f.controller.act("in");
+    expect(f.api.getClockState).toHaveBeenCalledTimes(2);
+    expect(f.settled.mock.calls).toEqual([["in", clock("working", "ana-in")]]);
+    expect(f.snapshot().state?.personId).toBe("ana");
+  });
+
+  it("a stop from the changed callback as a read begins sends no read", async () => {
+    const f = fixture();
+    f.changed.mockImplementation((snapshot) => {
+      if (snapshot.reading) f.controller.stop();
+    });
+    await f.controller.start("ana");
+    expect(f.api.getClockState).not.toHaveBeenCalled();
+  });
+
+  it("a stop from the changed callback as a write begins sends no write", async () => {
+    const f = fixture();
+    await f.controller.start("ana");
+    f.changed.mockImplementation((snapshot) => {
+      if (snapshot.busy) f.controller.stop();
+    });
+    expect(await f.controller.act("in")).toBeNull();
+    expect(f.api.clockIn).not.toHaveBeenCalled();
+  });
+
+  it("a stop from the changed callback once a write is uncertain sends no reconciling read", async () => {
+    const f = fixture();
+    await f.controller.start("ana");
+    f.api.clockIn.mockRejectedValue(new TypeError("lost"));
+    f.changed.mockImplementation((snapshot) => {
+      if (snapshot.error === "uncertain") f.controller.stop();
+    });
+    expect(await f.controller.act("in")).toBeNull();
+    expect(f.api.getClockState).toHaveBeenCalledOnce();
+    expect(f.settled).not.toHaveBeenCalled();
+  });
+
+  it("a stop from the changed callback when the reconciling read lands settles nothing", async () => {
+    const f = fixture();
+    await f.controller.start("ana");
+    f.api.clockIn.mockRejectedValue(new TypeError("lost"));
+    f.api.getClockState.mockResolvedValue(clock("working", "saved"));
+    f.changed.mockImplementation((snapshot) => {
+      if (snapshot.state?.lastEntryId === "saved") f.controller.stop();
+    });
+    expect(await f.controller.act("in")).toBeNull();
+    expect(f.api.getClockState).toHaveBeenCalledTimes(2);
+    expect(f.settled).not.toHaveBeenCalled();
+  });
+
   it("polling leaves the same idle deadline in place", async () => {
     const f = fixture();
     const idle = vi.fn();

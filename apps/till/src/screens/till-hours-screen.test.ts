@@ -232,6 +232,30 @@ it("refuses malformed dates, impossible dates and unsupported windows without re
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
   expect(seen).toEqual([{ selection: { kind: "week", date: "2026-01-12" } }]);
 });
+it("does not step past the last date the calendar can write", async () => {
+  const { el } = await mount();
+  const seen: unknown[] = [];
+  el.addEventListener("hours-select", (event) => seen.push((event as CustomEvent).detail));
+  el.shadowRoot!.querySelector('[name="hoursDate"]')!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "9999-12-28" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
+  expect(seen).toEqual([{ selection: { kind: "week", date: "9999-12-28" } }]);
+});
+it("Back pressed after the screen has gone sends no back event", async () => {
+  const { el } = await mount();
+  const seen = vi.fn();
+  el.addEventListener("back", seen);
+  const back = el.shadowRoot!.querySelector<HTMLElement>("[data-back]")!;
+  el.remove();
+  back.click();
+  expect(seen).not.toHaveBeenCalled();
+});
 it("a proposal can be accepted only when ready, while disagreement and missing-time edits keep their prompt identities", async () => {
   const item = attendanceItem({ personId: "p1", readyToApply: false });
   const proposal = attendancePrompt({

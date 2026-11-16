@@ -194,6 +194,16 @@ describe("chosen-day attendance detail", () => {
     expect(button(el, "[data-approve]").hasAttribute("disabled")).toBe(true);
   });
 
+  it("a close announced by a field inside the dialog leaves it open", async () => {
+    const { el } = await mount();
+    const closes = watch(el, "attendance-day-close");
+    el.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(closes).toEqual([]);
+    expect(el.open).toBe(true);
+  });
   it("Cancel closes without a save and detached controls cannot fix or decide", async () => {
     const { el } = await mount();
     const closes = watch(el, "attendance-day-close");

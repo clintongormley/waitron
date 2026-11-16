@@ -416,6 +416,17 @@ it("logout while the send is out prevents its reply from repopulating the journa
   expect(session.read("sale-1")).toBeNull();
 });
 
+it.each([
+  ["an empty invoice correction id", { invoiceCorrectionId: "" }],
+  ["an empty cancellation id", { cancellationIds: ["c-1", ""] }],
+  ["cancellation ids that are not a list", { cancellationIds: "c-1" }],
+])("refuses to prepare an ask carrying %s", (_case, change) => {
+  const store = new TenderRefundAttempts();
+  expect(() =>
+    store.prepare(scope, "sale-1", { ...ask, ...change } as unknown as typeof ask),
+  ).toThrow("invalid");
+});
+
 it("retains the server's twelve-digit money range and rejects a total above it", () => {
   const store = new TenderRefundAttempts();
   const sent = store.prepare(scope, "sale-1", {

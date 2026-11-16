@@ -153,6 +153,44 @@ describe("the cover request", () => {
   });
 });
 
+describe("the cover request while one is out", () => {
+  it("a second press sends nothing more", async () => {
+    const api = stubApi();
+    const reply = deferred<{ swapId: string }>();
+    api.requestSwap.mockImplementationOnce(() => reply.promise);
+    const { el } = await mountLoaded(api);
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    await press(el, "cover-submit");
+    action(el, "cover-submit").click();
+    await settle(el);
+    expect(api.requestSwap).toHaveBeenCalledTimes(1);
+    reply.resolve({ swapId: "sw9" });
+  });
+
+  it("an answer arriving after the screen was closed and reopened leaves the reopened form alone", async () => {
+    const api = stubApi();
+    const reply = deferred<{ swapId: string }>();
+    api.requestSwap.mockImplementationOnce(() => reply.promise);
+    const { el } = await mountLoaded(api);
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    await press(el, "cover-submit");
+    const host = el.parentElement!;
+    el.remove();
+    host.appendChild(el);
+    await vi.waitFor(() => expect(q(el, "[data-shift=s1]")).not.toBeNull());
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    reply.resolve({ swapId: "sw9" });
+    await settle(el);
+    expect(q<HTMLElement & { value: string }>(el, "[name=cover-shift]")!.value).toBe("s1");
+    expect(q<HTMLElement & { value: string }>(el, "[name=cover-colleague]")!.value).toBe("col1");
+    expect(await state(el, "cover-submit")).toEqual(ready);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("the absence request", () => {
   it("opens quiet, and a press sends nothing", async () => {
     const { el, api } = await mountLoaded();

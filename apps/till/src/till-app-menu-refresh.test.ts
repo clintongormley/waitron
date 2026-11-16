@@ -515,6 +515,21 @@ describe("a department's way of selling on a running till (A1522)", () => {
 
     expect(counter(el).store.dining).toBe("eat_in");
   });
+
+  it("a poll answering a changed way for an open table's zone hands the table that way", async () => {
+    const { el } = await mountApp(tableStubs());
+    await toTable(el);
+    expect(tableScreen(el).diningStart).toBeNull();
+    const takeaway = { policy: "takeaway", startsAs: "takeaway" } as const;
+
+    api.menuState.mockImplementation(async (zoneId: string) => ({
+      ...menuState("v1"),
+      dining: zoneId === "zone-dining" ? takeaway : null,
+    }));
+    await poll(el);
+
+    expect(tableScreen(el).diningStart).toEqual(takeaway);
+  });
 });
 
 describe("a basket that spans a publish", () => {

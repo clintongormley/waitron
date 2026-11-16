@@ -173,6 +173,30 @@ describe("DepartmentTransferMonitor", () => {
     expect(first.reads.every((url) => url.endsWith("/incoming"))).toBe(true);
   });
 
+  it("reads nothing more for a second start or a repeated tab, and nothing once stopped", async () => {
+    const source = desk();
+    source.monitor.start();
+    source.monitor.start();
+    source.monitor.watchSource("tab-1");
+    source.monitor.watchSource("tab-1");
+    await settle();
+    expect(source.reads).toEqual([
+      "/api/department-transfers/incoming",
+      "/api/working-orders/tab-1/department-transfers",
+    ]);
+    expect(source.monitor.snapshot.incoming).toEqual([pending]);
+    source.monitor.stop();
+    source.monitor.refresh();
+    await settle();
+    expect(source.reads).toHaveLength(2);
+    expect(source.monitor.snapshot).toEqual({
+      incoming: [],
+      receivingAllowed: undefined,
+      sent: [],
+      notifications: [],
+      error: undefined,
+    });
+  });
   it("reloads a durable request after a disconnected device reconnects", async () => {
     const source = desk();
     source.queue([]);

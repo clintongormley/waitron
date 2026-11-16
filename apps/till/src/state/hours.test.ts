@@ -135,6 +135,16 @@ it.each(["person", "selection"] as const)("rejects a view for the wrong %s", asy
     readError: { code: "attendance.read_failed" },
   });
 });
+it("a refusal of null reads as a failed read", async () => {
+  const f = await fixture();
+  f.getHours.mockRejectedValueOnce(null);
+  await f.controller.start("ana", selection);
+  expect(f.snapshot()).toEqual({
+    view: null,
+    reading: false,
+    readError: { code: "attendance.read_failed" },
+  });
+});
 it("times out a transport that ignores abort at25 seconds and permits retry", async () => {
   const f = await fixture();
   const held = deferred<PersonHours>();

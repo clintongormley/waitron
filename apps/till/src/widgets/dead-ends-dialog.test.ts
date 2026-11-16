@@ -51,6 +51,20 @@ it("removes a counter dish and lets the waiter cancel", async () => {
   expect(cancelled).toEqual(["cancel"]);
 });
 
+it("a close announced by a control inside the dialog does not cancel it", async () => {
+  const { el } = await mountWidget<TillDeadEndsDialog>("till-dead-ends-dialog", {
+    answer,
+    allowRemove: true,
+  });
+  const cancelled: Event[] = [];
+  el.addEventListener("dead-ends-cancel", (event) => cancelled.push(event));
+  el.shadowRoot!.querySelector("till-dead-ends-section")!.dispatchEvent(
+    new CustomEvent("wt-close", { bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(cancelled).toEqual([]);
+});
+
 it("does not offer Remove on an already stored bill", async () => {
   const { el } = await mountWidget<TillDeadEndsDialog>("till-dead-ends-dialog", {
     answer,

@@ -1923,6 +1923,26 @@ describe("the way an order sells (A1522)", () => {
     expect(store.dining).toBe("takeaway");
   });
 
+  it("choosing the way a draft already sells notifies no subscriber, yet a later till-choice start keeps the choice", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.setDining("eat_in");
+    expect(changes).toBe(0);
+    store.setDiningStart({ policy: "till_choice", startsAs: "takeaway" });
+    expect(store.dining).toBe("eat_in");
+  });
+
+  it("a switch the server answers with the way the order already sells takes only its revision", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [{ product: coffee, quantity: "1" }], undefined, 3, undefined, "eat_in");
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.adoptSwitchedDining("eat_in", 4);
+    expect([store.dining, store.revision, changes]).toEqual(["eat_in", 4, 0]);
+  });
+
   it("refuses setDining on a saved order, which switches through the server", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("held", [], undefined, 1, undefined, "eat_in");

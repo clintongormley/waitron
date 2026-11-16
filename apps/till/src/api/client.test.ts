@@ -1906,6 +1906,85 @@ describe("TillApi", () => {
   });
 
   it.each([
+    [
+      "setAvailability",
+      (api: TillApi) => api.setAvailability("z 1", "p/1", false),
+      "/api/service-zones/z%201/products/p%2F1/availability",
+      "PUT",
+      { available: false },
+    ],
+    [
+      "setOptionAvailability",
+      (api: TillApi) => api.setOptionAvailability("z1", "l1", "lab 1", true),
+      "/api/service-zones/z1/options/l1/labels/lab%201/availability",
+      "PUT",
+      { available: true },
+    ],
+    [
+      "getInvoiceDeliveryOptions",
+      (api: TillApi) => api.getInvoiceDeliveryOptions(),
+      "/api/invoice-delivery-options",
+      "GET",
+      undefined,
+    ],
+    [
+      "printBillPaymentSlip",
+      (api: TillApi) => api.printBillPaymentSlip("wo1", "pay1"),
+      "/api/working-orders/wo1/payments/pay1/slip-copy",
+      "POST",
+      {},
+    ],
+    [
+      "askDraftDeadEnds",
+      (api: TillApi) => api.askDraftDeadEnds("v1", "d1", ["l1"]),
+      "/api/dead-ends/draft",
+      "POST",
+      { partyId: "v1", draftId: "d1", lineIds: ["l1"] },
+    ],
+    [
+      "askSaleDeadEnds for an edit",
+      (api: TillApi) => api.askSaleDeadEnds([], "wo1"),
+      "/api/dead-ends/sale",
+      "POST",
+      { step: "edit", lines: [], workingOrderId: "wo1" },
+    ],
+    [
+      "askSaleDeadEnds for a payment",
+      (api: TillApi) => api.askSaleDeadEnds({ step: "pay", lines: [] }),
+      "/api/dead-ends/sale",
+      "POST",
+      { step: "pay", lines: [] },
+    ],
+    [
+      "askOrderDeadEnds to another zone",
+      (api: TillApi) => api.askOrderDeadEnds("wo1", "z2"),
+      "/api/dead-ends/order",
+      "POST",
+      { workingOrderId: "wo1", toZoneId: "z2" },
+    ],
+    [
+      "askOrderDeadEnds in place",
+      (api: TillApi) => api.askOrderDeadEnds("wo1"),
+      "/api/dead-ends/order",
+      "POST",
+      { workingOrderId: "wo1" },
+    ],
+  ] as const)(
+    "%s sends the route, method and body the server reads",
+    async (_name, call, path, method, body) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}));
+
+      await call(new TillApi("", fetchStub));
+
+      expect(fetchStub).toHaveBeenCalledOnce();
+      const [url, init] = fetchStub.mock.calls[0]! as [string, RequestInit];
+      expect([url, init.method]).toEqual([path, method]);
+      expect(init.credentials).toBe("include");
+      expect(init.body === undefined ? undefined : JSON.parse(init.body as string)).toEqual(body);
+    },
+  );
+
+  it.each([
     [undefined, {}],
     ["gl-ES", { language: "gl-ES" }],
   ] as const)(

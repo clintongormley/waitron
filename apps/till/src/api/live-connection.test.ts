@@ -94,6 +94,35 @@ it("a revoked device stops, dispatches unauthorized and ignores late events", as
   expect(reads).toHaveLength(1);
 });
 
+it("a second start opens no second read and keeps the reconnect back-off", async () => {
+  const { connection, reads } = setup();
+  connection.start();
+  expect(reads).toHaveLength(1);
+  reads[0]!.end();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(reads).toHaveLength(2);
+  connection.start();
+  reads[1]!.end();
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(reads).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(reads).toHaveLength(3);
+});
+
+it("a read refused as an unauthorized device stops, dispatches unauthorized and does not reconnect", async () => {
+  const read = vi.fn(() => Promise.reject({ code: "device.unauthorized", status: 401 }));
+  const connection = new TillLiveConnection({ read });
+  connections.push(connection);
+  const unauthorized = vi.fn();
+  connection.addEventListener("unauthorized", unauthorized);
+  connection.addInterests("device", ["devices"]);
+  connection.start();
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(unauthorized).toHaveBeenCalledOnce();
+  expect(read).toHaveBeenCalledOnce();
+  expect(connection.up).toBe(false);
+});
+
 it("reopens only when the union of interests changes and keeps other owners", () => {
   const { connection, reads } = setup();
   connection.addInterests("device", ["devices"]);
