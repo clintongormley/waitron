@@ -788,13 +788,64 @@ manager can recover the payment after the fault is fixed.
 
 ## Take a whole or part payment {#pay-window}
 
-Open **Pay** on the table's bill. Choose **An amount**, **Split equally**, **Items**, or **Whole
-bill**, selected at the right. For **Split equally**, enter how many people are still to pay.
-Choose cash or card, check the amount, and confirm the payment. After a part payment, check what
-remains and take the next guest's payment. On a phone, use **Take the next** to continue.
+To collect a bill, open **Pay** at the Counter or on the table's bill. On a table, send or remove
+any unsent items first. The top of the window shows **Total**, **Paid so far**, **Card payment in progress**
+and **Still to pay**. Start with what is still to pay, rather than the bill's original total.
 
-A bill already presented for collection offers the whole amount only. Finishing the table is a
+**Choose what this guest pays.** **Whole bill** starts selected and pays everything still due.
+Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
+particular dishes. For an equal share, enter how many people are still to pay, including this
+guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
+A bill already presented for collection offers the whole amount only.
+
+Choose the payment method, then press **Continue** to check it before taking any money. If the
+bill changes before you confirm, check the revised figures before confirming again.
+
+**Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation
+shows how much pays off the bill and the **Change to give**. If the venue takes tips, choose
+whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
+again after choosing a tip, then press **Take payment** and give that change to the guest.
+
+**Card and reader.** Choose **Card**. On a phone, check the named reader in **Reader and printer**;
+use **Change** or scan its Waitron label if you are holding another one. At the Counter, choose
+from the card readers when a list is offered. Check the reader and the total before confirming.
+To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
+
+If the venue takes tips, enter **Tip on the card (optional)** before continuing. The confirmation
+separates **Paid off the bill**, **Tip** and **Charged on the card**. An amount above what is
+still due becomes a tip, so check the full card charge with the guest before sending it.
+For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
+tip. If the venue does not take tips, use the amount the refusal says can be charged.
+
+On a phone, the confirmation button names the amount and reader. Once you press it, the waiting
+panel shows that same amount and reader, with elapsed waiting time. Complete the card step on
+that reader and wait for the result. A spinning phone is not proof that the card failed.
+
+**Continue with the next guest.** After a part payment, check **Still to pay**. On a phone, press
+**Take the next** to continue; an equal split also shows which share is next. Check the remaining
+number of people if your group changes. After the final payment, choose the
+[document to give the guest](table-service.md#settlement-document). Finishing a table is a
 separate action after payment.
+
+**Another phone is taking payment.** **Card payment in progress** is money already reserved for
+that card, so it is taken off **Still to pay**. On a €70 bill with a €30 card out, another phone
+can take the remaining €40. It cannot pay the reserved €30 again towards the bill. If no balance
+is left outside that card, wait for its result. When another card is already in progress, the
+window asks whether to **Take another**; check with the other member of staff before doing so.
+A phone that had an older amount open may be asked to confirm revised figures. Check both the
+amount paid off the bill and any tip before confirming.
+
+**Wi-Fi dropped or no result arrived.** Do not start a fresh payment just because the phone lost
+its connection. Reconnect and look at the bill's payments. If **Payment not confirmed** remains,
+use **Check again** to continue that same payment. This is not just a lookup: if the first
+payment was not recorded, it may charge the card or record the cash payment. Keep the same cash
+and reader details while you establish the result.
+
+If the payment is shown as not taken, you can take it again. If it stays pending, or the card was
+charged but the payment was not recorded, choose **Check card payments / sign in** and follow
+[Check a card before cancelling](table-service.md#cancel-pending-card). Do not charge a card you
+know has already been charged. If the check fails, follow
+[A card-payment check failed](table-service.md#card-check-failed).
 
 ## Close a bill as a deferred payment {#deferred-payment}
 

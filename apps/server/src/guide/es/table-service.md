@@ -845,14 +845,68 @@ para que el responsable pueda recuperar el pago una vez reparado el fallo.
 
 ## Cobra toda la cuenta o una parte {#pay-window}
 
-Abre **Cobrar** en la cuenta de la mesa. Elige **Una cantidad**, **Dividir a partes iguales**,
-**Artículos** o **Toda la cuenta**, seleccionada a la derecha. Para **Dividir a partes iguales**,
-indica cuántas personas quedan por pagar. Elige efectivo o tarjeta, comprueba el importe y confirma
-el cobro. Tras un pago parcial, comprueba cuánto queda y cobra al siguiente comensal. En un teléfono,
-usa **Cobrar al siguiente** para continuar.
+Para cobrar una cuenta, abre **Cobrar** en Mostrador o en la cuenta de la mesa. En una mesa, envía o quita
+primero los artículos sin enviar. Arriba se muestran **Total**, **Pagado hasta ahora**,
+**Pago con tarjeta en curso** y **Queda por pagar**. Parte de lo que queda por pagar, no del
+total original de la cuenta.
 
-Una cuenta ya presentada para su cobro solo permite cobrar el importe completo. Cerrar la mesa es
-una acción aparte, después del cobro.
+**Elige qué paga este comensal.** **Toda la cuenta** aparece seleccionada y cobra todo lo que
+queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
+una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
+personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
+si solo se pagan algunos. Una cuenta ya presentada para su cobro solo permite el importe completo.
+
+Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
+cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
+
+**Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La
+confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver**. Si el local
+acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina o dejar una
+cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
+
+**Tarjeta y lector.** Elige **Tarjeta**. En un teléfono, comprueba el lector en **Lector e
+impresora**; usa **Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En
+Mostrador, elige el lector cuando se ofrezca una lista. Comprueba el lector y el total antes de
+confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
+
+Si el local acepta propinas, introduce **Propina con tarjeta (opcional)** antes de continuar.
+La confirmación separa **Se descuenta de la cuenta**, **Propina** y **Se cobra en la tarjeta**.
+Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
+completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta
+40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el
+mensaje indica que se puede cobrar.
+
+En un teléfono, el botón de confirmación nombra el importe y el lector. Al pulsarlo, el panel de
+espera muestra ese mismo importe y lector, con el tiempo transcurrido. Completa el paso de la
+tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no demuestra que el
+cobro haya fallado.
+
+**Sigue con el siguiente comensal.** Tras un pago parcial, comprueba **Queda por pagar**. En un
+teléfono, pulsa **Cobrar al siguiente** para continuar; un reparto igual también indica qué parte
+va a cobrarse. Revisa cuántas personas quedan si cambia el grupo. Tras el último pago, elige el
+[documento para el cliente](table-service.md#settlement-document). Cerrar la mesa es una acción
+aparte, después del cobro.
+
+**Otro teléfono está cobrando.** **Pago con tarjeta en curso** es dinero reservado para esa
+tarjeta, por lo que se resta de **Queda por pagar**. En una cuenta de 70 € con un cobro de 30 €
+en curso, otro teléfono puede cobrar los 40 € restantes. No puede volver a descontar de la cuenta
+los 30 € reservados. Si no queda saldo aparte de esa tarjeta, espera su resultado. Si ya hay un
+cobro con tarjeta en curso, la ventana pregunta si quieres **Cobrar otro**; compruébalo con la
+otra persona antes de hacerlo. Un teléfono que tenía abierto un importe anterior puede pedirte
+confirmar los importes actualizados. Comprueba tanto lo que se descuenta de la cuenta como la
+propina antes de confirmar.
+
+**Se perdió el wifi o no llegó el resultado.** No empieces otro cobro solo porque el teléfono
+perdió la conexión. Reconecta y mira los pagos de la cuenta. Si sigue **Cobro sin confirmar**,
+usa **Comprobar de nuevo** para continuar ese mismo cobro. No es solo una consulta: si el primer
+pago no estaba registrado, puede cobrar la tarjeta o registrar el efectivo. Conserva los datos
+del efectivo y del lector mientras averiguas el resultado.
+
+Si el pago figura como no cobrado, puedes cobrarlo de nuevo. Si sigue pendiente, o la tarjeta se
+cobró pero el pago no se registró, elige **Comprobar pagos con tarjeta / acceder** y sigue
+[Comprobar un pago con tarjeta antes de cancelar](table-service.md#cancel-pending-card). No vuelvas
+a cobrar una tarjeta que sabes que ya se ha cobrado. Si falla la comprobación, sigue
+[Falló la comprobación de un cobro con tarjeta](table-service.md#card-check-failed).
 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 

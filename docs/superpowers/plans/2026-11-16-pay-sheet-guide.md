@@ -15,3 +15,5 @@ Ask: Lane F `queue.md`, PAY-SHEET-GUIDE. Claude reviews; the watcher clears the 
 **Expected size:** production +0/−0 (conditional reproduced refusal fix +1–15/−0–8); tests +30–50/−0; guides/plan/backlog +120–170/−15–30. No new test-support file or generated changes.
 
 Claude reviewed the initial draft (85 seconds); the driver accepted its smaller test route and corrected its five actionable findings. Watcher clearance is still required.
+
+2026-11-16 19:30 +0100: the watcher cleared the corrected plan in Lane F questions.md ("Cleared as corrected ... Build."). Implementation qualifies the existing reservation behavior and adds the existing-help section in both languages; no production code or help route changed. The lost-reply demo recovered through a live read on reconnect before Check again could be pressed. The prior pending-clearance sentence records the plan checkpoint.
