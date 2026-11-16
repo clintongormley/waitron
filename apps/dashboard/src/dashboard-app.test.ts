@@ -2483,18 +2483,15 @@ describe("dashboard-app", () => {
     "/manage/receipts",
     "/manage/receipt",
     "/manage/location-settings",
-  ])(
-    "treats the retired address %s as an unknown screen",
-    async (path) => {
-      history.replaceState(null, "", path);
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-      });
-      await flush(el);
-      expect(overview(el)).not.toBeNull();
-      expect(location.pathname).toBe("/manage/overview");
-    },
-  );
+  ])("treats the retired address %s as an unknown screen", async (path) => {
+    history.replaceState(null, "", path);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
+  });
 
   it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
     history.replaceState(null, "", "/manage/adjustment-reasons");
