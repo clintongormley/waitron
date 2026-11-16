@@ -60,16 +60,6 @@ describe("the change log", () => {
     expect(seen).toEqual([]);
   });
 
-  // THIS CASE NO LONGER SEPARATES ANYTHING: it repeats the first case under another name.
-  it("lets the application role write a change-fed row and drain what the trigger wrote", async () => {
-    const seen = collect();
-    let id = "";
-    await withTransaction(suite.db, async (tx) => {
-      id = await insertMenu(tx);
-    });
-    expect(seen).toEqual([{ resources: [{ type: "menus", id }] }]);
-  });
-
   it("stops delivering to a listener that has unsubscribed", async () => {
     const seen = collect();
     const dropped: ResourceChange[] = [];
