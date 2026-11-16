@@ -425,6 +425,7 @@ import type {
   BillRevisions,
   MoveBillResult,
   TillZoneMenu,
+  DiningChoice,
   ZoneDining,
   ZoneOffers,
 } from "./api/client.js";
@@ -4128,6 +4129,8 @@ export class TillApp extends LitElement {
   /** The invoice type stored on the Counter order last read into the basket, which
    * {@link invoiceChoice} does not hold for an order this till did not set it on. */
   #counterStoredInvoice?: { orderId: string; invoiceType: "F1" | "F2" };
+  /** Whether the server still let the Counter order last read into the basket switch its way. */
+  @state() private counterDiningChoice?: { orderId: string; choice: DiningChoice };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
   @state() private parking = false;
   /** Re-entry guard for {@link TillApp.#onPlaceOrder}; also disables Place while in flight. */
@@ -8246,6 +8249,7 @@ export class TillApp extends LitElement {
       order.revision,
     );
     this.#counterStoredInvoice = { orderId: id, invoiceType: order.invoiceType };
+    this.counterDiningChoice = { orderId: id, choice: order.diningChoice };
     this.counterLines = listed;
     this.#commitBasket(this.#basketPayload());
     unlock();
@@ -9237,6 +9241,11 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** Whether the server still lets a table bill switch its way; null for a bill not read yet. */
+  #tableBillDiningChoice(billId: string | undefined): DiningChoice | null {
+    return this.partyBills.find((bill) => bill.workingOrderId === billId)?.diningChoice ?? null;
+  }
+
   #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {
     if (!payment.presented)
       return api.recordSale(
@@ -9780,6 +9789,7 @@ export class TillApp extends LitElement {
       expectedEdit: structuredClone(order.expectedEdit),
     };
     this.#counterStoredInvoice = { orderId: order.id, invoiceType: order.invoiceType };
+    this.counterDiningChoice = { orderId: order.id, choice: order.diningChoice };
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
@@ -22105,6 +22115,7 @@ export class TillApp extends LitElement {
             : this.profileServiceZones
         }
         .selectedServiceZoneId=${this.counterServiceZoneId}
+        .diningChoice=${this.counterDiningChoice?.orderId === this.#store.id ? this.counterDiningChoice.choice : null}
         .selectedFilters=${this.selectedFilters}
         .orderList=${this.counterOrderList}
         .heldOrders=${this.heldOrders}
@@ -22239,6 +22250,9 @@ export class TillApp extends LitElement {
       .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
       .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
       .bills=${this.partyBills}
+      .dining=${this.#tableBillDining(this.activeTabId ?? "")}
+      .diningChoice=${this.#tableBillDiningChoice(this.activeTabId)}
+      .diningStart=${this.#tableDining}
       .receiptLanguages=${this.receiptLanguages}
       .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
@@ -22423,6 +22437,9 @@ export class TillApp extends LitElement {
           .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
           .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
           .bills=${this.partyBills}
+          .dining=${this.#tableBillDining(this.activeTabId ?? "")}
+          .diningChoice=${this.#tableBillDiningChoice(this.activeTabId)}
+          .diningStart=${this.#tableDining}
           .receiptLanguages=${this.receiptLanguages}
           .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}

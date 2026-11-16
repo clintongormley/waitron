@@ -14832,3 +14832,25 @@ describe("till-app: moving every dish off a bill set for a full invoice", () => 
     expect(api.moveDishes).toHaveBeenCalledOnce();
   });
 });
+
+describe("the way each table bill sells (A1522)", () => {
+  it("hands the table screen the shown bill's own way and switch, following a switch of bill", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          tabBill,
+          { ...checkBill, dining: "takeaway", diningChoice: "locked" } satisfies PartyBill,
+        ]),
+    });
+    const order = await openPartyTable(el);
+    expect(order.orderId).toBe("wo-4");
+    expect([order.dining, order.diningChoice]).toEqual(["eat_in", "none"]);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect([tableOrder(el)!.dining, tableOrder(el)!.diningChoice]).toEqual(["takeaway", "locked"]);
+  });
+});

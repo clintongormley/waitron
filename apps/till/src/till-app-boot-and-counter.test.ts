@@ -2688,6 +2688,44 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
     expect(call[2]).toBe("wo-1");
     expect(call[9]).toBe("takeaway");
   });
+  it.each(["open", "locked"] as const)(
+    "hands the counter screen a retrieved order's %s switch, and none once the basket is a new draft",
+    async (choice) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue(cashTill),
+        listDefaultZoneOffers: vi
+          .fn()
+          .mockResolvedValue(offersSelling({ policy: "till_choice", startsAs: "eat_in" })),
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          kitchenNote: {
+            scope: { workingOrderId: "wo-1" },
+            note: null,
+            revision: 0,
+            ownerRevision: 0,
+          },
+          id: "wo-1",
+          orderNumber: 5,
+          label: null,
+          revision: 2,
+          expectedEdit: null,
+          invoiceType: "F2",
+          dining: "takeaway",
+          diningChoice: choice,
+          lines: [{ menuItemId: coffee.menuItemId, quantity: "1.000" }],
+        }),
+      });
+      const c = await toCounter(el);
+      expect(c.diningChoice).toBeNull();
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      expect(c.diningChoice).toBe(choice);
+
+      c.store.clear();
+      await flush(el);
+      expect(c.diningChoice).toBeNull();
+    },
+  );
 });
 
 describe("till-app shell navigation", () => {

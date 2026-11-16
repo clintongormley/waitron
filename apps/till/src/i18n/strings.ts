@@ -1511,6 +1511,9 @@ export const en = {
   "table.reread_failed":
     "The order was updated, but the table could not be read again. Open the table again to check its amounts.",
   "table.split_updated_elsewhere": "The table was updated by somebody else. Try to Split again.",
+  "dining.eat_in": "Eat here",
+  "dining.takeaway": "Take away",
+  "dining.label": "Eat here or take away",
   "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",
@@ -3597,6 +3600,9 @@ export const es: Record<StringKey, string> = {
   "table.reread_failed":
     "El pedido se actualizó, pero no se pudo volver a leer la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
   "table.split_updated_elsewhere": "Otra persona ha actualizado la mesa. Intenta Separar de nuevo.",
+  "dining.eat_in": "Para tomar aquí",
+  "dining.takeaway": "Para llevar",
+  "dining.label": "Para tomar aquí o para llevar",
   "table.draft_title": "Nuevo pedido",
   "table.view_menu": "Carta",
   "table.view_order": "Pedido",

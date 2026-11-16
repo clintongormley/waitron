@@ -868,6 +868,11 @@ export class WorkingOrderStore {
     return this.#dining;
   }
 
+  /** How the zone's department sells, as last given to {@link setDiningStart}. */
+  get diningStart(): ZoneDining | null {
+    return this.#diningStart;
+  }
+
   get #startingDining(): Dining {
     return this.#diningStart?.startsAs ?? "eat_in";
   }

@@ -27,8 +27,10 @@ import "../widgets/held-orders.js";
 import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
+import { diningControl, diningShown, diningStyles } from "../widgets/dining-choice.js";
 import type {
   CounterWaitingOrder,
+  DiningChoice,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -60,6 +62,7 @@ export class TillCounterScreen extends LitElement {
     baseStyles,
     servicePeriodStyles,
     chooserStyles,
+    diningStyles,
     css`
       :host {
         display: block;
@@ -111,6 +114,11 @@ export class TillCounterScreen extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-3);
+      }
+
+      .dining,
+      .dining-label {
+        margin: var(--wt-space-2);
       }
 
       .menu-controls till-menu-switcher::part(options) {
@@ -280,6 +288,9 @@ export class TillCounterScreen extends LitElement {
   @property() receiptLanguage = "";
   @property({ type: Boolean }) asksGuests = false;
   @property({ attribute: false }) receiptGuests: number | null = null;
+  /** Whether the server still lets {@link store}'s saved order switch its way; ignored while the
+   * order is an unsaved draft, and read as `"none"` when not known. */
+  @property({ attribute: false }) diningChoice: DiningChoice | null = null;
   /** The enclosing shell owns the header. */
   @property({ type: Boolean }) embedded = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
@@ -404,6 +415,14 @@ export class TillCounterScreen extends LitElement {
           ${this.store.lastAdded === undefined ? nothing : html`<till-last-added .store=${this.store} .disabled=${this.busy || this.orderInFlight} .readOnly=${this.stage === "collect"} @open-line-details=${(event: CustomEvent<{ line: import("../state/working-order.js").OrderLine }>) => this.shadowRoot!.querySelector("till-basket")?.openLineDetails(event.detail.line)}></till-last-added>`}
         </div>
         <div class="basket-cell">
+          ${diningControl(
+            diningShown(
+              this.store.dining,
+              this.store.persisted ? (this.diningChoice ?? "none") : null,
+              this.store.diningStart,
+            ),
+            this,
+          )}
           <till-basket
             ?stacked=${this.#phone.matches}
             .store=${this.store}
