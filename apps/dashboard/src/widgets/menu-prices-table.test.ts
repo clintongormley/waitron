@@ -14,6 +14,7 @@ afterEach(cleanupWidgets);
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  setLocale("es-ES");
 });
 
 /** Each section's customer names differ from its internal name, so a placement drawn from the
