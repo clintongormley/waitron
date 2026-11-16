@@ -67,3 +67,45 @@ own clock has not been stepped since (wall time moved with the steady clock, as 
 already checks) and the process is the same, as a restore's start keeps the restore page's choice
 (CLAUDE.md §5) — server-only, small; (b) the page offers the time check again on a clock refusal and
 keeps the recovery-pack grant for a retry — page and provisioning changes, medium.
+
+## Amendment, 2026-11-17 00:40 — option (a), chosen by the watcher (not the owner) at 00:24
+
+The watcher's answer (lane L questions.md, "WATCHER 2026-11-17 00:24"): take (a) in this pull
+request, test-first, and put it in the pull request's first lines for the owner, citing the §5
+restore rule, saying the watcher chose it.
+
+**Rule.** At Provision, the time agreed when the name was chosen stays usable while the box's boot
+id is unchanged and its clock has not been stepped since — the rule a restore's start already
+follows (CLAUDE.md §5: the restore page's choice holds "while the box's boot id is unchanged and its
+clock has not been stepped since"). Otherwise the 30-second limit and every refusal stand; choosing
+the name is unchanged.
+
+**Mechanism: reuse the restore's.** `hosted-hour-recovery.ts` already carries a selection forward
+at a restore's start: `select` records the box's boot id, uptime and wall time on the intent
+(`readBoot`, `hour-selection.ts:577`), and `standing(chosenHourBoot(state, binding), 0, 0)` turns it
+into a reading of "the box's time as of the selection, carried on its uptime" — refused when the
+boot id differs or the wall clock has moved more than 1 second against the uptime (the
+`clock_corrected` figure) — which `clocks.compare(key, null, { onBox: true }, carried)` uses in
+place of the browser. For setup:
+1. Move `standing` out of `hosted-hour-recovery.ts` into a shared function both files use
+   (behaviour unchanged; restore tests unedited).
+2. `createHostedHourPreparation` passes `readBoot` (same shape as `hosted-hour-recovery.ts:61-66`)
+   to the selection, so a setup `select` records the boot; the fresh comparison at Provision passes
+   `carried` from `chosenHourBoot(state, binding)` read under the same `withFacts` state.
+3. The first-setup host gets the box's boot reader: `createFirstSetupRuntime` gains a `readBoot`
+   option handed to `createModuleOperationHost` (which already accepts it), and
+   `apps/server/src/module-operation-host.ts` passes `bootReader().readBoot` as
+   `recovery-preparation.ts:247` does.
+
+A process restart on the same boot keeps the carried time (the uptime and boot id come from the
+box, not the process), exactly as for a restore; a reboot or a clock step refuses. Where the boot id
+cannot be read (`id: null`, e.g. a Mac in development) nothing is carried and the 30-second rule
+applies.
+
+**Tests (red first).** In `hour-setup-defaults.test.ts` with a stub `readBoot`: time service
+unavailable, device time confirmed, 2 minutes later Provision writes the allocation (red today:
+`clock_stale`; after the first change: `second_clock_missing`); a clock step of more than 1 second
+between the choice and Provision refuses `second_clock_missing`; a different boot id refuses the
+same; no boot id carries nothing. One server-level check that the real first-setup host hands the
+boot reader on (a select through the setup routes records a boot on the intent). Restore tests
+(`hosted-hour-recovery.test.ts`) pass unedited.
