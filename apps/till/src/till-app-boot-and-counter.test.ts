@@ -2985,7 +2985,7 @@ describe("till-app fits the page it is given", () => {
     }
   });
 
-  it("keeps the lock screen's language button on the page while its staff list is short", async () => {
+  it("keeps the lock screen's language button on the page", async () => {
     const { el, host } = await mountApp();
     host.style.height = `${PAGE_HEIGHT}px`;
     await flush(el);
@@ -2996,6 +2996,58 @@ describe("till-app fits the page it is given", () => {
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
     expectChooserOnPage(edges.chooser, pageBox);
+  });
+
+  it("keeps the lock screen's language button on the unscrolled screen while its staff list runs past the bottom", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    const app = document.createElement("div");
+    app.id = "app";
+    document.body.append(app);
+    try {
+      api = stubApi({
+        listStaff: vi.fn().mockResolvedValue(
+          Array.from({ length: 40 }, (_, i) => ({
+            personId: `p${i}`,
+            displayName: `Waiter ${i}`,
+          })),
+        ),
+      });
+      const el = Object.assign(document.createElement("till-app"), { api });
+      app.append(el);
+      await flush(el);
+
+      for (const [viewWidth, viewHeight] of [
+        [390, 844],
+        [1024, 768],
+      ] as const) {
+        await page.viewport(viewWidth, viewHeight);
+        const staff = await vi.waitFor(() => {
+          const buttons = lock(el)!.shadowRoot!.querySelectorAll(".operator-button");
+          expect(buttons).toHaveLength(40);
+          return buttons;
+        });
+        expect(window.innerHeight).toBe(viewHeight);
+
+        expect(staff[staff.length - 1]!.getBoundingClientRect().bottom).toBeGreaterThan(
+          window.innerHeight,
+        );
+        expect(window.scrollY).toBe(0);
+        const { chooser } = edgesOf(el, lock(el)!);
+        expectChooserOnPage(chooser, new DOMRect(0, 0, window.innerWidth, window.innerHeight));
+        expect(chooser.left).toBeGreaterThanOrEqual(0);
+        expect(chooser.right).toBeLessThanOrEqual(window.innerWidth);
+      }
+    } finally {
+      app.remove();
+      style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+      await page.viewport(width, height);
+    }
   });
 
   it("keeps the join screen's language button on the page", async () => {
