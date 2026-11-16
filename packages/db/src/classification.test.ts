@@ -10,11 +10,10 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
-
 function tablesInDrizzle(): Set<string> {
-  const files = migrationSqlFiles(REPO_ROOT, "packages/db/drizzle").map((file) =>
-    readFileSync(join(REPO_ROOT, file), "utf8"),
+  const folder = CORE_MIGRATIONS.migrationsFolder;
+  const files = migrationSqlFiles(folder, "").map((file) =>
+    readFileSync(join(folder, file), "utf8"),
   );
   return tablesCreatedBy(files);
 }

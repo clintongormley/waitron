@@ -1738,7 +1738,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 
 For package distribution and the four-minute target, use the
-[CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
+[CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling). For db and ui-core mutation
+packing, use their [cost-table refresh instructions](developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). Fixed-secret work now covers the remaining held and unconverted setup. [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
