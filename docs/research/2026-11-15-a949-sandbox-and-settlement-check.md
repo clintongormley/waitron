@@ -7,6 +7,13 @@ through Waitron, then one real card payment followed by its daily report check.
 no sandbox merchant exists yet and the saved experiment keys are live. Sandbox access is with
 the owner. This page is a test script, not evidence of a successful payment or match.
 
+**16 November 2026:** the €10 successful control passed through the till and real SumUp
+client on Virtual A, using the confirmed sandbox merchant Foo Bar / M1Z03T0H.
+You saw the requested **10€**, used the simulator’s external **Pay** button in place of
+tapping a card and saw **Approved**. Waitron received €10, settled the bill and issued a receipt;
+SumUp reported `SUCCESSFUL` for the same amount. The decline and second-reader checks
+still need a coordinated session. Your real-card settlement check remains separate.
+
 ## Sandbox checks
 
 Use a separate preproduction venue, a confirmed sandbox merchant and two Virtual Solos on
@@ -16,10 +23,10 @@ references for each attempt. Keep raw receipts outside git.
 
 | Check | Expected observation | Actual result |
 | --- | --- | --- |
-| Virtual A, €10 successful control | Final success pays the correct order; accepting the checkout is insufficient. | Blocked: sandbox not provisioned. |
-| Virtual A, €11 decline | Order stays unpaid; record the exact message and available retry/other-payment choices. | Blocked: sandbox not provisioned. |
-| Virtual A, €42.51 insufficient funds | Order stays unpaid; record whether Waitron uses a generic decline or names insufficient funds. | Blocked: sandbox not provisioned. |
-| Same-account Virtual B | Pay a separate order through the till and real client; verify final success and correct routing to B. | Blocked: sandbox not provisioned. |
+| Virtual A, €10 successful control | Final success pays the correct order; accepting the checkout is insufficient. | Passed, 16 November: €10 received, bill settled, provider `SUCCESSFUL`. |
+| Virtual A, €11 decline | Order stays unpaid; record the exact message and available retry/other-payment choices. | Pending: next coordinated reader session. |
+| Virtual A, €42.51 insufficient funds | Order stays unpaid; record whether Waitron uses a generic decline or names insufficient funds. | Pending: next coordinated reader session. |
+| Same-account Virtual B | Pay a separate order through the till and real client; verify final success and correct routing to B. | Pending: next coordinated reader session. |
 
 After a definite decline, verify that a retry has a new reference and reaches the intended
 order and reader. An unknown outcome needs checking before another attempt. Virtual readers
@@ -28,6 +35,35 @@ match needs a charge made outside Waitron; if Virtual Solo cannot originate one,
 experiment blocked. Never enter an integrated charge a second time as **Other card machine**.
 Keep Waitron’s affiliate key unchanged and record its existing fallback if used; a checkout
 refusal is a blocker, not a reason to substitute credentials or change the integration.
+
+### Control evidence, 16 November 2026
+
+The replacement control began at 16:23:05 CET and completed at 16:24:28. The till moved
+from “Acerca o inserta la tarjeta…” to **Documento para el cliente**. Its payment response
+reported `received`, €10 received, €0 reserved and €0 outstanding. A read-only database
+query found the payment `captured` and its bill payment `received`, both for 1,000 cents.
+The provider lookup by the saved client reference returned HTTP 200, EUR 10 and `SUCCESSFUL`.
+
+| Reference | Value |
+| --- | --- |
+| Virtual A | `rdr_4JYAMRDDXQ8F4SYS3X8X0GH89Y` |
+| Waitron payment | `5591d0f7-e75a-407a-8b36-d2c5ec967075` |
+| Checkout client reference | `746ac48e-4690-4eb4-8729-769f46e98782` |
+| Final provider transaction | `9095ba2d-0cdf-4292-a733-c96ddd2eb1d4` |
+| Working order | `6ac22b3f-f07c-4dea-b008-096dd4bdc21c` |
+| Receipt | `A-0E1FR/396` |
+
+Redacted response, provider and local-row receipts are retained outside git in Lane F's
+`receipts/a949-sandbox-qualification-20261115/fresh-control-*.json`. Merchant history since
+16:20 returned one successful €10 transaction with this exact checkout client reference
+and Waitron order in its description; the transaction lookup also matched Waitron's payment
+reference. The owner clarified that the reader showed the requested **10€** and the
+simulator’s external **Pay** button stood in for tapping a card; it then showed **Approved**.
+That account is recorded in Lane F’s questions at 16:30, with watcher publication clearance
+at 16:31. This control qualifies the integrated sandbox success path only. The earlier 15:53 checkout had no
+transaction in the retained provider reads; the watcher closed it as an unattended timeout
+based on the owner's late arrival, without a provider failure reason. No decline is inferred
+from it. The €11 form was prepared but no checkout was sent after the owner left.
 
 ## Your one real-card check: ten minutes now
 

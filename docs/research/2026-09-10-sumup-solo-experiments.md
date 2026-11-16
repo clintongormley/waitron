@@ -1453,3 +1453,13 @@ still open in §11 remain open; no additional provider call was made for this sl
 Use the [sandbox checks and 15-minute owner settlement script](2026-11-15-a949-sandbox-and-settlement-check.md)
 for the next session. They do not add experimental results: sandbox access and the
 owner’s real-card session are still needed; physical backup and signature qualification stay open.
+
+### 11.7 Integrated Virtual A control, 16 November 2026
+
+The [qualification script's control evidence](2026-11-15-a949-sandbox-and-settlement-check.md#control-evidence-16-november-2026)
+records a €10 successful payment through the till and real SumUp client. Waitron captured
+the payment, settled the bill and issued its receipt. The provider lookup and the only
+merchant-history row since 16:20 matched its checkout reference, `SUCCESSFUL`, EUR 10.
+The owner confirmed the reader showed the requested **10€** and used its external **Pay**
+button in place of tapping a card, followed by **Approved**. Declines,
+Virtual B and the real-card daily comparison remain unqualified; sandbox access is now available.

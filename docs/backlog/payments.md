@@ -73,9 +73,10 @@ Each stays open until the owner answers it. "The picture" was a mock-up, removed
 ## The SumUp Solo experiments
 
 The [sandbox checks and owner settlement script](../research/2026-11-15-a949-sandbox-and-settlement-check.md)
-are ready. Simulated declines and the same-account second reader need sandbox access;
-the paired-reader gross-charge match needs an owner session and later read-only venue evidence.
-Those checks remain unrun.
+record the successful €10 integrated Virtual A control on 16 November: Waitron captured the
+payment and settled its bill; SumUp returned `SUCCESSFUL` for EUR 10. Simulated declines and
+the same-account second reader still need a coordinated session. The paired-reader gross-charge
+match needs an owner real-card session and later read-only venue evidence. Those checks remain unrun.
 
 **9 November continuation:** the owner's cross-account session accepted Waitron's new affiliate
 block with the restaurant's credential. A reference read changed from 404 to PENDING before the
