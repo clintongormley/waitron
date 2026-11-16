@@ -58,7 +58,15 @@ describe("A669 boards pass", () => {
         const plain = passCard({
           key: "bill:plain",
           target: { kind: "bill", workingOrderId: "plain" },
-          orders: [{ orderId: "plain", orderNumber: 2, tableLabel: "T2", kitchenNote: null }],
+          orders: [
+            {
+              dining: "eat_in",
+              orderId: "plain",
+              orderNumber: 2,
+              tableLabel: "T2",
+              kitchenNote: null,
+            },
+          ],
           items: [passItem({ id: "plain-item", orderId: "plain" })],
         });
         const { root } = await mount(mode, { ...board, inProgress: [...board.inProgress, plain] });

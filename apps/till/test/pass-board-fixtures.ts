@@ -45,7 +45,9 @@ export function passCard(overrides: Partial<PassCard> = {}): PassCard {
     requestedAt: minutesAgo(1),
     readyAt: null,
     allReady: false,
-    orders: [{ orderId: "order-1", orderNumber: 1, tableLabel: "T1", kitchenNote: null }],
+    orders: [
+      { orderId: "order-1", orderNumber: 1, tableLabel: "T1", kitchenNote: null, dining: "eat_in" },
+    ],
     items: [passItem()],
     releaseTicketItemIds: [],
     releaseContext: null,

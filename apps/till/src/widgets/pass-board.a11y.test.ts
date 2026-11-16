@@ -49,7 +49,15 @@ const board = passBoard({
       key: "bill:order-6",
       kind: "held",
       requestedAt: null,
-      orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+      orders: [
+        {
+          dining: "eat_in",
+          orderId: "order-6",
+          orderNumber: 17,
+          tableLabel: "T9",
+          kitchenNote: null,
+        },
+      ],
       items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
     }),
   ],
@@ -68,7 +76,15 @@ const board = passBoard({
       key: "bill:order-2",
       target: { kind: "bill", workingOrderId: "order-2" },
       kind: "next_course",
-      orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+      orders: [
+        {
+          dining: "eat_in",
+          orderId: "order-2",
+          orderNumber: 13,
+          tableLabel: "T5",
+          kitchenNote: null,
+        },
+      ],
       items: [
         passItem({
           id: "blocked-1",
@@ -85,7 +101,15 @@ const board = passBoard({
     passCard({
       key: "bill:order-5",
       target: { kind: "bill", workingOrderId: "order-5" },
-      orders: [{ orderId: "order-5", orderNumber: 16, tableLabel: "T8", kitchenNote: null }],
+      orders: [
+        {
+          dining: "eat_in",
+          orderId: "order-5",
+          orderNumber: 16,
+          tableLabel: "T8",
+          kitchenNote: null,
+        },
+      ],
       items: [
         passItem({ id: "b-1", orderId: "order-5", queuedAt: minutesAgo(7) }),
         passItem({ id: "dim-1", orderId: "order-5", informational: true, stationName: "Bar" }),
@@ -98,7 +122,15 @@ const board = passBoard({
       target: { kind: "bill", workingOrderId: "order-7" },
       readyAt: minutesAgo(3),
       allReady: true,
-      orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+      orders: [
+        {
+          dining: "eat_in",
+          orderId: "order-7",
+          orderNumber: 18,
+          tableLabel: "T10",
+          kitchenNote: null,
+        },
+      ],
       items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
     }),
   ],

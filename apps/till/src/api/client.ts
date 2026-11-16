@@ -1086,6 +1086,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   /** The table/operator label and venue order number printed on every document as its grouping key. */
   orderLabel: string | null;
   orderNumber: number;
+  /** The order was taken away; absent when it was eaten here. */
+  takeAway?: true;
   invoiceNumber: string;
   issuedAt: string;
   total: string;
@@ -1732,6 +1734,7 @@ export interface StationQueueGroup {
    *  counter order is delivered to, or the name kept once that table was let go; absent when
    *  none. */
   tableShortNames?: string[];
+  dining: Dining;
   queuedAt: string;
   /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`
    *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */
@@ -2031,6 +2034,7 @@ export interface PassCard {
     tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
+    dining: Dining;
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];

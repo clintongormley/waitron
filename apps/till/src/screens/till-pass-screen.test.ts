@@ -1164,13 +1164,29 @@ describe("A773 pass screen", () => {
         target: { kind: "bill", workingOrderId: "order-6" },
         kind: "held",
         requestedAt: null,
-        orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: "order-6",
+            orderNumber: 17,
+            tableLabel: "T9",
+            kitchenNote: null,
+          },
+        ],
         items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
       });
       const toFireCard = passCard({
         key: "bill:order-2",
         target: { kind: "bill", workingOrderId: "order-2" },
-        orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: "order-2",
+            orderNumber: 13,
+            tableLabel: "T5",
+            kitchenNote: null,
+          },
+        ],
         items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
         releaseTicketItemIds: ["req-1"],
         releaseContext: "ctx-1",
@@ -1985,13 +2001,29 @@ describe("D95 the pass on a 1024 px tablet", () => {
     target: { kind: "bill", workingOrderId: "order-6" },
     kind: "held",
     requestedAt: null,
-    orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+    orders: [
+      {
+        dining: "eat_in",
+        orderId: "order-6",
+        orderNumber: 17,
+        tableLabel: "T9",
+        kitchenNote: null,
+      },
+    ],
     items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
   });
   const toFire = passCard({
     key: "bill:order-2",
     target: { kind: "bill", workingOrderId: "order-2" },
-    orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+    orders: [
+      {
+        dining: "eat_in",
+        orderId: "order-2",
+        orderNumber: 13,
+        tableLabel: "T5",
+        kitchenNote: null,
+      },
+    ],
     items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
     releaseTicketItemIds: ["req-1"],
     releaseContext: "ctx-1",
@@ -2002,7 +2034,15 @@ describe("D95 the pass on a 1024 px tablet", () => {
     target: { kind: "bill", workingOrderId: "order-7" },
     readyAt: minutesAgo(3),
     allReady: true,
-    orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+    orders: [
+      {
+        dining: "eat_in",
+        orderId: "order-7",
+        orderNumber: 18,
+        tableLabel: "T10",
+        kitchenNote: null,
+      },
+    ],
     items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
   });
   const withHeld = passBoard({

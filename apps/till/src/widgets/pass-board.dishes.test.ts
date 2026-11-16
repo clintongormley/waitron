@@ -385,8 +385,20 @@ describe("A773 pass board widget: dishes", () => {
             party: { id: "p3", revision: 2 },
             group: { displayNumber: 4, position: 1 },
             orders: [
-              { orderId: "order-21", orderNumber: 21, tableLabel: "T11", kitchenNote: null },
-              { orderId: "order-22", orderNumber: 22, tableLabel: "T11", kitchenNote: null },
+              {
+                dining: "eat_in",
+                orderId: "order-21",
+                orderNumber: 21,
+                tableLabel: "T11",
+                kitchenNote: null,
+              },
+              {
+                dining: "eat_in",
+                orderId: "order-22",
+                orderNumber: 22,
+                tableLabel: "T11",
+                kitchenNote: null,
+              },
             ],
             items: [
               portion("ana", { name: "Chips", orderId: "order-21" }),
@@ -540,6 +552,7 @@ describe("A773 pass board widget: dishes", () => {
       {
         orders: [
           {
+            dining: "eat_in",
             orderId: "order-1",
             orderNumber: 27,
             formerNumbers: [28, 30],
@@ -622,6 +635,7 @@ describe("A773 pass board widget: dishes", () => {
         const el = await inProgress([passItem()], {
           orders: [
             {
+              dining: "eat_in",
               orderId: "order-1",
               orderNumber: 27,
               ...(formerNumbers === undefined ? {} : { formerNumbers: [...formerNumbers] }),

@@ -509,7 +509,8 @@ export class TillTicketView extends LitElement {
         padding: var(--wt-space-1) 0;
       }
 
-      .corrective {
+      .corrective,
+      .take-away {
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -1317,6 +1318,13 @@ export class TillTicketView extends LitElement {
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
           </div>
+          ${
+            r.takeAway === true
+              ? html`<div class="meta-row take-away" data-test="take-away">
+                  <span>${labels.takeAway}</span>
+                </div>`
+              : nothing
+          }
         </div>
 
         ${

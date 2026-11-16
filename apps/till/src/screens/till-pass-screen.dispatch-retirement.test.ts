@@ -41,7 +41,15 @@ function dish(overrides: Partial<PassCardItem> = {}): PassCardItem {
 }
 
 function card(kind: Kind, items: PassCardItem[], allReady: boolean): PassCard {
-  const orders = [{ orderId: "bill-1", orderNumber: 12, tableLabel: "Table 4", kitchenNote: null }];
+  const orders = [
+    {
+      orderId: "bill-1",
+      orderNumber: 12,
+      tableLabel: "Table 4",
+      kitchenNote: null,
+      dining: "eat_in" as const,
+    },
+  ];
   return kind === "course"
     ? passCard({
         key: "bill:bill-1",

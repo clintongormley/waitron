@@ -19,6 +19,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 // preparing and (inert) ready cells plus a labelled and an unlabelled ticket in one mount.
 const groups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
@@ -87,6 +88,7 @@ const groups: StationQueueGroup[] = [
     ],
   },
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,
@@ -119,6 +121,7 @@ const groups: StationQueueGroup[] = [
 // null course (no header), a fired named course, and a HELD later course (greyed lines without a Fire button).
 const coursedGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-c",
     orderNumber: 7,
@@ -180,6 +183,7 @@ const coursedGroups: StationQueueGroup[] = [
 
 const modifierGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-mod",
     orderNumber: 9,
@@ -211,6 +215,7 @@ const modifierGroups: StationQueueGroup[] = [
 
 const customisationGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-cust",
     orderNumber: 12,
@@ -242,6 +247,7 @@ const customisationGroups: StationQueueGroup[] = [
 
 const allergenGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-al",
     orderNumber: 11,
@@ -289,6 +295,7 @@ const allergenGroups: StationQueueGroup[] = [
 
 const dietGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-di",
     orderNumber: 21,
@@ -428,6 +435,7 @@ const notices: KitchenNotice[] = [
 
 const partyGroups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-p",
     orderNumber: 9,

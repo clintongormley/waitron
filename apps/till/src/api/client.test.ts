@@ -3489,6 +3489,7 @@ describe("TillApi", () => {
           today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" },
           queue: [
             {
+              dining: "eat_in",
               kitchenNote: null,
               orderId: "wo-1",
               orderNumber: 7,

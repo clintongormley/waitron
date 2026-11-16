@@ -14,7 +14,7 @@ function board(kitchenNote: string | null): PassBoard {
       passCard({
         key: "bill:order-a",
         target: { kind: "bill", workingOrderId: "order-a" },
-        orders: [{ orderId: "order-a", orderNumber: 7, kitchenNote }],
+        orders: [{ dining: "eat_in", orderId: "order-a", orderNumber: 7, kitchenNote }],
         items: [passItem({ id: "item-a", name: "Burger", orderId: "order-a", note: "No onions" })],
       }),
     ],

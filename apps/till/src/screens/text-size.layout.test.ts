@@ -206,6 +206,7 @@ const STATES = ["queued", "preparing", "ready"] as const;
 /** Three orders, one dish each, one in each of the kitchen's columns. */
 const queue: StationQueueGroup[] = DISHES.map((name, index) => ({
   kitchenNote: null,
+  dining: "eat_in",
   orderId: `wo-${index + 1}`,
   orderNumber: 41 + index,
   label: `Table ${index + 4}`,

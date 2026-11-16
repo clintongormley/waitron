@@ -15,6 +15,7 @@ const group = {
   status: "placed",
   queuedAt,
   kitchenNote: "Train at 14:30 <keep together>",
+  dining: "eat_in",
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   bumpMode: "line",
   items: [
