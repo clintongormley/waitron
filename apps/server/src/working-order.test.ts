@@ -2325,10 +2325,7 @@ describe("updateHeldOrder", () => {
   // quantity or lowers it, keeps the line as rung even when its dish or an extra has since become
   // Inactive or Unavailable (spec 2026-09-20 §10: existing work is not cancelled). RAISING the
   // quantity sells more of it, so the dish and every extra the line carries must then be Active and
-  // Available, and the edit is refused with the code a new order naming them gets. From the real
-  // till, only an extra that sold out before the till last loaded its menu is kept out of this
-  // path: the till never sends a pick the dish's offer, as the till last loaded it, no longer lists
-  // (`deriveExtraSelections`, apps/till/src/state/held-extras.ts).
+  // Available, and the edit is refused with the code a new order naming them gets.
   async function readLines(id: string) {
     return (
       await db.execute<{

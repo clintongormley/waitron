@@ -724,16 +724,6 @@ selected, because `willUpdate` never seeds `variantId`, and when the operator pi
 about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
 on a reopened line; if yes, `setLineModifiers` has to carry the product.
 
-## Reopening a held order still removes a sold-out extra on the first edit
-
-From **Variants as products (#511–#556) — what is left open.** How the model works is in
-[products.md](../developers/products.md), under _Variants_.
-
-- **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
-  option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
-  till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
-  now", and the first edit of the order removes such an extra.
-
 ## A893. Owner review of every table state and its look, after A757 lands
 
 **A893 (owner, 2026-10-18).** A757 is built (2026-10-22; it was to wait for the whole of A757:
@@ -1680,7 +1670,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Reopening a held order keeps its lines right
 
-4 entries, size S.
+3 entries, size S.
 
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
@@ -1693,9 +1683,6 @@ Printer identity is separate from the till route inventory.
   variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
   `setLineModifiers` has to carry the product.
   [Detail](till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
-- **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
-  such a line marked "Not offered now", and the first edit of the order removes such an extra.
-  [Detail](till.md#reopening-a-held-order-still-removes-a-sold-out-extra-on-the-first-edit)
 - **A held order brought back to the till shows a variant line with its PARENT's VAT class,
   category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
   unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
@@ -1940,6 +1927,11 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
+
+- **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
+  (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,
+  refuse only a quantity increase").** An extra whose list was deleted or no longer offers it is
+  treated the same (lane A's choice, 2026-11-16, not the owner's; the owner may overrule).
 
 - **A step done before a bill moves onto a seated table, or before two parties combine, is asked
   again at the receiving table (watcher, 2026-11-16, #3507, not the owner; the owner may

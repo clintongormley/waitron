@@ -21,8 +21,8 @@ type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
 /**
  * The dish plus every extras pick. Each component is rounded and then summed, as the server's
  * `grossBasketWithOptions` prices the dish and each pick as separate rows; never one rounding of a
- * summed unit price. A not-offered pick counts, because an unedited retrieved order is still billed
- * for it. An options answer has no price.
+ * summed unit price. A not-offered pick counts, because the stored order still bills it. An options
+ * answer has no price.
  */
 export function lineGross(line: OrderLine): Decimal {
   const dish = dishGross(line);
@@ -139,11 +139,17 @@ export function toWireProductIdentity(product: {
 
 /** Neither key is sent when empty, never `[]`. No price, VAT rate or name travels. */
 export function toWireModifiers(
-  line: Pick<OrderLine, "extras" | "options">,
+  line: Pick<OrderLine, "extras" | "notOfferedExtras" | "options">,
 ): Pick<SaleLine, "extras" | "options"> {
   const wire: Pick<SaleLine, "extras" | "options"> = {};
   const byList = new Map<string, ExtraSelection>();
-  for (const extra of line.extras ?? []) {
+  const named = [
+    ...(line.extras ?? []),
+    ...(line.notOfferedExtras ?? []).flatMap(({ listId, productId, quantity }) =>
+      listId === null || productId === null ? [] : [{ listId, productId, quantity }],
+    ),
+  ];
+  for (const extra of named) {
     const selection = byList.get(extra.listId) ?? { listId: extra.listId, picks: [] };
     selection.picks.push({ productId: extra.productId, quantity: extra.quantity });
     byList.set(extra.listId, selection);

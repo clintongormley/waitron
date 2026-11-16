@@ -3068,7 +3068,9 @@ export class TillApp extends LitElement {
       this.errorKey =
         refusal.code === "menu_period.not_running"
           ? "menu.last_orders_ended"
-          : { overLimit: refusal.limit };
+          : refusal.code === "extras.invalid"
+            ? "held.extra_blocks_raise"
+            : { overLimit: refusal.limit };
     });
   }
 

@@ -747,9 +747,15 @@ a card payment already captured is filed as it stands). On the till, retrieving 
 such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
 sold-out one, because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
 `apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved
-basket sends no update (`#syncIfDirty`, `apps/till/src/till-app.ts`). The till never sends such a
-pick, so the first edit takes it off the basket, and the server removes that extra from the line
-and keeps the rest at their stored prices.
+basket sends no update (`#syncIfDirty`, `apps/till/src/till-app.ts`). An edit sends such a pick
+again under its stored list (`toWireModifiers`, `apps/till/src/state/order-line.ts`), and the
+server keeps it as stored (`editLineExtras`, `apps/server/src/modifier-selection.ts`), also when
+its list has since been deleted. The till refuses raising its line's count before sending anything,
+with `extras.invalid`, worded by `held.extra_blocks_raise` (`setLineQuantity`,
+`apps/till/src/state/working-order.ts`), and never adds a tap to that line; the server refuses a
+raise that reaches it anyway with the same code, because it prices a raised line afresh. Editing
+its own line through the line's window takes it off, and a pick whose stored line names no list or
+product cannot be sent, so any edit, a raise included, takes that one off.
 
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own

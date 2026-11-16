@@ -141,17 +141,19 @@ describe("deriveExtraSelections", () => {
     );
     expect(result.extras).toEqual([]);
     expect(result.notOffered).toEqual([
-      { productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 2 },
+      { productId: "p-bacon", listId: "list-sauces", name: "Bacon", price: "1.50", quantity: 2 },
     ]);
   });
 
-  it("sets aside a pick whose list the dish no longer offers", () => {
+  it("sets aside a pick whose list the dish no longer offers, or that was deleted, keeping its list", () => {
     const result = deriveExtraSelections(
       [sauces],
       [held("list-toppings", "p-bacon", "Bacon", "1.50", 2)],
     );
     expect(result.extras).toEqual([]);
-    expect(result.notOffered).toHaveLength(1);
+    expect(result.notOffered).toEqual([
+      { productId: "p-bacon", listId: "list-toppings", name: "Bacon", price: "1.50", quantity: 2 },
+    ]);
   });
 
   it("sets aside a child line that names no product, or no list", () => {
@@ -161,8 +163,8 @@ describe("deriveExtraSelections", () => {
     );
     expect(result.extras).toEqual([]);
     expect(result.notOffered).toEqual([
-      { productId: null, name: "Bacon", price: "1.50", quantity: 1 },
-      { productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 1 },
+      { productId: null, listId: "list-toppings", name: "Bacon", price: "1.50", quantity: 1 },
+      { productId: "p-bacon", listId: null, name: "Bacon", price: "1.50", quantity: 1 },
     ]);
   });
 

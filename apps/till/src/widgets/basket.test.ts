@@ -643,7 +643,13 @@ describe("till-basket", () => {
         product: coffee,
         quantity: "2",
         notOfferedExtras: [
-          { productId: "p-oat", name: "Leche de avena", price: "0.40", quantity: 2 },
+          {
+            productId: "p-oat",
+            listId: "list-milk",
+            name: "Leche de avena",
+            price: "0.40",
+            quantity: 2,
+          },
         ],
       },
       {

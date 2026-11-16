@@ -937,10 +937,14 @@ describe("WorkingOrderStore", () => {
     });
   });
 
-  // An unedited retrieved order is paid from its stored lines, which still bill these picks. An edit
-  // sends the lines without them, so the server takes them off the order.
   describe("retrieved picks no list offers any more", () => {
-    const milk = { productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 };
+    const milk = {
+      productId: "p-milk",
+      listId: "list-milk",
+      name: "Leche",
+      price: "0.75",
+      quantity: 2,
+    };
     function loaded(): WorkingOrderStore {
       const s = new WorkingOrderStore();
       s.loadFrom("held-1", [
@@ -961,12 +965,112 @@ describe("WorkingOrderStore", () => {
       ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(1, {})],
       ["setLineExtras", (s: WorkingOrderStore) => s.setLineExtras(1, { note: "sin azúcar" })],
       ["removeLine", (s: WorkingOrderStore) => s.removeLine(1)],
-    ])("%s on another line drops them, and the total with them", (_, edit) => {
+    ])("%s on another line keeps them, and the total with them", (_, edit) => {
       const s = loaded();
       expect(s.total).toBe("7.50");
       edit(s);
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+      expect(lineGross(s.lines[0]!)).toBe("6.00");
+    });
+
+    it.each([
+      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(0, {})],
+      [
+        "setLineDetails",
+        (s: WorkingOrderStore) => s.setLineDetails(0, { quantity: "2", note: "", selection: {} }),
+      ],
+    ])("%s on their own line drops them, and the total with them", (_, edit) => {
+      const s = loaded();
+      edit(s);
       expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
       expect(lineGross(s.lines[0]!)).toBe("3.00");
+    });
+
+    it("refuses raising the count of the line that holds them, and keeps a lowering", () => {
+      const s = loaded();
+      const refusals: unknown[] = [];
+      s.on("refused", (value) => refusals.push(value));
+      s.setLineQuantity(0, "3");
+      expect(refusals).toEqual([{ code: "extras.invalid" }]);
+      expect(s.lines[0]!.quantity).toBe("2");
+      expect(s.total).toBe("7.50");
+      expect(s.dirty).toBe(false);
+
+      s.setLineQuantity(0, "1");
+      expect(refusals).toHaveLength(1);
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+      // 1.50 plus 2 × 0.75, and the other line's 1.50.
+      expect(s.total).toBe("4.50");
+
+      s.setLineQuantity(1, "2");
+      expect(refusals).toHaveLength(1);
+      expect(s.lines[1]!.quantity).toBe("2");
+      expect(s.total).toBe("6.00");
+    });
+
+    it("raises a line whose only picks name no list or product, which the raise drops", () => {
+      const s = new WorkingOrderStore();
+      s.loadFrom("held-1", [
+        {
+          product: coffee,
+          quantity: "2",
+          notOfferedExtras: [
+            { ...milk, listId: null },
+            { ...milk, productId: null },
+          ],
+        },
+      ]);
+      const refusals: unknown[] = [];
+      s.on("refused", (value) => refusals.push(value));
+      s.setLineQuantity(0, "3");
+      expect(refusals).toEqual([]);
+      expect(s.lines[0]!.quantity).toBe("3");
+      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+      expect(s.total).toBe("4.50");
+    });
+
+    it("takes a raise through the line's own window, which takes them off", () => {
+      const s = loaded();
+      const refusals: unknown[] = [];
+      s.on("refused", (value) => refusals.push(value));
+      expect(s.setLineDetails(0, { quantity: "3", note: "", selection: {} })).toBe(true);
+      expect(refusals).toEqual([]);
+      expect(s.lines[0]!.quantity).toBe("3");
+      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+      expect(s.total).toBe("6.00");
+    });
+
+    it("never merges a tap into the line that holds them, even one naming the same pick", () => {
+      const cafe = { ...coffee, menuItemId: "offer-cafe" };
+      const s = new WorkingOrderStore();
+      s.loadFrom("held-1", [{ product: cafe, quantity: "2", notOfferedExtras: [milk] }]);
+      const refusals: unknown[] = [];
+      s.on("refused", (value) => refusals.push(value));
+      s.addMerging(cafe, "1");
+      s.addMerging(cafe, "1", { extras: [milk] });
+      expect(refusals).toEqual([]);
+      expect(s.lines.map((line) => line.quantity)).toEqual(["2", "1", "1"]);
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+    });
+
+    it("an edit of another line drops a pick naming no list or product, which cannot be sent", () => {
+      const s = new WorkingOrderStore();
+      s.loadFrom("held-1", [
+        {
+          product: coffee,
+          quantity: "2",
+          notOfferedExtras: [milk, { ...milk, listId: null }, { ...milk, productId: null }],
+        },
+        { product: coffee, quantity: "1" },
+      ]);
+      s.removeLine(1);
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+      s.loadFrom("held-1", [
+        { product: coffee, quantity: "2", notOfferedExtras: [{ ...milk, listId: null }] },
+        { product: coffee, quantity: "1" },
+      ]);
+      s.removeLine(1);
+      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
     });
 
     it("a label change keeps them, because it is not an edit", () => {

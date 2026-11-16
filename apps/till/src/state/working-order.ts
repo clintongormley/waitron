@@ -52,11 +52,14 @@ export interface SelectedExtra {
 }
 
 /**
- * A retrieved pick that no list the dish offers today carries, so no wire entry can name it. An
- * unedited order is paid from its stored lines, which still bill it, so the basket shows and counts it
- * until the order is edited.
+ * A retrieved pick that no list the dish offers today carries. Sent again under its stored list, the
+ * server keeps it, though it refuses a raise of the line that holds it; one with no stored list or
+ * product cannot be named, so an edit drops it.
  */
-export type NotOfferedExtra = Pick<HeldExtra, "productId" | "name" | "price" | "quantity">;
+export type NotOfferedExtra = Pick<
+  HeldExtra,
+  "productId" | "listId" | "name" | "price" | "quantity"
+>;
 
 /**
  * What a picker confirm puts on a line. `optionSnapshots` is built locally in the same shape a held
@@ -84,7 +87,7 @@ export interface OrderLine {
   quantity: string;
   /** ABSENT (never `[]`) for a dish that took none. The dish `quantity` applies to every pick. */
   extras?: SelectedExtra[];
-  /** Never sent on the wire; ABSENT (never `[]`) when there are none. */
+  /** ABSENT (never `[]`) when there are none. */
   notOfferedExtras?: NotOfferedExtra[];
   /** A retrieved line whose offer is not in the till's live list. Display only. */
   notOffered?: true;
@@ -125,7 +128,10 @@ export type WorkingOrderEvent = "changed" | "product-selected" | "refused";
 
 export type BasketRefusal =
   | { code: "sale.total_exceeds_simplified_limit"; limit: string }
-  | { code: "menu_period.not_running" };
+  | { code: "menu_period.not_running" }
+  /** A raise of a line holding a not-offered pick that can be sent again, which the server would
+   * price afresh and refuse with the same code. */
+  | { code: "extras.invalid" };
 
 export type WorkingOrderListener = (payload?: unknown) => void;
 
@@ -180,7 +186,12 @@ function mergeTarget(lines: readonly OrderLine[], added: OrderLine): OrderLine |
   if (added.product.menuItemId === undefined) return undefined;
   let addedKey: string | null | undefined;
   return lines.find((kept) => {
-    if (kept.notOffered !== undefined || kept.blocked !== undefined) return false;
+    if (
+      kept.notOffered !== undefined ||
+      kept.blocked !== undefined ||
+      kept.notOfferedExtras !== undefined
+    )
+      return false;
     const keptKey = orderLineMergeKey(kept);
     if (keptKey === null) return false;
     if (addedKey === undefined) addedKey = orderLineMergeKey(added);
@@ -476,7 +487,14 @@ export class WorkingOrderStore {
 
   #markDirty(): void {
     this.#dirty = true;
-    for (const line of this.#lines) delete line.notOfferedExtras;
+    // A pick naming no list or product cannot be sent again, so the saved edit drops it.
+    for (const line of this.#lines) {
+      const named = line.notOfferedExtras?.filter(
+        (extra) => extra.listId !== null && extra.productId !== null,
+      );
+      if (named?.length) line.notOfferedExtras = named;
+      else delete line.notOfferedExtras;
+    }
   }
 
   appendLines(lines: readonly OrderLine[]): void {
@@ -499,7 +517,8 @@ export class WorkingOrderStore {
   /**
    * As {@link addProduct}, except that a line ordering the same thing as an earlier one (the draft
    * merge rule, D10) adds its quantity to the first such line, which keeps its place. A line marked
-   * not offered or blocked takes nothing: a fresh tap starts a line of its own beside it.
+   * not offered or blocked, or holding a not-offered pick, takes nothing: a fresh tap starts a line
+   * of its own beside it.
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
@@ -535,11 +554,13 @@ export class WorkingOrderStore {
     if (!line) return;
     const candidate: OrderLine = { ...line };
     delete candidate.extras;
+    delete candidate.notOfferedExtras;
     delete candidate.options;
     delete candidate.optionSnapshots;
     applySelection(candidate, selection);
     if (this.#passesLimit(lineGross(line), lineGross(candidate))) return;
     delete line.extras;
+    delete line.notOfferedExtras;
     delete line.options;
     delete line.optionSnapshots;
     applySelection(line, selection);
@@ -611,11 +632,15 @@ export class WorkingOrderStore {
       return;
     }
     const line = this.#lines[index]!;
-    if (
-      compareDecimal(decimal(quantity), decimal(line.quantity)) > 0 &&
-      this.#refusesSelection(line.product)
-    )
-      return;
+    if (compareDecimal(decimal(quantity), decimal(line.quantity)) > 0) {
+      if (this.#refusesSelection(line.product)) return;
+      if (
+        line.notOfferedExtras?.some((extra) => extra.listId !== null && extra.productId !== null)
+      ) {
+        this.emit("refused", { code: "extras.invalid" } satisfies BasketRefusal);
+        return;
+      }
+    }
     assertQuantityPrecision(quantity, productUnit(line.product).precision, {
       positive: true,
     });
