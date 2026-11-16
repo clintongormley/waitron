@@ -1831,7 +1831,7 @@ it("heads the price over the bin column too, with no heading of the bin's own", 
   const headings = [...el.shadowRoot!.querySelectorAll("thead th")];
   const rowCells = el.shadowRoot!.querySelector("tbody tr")!.children.length;
 
-  expect(headings.at(-1)!.textContent!.trim()).toBe(t("extras.price"));
+  expect(headings.at(-1)!.textContent!.trim()).toBe("Price");
   expect(headings.at(-1)!.getAttribute("colspan")).toBe("2");
   expect(headings.reduce((sum, th) => sum + Number(th.getAttribute("colspan") ?? 1), 0)).toBe(
     rowCells,
@@ -2580,7 +2580,7 @@ it("heads Portion and Price as two columns, Portion first, even when every item 
   const portionAt = headings.indexOf(t("extras.portion"));
 
   expect(portionAt).toBeGreaterThan(-1);
-  expect(headings[portionAt + 1]).toBe(t("extras.price"));
+  expect(headings[portionAt + 1]).toBe("Price");
   const row = el.shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!;
   const cells = [...row.children];
   expect(cells.indexOf(portionCell(el, 0))).toBe(portionAt);
@@ -2945,3 +2945,27 @@ it("keeps its native dialog open through repeated Escape while busy without a co
   await closed;
   expect(cancelled).toHaveBeenCalledOnce();
 });
+
+it.each(["en", "es"] as const)(
+  "heads mixed Each and measured extras with Price in %s",
+  async (locale) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mount({
+        value: addons,
+        products: [eachBacon, product({ id: EGG, unitId: KG.id, unit: KG })],
+      });
+      expect(el.shadowRoot!.querySelector("th:last-child")!.textContent!.trim()).toBe(
+        locale === "en" ? "Price" : "Precio",
+      );
+      const price = field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price");
+      await price.updateComplete;
+      await expect
+        .element(page.elementLocator(price.shadowRoot!.querySelector("input")!))
+        .toHaveAccessibleName(locale === "en" ? "Price per portion" : "Precio por porción");
+    } finally {
+      setLocale(previous);
+    }
+  },
+);

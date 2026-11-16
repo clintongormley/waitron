@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { AppError, isUuid, nonBlankTranslations } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import type { OptionLabel, OptionList, OptionSelection } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "./option-default.js";
-import { validateOptionalTranslations } from "./optional-translations.js";
+import { contractInput } from "./contract-input.js";
 import "./errors.js";
 
 export type { OptionSelection, OptionSnapshot } from "@waitron/shared";
@@ -12,55 +12,15 @@ export type { OptionLabel, OptionLabelInput, OptionList, OptionListInput } from 
 /** A body as `parseOptionListInput` hands it on: unlike the wire shape, every label has an id. */
 export type ParsedOptionList = Omit<OptionList, "id">;
 
-function invalid(field: string): never {
-  throw new AppError("options.invalid", { field });
-}
-function record(value: unknown, field: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalid(field);
-  return value as Record<string, unknown>;
-}
-function keys(value: Record<string, unknown>, allowed: string[], field: string) {
-  for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`${field}.${key}`);
-}
-function staffName(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") invalid(field);
-  return value;
-}
-/**
- * The translated customer name: absent, null, or a map holding no text anywhere means "fall back to
- * the staff name". A bad language key is deliberately `options.invalid` carrying the field path, not
- * `content.language_invalid`: one save submits a map for the list AND one per label, so a refusal
- * that names no field cannot be put beside its input (CLAUDE.md §3).
- */
-function translations(value: unknown, field: string): Record<string, string> | null {
-  if (value === undefined || value === null) return null;
-  const map = record(value, field);
-  try {
-    validateOptionalTranslations(map);
-  } catch {
-    invalid(field);
-  }
-  return nonBlankTranslations({ ...map } as Record<string, string>);
-}
-function kitchenName(value: unknown, field: string): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string") invalid(field);
-  return value.trim() === "" ? null : value;
-}
+const input = contractInput("options.invalid");
+const invalid: (field: string) => never = input.invalid;
+const { record, keys, staffName, translations, kitchenName, id } = input;
+
 function flag(value: unknown, field: string): boolean {
   if (value === undefined) return true;
   if (typeof value !== "boolean") invalid(field);
   return value;
 }
-/**
- * `isUuid` accepts either case and an id column compares byte for byte (packages/shared/src/ids.ts),
- * so lower-casing is what makes a body's ids comparable to each other and to the stored rows.
- */
-function id(value: unknown, field: string): string {
-  if (typeof value !== "string" || !isUuid(value)) invalid(field);
-  return value.toLowerCase();
-}
-
 export function parseOptionListInput(
   value: unknown,
   storedLabels: readonly Pick<OptionLabel, "id" | "available">[] = [],

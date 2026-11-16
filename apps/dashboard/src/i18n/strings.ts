@@ -805,6 +805,7 @@ export const en = {
   "extras.unknown_product": "Product not found",
   "extras.reorder": "Drag to reorder",
   "extras.price": "Price per portion",
+  "extras.price_heading": "Price",
   "extras.portion": "Portion",
   "extras.portion_required": "Enter the amount supplied by one pick.",
   "extras.portion_invalid": "Enter a positive amount that fits this product's unit.",
@@ -5201,6 +5202,7 @@ export const es: Record<StringKey, string> = {
   "extras.unknown_product": "Producto no encontrado",
   "extras.reorder": "Arrastrar para reordenar",
   "extras.price": "Precio por porción",
+  "extras.price_heading": "Precio",
   "extras.portion": "Porción",
   "extras.portion_required": "Introduce la cantidad que aporta una selección.",
   "extras.portion_invalid":

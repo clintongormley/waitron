@@ -15,7 +15,7 @@ have already created, and takes that product's names, tax treatment, allergens, 
 picture from it — you never retype them here. A product that has Active variants cannot be an
 entry, because it is sold only as one of its variants. What you set on the entry is the terms of the
 offer: **Maximum quantity**, how many of it one dish may take (1 means "one or none");
-**Preselected**, whether it starts chosen; and **Price per portion**, what one pick costs.
+**Preselected**, whether it starts chosen; and **Price**, what one pick costs.
 Press − from 2 to 1 and then to an empty box to remove the item's limit. The ∞ placeholder marks
 that empty value. The list's **Maximum choices** still limits the total picks when you set one.
 For a product sold in any unit except Each, also enter the **Portion** that one pick adds, in the

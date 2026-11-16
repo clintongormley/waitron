@@ -477,7 +477,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   shortcut placement and fixed values remain open.
   [Detail](backlog/menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
 
-- **Extras list forms still have two layout limits.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
+- **A very long number is cut off in an extras list form.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
 
 - **A1523. A cover charge, and dearer seats on the terrace (owner, 2026-11-14).** Not supported
   today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
@@ -545,7 +545,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   costs.**
   [Detail](backlog/menu.md#category-authoring-serialises-across-the-whole-database-and-nobody-has-measured-what-that-costs)
 
-- **Extras list forms** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-extras-list-forms)
+- **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
 - **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).** The Price overrides
   tab's save message comes after the whole table in tab order, so a keyboard user cannot reach Undo
