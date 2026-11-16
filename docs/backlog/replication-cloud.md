@@ -672,13 +672,14 @@ Slice 3.
 
 ### Integrity waits and waiting reasons
 
-Restore, spare-copy and emergency handover use the same provisional, unmeasured thirty-minute
+Restore and emergency handover use the same provisional, unmeasured thirty-minute
 SQLite integrity budget as controlled handover, plus up to five seconds waiting for worker stop.
 This bounds the caller's wait, not native execution or file closure; other module checks and the
 backup download are outside it. A check that needs longer than the budget will be refused on
 another attempt too. A closed HTTP connection aborts its check; retry the request. Discarding an
 attempt can leave its deleted file's space held until native work ends; another attempt needs
 room for a fresh copy meanwhile.
+The background joining check has no interactive deadline and keeps its duty stop signal.
 Closed-folder cleanup retries independently every sixty seconds, skipping files whose integrity
 worker still runs. `handover-fetch.test.ts` covers a worker exit and failed removal while a live
 comparison remains pending, and stopping the timer.

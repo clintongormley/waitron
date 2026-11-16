@@ -24,7 +24,7 @@ import { readHeldKey } from "./backup-config.js";
 import { COPY_READY_FILE } from "./handover-copy-selection.js";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
-import { checkIntegrity } from "./restore-stream.js";
+import { isCopyIntact } from "./handover-integrity.js";
 import { spareStoreBucket, type SpareStore } from "./spare-store.js";
 import { deriveStreamKey } from "./stream-key.js";
 import { reachDisk } from "./sync-path.js";
@@ -167,7 +167,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
       outPath: copyPath,
     });
     deps.signal.throwIfAborted();
-    if (!(await (deps.checkIntegrity ?? checkIntegrity)(copyPath, { signal: deps.signal })))
+    if (!(await (deps.checkIntegrity ?? isCopyIntact)(copyPath, { signal: deps.signal })))
       throw new NotYet("integrity_failed");
     // `copyNeededLink` relies on the placed copy holding this row; the main box writes it before it
     // streams, so a copy without it is only a late one.
