@@ -3,7 +3,7 @@ import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js
 import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, floorChipStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
@@ -27,7 +27,7 @@ import "../widgets/held-orders.js";
 import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
-import { diningControl, diningShown, diningStyles } from "../widgets/dining-choice.js";
+import { diningControl, diningShown } from "../widgets/dining-choice.js";
 import type {
   CounterWaitingOrder,
   DiningChoice,
@@ -62,7 +62,7 @@ export class TillCounterScreen extends LitElement {
     baseStyles,
     servicePeriodStyles,
     chooserStyles,
-    diningStyles,
+    floorChipStyles,
     css`
       :host {
         display: block;
@@ -117,7 +117,7 @@ export class TillCounterScreen extends LitElement {
       }
 
       .dining,
-      .dining-label {
+      [data-dining-label] {
         margin: var(--wt-space-2);
       }
 
@@ -422,6 +422,7 @@ export class TillCounterScreen extends LitElement {
               this.store.diningStart,
             ),
             this,
+            this.stage === "collect" || this.busy || this.orderInFlight,
           )}
           <till-basket
             ?stacked=${this.#phone.matches}

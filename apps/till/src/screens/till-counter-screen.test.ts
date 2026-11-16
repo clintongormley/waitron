@@ -773,6 +773,26 @@ describe("eaten here or taken away", () => {
     }
   });
 
+  it.each([
+    ["collecting", { stage: "collect" as const }],
+    ["busy", { busy: true }],
+    ["sending the order", { orderInFlight: true }],
+  ])("disables the switch while %s", async (_case, over) => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    const { el } = await mount({ store });
+    expect(segmented(el)!.disabled).toBe(false);
+    Object.assign(el, over);
+    await el.updateComplete;
+    expect(segmented(el)!.disabled).toBe(true);
+  });
+
+  it("labels Eat here as a plain chip", async () => {
+    const { el } = await mount({ store: saved("eat_in", "takeaway"), diningChoice: "none" });
+    const chip = el.shadowRoot!.querySelector("[data-dining-label]")!;
+    expect([...chip.classList]).toEqual(["chip"]);
+  });
+
   it("asks for Take away with the screen's dining-change event", async () => {
     const store = new WorkingOrderStore();
     store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });

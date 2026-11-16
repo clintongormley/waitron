@@ -14853,4 +14853,14 @@ describe("the way each table bill sells (A1522)", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     expect([tableOrder(el)!.dining, tableOrder(el)!.diningChoice]).toEqual(["takeaway", "locked"]);
   });
+  it("shows nothing on a saved bill the party's bills read did not list", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const order = await openPartyTable(el);
+    expect(order.orderId).toBe("wo-4");
+    expect(order.diningChoice).toBe("unread");
+    expect(order.shadowRoot!.querySelector("wt-segmented-control[name='dining']")).toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-dining-label]")).toBeNull();
+  });
 });

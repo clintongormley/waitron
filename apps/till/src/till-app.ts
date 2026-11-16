@@ -1,4 +1,5 @@
 import { outsideCardValues } from "./widgets/outside-card.js";
+import type { UnreadDiningChoice } from "./widgets/dining-choice.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
 import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
 import {
@@ -7442,8 +7443,11 @@ export class TillApp extends LitElement {
         if (
           !this.#store.persisted &&
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
-        )
+        ) {
           this.#commitBasket(payload);
+          // The attempt saved the order but neither paid nor sent it, so its way may still change.
+          this.counterDiningChoice = { orderId: id, choice: "open" };
+        }
         if (session === this.#operatorSession) {
           this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
           this.requestUpdate();
@@ -9241,9 +9245,11 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** Whether the server still lets a table bill switch its way; null for a bill not read yet. */
-  #tableBillDiningChoice(billId: string | undefined): DiningChoice | null {
-    return this.partyBills.find((bill) => bill.workingOrderId === billId)?.diningChoice ?? null;
+  /** Whether the server still lets a table bill switch its way: null while no bill is saved, and
+   * `"unread"` for a saved bill the party's bills do not list (a failed read clears them). */
+  #tableBillDiningChoice(billId: string | undefined): DiningChoice | UnreadDiningChoice | null {
+    if (billId === undefined) return null;
+    return this.partyBills.find((bill) => bill.workingOrderId === billId)?.diningChoice ?? "unread";
   }
 
   #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {

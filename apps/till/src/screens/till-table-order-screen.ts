@@ -18,6 +18,7 @@ import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
+  floorChipStyles,
   formatDecimalInput,
   formMessageStyles,
   Gestures,
@@ -61,7 +62,7 @@ import {
   type Decimal,
   type Dining,
 } from "@waitron/shared";
-import { diningControl, diningShown, diningStyles } from "../widgets/dining-choice.js";
+import { diningControl, diningShown, type UnreadDiningChoice } from "../widgets/dining-choice.js";
 import { clockTime, countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -645,7 +646,7 @@ export class TillTableOrderScreen extends LitElement {
     billControlStyles,
     guestsStepperStyles,
     formMessageStyles,
-    diningStyles,
+    floorChipStyles,
     css`
       .lunch {
         display: grid;
@@ -1448,9 +1449,10 @@ export class TillTableOrderScreen extends LitElement {
   /** Every bill of {@link party}, merged parties' included. */
   @property({ attribute: false }) bills: PartyBill[] = [];
   /** The way the bill on screen sells, whatever its department now says. */
-  @property() dining: Dining = "eat_in";
-  /** Whether the server still lets the bill on screen switch its way; null while it is unsaved. */
-  @property({ attribute: false }) diningChoice: DiningChoice | null = null;
+  @property({ attribute: false }) dining: Dining = "eat_in";
+  /** Whether the server still lets the bill on screen switch its way; null while it is unsaved,
+   * `"unread"` for a saved bill the party's bills do not list. */
+  @property({ attribute: false }) diningChoice: DiningChoice | UnreadDiningChoice | null = null;
   /** How the table's zone sells; null where the region has no distinction. */
   @property({ attribute: false }) diningStart: ZoneDining | null = null;
   /** The receipt languages staff may choose for a bill; the choice shows only when there are several. */

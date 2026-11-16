@@ -2579,6 +2579,28 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
   const takeawayZone = () =>
     vi.fn().mockResolvedValue(offersSelling({ policy: "takeaway", startsAs: "takeaway" }));
 
+  it("a declined card leaves the switch offered on the order it saved", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(offersSelling({ policy: "till_choice", startsAs: "eat_in" })),
+      pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "collect-card", { readerId: "reader-2" });
+    await flush(el);
+    expect(c.store.persisted).toBe(true);
+    expect(c.diningChoice).toBe("open");
+    expect(c.shadowRoot!.querySelector("wt-segmented-control[name='dining']")).not.toBeNull();
+  });
+
   it("a card payment of a takeaway draft sends takeaway", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({

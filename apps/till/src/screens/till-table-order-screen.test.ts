@@ -5884,6 +5884,9 @@ describe("eaten here or taken away", () => {
     });
     expect(segmented(el)).toBeNull();
     expect(label(el)).toBe("Take away");
+    expect(
+      el.shadowRoot!.querySelector("[data-dining-label]")!.classList.contains("tone-primary"),
+    ).toBe(true);
   });
 
   it("labels a takeaway bill in a takeaway department", async () => {
@@ -5906,6 +5909,16 @@ describe("eaten here or taken away", () => {
     el.diningStart = null;
     el.diningChoice = null;
     await el.updateComplete;
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBeUndefined();
+  });
+
+  it("shows nothing for a saved bill whose own way has not been read", async () => {
+    const { el } = await mount({
+      dining: "takeaway",
+      diningChoice: "unread",
+      diningStart: { policy: "till_choice", startsAs: "takeaway" },
+    });
     expect(segmented(el)).toBeNull();
     expect(label(el)).toBeUndefined();
   });
@@ -5960,10 +5973,10 @@ describe("eaten here or taken away", () => {
     });
     const changes: unknown[] = [];
     const outer: unknown[] = [];
-    el.addEventListener("dining-change", (event) =>
+    el.parentElement!.addEventListener("dining-change", (event) =>
       changes.push((event as CustomEvent<{ dining: string }>).detail),
     );
-    el.addEventListener("wt-change", (event) => outer.push(event));
+    el.parentElement!.addEventListener("wt-change", (event) => outer.push(event));
     const control = segmented(el)!;
     await control.updateComplete;
     await userEvent.click(
