@@ -281,7 +281,9 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     let images = 0;
     try {
       const bytes = Buffer.alloc(1024 * 1024);
-      const insert = database.prepare("insert into media_image_blobs (hash, bytes) values (?, ?)");
+      const insert = database.prepare(
+        "insert into media_blobs (hash, format, bytes) values (?, 'png', ?)",
+      );
       while ((await stat(databasePath)).size <= 128 * 1024 * 1024) {
         bytes.writeUInt32LE(images++);
         insert.run(createHash("sha256").update(bytes).digest("hex"), bytes);

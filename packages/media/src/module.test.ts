@@ -23,28 +23,15 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
 
-it("exports durable edits after their picture identities and source bytes", () => {
-  expect(
-    MEDIA_CLASSIFICATION.filter((row) =>
-      ["media_image_blobs", "media_image_edits"].includes(row.table),
-    ),
-  ).toEqual([
-    expect.objectContaining({ table: "media_image_blobs", class: "state" }),
-    expect.objectContaining({ table: "media_image_edits", class: "state" }),
+it("exports picture bytes before their metadata", () => {
+  expect(MEDIA_CLASSIFICATION).toEqual([
+    expect.objectContaining({ table: "media_images", class: "state" }),
+    expect.objectContaining({ table: "media_blobs", class: "state" }),
   ]);
-  expect(MEDIA_CONFIGURATION_TRANSFER.tables).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        name: "media_images",
-        before: expect.arrayContaining(["media_image_edits"]),
-      }),
-      expect.objectContaining({
-        name: "media_image_blobs",
-        before: expect.arrayContaining(["media_image_edits"]),
-      }),
-      expect.objectContaining({ name: "media_image_edits" }),
-    ]),
-  );
+  expect(MEDIA_CONFIGURATION_TRANSFER.tables).toEqual([
+    { name: "media_blobs", before: ["media_images"] },
+    { name: "media_images", before: ["products", "sections", "section_members"] },
+  ]);
 });
 
 describe("the media module descriptor", () => {
@@ -57,10 +44,23 @@ describe("the media module descriptor", () => {
         {
           id: "image-a",
           filename,
+          original_hash: filename.slice(0, 64),
+          source_hash: null,
+          focus_x: 5000,
+          focus_y: 5000,
+          zoom: 100,
+          revision: 1,
+          original_filename: null,
           names: JSON.stringify({ en: "Bread" }),
         },
       ],
-      media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
+      media_blobs: [
+        {
+          hash: createHash("sha256").update(bytes).digest("hex"),
+          format: "jpg",
+          bytes: `\\x${bytes.toString("hex")}`,
+        },
+      ],
     });
     const context = {
       createdAt: new Date("2026-10-20T12:00:00Z"),

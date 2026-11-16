@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
   seedDeviceProfiles,
   seedVenueSettings,
@@ -280,7 +281,7 @@ async function storeDepartmentReceipt(
       .select({ id: mediaImages.id })
       .from(mediaImages)
       .where(eq(mediaImages.filename, decoration.logo));
-    if (!image) await suite.db.insert(mediaImages).values({ filename: decoration.logo, names: {} });
+    if (!image) await seedPhotoMetadata(suite.db, { filename: decoration.logo, names: {} });
   }
   await seedDepartmentReceipt(suite.db, departmentId, receipt, logoRasters);
 }
@@ -2563,7 +2564,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
           .select({ id: mediaImages.id })
           .from(mediaImages)
           .where(eq(mediaImages.filename, decoration.logo));
-        if (!image) await tx.insert(mediaImages).values({ filename: decoration.logo, names: {} });
+        if (!image) await seedPhotoMetadata(tx, { filename: decoration.logo, names: {} });
       }
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)

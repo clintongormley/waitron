@@ -13,8 +13,7 @@ import { startManagementSession } from "@waitron/identity";
 import {
   MEDIA_MODULE,
   mediaImages,
-  mediaImageBlobs,
-  mediaImageEdits,
+  mediaBlobs,
   uploadImage,
   prepareImage,
   saveImage,
@@ -426,16 +425,8 @@ describe("replacement department receipt HTTP contract", () => {
     vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
       await withTransaction(suite.db, async (tx) => {
         const [image] = await tx.select().from(mediaImages).where(eq(mediaImages.filename, logo));
-        const [edit] = await tx
-          .select()
-          .from(mediaImageEdits)
-          .where(eq(mediaImageEdits.imageId, image!.id));
         await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
         await tx.insert(mediaImages).values({ ...image!, id: replacementId });
-        await tx.insert(mediaImageEdits).values({ ...edit!, imageId: replacementId });
-        await tx.execute(
-          sql`insert into media_image_data (image_id, bytes) values (${replacementId}, ${bytes})`,
-        );
       });
       return draw(bytes);
     });
@@ -544,7 +535,7 @@ describe("replacement department receipt HTTP contract", () => {
       ).toBe(204);
       const before = await rows();
       const beforePhoto = await readCurrentImage(suite.db, image.filename);
-      const beforeBlobs = await suite.db.select().from(mediaImageBlobs);
+      const beforeBlobs = await suite.db.select().from(mediaBlobs);
       const mediaApp = mediaRoute(
         f,
         failure === "preparation"
@@ -555,7 +546,7 @@ describe("replacement department receipt HTTP contract", () => {
       );
       if (failure === "write")
         await suite.db.execute(
-          sql`create trigger refuse_photo_edit before update on media_image_edits begin select raise(abort, 'test edit refused'); end`,
+          sql`create trigger refuse_photo_edit before update on media_images begin select raise(abort, 'test edit refused'); end`,
         );
       try {
         const response = await mediaApp.request(`/management-api/images/${image.id}`, {
@@ -567,7 +558,7 @@ describe("replacement department receipt HTTP contract", () => {
         expect(await response.json()).toEqual({ error: { code: "server.internal" } });
         expect(await rows()).toEqual(before);
         expect(await readCurrentImage(suite.db, image.filename)).toEqual(beforePhoto);
-        expect(await suite.db.select().from(mediaImageBlobs)).toEqual(beforeBlobs);
+        expect(await suite.db.select().from(mediaBlobs)).toEqual(beforeBlobs);
       } finally {
         if (failure === "write")
           await suite.db.execute(sql`drop trigger if exists refuse_photo_edit`);

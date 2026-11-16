@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -18,7 +19,6 @@ import { updateMenuItem } from "@waitron/menu/src/operations.js";
 import { addMember, createSectionIn } from "@waitron/menu/src/sections.js";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/menu/test/fixtures.js";
 import { offerOf } from "@waitron/menu/test/menus-fixture.js";
-import { mediaImages } from "@waitron/media";
 
 // The menu's own test database has no media tables, so it cannot store a section photo
 // (`mediaImageExists`); this case needs them.
@@ -69,7 +69,7 @@ async function twoMenus() {
 
 it("puts back an own section's photo added since publishing, through the section save", async () => {
   const f = await twoMenus();
-  await fx.db.insert(mediaImages).values({ filename: PHOTO, names: { en: "Plates" } });
+  await seedPhotoMetadata(fx.db, { filename: PHOTO, names: { en: "Plates" } });
   const { hash } = await app((tx) => previewMenu(tx, f.dinner));
   await app((tx) => publishMenu(tx, f.dinner, hash, "person-1"));
   await app((tx) => updateSection(tx, f.mains, { image: PHOTO }));

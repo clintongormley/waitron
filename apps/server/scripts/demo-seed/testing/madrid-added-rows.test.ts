@@ -90,8 +90,7 @@ function capture(deli: object, restaurantOffers: object = {}): CanonicalMadridSe
       menu_items: table({ [hamItem]: { id: hamItem, menu_id: menu, product_id: ham } }),
       routing_cells: table({}),
       media_images: table({}),
-      media_image_data: table({}),
-      media_image_edits: table({}),
+      media_blobs: table({}),
       menu_version_images: table({}),
       persons: table({}),
       menu_versions: table({
@@ -189,8 +188,7 @@ function seededWith(
     station_id: "deli",
   });
   add("media_images", { id: colaImage, filename: "cola.webp" });
-  add("media_image_data", { image_id: colaImage, bytes: "sha256:cola" });
-  add("media_image_edits", { image_id: colaImage, revision: 1 });
+  add("media_blobs", { hash: "cola", format: "webp", bytes: "sha256:cola" });
   add("menu_version_images", { version_id: deliVersion, filename: "cola.webp" });
   edit(seeded);
   return seeded;
@@ -230,8 +228,7 @@ it("adds the declared rows, the deli document's new section and offer, and recom
     menu_items: 1,
     routing_cells: 1,
     media_images: 1,
-    media_image_data: 1,
-    media_image_edits: 1,
+    media_blobs: 1,
     menu_version_images: 1,
   });
   expect(original.tables.products!.rows[cola]).toBeUndefined();

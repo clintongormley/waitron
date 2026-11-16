@@ -55,18 +55,16 @@ beforeEach(async () => {
       { hash, format: "webp", bytes },
       { hash: replacementHash, format: "webp", bytes: replacement },
     ]);
-    await suite.db
-      .insert(mediaImages)
-      .values({
-        id,
-        filename,
-        names: { en: "Bread" },
-        createdAt: stamp,
-        updatedAt: stamp,
-        originalHash: hash,
-        sourceHash: replacementHash,
-        revision: 2,
-      });
+    await suite.db.insert(mediaImages).values({
+      id,
+      filename,
+      names: { en: "Bread" },
+      createdAt: stamp,
+      updatedAt: stamp,
+      originalHash: hash,
+      sourceHash: replacementHash,
+      revision: 2,
+    });
   }
 });
 async function run(missingBefore = false, sourceSchema = 1) {
@@ -136,6 +134,7 @@ describe("media backup evidence", () => {
   });
   it.each([
     "update media_blobs set bytes=x'1234'",
+    "update media_blobs set format='png'",
     "delete from media_blobs",
     "update media_images set original_hash='missing'",
     "update media_images set source_hash='missing'",
@@ -160,28 +159,37 @@ describe("media backup evidence", () => {
     for (const suite of [original, restored]) await corrupt(suite, statement);
     expect((await run()).status).toBe("invalid");
   });
-  it.each(["jpg", "png"] as const)("accepts authentic retained %s bytes", async (extension) => {
-    const data = await sampleImage({
-      width: 11,
-      height: 6,
-      format: extension === "jpg" ? "jpeg" : "png",
-    });
-    const name = createHash("sha256").update(data).digest("hex") + "." + extension;
-    for (const suite of [original, restored]) {
-      await suite.db
-        .insert(mediaBlobs)
-        .values({ hash: name.slice(0, 64), format: extension, bytes: data });
-      await suite.db.insert(mediaImages).values({
-        originalHash: name.slice(0, 64),
-        id: menu,
-        filename: name,
-        names: { en: "Soup" },
-        createdAt: stamp,
-        updatedAt: stamp,
+  it.each(["jpg", "png"] as const)(
+    "accepts authentic retained %s originals but refuses them as WebP replacements",
+    async (extension) => {
+      const data = await sampleImage({
+        width: 11,
+        height: 6,
+        format: extension === "jpg" ? "jpeg" : "png",
       });
-    }
-    expect(await run()).toEqual(passed);
-  });
+      const name = createHash("sha256").update(data).digest("hex") + "." + extension;
+      for (const suite of [original, restored]) {
+        await suite.db
+          .insert(mediaBlobs)
+          .values({ hash: name.slice(0, 64), format: extension, bytes: data });
+        await suite.db.insert(mediaImages).values({
+          originalHash: name.slice(0, 64),
+          id: menu,
+          filename: name,
+          names: { en: "Soup" },
+          createdAt: stamp,
+          updatedAt: stamp,
+        });
+      }
+      expect(await run()).toEqual(passed);
+      for (const suite of [original, restored])
+        await corrupt(
+          suite,
+          `update media_images set source_hash='${name.slice(0, 64)}' where id='${id}'`,
+        );
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("current configuration requires a photo identity even when its bytes survive as a blob", async () => {
     for (const suite of [original, restored]) {
       await suite.db.insert(menus).values({ id: menu, name: "Menu" });
@@ -276,15 +284,13 @@ describe("media backup evidence", () => {
           createdAt: new Date("2026-10-20T08:00:00.000Z"),
         });
         await suite.db.insert(menuVersionImages).values({ versionId: version, filename });
-        await suite.db
-          .insert(menuReleases)
-          .values({
-            menuId: menu,
-            versionId: version,
-            state,
-            activatesAt: stamp,
-            ...(state === "cancelled" ? { cancelledAt: stamp, cancelledBy: id } : {}),
-          });
+        await suite.db.insert(menuReleases).values({
+          menuId: menu,
+          versionId: version,
+          state,
+          activatesAt: stamp,
+          ...(state === "cancelled" ? { cancelledAt: stamp, cancelledBy: id } : {}),
+        });
         for (const table of ["media_images", "media_blobs"])
           await corrupt(suite, `delete from "${table}"`);
       }

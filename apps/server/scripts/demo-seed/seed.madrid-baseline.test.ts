@@ -1,3 +1,4 @@
+import { madridWithPhotos } from "./testing/madrid-photos.js";
 import { madridWithMenuReleases } from "./testing/madrid-releases.js";
 import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
@@ -1848,9 +1849,12 @@ for (const locale of ["en", "es"] as const) {
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const { semantics, added } = madridWithAddedRows(
-          madridWithDroppedColumns(madridWithFoldedTables(expected.seeded, [staffMenuFold]), {
-            products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
-          }),
+          madridWithDroppedColumns(
+            madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
+            {
+              products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
+            },
+          ),
           historicalSeeded,
           ADDED_CATEGORIES[locale],
         );
@@ -1924,6 +1928,12 @@ for (const locale of ["en", "es"] as const) {
         expected[phase] = madridWithFoldedTables(expected[phase], [staffMenuFold]);
       delete phases[phase]!.menu_period_staff_menus;
 
+      if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
+      phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;
+      delete phases[phase]!.media_image_data;
+      delete phases[phase]!.media_image_blobs;
+      delete phases[phase]!.media_image_edits;
+      phases[phase] = byName(phases[phase]!);
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

@@ -94,7 +94,9 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
       if (
         row.source_hash !== null &&
         (!blobs ||
-          !(await first(query, "select 1 from media_blobs where hash=?", [row.source_hash!])))
+          !(await first(query, "select 1 from media_blobs where hash=? and format='webp'", [
+            row.source_hash!,
+          ])))
       )
         return false;
       if (

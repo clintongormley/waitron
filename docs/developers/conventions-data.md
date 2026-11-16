@@ -4098,6 +4098,8 @@ copy, the upgrade test found it empty; recorded in the commit "Photos keep only 
 text and labels from the image table"), so the copy aside and the copy back sit in the same file as
 the rebuild and no migration step ends with the bytes gone.
 
+**2026-11-16, A1308 mn13:** `media_image_data`, `media_image_blobs` and `media_image_edits` are replaced by `media_images` and `media_blobs`. A blob cannot be updated; either photo key restricts its deletion while referenced. See `packages/db/src/schema/media/images.ts` and `packages/db/triggers/core.sql`.
+
 ## A constraint that lives only in hand-written migration SQL is one regeneration away from gone
 
 **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,

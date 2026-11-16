@@ -1,9 +1,9 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
   menus,
-  mediaImages,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   contentSuggestionJobs,
@@ -255,7 +255,7 @@ it("refuses inconsistent fixed folder values and non-object names, and accepts t
     .values({ internalName: "List", ownerMenuId: menu!.id })
     .returning();
   const image = `${"a".repeat(64)}.webp`;
-  await db.insert(mediaImages).values({ filename: image, names: {} });
+  await seedPhotoMetadata(db, { filename: image, names: {} });
   const member = crypto.randomUUID();
   await db.execute(sql`insert into section_members (id, section_id, position, missing_name)
     values (${member}, ${section!.id}, 0, 'Missing')`);

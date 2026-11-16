@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "./seed.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
@@ -25,7 +26,6 @@ import {
   seedZone,
 } from "./seed.js";
 
-import { mediaImages } from "../schema/media/images.js";
 import { departments } from "../schema/venue-service/service.js";
 import { floorZones } from "../schema/floor-zones.js";
 
@@ -373,7 +373,7 @@ describe("seedDepartmentReceipt", () => {
     await suite.db
       .insert(departments)
       .values({ id: "receipt-department", name: "Dining", tradingName: "Dining" });
-    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await seedPhotoMetadata(suite.db, { id: "receipt-image", filename, names: {} });
     await withTransaction(suite.db, (tx) =>
       seedDepartmentReceipt(tx, "receipt-department", { logo: filename, phone: "123" }, rasters),
     );
@@ -396,7 +396,7 @@ describe("seedDepartmentReceipt", () => {
     ]);
   });
   it("replaces the receipt and clears the image and defaulted picture cache", async () => {
-    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await seedPhotoMetadata(suite.db, { id: "receipt-image", filename, names: {} });
     await suite.db.insert(departments).values({
       id: "receipt-department",
       name: "Dining",

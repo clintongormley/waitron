@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { readVenueSettings } from "@waitron/db";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -10,7 +11,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   invoiceSeries,
-  mediaImages,
   parties,
   sales,
   saleLines,
@@ -633,7 +633,7 @@ describe("A4 current optional source matrix", () => {
     });
 
     const own = { logo: `${"c".repeat(64)}.png` };
-    await suite.db.insert(mediaImages).values({ filename: own.logo, names: {} });
+    await seedPhotoMetadata(suite.db, { filename: own.logo, names: {} });
     {
       await seedDepartmentReceipt(suite.db, department!.id, own, {
         "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
@@ -848,7 +848,7 @@ describe("A4 department-only decoration", () => {
       tradingName: "Recorded brand",
       printTradingName: true,
     });
-    await suite.db.insert(mediaImages).values({ filename: `${"d".repeat(64)}.png`, names: {} });
+    await seedPhotoMetadata(suite.db, { filename: `${"d".repeat(64)}.png`, names: {} });
     await seedDepartmentReceipt(
       suite.db,
       department!.id,
@@ -979,10 +979,7 @@ describe("the theme's logo on the A4 invoice", () => {
   }
 
   async function ownLogo(departmentId: string): Promise<void> {
-    await suite.db
-      .insert(mediaImages)
-      .values({ filename: `${"b".repeat(64)}.png`, names: {} })
-      .onConflictDoNothing({ target: mediaImages.filename });
+    await seedPhotoMetadata(suite.db, { filename: `${"b".repeat(64)}.png`, names: {} });
     await seedDepartmentReceipt(
       suite.db,
       departmentId,

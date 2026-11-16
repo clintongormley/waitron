@@ -36,8 +36,7 @@ const SLOT: Record<string, (row: Row) => unknown> = {
   menu_items: (row) => [row.id, row.menu_id, row.product_id],
   routing_cells: (row) => [row.category_id, row.product_id, row.zone_id],
   media_images: (row) => [row.id, row.filename],
-  media_image_data: (row) => [row.image_id],
-  media_image_edits: (row) => [row.image_id],
+  media_blobs: (row) => [row.hash],
   menu_version_images: (row) => [row.version_id, row.filename],
 };
 
@@ -60,7 +59,7 @@ interface MenuDocument {
  * per category a `categories`, `category_details`, `sections` and `routing_cells` (no product or
  * zone) row and a `section_members` row placing the section in its menu's root; per product a
  * `products`, `menu_items` (its declared menu), `section_members` (its declared section),
- * `media_images`, `media_image_data` and `media_image_edits` row, and a `menu_version_images` row
+ * `media_images` and `media_blobs` row, and a `menu_version_images` row
  * for each published version of its menu. The declared facts (names, VAT class, price, pricing
  * unit, category, menu, image) are checked against the seeded rows, the section's names against
  * its seeded row, and all but the category against the published offer, whose placement must be
@@ -111,8 +110,7 @@ export function madridWithAddedRows(
       slot("section_members", section, productKey, null);
       slot("menu_items", key("menu_items", menu, productKey), menu, productKey);
       slot("media_images", mediaImage, product.image);
-      slot("media_image_data", mediaImage);
-      slot("media_image_edits", mediaImage);
+      slot("media_blobs", product.image.split(".")[0]);
       for (const [versionKey, version] of versions)
         if (version.menu_id === menu) slot("menu_version_images", versionKey, product.image);
     }

@@ -986,7 +986,7 @@ also qualifies the historical operation-description references in this section.
   Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
   history share `settings.menu`; translation runs store their total on the first batch only.
   The menu table, identifiers, routes and wording now use menu names; the Products screen uses
-  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Period assignments and photo folds await the following slices.
+  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Periods hold their ordered staff-menu ids. Photo metadata lives on each photo; original and replacement bytes share one immutable blob store, and deleting or replacing a photo prunes bytes no photo names.
   Membership reads its term from the signed document, and an alert's handler references a person.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
@@ -995,10 +995,6 @@ Size M.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
-- **The `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64
-  hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
-  the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
-  comments-only change.
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
   record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
@@ -1040,7 +1036,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**

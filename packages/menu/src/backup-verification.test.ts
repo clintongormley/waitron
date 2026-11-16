@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -7,7 +8,6 @@ import {
   menus,
   units,
   contentSuggestionJobs,
-  mediaImages,
   menuReleases,
   menuVersionImages,
   menuVersions,
@@ -82,7 +82,7 @@ beforeEach(async () => {
       createdAt: new Date("2026-10-20T08:00:00.000Z"),
       createdBy: person,
     });
-    await suite.db.insert(mediaImages).values({ filename: image, names: { en: "Archive" } });
+    await seedPhotoMetadata(suite.db, { filename: image, names: { en: "Archive" } });
     await suite.db.insert(menuVersionImages).values({ versionId: version, filename: image });
   }
 });

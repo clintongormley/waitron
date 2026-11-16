@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -29,9 +30,11 @@ async function fixture(active = true) {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
   });
-  await suite.db
-    .insert(mediaImages)
-    .values({ id: "existing-logo", filename: `${"a".repeat(64)}.png`, names: {} });
+  await seedPhotoMetadata(suite.db, {
+    id: "existing-logo",
+    filename: `${"a".repeat(64)}.png`,
+    names: {},
+  });
   const cfg = {
     receiptLanguages: ["es-ES", "ca-ES"],
   };
@@ -112,7 +115,7 @@ describe("department receipt storage", () => {
   it("saves a logo by image id, reads its name, and leaves logo out of receipt text", async () => {
     const f = await fixture();
     const filename = `${"d".repeat(64)}.png`;
-    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await seedPhotoMetadata(suite.db, { id: "receipt-image", filename, names: {} });
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, f.id, { logo: filename, phone: "+34911234567" }, pair),
     );
@@ -144,7 +147,7 @@ describe("department receipt storage", () => {
   it("the database protects a used logo and permits deleting it once cleared", async () => {
     const f = await fixture();
     const filename = `${"d".repeat(64)}.png`;
-    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await seedPhotoMetadata(suite.db, { id: "receipt-image", filename, names: {} });
     await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, { logo: filename }, pair));
     await expect(
       (async () => {

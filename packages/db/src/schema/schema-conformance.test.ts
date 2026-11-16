@@ -13,8 +13,8 @@ describeSchemaConformance({
   subject: CORE_MIGRATIONS,
   declarations: barrel,
   declaresClosedVocabularies: true,
-  // Media's and credentials' tables declare none: `venue_credentials.purpose` is a plain
+  // These tables declare none: `venue_credentials.purpose` is a plain
   // `label()`, and `PURPOSES` in `packages/credentials/src/purposes.ts` holds its values.
-  tablesWithoutClosedVocabularies: ["media_images", "media_blobs", "venue_credentials"],
+  tablesWithoutClosedVocabularies: ["media_images", "venue_credentials"],
   reload: () => import("./index.js"),
 });

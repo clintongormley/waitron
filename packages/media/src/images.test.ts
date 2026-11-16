@@ -13,6 +13,7 @@ import {
   type Transaction,
   mediaBlobs,
   mediaImages,
+  readActivityForSubject,
 } from "@waitron/db";
 import {
   writeContentLanguages,
@@ -229,6 +230,7 @@ describe("metadata and references", () => {
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
       expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await readActivityForSubject(tx, { kind: "media_image", id: image.id })).toEqual([]);
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       await tx.execute(sql`update products set image = null`);
       expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
@@ -599,15 +601,13 @@ describe("one search rule with every other search", () => {
         await tx
           .insert(mediaBlobs)
           .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
-        await tx
-          .insert(mediaImages)
-          .values({
-            id,
-            filename: picture.filename,
-            originalHash: picture.filename.slice(0, 64),
-            names: { en: "Gin" },
-            createdAt,
-          });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: "Gin" },
+          createdAt,
+        });
       }
       for (const sort of ["relevance", "date"] as const)
         expect(await ids(tx, { query: "gin", sort })).toEqual([low, high]);
@@ -648,17 +648,18 @@ describe("input boundaries", () => {
     });
     const filename = `${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(mediaBlobs)
-        .values({
-          hash: filename.slice(0, 64),
-          format: extension as "jpg" | "png" | "webp",
-          bytes,
-        });
+      await tx.insert(mediaBlobs).values({
+        hash: filename.slice(0, 64),
+        format: extension as "jpg" | "png" | "webp",
+        bytes,
+      });
       await tx
         .insert(mediaImages)
         .values({ filename, originalHash: filename.slice(0, 64), names: { en: "Dish" } });
       expect(await readImageBytes(tx, filename)).toEqual({ bytes, contentType });
+      expect(
+        await readImageBytes(tx, filename.slice(0, 64) + (extension === "webp" ? ".jpg" : ".webp")),
+      ).toBeNull();
     });
   });
 
@@ -1160,15 +1161,13 @@ describe("relevance scores and tie-breaks", () => {
         await tx
           .insert(mediaBlobs)
           .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
-        await tx
-          .insert(mediaImages)
-          .values({
-            id,
-            filename: picture.filename,
-            originalHash: picture.filename.slice(0, 64),
-            names: { en: "Bread" },
-            createdAt,
-          });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: "Bread" },
+          createdAt,
+        });
       }
       for (const sort of ["name", "date"] as const) {
         for (const direction of ["asc", "desc"] as const) {
@@ -1191,14 +1190,12 @@ describe("relevance scores and tie-breaks", () => {
         await tx
           .insert(mediaBlobs)
           .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
-        await tx
-          .insert(mediaImages)
-          .values({
-            id,
-            filename: picture.filename,
-            originalHash: picture.filename.slice(0, 64),
-            names: { en: name },
-          });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: name },
+        });
       }
       const options = { fallbackLanguage: "en" } as const;
       expect(await ids(tx, { ...options, query: "chick" })).toEqual([high, low]);

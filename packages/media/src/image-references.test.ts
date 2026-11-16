@@ -1,14 +1,8 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  menus,
-  products,
-  withTransaction,
-  type Database,
-  mediaImages,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, menus, products, withTransaction, type Database } from "@waitron/db";
 import {
   activateDueMenuPublications,
   addMember,
@@ -66,7 +60,7 @@ interface Fixture {
 
 /** One image, one menu with a product, and one section. */
 async function fixture(db: Database): Promise<Fixture> {
-  await db.insert(mediaImages).values({ filename: PRESENT, names: { en: "Bread" } });
+  await seedPhotoMetadata(db, { filename: PRESENT, names: { en: "Bread" } });
   const [menu] = await db.insert(menus).values({ name: "Lunch" }).returning({
     id: menus.id,
   });
@@ -95,7 +89,13 @@ async function removeImages(): Promise<void> {
 }
 
 async function renameImages(): Promise<void> {
-  await suite.db.execute(sql`update media_images set filename = ${ABSENT}`);
+  await suite.db
+    .insert(mediaBlobs)
+    .values({ hash: ABSENT.slice(0, 64), format: "webp", bytes: new Uint8Array() })
+    .onConflictDoNothing({ target: mediaBlobs.hash });
+  await suite.db.execute(
+    sql`update media_images set filename = ${ABSENT}, original_hash = ${ABSENT.slice(0, 64)}`,
+  );
 }
 
 async function imageCount(): Promise<number> {
@@ -431,7 +431,7 @@ describe("an image a live menu version names", () => {
   it("a stale preview publish changes no versions, live pointer or frozen image references", async () => {
     const { menuId, productId } = await publishedOnly();
     const old = await withTransaction(suite.db, (tx) => previewMenu(tx, menuId));
-    await suite.db.insert(mediaImages).values({ filename: ABSENT, names: { en: "New toast" } });
+    await seedPhotoMetadata(suite.db, { filename: ABSENT, names: { en: "New toast" } });
     await withTransaction(suite.db, (tx) => updateProduct(tx, productId, { image: ABSENT }));
     const next = await withTransaction(suite.db, (tx) => previewMenu(tx, menuId));
     expect(next.hash).not.toBe(old.hash);
@@ -516,8 +516,12 @@ describe("an image a queued menu edition names", () => {
     await suite.db.execute(sql`delete from media_images where filename = ${filename}`);
   }
   async function renameImage(filename: string): Promise<void> {
+    await suite.db
+      .insert(mediaBlobs)
+      .values({ hash: RENAMED.slice(0, 64), format: "webp", bytes: new Uint8Array() })
+      .onConflictDoNothing({ target: mediaBlobs.hash });
     await suite.db.execute(
-      sql`update media_images set filename = ${RENAMED} where filename = ${filename}`,
+      sql`update media_images set filename = ${RENAMED}, original_hash = ${RENAMED.slice(0, 64)} where filename = ${filename}`,
     );
   }
   async function filenames(): Promise<string[]> {
@@ -551,7 +555,7 @@ describe("an image a queued menu edition names", () => {
   /** "Lunch Menu" live with Toast showing `PRESENT`, and `ABSENT` in the library. */
   async function liveWithAbsentInLibrary(): Promise<{ menuId: string; productId: string }> {
     const ids = await publishedOnly();
-    await suite.db.insert(mediaImages).values({ filename: ABSENT, names: { en: "New toast" } });
+    await seedPhotoMetadata(suite.db, { filename: ABSENT, names: { en: "New toast" } });
     return ids;
   }
 
@@ -579,7 +583,7 @@ describe("an image a queued menu edition names", () => {
     await renameImage(ABSENT);
     expect(await filenames()).toEqual([PRESENT, RENAMED]);
     await suite.db.execute(
-      sql`update media_images set filename = ${ABSENT} where filename = ${RENAMED}`,
+      sql`update media_images set filename = ${ABSENT}, original_hash = ${ABSENT.slice(0, 64)} where filename = ${RENAMED}`,
     );
     expect(await filenames()).toEqual([PRESENT, ABSENT]);
     await removeImage(ABSENT);
