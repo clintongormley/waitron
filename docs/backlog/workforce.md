@@ -297,6 +297,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Staffing painter shared parts
 
+2 entries, size M.
+
 - **A699. Shared staffing popup and navigation parts.**
   [Detail](workforce.md#a699-shared-staffing-popup-and-navigation-parts)
 - **A711. Shared staffing painter chrome and date source.** The season stepper, paint-row markup,
