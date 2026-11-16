@@ -7,9 +7,7 @@ import {
   departments,
   menus,
   mediaImages,
-  mediaImageData,
-  mediaImageBlobs,
-  mediaImageEdits,
+  mediaBlobs,
   CORE_CLASSIFICATION,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,6 +15,7 @@ import {
   sections,
   sectionMembers,
   menuVersions,
+  menuReleases,
   menuVersionImages,
   menuDocumentHash,
   type MenuDocument,
@@ -52,14 +51,22 @@ const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] 
 beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
+    await suite.db.insert(mediaBlobs).values([
+      { hash, format: "webp", bytes },
+      { hash: replacementHash, format: "webp", bytes: replacement },
+    ]);
     await suite.db
       .insert(mediaImages)
-      .values({ id, filename, names: { en: "Bread" }, createdAt: stamp, updatedAt: stamp });
-    await suite.db.insert(mediaImageData).values({ imageId: id, bytes });
-    await suite.db.insert(mediaImageBlobs).values({ hash: replacementHash, bytes: replacement });
-    await suite.db
-      .insert(mediaImageEdits)
-      .values({ imageId: id, sourceHash: replacementHash, revision: 2 });
+      .values({
+        id,
+        filename,
+        names: { en: "Bread" },
+        createdAt: stamp,
+        updatedAt: stamp,
+        originalHash: hash,
+        sourceHash: replacementHash,
+        revision: 2,
+      });
   }
 });
 async function run(missingBefore = false, sourceSchema = 1) {
@@ -119,39 +126,35 @@ describe("media backup evidence", () => {
     expect(await run()).toEqual(passed);
   });
   it.each([
-    "update media_image_data set bytes=x'1234'",
-    "update media_image_blobs set bytes=x'1234'",
-    "delete from media_image_data",
-    "delete from media_image_blobs",
-    "update media_image_edits set revision=3",
+    "update media_blobs set bytes=x'1234'",
+    "delete from media_blobs",
+    "update media_images set revision=3",
     `update media_images set names='{"en":"Other"}'`,
   ])("retains all source state: %s", async (statement) => {
     await corrupt(restored, statement);
     expect((await run()).status).toBe("invalid");
   });
   it.each([
-    "update media_image_data set bytes=x'1234'",
-    "update media_image_blobs set bytes=x'1234'",
-    "delete from media_image_data",
-    "delete from media_image_blobs",
-    "update media_image_data set image_id='missing'",
-    "update media_image_edits set image_id='missing'",
-    "update media_image_edits set focus_x=10001",
-    "update media_image_edits set zoom=99",
-    "update media_image_edits set revision=0",
-    "update media_image_edits set original_filename=char(0)",
+    "update media_blobs set bytes=x'1234'",
+    "delete from media_blobs",
+    "update media_images set original_hash='missing'",
+    "update media_images set source_hash='missing'",
+    "update media_images set focus_x=10001",
+    "update media_images set zoom=99",
+    "update media_images set revision=0",
+    "update media_images set original_filename=char(0)",
     "update media_images set names='null'",
     "update media_images set names='broken'",
     "update media_images set names='[]'",
     `update media_images set names='{"en":7}'`,
     "update media_images set names=x'7b7d'",
-    "update media_image_edits set focus_y=-1",
-    "update media_image_edits set focus_x=0.5",
-    "update media_image_edits set zoom=401",
-    "update media_image_edits set revision=9007199254740992",
-    "update media_image_edits set original_filename=x'61'",
-    "update media_image_edits set original_filename='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
-    "insert into media_image_data values ('missing',x'1234')",
+    "update media_images set focus_y=-1",
+    "update media_images set focus_x=0.5",
+    "update media_images set zoom=401",
+    "update media_images set revision=9007199254740992",
+    "update media_images set original_filename=x'61'",
+    "update media_images set original_filename='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+    "insert into media_blobs values ('missing','webp',x'1234')",
     "update media_images set filename='broken.webp'",
   ])("checks invalid source and restored state: %s", async (statement) => {
     for (const suite of [original, restored]) await corrupt(suite, statement);
@@ -165,14 +168,17 @@ describe("media backup evidence", () => {
     });
     const name = createHash("sha256").update(data).digest("hex") + "." + extension;
     for (const suite of [original, restored]) {
+      await suite.db
+        .insert(mediaBlobs)
+        .values({ hash: name.slice(0, 64), format: extension, bytes: data });
       await suite.db.insert(mediaImages).values({
+        originalHash: name.slice(0, 64),
         id: menu,
         filename: name,
         names: { en: "Soup" },
         createdAt: stamp,
         updatedAt: stamp,
       });
-      await suite.db.insert(mediaImageData).values({ imageId: menu, bytes: data });
     }
     expect(await run()).toEqual(passed);
   });
@@ -218,80 +224,86 @@ describe("media backup evidence", () => {
     for (const suite of [original, restored])
       await corrupt(
         suite,
-        `update media_image_data set bytes=x'${Buffer.from(replacement).toString("hex")}'`,
+        `update media_blobs set bytes=x'${Buffer.from(replacement).toString("hex")}'`,
       );
     expect((await run()).status).toBe("invalid");
   });
   it("inactive media remains checked through its actual descriptor", async () => {
     expect(MEDIA_MODULE.backup?.verification).toBe(OWNER);
-    await corrupt(restored, "update media_image_data set bytes=x'1234'");
+    await corrupt(restored, "update media_blobs set bytes=x'1234'");
     expect((await run()).status).toBe("invalid");
   });
   it("schema zero cannot hide blobs", async () => {
-    await corrupt(restored, "update media_image_blobs set bytes=x'1234'");
+    await corrupt(restored, "update media_blobs set bytes=x'1234'");
     expect((await run(false, 0)).status).toBe("invalid");
   });
-  it("checks a blob referenced only by a historical menu version", async () => {
-    const document: MenuDocument = {
-      format: 4,
-      menuId: menu,
-      menuName: "Old menu",
-      root: {
-        members: [
-          {
-            kind: "section",
-            sectionId: menu,
-            internalName: "History",
-            names: { en: "History" },
-            image: filename,
-            color: null,
-            members: [],
-          },
-        ],
-      },
-      offers: {},
-      home: {
-        shortcuts: [],
-        handheld: { columns: 2, tiles: "colours", order: "home_first" },
-        till: { columns: 3, tiles: "colours", order: "home_first" },
-      },
-    };
-    for (const suite of [original, restored]) {
-      await suite.db.insert(menus).values({ id: menu, name: "Old menu", active: false });
-      await suite.db.insert(menuVersions).values({
-        id: version,
+  it.each(["superseded", "cancelled", "live", "queued"] as const)(
+    "judges only retained photos for a %s release",
+    async (state) => {
+      const document: MenuDocument = {
+        format: 4,
         menuId: menu,
-        number: 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdBy: id,
-        createdAt: new Date("2026-10-20T08:00:00.000Z"),
-      });
-      await suite.db.insert(menuVersionImages).values({ versionId: version, filename });
-      await suite.db.insert(mediaImageBlobs).values({ hash, bytes });
-      for (const table of ["media_image_edits", "media_image_data", "media_images"])
-        await corrupt(suite, `delete from "${table}"`);
-    }
-    expect(await run()).toEqual(passed);
-    for (const suite of [original, restored]) await corrupt(suite, "delete from media_image_blobs");
-    expect((await run()).status).toBe("invalid");
-  });
+        menuName: "Old menu",
+        root: {
+          members: [
+            {
+              kind: "section",
+              sectionId: menu,
+              internalName: "History",
+              names: { en: "History" },
+              image: filename,
+              color: null,
+              members: [],
+            },
+          ],
+        },
+        offers: {},
+        home: {
+          shortcuts: [],
+          handheld: { columns: 2, tiles: "colours", order: "home_first" },
+          till: { columns: 3, tiles: "colours", order: "home_first" },
+        },
+      };
+      for (const suite of [original, restored]) {
+        await suite.db.insert(menus).values({ id: menu, name: "Old menu", active: false });
+        await suite.db.insert(menuVersions).values({
+          id: version,
+          menuId: menu,
+          number: 1,
+          document,
+          contentHash: menuDocumentHash(document),
+          createdBy: id,
+          createdAt: new Date("2026-10-20T08:00:00.000Z"),
+        });
+        await suite.db.insert(menuVersionImages).values({ versionId: version, filename });
+        await suite.db
+          .insert(menuReleases)
+          .values({
+            menuId: menu,
+            versionId: version,
+            state,
+            activatesAt: stamp,
+            ...(state === "cancelled" ? { cancelledAt: stamp, cancelledBy: id } : {}),
+          });
+        for (const table of ["media_images", "media_blobs"])
+          await corrupt(suite, `delete from "${table}"`);
+      }
+      expect((await run()).status).toBe(
+        state === "live" || state === "queued" ? "invalid" : "passed",
+      );
+    },
+  );
   it("accepts honest absence and rejects target-only invented blobs", async () => {
-    for (const table of [
-      "media_image_edits",
-      "media_image_data",
-      "media_images",
-      "media_image_blobs",
-    ])
+    for (const table of ["media_images", "media_blobs"])
       await corrupt(restored, `delete from "${table}"`);
     expect(await run(true)).toEqual(passed);
-    await restored.db.insert(mediaImageBlobs).values({ hash, bytes });
+    await restored.db.insert(mediaBlobs).values({ hash, bytes, format: "webp" });
     expect((await run(true)).status).toBe("invalid");
   });
   it("declares actual database state without file or effect obligations", () => {
     const owner = validateBackupVerificationContribution(OWNER);
     expect(owner.data.tables).toEqual(MEDIA_CLASSIFICATION.map((c) => c.table));
-    expect(owner.data.immutableTables).toEqual(["media_image_data", "media_image_blobs"]);
+    expect(owner.data.immutableTables).toEqual(["media_blobs"]);
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });

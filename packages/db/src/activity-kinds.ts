@@ -10,6 +10,10 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  readonly "photo.deleted": {
+    readonly filename: string;
+    readonly names: Readonly<Record<string, string>>;
+  };
   readonly "menu_edition.rescheduled": { readonly from: string; readonly to: string };
   readonly "menu.archived": { readonly name: string };
   readonly "product.archived": { readonly name: string; readonly variantIds: readonly string[] };
@@ -107,6 +111,7 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "photo.deleted": { subject: "media_image" },
   "menu_edition.rescheduled": { subject: "menu_version" },
   "menu.archived": { subject: "menu" },
   "product.archived": { subject: "product" },

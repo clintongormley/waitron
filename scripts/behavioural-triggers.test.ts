@@ -94,6 +94,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  */
 const EXPECTED_TRIGGERS = [
   "activity_log_refuse_update",
+  "media_blobs_no_update",
   "party_allergy_guests_need_answer_insert",
   "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",

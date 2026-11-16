@@ -33,43 +33,9 @@ export function validateMediaConfiguration(
   bundle?: { readonly contentLanguages: { readonly defaultLanguage: string } | null },
 ): void {
   const images = tables.media_images ?? [];
-  const data = tables.media_image_data ?? [];
-  if (images.length !== data.length) invalid();
-  const remaining = new Map<string, Record<string, unknown>>();
-  for (const row of data) {
-    if (typeof row.image_id !== "string") invalid();
-    if (remaining.has(row.image_id)) invalid();
-    remaining.set(row.image_id, row);
-  }
-  const imageIds = new Set<string>();
-  const filenames = new Set<string>();
-  for (const image of images) {
-    if (typeof image.id !== "string" || typeof image.filename !== "string") invalid();
-    if (imageIds.has(image.id) || filenames.has(image.filename)) invalid();
-    imageIds.add(image.id);
-    filenames.add(image.filename);
-    const row = remaining.get(image.id);
-    if (
-      !row ||
-      typeof row.bytes !== "string" ||
-      row.bytes.length > MAX_BYTES * 2 + 2 ||
-      !/^\\x(?:[a-fA-F0-9]{2})+$/.test(row.bytes)
-    )
-      invalid();
-    const bytes = Buffer.from(row.bytes.slice(2), "hex");
-    if (image.filename !== imageFilename(bytes)) invalid();
-    const metadata = normalizeImageMetadata({
-      names: parsedJson(image.names),
-    } as ImageMetadataInput);
-    const defaultLanguage = bundle?.contentLanguages?.defaultLanguage;
-    if (typeof defaultLanguage !== "string") invalid();
-    const language = contentLanguageCode(defaultLanguage);
-    if (resolveContentText(metadata.names, language, language) === "") invalid();
-    remaining.delete(image.id);
-  }
-  const hashes = new Set<string>();
-  for (const blob of tables.media_image_blobs ?? []) {
-    if (typeof blob.hash !== "string" || !/^[a-f0-9]{64}$/.test(blob.hash) || hashes.has(blob.hash))
+  const blobs = new Map<string, string>();
+  for (const blob of tables.media_blobs ?? []) {
+    if (typeof blob.hash !== "string" || !/^[a-f0-9]{64}$/.test(blob.hash) || blobs.has(blob.hash))
       invalid();
     if (
       typeof blob.bytes !== "string" ||
@@ -77,35 +43,53 @@ export function validateMediaConfiguration(
       !/^\\x(?:[a-fA-F0-9]{2})+$/.test(blob.bytes)
     )
       invalid();
-    const bytes = Buffer.from(blob.bytes.slice(2), "hex");
     try {
-      if (imageFilename(bytes) !== `${blob.hash}.webp`) invalid();
+      if (imageFilename(Buffer.from(blob.bytes.slice(2), "hex")) !== `${blob.hash}.${blob.format}`)
+        invalid();
     } catch {
       invalid();
     }
-    hashes.add(blob.hash);
+    blobs.set(blob.hash, blob.format as string);
   }
-  const edited = new Set<string>();
-  for (const row of tables.media_image_edits ?? []) {
-    if (typeof row.image_id !== "string" || !imageIds.has(row.image_id) || edited.has(row.image_id))
-      invalid();
+  const imageIds = new Set<string>();
+  const filenames = new Set<string>();
+  const referenced = new Set<string>();
+  for (const image of images) {
+    if (typeof image.id !== "string" || typeof image.filename !== "string") invalid();
+    if (imageIds.has(image.id) || filenames.has(image.filename)) invalid();
+    imageIds.add(image.id);
+    filenames.add(image.filename);
     if (
-      row.source_hash !== null &&
-      (typeof row.source_hash !== "string" || !hashes.has(row.source_hash))
+      typeof image.original_hash !== "string" ||
+      image.original_hash !== image.filename.slice(0, 64) ||
+      image.filename !== `${image.original_hash}.${blobs.get(image.original_hash)}`
     )
       invalid();
-    if (!Number.isSafeInteger(row.revision) || (row.revision as number) < 1) invalid();
+    referenced.add(image.original_hash);
+    if (image.source_hash !== null) {
+      if (typeof image.source_hash !== "string" || blobs.get(image.source_hash) !== "webp")
+        invalid();
+      referenced.add(image.source_hash);
+    }
+    const metadata = normalizeImageMetadata({
+      names: parsedJson(image.names),
+    } as ImageMetadataInput);
+    const defaultLanguage = bundle?.contentLanguages?.defaultLanguage;
+    if (typeof defaultLanguage !== "string") invalid();
+    const language = contentLanguageCode(defaultLanguage);
+    if (resolveContentText(metadata.names, language, language) === "") invalid();
+    if (!Number.isSafeInteger(image.revision) || (image.revision as number) < 1) invalid();
     try {
-      validateFraming({ x: row.focus_x, y: row.focus_y, zoom: row.zoom });
+      validateFraming({ x: image.focus_x, y: image.focus_y, zoom: image.zoom });
       if (
-        row.original_filename !== null &&
-        (typeof row.original_filename !== "string" ||
-          normalizeUploadFilename(row.original_filename) !== row.original_filename)
+        image.original_filename !== null &&
+        (typeof image.original_filename !== "string" ||
+          normalizeUploadFilename(image.original_filename) !== image.original_filename)
       )
         invalid();
     } catch {
       invalid();
     }
-    edited.add(row.image_id);
   }
+  if (referenced.size !== blobs.size) invalid();
 }

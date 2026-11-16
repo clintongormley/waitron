@@ -378,13 +378,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
 
   // media
   classify("media_images", "state", "shared image metadata; copied to standbys"),
-  classify("media_image_data", "state", "shared image bytes; copied to standbys"),
-  classify(
-    "media_image_blobs",
-    "state",
-    "immutable replacement sources shared by photo identities",
-  ),
-  classify("media_image_edits", "state", "current picture, framing and revision for each photo"),
+  classify("media_blobs", "state", "shared image bytes keyed by content hash"),
 
   // identity: every table means the same on every node of the venue. A sign-in's cookie token is
   // stored only as its hash, so neither that session's row id nor its stored hash, read from a copy

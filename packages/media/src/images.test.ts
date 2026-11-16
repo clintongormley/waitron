@@ -1,3 +1,5 @@
+import { sampleImage } from "./testing/sample-image.js";
+import { createHash } from "node:crypto";
 import { columnsFromOverrides } from "@waitron/menu";
 import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +11,7 @@ import {
   products,
   workingOrderLines,
   type Transaction,
-  mediaImageData,
+  mediaBlobs,
   mediaImages,
 } from "@waitron/db";
 import {
@@ -589,11 +591,23 @@ describe("one search rule with every other search", () => {
     const createdAt = new Date(2026, 0, 1);
     await withTransaction(suite.db, async (tx) => {
       // The higher id is stored first, so storage order alone would list it first.
-      for (const [id, filename] of [
-        [high, `${"b".repeat(64)}.webp`],
-        [low, `${"c".repeat(64)}.webp`],
+      for (const [id, width] of [
+        [high, 301],
+        [low, 302],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: "Gin" }, createdAt });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx
+          .insert(mediaImages)
+          .values({
+            id,
+            filename: picture.filename,
+            originalHash: picture.filename.slice(0, 64),
+            names: { en: "Gin" },
+            createdAt,
+          });
       }
       for (const sort of ["relevance", "date"] as const)
         expect(await ids(tx, { query: "gin", sort })).toEqual([low, high]);
@@ -627,14 +641,23 @@ describe("input boundaries", () => {
   ])("serves a stored .$extension row as $contentType", async ({ extension, contentType }) => {
     // Uploads store WebP only; .jpg and .png rows still arrive through configuration transfer,
     // which copies a bundle's bytes unchanged.
-    const bytes = new Uint8Array([1, 2, 3]);
-    const filename = `${"a".repeat(64)}.${extension}`;
+    const bytes = await sampleImage({
+      width: 8,
+      height: 6,
+      format: extension === "jpg" ? "jpeg" : (extension as "png" | "webp"),
+    });
+    const filename = `${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
     await withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
+      await tx
+        .insert(mediaBlobs)
+        .values({
+          hash: filename.slice(0, 64),
+          format: extension as "jpg" | "png" | "webp",
+          bytes,
+        });
+      await tx
         .insert(mediaImages)
-        .values({ filename, names: { en: "Dish" } })
-        .returning({ id: mediaImages.id });
-      await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
+        .values({ filename, originalHash: filename.slice(0, 64), names: { en: "Dish" } });
       expect(await readImageBytes(tx, filename)).toEqual({ bytes, contentType });
     });
   });
@@ -1129,11 +1152,23 @@ describe("relevance scores and tie-breaks", () => {
     const createdAt = new Date(2026, 0, 1);
     await withTransaction(suite.db, async (tx) => {
       // The higher id is stored first, so storage order alone would list it first.
-      for (const [id, filename] of [
-        [high, `${"b".repeat(64)}.webp`],
-        [low, `${"c".repeat(64)}.webp`],
+      for (const [id, width] of [
+        [high, 301],
+        [low, 302],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: "Bread" }, createdAt });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx
+          .insert(mediaImages)
+          .values({
+            id,
+            filename: picture.filename,
+            originalHash: picture.filename.slice(0, 64),
+            names: { en: "Bread" },
+            createdAt,
+          });
       }
       for (const sort of ["name", "date"] as const) {
         for (const direction of ["asc", "desc"] as const) {
@@ -1148,11 +1183,22 @@ describe("relevance scores and tie-breaks", () => {
     const high = "00000000-0000-4000-8000-000000000002";
     await withTransaction(suite.db, async (tx) => {
       // The id tie-break alone would list the prefix-only match, which has the lower id, first.
-      for (const [id, filename, name] of [
-        [low, `${"b".repeat(64)}.webp`, "Chicken"],
-        [high, `${"c".repeat(64)}.webp`, "Chick peas"],
+      for (const [id, width, name] of [
+        [low, 301, "Chicken"],
+        [high, 302, "Chick peas"],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: name } });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx
+          .insert(mediaImages)
+          .values({
+            id,
+            filename: picture.filename,
+            originalHash: picture.filename.slice(0, 64),
+            names: { en: name },
+          });
       }
       const options = { fallbackLanguage: "en" } as const;
       expect(await ids(tx, { ...options, query: "chick" })).toEqual([high, low]);

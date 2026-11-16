@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, readActivityForSubject } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
@@ -68,7 +68,12 @@ async function fixture(
     },
     () => {},
   );
-  return { app, id, headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.token}` } };
+  return {
+    app,
+    id,
+    personId: person!.id,
+    headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+  };
 }
 function body() {
   const form = new FormData();
@@ -97,7 +102,7 @@ describe("image routes", () => {
     expect(first.created).toBe(true);
   });
   it("uploads, searches, serves public bytes, edits and deletes a photo", async () => {
-    const { app, headers } = await fixture();
+    const { app, headers, personId } = await fixture();
     const created = await app.request("/management-api/images", {
       method: "POST",
       headers,
@@ -135,6 +140,9 @@ describe("image routes", () => {
       headers,
     });
     expect(await removed.json()).toEqual({ deleted: true, uses: [] });
+    expect(await readActivityForSubject(suite.db, { kind: "media_image", id: image.id })).toEqual([
+      expect.objectContaining({ kind: "photo.deleted", personId }),
+    ]);
     expect((await app.request(`/media/${image.filename}`)).status).toBe(404);
   });
   it("requires manager access and rejects malformed input", async () => {

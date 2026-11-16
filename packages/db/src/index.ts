@@ -366,7 +366,7 @@ export { nextStationColour } from "./station-colour.js";
 // Tables of the modules hosted in core's set, listed by hand so each module package re-exports the
 // same objects and its importers do not change.
 export { venueCredentials } from "./schema/index.js";
-export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/index.js";
+export { mediaBlobs, mediaImages } from "./schema/index.js";
 export { handoverActivations, handoverScenario, handoverReturnBatches } from "./schema/index.js";
 export {
   deviceProfileAdmissionRoles,

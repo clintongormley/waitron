@@ -1,14 +1,7 @@
 import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  withTransaction,
-  mediaImageBlobs,
-  mediaImageData,
-  mediaImageEdits,
-  mediaImages,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, mediaBlobs, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedTaxpayer,
@@ -62,29 +55,27 @@ it("projects default framing and revisions in detail and both list paths without
     sourceFilename: first.filename,
     originalFilename: "dish.webp",
   });
-  await suite.db.delete(mediaImages).where(eq(mediaImages.id, image.id));
-  const [legacy] = await suite.db
-    .insert(mediaImages)
-    .values({ filename: first.filename, names: { en: "Seed" } })
-    .returning();
-  await suite.db.insert(mediaImageData).values({ imageId: legacy!.id, bytes: first.bytes });
   for (const sort of ["date", "name"] as const) {
     const { images } = await listImages(suite.db, { sort, fallbackLanguage: "en" });
     expect(images).toEqual([
       expect.objectContaining({
-        id: legacy!.id,
+        id: image.id,
         framing: DEFAULT_FRAMING,
-        revision: 0,
+        revision: 1,
         sourceFilename: first.filename,
-        originalFilename: null,
+        originalFilename: "dish.webp",
       }),
     ]);
     expect(images[0]).not.toHaveProperty("bytes");
   }
   const renamed = await withTransaction(suite.db, (tx) =>
-    updateImage(tx, legacy!.id, { names: { en: "Renamed" } }, "en"),
+    updateImage(tx, image.id, { names: { en: "Renamed" } }, "en"),
   );
-  expect(renamed).toMatchObject({ revision: 1, framing: DEFAULT_FRAMING, originalFilename: null });
+  expect(renamed).toMatchObject({
+    revision: 2,
+    framing: DEFAULT_FRAMING,
+    originalFilename: "dish.webp",
+  });
 });
 
 it("keeps the alias and original bytes while replacement and framing advance together", async () => {
@@ -156,8 +147,10 @@ it("stores a framing-only override and resets a replacement without changing eit
     sourceFilename: first.filename,
     originalFilename: "dish.webp",
   });
-  expect((await suite.db.select().from(mediaImageEdits))[0]!.sourceHash).toBeNull();
-  expect(await suite.db.select().from(mediaImageBlobs)).toEqual([]);
+  expect((await suite.db.select().from(mediaImages))[0]!.sourceHash).toBeNull();
+  expect(await suite.db.select({ hash: mediaBlobs.hash }).from(mediaBlobs)).toEqual([
+    { hash: first.filename.slice(0, 64) },
+  ]);
   const reset = await withTransaction(suite.db, (tx) =>
     saveImage(
       tx,
@@ -198,8 +191,8 @@ it("shares only source bytes, deduplicates by current source, and refuses a reti
     code: "image.reference_conflict",
     params: { imageId: a.id },
   });
-  expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
-    { n: 1 },
+  expect((await suite.db.execute(sql`select count(*) as n from media_blobs`)).rows).toEqual([
+    { n: 2 },
   ]);
   expect((await listImages(suite.db, {})).total).toBe(2);
 });
@@ -207,18 +200,21 @@ it("shares only source bytes, deduplicates by current source, and refuses a reti
 it("breaks an equal upload date by image id rather than the insertion order", async () => {
   const at = new Date("2026-10-17T10:00:00Z");
   await suite.db
-    .insert(mediaImageBlobs)
-    .values({ hash: third.filename.slice(0, 64), bytes: third.bytes });
+    .insert(mediaBlobs)
+    .values({ hash: third.filename.slice(0, 64), bytes: third.bytes, format: "webp" });
   for (const [id, photo] of [
     ["z", first],
     ["a", second],
   ] as const) {
     await suite.db
-      .insert(mediaImages)
-      .values({ id, filename: photo.filename, names: { en: id }, createdAt: at });
-    await suite.db.insert(mediaImageData).values({ imageId: id, bytes: photo.bytes });
-    await suite.db.insert(mediaImageEdits).values({
-      imageId: id,
+      .insert(mediaBlobs)
+      .values({ hash: photo.filename.slice(0, 64), format: "webp", bytes: photo.bytes });
+    await suite.db.insert(mediaImages).values({
+      id,
+      filename: photo.filename,
+      originalHash: photo.filename.slice(0, 64),
+      names: { en: id },
+      createdAt: at,
       sourceHash: third.filename.slice(0, 64),
       focusX: 1000,
       zoom: 175,
@@ -236,34 +232,42 @@ it("breaks an equal upload date by image id rather than the insertion order", as
 
 it("detects unequal stored bytes before deduplication or reuse of a hash", async () => {
   const a = (await upload()).image;
-  await suite.db
-    .update(mediaImageData)
-    .set({ bytes: second.bytes })
-    .where(eq(mediaImageData.imageId, a.id));
-  await expect(upload()).rejects.toMatchObject({
-    code: "image.hash_conflict",
-    params: { filename: first.filename },
-  });
-  await suite.db
-    .update(mediaImageData)
-    .set({ bytes: first.bytes })
-    .where(eq(mediaImageData.imageId, a.id));
-  await suite.db.execute(
-    sql`insert into media_image_blobs(hash,bytes) values (${second.filename.slice(0, 64)},${third.bytes})`,
-  );
-  await expect(
-    withTransaction(suite.db, (tx) =>
-      saveImage(
-        tx,
-        a.id,
-        { names: { en: "Wrong" }, framing, expectedRevision: 1 },
-        second,
-        rasters,
-        "en",
+  const trigger = suite.db.get<{ sql: string }>(
+    sql`select sql from sqlite_schema where name='media_blobs_no_update'`,
+  )!;
+  await suite.db.execute(sql`drop trigger media_blobs_no_update`);
+  try {
+    await suite.db
+      .update(mediaBlobs)
+      .set({ bytes: second.bytes })
+      .where(eq(mediaBlobs.hash, a.filename.slice(0, 64)));
+    await expect(upload()).rejects.toMatchObject({
+      code: "image.hash_conflict",
+      params: { filename: first.filename },
+    });
+    await suite.db
+      .update(mediaBlobs)
+      .set({ bytes: first.bytes })
+      .where(eq(mediaBlobs.hash, a.filename.slice(0, 64)));
+    await suite.db.execute(
+      sql`insert into media_blobs(hash,format,bytes) values (${second.filename.slice(0, 64)},'webp',${third.bytes})`,
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveImage(
+          tx,
+          a.id,
+          { names: { en: "Wrong" }, framing, expectedRevision: 1 },
+          second,
+          rasters,
+          "en",
+        ),
       ),
-    ),
-  ).rejects.toMatchObject({ code: "image.hash_conflict", params: { filename: second.filename } });
-  expect(await readImage(suite.db, a.id)).toEqual(a);
+    ).rejects.toMatchObject({ code: "image.hash_conflict", params: { filename: second.filename } });
+    expect(await readImage(suite.db, a.id)).toEqual(a);
+  } finally {
+    await suite.db.execute(sql.raw(trigger.sql));
+  }
 });
 
 it("serializes expected-revision saves so exactly one wins", async () => {
@@ -374,7 +378,7 @@ describe("edit validation", () => {
       params: { field: "names", language: "en" },
     });
     await suite.db.execute(
-      sql`update media_image_edits set revision = ${Number.MAX_SAFE_INTEGER} where image_id = ${image.id}`,
+      sql`update media_images set revision = ${Number.MAX_SAFE_INTEGER} where id = ${image.id}`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -433,8 +437,8 @@ it("refreshes currently attached active and inactive logos atomically without ov
     ),
   ).rejects.toThrow("Receipt logo requires both printable pictures");
   expect(await readImage(suite.db, image.id)).toEqual(attachedImage);
-  expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
-    { n: 0 },
+  expect((await suite.db.execute(sql`select count(*) as n from media_blobs`)).rows).toEqual([
+    { n: 1 },
   ]);
   await withTransaction(suite.db, (tx) =>
     saveImage(
@@ -484,8 +488,8 @@ it("rolls back picture, names, framing and every raster if a final logo update t
   ).rejects.toThrow("picture refused");
   expect(await readImage(suite.db, image.id)).toEqual(attachedImage);
   expect(await suite.db.select().from(departments)).toEqual(receipts);
-  expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
-    { n: 0 },
+  expect((await suite.db.execute(sql`select count(*) as n from media_blobs`)).rows).toEqual([
+    { n: 1 },
   ]);
 });
 
@@ -498,7 +502,7 @@ it("rolls back already refreshed rasters and names when the final override updat
   await expect(
     withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`create trigger refuse_override before update on media_image_edits begin select raise(abort,'override refused'); end`,
+        sql`create trigger refuse_override before update on media_images begin select raise(abort,'override refused'); end`,
       );
       return saveImage(
         tx,
@@ -512,12 +516,12 @@ it("rolls back already refreshed rasters and names when the final override updat
   ).rejects.toMatchObject({ message: "override refused", errcode: 1811 });
   expect(await readImage(suite.db, image.id)).toEqual(before);
   expect(await suite.db.select().from(departments)).toEqual(receipts);
-  expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
-    { n: 0 },
+  expect((await suite.db.execute(sql`select count(*) as n from media_blobs`)).rows).toEqual([
+    { n: 1 },
   ]);
 });
 
-it("keeps durable sources after deleting their last photo, while removing that photo's override", async () => {
+it("prunes sources after deleting their last photo and removes its metadata", async () => {
   const image = (await upload()).image;
   await withTransaction(suite.db, (tx) =>
     saveImage(
@@ -530,19 +534,16 @@ it("keeps durable sources after deleting their last photo, while removing that p
     ),
   );
   await expect(
-    withTransaction(suite.db, (tx) => tx.execute(sql`delete from media_image_blobs`)),
+    withTransaction(suite.db, (tx) => tx.execute(sql`delete from media_blobs`)),
   ).rejects.toMatchObject({ errcode: 1811, message: "FOREIGN KEY constraint failed" });
   expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id))).toEqual({
     deleted: true,
     uses: [],
   });
-  expect((await suite.db.execute(sql`select count(*) as n from media_image_edits`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select count(*) as n from media_images`)).rows).toEqual([
     { n: 0 },
   ]);
-  expect(await readImageBytes(suite.db, second.filename)).toEqual({
-    bytes: second.bytes,
-    contentType: "image/webp",
-  });
+  expect(await readImageBytes(suite.db, second.filename)).toBeNull();
   expect(await readCurrentImage(suite.db, image.filename)).toBeNull();
 });
 
@@ -558,7 +559,7 @@ describe("stored edit constraints", () => {
       await expect(
         withTransaction(suite.db, (tx) =>
           tx.execute(
-            sql`update media_image_edits set ${sql.identifier(column)} = ${value} where image_id = ${image.id}`,
+            sql`update media_images set ${sql.identifier(column)} = ${value} where id = ${image.id}`,
           ),
         ),
       ).rejects.toMatchObject({ errcode: 275 });
@@ -571,7 +572,7 @@ describe("stored edit constraints", () => {
       await expect(
         withTransaction(suite.db, (tx) =>
           tx.execute(
-            sql`insert into media_image_blobs(hash,bytes) values (${hash},${second.bytes})`,
+            sql`insert into media_blobs(hash,format,bytes) values (${hash},'webp',${second.bytes})`,
           ),
         ),
       ).rejects.toMatchObject({ errcode: 275 });

@@ -905,3 +905,9 @@ CREATE TRIGGER party_allergy_guests_need_answer_update
 BEFORE UPDATE OF party_id ON party_allergy_guests
 WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL
 BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); END;
+
+--> statement-breakpoint
+CREATE TRIGGER media_blobs_no_update BEFORE UPDATE ON media_blobs
+BEGIN
+  SELECT RAISE(ABORT, 'media_blobs rows are never changed');
+END;

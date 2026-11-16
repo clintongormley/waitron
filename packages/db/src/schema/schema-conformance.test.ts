@@ -15,12 +15,6 @@ describeSchemaConformance({
   declaresClosedVocabularies: true,
   // Media's and credentials' tables declare none: `venue_credentials.purpose` is a plain
   // `label()`, and `PURPOSES` in `packages/credentials/src/purposes.ts` holds its values.
-  tablesWithoutClosedVocabularies: [
-    "media_images",
-    "media_image_data",
-    "media_image_blobs",
-    "media_image_edits",
-    "venue_credentials",
-  ],
+  tablesWithoutClosedVocabularies: ["media_images", "media_blobs", "venue_credentials"],
   reload: () => import("./index.js"),
 });

@@ -1,6 +1,6 @@
 export * from "./images.js";
 export * from "./prepare.js";
-export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "@waitron/db";
+export { mediaBlobs, mediaImages } from "@waitron/db";
 export * from "./module.js";
 export { validateMediaConfiguration } from "./configuration-transfer.js";
 export * from "./logo.js";

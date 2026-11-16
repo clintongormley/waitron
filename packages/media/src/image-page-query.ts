@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
-import { asc, desc, eq, sql } from "drizzle-orm";
-import { mediaImageEdits, mediaImages } from "@waitron/db";
+import { asc, desc, sql } from "drizzle-orm";
+import { mediaImages } from "@waitron/db";
 
 export const IMAGE_LIST_COLUMNS = {
   id: mediaImages.id,
@@ -9,13 +9,13 @@ export const IMAGE_LIST_COLUMNS = {
   createdAt: mediaImages.createdAt,
   updatedAt: mediaImages.updatedAt,
   framing: {
-    x: sql<number>`coalesce(${mediaImageEdits.focusX}, 5000)`,
-    y: sql<number>`coalesce(${mediaImageEdits.focusY}, 5000)`,
-    zoom: sql<number>`coalesce(${mediaImageEdits.zoom}, 100)`,
+    x: mediaImages.focusX,
+    y: mediaImages.focusY,
+    zoom: mediaImages.zoom,
   },
-  revision: sql<number>`coalesce(${mediaImageEdits.revision}, 0)`,
-  sourceFilename: sql<string>`coalesce(${mediaImageEdits.sourceHash} || '.webp', ${mediaImages.filename})`,
-  originalFilename: mediaImageEdits.originalFilename,
+  revision: mediaImages.revision,
+  sourceFilename: sql<string>`coalesce(${mediaImages.sourceHash} || '.webp', ${mediaImages.filename})`,
+  originalFilename: mediaImages.originalFilename,
 };
 
 export function datedImagePageQuery(
@@ -27,7 +27,6 @@ export function datedImagePageQuery(
   return tx
     .select(IMAGE_LIST_COLUMNS)
     .from(mediaImages)
-    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
     .orderBy(
       direction === "asc" ? asc(mediaImages.createdAt) : desc(mediaImages.createdAt),
       asc(mediaImages.id),
