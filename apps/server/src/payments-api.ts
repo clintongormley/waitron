@@ -2045,7 +2045,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, (tx) => listAbandonedRefundOutcomes(tx, "sumup"));
-      return c.json(rows);
+      return c.json(
+        rows.map((row) => ({
+          paymentRef: row.paymentRef,
+          workingOrderId: row.workingOrderId,
+          externalRef: row.externalRef,
+          amount: row.amount,
+          claimedAt: row.claimedAt,
+          settledAt: row.settledAt,
+          outcome: row.outcome,
+        })),
+      );
     }),
   );
 

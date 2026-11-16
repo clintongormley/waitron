@@ -730,7 +730,9 @@ export async function listReconcilable(
 
 export async function listAbandonedRefundOutcomes(tx: Transaction, provider: string) {
   const rows = await tx
-    .select({
+    .selectDistinct({
+      paymentId: payments.id,
+      hasFailedRefund: sql<boolean>`${paymentRefunds.id} is not null`.mapWith(Boolean),
       paymentRef: payments.paymentRef,
       workingOrderId: payments.workingOrderId,
       externalRef: payments.externalRef,
@@ -740,6 +742,10 @@ export async function listAbandonedRefundOutcomes(tx: Transaction, provider: str
       state: payments.state,
     })
     .from(payments)
+    .leftJoin(
+      paymentRefunds,
+      and(eq(paymentRefunds.paymentId, payments.id), eq(paymentRefunds.state, "failed")),
+    )
     .where(and(eq(payments.provider, provider), isNotNull(payments.reconcileRemediatedAt)))
     .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);
   return rows.map(({ state, ...row }) => ({

@@ -1895,11 +1895,14 @@ describe("listAbandonedRefundOutcomes", () => {
         providerRefundRef: "provider-refund-1",
       });
       await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
+      await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
     });
     const read = (provider: string) =>
       withTransaction(suite.db, (tx) => listAbandonedRefundOutcomes(tx, provider));
     expect(await read("fake")).toEqual([
       {
+        paymentId: (await getRow(confirmed))!.id,
+        hasFailedRefund: false,
         paymentRef: "refund-confirmed",
         workingOrderId: seeded.workingOrderId,
         externalRef: null,
@@ -1909,6 +1912,8 @@ describe("listAbandonedRefundOutcomes", () => {
         outcome: "confirmed",
       },
       {
+        paymentId: (await getRow(unconfirmed))!.id,
+        hasFailedRefund: true,
         paymentRef: "refund-unconfirmed",
         workingOrderId: seeded.workingOrderId,
         externalRef: null,
