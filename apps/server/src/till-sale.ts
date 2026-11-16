@@ -896,7 +896,7 @@ async function fireAndFileSale(
   return ticket;
 }
 
-/** Reconstruct the filed invoice and persisted payment facts for original, duplicate or pay replay. */
+/** Reconstruct the recorded sale and persisted payment facts for original, duplicate or pay replay. */
 export async function readSettledTicket(
   backend: FiscalBackend,
   tx: Transaction,
@@ -914,6 +914,8 @@ export async function readSettledTicket(
       total: sales.total,
       locale: sales.locale,
       invoiceLocales: sales.invoiceLocales,
+      fiscalBackend: sales.fiscalBackend,
+      vatBreakdown: sales.vatBreakdown,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -937,14 +939,12 @@ export async function readSettledTicket(
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
-  /* v8 ignore start */
-  if (filed === undefined) {
-    // Corruption, as above. Fail rather than reprint a legal receipt with an invented breakdown (§5).
+  if (filed === undefined && issued.fiscalBackend !== "none") {
+    // Fail rather than reprint a legal receipt with an invented breakdown (§5).
     throw new Error(
       `payWorkingOrder: settled working order ${workingOrderId} has no filed fiscal record`,
     );
   }
-  /* v8 ignore stop */
 
   const tender = await readTenderBlock(tx, brandSaleId(issued.saleId), workingOrderId);
   const billTenders = await readBillTenderLines(tx, brandSaleId(issued.saleId));
@@ -958,11 +958,11 @@ export async function readSettledTicket(
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: centsToDecimal(issued.total),
-    vatBreakdown: toVatBreakdown(filed.vatBreakdown),
+    vatBreakdown: filed === undefined ? issued.vatBreakdown : toVatBreakdown(filed.vatBreakdown),
     ...ticketLines,
     tender,
     ...(billTenders.length === 0 ? {} : { payments: billTenders }),
-    ...receiptQr(backend, filed.verificationUrl),
+    ...receiptQr(backend, filed?.verificationUrl),
     ...(await readReceiptIssuer(backend, tx, brandSaleId(issued.saleId))),
   };
 }

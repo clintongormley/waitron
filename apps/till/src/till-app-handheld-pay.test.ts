@@ -3844,6 +3844,31 @@ describe("the document choice on a handheld", () => {
   });
 
   describe("on the presented path", () => {
+    it("a no-fiscal cash payment opens the paid choice, refreshes bills and returns to the table", async () => {
+      const { el, billsBeforePayment } = await payPresented(
+        { ...saleOf("120.00"), qr: "", tender: { method: "cash", change: "30.00" } },
+        undefined,
+        { method: "cash", tendered: "150.00", guestCount: 4 },
+      );
+
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+      await documentChoice(el)!.updateComplete;
+      expect(ticketView(el)).toBeNull();
+      expect(documentChoice(el)!.result.total).toBe("120.00");
+      expect(text(inChoice(el, "[data-settlement-change]"))).toContain(
+        `${t("label.change")} ${money("30.00")}`,
+      );
+      await vi.waitFor(() =>
+        expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billsBeforePayment),
+      );
+
+      await closeDocuments(el);
+      await vi.waitFor(() => expect(documentChoice(el)).toBeNull());
+      expect(tableOrder(el)).not.toBeNull();
+      expect(ticketView(el)).toBeNull();
+      expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
+      expect(vi.mocked(api.printReceipt)).not.toHaveBeenCalled();
+    });
     it("a simplified invoice opens the document choice with its total", async () => {
       const { el } = await payPresented(simplified());
 
@@ -3919,6 +3944,7 @@ describe("the document choice on a handheld", () => {
           .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
         pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoice }),
         collectOrder: vi.fn().mockResolvedValue(invoice),
+        printReceipt: vi.fn().mockResolvedValue(undefined),
         getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
         getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
         openDrawer: vi.fn().mockResolvedValue(undefined),
@@ -3933,11 +3959,12 @@ describe("the document choice on a handheld", () => {
       "till-presented-pay-dialog",
     )!;
     await sheet.updateComplete;
+    const billsBeforePayment = vi.mocked(api.getPartyBills).mock.calls.length;
     if (detail === undefined)
       sheet.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
     else emit(sheet, "presented-pay", detail);
     await flush(el);
-    return { el };
+    return { el, billsBeforePayment };
   }
 
   /** A part-paid counter order paid off through Find bill, from a phone, in one last payment. */

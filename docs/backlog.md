@@ -1196,7 +1196,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   the ticket.**
   [Detail](backlog/payments.md#a-payment-whose-read-shows-it-settled-the-bill-needs-one-press-of-comprobar-de-nuevo-to-show-the-ticket)
 
-- **No fiscal venue paid flow** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-no-fiscal-venue-paid-flow)
 
 - **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
   built.** Start by reading what the SumUp Solo actually does on a signature-required card,

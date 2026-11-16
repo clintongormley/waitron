@@ -52,6 +52,8 @@ import { departments, saleReceiptHeaders, workingLineContexts } from "@waitron/v
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
+import { venueModuleConfig } from "./provision.js";
 // Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -65,6 +67,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   payWorkingOrder,
   receiptQr,
+  readSettledTicket,
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
 } from "./testing/whole-payment-fixture.js";
@@ -552,6 +555,30 @@ describe("recordTillSale", () => {
         variant_descriptions: { [LOCALE]: "Fuera" },
       },
     ]);
+  });
+  it("refuses a missing filed record for a saved fiscal sale even with the no-fiscal backend", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    const id = randomUUID();
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "3.00" },
+      },
+    );
+    const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
+    const none = fiscalSlot(enabledModules(ALL_MODULES, config), null).makeBackend({
+      db: suite.db,
+      clock,
+      environment: deploymentEnvironment(process.env),
+    });
+
+    await expect(
+      withTransaction(suite.db, (tx) => readSettledTicket(none, tx, cfg, id)),
+    ).rejects.toThrow("has no filed fiscal record");
   });
   it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();

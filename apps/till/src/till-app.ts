@@ -21574,7 +21574,7 @@ export class TillApp extends LitElement {
       if (this.#ticketDeliveryTarget()?.transaction) void this.#readInvoicePrinters("receipt");
     }
     void this.#refreshReceiptPrint();
-    if (settlement?.surface === "table" && this.handheldMode && this.result?.invoiceType === "F2")
+    if (settlement?.surface === "table" && this.handheldMode && this.result?.invoiceType !== "F1")
       void this.#readSettlementBills();
   }
 
