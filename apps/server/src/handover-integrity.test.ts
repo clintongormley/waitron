@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
-import { isCopyIntact, copyCheckRunning } from "./handover-integrity.js";
+import { isCopyIntact, copyCheckRunning, checkCopyIntegrity } from "./handover-integrity.js";
 
 let scratch: string;
 beforeEach(async () => {
@@ -267,5 +267,60 @@ describe("a check whose thread has not exited", () => {
     } finally {
       thread.emit("exit", 1);
     }
+  });
+});
+
+describe("bounded copy integrity", () => {
+  it("a deadline refuses without claiming damage, keeping the path busy until actual exit", async () => {
+    const path = database();
+    const thread = Object.assign(new EventEmitter(), {
+      terminate: () => new Promise<number>(() => {}),
+      unref() {},
+    });
+    try {
+      await expect(
+        checkCopyIntegrity(path, {
+          signal: new AbortController().signal,
+          limitMs: 10,
+          stopWaitMs: 10,
+          startWorker: () => thread as unknown as Worker,
+        }),
+      ).rejects.toMatchObject({
+        code: "handover.copy_check_failed",
+        params: { module: "core" },
+        reason: "timeout",
+      });
+      expect(copyCheckRunning(path)).toBe(true);
+      thread.emit("exit", 1);
+      expect(copyCheckRunning(path)).toBe(false);
+      expect(await checkCopyIntegrity(path)).toBe(true);
+    } finally {
+      thread.emit("exit", 1);
+    }
+  });
+
+  it("a caller stop keeps its reason instead of becoming a deadline refusal", async () => {
+    const stopping = new AbortController();
+    const reason = new Error("caller stopped");
+    const startWorker = (_source: string, options: WorkerOptions) => {
+      const thread = new Worker("setInterval(() => {}, 1000)", options);
+      onTestFinished(async () => {
+        await thread.terminate();
+      });
+      thread.once("online", () => stopping.abort(reason));
+      return thread;
+    };
+    await expect(
+      checkCopyIntegrity(database(), {
+        signal: stopping.signal,
+        startWorker,
+      }),
+    ).rejects.toBe(reason);
+  });
+
+  it("actual damage still answers false", async () => {
+    const path = join(scratch, "damaged.db");
+    await writeFile(path, "broken".repeat(1500));
+    expect(await checkCopyIntegrity(path)).toBe(false);
   });
 });

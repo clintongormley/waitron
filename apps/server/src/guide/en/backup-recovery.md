@@ -210,6 +210,8 @@ If the backup has no active administrator with a password, choose another backup
 
 ## If a recovery is interrupted {#resume}
 
+If the downloaded copy did not pass its checks, try again or choose another backup.
+
 If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.
 
 Until you choose the restore button, the page keeps what you entered only while it stays open.

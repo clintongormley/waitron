@@ -104,6 +104,7 @@ export interface DestinationDutyDeps {
   /** For the check of room to place the copy; a real read unless named. */
   statfs?: Statfs;
   tickMs?: number;
+  cleanupIntervalMs?: number;
   /** How long a download may go without a byte before it is given up on. */
   silenceLimitMs?: number;
   /**
@@ -351,12 +352,15 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     });
   }
 
-  /**
-   * An operation that closes from `prepared` leaves a whole venue's copy nothing will read again.
-   * Swept when the duty starts and on a pass with no work, never at each tick of a wait on a live
-   * operation.
-   */
-  async function removeClosedFolders(): Promise<void> {
+  let sweeping: Promise<void> | undefined;
+  function removeClosedFolders(): Promise<void> {
+    if (signal.aborted) return Promise.resolve();
+    return (sweeping ??= sweepClosedFolders().finally(() => {
+      sweeping = undefined;
+    }));
+  }
+
+  async function sweepClosedFolders(): Promise<void> {
     try {
       for await (const { operationId, state } of destinationOperationFolders(deps, deps.stateDir)) {
         if (state === "abandoned" || state === "replaced") await removeFolder(operationId);
@@ -702,12 +706,25 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     }
   }
 
+  // Work can await a venue-sized check; folder retries must run independently of that wait.
+  let cleanupTimer: NodeJS.Timeout;
+  function scheduleCleanup(): void {
+    cleanupTimer = setTimeout(() => {
+      void removeClosedFolders().finally(() => {
+        if (!signal.aborted) scheduleCleanup();
+      });
+    }, deps.cleanupIntervalMs ?? 60_000);
+    cleanupTimer.unref();
+  }
+  scheduleCleanup();
   const running = loop();
   return {
     wake,
-    stop: () => {
+    stop: async () => {
       stopping.abort();
-      return running;
+      clearTimeout(cleanupTimer);
+      await running;
+      await sweeping;
     },
   };
 }

@@ -23,7 +23,7 @@ import {
 } from "@waitron/stream";
 import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
-import { isCopyIntact } from "./handover-integrity.js";
+import { checkCopyIntegrity } from "./handover-integrity.js";
 import type { Logger } from "./logger.js";
 import {
   openStagedCopy,
@@ -69,7 +69,8 @@ export interface PrepareStreamDeps {
   log: Logger;
   openStore?: (bucket: BucketConfig) => ObjectStore;
   restoreGeneration?: typeof restoreGeneration;
-  checkIntegrity?: (databasePath: string) => Promise<boolean>;
+  signal?: AbortSignal;
+  checkIntegrity?: (databasePath: string, options: { signal?: AbortSignal }) => Promise<boolean>;
 }
 
 export interface PreparedStream {
@@ -89,12 +90,15 @@ export interface PreparedStream {
  * thread of its own so the main thread's timers, and with them the venue watchdog, keep turning.
  * A copy whose rows name a missing parent is refused like any other damage.
  */
-export function checkIntegrity(databasePath: string): Promise<boolean> {
-  return isCopyIntact(databasePath);
+export function checkIntegrity(
+  databasePath: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<boolean> {
+  return checkCopyIntegrity(databasePath, options);
 }
 
-function integrityFailed(log: Logger): never {
-  log("warn", "restore.stream_integrity_failed", {});
+function integrityFailed(log: Logger, reason?: "timeout"): never {
+  log("warn", "restore.stream_integrity_failed", reason === undefined ? {} : { reason });
   throw new AppError("restore.stream_integrity_failed", {});
 }
 
@@ -240,11 +244,24 @@ async function readRestoredCopy(args: {
   directory: string;
   nodeId: string;
   migrationsRoot: string | null;
-  checkIntegrity: (databasePath: string) => Promise<boolean>;
+  signal?: AbortSignal;
+  checkIntegrity: (databasePath: string, options: { signal?: AbortSignal }) => Promise<boolean>;
   log: Logger;
 }): Promise<{ sealed: Uint8Array; venue: RestoredVenue }> {
   const { nodeId } = args;
-  if (!(await args.checkIntegrity(join(args.directory, VENUE_FILE)))) integrityFailed(args.log);
+  try {
+    if (!(await args.checkIntegrity(join(args.directory, VENUE_FILE), { signal: args.signal })))
+      integrityFailed(args.log);
+  } catch (error) {
+    args.signal?.throwIfAborted();
+    if (
+      isAppError(error) &&
+      hasCode(error, "handover.copy_check_failed") &&
+      error.reason === "timeout"
+    )
+      integrityFailed(args.log, "timeout");
+    throw error;
+  }
   let store: VenueDatabase;
   try {
     store = await openVenueDatabase(args.directory);
@@ -339,6 +356,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       directory: scratch,
       nodeId,
       migrationsRoot: deps.migrationsRoot,
+      signal: deps.signal,
       checkIntegrity: deps.checkIntegrity ?? checkIntegrity,
       log: deps.log,
     });

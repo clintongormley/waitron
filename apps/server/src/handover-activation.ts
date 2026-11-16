@@ -137,7 +137,7 @@ async function activate(
       async (_modules, runner) => {
         if (!committed && operation.scenario === "emergency") {
           if (deps.emergency === undefined) throw new AppError("handover.copy_mismatch", {});
-          await deps.emergency.assertMayActivate(operation);
+          await deps.emergency.assertMayActivate(operation, c.req.raw.signal);
         }
         return deps.run(
           { oldNodeNeutralised: true },

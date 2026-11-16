@@ -233,3 +233,14 @@ it("keeps the placed source after a second selection is interrupted", async () =
   expect(await checkEmergencyCopy({ stateDir: root, venueDir, modules: [] })).toMatchObject(first);
   expect(await readdir(join(root, "pair-copy"))).toEqual(["placed.json"]);
 });
+
+it("a cancelled backup-copy check preserves the ready copy and discards validation scratch", async () => {
+  await stage();
+  const before = await readFile(join(root, "pair-copy", "venue.db"));
+  const marker = await readFile(join(root, "pair-copy", "ready.json"));
+  const reason = new Error("request closed");
+  await expect(stage({ signal: AbortSignal.abort(reason) })).rejects.toBe(reason);
+  expect(await readFile(join(root, "pair-copy", "venue.db"))).toEqual(before);
+  expect(await readFile(join(root, "pair-copy", "ready.json"))).toEqual(marker);
+  expect(await readdir(join(root, "scratch"))).toEqual([]);
+});

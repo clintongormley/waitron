@@ -1314,6 +1314,45 @@ describe("placeAcceptedCopyAtStart", () => {
       });
     });
 
+    it("cannot identify an opened accepted copy by its signed size and empty summaries alone", async () => {
+      const b = await box();
+      const acceptedDigest = sha(b.accepted);
+      const acceptedBytes = statSync(b.accepted).size;
+      await placeAcceptedCopyAtStart(b.args);
+      const opened = await openVenueDatabase(b.venueDir);
+      await opened.close();
+      const placedDigest = sha(b.live);
+      expect(placedDigest).not.toBe(acceptedDigest);
+      const before = readFileSync(b.accepted);
+      const after = readFileSync(b.live);
+      const changed = [...before.keys()].filter((offset) => before[offset] !== after[offset]);
+      // These offsets characterize this fixture; ignoring a real start's WAL remains unqualified.
+      expect(changed).toEqual([18, 19, 27, 95]);
+      const normalized = Buffer.from(after);
+      for (const offset of changed) normalized[offset] = before[offset]!;
+      expect(createHash("sha256").update(normalized).digest("hex")).toBe(acceptedDigest);
+      expect(statSync(b.live).size).toBe(acceptedBytes);
+      expect(tableNames(b.live)).toContain("placed");
+      rmSync(b.accepted);
+      await expect(placeAcceptedCopyAtStart(b.args)).rejects.toMatchObject({
+        code: "handover.accepted_copy_missing",
+      });
+      expect(sha(b.live)).toBe(placedDigest);
+      const different = new DatabaseSync(b.live);
+      try {
+        different.exec("insert into placed(a) values ('different valid data')");
+      } finally {
+        different.close();
+      }
+      const changedDigest = sha(b.live);
+      expect(changedDigest).not.toBe(placedDigest);
+      expect(statSync(b.live).size).toBe(acceptedBytes);
+      await expect(placeAcceptedCopyAtStart(b.args)).rejects.toMatchObject({
+        code: "handover.accepted_copy_missing",
+      });
+      expect(sha(b.live)).toBe(changedDigest);
+    });
+
     it("an accepted.db that is no longer what the indicator describes refuses, changing nothing", async () => {
       const b = await box();
       const old = sha(b.live);

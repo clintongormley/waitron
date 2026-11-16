@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { copyFile, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,6 +39,27 @@ import {
   type FirstCopyStatus,
 } from "./spare-copy.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
+
+const workerGate = vi.hoisted(() => ({
+  thread: undefined as import("node:worker_threads").Worker | undefined,
+  began: () => {},
+}));
+vi.mock("node:worker_threads", async (original) => {
+  const real = await original<typeof import("node:worker_threads")>();
+  return {
+    ...real,
+    Worker: class {
+      constructor(source: string | URL, options?: import("node:worker_threads").WorkerOptions) {
+        const data = options?.workerData as { path?: string } | undefined;
+        if (workerGate.thread !== undefined && data?.path !== undefined) {
+          workerGate.began();
+          return workerGate.thread;
+        }
+        return new real.Worker(source, options);
+      }
+    },
+  };
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -496,19 +518,59 @@ describe("takeFirstCopy", () => {
     const good = await fixture("good-damaged", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
     const objectStore = await storeWithPointer(generation(1));
     const restore = copyOf(good);
-    const checkIntegrity = vi.fn(async () => false);
+    const checkIntegrity = vi.fn(async () => {
+      return false;
+    });
     const r = run({ objectStore, restoreGeneration: restore, checkIntegrity });
 
     await vi.waitFor(() => expect(checkIntegrity.mock.calls.length).toBeGreaterThanOrEqual(2));
     r.controller.abort();
     await r.done.catch(() => {});
-    expect(checkIntegrity).toHaveBeenCalledWith(join(stateDir, "pair-copy", "venue.db"));
+    expect(checkIntegrity).toHaveBeenCalledWith(join(stateDir, "pair-copy", "venue.db"), {
+      signal: r.controller.signal,
+    });
     expect(events("spare.first_copy_waiting").map((e) => e.fields?.reason)).toEqual([
       "integrity_failed",
     ]);
     expect(r.restart).not.toHaveBeenCalled();
     expect(r.statuses.some((s) => s.copy === "ready")).toBe(false);
     await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
+  });
+
+  it("keeps one download while a background check outlives the interactive budget", async () => {
+    await writeKey();
+    const good = await fixture("slow-check", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    const objectStore = await storeWithPointer(generation(1));
+    const restore = copyOf(good);
+    const thread = Object.assign(new EventEmitter(), {
+      terminate: () => new Promise<number>(() => {}),
+      unref() {},
+    });
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    workerGate.thread = thread as unknown as import("node:worker_threads").Worker;
+    workerGate.began = began;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const r = run({ objectStore, restoreGeneration: restore });
+    try {
+      await started;
+      await vi.advanceTimersByTimeAsync(30 * 60_000 + 5_001);
+      expect(r.statuses.at(-1)).toEqual({ copy: "restoring" });
+      expect(restore).toHaveBeenCalledOnce();
+      thread.emit("message", { intact: true });
+      thread.emit("exit", 0);
+      vi.useRealTimers();
+      await expect(r.done).resolves.toBe("ready");
+      expect(restore).toHaveBeenCalledOnce();
+    } finally {
+      thread.emit("exit", 0);
+      r.controller.abort();
+      vi.useRealTimers();
+      workerGate.thread = undefined;
+      await r.done.catch(() => {});
+    }
   });
 
   it("never logs the recovery key it holds", async () => {

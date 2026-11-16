@@ -319,13 +319,14 @@ async function emergencySpare(gate = true) {
     operationId: "emergency",
   });
   expect(declared.status, JSON.stringify(declared.body)).toBe(200);
+  const activationEmergency = gate
+    ? emergency
+    : mountHandoverEmergencyApi(new Hono(), emergencyDeps);
+  const assertMayActivate = vi.spyOn(activationEmergency, "assertMayActivate");
   return {
+    assertMayActivate,
     store: placed,
-    ...spareOn(
-      placed,
-      serviceFor(placed),
-      gate ? emergency : mountHandoverEmergencyApi(new Hono(), emergencyDeps),
-    ),
+    ...spareOn(placed, serviceFor(placed), activationEmergency),
     declared: declared.body as unknown as { declaration: unknown },
     repeat: () => request(declarationApp, "declare", declarationBody, { operationId: "emergency" }),
     exchange,
@@ -370,6 +371,10 @@ describe("emergency activation on a real copy", () => {
       const { input } = await selectName(s.app);
       if (changed) await seedWorkingOrder(s.store.venue, { openedAt: "2026-10-16T12:05:00Z" });
       const answer = await activate(s.app, input);
+      expect(s.assertMayActivate).toHaveBeenCalledWith(
+        expect.objectContaining({ operationId: OPERATION }),
+        expect.any(AbortSignal),
+      );
       if (changed) {
         expect(answer.body.error?.code).toBe("handover.copy_mismatch");
         expect(await activations(s.store)).toHaveLength(0);

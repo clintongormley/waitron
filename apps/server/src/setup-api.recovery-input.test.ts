@@ -104,13 +104,16 @@ it.each(["archive", "bucket", "cloud"])(
     expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
     expect(response.headers.get("cache-control")).toBe("no-store");
     if (kind === "bucket") {
-      expect(stageBucketRestore).toHaveBeenCalledWith({
-        kit: "bucket-kit",
-        environment: "preproduction",
-        oldBoxGone: true,
-        venueConfirmed: "89890001K",
-        ...credentials,
-      });
+      expect(stageBucketRestore).toHaveBeenCalledWith(
+        {
+          kit: "bucket-kit",
+          environment: "preproduction",
+          oldBoxGone: true,
+          venueConfirmed: "89890001K",
+          ...credentials,
+        },
+        expect.any(AbortSignal),
+      );
     } else {
       expect(stageRestore).toHaveBeenCalledWith(
         {

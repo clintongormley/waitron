@@ -168,6 +168,10 @@ it.each(["archive", "bucket"])(
         },
       );
       expect(response.status, await response.text()).toBe(202);
+      if (kind === "bucket")
+        expect(download).toHaveBeenCalledWith(
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
       await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
       const marker = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
       expect(JSON.parse(marker).request).toMatchObject({

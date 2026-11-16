@@ -46,6 +46,7 @@ export type PrepareRecovery = (
   input: RecoveryPreparationRequest,
   hold: FirstSetupHold | undefined,
   client: OperationClient,
+  signal?: AbortSignal,
 ) => Promise<unknown>;
 function invalid(field: string): never {
   throw new AppError("setup.request_invalid", { field });
@@ -268,7 +269,15 @@ export function mountRecoveryPreparationApi(
         source = { kind: "cloud", pointId: raw.pointId };
       }
       const onBox = (deps.requestFromBox ?? requestFromBox)(c);
-      return c.json(await deps.prepareRecovery(source, input, options.hold(c.req.raw), { onBox }));
+      return c.json(
+        await deps.prepareRecovery(
+          source,
+          input,
+          options.hold(c.req.raw),
+          { onBox },
+          c.req.raw.signal,
+        ),
+      );
     }),
   );
 }

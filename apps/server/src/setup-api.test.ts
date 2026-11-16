@@ -2011,12 +2011,15 @@ describe("POST /setup-api/restore-bucket", () => {
       });
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
-      expect(stageBucketRestore).toHaveBeenCalledWith({
-        kit: "WAITRON-RECOVERY-KIT-2:abc",
-        environment: "production",
-        oldBoxGone: false,
-        venueConfirmed: null,
-      });
+      expect(stageBucketRestore).toHaveBeenCalledWith(
+        {
+          kit: "WAITRON-RECOVERY-KIT-2:abc",
+          environment: "production",
+          oldBoxGone: false,
+          venueConfirmed: null,
+        },
+        expect.any(AbortSignal),
+      );
       expect((await operations.read())?.phase).toBe("complete");
       await tick();
       expect(requestRestart).toHaveBeenCalledOnce();
@@ -2059,12 +2062,15 @@ describe("POST /setup-api/restore-bucket", () => {
         oldBoxGone: true,
       });
       expect(second.status).toBe(202);
-      expect(stageBucketRestore).toHaveBeenLastCalledWith({
-        kit: "k",
-        environment: "production",
-        oldBoxGone: true,
-        venueConfirmed: null,
-      });
+      expect(stageBucketRestore).toHaveBeenLastCalledWith(
+        {
+          kit: "k",
+          environment: "production",
+          oldBoxGone: true,
+          venueConfirmed: null,
+        },
+        expect.any(AbortSignal),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -2236,12 +2242,15 @@ describe("POST /setup-api/restore-bucket", () => {
         venueConfirmed: "89890001K",
       });
       expect(second.status).toBe(202);
-      expect(stageBucketRestore).toHaveBeenLastCalledWith({
-        kit: "k",
-        environment: "production",
-        oldBoxGone: false,
-        venueConfirmed: "89890001K",
-      });
+      expect(stageBucketRestore).toHaveBeenLastCalledWith(
+        {
+          kit: "k",
+          environment: "production",
+          oldBoxGone: false,
+          venueConfirmed: "89890001K",
+        },
+        expect.any(AbortSignal),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

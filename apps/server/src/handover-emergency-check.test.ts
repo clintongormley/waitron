@@ -175,3 +175,12 @@ it("refuses damaged bytes before trying to read activity", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("ends an emergency copy check when its request is already closed", async () => {
+  const controller = new AbortController();
+  const reason = new Error("request closed");
+  controller.abort(reason);
+  await expect(
+    checkEmergencyCopy({ venueDir: venueDir(), modules: [], signal: controller.signal }),
+  ).rejects.toBe(reason);
+});

@@ -68,7 +68,7 @@ async function followedOutput(): Promise<Buffer> {
   await writeFile(`${input}-txid`, `${position.appliedTXID}\n`);
   return bytes;
 }
-const stage = () =>
+const stage = (signal?: AbortSignal) =>
   stageFollowedAsCopy(
     {
       db: suite.db,
@@ -78,6 +78,7 @@ const stage = () =>
       stateDir: root,
       modules: [],
       migrationsRoot: null,
+      signal,
     },
     { path: input, ...position },
   );
@@ -113,4 +114,15 @@ it("refuses a copy whose chart does not admit this spare", async () => {
   await chart();
   await expect(stage()).rejects.toMatchObject({ code: "handover.copy_predates_destination" });
   await noMarker();
+});
+
+it("a cancelled followed-copy check preserves the previously ready selection", async () => {
+  await followedOutput();
+  await stage();
+  const before = await readFile(join(root, "pair-copy", "venue.db"));
+  const marker = await readFile(join(root, "pair-copy", "ready.json"));
+  const reason = new Error("request closed");
+  await expect(stage(AbortSignal.abort(reason))).rejects.toBe(reason);
+  expect(await readFile(join(root, "pair-copy", "venue.db"))).toEqual(before);
+  expect(await readFile(join(root, "pair-copy", "ready.json"))).toEqual(marker);
 });

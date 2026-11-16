@@ -481,7 +481,8 @@ function bucketRefusal(err: AppError): string | null {
       "the disk filled while the copy was downloading; nothing on this server changed. Free some space and run it again",
     "restore.stream_pointer_missing":
       "the bucket holds no copy for the venue this kit names; check that the kit is this venue's",
-    "restore.stream_integrity_failed": "the copy downloaded from the bucket is damaged",
+    "restore.stream_integrity_failed":
+      "the downloaded copy did not pass its checks; try again, or choose another backup",
     "restore.stream_state_missing":
       "the copy in the bucket does not hold the old server's locked secrets, so it cannot be restored",
     "restore.identity_unknown":

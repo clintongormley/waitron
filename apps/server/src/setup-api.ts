@@ -174,11 +174,12 @@ export interface SetupDeps {
   previewRestore?: (request: ArchiveRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,
+    signal?: AbortSignal,
   ) => Promise<RecoveryBackupPreview>;
   previewCloudRestore?: (pointId: string) => Promise<RecoveryBackupPreview>;
   /** Checks the owner's bucket and stages a rebuild from it for the entrypoint to write after
    * restart. Rejects with the refusal, having staged nothing. */
-  stageBucketRestore?: (input: BucketRestoreInput) => Promise<void>;
+  stageBucketRestore?: (input: BucketRestoreInput, signal?: AbortSignal) => Promise<void>;
   /** Stages the reset of the adopt `operationId` for the entrypoint to carry out after restart. */
   stageReset?: (operationId: string) => Promise<void>;
   /** Fresh replacement's private Cloud snapshot recovery client. */
@@ -1287,7 +1288,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("oldBoxGone");
         c.header("Cache-Control", "no-store");
         return c.json(
-          await preview({ kit, environment, oldBoxGone: body.oldBoxGone === true }),
+          await preview(
+            { kit, environment, oldBoxGone: body.oldBoxGone === true },
+            c.req.raw.signal,
+          ),
           200,
         );
       } finally {
@@ -1548,7 +1552,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           )
           .digest("hex");
         const execute = async (): Promise<Response> => {
-          await stage(input);
+          await stage(input, c.req.raw.signal);
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => requestRestart(), 0);
           return response;

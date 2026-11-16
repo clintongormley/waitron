@@ -18,7 +18,7 @@ import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { validateArtifactFile } from "./restore.js";
-import { checkIntegrity } from "./restore-stream.js";
+import { checkCopyIntegrity } from "./handover-integrity.js";
 import { checkCopy } from "./spare-copy.js";
 import { reachDisk } from "./sync-path.js";
 
@@ -27,6 +27,7 @@ export type CheckedCopyDeps = StoredTrustDeps & {
   stateDir: string;
   modules: readonly WaitronModule[];
   migrationsRoot: string | null;
+  signal?: AbortSignal;
 };
 
 /** Checks a copy read-only where it lies, then publishes one copy of it under `selection`. */
@@ -35,7 +36,8 @@ export async function stageCheckedCopy(
   path: string,
   selection: SelectedCopy,
 ): Promise<void> {
-  if (!(await checkIntegrity(path))) throw new AppError("handover.copy_damaged", {});
+  if (!(await checkCopyIntegrity(path, { signal: deps.signal })))
+    throw new AppError("handover.copy_damaged", {});
   const publicKey = nodeSigningPublicKey(
     await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId),
   );

@@ -51,6 +51,8 @@ import {
   placedSpareFixture,
 } from "./testing/handover-placed-copy.js";
 
+vi.mock("./handover-emergency-check.js", { spy: true });
+
 const migrations = migrationOptionsFor(manifestSets(), null);
 const mainBox = useVenueDb({ migrations });
 const spareBefore = useVenueDb({ migrations });
@@ -849,4 +851,19 @@ describe("the switch's passkey and proof", () => {
       "passkey.challenge_expired",
     );
   });
+});
+
+it("forwards each preview, declaration and activation request's stop to its copy check", async () => {
+  const s = service();
+  vi.mocked(checkEmergencyCopy).mockClear();
+  expect((await s.post({ signIn: request.signIn }, true, "preview")).status).toBe(200);
+  expect(vi.mocked(checkEmergencyCopy).mock.lastCall?.[0].signal).toBeInstanceOf(AbortSignal);
+  vi.mocked(checkEmergencyCopy).mockClear();
+  expect((await s.post()).status).toBe(200);
+  expect(vi.mocked(checkEmergencyCopy).mock.lastCall?.[0].signal).toBeInstanceOf(AbortSignal);
+  const operation = (await readHandoverOperation(placed.node, standby.nodeId, OPERATION))!;
+  const controller = new AbortController();
+  vi.mocked(checkEmergencyCopy).mockClear();
+  await service().emergency.assertMayActivate(operation, controller.signal);
+  expect(vi.mocked(checkEmergencyCopy).mock.lastCall?.[0].signal).toBe(controller.signal);
 });

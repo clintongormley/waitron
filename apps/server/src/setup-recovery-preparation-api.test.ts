@@ -4,9 +4,15 @@ import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { encodeRecoveryKit } from "@waitron/stream";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
+import { prepareStreamRestore } from "./restore-stream.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
+
+vi.mock("./restore-stream.js", { spy: true });
 
 const receiveArchive = useSetupArchiveUpload();
 const sockets: TLSSocket[] = [];
@@ -65,7 +71,13 @@ it("prepares a bucket recovery within the existing setup hold without reflecting
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ id: "module-clock-challenge", expiresInMs: 5000 });
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(execute).toHaveBeenCalledWith(bucket, preparation, expect.any(Object), { onBox: true });
+  expect(execute).toHaveBeenCalledWith(
+    bucket,
+    preparation,
+    expect.any(Object),
+    { onBox: true },
+    expect.any(AbortSignal),
+  );
   expect(JSON.stringify(log.mock.calls)).not.toContain(preparation.nodeRecoverySecret);
   expect(JSON.stringify(log.mock.calls)).not.toContain(bucket.kit);
 });
@@ -89,7 +101,13 @@ it("forwards a managed Cloud point without accepting client-supplied archive cre
   const source = { kind: "cloud", pointId: "d0000000-0000-4000-8000-000000000002" };
   const response = await app.request(path, request(source), tls());
   expect(response.status).toBe(200);
-  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object), { onBox: true });
+  expect(execute).toHaveBeenCalledWith(
+    source,
+    preparation,
+    expect.any(Object),
+    { onBox: true },
+    expect.any(AbortSignal),
+  );
 });
 it("reads archive bytes and the separate backup password from multipart input", async () => {
   const { app, execute } = fixture();
@@ -104,6 +122,7 @@ it("reads archive bytes and the separate backup password from multipart input", 
     preparation,
     expect.any(Object),
     { onBox: true },
+    expect.any(AbortSignal),
   );
 });
 it.each(["plain", "forwarded", "origin", "site"])(
@@ -302,7 +321,13 @@ it("prepares from a staged copy named in a small JSON body", async () => {
   const source = { kind: "staged", stagedId };
   const response = await app.request(path, request(source), tls());
   expect(response.status).toBe(200);
-  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object), { onBox: true });
+  expect(execute).toHaveBeenCalledWith(
+    source,
+    preparation,
+    expect.any(Object),
+    { onBox: true },
+    expect.any(AbortSignal),
+  );
 });
 it.each(["../../state/secrets", "5C1D6C43-4F61-4C4A-9E0B-0A8F2F8D9A1", "", 7])(
   "refuses a malformed staged id (%j) before it reaches the preparation",
@@ -497,5 +522,49 @@ it("refuses an upload before the setup queue while configuration staging is busy
     release();
     await first;
     await second;
+  }
+});
+
+it("keeps the request cancellation through the bucket preparation service", async () => {
+  const reason = new Error("request closed");
+  const signal = AbortSignal.abort(reason);
+  const download = vi.mocked(prepareStreamRestore).mockImplementation(async (deps) => {
+    deps.signal?.throwIfAborted();
+    throw new Error("download was not cancelled");
+  });
+  const service = createSetupRecoveryPreparation({
+    stateDir: "/unused/state",
+    venueDir: "/unused/venue",
+    stagingDir: "/unused/staging",
+    modules: [],
+    migrationsRoot: null,
+    coordinator: createFirstSetupCoordinator(),
+    bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
+  });
+  const kit = encodeRecoveryKit({
+    version: 2,
+    streamId: "d0000000-0000-4000-8000-000000000002",
+    recoveryKey: "synthetic-recovery-key",
+    pointerSignerPublicKey: generateNodeKeyPair().publicKey,
+    bucket: {
+      region: "local",
+      bucket: "copy",
+      prefix: "",
+      accessKeyId: "unused",
+      secretAccessKey: "unused",
+    },
+  });
+  try {
+    await expect(
+      service(
+        { kind: "bucket", kit, environment: "preproduction" },
+        preparation,
+        undefined,
+        { onBox: true },
+        signal,
+      ),
+    ).rejects.toBe(reason);
+  } finally {
+    download.mockRestore();
   }
 });
