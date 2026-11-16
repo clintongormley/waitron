@@ -104,8 +104,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_request_failed": 502,
 };
 
-// The dashboard sets no time limit on a POST or PUT (`READ_TIME_LIMIT_MS` in
-// `packages/dashboard-kit/src/request.ts` covers GETs only), so nothing else ends a check whose
+// The dashboard's stream-settings test and save set no time limit (the default in
+// `packages/dashboard-kit/src/request.ts` bounds GETs only), so nothing else ends a check whose
 // answer stalls after its headers. The minute was not measured.
 const PROBE_LIMIT_MS = 60_000;
 

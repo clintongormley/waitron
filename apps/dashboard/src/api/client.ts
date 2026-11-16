@@ -2677,7 +2677,11 @@ export interface OrderDeliveries {
 const CARD_PROVIDER_READ_LIMIT_MS = 50_000;
 /** Keep above the battery deadline in apps/server/src/alert-sources.ts; no shared constant enforces it. */
 const ALERTS_READ_LIMIT_MS = 55_000;
-/** Without a limit a write never times out, and a pairing that never answers would lock both dialogs. */
+/**
+ * Safe to give up on: an accept that went through drops this login's claim, so a re-sent one is
+ * refused `join_request.unclaimed` (the device accept route, apps/server/src/join-api.ts), whose
+ * message points at the device list.
+ */
 const DEVICE_ACCEPT_LIMIT_MS = 30_000;
 
 export interface ThemeView {
