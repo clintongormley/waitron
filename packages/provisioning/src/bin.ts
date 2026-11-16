@@ -39,7 +39,6 @@ export interface BinProcess {
   stderr: NodeJS.WritableStream;
 }
 
-/** No storage is opened here: `venue` opens its own directory and `keyring` needs none. */
 export async function runBin(proc: BinProcess, run: typeof runCli = runCli): Promise<number> {
   let database: Database | undefined;
   try {

@@ -206,9 +206,16 @@ describe("ask", () => {
     const first = ask("Name? ", true, input, output);
     input.end();
     expect(await first).toBe("");
-    const hung = new Promise((resolve) => setTimeout(resolve, 2_000, "still waiting"));
-    expect(await Promise.race([ask("Legal name? ", true, input, output), hung])).toBe("");
-    expect(await Promise.race([ask("PIN: ", false, input, output), hung])).toBe("");
+    let timer: NodeJS.Timeout | undefined;
+    const hung = new Promise((resolve) => {
+      timer = setTimeout(resolve, 2_000, "still waiting");
+    });
+    try {
+      expect(await Promise.race([ask("Legal name? ", true, input, output), hung])).toBe("");
+      expect(await Promise.race([ask("PIN: ", false, input, output), hung])).toBe("");
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   it("returns an empty answer when the operator presses Ctrl+D at a terminal", async () => {

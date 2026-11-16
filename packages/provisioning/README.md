@@ -246,6 +246,9 @@ If nothing supplies the venue directory — no flag, no variable, and a prompt t
 which is what an exhausted stdin or a Ctrl+D gives — the run stops with
 `provisioning.venue_dir_missing`. It does not fall back to a default.
 
+Answers cannot be piped in: lines that arrive together are all taken by the first prompt, and every
+later prompt answers nothing. Pass flags and variables instead.
+
 **Nothing this tool prints carries a secret.** The plan summary names the venue directory and the
 environment stamped on it, both operator-supplied configuration, and the admin's PIN and password
 appear nowhere — not in plaintext, not as a hash.
