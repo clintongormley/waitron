@@ -584,6 +584,49 @@ describe("opaque authenticated standby carriers", () => {
     expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 
+  it("rechecks promotion authority that ends after its own module's activation", async () => {
+    const scope = { ...binding, action: "promote" };
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deps = await mirror(activateSeries);
+    // Activates after the regime's own recheck, and carries no operation of its own to recheck.
+    const later = fakeModule("other-regime", {
+      provisioning: {
+        standby: {
+          reserve: async () => ({ state: {} }),
+          establish: async () => {},
+          activate: async () => {
+            enter();
+            await released;
+          },
+        },
+      },
+    });
+    let pending!: Promise<unknown>;
+    await withOperationAuthority(scope, "admin", async (authority) => {
+      pending = promoteMirrorToPrimary(
+        {
+          ...deps,
+          modules: [...deps.modules, later],
+          moduleOperations: operations(authority, scope),
+        },
+        { oldNodeNeutralised: true },
+      );
+      await entered;
+    });
+    const refused = expect(pending).rejects.toMatchObject({ code: "module.operation_invalid" });
+    release();
+    await refused;
+    expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+  });
+
   it("snapshots reserve input before waiting for a prior transaction", async () => {
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     modules.push(

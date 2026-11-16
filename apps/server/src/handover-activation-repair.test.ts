@@ -14,7 +14,6 @@ import { loadKeyRing } from "@waitron/credentials";
 import { resolveAccountKey } from "./account-key.js";
 import { loadBoxEnv } from "./box-env.js";
 import type { StartedServer } from "./boot.js";
-import { parseEnvFile } from "./env-file.js";
 import { readActivatedFrom } from "./start-peer-check.js";
 import { expectChildKilled } from "./testing/child-process-death.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -115,14 +114,10 @@ async function spareEnv(): Promise<Record<string, string>> {
 }
 
 /** A copy placed, then the real routes in their own process, killed at `at`. */
-async function killedActivating(at: ActivationKillPoint) {
+async function killedActivating(at: ActivationKillPoint, beforeKill?: () => Promise<void>) {
   const placed = await fixture.placeRealCopy();
   await placed.close();
-  await killChild(at);
-  return placed;
-}
-
-async function killChild(at: ActivationKillPoint): Promise<void> {
+  await beforeKill?.();
   const { spareState, spareVenue } = dirs();
   const args: ActivationKillArgs = {
     venueDir: spareVenue,
@@ -142,6 +137,7 @@ async function killChild(at: ActivationKillPoint): Promise<void> {
     ),
     { signal: "SIGKILL", stdout: `killed at ${at}\n` },
   );
+  return placed;
 }
 
 /** The real start, with the real start check: M1 is switched off, so nothing answers it. */
@@ -332,30 +328,21 @@ describe("a box killed while activating, then a real start with its old box swit
 
   it("killed inside the venue transaction, the box stays a mirror with its trading.env untouched, and can activate", async () => {
     const { spareState } = dirs();
-    const placed = await fixture.placeRealCopy();
-    await placed.close();
-    // As the spare's join writes it (`adopt.ts`).
-    const tradingEnv = await writeTradingEnv(spareState, {
-      nodeId: standby.nodeId,
-      environment: "preproduction",
-      accountKey: resolveAccountKey({}, loadKeyRing(await spareEnv())).toString("base64"),
+    let tradingEnv!: string;
+    let joined!: { ino: number; bytes: string };
+    await killedActivating("venue-body", async () => {
+      // As the spare's join writes it (`adopt.ts`).
+      tradingEnv = await writeTradingEnv(spareState, {
+        nodeId: standby.nodeId,
+        environment: "preproduction",
+        accountKey: resolveAccountKey({}, loadKeyRing(await spareEnv())).toString("base64"),
+      });
+      joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
     });
-    const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
-    await killChild("before-commit");
     expect({
       ino: (await stat(tradingEnv)).ino,
       bytes: await readFile(tradingEnv, "utf8"),
     }).toEqual(joined);
-    const written = parseEnvFile(joined.bytes);
-    expect(Object.keys(written).sort()).toEqual([
-      "WAITRON_ACCOUNT_KEY",
-      "WAITRON_ENV",
-      "WAITRON_NODE_ID",
-    ]);
-    expect(written).toMatchObject({
-      WAITRON_ENV: "preproduction",
-      WAITRON_NODE_ID: standby.nodeId,
-    });
 
     // The node id comes from the file here, as on a box.
     const env = await spareEnv();

@@ -5,7 +5,7 @@ import { registerHooks } from "node:module";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 
-export type ActivationKillPoint = "before-commit" | "venue-commit" | "role";
+export type ActivationKillPoint = "venue-body" | "venue-commit" | "role";
 
 export interface ActivationKillArgs {
   venueDir: string;
@@ -120,7 +120,7 @@ mountHandoverActivationApi(app, {
         withModuleOperations: async (context, consume) => {
           const series = await runner(context, async (tx, operations) => {
             const inTransaction = await consume(tx, operations);
-            killedAt("before-commit");
+            killedAt("venue-body");
             return inTransaction;
           });
           killedAt("venue-commit");

@@ -1,7 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -503,11 +503,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
         ino: (await stat(tradingEnv)).ino,
         bytes: await readFile(tradingEnv, "utf8"),
       }).toEqual(joined);
-      const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
-      expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
       expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(activeSeriesId);
-      expect(persisted.WAITRON_NODE_ID).toBe(seed.nodeId);
-      expect(persisted.WAITRON_ENV).toBe("production");
       await server.close();
       await mirrorDb.execute(
         sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
@@ -517,7 +513,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       const restarted = await startServer(
         {
           ...KEY_ENV,
-          ...persisted,
+          ...parseEnvFile(joined.bytes),
           WAITRON_VENUE_DIR: mirrorVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,

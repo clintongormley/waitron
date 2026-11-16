@@ -635,7 +635,7 @@ describe("promoteMirrorToPrimary", () => {
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
   });
 
-  it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
+  it("refuses without a fence attestation, leaving the node a mirror", async () => {
     const { deps, nodeId } = await mirror();
     const err = await captureError(() =>
       promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: false }),
@@ -656,7 +656,7 @@ describe("promoteMirrorToPrimary", () => {
     expect((await readNodeMembership(db))?.body.term).toBe(4);
   });
 
-  it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
+  it("refuses a fenced node with promotion.node_fenced, leaving it a mirror", async () => {
     const { db, deps, nodeId } = await mirror();
     await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
     const err = await captureError(() =>
