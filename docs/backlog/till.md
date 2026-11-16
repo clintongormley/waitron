@@ -587,9 +587,7 @@ Open:
   can make such a loop was not checked. Left by #906's review: no case pins what a correction slip prints for a counter order delivered
   to a table.
 - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
-  2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
-  time is picked by comparing the stored times as text, right only while every writer stores the
-  same `toISOString()` form (every writer found uses `nowIso()`; not proven for all).
+  2026-10-17; recorded in kitchen.md's Decisions).
   The owner's replacement for C80's earlier course-placement rule is retained under
   [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
 - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
