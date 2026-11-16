@@ -2,6 +2,8 @@
 
 **Status:** proposal only, prepared under the watcher's 16 November 14:15 clearance
 of the [qualification slice](2026-11-16-ci-routing-post-3514-qualification.md).
+The watcher parked it at 14:56 pending a natural setup-download stall. Build no new
+guest capability now. On a captured recurrence, bring the capture and this proposal back.
 Neither the mechanism nor a fault run is cleared. No guest was changed or started.
 
 **Question:** does a one-minute job limit deliver cancellation to the listener and end its worker
@@ -66,8 +68,10 @@ whether download retry/refusal intervened. Manual cancellation, fast refusal, th
 stop, or an absent connection leaves the job-limit proof open. Collect sanitized runner
 diagnostics before destruction. Remove only this turn's listener, name mapping, registrations
 and guest; independently inspect guest absence before releasing its pool lease. No other
-lane is paused; the shared effect is one occupied normal slot for at most ten minutes.
+lane is paused. The deadline triggers destruction at ten minutes; the normal slot stays
+occupied until cleanup independently confirms guest absence.
 
-**Recommendation:** clear a bounded implementation plan for that missing qualification
-entry point first. The hostname and control-traffic gate must pass before the fault phase;
-do not treat the public redirect or this proposal as live qualification.
+**Next action:** retain a natural action-download setup stall with its run, attempt,
+job and runner diagnostics, then return this proposal to the watcher. Do not build the
+setup hook or two-job lease reuse solely to stage this failure. The hostname and
+control-traffic gate remain unverified.
