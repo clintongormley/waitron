@@ -1550,8 +1550,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La base de datos contiene cambios que esta versión de Waitron no reconoce. Instala la misma versión de Waitron o una más reciente antes de volver a intentarlo.",
   },
   "handover.stepping_down": {
-    en: "This server is not taking sales. Use the main server’s address once that server is taking sales.",
-    es: "Este servidor no acepta ventas. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
+    en: "This server is not taking requests, so this action was refused. Use the main server’s address once that server is taking sales.",
+    es: "Este servidor no atiende solicitudes, así que se ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   },
   "handover.known_handover": {
     en: "This server has already handed over the venue. Open the current main server’s address to continue.",
@@ -1574,8 +1574,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los datos del local en el servidor antiguo han cambiado después de hacer su copia final. Mantén ambos servidores conectados mientras se vuelve a pedir la copia.",
   },
   "handover.source_unreachable": {
-    en: "This server could not finish exchanging handover data with the old server. It retries by itself. Check both servers’ power, connections and free disk space.",
-    es: "Este servidor no ha podido terminar el intercambio de datos del traspaso con el servidor antiguo. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores.",
+    en: "This server could not complete this handover step. It retries by itself. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    es: "Este servidor no ha podido completar este paso del traspaso. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   },
   "handover.not_a_spare": {
     en: "This server is not a spare and cannot accept this handover. Open Servers on the main server and choose a joined spare.",
@@ -1670,8 +1670,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los preparativos de módulos guardados dejan demasiado poco espacio para aceptar este traspaso. Es un fallo de Waitron; reintentar con la misma copia no reduce ese archivo.",
   },
   "handover.summary_mismatch": {
-    en: "The copy’s contents do not match the old server’s description. Keep both servers connected while the check retries. If it keeps failing, use the emergency procedure with a working backup.",
-    es: "El contenido de la copia no coincide con la descripción del servidor antiguo. Mantén ambos servidores conectados mientras se repite la comprobación. Si sigue fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
+    en: "The copy’s contents do not match the old server’s description. Repeating the check does not repair that copy. Use the emergency procedure with a working backup.",
+    es: "El contenido de la copia no coincide con la descripción del servidor antiguo. Repetir la comprobación no repara esa copia. Usa el procedimiento de emergencia con una copia de seguridad válida.",
   },
   "handover.summary_unreadable": {
     en: "This server could not read the copy’s contents to check them. Keep both servers connected while it retries. If it keeps failing, use the emergency procedure with a working backup.",
@@ -1682,8 +1682,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta copia no tiene un registro válido de este servidor de reserva. Revisa la lista de servidores en el servidor antiguo; un traspaso controlado necesita un servidor de reserva que haya terminado de unirse.",
   },
   "handover.authoriser_not_permitted": {
-    en: "The person who authorised this handover lacks Box administration permission in this copy. Check their permissions on the main server before starting another handover.",
-    es: "La persona que autorizó este traspaso no tiene permiso de Administración del servidor en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
+    en: "The person who authorised this handover lacks Manage boxes permission in this copy. Check their permissions on the main server before starting another handover.",
+    es: "La persona que autorizó este traspaso no tiene permiso de Gestionar servidores en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
   },
   "handover.preparation_state_unusable": {
     en: "This server cannot read or add to its module preparation file, so it has not placed the accepted copy. This is a fault in Waitron or this server’s disk. Retry a normal boot only after that file is repaired.",

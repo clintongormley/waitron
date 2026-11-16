@@ -383,11 +383,11 @@ it.each(["en", "es"])(
 it.each([
   [
     "en-GB",
-    "The last attempt could not finish exchanging handover data with the old server. Check both servers’ power, connections and free disk space.",
+    "The last attempt could not complete this handover step. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
   ],
   [
     "es-ES",
-    "El último intento no pudo terminar el intercambio de datos del traspaso con el servidor antiguo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores.",
+    "El último intento no pudo completar este paso del traspaso. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   ],
 ])("describes a failed source attempt before and after acceptance in %s", async (locale, words) => {
   const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");

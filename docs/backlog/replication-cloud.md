@@ -716,6 +716,10 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
 
 ## Decisions and deliberate limits
 
+**HANDOVER-WORDS, 16 November 2026:** the watcher cleared keeping a refused copy’s module name
+in the log only (`handover.chain_broken` and `handover.summary_mismatch`). The screen describes
+the failed check without naming the module. This is watcher clearance, not an owner decision.
+
 **A1321 retiring a spare, 2026-11-14:** Servers' Remove takes a spare that finished joining once
 an administrator declares it switched off and no other recovery in progress; the declarations are
 not stored. A removed spare that is offline is not told (the

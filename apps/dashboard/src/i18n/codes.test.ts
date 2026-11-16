@@ -1044,8 +1044,8 @@ it("explains an invalid contains tag in both languages", () => {
 it.each([
   [
     "handover.stepping_down",
-    "This server is not taking sales. Use the main server’s address once that server is taking sales.",
-    "Este servidor no acepta ventas. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
+    "This server is not taking requests, so this action was refused. Use the main server’s address once that server is taking sales.",
+    "Este servidor no atiende solicitudes, así que se ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   ],
   [
     "handover.known_handover",
@@ -1074,8 +1074,8 @@ it.each([
   ],
   [
     "handover.source_unreachable",
-    "This server could not finish exchanging handover data with the old server. It retries by itself. Check both servers’ power, connections and free disk space.",
-    "Este servidor no ha podido terminar el intercambio de datos del traspaso con el servidor antiguo. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores.",
+    "This server could not complete this handover step. It retries by itself. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    "Este servidor no ha podido completar este paso del traspaso. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   ],
   [
     "handover.not_a_spare",
@@ -1109,8 +1109,8 @@ it.each([
   ],
   [
     "handover.summary_mismatch",
-    "The copy’s contents do not match the old server’s description. Keep both servers connected while the check retries. If it keeps failing, use the emergency procedure with a working backup.",
-    "El contenido de la copia no coincide con la descripción del servidor antiguo. Mantén ambos servidores conectados mientras se repite la comprobación. Si sigue fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
+    "The copy’s contents do not match the old server’s description. Repeating the check does not repair that copy. Use the emergency procedure with a working backup.",
+    "El contenido de la copia no coincide con la descripción del servidor antiguo. Repetir la comprobación no repara esa copia. Usa el procedimiento de emergencia con una copia de seguridad válida.",
   ],
   [
     "handover.summary_unreadable",
@@ -1124,8 +1124,8 @@ it.each([
   ],
   [
     "handover.authoriser_not_permitted",
-    "The person who authorised this handover lacks Box administration permission in this copy. Check their permissions on the main server before starting another handover.",
-    "La persona que autorizó este traspaso no tiene permiso de Administración del servidor en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
+    "The person who authorised this handover lacks Manage boxes permission in this copy. Check their permissions on the main server before starting another handover.",
+    "La persona que autorizó este traspaso no tiene permiso de Gestionar servidores en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
   ],
   [
     "handover.preparation_state_unusable",
