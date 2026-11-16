@@ -848,6 +848,7 @@ it("Stop access records the stop with the replacement after the permission reche
       entered = resolve;
     });
     f.delay(async () => {
+      f.delay(async () => {});
       entered();
       await new Promise<void>((resolve) => {
         release = resolve;
