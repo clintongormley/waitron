@@ -119,7 +119,6 @@ close the day, then A947 and its handover bundles.
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 - [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
-- [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
 **5. Important work.** The bundles marked important under each area, taken by theme so that a lane
@@ -1642,8 +1641,6 @@ Not in any track until the standalone primary is done.
   [Part 2 plan](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
   Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November; the locked-start build and production qualification remain open.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
-
-- **Recheck that a spare gets later charts** (bundle of 2, 1 important, size S, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 
 - **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 

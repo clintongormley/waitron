@@ -371,8 +371,6 @@ choice for later venues (the owner's answer to question 4 of that design).
   retires; an administrator can clear an `evicted` entry. Re-admission must retire the node's
   previous chart entry and delete its live `fiscal.aeat` row. It must retire, not add.
 - **Chart addresses.** A post-setup `WAITRON_MANAGEMENT_ORIGIN` change is not republished.
-  The separate [empty-contactUrl entry](#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
-  keeps the missing-self fallback concern.
 - **Restore restart and promotion.** A persistent wiped-state marker and in-process mirror
   promotion remain open. Role repair from a committed chart is tested by `promoted-role.test.ts`.
 - **Fiscal-certificate distribution.** The old distribution design was reverted. The spare gets
@@ -671,18 +669,6 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   Measured at the helper, not end to end.
   [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
 
-## Bundle: Recheck that a spare gets later charts
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A mirror keeps a renamed server's old chart (A917).** After a rename its copy would name the
-  old address until it is paired again. No reader routing by a mirror's copy was found (not exhaustive).
-  [Detail](replication-cloud.md#a-mirror-keeps-a-renamed-servers-old-chart-a917)
-- **A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
-  `nextStandings` appends it with an empty `contactUrl`, and `routableServers` then drops it.
-  Found by reading, not run.
-  [Detail](replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
-
 ## Bundle: Decide what the old promote route still does
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -863,13 +849,6 @@ compromised box server. The watcher lifted the A760 landing freeze and table hol
 The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linked protocol and host
 artifacts are historical references for the dropped implementation. They do not add work or
 gates to A951-S.
-
-## A mirror keeps a renamed server's old chart (A917)
-
-A mirror node is given the venue's chart
-when it is paired; no path was found that delivers a later one, so after a
-rename its copy would name the old address until it is paired again. No reader routing by a
-mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
 
 ## A947. Go-live on two local boxes
 
@@ -1123,10 +1102,3 @@ A947 slice 3a moved five tables into `node.db` with no change-log triggers: `nod
 or `change_log` itself, decides again how the drain crosses the two files: SQLite refuses a trigger
 body that writes another attached database, so either `change_log` is reclassified to the file its
 writers live on, or the triggers stop writing it directly and something above them does (P3).
-
-## A promoting standby may list itself with an empty contactUrl
-
-No path was found that copies `node_membership` from the primary to a standby. A
-standby whose own held membership list omits it takes the fallback in `nextStandings`
-(`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
-`routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
