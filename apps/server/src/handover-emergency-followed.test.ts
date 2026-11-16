@@ -396,10 +396,14 @@ it("signs in only after staging, so the staged copy is the followed output as it
   expect((await readFile(staged)).equals(atStop)).toBe(true);
   const copy = new DatabaseSync(staged, { readOnly: true });
   expect(copy.prepare("select count(*) as n from dashboard_sessions").get()).toEqual({ n: 0 });
+  const historyBefore = copy.prepare("select count(*) as n from activity_log").get() as {
+    n: number;
+  };
   copy.close();
   const followed = new DatabaseSync(followedVenue(), { readOnly: true });
-  expect(followed.prepare("select count(*) as n from dashboard_sessions").get()).toEqual({
-    n: 1,
+  expect(followed.prepare("select count(*) as n from dashboard_sessions").get()).toEqual({ n: 0 });
+  expect(followed.prepare("select count(*) as n from activity_log").get()).toEqual({
+    n: historyBefore.n + 2,
   });
   followed.close();
   await restarted(s);

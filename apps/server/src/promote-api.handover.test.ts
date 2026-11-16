@@ -1,6 +1,7 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -458,23 +459,32 @@ describe("the open-operation refusal comes after the sign-in", () => {
     expect(await sessions()).toEqual([]);
   });
 
-  it("with no operation open the same credentials go through, and a password writes its one ended session", async () => {
+  it("with no operation open the credentials go through, and password sign-ins leave history only", async () => {
     const attempts = rightCredentials();
     const counts: Record<string, unknown> = {};
     for (const [name, sent] of Object.entries(attempts)) {
       const before = (await sessions()).length;
+      const historyBefore = suite.db.all<{ n: number }>(
+        sql`select count(*) as n from activity_log`,
+      )[0]!.n;
       const answer = await attempt(sent);
-      counts[name] = { status: answer.status, sessions: (await sessions()).length - before };
+      counts[name] = {
+        status: answer.status,
+        sessions: (await sessions()).length - before,
+        events:
+          suite.db.all<{ n: number }>(sql`select count(*) as n from activity_log`)[0]!.n -
+          historyBefore,
+      };
     }
     expect(counts).toEqual({
-      password: { status: 200, sessions: 1 },
-      "break-glass key": { status: 200, sessions: 0 },
-      "module operation, password": { status: 200, sessions: 1 },
-      "module operation, key": { status: 200, sessions: 0 },
-      "module operation, noParallelRecovery, password": { status: 200, sessions: 1 },
-      "module operation, noParallelRecovery, key": { status: 200, sessions: 0 },
-      "preparation, password": { status: 200, sessions: 1 },
-      "preparation, key": { status: 200, sessions: 0 },
+      password: { status: 200, sessions: 0, events: 2 },
+      "break-glass key": { status: 200, sessions: 0, events: 0 },
+      "module operation, password": { status: 200, sessions: 0, events: 2 },
+      "module operation, key": { status: 200, sessions: 0, events: 0 },
+      "module operation, noParallelRecovery, password": { status: 200, sessions: 0, events: 2 },
+      "module operation, noParallelRecovery, key": { status: 200, sessions: 0, events: 0 },
+      "preparation, password": { status: 200, sessions: 0, events: 2 },
+      "preparation, key": { status: 200, sessions: 0, events: 0 },
     });
     expect(run).toHaveBeenCalledTimes(6);
     expect(recovery).toHaveBeenCalledTimes(2);

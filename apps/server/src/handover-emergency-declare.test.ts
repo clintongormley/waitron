@@ -461,9 +461,16 @@ it("records a signed declaration before answering, then replays without asking t
   expect((await readHandoverOperation(placed.node, standby.nodeId, OPERATION))?.state).toBe(
     "emergency_declared",
   );
+  expect(await placed.venue.select().from(dashboardSessions)).toEqual([]);
+  const history = await placed.venue.execute<{ kind: string; data: string }>(
+    sql`select kind, data from activity_log order by rowid desc limit 2`,
+  );
   expect(
-    await placed.venue.select({ endedAt: dashboardSessions.endedAt }).from(dashboardSessions),
-  ).toEqual([{ endedAt: expect.any(String) }]);
+    history.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
+  ).toEqual([
+    { kind: "dashboard.signed_in", data: { method: "password" } },
+    { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
+  ]);
   expect(await s.post()).toEqual(first);
   expect(external.calls).toBe(1);
   expect(JSON.stringify(s.log.mock.calls)).not.toContain(request.reason);
