@@ -4,8 +4,16 @@
  * `WAITRON_LITESTREAM_BIN=<that path>`. The box image fetches its own copy (`deploy/Dockerfile`).
  */
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isMainScript } from "./is-main-script.mjs";
@@ -95,8 +103,14 @@ export async function install({
     writeFileSync(archive, bytes);
     run("tar", ["-xzf", archive, "-C", staging, "litestream"]);
     mkdirSync(join(root, ".bin"), { recursive: true });
-    copyFileSync(join(staging, "litestream"), target);
-    chmodSync(target, 0o755);
+    const replacement = `${target}.${randomUUID()}.tmp`;
+    try {
+      copyFileSync(join(staging, "litestream"), replacement);
+      chmodSync(replacement, 0o755);
+      renameSync(replacement, target);
+    } finally {
+      rmSync(replacement, { force: true });
+    }
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

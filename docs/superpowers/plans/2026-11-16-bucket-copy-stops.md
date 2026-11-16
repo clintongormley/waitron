@@ -28,3 +28,10 @@ corrections. Lane I's watcher cleared this corrected plan at 01:40 in `questions
 matching binary installed is acceptable (rare, and the message must say so plainly). Best-effort
 storage, the Docker Desktop Linux measurement and the same-id-clone limit are cleared. One PR.
 Not an owner approval.”
+
+
+Dated review correction, 2026-11-16 03:59: the watcher cleared replacing the installed binary
+through a unique temporary sibling and rename, after the Linux native-executable probe reproduced
+`ETXTBSY`. Archive verification still runs every time. The watcher excluded the forced overlapping
+history-save race (not reproduced through a real host) and retained the marker check without a
+private-state test; the cancellation case and logging assertion remain required.
