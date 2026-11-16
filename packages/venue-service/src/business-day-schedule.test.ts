@@ -2067,15 +2067,13 @@ describe("clock compatibility reads special-day paint", () => {
         .select({ id: specialDayDates.id })
         .from(specialDayDates)
         .where(eq(specialDayDates.specialDayId, specialDayId));
-      await tx
-        .insert(openingHours)
-        .values({
-          zoneId: v.zoneId!,
-          specialDayDateId: date!.id,
-          kind: "closed",
-          startsAt: "22:00:00",
-          endsAt: "04:30:00",
-        });
+      await tx.insert(openingHours).values({
+        zoneId: v.zoneId!,
+        specialDayDateId: date!.id,
+        kind: "closed",
+        startsAt: "22:00:00",
+        endsAt: "04:30:00",
+      });
     });
     expect((await conflicts("03:00")).conflicts).toEqual([
       {
