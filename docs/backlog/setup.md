@@ -13,13 +13,12 @@ What constrains the next change to the wizard:
   pack's demo value (`CountryPack.demo`; Spain's, `B00000000`, in `packages/country-es/src/spain.ts`),
   which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
   Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
-  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). Leaving Demo also clears an explicitly
-  automatic venue name with its draft ownership marker; a name you authored remains. The
-  Demo/Live/Demo cases in `apps/setup/src/setup-app-venue.unsaved-changes.test.ts` cover both paths.
-- **Default both series codes to values that survive a cold restore.** A cold restore appends
-  `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
-  default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
-  (rectificativa). Nothing in the dashboard can change or add a series today.
+  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`).
+- **Default all three series codes to values with no trailing `-<name>`.** Each series a box opens
+  is named `<code>-<installation name>`, and `stripOwnSuffixes`
+  (`packages/fiscal-verifactu/src/reserved-series.ts`) removes a trailing `-<name>` that matches a
+  recorded installation name, so the defaults are **FS** (simplified invoices), **FF** (full
+  invoices) and **FR** (corrections). Nothing in the dashboard can change or add a series today.
 - **A sale's operation description comes from its department.** Save it on the **Details** tab
   of the department's dialog. When the department has none, the installed fiscal contribution's
   default fills it (`apps/server/src/sale-operation-description.ts`).
@@ -50,36 +49,6 @@ certificate export. The existing walkthrough above remains open.
 `pnpm --filter @waitron/setup exec vitest run src/screens/cert-screen.test.ts` checks that both
 setup languages render three FNMT links under `/en/` and retain the three article identifiers.
 It does not fetch FNMT or check its translations.
-
-## In Demo, a server refusal of a field Demo hides can only be retried unchanged
-
-**Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
-each says whether it was seen in a run or only read in the code:
-
-The shell routes
-  a refused `seriesCode` or `rectificativeSeriesCode` back to the venue
-  screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
-  The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
-  sends the same series codes again, so the operator has nothing to change if the server refused
-  them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
-%s above Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
-  the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
-  server ever refuses Demo's fixed series codes is not established.
-
-## In Demo, a local check that fails only on a field Demo hides
-
-**Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
-each says whether it was seen in a run or only read in the code:
-
-- _In Demo, a local check that fails only on a field Demo hides_ — for example a draft whose series
-  code equals its refund-invoice series code — shows its message above Next once Next has been
-  pressed, while Next stays enabled (it is disabled only by errors on fields the screen shows).
-  In that example both hidden fields carry the same message, and the message above Next is built
-  from every hidden field's error (the `bottom` list in `render`,
-  `apps/setup/src/screens/venue-screen.ts`), so "Use different codes for ordinary and correction
-  invoices." would appear twice. Every press only runs the focus-the-first-invalid-field step and
-  returns, so the draft is never sent. All of this was read in the code, not run; whether a real
-  draft can reach that state has not been tested.
 
 ## A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)
 
