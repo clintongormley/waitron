@@ -405,7 +405,7 @@ describe("A773 pass board: cards", () => {
         row({
           id: "b-item",
           orderId: bill2,
-          order: { orderNumber: 2, kitchenNote: null, openedAt: early },
+          order: { orderNumber: 2, kitchenNote: null, dining: "eat_in", openedAt: early },
         }),
       ],
       EVERY,
