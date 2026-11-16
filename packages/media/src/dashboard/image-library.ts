@@ -645,7 +645,13 @@ export class ImageLibrary extends LitElement {
     const name = usageName(use);
     const inactive =
       "active" in use && !use.active
-        ? ` (${t(use.kind === "department_receipt" ? "image.deleted_department" : "image.archived_product")})`
+        ? ` (${t(
+            use.kind === "department_receipt"
+              ? "image.deleted_department"
+              : use.kind === "variant" && use.productActive
+                ? "image.archived_variant"
+                : "image.archived_product",
+          )})`
         : "";
     if (use.kind === "department_receipt" && !use.active)
       return html`<span>${name}${inactive}</span>`;

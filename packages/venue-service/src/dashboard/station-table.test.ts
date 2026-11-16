@@ -109,7 +109,7 @@ it("names its columns in Spanish, and says so when there are no stations", async
     "Acciones",
   ]);
   const empty = await mount([]);
-  expect(table(empty)?.textContent).toContain("No hay estaciones de preparación");
+  expect(table(empty)?.textContent).toContain("Todavía no hay estaciones de preparación");
 });
 it("omits deleted stations and their supplied status while preserving Default", async () => {
   const el = await mount([

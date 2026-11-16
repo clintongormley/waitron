@@ -25,6 +25,7 @@ export type ImageUsage =
       menuId: string;
       name: string;
       active: boolean;
+      productActive: boolean;
     }
   | {
       kind: "menu_include";

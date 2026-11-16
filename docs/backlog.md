@@ -1282,8 +1282,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
-- **Ui wording sweep** (bundle of 2, size S). [Detail](backlog/languages.md#bundle-ui-wording-sweep)
-
 - **Native speaker review** (bundle of 3, size S, needs a third party). [Detail](backlog/languages.md#bundle-native-speaker-review)
 
 - **Regional languages** (bundle of 3, size L, needs the owner). C125, the staff screens in every

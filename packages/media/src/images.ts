@@ -76,6 +76,8 @@ export type ImageUsage =
       name: string;
       /** The variant AND its product are Active. */
       active: boolean;
+      /** The parent product is Active. */
+      productActive: boolean;
     }
   /**
    * An include's folder photo, held whether or not the include shows as a folder. `id` is the
@@ -271,6 +273,7 @@ async function listImageUsagesForFilename(
           productId: parentId,
           name: staffPresentationName({ name: parentName!, variantName: name }),
           active: active && parentActive === true,
+          productActive: parentActive === true,
         };
   return [
     ...productRows.map(usage),

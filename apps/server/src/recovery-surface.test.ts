@@ -293,7 +293,7 @@ const SPANISH_CHROME = [
   "<h2>Detalles</h2>",
   "Final del registro",
   "Nivel: recovery. Intentos fallidos: 3.",
-  "(aún no hay registro)",
+  "(todavía no hay registro)",
 ];
 
 describe("the page's language", () => {

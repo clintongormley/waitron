@@ -3236,7 +3236,7 @@ it("a missing station closes its printer editor without changing the saved membe
 
 it.each([
   ["en", "No prep stations yet"],
-  ["es", "No hay estaciones de preparación todavía"],
+  ["es", "Todavía no hay estaciones de preparación"],
 ] as const)(
   "Stations shows its localised empty state and no printer read-out with no stations (%s)",
   async (locale, message) => {
