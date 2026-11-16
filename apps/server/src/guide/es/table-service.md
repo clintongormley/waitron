@@ -613,15 +613,25 @@ Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo q
 Si falla **Consultar con el proveedor de pagos**, conserva los datos del pedido y del cobro que
 muestra Pagos con tarjeta y consulta el cobro en el panel del proveedor. No vuelvas a cobrar. Si
 el cobro sigue en la lista, Waitron puede seguir consultándolo automáticamente. Puedes elegir
-**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor.
+**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor. Si la
+comprobación sigue fallando, es un fallo cuya causa aún no se conoce. Conserva los datos del
+pedido y del cobro.
 
 Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si la comprobación
 confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. Si
 el proveedor confirma el cobro, comprueba primero si el pedido original ya está pagado. Si lo
 está, no hace falta hacer nada más. Si era un pedido del Mostrador y sigue sin pagar, busca el
 pedido original en **Mostrador** y elige **Tarjeta** con el mismo proveedor. Waitron registra un
-cobro guardado que coincida. Si el lector pide la tarjeta, cancela sin presentarla. Conserva los
-datos del cobro si no puedes completar este paso.
+cobro guardado que coincida. Para una cuenta de mesa ya presentada al cliente, vuelve a abrir
+la cuenta original y elige **Cobrar** y después **Tarjeta** con el mismo proveedor. Si el lector
+pide la tarjeta, cancela sin presentarla. Si el registro sigue fallando, es un fallo de Waitron
+o de este servidor. Conserva los datos del pedido y del cobro y no vuelvas a cobrar.
+
+Para un pago de mesa que aparezca en **Pagos de cuentas y devoluciones pendientes del proveedor
+de tarjetas**, elige **Consultar al proveedor** allí. Una vez registrado, vuelve a abrir la cuenta
+para ver cuánto queda por pagar. Waitron también reintenta estos pagos automáticamente. Si el
+registro sigue fallando, conserva los datos del pedido y del cobro y no vuelvas a cobrar; es un
+fallo de Waitron o de este servidor.
 
 ## Mover platos a otra cuenta {#move-dishes}
 

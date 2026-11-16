@@ -1562,7 +1562,7 @@ describe("card payments stuck after a restart", () => {
     ],
     [
       { code: "server.internal", status: 500 },
-      "The payment check failed and the payment is still listed. Waitron may still check an unresolved payment automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
+      "The payment check failed and the payment is still listed. Waitron may still check an unresolved payment automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again. If the check keeps failing, this is a fault whose cause is not yet known. Keep the order and payment details.",
     ],
   ])("shows the curated text for a %o refusal and refreshes the list", async (refusal, text) => {
     const listStuckPayments = vi.fn().mockResolvedValue(STUCK);
@@ -1603,6 +1603,15 @@ describe("card payments stuck after a restart", () => {
         expect(result(el)!.textContent).toContain(
           t(listed ? "payments.stuck.failed_listed" : "payments.stuck.failed_removed"),
         );
+        expect(result(el)!.textContent).toContain(
+          locale === "en"
+            ? "If the check keeps failing, this is a fault"
+            : "Si la comprobación sigue fallando, es un fallo",
+        );
+        if (!listed)
+          expect(result(el)!.textContent).toContain(
+            locale === "en" ? "table bill already presented" : "cuenta de mesa ya presentada",
+          );
         expect(q(el, "[data-test=stuck-pay-1]") !== null).toBe(listed);
         const evidence = q(el, "[data-test=stuck-failed-evidence]")!.textContent!;
         for (const value of [
