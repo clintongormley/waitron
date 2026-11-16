@@ -6863,6 +6863,16 @@ unsaved-input handling stays in the payment window. Presented bills keep whole-o
 retained whole-payment confirmations and zero-total completion keep their existing paths.
 Counter bills use the same window for their first and remaining payments.
 
+Whole bill asks the server for one share of the current balance. Its confirmation heading and
+receipt guest-count prompt use that preview, even while the opening balance is still shown.
+Items groups matching whole portions with the bill screen's grouping key and a count control;
+the request carries the selected members' line numbers. Successful table-bill reads refresh idle
+item choices, retaining valid selections and tender input. A selected member that leaves is dropped,
+never replaced by another portion. Idle Pay closes when its bill moves or merges away, including
+its refund child. A pending card or payment/refund send keeps its window on the original bill. Unanswered
+payments retain their original bill and request; reopening that bill at its destination uses the
+retained confirmation.
+
 On an open table bill and a Counter bill, Whole bill also offers Close as deferred payment as a
 secondary action; a presented bill's Pay window offers it under its whole-amount line. It is
 hidden when the device profile lacks the action, the bill still holds money (a payment pending, or

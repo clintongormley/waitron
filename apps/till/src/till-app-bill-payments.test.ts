@@ -2222,17 +2222,22 @@ describe("till-app: a bill payment's refusals and retries", () => {
   });
 
   it("shows a refusal above the action and reads the balance again", async () => {
-    const takeBillPayment = vi.fn().mockRejectedValue({ code: "bill.line_paid", lineNo: 1 });
-    const getBillBalance = vi
-      .fn()
-      .mockResolvedValueOnce(balanceOf())
-      .mockResolvedValue(
-        balanceOf({
-          received: "40.00",
-          outstanding: "80.00",
-          paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
-        }),
-      );
+    let paidElsewhere = false;
+    const takeBillPayment = vi.fn(async () => {
+      paidElsewhere = true;
+      throw { code: "bill.line_paid", lineNo: 1 };
+    });
+    const getBillBalance = vi.fn(async () =>
+      balanceOf(
+        paidElsewhere
+          ? {
+              received: "40.00",
+              outstanding: "80.00",
+              paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
+            }
+          : {},
+      ),
+    );
     const { el } = await mountApp({ takeBillPayment, getBillBalance });
     await openTable(el);
     await openDialog(el, "items");
@@ -2241,8 +2246,10 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("bill.line_paid"));
-    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("form.fix_fields")} ${codeMessage("bill.line_paid")}`,
+    );
+    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(true);
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="1"]')).toBeNull();
   });

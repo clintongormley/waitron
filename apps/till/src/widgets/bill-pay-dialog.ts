@@ -22,7 +22,8 @@ import {
 } from "@waitron/shared";
 import {
   baseStyles,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   formatDecimalInput,
   submitOnEnter,
   leaveCoordinatorFor,
@@ -69,6 +70,7 @@ import {
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
+import { portionGroups } from "../state/portion-groups.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -80,8 +82,7 @@ import { refusalText, type PayRefusal } from "./pay-refusal.js";
 
 export type { PayRefusal } from "./pay-refusal.js";
 
-/** `whole` is the till's own: it asks for a contribution of what is left. */
-export type PayWay = PayChoice["kind"] | "whole";
+export type PayWay = PayChoice["kind"];
 /** `manual` is a card keyed on a terminal the till does not drive; it is sent as a card. */
 type Method = "cash" | "card" | "manual";
 
@@ -95,6 +96,7 @@ export interface PayLine {
   total: string;
   /** One unit's price when the dish can be paid for a unit at a time; null when only whole. */
   unitTotal: string | null;
+  portionKey?: string;
 }
 
 /** What the operator asks the server to allocate: the choice, how it is paid, for a card how it is
@@ -563,13 +565,14 @@ export class TillBillPayDialog extends LitElement {
   @state() private outside: OutsideCardDetails = {};
   @state() private tipMode: TipMode = "none";
   @state() private tipAmount = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private tipAttempted = false;
   /** Unset, the server uses the device's own reader. */
   @state() private chosenReaderId?: string;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
-  /** The refusal still shown: it goes when the field it names changes, or at the next request. */
-  @state() private shownRefusal: PayRefusal | null = null;
+  get #shownRefusal(): PayRefusal | null {
+    return this.#feedback.remaining({ refusal: this.refusal }).refusal ?? null;
+  }
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
@@ -678,7 +681,7 @@ export class TillBillPayDialog extends LitElement {
     this.outside = value.outside;
     this.chosenReaderId = value.readerId;
     this.simulationOutcome = value.simulationOutcome;
-    this.attempted = false;
+    this.#feedback.attempted = false;
   }
 
   #syncDrafts(): void {
@@ -755,7 +758,7 @@ export class TillBillPayDialog extends LitElement {
       this.#tip = undefined;
       this.#tipBaseline = undefined;
       this.#noTip();
-      this.shownRefusal = null;
+      this.#feedback.dismiss("refusal");
       this.#emit("bill-pay-edit");
     };
     if (this.#tip)
@@ -771,8 +774,16 @@ export class TillBillPayDialog extends LitElement {
         this.method = offered[0] ?? "card";
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
+    if (!this.busy && this.asked === null && !this.confirmationLocked) {
+      const picks = new Map<number, number>();
+      for (const line of this.#offered()) {
+        const units = this.picks.get(line.lineNo);
+        if (units !== undefined) picks.set(line.lineNo, Math.min(units, this.#remaining(line)));
+      }
+      this.picks = picks;
+    }
     if (changed.has("refusal")) {
-      this.shownRefusal = this.refusal;
+      this.#feedback.newRefusal();
       const shownPending = (changed.get("taken") as PayTaken | null | undefined)?.pending;
       if (
         (this.#runPending.size > 0 || shownPending !== undefined) &&
@@ -900,7 +911,9 @@ export class TillBillPayDialog extends LitElement {
     this.cardTip = "";
     this.externalRef = "";
     this.outside = {};
-    this.attempted = false;
+    const refusalDismissed = this.#shownRefusal === null;
+    this.#feedback.reset();
+    if (refusalDismissed) this.#feedback.dismiss("refusal");
     this.guestsEntry = undefined;
     this.guestsAttempted = false;
     this.#noTip();
@@ -948,7 +961,7 @@ export class TillBillPayDialog extends LitElement {
   #choice(): PayChoice {
     switch (this.chosenWay) {
       case "whole":
-        return { kind: "contribution", amount: this.balance!.outstanding };
+        return { kind: "whole" };
       case "items":
         return {
           kind: "items",
@@ -1068,15 +1081,15 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #refusalField(): Field | null {
-    return this.shownRefusal === null
+    return this.#shownRefusal === null
       ? null
-      : refusalField(this.shownRefusal, this.method, this.chosenWay);
+      : refusalField(this.#shownRefusal, this.method, this.chosenWay);
   }
 
   #refusalMessage(field: Field): string {
     return field === "tendered"
       ? t("bill_pay.tendered_short")
-      : refusalText(this.shownRefusal!, { checkTime: this.checkTimeOffered, billPayment: true });
+      : refusalText(this.#shownRefusal!, { checkTime: this.checkTimeOffered, billPayment: true });
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
@@ -1089,18 +1102,25 @@ export class TillBillPayDialog extends LitElement {
   /** The one message above the action: the generic one while a field is marked, then a refusal
    * that names no field, in its own words. */
   #bottomMessage(fieldErrors: ReadonlyMap<Field, string>, extra?: string): string {
-    const parts: string[] = [];
-    if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
-    if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(
-        refusalText(this.shownRefusal, { checkTime: this.checkTimeOffered, billPayment: true }),
-      );
-    if (extra !== undefined) parts.push(extra);
-    return parts.join(" ");
+    const refusal = this.#shownRefusal;
+    return bottomMessage(
+      this.#feedback.message({}, new Set(fieldErrors.keys()), t("form.fix_fields")),
+      this.#feedback.message(
+        {
+          refusal:
+            refusal !== null && this.#refusalField() === null
+              ? refusalText(refusal, { checkTime: this.checkTimeOffered, billPayment: true })
+              : undefined,
+          extra,
+        },
+        new Set(),
+        t("form.fix_fields"),
+      ),
+    );
   }
 
   #changed(field: Field): void {
-    if (this.#refusalField() === field) this.shownRefusal = null;
+    if (this.#refusalField() === field) this.#feedback.dismiss("refusal");
   }
 
   #emit(type: string, detail: unknown = {}): void {
@@ -1110,11 +1130,9 @@ export class TillBillPayDialog extends LitElement {
   async #continue(): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy || !this.#canAsk()) return;
     if (this.#heldForEquipment(this.method)) return;
-    this.attempted = true;
-    this.shownRefusal = null;
+    this.#feedback.press("refusal");
     if (this.#ownErrors().size > 0) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     if (this.method !== "cash" && !this.confirmationLocked && this.#cardInProgress()) {
@@ -1285,7 +1303,7 @@ export class TillBillPayDialog extends LitElement {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
     const actions = html`<wt-form-actions slot="footer"
-      >${recoveryLink(this.shownRefusal)}
+      >${recoveryLink(this.#shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1312,8 +1330,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   async #focusInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.shadowRoot!);
+    await this.#feedback.focus(this.shadowRoot!);
   }
 
   #guestsDetail(shown: boolean): ReceiptGuestsDetail {
@@ -1498,14 +1515,26 @@ export class TillBillPayDialog extends LitElement {
         return this.balance === null
           ? ""
           : t("table.bill_to_pay").replace("{amount}", () =>
-              this.#money(this.balance!.outstanding),
+              this.#money(
+                this.asked?.choice.kind === "whole" && this.preview?.kind === "allocated"
+                  ? this.preview.applied
+                  : this.balance!.outstanding,
+              ),
             );
       case "items": {
         const picked = this.#picked();
         if (picked.length === 0) return t("bill_pay.scope_items_none");
-        const names = picked
-          .map((line) => {
-            const shown = this.#shownQuantity(line, this.picks.get(line.lineNo)!);
+        const names = portionGroups(
+          picked,
+          (line) => line.portionKey ?? null,
+          (line) => line.lineNo,
+        )
+          .map((group) => {
+            const line = group[0]!;
+            const shown =
+              group.length > 1
+                ? String(group.length)
+                : this.#shownQuantity(line, this.picks.get(line.lineNo)!);
             return shown === "1" ? line.name : `${line.name} ×${shown}`;
           })
           .join(", ");
@@ -1590,7 +1619,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #form(): SheetView {
-    const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
     const body = html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
@@ -1618,7 +1647,7 @@ export class TillBillPayDialog extends LitElement {
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       ${this.#methods().length === 0 ? this.#notice() : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${bottom}
-      >${recoveryLink(this.shownRefusal)}
+      >${recoveryLink(this.#shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1702,7 +1731,13 @@ export class TillBillPayDialog extends LitElement {
       return html`<p class="muted" data-items-none>${t("bill_pay.items_none")}</p>`;
     return html`<fieldset class="choice" data-pay-lines ?disabled=${this.busy}>
       <legend>${t("bill_pay.items")}<span class="required" aria-hidden="true">*</span></legend>
-      <div class="lines">${offered.map((line) => this.#lineRow(line, error !== undefined))}</div>
+      <div class="lines">
+        ${portionGroups(
+          offered,
+          (line) => line.portionKey ?? null,
+          (line) => line.lineNo,
+        ).map((group) => this.#lineRow(group, error !== undefined))}
+      </div>
       ${
         error === undefined
           ? nothing
@@ -1711,13 +1746,32 @@ export class TillBillPayDialog extends LitElement {
     </fieldset>`;
   }
 
-  #lineRow(line: PayLine, invalid: boolean): TemplateResult {
-    const remaining = this.#remaining(line);
-    const units = this.picks.get(line.lineNo);
-    const quantity = this.#shownQuantity(line, remaining);
-    const label = `${line.name} ×${quantity} · ${this.#money(this.#pickAmount(line, remaining))}`;
+  #lineRow(group: PayLine[], invalid: boolean): TemplateResult {
+    const line = group[0]!;
+    const grouped = group.length > 1;
+    const remaining = grouped ? group.length : this.#remaining(line);
+    const selected = group.filter((member) => this.picks.has(member.lineNo));
+    const units = grouped ? selected.length || undefined : this.picks.get(line.lineNo);
+    const quantity = grouped ? String(remaining) : this.#shownQuantity(line, remaining);
+    const total = grouped
+      ? sumDecimals(group.map((member) => decimal(member.total)))
+      : this.#pickAmount(line, remaining);
+    const label = `${line.name} ×${quantity} · ${this.#money(total)}`;
+    const setCount = (count: number) => {
+      const next = new Map(this.picks);
+      for (const member of group) next.delete(member.lineNo);
+      const chosen = [...selected, ...group.filter((member) => !this.picks.has(member.lineNo))];
+      for (const member of chosen.slice(0, count)) next.set(member.lineNo, 1);
+      this.picks = next;
+      this.#changedDraft();
+      this.#changed("lines");
+    };
     const toggle = () => {
       if (!this.isConnected || !this.#active || this.busy) return;
+      if (grouped) {
+        setCount(units === undefined ? 1 : 0);
+        return;
+      }
       const next = new Map(this.picks);
       if (next.has(line.lineNo)) next.delete(line.lineNo);
       else next.set(line.lineNo, remaining);
@@ -1742,16 +1796,25 @@ export class TillBillPayDialog extends LitElement {
         <span>${label}</span>
       </label>
       ${
-        units === undefined || line.unitTotal === null || remaining <= 1
+        units === undefined || (!grouped && line.unitTotal === null) || remaining <= 1
           ? nothing
-          : this.#unitsStepper(line, units, remaining)
+          : this.#unitsStepper(line, units, remaining, grouped ? setCount : undefined)
       }
     </div>`;
   }
 
-  #unitsStepper(line: PayLine, units: number, remaining: number): TemplateResult {
+  #unitsStepper(
+    line: PayLine,
+    units: number,
+    remaining: number,
+    setCount?: (count: number) => void,
+  ): TemplateResult {
     const step = (delta: -1 | 1) => {
       if (!this.isConnected || !this.#active || this.busy) return;
+      if (setCount !== undefined) {
+        setCount(units + delta);
+        return;
+      }
       const next = new Map(this.picks);
       next.set(line.lineNo, units + delta);
       this.picks = next;
@@ -1966,7 +2029,7 @@ export class TillBillPayDialog extends LitElement {
   /** Asks the server again with `addedTip` as the tip left from the change. */
   #askWithTip(asked: PayRequest, cash: CashPay, addedTip: string | undefined): void {
     const pay: CashPay = { method: "cash", tendered: cash.tendered };
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     this.#emit("bill-pay-preview", {
       ...asked,
       pay: addedTip === undefined ? pay : { ...pay, addedTip },
@@ -2003,7 +2066,7 @@ export class TillBillPayDialog extends LitElement {
         return;
       }
     }
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     const reader =
       this.handheld && onReader && !this.confirmationLocked ? this.#readyReader() : null;
     this.#sent = reader === null ? null : sentCard(reader, preview.charged!);
@@ -2021,7 +2084,8 @@ export class TillBillPayDialog extends LitElement {
     return (
       this.asksGuests &&
       this.balance !== null &&
-      compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0
+      (this.asked?.choice.kind === "whole" ||
+        compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
     );
   }
 
@@ -2132,7 +2196,7 @@ export class TillBillPayDialog extends LitElement {
       }
       ${guestsShown ? this.#guests(errors.get("guests")) : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${bottom}
-      >${recoveryLink(this.shownRefusal)} ${this.#backButton()}
+      >${recoveryLink(this.#shownRefusal)} ${this.#backButton()}
       <wt-button
         variant="primary"
         data-pay-confirm
@@ -2150,7 +2214,7 @@ export class TillBillPayDialog extends LitElement {
               : readerButtonLabel(
                   reader.name,
                   this.#money(preview.charged!),
-                  this.shownRefusal?.code === "declined",
+                  this.#shownRefusal?.code === "declined",
                 )
         }
       </wt-button>
@@ -2208,7 +2272,7 @@ export class TillBillPayDialog extends LitElement {
     return {
       body,
       actions: html`<wt-form-actions slot="footer" .error=${bottom}
-        >${recoveryLink(this.shownRefusal)}${this.#backButton()}</wt-form-actions
+        >${recoveryLink(this.#shownRefusal)}${this.#backButton()}</wt-form-actions
       >`,
     };
   }
@@ -2230,7 +2294,7 @@ export class TillBillPayDialog extends LitElement {
 
   #choose(asked: PayRequest, allocation: AllocationChoice): void {
     if (!this.isConnected || !this.#active || this.busy) return;
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     this.#noTip();
     this.#emit("bill-pay-preview", { ...asked, allocation } satisfies PayRequest);
   }

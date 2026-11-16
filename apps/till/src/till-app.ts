@@ -12807,6 +12807,7 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead || billId !== this.activeTabId) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
+      this.#refreshOpenPayLines(billId);
     } catch {
       if (read === this.#tabLinesRead && billId === this.activeTabId)
         this.#tableOffers.liveFields = undefined;
@@ -12838,6 +12839,7 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
+      this.#refreshOpenPayLines(billId);
     } catch {
       if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
       this.tabLines = [];
@@ -13299,14 +13301,25 @@ export class TillApp extends LitElement {
         ? Promise.resolve()
         : Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
       void refresh.finally(() => {
-        if (this.isConnected && (this.#draftSync !== undefined || this.#splitPanel !== undefined))
+        if (
+          this.isConnected &&
+          (this.#draftSync !== undefined ||
+            this.#splitPanel !== undefined ||
+            (this.billPaying?.surface === "table" && this.billPaying.billId === this.activeTabId))
+        )
           this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
   }
 
   async #rereadBillsOnTimer(): Promise<void> {
-    const partyId = this.#draftSync?.partyId ?? this.#splitPanel?.partyId;
+    const paying = this.billPaying;
+    const partyId =
+      this.#draftSync?.partyId ??
+      this.#splitPanel?.partyId ??
+      (paying?.surface === "table" && paying.billId === this.activeTabId
+        ? this.orderParty?.id
+        : undefined);
     if (
       partyId === undefined ||
       partyId !== this.orderParty?.id ||
@@ -13316,6 +13329,8 @@ export class TillApp extends LitElement {
     )
       return;
     await this.#loadPartyBills(undefined, true, true);
+    if (this.billPaying?.surface === "table" && this.billPaying.billId === this.activeTabId)
+      await this.#refreshTableLines();
   }
 
   /** Holds the window for this till's own change to the bills while `run` is under way. Move this
@@ -13715,6 +13730,19 @@ export class TillApp extends LitElement {
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
     const sync = this.#draftSync;
+    if (gone !== undefined) {
+      const paying = this.billPaying;
+      if (
+        paying?.surface === "table" &&
+        paying.billId === gone &&
+        !paying.busy &&
+        paying.taken?.pending === undefined &&
+        this.#pendingReread?.dialogId !== paying.id &&
+        !(this.billRefunding?.payId === paying.id && this.billRefunding.busy) &&
+        !this.#billPaymentHeld(gone)
+      )
+        this.#closeBillPaying();
+    }
     this.activeTabId = next;
     this.#billAfterSplit = undefined;
     if (gone !== undefined) {
@@ -13766,14 +13794,13 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /** The balance of the bill on screen when its party's bills say it holds a payment; none
-   * otherwise, or when the read fails. A `known` balance of that bill, just read or answered, is
-   * taken rather than read again. */
   async #loadBillBalance(known?: BillBalance): Promise<void> {
     const read = ++this.#billBalanceRead;
     const billId = this.activeTabId;
     const bill = this.partyBills.find((row) => row.workingOrderId === billId);
-    if (billId === undefined || bill?.hasPayments !== true) {
+    const paying = this.billPaying;
+    const open = paying?.surface === "table" && paying.billId === billId;
+    if (billId === undefined || (bill?.hasPayments !== true && !open)) {
       this.billBalance = null;
       return;
     }
@@ -13781,11 +13808,15 @@ export class TillApp extends LitElement {
       this.billBalance = known;
       return;
     }
+    const sentAt = ++this.#payTicks;
     try {
       const balance = await this.api.getBillBalance(billId);
-      if (read === this.#billBalanceRead) this.billBalance = balance;
+      if (read === this.#billBalanceRead) {
+        if (open) await this.#showBillPayingBalance(paying.id, billId, balance, sentAt);
+        else this.billBalance = balance;
+      }
     } catch {
-      if (read === this.#billBalanceRead) this.billBalance = null;
+      if (read === this.#billBalanceRead && !open) this.billBalance = null;
     }
   }
 
@@ -20643,6 +20674,12 @@ export class TillApp extends LitElement {
     return payLines(this.tabLines, (line) => line.name ?? "");
   }
 
+  #refreshOpenPayLines(billId: string): void {
+    const open = this.billPaying;
+    if (open?.surface === "table" && open.billId === billId && open.asked === null && !open.busy)
+      this.billPaying = { ...open, lines: this.#payLinesOnScreen() };
+  }
+
   /** The bill payment dialog on the bill on screen, unless one is open already; the balance last
    * read shows at once and is read again. */
   async #openBillPaying(
@@ -20680,6 +20717,8 @@ export class TillApp extends LitElement {
       ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
+    if (open.surface === "table" && this.#draftSync === undefined && this.#splitPanel === undefined)
+      this.#scheduleBillDraftRefresh();
     if (this.handheldMode) void this.#readForSheet();
     await this.#rereadBillPaying(open.id, billId, order);
     return open;
@@ -21363,6 +21402,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };
+    if (open.billId === this.activeTabId) this.#refreshOpenPayLines(open.billId);
   }
 
   /** A device with no counter screen holds a counter bill only to pay it from Find a bill, so the

@@ -989,15 +989,6 @@ A handheld's top bar fits at the same width. Slice 2 did not change the top bar,
 so I believe it predates it.
 
 
-## A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).
-
-"12 ×
-Croquetas" is twelve rows to tick, because A739's payment window holds those files
-(`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Since A1208 the counter's
-Pay items on a part-paid counter order lists one row per portion too. Once A739 releases them,
-group the rows with a count that sends the members' line numbers.
-
-
 ## A1235. Parked orders, Waiting and department transfers can still name a table bill by an old table (left open by A803 slice 2).
 
 Parked orders now shows a table bill's stored number and
@@ -1699,27 +1690,6 @@ Printer identity is separate from the till route inventory.
 
 - **Qualify printer identity at enrolment.** Complete the device enrolment design's printer track.
   [Detail](till.md#printer-identity-at-enrolment).
-
-## Bundle: The pay window, after A739
-
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** Once A739
-  releases them, group the rows with a count that sends the members' line numbers.
-  [Detail](till.md#a1191-pay-items-lists-one-row-per-portion-left-open-by-a803-slice-1-d15)
-- **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
-  card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Decide whether
-  the window closes or follows the screen, and keep an unanswered card payment's view reachable.
-  [Detail](till.md#a1266-a-payment-window-stays-on-a-bill-another-till-moved-or-merged-away-and-an-unanswered-card-payments-view-leaves-this-tills-screen)
-- **A1300. "Pay the whole" sends the amount the pay dialog read, so a bill that grew meanwhile is
-  left owing (found by A803 slice 4a's review of moving dishes onto a part-paid bill).** Decide
-  whether a whole payment carries what it read and is refused when the bill has grown.
-  [Detail](till.md#a1300-pay-the-whole-sends-the-amount-the-pay-dialog-read-so-a-bill-that-grew-meanwhile-is-left-owing)
-- **A1291. Another till's open Pay items list is not refreshed when dishes leave its bill (seen in
-  A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list still showed the
-  dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
-  it right.
-  [Detail](till.md#a1291-another-tills-open-pay-items-list-is-not-refreshed-when-dishes-leave-its-bill)
 
 ## Bundle: Close the day: count the cash, record cash in and out, waiter floats
 
@@ -3545,12 +3515,12 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1191, A1193–A1195, A1197, A1198, A1201 and A1217 under
+ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1197, A1198, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1261 and A1265–A1267. Slice
+main bill, has landed (#2360); it leaves open A1261, A1265 and A1267. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-has landed (#2372); it leaves open A1287–A1294 and A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
+has landed (#2372); it leaves open A1287–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1347–A1349, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
@@ -3580,19 +3550,6 @@ first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
 one item shorter (Move dishes… replaced Split by item and Transfer items). Measured then (slice
 4a's LOOK, list content 647 px): at 1280×900 it fits in English and Spanish (649 px); at 390×844
 it scrolls by 8 px in English and 78 px in Spanish, where the list starts lower.
-
-## A1266. A payment window stays on a bill another till moved or merged away, and an unanswered card payment's view leaves this till's screen
-
-**A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
-card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Since the LOOK
-fix F1 the table screen moves off such a bill, but its payment window (`bill-pay` in
-`apps/till/src/till-app.ts`, which follows `billPaying.billId`) stays open on the gone bill, and a
-payment taken there is refused (`requireOpenBill` in `apps/server/src/bill-payments.ts`,
-`working_order.not_open`). Seen in the LOOK fix review (its probe C). By reading, not run: if
-another till moves a bill whose card payment has no answer yet, the pay area's confirmation view
-(`#unansweredWholePayments`, keyed by the bill on screen) is no longer drawn on this till once its
-screen moves. Decide whether the window closes or follows the screen, and keep an unanswered card
-payment's view reachable.
 
 ## A1267. Retained changes on a vanished bill have no place when the replacement already holds changes
 
@@ -3634,19 +3591,6 @@ waiter has to find it. The panel offered that bill with no sign of the unsent di
 the approved `draft.taken_over` text the plan chose (D9); after Take over the move works. Decide
 the words, and whether the refusal offers Take over in place. Pictures `s7-*`, `s8-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
-## A1300. "Pay the whole" sends the amount the pay dialog read, so a bill that grew meanwhile is left owing
-
-**A1300. "Pay the whole" sends the amount the pay dialog read, so a bill that grew meanwhile is
-left owing (found by A803 slice 4a's review of moving dishes onto a part-paid bill).** The pay
-dialog's whole choice sends a contribution of the `balance.outstanding` it read when it opened
-(`apps/till/src/widgets/bill-pay-dialog.ts`, `#choice()`). The reviewer's probe: Bill 2 holds
-€5 and reads €27.00 outstanding, a €3 Caña moves onto it, and a contribution of €27 is accepted
-with `outstandingAfter: "3.00"`; a share of one at the old amount is refused
-`bill.allocation_changed`. Not checked whether adding a dish from another till does the same,
-nor how the dialog shows the answer. Decide whether a whole payment carries what it read and is
-refused when the bill has grown. Probe:
-`~/waitron-campaign-c/a803-4-reviews/q2-experiments/move-dishes.q2-probe.test.ts`.
-
 ## A1290. The table screen's action panel can put Back and its action half below the window, and "+ New bill" touches Back
 
 **A1290. The table screen's action panel can put Back and its action half below the window, and
@@ -3660,14 +3604,6 @@ Since the grey reason gained ": move fewer dishes" (owner, 2026-11-01) it wraps 
 so Back and Move sit fully below the window at 1280×900 and are cut at the bottom at 390×844 in
 Spanish (re-taken pictures `slice4a-paid-floor-long-names-destination.png`,
 `slice4a-spanish-phone.png`).
-
-## A1291. Another till's open Pay items list is not refreshed when dishes leave its bill
-
-**A1291. Another till's open Pay items list is not refreshed when dishes leave its bill (seen in
-A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list still showed the
-dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
-it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
-on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
 ## An unpaid table bill showed two "Full invoice" buttons
 
