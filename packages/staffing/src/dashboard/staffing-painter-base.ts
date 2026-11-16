@@ -28,7 +28,7 @@ export abstract class StaffingPainterBase<
   @property({ attribute: false }) api!: StaffingApi;
   /** The address's area key; the picker starts there and never writes it back. */
   @property() area = "";
-  /** The Calendar's month, YYYY-MM, kept when stepping and closing. */
+  /** The Calendar's month, YYYY-MM, kept when closing. */
   @property() month = "";
   @property({ type: Boolean }) readOnly = false;
   /** Moves the Calendar's address. */
