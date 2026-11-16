@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { BillEditExpected, PartyBill, SplitSources } from "./api/client.js";
+import type { BillEditExpected, PartyBill, SplitSources, TillApi } from "./api/client.js";
 import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
@@ -266,6 +266,28 @@ describe("a refusal's own reads have a time limit", () => {
     await timedRead(el);
 
     expect(sources).toHaveBeenCalledTimes(2);
+  });
+
+  it("a successful split's follow-up floor read expires at 25 seconds and ignores a late answer", async () => {
+    const el = await billTwoTicked();
+    const floorRead = held<ReturnType<typeof atFloor>>();
+    api.getTablesState!.mockReset().mockImplementationOnce(floorRead.read);
+    await press(el, "[data-split-confirm]");
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    try {
+      await vi.advanceTimersByTimeAsync(LIMIT - 1);
+      await flush(el);
+      expect(tableOrder(el)!.tables.length).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(1);
+      await flush(el);
+      expect(tableOrder(el)!.tables).toEqual([]);
+      floorRead.calls[0]!.answer(atFloor(9));
+      await flush(el);
+      expect(tableOrder(el)!.tables).toEqual([]);
+    } finally {
+      hidden.mockRestore();
+    }
   });
 
   it("a panel left with its rows still owed: the next panel's first read gets its own 25 seconds", async () => {
@@ -914,6 +936,35 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
     expect(tableOrder(el)!.orderId).toBeUndefined();
     return { el, floors };
   }
+
+  it("an ordinary bills read keeps its budget while the panel's first-bill lines are out", async () => {
+    const { el, floors } = await reloadOut();
+    const lines = held<Awaited<ReturnType<TillApi["getTabLines"]>>>();
+    api.getTabLines!.mockReset().mockImplementation(lines.read);
+    floors.calls[0]!.answer(stillTogether());
+    await flush(el);
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("b9");
+    expect(lines.calls).toHaveLength(1);
+    const bills = held<PartyBill[]>();
+    api.getTablesState!.mockResolvedValue(stillTogether());
+    api.getPartyBills!.mockReset().mockImplementation(bills.read);
+    api.setPartyName = vi.fn().mockResolvedValue({ revision: 4 });
+    emit(tableOrder(el)!, "name-party", { name: "Lunch" });
+    await flush(el);
+    expect(bills.calls).toHaveLength(1);
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    try {
+      await vi.advanceTimersByTimeAsync(26_000);
+      await flush(el);
+      expect(bills.calls).toHaveLength(1);
+      bills.calls[0]!.answer([partyBill("b10", 2, "30.00")]);
+      await flush(el);
+      expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["b10"]);
+    } finally {
+      hidden.mockRestore();
+    }
+  });
 
   const pressSplit = async (el: TillApp) => {
     await press(el, "[data-split-confirm]");

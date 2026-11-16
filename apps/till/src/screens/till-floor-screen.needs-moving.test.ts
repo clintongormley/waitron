@@ -99,13 +99,13 @@ const cardButton = (el: TillFloorScreen, id: string, which: "leave-here" | "mark
 function deferred(): {
   promise: Promise<{ zoneId: string; revision: number }>;
   answer: () => void;
-  refuse: () => void;
+  refuse: (code?: string) => void;
 } {
   let answer!: () => void;
-  let refuse!: () => void;
+  let refuse!: (code?: string) => void;
   const promise = new Promise<{ zoneId: string; revision: number }>((resolve, reject) => {
     answer = () => resolve({ zoneId: "z1", revision: 7 });
-    refuse = () => reject({ code: "floor_today.out_of_date" });
+    refuse = (code = "floor_today.out_of_date") => reject({ code });
   });
   return { promise, answer, refuse };
 }
@@ -226,7 +226,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(api.markMovedToday).toHaveBeenCalledWith("t3", 6);
   });
 
-  it.each(["answers", "refuses"] as const)(
+  it.each(["answers", "refuses", "fails"] as const)(
     "sequences two list presses in one room when the first %s",
     async (outcome) => {
       const api = stubApi();
@@ -241,11 +241,15 @@ describe("till-floor-screen: a table that needs moving", () => {
       expect(api.markMovedToday).not.toHaveBeenCalled();
       expect(cardButton(el, "t4", "mark-moved").disabled).toBe(true);
       if (outcome === "answers") first.answer();
-      else first.refuse();
+      else first.refuse(outcome === "refuses" ? "floor_today.out_of_date" : "server.internal");
       await vi.waitFor(() =>
         expect(api.markMovedToday).toHaveBeenCalledWith("t4", outcome === "answers" ? 7 : 6),
       );
-      expect(refusal(el)).toBeNull();
+      expect(refusal(el)).toBe(
+        outcome === "answers"
+          ? null
+          : codeMessage(outcome === "refuses" ? "floor_today.out_of_date" : "server.internal"),
+      );
     },
   );
 

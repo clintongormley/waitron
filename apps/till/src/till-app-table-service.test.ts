@@ -2,7 +2,15 @@ import { es } from "./i18n/strings.js";
 import { openOrderAddress } from "../test/order-address.js";
 import { userEvent } from "vitest/browser";
 import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
-import { balanceOf, cash, takenOf } from "../test/bill-pay-app.js";
+import {
+  balanceOf,
+  cash,
+  takenOf,
+  dialog as payingDialog,
+  type as typePay,
+  press as pressPay,
+  openDialog as openPay,
+} from "../test/bill-pay-app.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -3820,7 +3828,11 @@ describe("A803 action results: the bill on screen after a table action", () => {
 
   /** Opens table 2, whose party's only bill is wo-8, and splits table 3 off with that bill. Each
    * bills read after the split takes the next of `reads`, the last repeating; an Error is thrown. */
-  async function splitOffOnlyBill(reads: (PartyBill[] | Error)[], loose = false) {
+  async function splitOffOnlyBill(
+    reads: (PartyBill[] | Error)[],
+    loose = false,
+    overrides: Record<string, unknown> = {},
+  ) {
     let floorAfter = false;
     const t3 = { id: "t3", label: "3" };
     const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
@@ -3843,6 +3855,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
         floorAfter = true;
         return { partyId: "v-new", billIds: ["wo-8"] };
       }),
+      ...overrides,
     });
     const screen = await toTableOrder(mounted.el);
     emit(screen, "split-table", {
@@ -3933,12 +3946,83 @@ describe("A803 action results: the bill on screen after a table action", () => {
       await flush(el);
       await flush(el);
       expect(tableOrder(el)!.orderId).toBe("wo-10");
+      expect(tableOrder(el)!.billGone).toBeNull();
       expect(api.getTabLines).toHaveBeenLastCalledWith("wo-10");
       expect(await nextSavedBill(el)).toBe("wo-10");
       expect(api.splitTable).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each(["busy", "unconfirmed"] as const)(
+    "a delayed paid-bill follow keeps its %s payment window and bill",
+    async (state) => {
+      const reads: (PartyBill[] | Error)[] = [
+        new TypeError("Failed to fetch"),
+        new TypeError("Failed to fetch"),
+      ];
+      let release!: (value: ReturnType<typeof cash>) => void;
+      const preview = new Promise<ReturnType<typeof cash>>((resolve) => (release = resolve));
+      const { el } = await splitOffOnlyBill(reads, true, {
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, capabilities: ["print-receipt", "take-cash"] }),
+        previewBillPayment: vi
+          .fn()
+          .mockImplementation(() =>
+            state === "busy" ? preview : Promise.resolve(cash("1.00", "0.00")),
+          ),
+        takeBillPayment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      await openPay(el, "contribution");
+      await typePay(el, "amount", "1");
+      await typePay(el, "tendered", "1");
+      await pressPay(el, "[data-pay-continue]");
+      if (state === "unconfirmed") {
+        await pressPay(el, "[data-pay-confirm]");
+        await vi.waitFor(() => expect(payingDialog(el)!.confirmationLocked).toBe(true), {
+          timeout: 10_000,
+        });
+      } else expect(payingDialog(el)!.busy).toBe(true);
+      const panel = payingDialog(el)!;
+      reads.splice(0, reads.length, [
+        partyBill("wo-8", "v-2", 1, "settled"),
+        partyBill("wo-10", "v-2", 2),
+      ]);
+      await nameParty(el, "Ana");
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(payingDialog(el)).toBe(panel);
+      expect(state === "busy" ? panel.busy : panel.confirmationLocked).toBe(true);
+      release(cash("1.00", "0.00"));
+      await flush(el);
+    },
+  );
+
+  it("a bill explicitly chosen after a split stays chosen, including a later return to the paid bill", async () => {
+    const reads: (PartyBill[] | Error)[] = [
+      new TypeError("Failed to fetch"),
+      new TypeError("Failed to fetch"),
+    ];
+    const { el } = await splitOffOnlyBill(reads, true, {
+      createPartyBill: vi.fn().mockResolvedValue({ billId: "wo-10", revision: 5 }),
+    });
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-new-bill]")!.click();
+    await flush(el);
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-10");
+    reads.splice(0, reads.length, [
+      partyBill("wo-8", "v-2", 1, "settled"),
+      partyBill("wo-10", "v-2", 3),
+      partyBill("wo-9", "v-2", 2),
+    ]);
+    await nameParty(el, "Ana");
+    expect(tableOrder(el)!.orderId).toBe("wo-10");
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-switch-bill="wo-8"]')!.click();
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    await nameParty(el, "Eva");
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
   });
 
   it("Split a table giving away the staying party's only bill shows the empty bill the server made for it once a bills read succeeds after one that failed", async () => {

@@ -1332,10 +1332,7 @@ export class TillFloorScreen extends LitElement {
     this.sendingToday = new Map(this.sendingToday).set(table.id, action);
     const previous = this.#todayTurns.get(table.zoneId) ?? Promise.resolve();
     const turn = previous
-      .then(() => {
-        this.refusal = null;
-        return this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)));
-      })
+      .then(() => this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent))))
       .finally(() => {
         const sending = new Map(this.sendingToday);
         sending.delete(table.id);
