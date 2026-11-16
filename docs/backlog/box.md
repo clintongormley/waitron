@@ -257,11 +257,7 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
 
 The image ships with backups OFF, deliberately.
 
-Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env`; module selection travels inside `venue.db`; the replacement's private `cloud/recovery.json`, `cloud/replacement.json` and
-`cloud/connection.json` stay outside that named capture set and the captured ciphertext archive.
-The exclusion set for the deeper change is `scratch/`,
-`logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
-bundle. Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot success-path integration
+Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot success-path integration
 test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
 `packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails safe under GCM auth
 today); generalise archive entry routing off declared source ids when a second non-DB source lands.

@@ -1,3 +1,4 @@
+import { OPTIONAL_BACKUP_STATE } from "@waitron/store";
 import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import { join } from "node:path";
  * `RECOVERY_FILES` (`state-secrets.ts`), a missing one is skipped, never
  * `recovery.state_incomplete`.
  */
-export const OPTIONAL_BACKUP_STATE = ["backup.env"] as const;
+export { OPTIONAL_BACKUP_STATE };
 
 /** Skips only a missing file; any other read error rethrows rather than shipping a short archive. */
 export async function collectOptionalStateFiles(
