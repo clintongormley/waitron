@@ -6,7 +6,7 @@ authorises implementation and landing
 through the campaign queue; this plan has no separate owner approval.
 
 **Ask:** “Other server test files still hash fixed PINs and passwords on every test”
-(`docs/backlog/ci.md:1010–1019`): “Move the set-up ones over; leave any test that is about hashing.”
+(quoted from `docs/backlog/ci.md` at `091b87aa48`, lines 1010–1019): “Move the set-up ones over; leave any test that is about hashing.”
 Deliver one measured, bounded PR using `fixturePinHash` and `fixturePasswordHash` from
 `apps/server/src/testing/known-secret-hashes.ts`.
 
