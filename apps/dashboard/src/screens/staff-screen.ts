@@ -66,21 +66,6 @@ export class StaffScreen extends LitElement {
       .download-error p {
         margin: 0;
       }
-      .filters {
-        display: grid;
-        grid-template-columns: minmax(calc(var(--wt-space-6) * 7), 1fr) repeat(
-            2,
-            minmax(calc(var(--wt-space-6) * 5), auto)
-          );
-        gap: var(--wt-space-3);
-        align-items: start;
-        margin-bottom: var(--wt-space-4);
-      }
-      @media (max-width: 42rem) {
-        .filters {
-          grid-template-columns: 1fr;
-        }
-      }
     `,
   ];
 
@@ -517,8 +502,41 @@ export class StaffScreen extends LitElement {
         <h1 class="title">${t("staff.title")}</h1>
         <div class="actions">${this.#renderAdd()}</div>
       </div>
-      <div class="filters" aria-label=${t("staff.filters")}>
+      <dashboard-staff-list
+        .accessRoles=${this.accessRoles}
+        .people=${this.people}
+        .serverPaging=${this.paging}
+        .externalFilterCount=${Number(this.roleFilter.length > 0) + Number(this.statusFilter !== "all")}
+        @wt-filters-clear=${(event: Event) => {
+          event.stopPropagation();
+          this.roleFilter = [];
+          this.statusFilter = "all";
+        }}
+        @wt-query-change=${(
+          event: CustomEvent<Pick<PersonPageQuery, "sortKey" | "sortDirection">>,
+        ) => {
+          event.stopPropagation();
+          this.#sort = { sortKey: event.detail.sortKey, sortDirection: event.detail.sortDirection };
+          this.#requestPage();
+        }}
+        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
+          event.stopPropagation();
+          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
+          else this.#pages.move(event.detail.page);
+        }}
+        .searchTerm=${this.search}
+        .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}
+        .currentPersonId=${this.currentPersonId}
+        .canAdminister=${this.canAdminister}
+        .canExportPersonalData=${this.canExportPersonalData}
+        .downloadingPersonId=${this.downloadingPerson?.personId ?? null}
+        @download-person-data=${(event: CustomEvent<{ personId: string }>) =>
+          void this.#onDownloadPersonData(event)}
+        @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
+        @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
+      >
         <wt-input
+          slot="toolbar-search"
           data-test="search"
           name="search"
           type="search"
@@ -529,6 +547,7 @@ export class StaffScreen extends LitElement {
             (this.search = event.detail.value)}
         ></wt-input>
         <wt-combobox
+          slot="filters-start"
           data-test="role-filter"
           name="role-filter"
           label=${t("staff.filter_role")}
@@ -545,6 +564,7 @@ export class StaffScreen extends LitElement {
         ></wt-combobox>
         <wt-combobox
           ?preserve-order=${true /* Preserve current/active/pending/suspended/all lifecycle. */}
+          slot="filters-start"
           data-test="status-filter"
           name="status-filter"
           label=${t("staff.filter_status")}
@@ -568,34 +588,7 @@ export class StaffScreen extends LitElement {
             >${t("staff.filter_current_help")}</wt-help-tooltip
           >
         </wt-combobox>
-      </div>
-      <dashboard-staff-list
-        .accessRoles=${this.accessRoles}
-        .people=${this.people}
-        .serverPaging=${this.paging}
-        @wt-query-change=${(
-          event: CustomEvent<Pick<PersonPageQuery, "sortKey" | "sortDirection">>,
-        ) => {
-          event.stopPropagation();
-          this.#sort = { sortKey: event.detail.sortKey, sortDirection: event.detail.sortDirection };
-          this.#requestPage();
-        }}
-        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
-          event.stopPropagation();
-          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
-          else this.#pages.move(event.detail.page);
-        }}
-        .searchTerm=${this.search}
-        .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}
-        .currentPersonId=${this.currentPersonId}
-        .canAdminister=${this.canAdminister}
-        .canExportPersonalData=${this.canExportPersonalData}
-        .downloadingPersonId=${this.downloadingPerson?.personId ?? null}
-        @download-person-data=${(event: CustomEvent<{ personId: string }>) =>
-          void this.#onDownloadPersonData(event)}
-        @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
-        @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
-        >${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
+        ${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
       >
       ${
         this.errorKey && !this.editOpen && !this.formOpen && this.rowAction === null

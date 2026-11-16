@@ -3,6 +3,7 @@ import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget as mountBaseWidget } from "../widgets/test-helpers.js";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -1633,6 +1634,54 @@ describe("staff-screen filter fields", () => {
   };
   const field = (el: StaffScreen, selector: string) =>
     el.shadowRoot!.querySelector(selector) as Field | null;
+
+  it.each([390, 1280])(
+    "keeps search beside Customise and opens usable filters at %ipx",
+    async (width) => {
+      const previous = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+          api: stubApi(),
+        });
+        await flush(el);
+        const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
+        const search = field(el, "[data-test=search]")!;
+        const chooser = table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!;
+        await vi.waitFor(() => {
+          const searchBox = search.getBoundingClientRect();
+          const chooserBox = chooser.getBoundingClientRect();
+          expect(searchBox.width).toBeGreaterThan(0);
+          expect(chooserBox.top).toBeLessThan(searchBox.bottom);
+          expect(chooserBox.bottom).toBeGreaterThan(searchBox.top);
+        });
+        const trigger = table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+        expect(trigger.getAttribute("aria-label")).toBe(`${t("table.filters")} 1`);
+        await userEvent.click(trigger);
+        const role = field(el, "[data-test=role-filter]")!;
+        const status = field(el, "[data-test=status-filter]")!;
+        expect(role.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(status.getBoundingClientRect().width).toBeGreaterThan(0);
+        await chooseOptions(role, ["manager"]);
+        await vi.waitFor(() =>
+          expect(trigger.getAttribute("aria-label")).toBe(`${t("table.filters")} 2`),
+        );
+        await userEvent.click(
+          table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!,
+        );
+        await vi.waitFor(() =>
+          expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+            expect.objectContaining({ roleIds: [], status: "all", page: 0 }),
+          ),
+        );
+        expect(role.values).toEqual([]);
+        expect(status.value).toBe("all");
+        expect(trigger.getAttribute("aria-label")).toBe(t("table.filters"));
+      } finally {
+        await page.viewport(previous.width, previous.height);
+      }
+    },
+  );
 
   it("searches from a labelled search field", async () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {

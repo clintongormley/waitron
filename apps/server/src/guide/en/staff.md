@@ -5,7 +5,7 @@ each person may do; job roles put them on the rota and on the devices that take 
 
 To find a setting, type its label in **Search pages** and choose the window to open; if several rows offer it, choose the one you want.
 
-Use **Search users** to find a name, email or telephone. Choose **Access roles** or **Status** to narrow the list; **Any status** includes disabled accounts.
+Use **Search users** to find a name, email or telephone. Open **Filters** and choose **Access roles** or **Status** to narrow the list; **Any status** includes disabled accounts.
 
 Search and column sorting cover everyone who matches your filters. Use **Previous page** and **Next page** to move through the results, 50 people at a time.
 
