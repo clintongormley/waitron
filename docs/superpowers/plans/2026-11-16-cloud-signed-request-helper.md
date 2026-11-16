@@ -1,10 +1,11 @@
 # Cloud signed request helper — implementation plan
 
-Codex proposal for Lane J, CLOUD-SIGNED-REQUEST-HELPER (watcher, 2026-11-16 02:06;
-`/Users/clintongormley/waitron-campaign-j/queue.md`). No owner plan approval is claimed;
-Claude has not read this proposal and watcher clearance is pending. The driver commits the
-plan later, obtains Claude’s read through `claude-seat.sh review-branch`, addresses findings,
-then obtains watcher clearance. **No build before both.**
+Codex proposal for Lane J. Watcher queue instruction, 2026-11-16 02:06,
+`/Users/clintongormley/waitron-campaign-j/queue.md`, CLOUD-SIGNED-REQUEST-HELPER:
+“put the repeated signing and size-capped reading of requests to Cloud into one shared helper,
+and make the readers refuse a one-item list where they want text”. Separate Sol/high writer;
+Claude initial read complete, corrections read next; watcher clearance pending. No owner plan
+approval is claimed. **No build before Claude review and watcher clearance.**
 
 **Smallest usable result:** existing Cloud operations share signing and capped HTTP response
 reading, and refuse lists masquerading as state text. Deliver one PR and remove the completed
@@ -15,7 +16,8 @@ No separate spec is needed; the queued ask and this plan define the scope.
 `signCloudPayload(bytes: Uint8Array, privateKey: string): string` returns the base64url Ed25519
 signature using the existing base64url PKCS8 key;
 `readCloudResponseBytes(response: Response, maxBytes: number): Promise<Buffer>` collects actual
-stream bytes, rejects a missing body or overflow, and exits iteration on failure. It neither
+stream bytes, throws plain `Error` for missing body/overflow, and exits iteration on failure;
+stream/abort errors propagate unchanged. Remove duplicated body checks. It neither
 fetches nor parses JSON. Callers retain payload construction, envelope keys/order, HTTP status
 handling, decoding, deadlines, redirects, abort signals and error mapping.
 
@@ -27,15 +29,15 @@ handling, decoding, deadlines, redirects, abort signals and error mapping.
   | Production reader and field | Regression owner and assertion |
   | --- | --- |
   | `cloud-client.ts` pairing/saved `view.state` | `cloud-client.test.ts`: list refused as `cloud.unavailable` on reply, `cloud.state_invalid` on reload; saved bytes retained on reply refusal. |
-  | `cloud-recovery.ts` reply `result.state` | `cloud-recovery.test.ts`: list refused with the existing recovery-unavailable message, before accepting approval. |
-  | `cloud-replacement.ts` reply/saved `view.state` | `cloud-replacement.test.ts`: list refused as `cloud.unavailable`/`cloud.replacement_state_invalid`, respectively. |
-  | `cloud-recovery-v2.ts` saved optional `phase` | `cloud-recovery-v2.test.ts`: otherwise valid v1/v2 files with `["staged"]` refused; absent phase remains valid. |
-  | `cloud-staff-certificate.ts` reply `state` | `cloud-staff-certificate.test.ts`: `["pending"]` and `["ready"]` reject as `cloud.unavailable`, rather than resolving false. |
+  | `cloud-recovery.ts` reply `result.state` | `cloud-recovery.test.ts`: `["approved"]` with `operationId: null` refused with the existing recovery-unavailable message before accepting approval. |
+  | `cloud-replacement.ts` reply/saved `view.state` | `cloud-replacement.test.ts`: `["complete"]` with `registration: null` refused as `cloud.unavailable`/`cloud.replacement_state_invalid`, respectively. |
+  | `cloud-recovery-v2.ts` saved optional `phase` | `cloud-recovery-v2.test.ts`: valid v1/v2 files with `["staged"]` refused; v2 includes matching point/verification; absent phase remains valid. |
+  | `cloud-staff-certificate.ts` reply `state` | `cloud-staff-certificate.test.ts`: submit replies `["pending"]`/`["ready"]` reject as `cloud.unavailable`, rather than resolving false. |
 
 - [ ] **2. Extract and adopt the helper.** First add
   `apps/server/src/cloud-signed-request.test.ts`: signature verifies over unchanged bytes;
-  capped reading accepts exactly the limit across chunks, rejects one byte more regardless of
-  Content-Length, cancels overflow, and propagates missing-body/stream failures. Observe red,
+  capped reading accepts exactly the limit across chunks, rejects one byte more,
+  cancels overflow, rejects missing body and propagates stream failures. Observe red,
   implement minimally, then green. Replace duplication in `apps/server/src/` files
   `cloud-client.ts`, `cloud-recovery.ts`, `cloud-replacement.ts`, `cloud-billing.ts`,
   `cloud-backup.ts`, `cloud-installation.ts`, `cloud-translation.ts`.
@@ -44,10 +46,11 @@ handling, decoding, deadlines, redirects, abort signals and error mapping.
   recovery’s redirect default and 30-second deadline, and recovery-v2’s
   `parseBackupVerificationJson`; keep each caller’s tolerant or fatal UTF-8 decoding.
 
-- [ ] **3. Verify contracts and finish.** Existing client suites own wire bytes/envelopes,
-  parser choices, limits/deadlines, caller cancellation and distinct HTTP/error mappings.
-  Reuse `apps/server/test/cloud-fixture.ts`, `cloud-installation-fixture.ts`,
-  `translation-cloud-fixture.ts` and file-local fixtures without new support. Run
+- [ ] **3. Verify contracts and finish.** Client suites own wire bytes/envelopes, parsers,
+  limits/deadlines, cancellation and distinct HTTP/error mappings. Add valid JSON padded to the
+  exact cap and cap+1 in client/replacement/installation tests, following billing’s existing
+  case; extend only `apps/server/test/cloud-fixture.ts` for valid padded replies. Reuse
+  `cloud-installation-fixture.ts`, `translation-cloud-fixture.ts` and file-local fixtures. Run
   `pnpm --filter @waitron/server exec vitest run` with all five regression test paths above,
   `src/cloud-signed-request.test.ts`, `src/cloud-billing.test.ts`, `src/cloud-backup.test.ts`,
   `src/cloud-installation.test.ts`, `src/cloud-translation.test.ts`,
@@ -59,8 +62,8 @@ handling, decoding, deadlines, redirects, abort signals and error mapping.
 **Exclusions:** S3 archive download/upload, CSR signing, inbound proxy limits, protocols/security
 policy, retries, universal transport, unrelated defects and new test infrastructure.
 
-**Size/time:** estimated production +100/−180, tests +220/−0, support +0/−0, docs +70/−20
-lines (590 changed total). Above 885 (1.5×), stop for watcher outside opinion, explaining growth
+**Size/time:** estimated production +60/−115, tests +280/−0, support +10/−0, docs +75/−20
+lines (560 changed total). Above 840 (1.5×), stop for watcher outside opinion, explaining growth
 and real events covered. **THREE ACTIVE HOURS from implementation start THROUGH OPEN PR**, including
 verification and branch review; external waits excluded and recorded. At the limit, stop cleanly
 and report what works, remains, and the smallest cut to the watcher.
