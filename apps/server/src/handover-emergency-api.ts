@@ -296,7 +296,7 @@ export function mountHandoverEmergencyApi(
           await withInspectorAdmitted(() =>
             authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
           );
-          await endManagementSession(tx, session.token);
+          await endManagementSession(tx, session.token, "operation_finished");
           const [person] = await tx
             .select({ totpSecret: persons.totpSecret })
             .from(persons)

@@ -875,6 +875,23 @@ for (const locale of ["en", "es"] as const) {
         ),
       };
       phases[phase]!.activity_log = revisions.length + (phase === "before" ? 0 : 2);
+      if (phase !== "before") {
+        const subject = '@persons:["owner@example.test"]';
+        const data = { method: "setup" };
+        const id = `@activity_log:${stable(["dashboard.signed_in", subject, at, JSON.stringify(data)])}`;
+        expected[phase].tables.activity_log!.rows[id] = {
+          id,
+          at,
+          kind: "dashboard.signed_in",
+          subject_kind: "person",
+          subject_id: subject,
+          person_id: subject,
+          device_id: null,
+          data,
+        };
+        phases[phase]!.activity_log! += 1;
+      }
+
       for (const name of ADDED_TABLES) {
         const added = canonical[phase].tables[name];
         expect(added, `${phase}/${name}`).toBeDefined();
@@ -2217,6 +2234,9 @@ for (const locale of ["en", "es"] as const) {
         pk: 0,
       });
       for (const row of Object.values(paymentTable.rows)) row.requested_by = null;
+      const actions = expected[phase].tables.account_actions!;
+      actions.columns = actions.columns.filter((column) => column.name !== "target_email");
+      for (const row of Object.values(actions.rows)) delete row.target_email;
       for (const name of ["till_sessions", "dashboard_sessions"]) {
         const table = expected[phase].tables[name]!;
         table.foreignKeys = [

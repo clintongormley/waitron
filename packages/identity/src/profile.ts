@@ -5,6 +5,7 @@ import {
   nowIso,
   persons,
   dashboardSessions,
+  recordActivity,
   accountActions,
   webauthnCredentials,
   tillSessions,
@@ -408,16 +409,23 @@ export async function changeOwnPassword(
     .set({ passwordHash: await hashPasswordAsync(input.password) })
     .where(eq(persons.id, person.id));
   await invalidateLinks(tx, person.id);
-  await tx
-    .update(dashboardSessions)
-    .set({ endedAt: nowIso() })
+  const ended = await tx
+    .delete(dashboardSessions)
     .where(
       and(
         eq(dashboardSessions.personId, person.id),
         ne(dashboardSessions.id, sessionRowId),
         isNull(dashboardSessions.endedAt),
       ),
-    );
+    )
+    .returning({ personId: dashboardSessions.personId });
+  for (const row of ended)
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: row.personId,
+      personId: row.personId,
+      data: { reason: "password_changed" },
+    });
   await queueSecurityChangeMail(tx, { personId: person.id, change: "password_changed" });
 }
 

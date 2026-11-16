@@ -283,7 +283,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
           const { authorizedBy } = await withInspectorAdmitted(() =>
             authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
           );
-          await endManagementSession(tx, session.token);
+          await endManagementSession(tx, session.token, "operation_finished");
           return authorizedBy;
         });
       } catch (error) {

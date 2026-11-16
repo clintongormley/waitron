@@ -1000,7 +1000,7 @@ export function mountManagementApi(
       const token = readManagementSessionToken(c);
       if (token !== null && isUuid(token)) {
         await withTransaction(deps.db, async (tx) => {
-          await endManagementSession(tx, token);
+          await endManagementSession(tx, token, "signed_out");
         });
       }
       clearManagementCookie(c);
@@ -1050,7 +1050,7 @@ export function mountManagementApi(
         await withInspectorAdmitted(() =>
           authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
         );
-        await endManagementSession(tx, session.token);
+        await endManagementSession(tx, session.token, "operation_finished");
       });
       const document = await readNodeMembership(deps.db);
       return c.json({ document });

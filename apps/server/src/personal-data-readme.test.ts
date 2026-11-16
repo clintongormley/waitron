@@ -43,7 +43,8 @@ const PROFILE_KEPT =
   "- Your profile stays on the box after your account is disabled: nothing in the box deletes it.";
 const DISABLE_KEPT =
   "- When your account is disabled, your PIN, password, passkeys, authenticator app, recovery codes and Google login are deleted from the box.";
-const SESSIONS_KEPT = "- Your sign-in sessions stay on the box after they end.";
+const SESSIONS_KEPT =
+  "- Your till sign-in sessions stay on the box after they end. Dashboard sign-ins and sign-outs are recorded in activity history, which the box keeps for 30 days.";
 const CLEANUP_KEPT =
   "- The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in or link after it has expired.";
 const DECIDES = "- Ask the venue how long it keeps your data and why; its privacy notice may say.";

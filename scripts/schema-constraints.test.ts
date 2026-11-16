@@ -660,7 +660,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "account_actions_code_hash_ck",
   "account_actions_expiry_ck",
   "account_actions_purpose_ck",
-  "account_actions_target_email_ck",
   "account_actions_token_hash_ck",
   "dashboard_sessions_token_hash_ck",
   "media_images_filename_ck",

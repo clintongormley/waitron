@@ -281,7 +281,7 @@ export function mountMirrorBundleApi(
             authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
           );
           // The session only authorised this request.
-          await endManagementSession(tx, session.token);
+          await endManagementSession(tx, session.token, "operation_finished");
         });
         passed();
         return await assemble();

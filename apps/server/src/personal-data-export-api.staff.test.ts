@@ -249,7 +249,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   });
 
   it("refuses an admin's ended session", async () => {
-    await withTransaction(suite.db, (tx) => endManagementSession(tx, tokens.admin));
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, tokens.admin, "signed_out"));
     await refused(await ask(staffPath(ids.martha), tokens.admin), 401, {
       code: "management_session.required",
       params: {},
@@ -321,7 +321,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   it("checks again after building, and sends nothing once the admin's session has ended", async () => {
     duringBuild = () =>
       withTransaction(suite.db, async (tx) => {
-        await endManagementSession(tx, tokens.admin);
+        await endManagementSession(tx, tokens.admin, "signed_out");
       });
     await refused(await ask(staffPath(ids.martha), tokens.admin), 401, {
       code: "management_session.required",

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "339a282d-45f5-44a7-918f-304e17953305",
+  "id": "811d73e3-4cb8-414b-9fc3-4aab604b241a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11357,13 +11357,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "target_email": {
-          "name": "target_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "token_hash": {
           "name": "token_hash",
           "type": "text",
@@ -11453,10 +11446,6 @@
         "account_actions_purpose_ck": {
           "name": "account_actions_purpose_ck",
           "value": "\"account_actions\".\"purpose\" in ('invitation', 'password_reset', 'email_change')"
-        },
-        "account_actions_target_email_ck": {
-          "name": "account_actions_target_email_ck",
-          "value": "(\"account_actions\".\"purpose\" = 'email_change') = (\"account_actions\".\"target_email\" is not null)"
         },
         "account_actions_token_hash_ck": {
           "name": "account_actions_token_hash_ck",

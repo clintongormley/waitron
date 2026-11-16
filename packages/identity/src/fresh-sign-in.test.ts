@@ -50,7 +50,7 @@ it("proof reuse neither extends the window nor proves another browser, and logou
   expect(await codeOf(() => requireFreshManagementSignIn(suite.db, other.token))).toBe(
     "management_session.proof_required",
   );
-  await withTransaction(suite.db, (tx) => endManagementSession(tx, token));
+  await withTransaction(suite.db, (tx) => endManagementSession(tx, token, "signed_out"));
   expect(await codeOf(() => requireFreshManagementSignIn(suite.db, token))).toBe(
     "management_session.required",
   );

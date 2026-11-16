@@ -297,7 +297,9 @@ describe("POST /management-api/fiscal-certificate", () => {
     const venue = await setupVenue();
     const seat = fakeSeat();
     seat.betweenAuthorizations = async () => {
-      await withTransaction(suite.db, (tx) => endManagementSession(tx, venue.manager.token));
+      await withTransaction(suite.db, (tx) =>
+        endManagementSession(tx, venue.manager.token, "signed_out"),
+      );
     };
     const response = await post(mount(seat), venue.manager.cookie, certificateBody);
     expect(response.status).toBe(401);

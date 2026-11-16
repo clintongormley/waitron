@@ -140,15 +140,28 @@ export async function resolveManagementSession(
   };
 }
 
-/** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */
-export async function endManagementSession(tx: Transaction, token: string): Promise<boolean> {
-  const tokenHash = hashSessionToken(token);
-  const updated = await tx
-    .update(dashboardSessions)
-    .set({ endedAt: nowIso() })
-    .where(and(eq(dashboardSessions.tokenHash, tokenHash), isNull(dashboardSessions.endedAt)))
-    .returning({ id: dashboardSessions.id });
-  return updated.length > 0;
+export async function endManagementSession(
+  tx: Transaction,
+  token: string,
+  reason: DashboardSignOutReason,
+): Promise<boolean> {
+  const removed = await tx
+    .delete(dashboardSessions)
+    .where(
+      and(
+        eq(dashboardSessions.tokenHash, hashSessionToken(token)),
+        isNull(dashboardSessions.endedAt),
+      ),
+    )
+    .returning({ personId: dashboardSessions.personId });
+  for (const row of removed)
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: row.personId,
+      personId: row.personId,
+      data: { reason },
+    });
+  return removed.length > 0;
 }
 
 /** Refuses what `resolveManagementSession` refuses, a session holding `invoice.inspect` alone

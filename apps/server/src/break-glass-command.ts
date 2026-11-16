@@ -2,6 +2,7 @@ import { venueDirOf } from "@waitron/store";
 import { eq, sql } from "drizzle-orm";
 import {
   isUniqueViolation,
+  recordActivity,
   nowIso,
   openVenueDatabase,
   type Database,
@@ -139,9 +140,16 @@ export async function runBreakGlassReset(deps: {
         await tx.execute(
           sql`update account_actions set used_at=${revokedAt} where person_id=${targetId} and used_at is null`,
         );
-        await tx.execute(
-          sql`update dashboard_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
+        const ended = await tx.execute<{ person_id: string }>(
+          sql`delete from dashboard_sessions where person_id=${targetId} and ended_at is null returning person_id`,
         );
+        for (const row of ended.rows)
+          await recordActivity(tx, {
+            kind: "dashboard.signed_out",
+            subjectId: row.person_id,
+            personId: null,
+            data: { reason: "break_glass" },
+          });
         await tx.execute(
           sql`update till_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );

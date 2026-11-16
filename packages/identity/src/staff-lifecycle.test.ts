@@ -1,3 +1,4 @@
+import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
 import { readPersonAuthority } from "./authority.js";
 import { ensureBuiltInRoles, setPersonAccessRoles } from "./roles.js";
@@ -6,6 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   activityLog,
+  readActivityForPerson,
   outgoingMail,
   roles,
   captureError,
@@ -333,8 +335,11 @@ describe("invited person lifecycle", () => {
   });
 
   it("ends dashboard and till sessions when an administrator marks a person inactive", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
+    const { token, personId: actorId } = await openManagementSession(suite.db, "admin");
     const target = await openManagementSession(suite.db, "staff");
+    await run((tx) =>
+      startManagementSession(tx, { personId: target.personId, method: "password" }),
+    );
     const deviceId = await seedSessionDevice(suite.db);
     const tillSession = await run((tx) =>
       loginWithPin(tx, { deviceId, personId: target.personId, pin: "1234" }),
@@ -349,6 +354,22 @@ describe("invited person lifecycle", () => {
       sql`select ended_at from till_sessions where id = ${tillSession.id}`,
     );
     expect(rows.rows).toEqual([{ ended_at: expect.any(String) }]);
+    expect(
+      suite.db.all(sql`select id from dashboard_sessions where person_id=${target.personId}`),
+    ).toEqual([]);
+    const entries = await readActivityForPerson(suite.db, target.personId, {
+      kinds: ["dashboard.signed_out"],
+    });
+    expect(entries).toEqual(
+      [1, 2].map(() =>
+        expect.objectContaining({
+          personId: actorId,
+          subjectKind: "person",
+          subjectId: target.personId,
+          data: { reason: "access_removed" },
+        }),
+      ),
+    );
   });
 
   it("clears a PIN instead of letting an administrator choose its replacement", async () => {

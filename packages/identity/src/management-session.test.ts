@@ -137,9 +137,21 @@ describe("management session lifecycle", () => {
   it("throws management_session.required after endManagementSession", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
-    expect(await run((tx) => endManagementSession(tx, session.token))).toBe(true);
+    expect(await run((tx) => endManagementSession(tx, session.token, "signed_out"))).toBe(true);
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.required");
+    expect(
+      (await suite.db.execute(sql`select id from dashboard_sessions where person_id=${personId}`))
+        .rows,
+    ).toEqual([]);
+    const entries = await readActivityForPerson(suite.db, personId);
+    expect(entries.map(({ kind, data }) => ({ kind, data }))).toEqual([
+      { kind: "dashboard.signed_in", data: { method: "password" } },
+      { kind: "dashboard.signed_out", data: { reason: "signed_out" } },
+    ]);
+    expect(entries[1]).toMatchObject({ personId, subjectKind: "person", subjectId: personId });
+    expect(await run((tx) => endManagementSession(tx, session.token, "signed_out"))).toBe(false);
+    expect(await readActivityForPerson(suite.db, personId)).toEqual(entries);
   });
 
   it("refuses deleting the person behind a dashboard session", async () => {
@@ -160,6 +172,10 @@ describe("management session lifecycle", () => {
     await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.token)));
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.expired");
+    expect(
+      (await suite.db.execute(sql`select id from dashboard_sessions where person_id=${personId}`))
+        .rows,
+    ).toHaveLength(1);
   });
 
   describe("a last-seen time ahead of the clock, as a backward clock step leaves it", () => {
@@ -279,7 +295,7 @@ it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as con
       await run((tx) =>
         tx.execute(sql`update persons set status = ${state} where id = ${personId}`),
       );
-    if (state === "ended") await run((tx) => endManagementSession(tx, session.token));
+    if (state === "ended") await run((tx) => endManagementSession(tx, session.token, "signed_out"));
     const check = checkManagementSession(suite.db, state === "unknown" ? "unknown" : session.token);
     if (state === "active") await expect(check).resolves.toBeUndefined();
     else
@@ -296,7 +312,8 @@ it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as con
         sql`select last_seen_at from dashboard_sessions where token_hash = ${hashSessionToken(session.token)}`,
       )
     ).rows;
-    expect(row!.last_seen_at).toBe(at);
+    if (state === "ended") expect(row).toBeUndefined();
+    else expect(row!.last_seen_at).toBe(at);
   },
 );
 

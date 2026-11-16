@@ -2,7 +2,7 @@ import "./errors.js";
 import {
   devices,
   accountActions,
-  dashboardSessions,
+  readActivityForPerson,
   persons,
   roles,
   personRoles,
@@ -73,17 +73,29 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .from(recoveryCodes)
       .where(eq(recoveryCodes.personId, personId));
 
-    const dashboardSessionRows = await tx
-      .select({
-        openedAt: dashboardSessions.createdAt,
-        lastSeenAt: dashboardSessions.lastSeenAt,
-        endedAt: dashboardSessions.endedAt,
-        provedAt: dashboardSessions.provedAt,
-        proofMethod: dashboardSessions.proofMethod,
-      })
-      .from(dashboardSessions)
-      .where(eq(dashboardSessions.personId, personId))
-      .orderBy(asc(dashboardSessions.createdAt), asc(dashboardSessions.id));
+    const signInEvents = await readActivityForPerson(tx, personId, {
+      kinds: ["dashboard.signed_in", "dashboard.signed_out"],
+    });
+    const dashboardSignIns = signInEvents
+      .filter((entry) => entry.subjectKind === "person" && entry.subjectId === personId)
+      .map((entry) =>
+        entry.kind === "dashboard.signed_in"
+          ? {
+              at: entry.at.toISOString(),
+              event: "signed_in",
+              method: entry.data.method,
+              reason: null,
+            }
+          : entry.kind === "dashboard.signed_out"
+            ? {
+                at: entry.at.toISOString(),
+                event: "signed_out",
+                method: null,
+                reason: entry.data.reason,
+              }
+            : null,
+      )
+      .filter((entry) => entry !== null);
 
     const deviceSessions = await tx
       .select({
@@ -99,7 +111,6 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
     const accountEmails = await tx
       .select({
         purpose: accountActions.purpose,
-        newEmail: accountActions.targetEmail,
         createdAt: accountActions.createdAt,
         expiresAt: accountActions.expiresAt,
         usedAt: accountActions.usedAt,
@@ -148,7 +159,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
           lastUsedAt,
         })),
         recoveryCodes: codes,
-        dashboardSessions: dashboardSessionRows,
+        dashboardSignIns,
         deviceSessions,
         accountEmails,
         unfinishedSetups: [

@@ -270,7 +270,7 @@ describe("both routes", () => {
 
     it(`refuses an ended session at ${route}`, async () => {
       const admin = await ownAdmin();
-      await withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token));
+      await withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token, "signed_out"));
       await refused(await ask(withTaxId(route, "12345678Z"), admin.cookie), 401, sessionRequired);
     });
 
@@ -401,7 +401,7 @@ describe("the invoice customer download", () => {
   it("checks again after the PDFs, and sends nothing once the session has ended", async () => {
     const admin = await ownAdmin();
     const render = async () => {
-      await withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token));
+      await withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token, "signed_out"));
       return stubPdf();
     };
     await refused(
@@ -413,7 +413,8 @@ describe("the invoice customer download", () => {
 
   it("checks again once the ZIP is built, and sends nothing once the session ended while zipping", async () => {
     const admin = await ownAdmin();
-    duringZip.run = () => withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token));
+    duringZip.run = () =>
+      withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token, "signed_out"));
     await refused(await ask(withTaxId(DOWNLOAD, "12345678Z"), admin.cookie), 401, sessionRequired);
   });
 });

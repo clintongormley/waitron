@@ -8,7 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { nowIso, openVenueDatabase, signInChallenges, type Database } from "@waitron/db";
+import {
+  readActivityForPerson,
+  nowIso,
+  openVenueDatabase,
+  signInChallenges,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { verifyPassword, webauthnCredentials } from "@waitron/identity";
@@ -130,6 +136,18 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(out.join("\n")).toMatch(adminId);
     expect(out.join("\n")).not.toMatch(NEW_PASSWORD);
     expect(closes).toBe(1);
+    expect(suite.db.all(sql`select id from dashboard_sessions where person_id=${adminId}`)).toEqual(
+      [],
+    );
+    expect(
+      await readActivityForPerson(suite.db, adminId, { kinds: ["dashboard.signed_out"] }),
+    ).toEqual([
+      expect.objectContaining({
+        personId: null,
+        subjectId: adminId,
+        data: { reason: "break_glass" },
+      }),
+    ]);
   });
 
   it("opens the directory WAITRON_VENUE_DIR names, and an EMPTY value takes <stateDir>/venue", async () => {

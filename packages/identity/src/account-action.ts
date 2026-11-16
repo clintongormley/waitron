@@ -16,6 +16,7 @@ import {
   type Transaction,
   accountActions,
   dashboardSessions,
+  recordActivity,
   loginEmailKey,
   persons,
 } from "@waitron/db";
@@ -78,7 +79,6 @@ export async function issueAccountAction(
     personId: string;
     purpose: AccountActionPurpose;
     codeKey?: Buffer;
-    targetEmail?: string;
     now?: Date;
   },
 ): Promise<IssuedAccountAction> {
@@ -87,6 +87,7 @@ export async function issueAccountAction(
   const [person] = await tx
     .select({
       email: persons.email,
+      pendingEmail: persons.pendingEmail,
       displayName: persons.displayName,
       locale: persons.locale,
       status: persons.status,
@@ -105,7 +106,7 @@ export async function issueAccountAction(
   }
   if (person.email === null) throw new AppError("person.email_invalid", {});
   const deliveryEmail =
-    input.purpose === "email_change" ? normalizeEmail(input.targetEmail ?? "") : person.email;
+    input.purpose === "email_change" ? normalizeEmail(person.pendingEmail ?? "") : person.email;
   if (!isValidEmail(deliveryEmail)) throw new AppError("person.email_invalid", {});
 
   await deleteDeadActions(tx, input.personId, input.purpose, nowIso);
@@ -135,7 +136,6 @@ export async function issueAccountAction(
     .values({
       personId: input.personId,
       purpose: input.purpose,
-      targetEmail: input.purpose === "email_change" ? deliveryEmail : null,
       tokenHash: hashToken(token),
       codeHash:
         code === undefined ? null : hashCode(input.codeKey!, deliveryEmail, input.purpose, code),
@@ -194,9 +194,10 @@ export async function confirmEmailChangeByCode(
     .select({
       id: accountActions.id,
       codeHash: accountActions.codeHash,
-      targetEmail: accountActions.targetEmail,
+      pendingEmail: persons.pendingEmail,
     })
     .from(accountActions)
+    .innerJoin(persons, eq(persons.id, accountActions.personId))
     .where(
       and(
         eq(accountActions.personId, input.personId),
@@ -210,10 +211,10 @@ export async function confirmEmailChangeByCode(
     )
     .orderBy(sql`${accountActions.createdAt} desc`)
     .limit(1);
-  if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
+  if (action?.codeHash === null || action?.pendingEmail === null || action === undefined)
     return null;
   const supplied = Buffer.from(
-    hashCode(input.codeKey, action.targetEmail, "email_change", input.code),
+    hashCode(input.codeKey, action.pendingEmail, "email_change", input.code),
     "hex",
   );
   const stored = Buffer.from(action.codeHash, "hex");
@@ -234,19 +235,19 @@ export async function confirmEmailChangeByCode(
     const changed = await tx
       .update(persons)
       .set({
-        email: action.targetEmail,
-        emailFolded: foldForUniqueness(action.targetEmail),
+        email: action.pendingEmail,
+        emailFolded: foldForUniqueness(action.pendingEmail),
         pendingEmail: null,
         pendingEmailFolded: null,
         emailVerifiedAt: nowIso,
       })
-      .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.targetEmail)))
+      .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.pendingEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
     return changed[0]!.email;
   } catch (error) {
     if (indexViolated(error, PERSONS_EMAIL)) {
-      throw new AppError("person.email_taken", { email: action.targetEmail });
+      throw new AppError("person.email_taken", { email: action.pendingEmail });
     }
     throw error;
   }
@@ -336,10 +337,17 @@ async function finishClaimedAction(
     .where(eq(persons.id, personId))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});
-  await tx
-    .update(dashboardSessions)
-    .set({ endedAt: nowIso })
-    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)));
+  const ended = await tx
+    .delete(dashboardSessions)
+    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)))
+    .returning({ personId: dashboardSessions.personId });
+  for (const row of ended)
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: row.personId,
+      personId: row.personId,
+      data: { reason: "account_action_completed" },
+    });
   if (input.purpose === "password_reset")
     await queueSecurityChangeMail(tx, { personId, change: "password_changed" });
   return {
@@ -456,7 +464,6 @@ export async function issueQueuedAccountAction(
     return await issueAccountAction(tx, {
       personId: mail.personId,
       purpose: mail.params.purpose,
-      targetEmail: person?.pendingEmail ?? undefined,
       ...input,
     });
   } catch (error) {

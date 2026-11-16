@@ -1017,6 +1017,9 @@ describe("mountMeApi — set your own locale", () => {
     return row!.id;
   }
   async function cleanup(personId: string): Promise<void> {
+    await suite.db.execute(
+      sql`delete from activity_log where person_id=${personId} or (subject_kind='person' and subject_id=${personId})`,
+    );
     await suite.db.execute(sql`delete from dashboard_sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
   }

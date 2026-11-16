@@ -1,4 +1,4 @@
-import { captureError, restrictRefused } from "@waitron/db";
+import { captureError, restrictRefused, readActivityForPerson } from "@waitron/db";
 import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -380,6 +380,19 @@ describe("your profile", () => {
       }),
     );
     expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain("new password");
+    expect(
+      suite.db.all(sql`select token_hash from dashboard_sessions where person_id=${f.personId}`),
+    ).toEqual([{ token_hash: hashSessionToken(f.managementSessionId) }]);
+    expect(
+      await readActivityForPerson(suite.db, f.personId, { kinds: ["dashboard.signed_out"] }),
+    ).toEqual([
+      expect.objectContaining({
+        personId: f.personId,
+        subjectId: f.personId,
+        data: { reason: "password_changed" },
+      }),
+    ]);
+
     expect(await securityNotices(f.personId)).toEqual([
       { personId: f.personId, params: { change: "password_changed" } },
     ]);

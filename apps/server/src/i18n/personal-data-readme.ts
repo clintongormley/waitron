@@ -52,7 +52,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         ],
         kept: [
           "When your account is disabled, your PIN, password, passkeys, authenticator app, recovery codes and Google login are deleted from the box.",
-          "Your sign-in sessions stay on the box after they end.",
+          "Your till sign-in sessions stay on the box after they end. Dashboard sign-ins and sign-outs are recorded in activity history, which the box keeps for 30 days.",
           "The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in or link after it has expired.",
         ],
       },
@@ -179,7 +179,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         ],
         kept: [
           "Cuando se deshabilita tu cuenta, se borran del servidor Waitron del local tu PIN, tu contraseña, tus passkeys, la aplicación de autenticación, los códigos de recuperación y el inicio de sesión con Google.",
-          "Tus sesiones se quedan en el servidor Waitron del local aunque hayan terminado.",
+          "Tus sesiones de caja se quedan en el servidor Waitron del local aunque hayan terminado. Los accesos y cierres de sesión del panel se registran en el historial de actividad, que el servidor conserva durante 30 días.",
           "El registro de un correo de cuenta ya usado o caducado se borra cuando se genera para ti otro del mismo tipo; una vinculación con Google sin terminar se borra la próxima vez que alguien empieza un inicio de sesión o una vinculación con Google después de que caduque.",
         ],
       },

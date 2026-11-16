@@ -213,12 +213,12 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("refuses an ended session", async () => {
-    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken));
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken, "signed_out"));
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 
   it("refuses an ended session sent with a query as an ended session", async () => {
-    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken));
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken, "signed_out"));
     await refused(
       await ask(mounted(), marthaToken, `?personId=${colleagueId}`),
       401,
@@ -263,7 +263,7 @@ describe("GET /management-api/me/personal-data/export", () => {
   it("checks the session again after building, and sends nothing once it has ended", async () => {
     duringBuild = () =>
       withTransaction(suite.db, async (tx) => {
-        await endManagementSession(tx, marthaToken);
+        await endManagementSession(tx, marthaToken, "signed_out");
       });
     const response = await ask(mounted());
     expect(order).toEqual(["prepare", "build"]);
