@@ -109,6 +109,7 @@ describe("the counter's way of selling (A1522)", () => {
   };
 
   const savedOrder = (diningChoice: "open" | "locked", revision = 2) => ({
+    zoneId: null,
     id: "wo-1",
     orderNumber: 5,
     revision,

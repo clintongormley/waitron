@@ -114,6 +114,7 @@ function heldOrder(
   draughtBeerQuantity = "1.000",
 ): HeldOrder {
   return {
+    zoneId: null,
     dining: "eat_in",
     diningChoice: "none",
     kitchenNote: {
@@ -937,6 +938,7 @@ describe("till-app: discarding a parked table bill", () => {
     api = stubApi({
       listWorkingOrders: vi.fn().mockResolvedValue([
         {
+          zoneId: null,
           id: "wo-9",
           orderNumber: 12,
           items: [],
@@ -1847,6 +1849,7 @@ describe("till-app: comping a stored counter order", () => {
         const el = await retrieved({
           listWorkingOrders: vi.fn().mockResolvedValue([
             {
+              zoneId: null,
               items: [],
               id: "wo-9",
               orderNumber: 12,
@@ -1995,6 +1998,7 @@ describe("till-app: comping a stored counter order", () => {
       const el = await retrieved({
         listWorkingOrders: vi.fn().mockResolvedValue([
           {
+            zoneId: null,
             items: [],
             id: "wo-9",
             orderNumber: 12,
@@ -2170,6 +2174,7 @@ describe("till-app: comping a stored counter order", () => {
       retrieveWorkingOrder: vi.fn().mockResolvedValue({ ...heldOrder(4), expectedEdit }),
       listWorkingOrders: vi.fn().mockResolvedValue([
         {
+          zoneId: null,
           id: "wo-9",
           partyId: "party-4",
           billNumber: 1,

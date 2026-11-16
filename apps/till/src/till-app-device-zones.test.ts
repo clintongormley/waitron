@@ -759,6 +759,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
   const heldOrder = {
     kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
     id: "wo-1",
+    zoneId: "bar",
     revision: 0,
     orderNumber: 5,
     label: null,

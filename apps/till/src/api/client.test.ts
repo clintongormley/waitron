@@ -1163,6 +1163,7 @@ describe("TillApi", () => {
     // The server sends `quantity` as a three-place decimal string ("2.000"); the client passes it
     // through as sent.
     const order = {
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo1" }, note: null, revision: 0, ownerRevision: 0 },
       id: "wo1",
       orderNumber: 7,
@@ -1672,6 +1673,7 @@ describe("TillApi", () => {
 
   it("retrievePlacedOrder GETs the addressed sent order with a caller's abort signal", async () => {
     const order = {
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo1" }, note: null, revision: 0, ownerRevision: 2 },
       id: "wo1",
       orderNumber: 7,

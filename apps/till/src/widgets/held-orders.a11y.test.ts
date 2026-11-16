@@ -6,6 +6,7 @@ import type { HeldOrderSummary, TableState } from "../api/client.js";
 
 const orders: HeldOrderSummary[] = [
   {
+    zoneId: null,
     items: [],
     id: "wo-1",
     orderNumber: 5,
@@ -21,6 +22,7 @@ const orders: HeldOrderSummary[] = [
     signals: [],
   },
   {
+    zoneId: null,
     items: [],
     id: "wo-2",
     orderNumber: 6,

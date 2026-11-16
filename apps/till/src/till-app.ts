@@ -872,6 +872,15 @@ function guestField(count: number | null): string {
   return count === null ? "" : String(count);
 }
 
+function isOrderGone(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "working_order.not_found";
+}
+
+function heldOrderLoadRefusal(error: unknown): CounterError {
+  if (isOrderGone(error)) return "held.stale";
+  return profileZoneRefusal(error) ?? "held.open_failed";
+}
+
 function isPartyOutOfDate(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "party.out_of_date";
 }
@@ -934,13 +943,17 @@ function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false)
     : tableWriteError({ code: refused });
 }
 
-/** The device's profile refusing a zone's offers says so in its own words; any other failure to
- * read them is a load failure. */
-function zoneLoadError(error: unknown): CounterError {
+function profileZoneRefusal(error: unknown): { code: string } | undefined {
   const code = (error as { code?: unknown } | null)?.code;
   return code === "device_profile.no_service_zone" || code === "service_zone.not_allowed"
     ? { code }
-    : "service_zone.load_error";
+    : undefined;
+}
+
+/** The device's profile refusing a zone's offers says so in its own words; any other failure to
+ * read them is a load failure. */
+function zoneLoadError(error: unknown): CounterError {
+  return profileZoneRefusal(error) ?? "service_zone.load_error";
 }
 
 /** A refused take-over: the drafts have been read again, so each says what changed. */
@@ -8328,25 +8341,33 @@ export class TillApp extends LitElement {
 
   /** The basket takes the order `id` as stored after its own save, so a later save names every
    * stored dish; unfolded, as a load takes it, when its lines cannot be read. Edits are locked while
-   * it reads. When the order cannot be read the lock stays until the basket is cleared or loaded
-   * again, and nothing more is saved from it: the answer is false and the basket is no longer
-   * unsaved. */
+   * it reads. When the order or its zone's offer cannot be read the lock stays until the basket is
+   * cleared or loaded again, and nothing more is saved from it: the answer is false and the basket
+   * is no longer unsaved. */
   async #readBackSaved(id: string, session: number, visit: number): Promise<boolean> {
     const unlock = this.#store.lockEdits();
+    const offerOf = this.#offerOfHeldOrder(id);
     const [order, listed] = await Promise.all([
       this.api.retrieveWorkingOrder(id).catch(() => undefined),
       this.#readStoredLines(id),
     ]);
+    const zone =
+      order === undefined
+        ? undefined
+        : await offerOf(order.zoneId).then(
+            (offered) => ({ offered }),
+            () => undefined,
+          );
     if (session !== this.#operatorSession || visit !== this.#store.loadGeneration) {
       unlock();
       return false;
     }
-    if (order === undefined) {
+    if (order === undefined || zone === undefined) {
       this.#store.markPersisted();
       this.errorKey = "held.reread_failed";
       return false;
     }
-    const { lines, banner } = this.#basketLinesOf(order);
+    const { lines, banner } = this.#basketLinesOf(order, zone.offered);
     if (banner !== undefined) this.errorKey = banner;
     this.#store.adoptSaved(
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
@@ -8658,11 +8679,11 @@ export class TillApp extends LitElement {
         return;
       }
       if (row.partyId !== null) {
-        await this.#loadFloorData(() => !current());
+        const floorRead = await this.#loadFloorData(() => !current());
         if (!current()) return;
         const table = this.tables.find((candidate) => candidate.party?.id === row.partyId);
         if (table === undefined) {
-          this.errorKey = "held.stale";
+          this.errorKey = floorRead ? "held.stale" : "held.open_failed";
           return;
         }
         const opening = this.#orderVisit + 1;
@@ -8721,8 +8742,8 @@ export class TillApp extends LitElement {
           } else this.errorKey = "held.stale";
         },
       });
-    } catch {
-      if (current()) this.errorKey = "held.stale";
+    } catch (error) {
+      if (current()) this.errorKey = heldOrderLoadRefusal(error);
     } finally {
       if (session === this.#operatorSession && visit === this.#invoiceRecoveryVisit)
         this.findBillBusy = false;
@@ -9725,8 +9746,7 @@ export class TillApp extends LitElement {
       if (loaded === undefined) return;
     } catch (error) {
       if (movedOn()) return;
-      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
-      this.errorKey = gone ? "held.stale" : "waiting.pay_error";
+      this.errorKey = isOrderGone(error) ? "held.stale" : "waiting.pay_error";
     } finally {
       limit.done();
       unlock();
@@ -9918,9 +9938,9 @@ export class TillApp extends LitElement {
       );
       if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
       this.#refusePaidInPart();
-    } catch {
+    } catch (error) {
       if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
-      this.errorKey = "held.stale";
+      this.errorKey = heldOrderLoadRefusal(error);
     } finally {
       this.#counterRetrievals.delete(read);
     }
@@ -9944,8 +9964,7 @@ export class TillApp extends LitElement {
             : sentDish;
     } catch (error) {
       if (session !== this.#operatorSession) return;
-      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
-      this.errorKey = gone ? "held.stale" : "held.reread_failed";
+      this.errorKey = isOrderGone(error) ? "held.stale" : "held.reread_failed";
     }
     await this.#refreshHeldOrders().catch(() => undefined);
   }
@@ -9960,30 +9979,60 @@ export class TillApp extends LitElement {
     signal?: AbortSignal,
     stationChoiceOwner: object | null = null,
   ): Promise<boolean | undefined> {
+    const offerOf = this.#offerOfHeldOrder(id, signal);
     const [order, listed] = await Promise.all([
       signal === undefined
         ? this.api.retrieveWorkingOrder(id)
         : this.api.retrieveWorkingOrder(id, { signal }),
       this.#readStoredLines(id, signal),
     ]);
+    const offered = await offerOf(order.zoneId);
     if (left?.() === true) return undefined;
-    this.#loadIntoBasket(order, listed, stationChoiceOwner);
+    this.#loadIntoBasket(order, listed, stationChoiceOwner, offered);
     this.stage = "order";
     return listed !== null;
   }
 
-  /** Replaces the basket with `order`, rebuilt against today's live offer. */
+  /** Starts reading the offer of the zone the held list places order `id` in, beside the order's
+   * own read; the answer reads again when the order turns out to be in another zone. */
+  #offerOfHeldOrder(
+    id: string,
+    signal?: AbortSignal,
+  ): (zoneId: string | null) => Promise<TillProduct[] | undefined> {
+    const listed = this.heldOrders.find((held) => held.id === id)?.zoneId;
+    const early = listed === undefined ? undefined : this.#offerOfZone(listed, signal);
+    // Keeps a failed early read from being reported as unhandled.
+    early?.catch(() => undefined);
+    return (zoneId) =>
+      early !== undefined && zoneId === listed ? early : this.#offerOfZone(zoneId, signal);
+  }
+
+  /** What `zoneId` offers now; undefined, leaving the counter's offer to judge, for the counter's
+   * own zone or no zone. A failed read rejects: judging by the counter's offer instead would drop
+   * what only the order's zone offers. */
+  async #offerOfZone(
+    zoneId: string | null,
+    signal?: AbortSignal,
+  ): Promise<TillProduct[] | undefined> {
+    if (zoneId === null || zoneId === this.counterServiceZoneId) return undefined;
+    const offers = new ZoneOfferIndex();
+    offers.load(await this.#readZoneOffers(zoneId, signal === undefined ? undefined : { signal }));
+    return offers.products();
+  }
+
+  /** Replaces the basket with `order`, its lines judged against `offered`. */
   #loadIntoBasket(
     order: HeldOrder,
     listed: StoredLines | null,
     stationChoiceOwner: object | null = null,
+    offered: readonly TillProduct[] = this.products,
   ): void {
     // Only a counter Move's own reread keeps its refusal choice.
     if (stationChoiceOwner === null || stationChoiceOwner !== this.#counterMoveSubmitting) {
       this.#dismissStationChoices();
       this.#counterMoveSubmitting = null;
     }
-    const { lines, banner } = this.#basketLinesOf(order);
+    const { lines, banner } = this.#basketLinesOf(order, offered);
     if (banner !== undefined) this.errorKey = banner;
     this.#store.loadFrom(
       order.id,
@@ -10016,15 +10065,18 @@ export class TillApp extends LitElement {
     this.collectFlow = undefined;
   }
 
-  /** `order`'s lines rebuilt against today's live offer, and the one banner that says what the
-   * rebuild changed. */
-  #basketLinesOf(order: HeldOrder): { lines: OrderLine[]; banner?: StringKey } {
+  /** `order`'s lines rebuilt against `offered`, and the one banner that says what the rebuild
+   * changed. */
+  #basketLinesOf(
+    order: HeldOrder,
+    offered: readonly TillProduct[] = this.products,
+  ): { lines: OrderLine[]; banner?: StringKey } {
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
     let mustChooseAgain = false;
     const liveByMenuItem = new Map<string, TillProduct>();
-    for (const candidate of this.products) {
+    for (const candidate of offered) {
       if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
         liveByMenuItem.set(candidate.menuItemId, candidate);
     }
@@ -10102,8 +10154,9 @@ export class TillApp extends LitElement {
       api.retrievePlacedOrder(id, { signal }),
       this.#readStoredLines(id, signal),
     ]);
+    const offered = await this.#offerOfZone(order.zoneId, signal);
     if (api !== this.api || left() || signal.aborted) return undefined;
-    this.#loadIntoBasket(order, listed, stationChoiceOwner);
+    this.#loadIntoBasket(order, listed, stationChoiceOwner, offered);
     this.stage = "collect";
     this.collectFlow = "ticket_then_pay";
     return listed !== null;
@@ -10140,8 +10193,7 @@ export class TillApp extends LitElement {
       if (read !== undefined) load = this.#store.loadGeneration;
       if (read !== true) failure = "held.reread_failed";
     } catch (error) {
-      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
-      failure = gone ? "held.stale" : "held.reread_failed";
+      failure = isOrderGone(error) ? "held.stale" : "held.reread_failed";
     } finally {
       limit.done();
       unlock();
@@ -12509,20 +12561,23 @@ export class TillApp extends LitElement {
 
   /**
    * A shell tab reached through `tab-select` must load the floor itself, or the floor-plan card renders
-   * with no table to tap. A failed load leaves the last-known floor.
+   * with no table to tap. A failed load leaves the last-known floor. Answers whether this read
+   * answered, which `floorReadFailed` cannot say: another read may have set or cleared it.
    */
-  async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
+  async #loadFloorData(replaced: () => boolean = () => false): Promise<boolean> {
     const zonesRead = ++this.#floorZonesRead;
     const tablesRead = this.#startTablesRead();
     try {
       const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
-      if (replaced()) return;
+      if (replaced()) return true;
       this.#applyTables(tablesRead, tables);
       if (zonesRead === this.#floorZonesRead) this.#applyZones(zones);
       this.#floorLoaded = true;
+      return true;
     } catch {
       // Non-fatal: the last-known floor stays.
       if (!replaced()) this.floorReadFailed = true;
+      return false;
     }
   }
 

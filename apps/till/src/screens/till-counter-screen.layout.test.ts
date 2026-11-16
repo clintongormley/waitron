@@ -535,6 +535,7 @@ it("keeps a usable basket and payment controls when many orders are held", async
   counter.embedded = true;
   counter.orderList = "parked";
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
+    zoneId: null,
     items: [],
     id: `held-${i}`,
     orderNumber: i + 1,

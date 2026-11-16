@@ -19,6 +19,7 @@ const items = [
   { lineId: "blank", name: "Pan", quantity: "1.000", note: "", extras: [] },
 ];
 const held: HeldOrderSummary = {
+  zoneId: null,
   items,
   id: "held",
   orderNumber: 41,

@@ -1773,7 +1773,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Reopening a held order keeps its lines right
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
@@ -1789,10 +1789,6 @@ Printer identity is separate from the till route inventory.
 - **A held order brought back to the till shows a variant line with its PARENT's VAT class,
   category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
   unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
-- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
-  parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
-  can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
-  action:** send the order's zone with the retrieved order and read that zone's offer.
 
 ## Bundle: One count of items everywhere
 
@@ -2023,16 +2019,6 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   test helpers call it (`apps/server/src/testing/party-venue.ts`,
   `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it into whole dishes or
   retire it.
-
-## Bundle: Do not offer a closed area as a destination
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **Held-order closed-area destinations need the order's source area (2026-10-15; open,
-  A697 follow-up).** Neither `HeldOrderSummary` nor `HeldOrder` includes the saved source area
-  (`apps/till/src/api/client.ts`). Include that context in the read contract, then filter closed
-  destinations while preserving same-area moves.
-  [Detail](till.md#held-order-closed-area-destinations-need-the-orders-source-area)
 
 ## Bundle: Add a device: loose ends from A268
 
@@ -3244,15 +3230,6 @@ place.
   not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
   floor join that needs seats asks for them before its first request and sends once.
   The request log is in #1699.
-
-## Held-order closed-area destinations need the order's source area
-
-Move to table on a held-order card cannot distinguish a move within a closed
-area from a move into one: neither `HeldOrderSummary` nor `HeldOrder` includes the saved source
-area (`apps/till/src/api/client.ts`). The server permits the former and refuses the latter for
-an open bill (`adoptZone`, `apps/server/src/move-bill.ts`). Include that context in the read
-contract, then filter closed destinations while preserving same-area moves. A697's till-only
-change covers the order screen; the held-order picker still leaves this decision to the server.
 
 ## A730. The floor's Rename window may keep comparing against the name it opened with
 

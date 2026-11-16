@@ -1380,6 +1380,8 @@ export interface HeldOrderSummary {
   /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
   billName: string | null;
   openedAt: string;
+  /** The service zone the order is recorded in; null for one with none. */
+  zoneId: string | null;
   /** The bill's own dishes ready at a station, and its long wait. */
   signals: KitchenSignal[];
   /** The numbers the order's dishes were sent under before they moved to it, lowest first;
@@ -1416,6 +1418,8 @@ export interface KitchenNoteSnapshot {
  */
 export interface HeldOrder {
   id: string;
+  /** The service zone the order is recorded in; null for one with none. */
+  zoneId: string | null;
   expectedEdit: BillEditExpected | null;
   kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;

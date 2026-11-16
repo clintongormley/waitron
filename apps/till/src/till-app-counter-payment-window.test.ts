@@ -50,6 +50,7 @@ it("persists the first Counter payment before opening the window, then offers th
     return { id, orderNumber: 7 };
   });
   const retrieveWorkingOrder = vi.fn(async () => ({
+    zoneId: null,
     id,
     orderNumber: 7,
     revision: 0,
@@ -178,6 +179,7 @@ it.each([undefined, "F1/7"])(
         },
       ]),
       retrievePlacedOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         id,
         orderNumber: 7,
         revision: 0,

@@ -9,6 +9,7 @@ import { TillHeldOrders } from "./held-orders.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
 
 const labeledOrder: HeldOrderSummary = {
+  zoneId: null,
   items: [],
   id: "wo-1",
   orderNumber: 5,
@@ -25,6 +26,7 @@ const labeledOrder: HeldOrderSummary = {
 };
 
 const unlabeledOrder: HeldOrderSummary = {
+  zoneId: null,
   items: [],
   id: "wo-2",
   orderNumber: 6,
@@ -581,6 +583,45 @@ describe("till-held-orders: moving a counter order to a table", () => {
           seated: null,
         },
       ]);
+    },
+  );
+
+  it.each([
+    ["another area", "bar", ["open-free"]],
+    ["no area", null, ["open-free"]],
+    ["the closed area itself", "terrace", ["closed-free", "closed-seated", "open-free"]],
+  ])(
+    "leaves a closed area's tables out of Move to table for an order parked in %s",
+    async (_, parkedIn, listed) => {
+      const area = (id: string, closed: boolean): FloorZone => ({
+        id,
+        name: id,
+        displayOrder: 0,
+        active: true,
+        closesAt: null,
+        closed,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      });
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...labeledOrder, zoneId: parkedIn }],
+        zones: [area("bar", false), area("dining", false), area("terrace", true)],
+        tables: [
+          tableRow("closed-free", "1", { zoneId: "terrace" }),
+          tableRow("closed-seated", "2", { zoneId: "terrace", party: luis, condition: "held" }),
+          tableRow("open-free", "3", { zoneId: "dining" }),
+        ],
+      });
+
+      await openPicker(el);
+
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
+          (row) => row.dataset.target,
+        ),
+      ).toEqual(listed);
     },
   );
 

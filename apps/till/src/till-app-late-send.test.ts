@@ -1405,6 +1405,7 @@ const lastArgument = (fn: ReturnType<typeof vi.fn>, call: number) => fn.mock.cal
 
 /** An order held earlier with one Omelette of the Breakfast menu already stored on it. */
 const heldOmelette = {
+  zoneId: null,
   kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
   id: "wo-1",
   orderNumber: 5,
@@ -1829,6 +1830,7 @@ describe("counter pay", () => {
 
 /** The held order `wo-1` with a payment on it, so the counter takes the rest as a bill payment. */
 const partlyPaid = {
+  zoneId: null,
   items: [],
   id: "wo-1",
   orderNumber: 5,

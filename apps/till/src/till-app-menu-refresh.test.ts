@@ -2947,6 +2947,7 @@ async function retrieveForRefresh(
 ) {
   api.retrieveWorkingOrder = vi.fn().mockResolvedValue({
     id: "held-order",
+    zoneId: null,
     revision: 7,
     label: "Lunch",
     expectedEdit: null,

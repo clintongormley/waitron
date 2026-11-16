@@ -4179,6 +4179,7 @@ describe("till-app: a partly paid order at the counter", () => {
   });
   const counterFormFactor: FormFactor = "till";
   const held = (over: Partial<HeldOrderSummary> = {}): HeldOrderSummary => ({
+    zoneId: null,
     items: [],
     id: "wo-1",
     orderNumber: 5,
@@ -4216,6 +4217,7 @@ describe("till-app: a partly paid order at the counter", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: counterFormFactor }),
       listWorkingOrders: vi.fn().mockResolvedValue([held()]),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -4280,6 +4282,7 @@ describe("till-app: a partly paid order at the counter", () => {
       allergens: null,
     };
     const stored = (ids: string[]) => ({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,

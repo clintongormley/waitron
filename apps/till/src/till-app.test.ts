@@ -67,6 +67,7 @@ import type {
   EquipmentChange,
   EquipmentItem,
   FloorZone,
+  HeldOrder,
   HeldOrderSummary,
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
@@ -126,6 +127,7 @@ const ham: TillProduct = {
 };
 
 const heldSummary: HeldOrderSummary = {
+  zoneId: null,
   items: [],
   id: "wo-1",
   orderNumber: 5,
@@ -490,6 +492,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn(async (id: string) => ({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 3 },
       id,
       orderNumber: 5,
@@ -825,6 +828,69 @@ function deferredTables(): {
   return { promise, resolve };
 }
 
+/** A dish only the terrace offers, and an order parked there holding one. */
+const terraceSoup: TillProduct = {
+  id: "terrace-soup",
+  productId: "terrace-soup",
+  menuItemId: "offer-terrace-soup",
+  name: "Terrace soup",
+  customerName: { en: "Terrace soup" },
+  pricingUnit: "each",
+  unitPrice: "8.50",
+  vatClass: "reduced",
+  category: "Starter",
+  allergens: null,
+  menuId: "cat-default",
+  menuName: "Carta",
+  diet: null,
+  dietOverride: null,
+  courseId: null,
+};
+const terraceOrder = (): HeldOrder =>
+  ({
+    kitchenNote: {
+      scope: { workingOrderId: "wo-terrace" },
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    },
+    id: "wo-terrace",
+    zoneId: "zone-terrace",
+    orderNumber: 9,
+    label: null,
+    revision: 0,
+    lines: [
+      {
+        menuItemId: "offer-terrace-soup",
+        productId: "terrace-soup",
+        quantity: "1.000",
+        product: terraceSoup,
+      },
+    ],
+  }) as unknown as HeldOrder;
+
+/** The counter on its own area, offering coffee, with {@link terraceOrder} to read; the terrace
+ * offers the soup, and every other area coffee. */
+async function terraceRetrieve(overrides: Record<string, unknown> = {}) {
+  const counterOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+  const terraceOffers = fixtureOffers(
+    { menus: [defaultMenu], products: [terraceSoup] },
+    { zoneId: "zone-terrace" },
+  );
+  const listZoneOffers = vi.fn(async (zoneId: string) =>
+    zoneId === "zone-terrace" ? terraceOffers : counterOffers,
+  );
+  const { el } = await mountApp({
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOffers),
+    listZoneOffers,
+    retrieveWorkingOrder: vi.fn(async () => terraceOrder()),
+    retrievePlacedOrder: vi.fn(async () => terraceOrder()),
+    ...overrides,
+  });
+  const c = await toCounter(el);
+  return { el, c, listZoneOffers: currentApi.listZoneOffers as typeof listZoneOffers };
+}
+
 describe("till-app", () => {
   it("asks before Counter Pay and saves a chosen station before opening the window", async () => {
     const order: string[] = [];
@@ -859,6 +925,7 @@ describe("till-app", () => {
           { ...defaultStation, id: "kitchen", name: "Kitchen", isDefault: false },
         ]),
       retrieveWorkingOrder: vi.fn(async (id: string) => ({
+        zoneId: null,
         id,
         orderNumber: 5,
         label: null,
@@ -1231,6 +1298,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       askSaleDeadEnds,
       retrieveWorkingOrder: vi.fn(async (id: string) => ({
+        zoneId: null,
         id,
         orderNumber: 5,
         label: null,
@@ -1298,6 +1366,7 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValue([defaultStation, { ...defaultStation, id: "kitchen" }]),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -1409,6 +1478,7 @@ describe("till-app", () => {
             { ...defaultStation, id: "kitchen" },
           ]),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          zoneId: null,
           kitchenNote: {
             scope: { workingOrderId: "wo-1" },
             note: null,
@@ -4640,6 +4710,7 @@ describe("till-app", () => {
     it("keeps each order's own language: a held order keeps its choice and the next sale starts on the venue's", async () => {
       const { el, c } = await counterWith({
         retrieveWorkingOrder: vi.fn(async (id: string) => ({
+          zoneId: null,
           kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 1 },
           id,
           orderNumber: 5,
@@ -4720,6 +4791,7 @@ describe("till-app", () => {
         {
           setOrderReceiptLanguage,
           retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            zoneId: null,
             kitchenNote: {
               scope: { workingOrderId: "wo-1" },
               note: null,
@@ -4775,6 +4847,7 @@ describe("till-app", () => {
       const { el, c } = await counterWith(
         {
           retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            zoneId: null,
             kitchenNote: {
               scope: { workingOrderId: "wo-1" },
               note: null,
@@ -4825,6 +4898,7 @@ describe("till-app", () => {
 
     it("reads the order again when its language was saved from a copy changed elsewhere", async () => {
       const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -4849,6 +4923,7 @@ describe("till-app", () => {
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
       retrieveWorkingOrder.mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -6687,6 +6762,7 @@ describe("till-app", () => {
       .mockResolvedValue({ revision: 5 });
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const stored = (revision: number, quantities: string[]) => ({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
@@ -6728,6 +6804,7 @@ describe("till-app", () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     // A stored café line the listing shows as one line of two, which a save raises in place.
     const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
@@ -6812,6 +6889,7 @@ describe("till-app", () => {
         .mockResolvedValueOnce({ revision: 4 })
         .mockResolvedValue({ revision: 5 });
       const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -6929,6 +7007,7 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -6942,6 +7021,7 @@ describe("till-app", () => {
         lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
       })
       .mockResolvedValueOnce({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -6982,6 +7062,7 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -7018,6 +7099,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       updateWorkingOrder,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-stable" },
           note: null,
@@ -7127,6 +7209,7 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-customised" },
           note: null,
@@ -7215,6 +7298,7 @@ describe("till-app", () => {
   };
   function heldWineOrder(extras: (typeof heldMilk)[]) {
     return {
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "wo-vino" },
         note: null,
@@ -7278,6 +7362,7 @@ describe("till-app", () => {
   /** A retrieved order whose one café line (×2) carries `heldMilk` (×2 per dish). */
   function milkOrder(product: TillProduct = coffee) {
     return {
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "wo-customised" },
         note: null,
@@ -7439,6 +7524,7 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-both" },
           note: null,
@@ -7451,6 +7537,7 @@ describe("till-app", () => {
         lines: [answered, { menuItemId: "menu-item-ghost", productId: "ghost", quantity: "1.000" }],
       })
       .mockResolvedValueOnce({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-one" },
           note: null,
@@ -7491,6 +7578,7 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-answered" },
           note: null,
@@ -7567,6 +7655,7 @@ describe("till-app", () => {
   /** A retrieved order whose one line froze `answer` against a dish offering `donenessList`. */
   function answeredOrder(answer: Record<string, unknown>) {
     return {
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "wo-answered" },
         note: null,
@@ -8369,6 +8458,7 @@ describe("till-app", () => {
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(zoneOffers)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-happy" },
           note: null,
@@ -8432,6 +8522,7 @@ describe("till-app", () => {
         offers: [],
       }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-seasonal" },
           note: null,
@@ -8462,12 +8553,198 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("retrieve-order judges a line against the offer of the area the order was parked in, not the counter's", async () => {
+    const { el, c } = await terraceRetrieve();
+
+    emit(c, "retrieve-order", { id: "wo-terrace" });
+    await flush(el);
+
+    expect(c.store.lines).toHaveLength(1);
+    expect(c.store.lines[0]!.notOffered).toBeUndefined();
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+    expect(basket.querySelector(".line")!.textContent).not.toContain(t("basket.not_offered"));
+  });
+
+  it("retrieve-order refuses an order whose own area's offer cannot be read, rather than judging it by the counter's", async () => {
+    const { el, c } = await terraceRetrieve({
+      listZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const id = c.store.id;
+
+    emit(c, "retrieve-order", { id: "wo-terrace" });
+    await flush(el);
+
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      t("held.open_failed"),
+    );
+  });
+
+  it("retrieve-order says to try again, not that the order is gone, when the order's read fails for another reason", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    await el.updateComplete;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await discardBasketChanges(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      t("held.open_failed"),
+    );
+    expect(c.store.lines).toHaveLength(1);
+    expect(c.store.lines[0]!.product).toBe(coffee);
+  });
+
+  it.each(["service_zone.not_allowed", "device_profile.no_service_zone"])(
+    "retrieve-order says what %s means, not to try again, when the device's profile may not open the order",
+    async (code) => {
+      const { el } = await mountApp({
+        retrieveWorkingOrder: vi.fn().mockRejectedValue({ code, status: 403 }),
+        listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(coffee, "2");
+      await el.updateComplete;
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await discardBasketChanges(el);
+
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+        codeMessage(code),
+      );
+      expect(c.store.lines).toHaveLength(1);
+      expect(c.store.lines[0]!.product).toBe(coffee);
+    },
+  );
+
+  /** Runs `body`, answering with every promise rejection nobody handled while it ran. */
+  async function unhandledDuring(body: () => Promise<void>): Promise<unknown[]> {
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      await body();
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+    return rejections;
+  }
+
+  it("retrieve-order refuses the order when the area the held list names cannot be read and the order is still there", async () => {
+    let answer!: (order: HeldOrder) => void;
+    const { el, c } = await terraceRetrieve({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([{ ...heldSummary, id: "wo-terrace", zoneId: "zone-terrace" }]),
+      retrieveWorkingOrder: vi.fn(() => new Promise<HeldOrder>((resolve) => (answer = resolve))),
+    });
+    const id = c.store.id;
+    (currentApi.listZoneOffers as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    const rejections = await unhandledDuring(async () => {
+      emit(c, "retrieve-order", { id: "wo-terrace" });
+      // The area's read fails while the order's is still out.
+      await flush(el);
+      await flush(el);
+      answer(terraceOrder());
+      await flush(el);
+      await flush(el);
+    });
+
+    expect(rejections).toEqual([]);
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      t("held.open_failed"),
+    );
+  });
+
+  it("retrieve-order judges a moved order by its new area when the area the held list names cannot be read", async () => {
+    let answer!: (order: HeldOrder) => void;
+    const { el, c, listZoneOffers } = await terraceRetrieve({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([{ ...heldSummary, id: "wo-terrace", zoneId: "zone-bar" }]),
+      retrieveWorkingOrder: vi.fn(() => new Promise<HeldOrder>((resolve) => (answer = resolve))),
+    });
+    const terrace = listZoneOffers.getMockImplementation()!;
+    listZoneOffers.mockImplementation(async (zoneId: string) => {
+      if (zoneId === "zone-bar") throw new TypeError("Failed to fetch");
+      return terrace(zoneId);
+    });
+
+    const rejections = await unhandledDuring(async () => {
+      emit(c, "retrieve-order", { id: "wo-terrace" });
+      await flush(el);
+      await flush(el);
+      answer(terraceOrder());
+      await flush(el);
+      await flush(el);
+    });
+
+    expect(rejections).toEqual([]);
+    expect(listZoneOffers.mock.calls.map(([zoneId]) => zoneId)).toEqual([
+      "zone-bar",
+      "zone-terrace",
+    ]);
+    expect(c.store.id).toBe("wo-terrace");
+    expect(c.store.lines.map((line) => line.notOffered)).toEqual([undefined]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("retrieve-order reads the area's offer the held list names while the order is still being read", async () => {
+    let answer!: (order: HeldOrder) => void;
+    const { el, c, listZoneOffers } = await terraceRetrieve({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([{ ...heldSummary, id: "wo-terrace", zoneId: "zone-terrace" }]),
+      retrieveWorkingOrder: vi.fn(() => new Promise<HeldOrder>((resolve) => (answer = resolve))),
+    });
+
+    emit(c, "retrieve-order", { id: "wo-terrace" });
+    await flush(el);
+    expect(listZoneOffers.mock.calls.map(([zoneId]) => zoneId)).toEqual(["zone-terrace"]);
+
+    answer(terraceOrder());
+    await flush(el);
+    expect(listZoneOffers).toHaveBeenCalledOnce();
+    expect(c.store.lines.map((line) => line.notOffered)).toEqual([undefined]);
+  });
+
+  it("retrieve-order reads the area the order is in when it has moved since the held list was read", async () => {
+    const { el, c, listZoneOffers } = await terraceRetrieve({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([{ ...heldSummary, id: "wo-terrace", zoneId: "zone-bar" }]),
+    });
+
+    emit(c, "retrieve-order", { id: "wo-terrace" });
+    await flush(el);
+
+    expect(listZoneOffers.mock.calls.map(([zoneId]) => zoneId)).toEqual([
+      "zone-bar",
+      "zone-terrace",
+    ]);
+    expect(c.store.lines.map((line) => line.notOffered)).toEqual([undefined]);
+  });
+
   it("retrieve-order: an each quantity displays without trailing zeros; a weight keeps its decimals", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [coffee, ham] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -8499,6 +8776,7 @@ describe("till-app", () => {
   it("retrieve-order: drops a line whose product no longer resolves and shows a non-fatal held.product_gone", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -8545,6 +8823,7 @@ describe("till-app", () => {
               {
                 getTill: vi.fn().mockResolvedValue({ ...till, locale }),
                 retrieveWorkingOrder: vi.fn().mockResolvedValue({
+                  zoneId: null,
                   kitchenNote: {
                     scope: { workingOrderId: "wo-missing-offer" },
                     note: null,
@@ -8585,6 +8864,7 @@ describe("till-app", () => {
   it("retrieve-order: drops a line whose product is null beside an offered line", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-null" },
           note: null,
@@ -15854,6 +16134,7 @@ describe("remembered dietary filters", () => {
           fixtureOffers({ menus: [defaultMenu], products: [almond, walnut, mixed] }),
         ),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -18916,6 +19197,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   it("empties the basket when the order moved is the one retrieved into it", async () => {
     const { el, c } = await counterWith({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-12" },
           note: null,
@@ -19193,6 +19475,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
   const pressPay = (el: TillApp, id: string) =>
     rowOf(el, id)!.querySelector<HTMLElement>("[data-waiting-pay]")!.click();
   const placedRead = (id: string) => ({
+    zoneId: null,
     kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 2 },
     id,
     orderNumber: 12,
@@ -19929,6 +20212,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
   it("Pay opens the counter's collect stage on THAT order, with its lines, and collects it by its id", async () => {
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "wo-sent" },
         note: null,
@@ -19972,6 +20256,47 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     );
     expect(ticket(el)).not.toBeNull();
     expect(listCounterWaiting.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Pay judges the order's lines against the offer of the area it was sent from, not the counter's", async () => {
+    const listZoneOffers = vi.fn(async (zoneId: string) =>
+      fixtureOffers(
+        { menus: [defaultMenu], products: zoneId === "zone-terrace" ? [terraceSoup] : [coffee] },
+        { serviceMode: "ticket_then_pay", zoneId },
+      ),
+    );
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      listCounterWaiting: vi.fn().mockResolvedValue([{ ...sentOrder, id: "wo-terrace" }]),
+      listZoneOffers,
+      retrievePlacedOrder: vi.fn(async () => terraceOrder()),
+    });
+
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-terrace" });
+    await flush(el);
+
+    expect(listZoneOffers).toHaveBeenCalledWith("zone-terrace", expect.anything());
+    expect(tenderPay(el).stage).toBe("collect");
+    expect(c.store.lines.map((line) => [line.product.id, line.notOffered])).toEqual([
+      ["terrace-soup", undefined],
+    ]);
+  });
+
+  it("Pay loads nothing when the offer of the area the order was sent from cannot be read", async () => {
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      listCounterWaiting: vi.fn().mockResolvedValue([{ ...sentOrder, id: "wo-terrace" }]),
+      listZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      retrievePlacedOrder: vi.fn(async () => terraceOrder()),
+    });
+    const id = c.store.id;
+
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-terrace" });
+    await flush(el);
+
+    expect(c.store.id).toBe(id);
+    expect(tenderPay(el).stage).toBe("order");
+    expect(alert(el)!.textContent).toContain(t("waiting.pay_error"));
   });
 
   it("Pay on an order paid or gone meanwhile says it is no longer available and leaves the basket", async () => {
@@ -23320,6 +23645,7 @@ describe("basket protection lifetimes", () => {
   });
   it("an accepted line save stays clean when the subsequent payment is refused", async () => {
     const stored = (note?: string) => ({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
@@ -23994,6 +24320,36 @@ describe("A737 Find a bill page", () => {
     expect(tableOrder(el)).toBeNull();
     expect(currentApi.getPartyBills).not.toHaveBeenCalled();
   });
+  it("Find gate says to try again, not that the party is gone, when its own floor read fails", async () => {
+    const getTablesState = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([]);
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "departed-party" })),
+      getPartyBills: vi.fn(),
+    });
+    el.api.getTablesState = getTablesState;
+    counter.store.addProduct(coffee, "2");
+
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.open_failed")));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+    expect(pageOf(el)).toBe(view);
+    expect(view.busy).toBe(false);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(tableOrder(el)).toBeNull();
+
+    // The next attempt's read answers without the party, after the failure above.
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.open_failed"));
+    expect(getTablesState).toHaveBeenCalledTimes(2);
+    expect(view.busy).toBe(false);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(tableOrder(el)).toBeNull();
+    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
+  });
   it("Find gate ignores table discovery completed after Back", async () => {
     let finish!: (tables: TableState[]) => void;
     const { el, view, counter } = await open({
@@ -24038,7 +24394,8 @@ describe("A737 Find a bill page", () => {
     });
     counter.store.addProduct(coffee, "2");
     emit(view, "find-bill-open", { row: billRow() });
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.open_failed")));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
     expect(view.busy).toBe(false);
     expect(ticket(el)).toBeNull();
     expect(counter.store.lines[0]!.quantity).toBe("2");
@@ -24111,6 +24468,7 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(coffee, "2");
     const id = counter.store.id;
     finish({
+      zoneId: null,
       dining: "eat_in",
       diningChoice: "none",
       expectedEdit: null,
@@ -24649,6 +25007,7 @@ describe("A737 Find a bill page", () => {
   });
   it("an edited basket can stay or discard before a fresh held order replaces it", async () => {
     const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-1" },
         note: null,
@@ -24702,6 +25061,7 @@ describe("A737 Find a bill page", () => {
     const { el, counter, view } = await open({
       getFindBill: vi.fn().mockResolvedValue(billRow()),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "bill-1" },
           note: null,
@@ -24757,18 +25117,27 @@ describe("A737 Find a bill page", () => {
     const menu = shell(el)!.shadowRoot!.querySelector("[data-test=more-menu]")!;
     expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
   });
-  it("a held retrieval that fails leaves the current basket on the page and reports stale", async () => {
-    const { el, view, counter } = await open({
-      getFindBill: vi.fn().mockResolvedValue(billRow({ paid: "0.00", state: "held" })),
-      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
-    });
-    emit(view, "find-bill-open", { row: billRow() });
-    await vi.waitFor(() => expect(currentApi.retrieveWorkingOrder).toHaveBeenCalled());
-    await flush(el);
-    expect(pageOf(el)).toBe(view);
-    expect(counter.store.lines).toHaveLength(0);
-    expect(el.shadowRoot!.textContent).toContain(t("held.stale"));
-  });
+  it.each([
+    ["is gone", { code: "working_order.not_found", status: 404 }, "held.stale"],
+    ["fails for another reason", { code: "server.internal", status: 500 }, "held.open_failed"],
+  ] as const)(
+    "a held retrieval whose order %s leaves the current basket on the page and says so",
+    async (_label, refusal, key) => {
+      const { el, view, counter } = await open({
+        getFindBill: vi.fn().mockResolvedValue(billRow({ paid: "0.00", state: "held" })),
+        retrieveWorkingOrder: vi.fn().mockRejectedValue(refusal),
+      });
+      emit(view, "find-bill-open", { row: billRow() });
+      await vi.waitFor(() => expect(currentApi.retrieveWorkingOrder).toHaveBeenCalled());
+      await flush(el);
+      expect(pageOf(el)).toBe(view);
+      expect(counter.store.lines).toHaveLength(0);
+      expect(el.shadowRoot!.textContent).toContain(t(key));
+      expect(el.shadowRoot!.textContent).not.toContain(
+        t(key === "held.stale" ? "held.open_failed" : "held.stale"),
+      );
+    },
+  );
 
   it("opens the selected party bill through the table's existing controls and retains a counter draft", async () => {
     const getTabLines = vi
@@ -24800,6 +25169,7 @@ describe("A737 Find a bill page", () => {
   });
   it("a placed uninvoiced counter order opens the existing collection stage", async () => {
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-placed" },
         note: null,
@@ -24908,6 +25278,7 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(coffee, "1");
     const id = counter.store.id;
     finish({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-placed" },
         note: null,
@@ -25038,6 +25409,7 @@ describe("A767 card outcome belongs to its order", () => {
           try {
             const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
             const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+              zoneId: null,
               id,
               orderNumber: id === "declined-order" ? 41 : 42,
               revision: 3,
@@ -25117,6 +25489,7 @@ describe("A767 card outcome belongs to its order", () => {
         }),
     );
     const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+      zoneId: null,
       id,
       orderNumber: 41,
       revision: 3,
@@ -25201,6 +25574,7 @@ describe("A767 card outcome belongs to its order", () => {
 
 describe("A767 sign-in and held-order recovery", () => {
   const heldRow = (id: string): HeldOrderSummary => ({
+    zoneId: null,
     items: [],
     id,
     orderNumber: id === "wo-1" ? 41 : 42,
@@ -26280,6 +26654,7 @@ describe("retrieved table bills paid at Counter", () => {
       const { el } = await mountApp({
         recordSale,
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          zoneId: null,
           id: "wo-1",
           orderNumber: 5,
           label: "Table 4",
@@ -26309,6 +26684,7 @@ describe("retrieved table bills paid at Counter", () => {
     const { el } = await mountApp({
       pay,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         id: "wo-1",
         orderNumber: 5,
         label: "Table 4",
@@ -26331,6 +26707,7 @@ describe("retrieved table bills paid at Counter", () => {
     const mounted = await mountApp({
       ...overrides,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         id: "wo-1",
         orderNumber: 5,
         label: "Table 4",

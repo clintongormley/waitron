@@ -704,6 +704,7 @@ async function counterPay(
       return { id, orderNumber: 7 };
     }),
     retrieveWorkingOrder: vi.fn(async () => ({
+      zoneId: null,
       id,
       orderNumber: 7,
       revision: 0,
@@ -860,6 +861,7 @@ async function storedCounterPay(
 ) {
   const api = deferredApi({
     [placed ? "retrievePlacedOrder" : "retrieveWorkingOrder"]: vi.fn().mockResolvedValue({
+      zoneId: null,
       id: "wo-9",
       orderNumber: 9,
       revision: 2,
