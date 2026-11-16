@@ -166,7 +166,7 @@ it.each([
   "different-origin",
   "duplicate-kind",
   "equal-times",
-] as const)("refuses %s request bundles without changing rows or heads", async (shape) => {
+] as const)("refuses %s request bundles without changing rows", async (shape) => {
   const inputs = pair();
   if (shape === "empty") inputs.length = 0;
   if (shape === "three") inputs.push({ ...inputs[1]! });

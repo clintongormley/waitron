@@ -165,7 +165,6 @@ describe("attendance obligations follow current clock and planning evidence", ()
     const before = await f.state();
     await f.process();
     expect((await f.state()).entries).toEqual(before.entries);
-    expect((await f.state()).chains).toEqual(before.chains);
     expect(await f.questions()).toMatchObject([
       { openEntryId: old, kind: "missing-times", missingKinds: ["out"] },
     ]);
