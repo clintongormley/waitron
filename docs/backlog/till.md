@@ -50,7 +50,7 @@ their full text.
   known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
   pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
   titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
-  "(SP-B2.1)"), as do three `session-activity.test.ts` titles ("(C3)").
+  "(SP-B2.1)").
 
 ## Test titles repeat claims the branch corrected (#618)
 

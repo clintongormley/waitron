@@ -194,11 +194,11 @@ were the legitimate shape where a block comment heads a group of members rather 
 the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
 header-then-member shape, and its own tests, rather than re-running a scratch script.
 
-## The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was measured false
+## Schema files keep `v8 ignore` pairs with no stated reason
 
-- #585 took the reason out of
-  `packages/db/src/schema`; the ignore pairs there stay. Six files in
-  `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
+- Schema files in `packages/db/src/schema` (including `identity/`),
+  `packages/fiscal-verifactu/src/schema`, `packages/node-db/src/schema` and
+  `packages/payments/src/schema` keep `v8 ignore` pairs, and none says why. Removing a pair is a
   code change, for whoever next changes that package's code.
 
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
