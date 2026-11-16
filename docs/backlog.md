@@ -656,7 +656,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   listed on every station; a watcher set to follow every station used to cover a new station at
   once. Consider an "add to every station" control. Left open by A366 slice 5 Part B (decision P2).
 
-- **Routing model reads** (bundle of 4, size M). [Detail](backlog/kitchen.md#bundle-routing-model-reads)
 
 - **KDS corrections deferred from #191** — owner, 2026-09-01.
   [Detail](backlog/kitchen.md#kds-corrections-deferred-from-191)

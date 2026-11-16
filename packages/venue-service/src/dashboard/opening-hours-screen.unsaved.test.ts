@@ -108,8 +108,6 @@ class OpeningLeaveApp extends LitElement {
               colour: "blue",
               menuId: "lunch",
               staffMenuIds: [],
-              weekdays: [1],
-              routingUses: [],
             },
           ],
         },

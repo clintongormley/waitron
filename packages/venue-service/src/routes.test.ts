@@ -3132,6 +3132,31 @@ describe("a routing cell's period choices on the routes", () => {
     ]);
   });
 
+  it.each(["false", "true", "other"])(
+    "routing periods=%s selects only the explicit plain read",
+    async (periods) => {
+      const fx = await lunchFixture();
+      await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, {
+        address: address(fx),
+        target: at(fx.stationId),
+        periods: [{ periodId: fx.lunch, target: at(fx.downstairs) }],
+      });
+      const response = await send(fx.app, "GET", `${base}?periods=${periods}`, fx.managerCookie);
+      expect(response.status).toBe(200);
+      const model = await response.json();
+      expect(model.periods).toHaveLength(periods === "false" ? 0 : 1);
+      expect(model.cells).toEqual([
+        {
+          ...address(fx),
+          target: at(fx.stationId),
+          ...(periods === "false"
+            ? {}
+            : { periods: [{ periodId: fx.lunch, target: at(fx.downstairs) }] }),
+        },
+      ]);
+    },
+  );
+
   it("answers a refused line with its status: 409 route.period_invalid, 400 for an unknown period", async () => {
     const fx = await lunchFixture();
     const unknown = crypto.randomUUID();

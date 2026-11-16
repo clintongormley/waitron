@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_STRINGS } from "./dashboard/strings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -10,6 +11,7 @@ import {
   kitchenStations,
   settings as businessDaySettingsTable,
   menuPeriods,
+  categories,
   routingCellPeriods,
   routingCells,
   seasons as seasonsTable,
@@ -292,6 +294,37 @@ describe("the period-delete routes", () => {
       clockRevision: 1,
     });
   });
+
+  it.each(["en-GB", "es-ES", "invalid"])(
+    "GET delete-impact orders names with supported language %s",
+    async (language) => {
+      const r = await routed();
+      const [station] = await db.select({ id: kitchenStations.id }).from(kitchenStations);
+      const localizedName = VENUE_SERVICE_STRINGS.es["prep.tomorrow"];
+      for (const name of ["manner", localizedName]) {
+        const [category] = await db.insert(categories).values({ name }).returning();
+        const [cell] = await db
+          .insert(routingCells)
+          .values({ categoryId: category!.id, stationId: station!.id })
+          .returning();
+        await db
+          .insert(routingCellPeriods)
+          .values({ cellId: cell!.id, periodId: r.lunch, stationId: station!.id });
+      }
+      const response = await r.send(
+        "GET",
+        `/${r.lunch}/delete-impact?language=${language}`,
+        r.supervisor,
+      );
+      expect(response.status).toBe(200);
+      const { routingUses } = await response.json();
+      expect(
+        routingUses
+          .filter((use: { rowKind: string }) => use.rowKind === "category")
+          .map((use: { rowLabel: string }) => use.rowLabel),
+      ).toEqual(language === "es-ES" ? ["manner", localizedName] : [localizedName, "manner"]);
+    },
+  );
 
   it("GET delete-impact carries the clock revision POST delete accepts, and a new one once the clock changes", async () => {
     const r = await routed();

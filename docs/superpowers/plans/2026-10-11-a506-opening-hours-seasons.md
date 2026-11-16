@@ -1,5 +1,7 @@
 # Opening hours rebuilt around seasons and special days — implementation plan (A506)
 
+> 2026-11-16: the [routing-read cleanup](2026-11-16-routing-model-reads.md) removes the Opening hours model’s unused period weekdays and routing uses. The delete-impact read retains routing uses and shares row traversal with Routes.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing behavioural test, run it,

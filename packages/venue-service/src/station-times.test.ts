@@ -348,6 +348,13 @@ describe("station status on special dates and calendar boundaries", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await saveDate(tx, "2026-10-06", true);
+      await setStationToday(
+        tx,
+        f.downstairs,
+        "closed",
+        new Date("2026-10-06T10:00:00Z"),
+        await seedActivityActor(tx),
+      );
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
@@ -361,6 +368,14 @@ describe("station status on special dates and calendar boundaries", () => {
         why: "default",
       });
       expect(await statusAt(tx, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
+      expect(
+        await stationTimes.stationDestinations(tx, f.upstairs, new Date("2026-10-06T10:00:00Z")),
+      ).toContainEqual({
+        id: f.downstairs,
+        name: "Downstairs bar",
+        isDefault: true,
+        preferred: false,
+      });
       await tx
         .update(kitchenStations)
         .set({ active: false })

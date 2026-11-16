@@ -307,7 +307,13 @@ export async function setRoutingCell(
   periods?: readonly PeriodLine[],
 ): Promise<void> {
   const valid = await validateRoutingCell(tx, address, target);
-  const lines = periods === undefined ? undefined : await validatePeriodLines(tx, valid, periods);
+  const lines =
+    periods === undefined
+      ? undefined
+      : (await validatePeriodLines(tx, valid, periods)).filter(
+          (line) =>
+            line.target.kind !== "station" || targetKey(line.target) !== targetKey(valid.target!),
+        );
   const stored = storedTarget(valid.target!);
   const [updated] = await tx
     .update(routingCells)
@@ -940,7 +946,11 @@ export async function stationStates(
   );
 }
 
-export async function routingModel(tx: Transaction, at: Date): Promise<RoutingModel> {
+export async function routingModel(
+  tx: Transaction,
+  at: Date,
+  options: { periods?: boolean } = {},
+): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, at);
   const { rules, folders, stations } = await snapshot(tx, scopeAt(moment));
   const context = moment === null ? null : serviceDayContext(clock, moment.businessDay);
@@ -956,10 +966,11 @@ export async function routingModel(tx: Transaction, at: Date): Promise<RoutingMo
     .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
-  const periods = await readRoutingPeriods(tx, cutover);
+  const periods = options.periods === false ? [] : await readRoutingPeriods(tx, cutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
-  const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];
+  const active =
+    options.periods !== false && (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];
   const productsOfRow = new Map<string, Set<string>>();
   const rowProducts = (cell: CellAddress) => {
     const key = cellKey({ row: cell.row, zoneId: null });
@@ -975,7 +986,7 @@ export async function routingModel(tx: Transaction, at: Date): Promise<RoutingMo
     cells: rules.cells
       .filter((cell) => cell.row.kind !== "product" || shown.has(cell.row.productId))
       .map((cell) => {
-        const lines = rules.cellPeriods?.get(cellKey(cell));
+        const lines = options.periods === false ? undefined : rules.cellPeriods?.get(cellKey(cell));
         if (lines === undefined) return cell;
         const covered = rowProducts(cell);
         return {

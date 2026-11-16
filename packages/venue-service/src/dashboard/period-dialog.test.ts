@@ -20,8 +20,6 @@ const period = {
   menuId: "lunch",
   staffMenuIds: ["deli"],
   floorPlanSetId: null,
-  weekdays: [1, 2],
-  routingUses: [],
 };
 beforeEach(() => setLocale("en"));
 afterEach(() => {

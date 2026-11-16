@@ -1,5 +1,7 @@
 # Prep stations, slice 4 — combined tickets, period choices in routing, and no station hours (A366)
 
+> 2026-11-16: the [routing-read cleanup](2026-11-16-routing-model-reads.md) removes the Opening hours model’s unused period weekdays and routing uses. The delete-impact read retains routing uses and shares row traversal with Routes.
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

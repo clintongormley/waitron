@@ -61,6 +61,7 @@ import {
   setRoutingCell,
   clearRoutingCell,
 } from "./routing-store.js";
+import * as periodReads from "./routing-periods.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
 import {
@@ -2987,6 +2988,53 @@ describe("saving a cell's period choices", () => {
     tx
       .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
       .from(routingCellPeriods);
+
+  it("omits supplied period lines to the plain station while keeping differing and No preparation targets", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.upstairs)),
+        line(f.staffLunch, station(f.downstairs)),
+      ]);
+      expect(await storedLines(tx)).toEqual([{ periodId: f.staffLunch, stationId: f.downstairs }]);
+      expect((await modelCell(tx, everyZone(f)))?.periods).toEqual([
+        line(f.staffLunch, station(f.downstairs)),
+      ]);
+      await setRoutingCell(tx, everyZone(f), station(f.upstairs), [line(f.lunch, noPrep)]);
+      expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: null }]);
+      await setRoutingCell(tx, everyZone(f), station(f.downstairs));
+      expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: null }]);
+      await setRoutingCell(tx, everyZone(f), station(f.downstairs), []);
+      expect(await storedLines(tx)).toEqual([]);
+    }));
+
+  it("reads plain folder routing without period products while full reads keep warnings", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      const readPeriods = vi.spyOn(periodReads, "readRoutingPeriods");
+      const full = await routingModel(tx, at);
+      expect(readPeriods).toHaveBeenCalledOnce();
+      readPeriods.mockClear();
+      const plain = await routingModel(tx, at, { periods: false });
+      expect(readPeriods).not.toHaveBeenCalled();
+      readPeriods.mockRestore();
+      expect(plain.periods).toEqual([]);
+      expect(plain.cells).toEqual(
+        full.cells.map(({ row, zoneId, target }) => ({ row, zoneId, target })),
+      );
+      expect(plain.categories).toEqual(full.categories);
+      expect(plain.products).toEqual(full.products);
+      expect(plain.stationTimes).toEqual(full.stationTimes);
+      expect(full.periods.find((period) => period.id === f.lunch)?.productIds).toContain(f.mojito);
+      expect(
+        full.cells.find(
+          (cell) => cell.row.kind === "category" && cell.row.categoryId === f.cocktails,
+        )?.periods,
+      ).toEqual([line(f.lunch, station(f.downstairs))]);
+    }));
 
   it("gives each zone of the model its department", async () =>
     scoped(async (tx) => {

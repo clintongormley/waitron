@@ -82,9 +82,6 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
       staffMenuIds: readonly string[];
       /** Null when the field is empty and the department's default set is used. */
       floorPlanSetId: string | null;
-      /** The weekdays the period is painted on in any season. */
-      weekdays: readonly number[];
-      routingUses: readonly PeriodRoutingUse[];
     }[];
     /** One entry per season, in `seasons` order; a season never written is an empty week. */
     seasonWeeks: readonly {

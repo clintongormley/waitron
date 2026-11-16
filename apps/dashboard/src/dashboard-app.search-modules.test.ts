@@ -40,8 +40,6 @@ const model = {
           colour: "blue",
           menuId: "menu",
           staffMenuIds: [],
-          weekdays: [1],
-          routingUses: [],
         },
       ],
       seasonWeeks: [

@@ -125,11 +125,12 @@ export async function periodDeleteImpact(
   tx: Transaction,
   periodId: string,
   at: Date,
+  language?: string,
 ): Promise<PeriodDeleteImpact> {
   const period = await requirePeriod(tx, periodId);
   const today = await businessDayAt(tx, at);
   const painted = (await paintedIn(tx, today, periodId)).get(periodId)!;
-  const routingUses = (await readRoutingUses(tx, periodId)).get(periodId) ?? [];
+  const routingUses = (await readRoutingUses(tx, periodId, language)).get(periodId) ?? [];
   const replacements = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
     .from(menuPeriods)

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { serviceStepOrder } from "./service-steps.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { AppError, DINING_POLICIES, DININGS } from "@waitron/shared";
@@ -8,7 +9,7 @@ import { isReadableClock } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
-import { SERVICE_STEP_STARTS, ZONE_PAINT_KINDS } from "@waitron/db";
+import { SERVICE_STEP_STARTS, ZONE_PAINT_KINDS, type Transaction } from "@waitron/db";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { parseSeasonStart } from "./season-rules.js";
 import { firstSkippedEnd, NO_HOLIDAY_DATES, sharedSpecialDate } from "./special-days.js";
@@ -704,4 +705,11 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "opening_hours" },
   ],
   validate: validateVenueServiceConfiguration,
+  afterImport: async (tx: Transaction): Promise<void> => {
+    await tx.run(sql`delete from routing_cell_periods where id in (
+      select line.id from routing_cell_periods line
+      join routing_cells cell on cell.id = line.cell_id
+      where line.station_id is not null and line.station_id = cell.station_id
+    )`);
+  },
 } as const;

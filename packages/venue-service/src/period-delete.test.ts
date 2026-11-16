@@ -1,10 +1,19 @@
+import { VENUE_SERVICE_STRINGS } from "./dashboard/strings.js";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
+import {
+  createProduct,
+  buildMenuDocument,
+  createMenu,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
+  products,
+  floorZones,
   openingHours,
   insertInChunks,
   specialDays,
@@ -22,11 +31,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError } from "@waitron/shared";
+import { visibleRoutingRows, rowKey } from "./routing.js";
+import { AppError, createLabelComparator } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { readRoutingUses, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
+import { routingModel } from "./routing-store.js";
 import { createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { ensureDefaultSeasons } from "./seasons.js";
@@ -425,6 +436,115 @@ describe("what deleting a period touches", () => {
     });
     expect(impact.routingUses).toEqual(routing.get(v.lunch));
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "orders warning rows like the expanded Routes model in %s, including cycles and tied product names",
+    async (language) => {
+      const v = await venue();
+      await scoped(async (tx) => {
+        const localizedName = VENUE_SERVICE_STRINGS.es["prep.tomorrow"];
+        const folders = await tx
+          .insert(categories)
+          .values([
+            { name: "manner" },
+            { name: localizedName },
+            { name: "Cycle A" },
+            { name: "Cycle B" },
+          ])
+          .returning();
+        await tx
+          .update(categories)
+          .set({ parentId: folders[3]!.id })
+          .where(eq(categories.id, folders[2]!.id));
+        await tx
+          .update(categories)
+          .set({ parentId: folders[2]!.id })
+          .where(eq(categories.id, folders[3]!.id));
+        const first = await createProduct(tx, {
+          name: "First",
+          categoryId: folders[0]!.id,
+          pricingUnit: "each",
+          unitPrice: "1",
+          vatClass: "general",
+        });
+        const second = await createProduct(tx, {
+          name: "Second",
+          categoryId: folders[0]!.id,
+          pricingUnit: "each",
+          unitPrice: "1",
+          vatClass: "general",
+        });
+        await tx.update(products).set({ name: "Same" }).where(eq(products.id, first.id));
+        await tx.update(products).set({ name: "Same" }).where(eq(products.id, second.id));
+        const zones = await tx
+          .insert(floorZones)
+          .values([
+            { name: "Zone A", departmentId: v.restaurant, displayOrder: 1 },
+            { name: "Zone B", departmentId: v.restaurant, displayOrder: 2 },
+          ])
+          .returning();
+        for (const address of [
+          ...folders.map(({ id }) => ({ categoryId: id })),
+          ...[first, second]
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .flatMap(({ id }) => zones.map((zone) => ({ productId: id, zoneId: zone.id }))),
+        ]) {
+          const [cell] = await tx
+            .insert(routingCells)
+            .values({ ...address, stationId: v.stationId })
+            .returning();
+          await tx
+            .insert(routingCellPeriods)
+            .values({ cellId: cell!.id, periodId: v.lunch, stationId: v.stationId });
+        }
+        const impact = await periodDeleteImpact(tx, v.lunch, AT, language);
+        const names = impact.routingUses.map(({ rowLabel, zoneName }) => [rowLabel, zoneName]);
+        const nuts = [
+          ["manner", null],
+          ["manner › Same", "Zone A"],
+          ["manner › Same", "Zone B"],
+          ["manner › Same", "Zone A"],
+          ["manner › Same", "Zone B"],
+        ];
+        expect(names).toEqual([
+          ...(language === "es-ES"
+            ? [...nuts, [localizedName, null]]
+            : [[localizedName, null], ...nuts]),
+          ["Cycle A", null],
+          ["Cycle A › Cycle B", null],
+        ]);
+        const model = await routingModel(tx, AT);
+        const expanded = visibleRoutingRows(
+          model,
+          new Set(model.categories.map(({ id }) => id)),
+          createLabelComparator(language),
+        );
+        const expected = expanded.flatMap((entry) =>
+          model.cells
+            .filter(
+              (cell) =>
+                rowKey(cell.row) === rowKey(entry.row) &&
+                cell.periods?.some(({ periodId }) => periodId === v.lunch),
+            )
+            .sort(
+              (a, b) =>
+                model.zones.findIndex(({ id }) => id === a.zoneId) -
+                model.zones.findIndex(({ id }) => id === b.zoneId),
+            )
+            .map((cell) => ({
+              rowKind: entry.row.kind,
+              rowLabel: [...entry.path, entry.name].join(" › "),
+              zoneName: model.zones.find(({ id }) => id === cell.zoneId)?.name ?? null,
+            })),
+        );
+        expect(impact.routingUses).toEqual(expected);
+        await tx.update(products).set({ active: false }).where(eq(products.id, second.id));
+        expect((await periodDeleteImpact(tx, v.lunch, AT, language)).routingUses).toEqual(
+          impact.routingUses,
+        );
+      });
+    },
+  );
 
   it("names no routing for a period no cell names", async () => {
     const v = await venue();

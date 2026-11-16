@@ -92,6 +92,8 @@ import {
   diningTables,
   floorPlanTables,
   floorZones,
+  routingCells,
+  routingCellPeriods,
   kitchenStations,
   kitchenCourses,
   dayCutoverChanges,
@@ -5866,6 +5868,13 @@ it("carries a cell's period choices with their cell, including a period whose me
       (id, cell_id, period_id, station_id, no_preparation)
       values (${randomUUID()}, ${productCell}, ${period.id}, ${griddle!.id}, 0),
         (${randomUUID()}, ${categoryCell}, ${period.id}, null, 1)`);
+    const [redundant] = await tx
+      .insert(routingCells)
+      .values({ noCategory: true, stationId: bar!.id })
+      .returning();
+    await tx
+      .insert(routingCellPeriods)
+      .values({ cellId: redundant!.id, periodId: period.id, stationId: bar!.id });
     return [department.id, terrace.id, bar!.id, griddle!.id, period.id, productCell, categoryCell];
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -5882,7 +5891,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     ),
     "a strong passphrase",
   );
-  expect(decoded.tables.routing_cell_periods).toHaveLength(2);
+  expect(decoded.tables.routing_cell_periods).toHaveLength(3);
   await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,

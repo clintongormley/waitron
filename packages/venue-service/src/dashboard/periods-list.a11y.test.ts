@@ -44,8 +44,6 @@ const period = (id: string, name: string, colour: Period["colour"], menuId: stri
   menuId,
   staffMenuIds: id === "p2" ? ["staff", "wine"] : [],
   floorPlanSetId: null,
-  weekdays: [],
-  routingUses: [],
 });
 function model(empty: boolean): OpeningHoursModel {
   return {
@@ -123,7 +121,7 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
   const wrapper = await mountThemed("<div></div>", theme);
   const screen = document.createElement("periods-list") as PeriodsList;
   screen.api = new OpeningHoursApi((async (path: string, method: string) => {
-    if (path.endsWith("/delete-impact"))
+    if (path.split("?")[0]!.endsWith("/delete-impact"))
       return {
         seasons: 4,
         specialDays: 1,

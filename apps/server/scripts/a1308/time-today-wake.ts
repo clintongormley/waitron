@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import * as db from "@waitron/db";
 import * as identity from "@waitron/identity";
@@ -76,9 +77,12 @@ try {
         startingZoneId: zone!.id,
       }),
     );
-    const session = await db.withTransaction(store.venue, (tx) =>
-      identity.loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" }),
-    );
+    const session = await db.withTransaction(store.venue, async (tx) => {
+      await tx
+        .insert(db.personStaffRoles)
+        .values({ personId: person!.id, staffRoleId: await ensureFixtureJobRole(tx) });
+      return identity.loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
+    });
     const cookie = await sessionCookieForTest(store.venue, session.token);
     const management = await db.withTransaction(store.venue, (tx) =>
       identity.startManagementSession(tx, { personId: person!.id }),
@@ -211,7 +215,9 @@ try {
     managementRoutes.push(
       ...stations.map((station) => `/management-api/stations/${station.id}/printers`),
     );
+    const folderRoutingPath = "/management-api/venue-service/routing?periods=false";
     const routes = [
+      { path: folderRoutingPath, headers: managerHeaders },
       ...managementRoutes.map((path) => ({ path, headers: managerHeaders })),
       ...[
         `/api/menu-state?zoneId=${zone!.id}`,
@@ -289,7 +295,7 @@ try {
     const readerRoutes: Record<string, string[]> = {
       "dashboard:listOrdersPage": [managementRoutes[0]!],
       "dashboard:getOrder": [managementRoutes[1]!],
-      "dashboard:getFolderRouting": [managementRoutes[2]!, ...companions],
+      "dashboard:getFolderRouting": [folderRoutingPath, ...companions],
       "dashboard:getProfileScopeChoices": [managementRoutes[3]!],
       "dashboard:listProfileKitchenScreens": [managementRoutes[4]!],
       "dashboard:listDevices": [managementRoutes[5]!],

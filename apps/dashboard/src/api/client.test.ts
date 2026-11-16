@@ -122,7 +122,7 @@ describe("DashboardApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(routing));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getFolderRouting()).toEqual(routing);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/routing", {
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/routing?periods=false", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),

@@ -19,8 +19,6 @@ const period = (id: string, name: string, colour: "amber" | "green" | "red" | "p
   menuId: "m",
   staffMenuIds: [],
   floorPlanSetId: null,
-  weekdays: [0, 1, 2, 3, 4, 5, 6],
-  routingUses: [],
 });
 
 export const DEPARTMENTS: OpeningHoursModel["departments"] = [

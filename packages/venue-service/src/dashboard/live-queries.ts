@@ -160,6 +160,7 @@ export const QUERY_DEPENDENCIES = {
     "settings.venue",
     "day_cutover_changes",
     "floor_zones",
+    // PeriodsList follows the next four dependencies to refresh an open delete warning.
     "routing_cells",
     "routing_cell_periods",
     "categories",

@@ -3,7 +3,7 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { kitchenStations, readVenueClock, recordActivity, type Transaction } from "@waitron/db";
 import { venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError, compareStationNames } from "@waitron/shared";
-import { routingModel } from "./routing-store.js";
+import { stationStatus, type RoutingRules } from "./routing.js";
 import "./errors.js";
 
 export async function venueMoment(tx: Transaction, at: Date): Promise<VenueMoment | null> {
@@ -70,18 +70,33 @@ export async function stationDestinations(
       id: kitchenStations.id,
       name: kitchenStations.name,
       isDefault: kitchenStations.isDefault,
+      closedOnDay: kitchenStations.closedOnDay,
     })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.active, true), ne(kitchenStations.id, stationId)))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
-  const model = await routingModel(tx, at);
-  const open = new Set(
-    model.stationTimes.filter((row) => row.status.open).map((row) => row.stationId),
-  );
+  const moment = await venueMoment(tx, at);
+  const rules: RoutingRules = {
+    cells: [],
+    parentOf: new Map(),
+    activeStationIds: new Set(stations.map(({ id }) => id)),
+    defaultStationId: stations.find(({ isDefault }) => isDefault)?.id ?? null,
+    timing: new Map(
+      stations.map(({ id, closedOnDay }) => [
+        id,
+        { today: moment !== null && closedOnDay === moment.businessDay ? "closed" : null },
+      ]),
+    ),
+  };
   return stations
     .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
-    .filter((station) => open.has(station.id))
-    .map((station) => ({ ...station, preferred: station.id === whenClosedSendsToStationId }));
+    .filter((station) => stationStatus(rules, station.id, moment).open)
+    .map(({ id, name, isDefault }) => ({
+      id,
+      name,
+      isDefault,
+      preferred: id === whenClosedSendsToStationId,
+    }));
 }
 
 export async function assertStationDestination(
