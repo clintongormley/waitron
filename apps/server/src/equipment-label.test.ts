@@ -1,6 +1,6 @@
 import jsQR from "jsqr";
 import { expect, it } from "vitest";
-import { SETTING_WIDTHS, readRasterText, gridForWidth } from "@waitron/printing";
+import { SETTING_WIDTHS } from "@waitron/printing";
 import { formatEquipmentCode } from "@waitron/shared";
 import { formatEquipmentLabel } from "./equipment-label.js";
 import { printedCommands, opensDrawer, commandNames } from "./testing/decode-ticket.js";
@@ -11,30 +11,11 @@ it.each(SETTING_WIDTHS)("keeps the name and QR readable within $widthDots dots",
   const commands = printedCommands(payload);
   const bands = commands.filter((c) => c.name === "GS v 0" && c.heightDots === 56);
   expect(bands.length).toBeGreaterThan(0);
-  const width = Math.floor(printer.widthDots / 16) * 8,
-    stride = width / 8;
-  const inset = (printer.widthDots - width * 2) / 2;
   const decoded = bands
     .map((band) => {
       expect(band.widthDots).toBe(printer.widthDots);
-      const bytes = band.bytes.subarray(8),
-        packed = new Uint8Array(stride * 28);
-      for (let y = 0; y < 28; y++)
-        for (let x = 0; x < width; x++) {
-          const left = inset + x * 2,
-            row = y * 2;
-          const dot = (dx: number, dy: number) =>
-            Boolean(
-              bytes[(row + dy) * (printer.widthDots / 8) + ((left + dx) >> 3)]! &
-              (0x80 >> ((left + dx) & 7)),
-            );
-          expect(dot(1, 0)).toBe(dot(0, 0));
-          expect(dot(0, 1)).toBe(dot(0, 0));
-          expect(dot(1, 1)).toBe(dot(0, 0));
-          if (dot(0, 0)) packed[y * stride + (x >> 3)]! |= 0x80 >> (x & 7);
-        }
-      expect(gridForWidth(width).columns).toBeGreaterThan(0);
-      return readRasterText(width, 28, packed)?.trim();
+      expect(band.text).toBeDefined();
+      return band.text!.trim();
     })
     .join(" ");
   expect(decoded).toBe(name);

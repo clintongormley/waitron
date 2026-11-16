@@ -1,13 +1,10 @@
 import {
   chooseQrDots,
   dpiValue,
-  drawTextBand,
   esc,
-  gridForWidth,
   prepareText,
   QR_QUIET_ZONE,
   safeWidthDots,
-  TEXT_BAND_HEIGHT,
   withQuietZone,
   wrapText,
   type EscSetting,
@@ -21,20 +18,9 @@ export function formatEquipmentLabel(
 ): Uint8Array {
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
-  const headingGrid = gridForWidth(Math.floor(widthDots / 16) * 8);
-  const stride = headingGrid.widthDots / 8;
-  const inset = (widthDots - headingGrid.widthDots * 2) / 2;
   b.init().printArea(widthDots).align("center");
-  for (const line of wrapText(prepareText(label.name), headingGrid.columns)) {
-    const band = drawTextBand(line, headingGrid, "center");
-    b.raster(widthDots, TEXT_BAND_HEIGHT * 2, (x, y) => {
-      const sourceX = Math.floor((x - inset) / 2);
-      return (
-        sourceX >= 0 &&
-        sourceX < headingGrid.widthDots &&
-        (band[Math.floor(y / 2) * stride + (sourceX >> 3)]! & (0x80 >> (sourceX & 7))) !== 0
-      );
-    });
+  for (const line of wrapText(prepareText(label.name), Math.floor(columns / 2))) {
+    b.line(line, { double: true });
   }
   const code = formatEquipmentCode(label.kind, label.id);
   const matrix = qrModules(code);

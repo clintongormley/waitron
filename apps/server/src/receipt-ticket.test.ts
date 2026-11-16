@@ -22,6 +22,7 @@ import {
   decodeTicket,
   printedCommands,
   printedLines,
+  withoutRules,
 } from "./testing/decode-ticket.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
@@ -2150,7 +2151,7 @@ describe("a bill paid in parts before its invoice", () => {
     const printed = lines();
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+    expect(withoutRules(printed.slice(start + 1))).toEqual([
       "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
       "Base imponible 10% 8,00 €",
@@ -2202,7 +2203,7 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+    expect(withoutRules(printed.slice(start + 1))).toEqual([
       "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
       "Base imponible 10% 8,00 €",
@@ -2242,7 +2243,7 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+    expect(withoutRules(printed.slice(start + 1))).toEqual([
       "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
       "Base imponible 10% 8,00 €",

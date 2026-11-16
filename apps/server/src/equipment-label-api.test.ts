@@ -9,7 +9,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { readRasterText } from "@waitron/printing";
 import { cardReaders } from "@waitron/payments";
 import { formatEquipmentCode, nodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -136,14 +135,9 @@ it.each(["printer", "reader"] as const)(
     const bands = commands.filter((c) => c.name === "GS v 0" && c.heightDots === 56);
     const words = bands
       .map((band) => {
-        const bytes = band.bytes.subarray(8),
-          packed = new Uint8Array(24 * 28);
-        for (let y = 0; y < 28; y++)
-          for (let x = 0; x < 192; x++) {
-            const ink = bytes[y * 2 * 48 + ((x * 2) >> 3)]! & (0x80 >> ((x * 2) & 7));
-            if (ink) packed[y * 24 + (x >> 3)]! |= 0x80 >> (x & 7);
-          }
-        return readRasterText(192, 28, packed)?.trim();
+        expect(band.widthDots).toBe(384);
+        expect(band.text).toBeDefined();
+        return band.text!.trim();
       })
       .join(" ");
     expect(words).toBe(kind === "reader" ? "Reader Café" : "Portable Café");
