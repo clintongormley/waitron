@@ -252,22 +252,12 @@ export class WtColourChooser extends LitElement {
     const placement = popupPlacement(anchor, box.height, innerHeight, "above");
     popup.style.maxHeight = `${placement.maxHeight}px`;
     popup.scrollTop = scrollTop;
-    // A change of columns moves every tile, so the kept scroll position can hide the chosen one.
-    if (group.dataset.columns !== columnsBefore) this.scrollIntoPanel(this.tabStop());
     const maxLeft = Math.max(0, innerWidth - popup.getBoundingClientRect().width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     popup.style.top = `${placement.top}px`;
-  }
-
-  /** Scrolls the panel alone, never the page, until the tile lies inside it. */
-  private scrollIntoPanel(tile: HTMLElement | null): void {
-    if (!tile) return;
-    const popup = this.popup!;
-    const top = popup.getBoundingClientRect().top + popup.clientTop;
-    const bottom = top + popup.clientHeight;
-    const box = tile.getBoundingClientRect();
-    if (box.bottom > bottom) popup.scrollTop += box.bottom - bottom;
-    else if (box.top < top) popup.scrollTop -= top - box.top;
+    // A change of columns moves every tile, so the kept scroll position can hide the chosen one.
+    if (group.dataset.columns !== columnsBefore)
+      this.tabStop()?.scrollIntoView({ block: "nearest" });
   }
 
   private readonly onWindowResize = (): void => this.positionPopup();

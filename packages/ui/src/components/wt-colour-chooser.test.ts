@@ -1039,6 +1039,41 @@ describe("columns", () => {
     });
   });
 
+  test("bringing the chosen colour into view on a change of columns moves neither the page nor a scrolling box around the chooser", async () => {
+    await atViewport(1280, 300, async () => {
+      const { el, panel, tile } = await mountSixteen(sixteen("en"), "grey");
+      const scroller = document.createElement("div");
+      scroller.style.cssText = "height: 200px; overflow: auto";
+      const above = document.createElement("div");
+      above.style.height = "400px";
+      const below = document.createElement("div");
+      below.style.height = "400px";
+      host.style.padding = "600px 0";
+      el.replaceWith(scroller);
+      scroller.append(above, el, below);
+      await el.updateComplete;
+      scroller.scrollTop = 300;
+      window.scrollTo(0, 500);
+      const group = panel.querySelector<HTMLElement>('[role="radiogroup"]')!;
+      await openByClick(el);
+      expect(group.dataset.columns).toBe("4");
+      const [pageAt, scrollerAt] = [scrollY, scroller.scrollTop];
+      expect([pageAt, scrollerAt]).toEqual([500, 300]);
+      await page.viewport(450, 300);
+      await vi.waitFor(() => expect(group.dataset.columns).toBe("2"));
+      expect(panel.scrollTop).toBeGreaterThan(0);
+      const box = panel.getBoundingClientRect();
+      const last = tile("grey").getBoundingClientRect();
+      const shown = `panel ${box.top}-${box.bottom}, tile ${last.top}-${last.bottom}`;
+      expect(last.top, shown).toBeGreaterThanOrEqual(box.top - 0.5);
+      expect(last.bottom, shown).toBeLessThanOrEqual(box.bottom + 0.5);
+      expect({ page: scrollY, scroller: scroller.scrollTop }).toEqual({
+        page: pageAt,
+        scroller: scrollerAt,
+      });
+    });
+  });
+
   test("in a 390x400 window, opened on the last colour, its tile is focused and inside the panel", async () => {
     await atViewport(390, 400, async () => {
       const { el, root, panel, trigger, tile } = await mountSixteen(sixteen("en"), "grey");
