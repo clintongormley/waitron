@@ -28,3 +28,5 @@ Estimate: two implementation lines, tests about 15–25 changed lines, gate docs
 - [ ] Driver runs the already-authorised `finish-branch` for its own small PR, follows its review requirements, and waits for normal PR CI green on the final head; then uses the already-authorised `land-branch`. No extra owner approval for the cleared method.
 
 Claude’s sole plan read found only these corrected evidence/run-cleanup wording issues; watcher18:25 cleared the exact method. No source built before that read.
+
+16 November 19:04: the watcher accepted the actual hosted no-runner/empty-steps records with cancelled labels, replacing the reviewer’s predicted skipped-label criterion. Run43924100221 is the sole qualification dispatch; the unchanged aggregate ran and failed. Record this label difference in the PR.
