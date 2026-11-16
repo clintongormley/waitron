@@ -56,9 +56,16 @@ Left open:
 - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
   another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
 - A group's HOLD paper is recorded per station, not per printer
-  (`order_group_hold_stations`), so a correction to a station whose printer changed after its
-  HOLD ticket prints on the new printer, which never had that ticket (`printCorrectionSlips`
-  reads the station's current printers; read, not run).
+  (`order_group_hold_stations`), so a correction after replacing the station's printer goes to
+  the new printer. Reproduced on 2026-11-16 from `8d65e53f22`: HOLD on Grill/pass, then replace
+  Grill's printer with Fryer and cancel the requested burger; cancellation went to Fryer, not
+  Grill. Existing `kitchen_print_job_lines` links identify the original recipient while an
+  original dish survives. An added-portion/removal/cancellation control found no such links for
+  the remaining correction-only dish; HOLD CHANGED/CANCELLED jobs carry no kitchen links.
+  The unchanged-printer control retained Grill/pass output; the [A1369 evidence](../superpowers/plans/2026-11-16-held-dish-reprint.md#evidence-and-scope)
+  records both reproductions. The watcher
+  deferred recipient routing on 2026-11-16 at 22:45: a partial route exists, but the correction-only
+  gap and whether to use a replaced printer remain open.
 
 ## KDS corrections deferred from #191
 
@@ -148,15 +155,10 @@ in A1308's orders and sales slice, which rebuilds the table anyway.
 
 ## Bundle: Held paper followups
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M.
 
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](kitchen.md#task-6-761-hold-tickets-in-advance)
-- **A1369. A reprint of a bill's kitchen tickets leaves out a dish waiting for the pass whose HOLD ticket printed (seen in A1327's review, #2502; predates it).**
-  The dish is one whose HOLD ticket printed, then fired at a station that waits for the pass and not
-  yet released. Reprinting its bill prints only the bill's other dishes: `readReprintParts`
-  (`apps/server/src/kitchen-print.ts`) reads held work through `readOnHoldTickets` only. Decide
-  whether a reprint lists it, and how it is marked.
 
 ## Bundle: Supervisor station read
 
