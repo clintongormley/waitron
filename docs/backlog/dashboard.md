@@ -97,7 +97,7 @@ change what deleting a person does.
 
 ## Password-manager autofill in the confirmation window (C98, #934) — still open:
 
-Unknown: which browser and address the owner saw the empty field in. The payments screen's manager-PIN prompt
+Which browser and address showed an empty field in the confirmation window is still unknown. The payments screen's manager-PIN prompt
   now says `autocomplete="off"` (owner, 2026-09-30, C110 #940); nobody checked in a real browser
   whether it then stops offering the dashboard password there.
 

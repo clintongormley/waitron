@@ -337,38 +337,39 @@ export class ProfileScreen extends LitElement {
 
   async #load(): Promise<OwnProfile | undefined> {
     let applied: OwnProfile | undefined;
-    try {
-      await Promise.allSettled([
-        this.#queries.watch("getProfile", [], (value) => {
-          this.profile = value;
-          applied = value;
-          this.#announceTab();
-        }),
-        this.#queries.watch("getGoogleConfig", [], (value) => {
-          this.googleConfigured = value.configured;
-          this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
-        }),
-        this.#queries.watch("getLocales", [], (locales) => {
-          this.locales = locales.locales;
-          this.venueLocale = locales.venueDefault;
-        }),
-      ]);
-      if (!this.#initialDetailsChecked && this.profile !== null && this.isConnected) {
-        this.#initialDetailsChecked = true;
-        if (
-          this.mode === "view" &&
-          [
-            this.profile.displayName,
-            this.profile.firstNames,
-            this.profile.lastNames,
-            this.profile.email,
-          ].some((value) => !value?.trim())
-        ) {
-          this.#edit("details");
-        }
+    const reads = await Promise.allSettled([
+      this.#queries.watch("getProfile", [], (value) => {
+        this.profile = value;
+        applied = value;
+        this.#announceTab();
+      }),
+      this.#queries.watch("getGoogleConfig", [], (value) => {
+        this.googleConfigured = value.configured;
+        this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
+      }),
+      this.#queries.watch("getLocales", [], (locales) => {
+        this.locales = locales.locales;
+        this.venueLocale = locales.venueDefault;
+      }),
+    ]);
+    if (
+      reads.every((read) => read.status === "fulfilled") &&
+      !this.#initialDetailsChecked &&
+      this.profile !== null &&
+      this.isConnected
+    ) {
+      this.#initialDetailsChecked = true;
+      if (
+        this.mode === "view" &&
+        [
+          this.profile.displayName,
+          this.profile.firstNames,
+          this.profile.lastNames,
+          this.profile.email,
+        ].some((value) => !value?.trim())
+      ) {
+        this.#edit("details");
       }
-    } catch (error) {
-      this.#showReadError(error);
     }
     return applied;
   }

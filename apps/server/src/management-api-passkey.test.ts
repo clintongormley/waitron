@@ -685,7 +685,7 @@ describe("what the browser's password manager is told", () => {
 
 it("offers staff-host passkey registration and authentication separately from the LAN hostname", async () => {
   await setupVenue();
-  const local = mountApp(),
+  const local = mountAppWithMe(),
     staff = createStaffApp(local, "https://staff.example.test");
   const signed = await staff.request("https://staff.example.test/management-api/session", {
     method: "POST",
@@ -706,6 +706,12 @@ it("offers staff-host passkey registration and authentication separately from th
   expect(options.status).toBe(200);
   const registered = (await options.json()) as { options: { rp: { id: string } } };
   expect(registered.options.rp.id).toBe("staff.example.test");
+  const profile = await staff.request(
+    "https://staff.example.test/management-api/session/me/profile",
+    { headers: { cookie } },
+  );
+  expect(profile.status).toBe(200);
+  expect((await profile.json()).passkeySignals.rpId).toBe("staff.example.test");
   const remoteOptions = (await (
     await staff.request("https://staff.example.test/management-api/passkey/auth/options", {
       method: "POST",

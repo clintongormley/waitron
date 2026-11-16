@@ -268,6 +268,15 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("wt-button")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(codeMessage("server.internal"));
   });
+  it("keeps the initial auxiliary-read refusal without opening incomplete details", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null }),
+      getLocales: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect((el as unknown as { error: string }).error).toBe(codeMessage("connection.failed"));
+  });
   it("opens Edit in a modal over the details card, not in place of it", async () => {
     const { el } = await mount();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;

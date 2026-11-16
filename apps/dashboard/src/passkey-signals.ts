@@ -41,7 +41,6 @@ export async function signalAcceptedPasskeys(
   await sendAcceptedPasskeys(signals);
 }
 
-/** Never throws. */
 export async function sendAcceptedPasskeys(signals: PasskeySignals): Promise<void> {
   const browser = browserSignals();
   const { signalAllAcceptedCredentials: all, signalCurrentUserDetails: details } = browser;
