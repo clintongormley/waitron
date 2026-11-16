@@ -2064,6 +2064,7 @@ describe("a dish whose period ended earlier today", () => {
       const { v, printerId, stationId, id } = await parkedAtLunch();
       at(mondayAt("14:05"));
       const paid = await sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         lines: [],
         tender: { method: "cash", amount: "5.00" },
@@ -2155,6 +2156,7 @@ describe("a dish whose period ended earlier today", () => {
       at(mondayAt("14:05"));
       await replaceLunchMenu(v);
       const paid = await sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         lines: [],
         tender: { method: "cash", amount: "5.00" },
@@ -2274,6 +2276,7 @@ describe("a dish whose period ended earlier today", () => {
       };
       const dishId = order.lines[0]!.workingOrderLineId;
       const added = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        dining: "eat_in",
         revision: order.revision,
         lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
           workingOrderLineId,
