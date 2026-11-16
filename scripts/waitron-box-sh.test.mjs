@@ -88,8 +88,9 @@ case "$1" in
   start)
     if [ -n "\${WB_MONITOR_DIR}" ]; then
       count=0; [ ! -e "$WB_MONITOR_DIR/count" ] || read -r count < "$WB_MONITOR_DIR/count"
-      count=$((count + 1)); printf '%s' "$count" > "$WB_MONITOR_DIR/count"
+      count=$((count + 1))
       printf '%s' "$$" > "$WB_MONITOR_DIR/start.$count"
+      printf '%s' "$count" > "$WB_MONITOR_DIR/count"
       while [ ! -e "$WB_MONITOR_DIR/finish.$count" ]; do sleep 0.01; done
       exit "$(cat "$WB_MONITOR_DIR/finish.$count")"
     fi
