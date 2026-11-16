@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
-import { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
+import { MAX_RECEIPT_FIELD_LENGTH } from "./receipt-limits.js";
+import { validateReceiptConfig } from "./validate.js";
 
 /** Returns the thrown `AppError` so a test can assert its params; `toThrow` does not check them. */
 function catchAppError(fn: () => unknown): AppError {

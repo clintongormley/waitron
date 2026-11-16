@@ -305,7 +305,7 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 ## Left open by #1261's review, not acted on (2026-10-05)
 
-- **Left open by #1261's review:** a theme's logo (`custom_themes`) is protected from library deletion only by the application. The phone and email length limits (30 and 254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately from `packages/layouts/src/validate.ts`.
+- **Left open by #1261's review:** a theme's logo (`custom_themes`) is protected from library deletion only by the application.
 
 ## Loose ends left by #367
 

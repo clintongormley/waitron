@@ -3,10 +3,11 @@ import { AppError, isValidTelephone, MEDIA_FILENAME } from "@waitron/shared";
 import "./errors.js";
 import type { DepartmentReceiptConfig, ReceiptText } from "@waitron/shared";
 import type { ReceiptConfig } from "./types.js";
-
-export const MAX_RECEIPT_FIELD_LENGTH = 200;
-export const MAX_RECEIPT_PHONE_LENGTH = 30;
-export const MAX_RECEIPT_EMAIL_LENGTH = 254;
+import {
+  MAX_RECEIPT_EMAIL_LENGTH,
+  MAX_RECEIPT_FIELD_LENGTH,
+  MAX_RECEIPT_PHONE_LENGTH,
+} from "./receipt-limits.js";
 
 const TEXT_FIELDS = ["headerSubtitle", "footerMessage"] as const;
 export const RECEIPT_STRING_FIELDS = [...TEXT_FIELDS, "phone", "email", "logo"] as const;
