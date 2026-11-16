@@ -2905,6 +2905,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #back(): void {
+    this.#actionOpening++;
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
 
@@ -5926,8 +5927,24 @@ export class TillTableOrderScreen extends LitElement {
     if (verb === "move-dishes") {
       this.moveDishesPicks = new Set();
       this.moveDishesTo = undefined;
+      const opening = ++this.#actionOpening;
+      const ready = () => {
+        if (!this.isConnected || opening !== this.#actionOpening || this.actionVerb !== verb)
+          return;
+        this.actionStep = "move-dishes";
+        this.#stepFocus = "step";
+        this.#watchActions();
+      };
+      const event = new CustomEvent("move-dishes-open", {
+        detail: { ready },
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      if (this.dispatchEvent(event)) ready();
+      return;
     }
-    this.actionStep = verb === "move-dishes" ? "move-dishes" : "pick";
+    this.actionStep = "pick";
     this.#stepFocus = "step";
     this.#watchActions();
   }

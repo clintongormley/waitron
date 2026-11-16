@@ -1671,19 +1671,6 @@ Printer identity is separate from the till route inventory.
 - **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Nothing compares
   the table with the layout due at the booking's time.
   [Detail](till.md#a857-a-booking-can-take-a-table-the-evenings-layout-puts-away-2026-10-18)
-## Bundle: A bill another till moved, merged or part-paid
-
-2 entries, size M.
-
-- **A1267. Retained changes on a vanished bill have no place when the replacement already holds
-  changes (left open by A803 slice 3, #2360).** Decide where those lines go.
-  [Detail](till.md#a1267-retained-changes-on-a-vanished-bill-have-no-place-when-the-replacement-already-holds-changes)
-- **A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads the
-  bill (seen in A803 slice 4a's LOOK).** Move in that gap is refused (`bill.line_paid`) and nothing
-  moves, but the waiter sees a choice the till then refuses. Decide whether the panel re-reads the
-  bill on opening and the foot after a money refusal.
-  [Detail](till.md#a1288-move-dishes-shows-a-dish-paid-on-another-till-as-tickable-until-the-till-next-reads-the-bill)
-
 ## Bundle: What an open till picks up from a setup change
 
 1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
@@ -3189,9 +3176,9 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1197, A1198, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1261, A1265 and A1267. Slice
+main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-has landed (#2372); it leaves open A1287–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
+has landed (#2372); it leaves open A1287, A1289–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
@@ -3222,17 +3209,6 @@ one item shorter (Move dishes… replaced Split by item and Transfer items). Mea
 4a's LOOK, list content 647 px): at 1280×900 it fits in English and Spanish (649 px); at 390×844
 it scrolls by 8 px in English and 78 px in Spanish, where the list starts lower.
 
-## A1267. Retained changes on a vanished bill have no place when the replacement already holds changes
-
-**A1267. Retained changes on a vanished bill have no place when the replacement already holds
-changes (left open by A803 slice 3, #2360).** The till offers unsaved lines for review on the bill
-it now shows. When that bill already holds lines kept for review, the old lines stay under the gone
-bill, which no screen shows (`#carryCandidate` in `apps/till/src/till-app.ts`; by reading, not run).
-Decide where those lines go.
-
-2026-11-11: R4 retires the separate no-bill case: a still-seated party receives a fresh empty bill
-when its last bill leaves. The remaining case above is unchanged by R4.
-
 ## A1287. With no party, the ⋮'s Merge bills does nothing
 
 **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).** A
@@ -3241,17 +3217,6 @@ bill (`#otherBills` answers none without a party, `apps/till/src/screens/till-ta
 and `#onMergeBills` returns without a word when `#billComposition` answers `null`, which it does
 with no party (`apps/till/src/till-app.ts`). By reading, not run. Slice 4a took Split by item and
 Transfer items out of that section for the same reason. Decide whether Merge bills goes too.
-
-## A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads the bill
-
-**A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads
-the bill (seen in A803 slice 4a's LOOK).** On one table the open panel greyed the dish "Paid"
-10 seconds after the payment, on another about 2 seconds after; a panel opened a second after a
-payment showed it tickable for 4 seconds. Move in that gap is refused (`bill.line_paid`) and
-nothing moves, but the waiter sees a choice the till then refuses. After that refusal the foot's
-"Still to pay at this table" stayed at the old figure until the table was opened again, while the
-bill itself was right. Decide whether the panel re-reads the bill on opening and the foot after a
-money refusal. Pictures `s4-stale-paid-row`, `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
 ## A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to someone else. Reload the table to see it"
 

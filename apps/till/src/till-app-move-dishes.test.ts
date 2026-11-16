@@ -247,6 +247,122 @@ describe("A803 move dishes app:", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 
+  it("opening Move dishes waits for its balance and disables a dish paid on another till", async () => {
+    const { el, order } = await open({
+      getPartyBills: vi.fn().mockResolvedValue(twoBills()),
+      getBillBalance: vi.fn().mockResolvedValue(balance()),
+    });
+    const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+    await userEvent.click(menu);
+    await flush(el);
+    api.getPartyBills.mockResolvedValue(partPaid());
+    const read = heldRead<BillBalance>();
+    api.getBillBalance.mockImplementationOnce(read.call);
+    const bills = api.getPartyBills.mock.calls.length;
+    const balances = api.getBillBalance.mock.calls.length;
+    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+    await flush(el);
+    expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
+    expect(api.getPartyBills.mock.calls.length).toBe(bills + 1);
+    expect(api.getBillBalance.mock.calls.length).toBe(balances + 1);
+    read.settle(
+      balance({
+        received: "3.00",
+        outstanding: "0.00",
+        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
+      }),
+    );
+    await flush(el, 6);
+    const picker = order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker")!;
+    await picker.updateComplete;
+    expect(
+      picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
+    ).toBe(true);
+    expect(picker.rows[0]!.blocked).toEqual({ reason: "paid" });
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("opens Move dishes while this till's earlier move is still waiting for its reply", async () => {
+    const moving = heldMove();
+    const { el, order } = await open({ moveDishes: moving.call });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el);
+    expect(moving.call).toHaveBeenCalledOnce();
+    try {
+      const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      await userEvent.click(menu);
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
+      expect(api.moveDishes).toHaveBeenCalledOnce();
+    } finally {
+      moving.refuse({ code: "bill.line_paid", status: 409 });
+      await flush(el, 6);
+    }
+  });
+
+  it("reads once more when a newer bills read overtakes the Move dishes opening", async () => {
+    const { el, order } = await open({
+      getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+      getBillBalance: vi.fn().mockResolvedValue(balance()),
+    });
+    const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+    await userEvent.click(menu);
+    await flush(el);
+    const read = heldRead<PartyBill[]>();
+    api.getPartyBills.mockImplementationOnce(read.call);
+    const bills = api.getPartyBills.mock.calls.length;
+    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+    await flush(el);
+    expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
+    api.getBillBalance.mockResolvedValue(
+      balance({
+        received: "3.00",
+        outstanding: "0.00",
+        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
+      }),
+    );
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => api.getPartyBills.mock.calls.length).toBe(bills + 2);
+    await flush(el);
+    read.settle(partPaid());
+    await flush(el, 6);
+    expect(api.getPartyBills.mock.calls.length).toBe(bills + 3);
+    const picker = order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker")!;
+    expect(picker).not.toBeNull();
+    await picker.updateComplete;
+    expect(
+      picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
+    ).toBe(true);
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it.each(["bills", "balance"])(
+    "a failed opening %s read leaves Move dishes closed and lets the waiter retry",
+    async (read) => {
+      const { el, order } = await open({
+        getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+        getBillBalance: vi.fn().mockResolvedValue(balance()),
+      });
+      const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      await userEvent.click(menu);
+      await flush(el);
+      (read === "bills" ? api.getPartyBills : api.getBillBalance).mockRejectedValueOnce(
+        new TypeError("offline"),
+      );
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
+      expect(bannerText(el)).toContain(t("table.reread_failed"));
+      await userEvent.click(menu);
+      expect(menu.querySelector('[data-action="move-dishes"]')).not.toBeNull();
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
+      expect(api.moveDishes).not.toHaveBeenCalled();
+    },
+  );
+
   it("bill.line_paid shows its sentence and reads the party's bills and the bill's balance again, not its lines", async () => {
     const { el, order } = await open({
       getPartyBills: vi.fn().mockResolvedValue(partPaid()),
@@ -255,6 +371,10 @@ describe("A803 move dishes app:", () => {
     const bills = api.getPartyBills.mock.calls.length;
     const balances = api.getBillBalance.mock.calls.length;
     const lineReads = api.getTabLines.mock.calls.length;
+    api.getTablesState.mockResolvedValue([
+      table("t4", "4", { ...seated, outstanding: "1.00" }),
+      table7,
+    ]);
 
     emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
     await flush(el, 6);
@@ -263,6 +383,9 @@ describe("A803 move dishes app:", () => {
     expect(api.getPartyBills.mock.calls.length).toBe(bills + 1);
     expect(api.getBillBalance.mock.calls.length).toBeGreaterThan(balances);
     expect(api.getTabLines.mock.calls.length).toBe(lineReads);
+    expect(order.shadowRoot!.querySelector("[data-party-outstanding]")!.textContent).toContain(
+      money("1.00"),
+    );
   });
 
   it("party.out_of_date reloads the order and says what changed", async () => {
@@ -430,6 +553,7 @@ describe("A803 move dishes app:", () => {
   it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes… again starts with nothing picked over the re-read balance", async () => {
     const getBillBalance = vi
       .fn()
+      .mockResolvedValueOnce(balance())
       .mockResolvedValueOnce(balance())
       .mockResolvedValue(
         balance({

@@ -483,6 +483,30 @@ describe("A803 move dishes panel", () => {
     });
   }
 
+  it.each(["ready", "Back", "bill change"])(
+    "a delayed Move dishes opening follows %s",
+    async (outcome) => {
+      const el = await mountScreen();
+      let ready!: () => void;
+      el.addEventListener("move-dishes-open", (event) => {
+        event.preventDefault();
+        ready = (event as CustomEvent<{ ready: () => void }>).detail.ready;
+      });
+      await openMoveDishes(el);
+      expect(panel(el)).toBeNull();
+      expect(ready).toBeTypeOf("function");
+      if (outcome === "Back") {
+        await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-back]")!);
+      } else if (outcome === "bill change") {
+        el.orderId = "wo-1";
+        await el.updateComplete;
+      }
+      ready();
+      await el.updateComplete;
+      expect(panel(el) !== null).toBe(outcome === "ready");
+    },
+  );
+
   it("Back closes the panel and sends nothing", async () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
