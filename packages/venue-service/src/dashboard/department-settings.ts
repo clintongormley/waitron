@@ -532,6 +532,8 @@ export class DepartmentSettings extends LitElement {
           "orderStart",
           "paidWhen",
           "collectionNumber",
+          "dining",
+          "diningStartsAs",
           "needsClearing",
           "lateSendNeedsManager",
         ] as const) {

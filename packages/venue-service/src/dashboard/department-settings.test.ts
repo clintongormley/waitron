@@ -3049,10 +3049,6 @@ it("with takeaway VAT the Service tab asks how the department sells and saves th
     collectionNumber: "none",
     dining: "till_choice",
     diningStartsAs: "takeaway",
-    needsClearing: false,
-    lateSendNeedsManager: false,
-    courseSettings: [],
-    transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
   });
   await expect.poll(() => save(el).disabled).toBe(true);
   expect(diningBox(el, "dining")!.value).toBe("till_choice");
@@ -3127,5 +3123,29 @@ it.each(["dining", "diningStartsAs"] as const)(
     const message = "This value was not accepted. Change it and save again.";
     await expect.poll(() => diningBox(el, field)?.error).toBe(message);
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  },
+);
+
+it.each(["dining", "diningStartsAs"] as const)(
+  "an untouched %s follows while the department name is edited",
+  async (setting) => {
+    const view = structuredClone(model);
+    view.takeawayVat = true;
+    Object.assign(view.salePolicies.departments[0]!, {
+      dining: "till_choice",
+      diningStartsAs: "eat_in",
+    });
+    const { el, writes } = await mount(view);
+    await change(el, "name", "Evening restaurant");
+    const next = structuredClone(view);
+    Object.assign(next.salePolicies.departments[0]!, { [setting]: "takeaway" });
+    el.model = next;
+    await el.updateComplete;
+    await selectDepartmentTab(el, "service");
+    await expect.poll(() => diningBox(el, setting)?.value).toBe("takeaway");
+    expect(field(el, "name").value).toBe("Evening restaurant");
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.body).toMatchObject({ name: "Evening restaurant", [setting]: "takeaway" });
   },
 );
