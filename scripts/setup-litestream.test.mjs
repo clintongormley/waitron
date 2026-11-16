@@ -2,9 +2,11 @@ import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -156,10 +158,12 @@ describe("install", () => {
     expect(readFileSync(join(root, ".bin", "litestream"), "utf8")).toBe(fakeBinary(VERSION));
   });
 
-  it("replaces a binary reporting another version", async () => {
+  it("replaces a binary reporting another version", async ({ onTestFinished }) => {
     const root = tempDir();
     mkdirSync(join(root, ".bin"));
     writeFileSync(join(root, ".bin", "litestream"), fakeBinary("0.0.1"), { mode: 0o755 });
+    const oldFile = openSync(join(root, ".bin", "litestream"), "r");
+    onTestFinished(() => closeSync(oldFile));
     const bytes = releaseArchive(VERSION);
     const { fetch } = fakeFetch(bytes);
     const result = await install({
@@ -171,6 +175,8 @@ describe("install", () => {
     });
     expect(result.downloaded).toBe(true);
     expect(execFileSync(result.target, ["version"], { encoding: "utf8" }).trim()).toBe(VERSION);
+    expect(readFileSync(oldFile, "utf8")).toBe(fakeBinary("0.0.1"));
+    expect(readdirSync(join(root, ".bin"))).toEqual(["litestream"]);
   });
 
   it("refuses a release answer that is not a success", async () => {
