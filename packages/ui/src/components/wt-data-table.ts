@@ -2511,10 +2511,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   isExpanded(key: string): boolean {
     if (this.#flatSearching()) {
       const row = this.#treeShown().byKey.get(key);
-      return (
-        (this.collapseDescendants && row !== undefined && !this.rowCollapsible(row)) ||
-        this.searchExpanded.has(key)
-      );
+      return (row !== undefined && !this.rowCollapsible(row)) || this.searchExpanded.has(key);
     }
     if (!this.collapseDescendants || !this.rowParent) return !this.collapsed.has(key);
     return this.#ordinaryOpen(key, this.#treeShown().shown.heldOpen);

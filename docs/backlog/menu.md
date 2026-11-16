@@ -795,7 +795,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](menu.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
@@ -819,10 +819,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   [Detail](menu.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
-- **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
-  answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
-  mutation tests, not fixed. Outside a search it answers true for the same row
-  (`packages/ui/src/components/wt-data-table.ts`).
+
 
 
 ## Bundle: Translate all followups
