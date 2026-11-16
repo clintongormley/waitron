@@ -1,5 +1,7 @@
 # Whole-state capture implementation plan
 
+**Status: NOT CLEARED.** Claude's 2026-11-16 source review recommends a smaller disposition-table approach instead of this recursive collector. The watcher must settle that scope before any build. Both approaches must keep venue material snapshot-only, derive completeness fixtures from the layout, and avoid making stray working files a new backup refusal.
+
 **Goal:** One PR captures every declared, non-excluded state path and restores that material through the real cold-restore path, using SQLite snapshots rather than copying live databases.
 
 **Authority:** Lane K’s `WHOLE-STATE-CAPTURE` request in `/Users/clintongormley/waitron-campaign-k/queue.md` authorises planning: “capture the whole state directory EXCEPT an explicit exclusion set, with a completeness guard that fails when a new top-level entry is neither captured nor excluded — the curated list went stale on `modules.json` already.” Claude must review this plan with `claude-seat.sh review-branch`, then the watcher must clear it before building. This is not owner design approval. Execute inline with TDD after clearance; this invocation drafts only.
