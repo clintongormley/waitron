@@ -67,7 +67,7 @@ async function inventory(
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
     if (!answer[key].length) {
-      if (plannerShortfall) {
+      if (plannerShortfall && !reread) {
         plannerShortfall(unavailable("Planner discovery count shortfall").message);
         return entries;
       }
@@ -80,6 +80,7 @@ async function inventory(
           pageSize,
           false,
           staleCount && { ...staleCount, entries, total },
+          plannerShortfall,
         );
       const byId = (a, b) => a.id - b.id;
       if (
@@ -174,7 +175,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
           100,
           true,
           status === "queued" ? staleQueuedCount : undefined,
-          options.plannersOnly ? plannerShortfall : undefined,
+          plannerShortfall,
         ),
       unavailable,
     )) {
@@ -640,7 +641,9 @@ export async function healthCommand(command, options, { report, output }) {
         report(
           retried.length
             ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned${command === "recover" ? " or recently progressing server" : ""} work.`
-            : "No stalled server run needed recovery.",
+            : command === "recover-planners"
+              ? "No stalled server run found in the rows read."
+              : "No stalled server run needed recovery.",
         );
     } else {
       assert.equal(command, "probe", "Unknown server health command");

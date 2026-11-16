@@ -264,7 +264,7 @@ External provenance, read 2026-11-09:
 | PR workflow identity can be reconstructed from a local reusable call | [Reuse workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow), read 15 November: “the called workflow is from the same commit as the caller workflow” | Match `referenced_workflows[].sha` to the inspected `./.github/workflows/image-smoke.yml` call; retain the source head separately. |
 | The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
-| Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full lists. |
+| Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full run-history window. |
 | Only the server planning step installs gh | [GitHub runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context): “self-hosted for self-hosted runners configured by the repository owner” | Test `runner.environment` so hosted jobs keep their existing tools. |
 
 The routing health check reads CI's queued and running workflows, bounding its queued
@@ -308,7 +308,7 @@ whose capacity snapshot under five minutes old shows every positive slot occupie
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
 Only this planner candidate scan accepts collected workflow rows when an empty page arrives
-before the advertised count, without repeating that scan solely for the shortfall. It logs
+before the advertised count after the existing single immediate reread. It logs
 `Planner discovery count shortfall` with path, page, read, totals and numeric IDs
 (watcher, 16 November 2026 13:31). Omitted candidates may wait. Malformed, duplicate,
 excess-row and count-drift checks remain; all job lists, standalone `check`, `recover` and
