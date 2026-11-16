@@ -489,6 +489,9 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
         .where(eq(departments.id, departmentId));
       await db.delete(departments).where(eq(departments.id, departmentId));
       await db.execute(sql`delete from dashboard_sessions where person_id = ${personId}`);
+      await db.execute(
+        sql`delete from activity_log where person_id=${personId} or (subject_kind='person' and subject_id=${personId})`,
+      );
       await db.execute(sql`delete from persons where id = ${personId}`);
     });
   }
@@ -2364,6 +2367,9 @@ describe("startServer, against a migrated venue directory", () => {
         await sharedDb.delete(bookings).where(eq(bookings.id, bookingId));
       }
       await sharedDb.execute(sql`delete from dashboard_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(
+        sql`delete from activity_log where person_id=${person!.id} or (subject_kind='person' and subject_id=${person!.id})`,
+      );
       await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
     }
   }, 60_000);
@@ -3517,6 +3523,9 @@ describe("the dev-device header reaches the live device routes only under devMod
     } finally {
       await server.close();
       await sharedDb.execute(sql`delete from dashboard_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(
+        sql`delete from activity_log where person_id=${person!.id} or (subject_kind='person' and subject_id=${person!.id})`,
+      );
       await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
     }
   }, 60_000);
