@@ -55,8 +55,8 @@ import type { TaxOfficeInvoice } from "./tax-office-list.js";
 
 const files = vi.hoisted(() => ({
   opened: [] as FileHandle[],
-  /** Runs once, before the next `open` returns. */
-  whileOpening: null as (() => void) | null,
+  /** Runs once, on the handle the next `open` gives out, before it is returned. */
+  whileOpening: null as ((handle: FileHandle) => void) | null,
 }));
 vi.mock("node:fs/promises", async (original) => {
   const real = await original<typeof import("node:fs/promises")>();
@@ -67,12 +67,12 @@ vi.mock("node:fs/promises", async (original) => {
       files.opened.push(handle);
       const whileOpening = files.whileOpening;
       files.whileOpening = null;
-      whileOpening?.();
+      whileOpening?.(handle);
       return handle;
     }),
   };
 });
-/** The handles opened since the last call that are still open. */
+/** The handles in `files.opened` that are still open. */
 const stillOpen = () => files.opened.filter((handle) => handle.fd !== -1);
 
 vi.mock("./receipt-print.js", async (importOriginal) => {
@@ -832,6 +832,58 @@ describe("asking for the month's file and saving it", () => {
     files.whileOpening = () => aborted.abort();
     await expect(partial.body!.getReader().read()).rejects.toThrow();
     expect(files.opened).toHaveLength(1);
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
+  });
+
+  it("closes the file and keeps it for another try when reading it fails", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    files.opened.length = 0;
+    files.whileOpening = (handle) =>
+      void vi.spyOn(handle, "read").mockRejectedValueOnce(new Error("read failed"));
+    const failing = await monthFile(app);
+    expect(failing.status).toBe(200);
+    await expect(failing.body!.getReader().read()).rejects.toThrow("read failed");
+    expect(files.opened).toHaveLength(1);
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
+  });
+
+  it("closes the file and keeps it for another try when the reader cancels part-way", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    files.opened.length = 0;
+    const reader = (await monthFile(app)).body!.getReader();
+    expect((await reader.read()).done).toBe(false);
+    await reader.cancel();
+    expect(files.opened).toHaveLength(1);
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
+  });
+
+  it("keeps the file when the connection ends during the last read", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    const aborted = new AbortController();
+    files.opened.length = 0;
+    files.whileOpening = (handle) => {
+      const read = handle.read.bind(handle) as (
+        ...args: unknown[]
+      ) => Promise<{ bytesRead: number; buffer: Uint8Array }>;
+      vi.spyOn(handle, "read").mockImplementation((async (...args: unknown[]) => {
+        const result = await read(...args);
+        if (result.bytesRead === 0) aborted.abort();
+        return result;
+      }) as FileHandle["read"]);
+    };
+    const response = await monthFile(app, { signal: aborted.signal });
+    const reader = response.body!.getReader();
+    while (!(await reader.read()).done);
+    expect(aborted.signal.aborted).toBe(true);
     await vi.waitFor(() => expect(stillOpen()).toEqual([]));
     expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
   });
