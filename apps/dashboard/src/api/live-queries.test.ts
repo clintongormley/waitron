@@ -509,22 +509,17 @@ it("reads the categories' routing again when a zone's department changes", () =>
   expect(query.dependencies).toContainEqual({ type: "floor_zones" });
 });
 
-it("reads the categories' routing again when a season week changes", () => {
+it("keeps plain category routing independent of periods, department labels and opening hours", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  for (const type of ["seasons", "opening_hours"])
-    expect(query.dependencies).toContainEqual({ type });
-});
-
-it("reads the categories' routing again when a special day or one of its dates changes", () => {
-  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  for (const type of ["special_days", "special_day_dates"])
-    expect(query.dependencies).toContainEqual({ type });
-});
-
-it("reads the categories' routing again when a period or its department changes", () => {
-  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  for (const type of ["menu_periods", "departments"])
-    expect(query.dependencies).toContainEqual({ type });
+  for (const type of [
+    "menu_periods",
+    "departments",
+    "seasons",
+    "opening_hours",
+    "special_days",
+    "special_day_dates",
+  ])
+    expect(query.dependencies).not.toContainEqual({ type });
 });
 
 it("subscribes no read to the retired watcher tables, and has no watcher list", () => {

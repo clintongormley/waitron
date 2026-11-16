@@ -657,6 +657,9 @@ it("with live data, reads the impact again when a day range it counts changes, a
   liveData.invalidate([{ type: "opening_hours" }]);
   await expect.poll(() => body(dialog)).toContain("Painted in 3 seasons.");
   expect(reads).toBe(3);
+  liveData.invalidate([{ type: "routing_cell_periods" }]);
+  await expect.poll(() => body(dialog)).toContain("Painted in 4 seasons.");
+  expect(reads).toBe(4);
 });
 
 it("with live data, an impact answer that arrives while the list is detached is shown once it is back, and Delete sends its revision", async () => {

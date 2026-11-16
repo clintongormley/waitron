@@ -344,12 +344,6 @@ export const QUERY_DEPENDENCIES = {
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",
-    "menu_periods",
-    "departments",
-    "seasons",
-    "opening_hours",
-    "special_days",
-    "special_day_dates",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/menu/src/options.ts, `listExtraLists` and `getExtraList` in
