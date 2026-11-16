@@ -7,8 +7,7 @@ import {
   seasons,
   withTransaction,
   type Transaction,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -131,15 +130,14 @@ describe("zone closed times", () => {
     expect(
       await suite.db
         .select({
-          seasonId: zoneDays.seasonId,
-          weekday: zoneDays.weekday,
-          startsAt: zoneDayRanges.startsAt,
-          endsAt: zoneDayRanges.endsAt,
+          seasonId: openingHours.seasonId,
+          weekday: openingHours.weekday,
+          startsAt: openingHours.startsAt,
+          endsAt: openingHours.endsAt,
         })
-        .from(zoneDayRanges)
-        .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-        .where(eq(zoneDays.zoneId, b.terrace))
-        .orderBy(zoneDays.seasonId),
+        .from(openingHours)
+        .where(eq(openingHours.zoneId, b.terrace))
+        .orderBy(openingHours.seasonId),
     ).toEqual(
       seasonIds.map((season) => ({
         seasonId: season.id,
@@ -403,7 +401,7 @@ describe("zones closed at an instant", () => {
     const one = await reads([v.terrace]);
     const three = await reads([v.bar, v.terrace, v.disabled]);
     for (const texts of [one, three]) {
-      for (const table of ["settings", "seasons", "special_day_dates", "zone_days", "floor_zones"])
+      for (const table of ["settings", "seasons", "special_day_dates", "opening_hours", "floor_zones"])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
       expect(texts).toHaveLength(6);
     }

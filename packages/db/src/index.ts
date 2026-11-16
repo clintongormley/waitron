@@ -449,8 +449,6 @@ export {
   specialDayDates,
   specialDays,
   workingLineContexts,
-  zoneDayRanges,
-  zoneDays,
 } from "./schema/index.js";
 export { kitchenAllergyBlockCheck } from "./schema/venue-service/kitchen-allergy.js";
 export { KITCHEN_NOTICE_DIRECTIONS } from "./schema/venue-service/kitchen-notices.js";

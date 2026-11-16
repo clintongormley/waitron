@@ -2571,33 +2571,6 @@ CREATE TABLE `special_days` (
 	CONSTRAINT "special_days_name_ck" CHECK(trim("special_days"."name") <> '')
 );
 --> statement-breakpoint
-CREATE TABLE `zone_day_ranges` (
-	`id` text PRIMARY KEY NOT NULL,
-	`day_id` text NOT NULL,
-	`kind` text DEFAULT 'closed' NOT NULL,
-	`starts_at` text NOT NULL,
-	`ends_at` text NOT NULL,
-	FOREIGN KEY (`day_id`) REFERENCES `zone_days`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "zone_day_ranges_kind_ck" CHECK("zone_day_ranges"."kind" in ('closed', 'open')),
-	CONSTRAINT "zone_day_ranges_step_ck" CHECK(substr("zone_day_ranges"."starts_at", 4, 2) in ('00', '15', '30', '45') and substr("zone_day_ranges"."ends_at", 4, 2) in ('00', '15', '30', '45'))
-);
---> statement-breakpoint
-CREATE INDEX `zone_day_ranges_day_idx` ON `zone_day_ranges` (`day_id`,`starts_at`);--> statement-breakpoint
-CREATE TABLE `zone_days` (
-	`id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`season_id` text,
-	`weekday` integer,
-	`special_day_date_id` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "zone_days_one_day_ck" CHECK(("zone_days"."season_id" is null) <> ("zone_days"."special_day_date_id" is null) and ("zone_days"."season_id" is null) = ("zone_days"."weekday" is null)),
-	CONSTRAINT "zone_days_weekday_ck" CHECK("zone_days"."weekday" is null or "zone_days"."weekday" between 0 and 6)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `zone_days_season_key` ON `zone_days` (`zone_id`,`season_id`,`weekday`) WHERE "zone_days"."season_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `zone_days_date_key` ON `zone_days` (`zone_id`,`special_day_date_id`) WHERE "zone_days"."special_day_date_id" is not null;--> statement-breakpoint
 CREATE TABLE `order_kitchen_notes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text,

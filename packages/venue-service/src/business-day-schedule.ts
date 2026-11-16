@@ -11,8 +11,7 @@ import {
   seasons,
   specialDayDates,
   specialDays,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -76,18 +75,17 @@ export async function businessDayClockConflicts(
       departmentId: floorZones.departmentId,
       departmentName: departments.name,
       zoneName: floorZones.name,
-      zoneId: zoneDays.zoneId,
-      weekday: zoneDays.weekday,
-      seasonId: zoneDays.seasonId,
-      startsAt: zoneDayRanges.startsAt,
-      endsAt: zoneDayRanges.endsAt,
+      zoneId: openingHours.zoneId,
+      weekday: openingHours.weekday,
+      seasonId: openingHours.seasonId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(zoneDayRanges)
-    .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-    .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
+    .from(openingHours)
+    .innerJoin(floorZones, eq(floorZones.id, openingHours.zoneId))
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(isNotNull(zoneDays.seasonId))
-    .orderBy(asc(zoneDayRanges.id));
+    .where(isNotNull(openingHours.seasonId))
+    .orderBy(asc(openingHours.id));
   const specialDayList = await tx
     .select({
       dateId: specialDayDates.id,
@@ -119,21 +117,20 @@ export async function businessDayClockConflicts(
     .unionAll(
       tx
         .select({
-          dateId: zoneDays.specialDayDateId,
+          dateId: openingHours.specialDayDateId,
           departmentId: floorZones.departmentId,
           departmentName: departments.name,
-          zoneId: zoneDays.zoneId,
+          zoneId: openingHours.zoneId,
           zoneName: floorZones.name,
           periodId: sql<string | null>`null`,
           periodName: sql<string | null>`null`,
-          startsAt: zoneDayRanges.startsAt,
-          endsAt: zoneDayRanges.endsAt,
+          startsAt: openingHours.startsAt,
+          endsAt: openingHours.endsAt,
         })
-        .from(zoneDayRanges)
-        .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-        .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
+        .from(openingHours)
+        .innerJoin(floorZones, eq(floorZones.id, openingHours.zoneId))
         .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-        .where(isNotNull(zoneDays.specialDayDateId)),
+        .where(isNotNull(openingHours.specialDayDateId)),
     );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {

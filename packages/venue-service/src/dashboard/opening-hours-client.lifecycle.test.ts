@@ -50,8 +50,7 @@ describe("OpeningHoursApi.watchYear", () => {
       "seasons",
       "department_days",
       "department_day_ranges",
-      "zone_days",
-      "zone_day_ranges",
+      "opening_hours",
       "special_days",
       "special_day_dates",
     ]);

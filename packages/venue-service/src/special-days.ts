@@ -10,8 +10,7 @@ import {
   specialDayDates,
   specialDays,
   ZONE_PAINT_KINDS,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
   type Transaction,
 } from "@waitron/db";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
@@ -273,16 +272,15 @@ async function occurrencesOf(
     .unionAll(
       tx
         .select({
-          dateId: zoneDays.specialDayDateId,
-          ownerId: zoneDays.zoneId,
+          dateId: openingHours.specialDayDateId,
+          ownerId: openingHours.zoneId,
           periodId: sql<string | null>`null`,
-          kind: zoneDayRanges.kind,
-          startsAt: zoneDayRanges.startsAt,
-          endsAt: zoneDayRanges.endsAt,
+          kind: sql<ZonePaint["kind"]>`${openingHours.kind}`,
+          startsAt: openingHours.startsAt,
+          endsAt: openingHours.endsAt,
         })
-        .from(zoneDays)
-        .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
-        .where(inArray(zoneDays.specialDayDateId, [...dateIds])),
+        .from(openingHours)
+        .where(and(isNotNull(openingHours.zoneId), inArray(openingHours.specialDayDateId, [...dateIds]))),
     );
   const departmentPaint = new Map<string, Map<string, PaintRange[]>>();
   const zonePaint = new Map<string, Map<string, ZonePaint[]>>();
@@ -803,16 +801,15 @@ export async function readSpecialDay(tx: Transaction, id: string): Promise<Speci
     .orderBy(asc(departmentDays.departmentId), asc(departmentDayRanges.startsAt));
   const zonePaint = await tx
     .select({
-      dateId: zoneDays.specialDayDateId,
-      zoneId: zoneDays.zoneId,
-      kind: zoneDayRanges.kind,
-      startsAt: zoneDayRanges.startsAt,
-      endsAt: zoneDayRanges.endsAt,
+      dateId: openingHours.specialDayDateId,
+      zoneId: openingHours.zoneId,
+      kind: sql<ZonePaint["kind"]>`${openingHours.kind}`,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(zoneDays)
-    .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
-    .where(inArray(zoneDays.specialDayDateId, dateIds))
-    .orderBy(asc(zoneDays.zoneId), asc(zoneDayRanges.startsAt));
+    .from(openingHours)
+    .where(and(isNotNull(openingHours.zoneId), inArray(openingHours.specialDayDateId, dateIds)))
+    .orderBy(asc(openingHours.zoneId), asc(openingHours.startsAt));
   const group = <T>(rows: readonly { dateId: string | null; ownerId: string; range: T }[]) => {
     const byKey = new Map<string, { ownerId: string; date: LocalDate; ranges: T[] }>();
     for (const row of rows) {
@@ -982,16 +979,15 @@ export async function saveSpecialDay(
   for (const entry of parsed.zonePaint) {
     const specialDayDateId = dateIds.get(entry.date)!;
     await tx
-      .delete(zoneDays)
+      .delete(openingHours)
       .where(
-        and(eq(zoneDays.zoneId, entry.ownerId), eq(zoneDays.specialDayDateId, specialDayDateId)),
+        and(eq(openingHours.zoneId, entry.ownerId), eq(openingHours.specialDayDateId, specialDayDateId)),
       );
     if (entry.ranges.length === 0) continue;
-    const dayId = newId();
-    await tx.insert(zoneDays).values({ id: dayId, zoneId: entry.ownerId, specialDayDateId });
-    await tx.insert(zoneDayRanges).values(
+    await tx.insert(openingHours).values(
       joinTouching(entry.ranges, (a, b) => a.kind === b.kind).map((range) => ({
-        dayId,
+        zoneId: entry.ownerId,
+        specialDayDateId,
         kind: range.kind,
         startsAt: storedTime(range.startsAt),
         endsAt: storedTime(range.endsAt),

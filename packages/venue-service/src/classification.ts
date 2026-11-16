@@ -33,8 +33,6 @@ export const VENUE_SERVICE_TABLES = [
   "department_days",
   "department_day_ranges",
   "opening_hours",
-  "zone_days",
-  "zone_day_ranges",
 ] as const;
 
 export const VENUE_SERVICE_CHANGE_SOURCES: readonly ChangeSource[] = VENUE_SERVICE_TABLES.map(

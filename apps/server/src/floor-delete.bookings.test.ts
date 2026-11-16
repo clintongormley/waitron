@@ -85,8 +85,7 @@ for (const enabled of [true, false]) {
         "menu_periods",
         "department_days",
         "department_day_ranges",
-        "zone_days",
-        "zone_day_ranges",
+        "opening_hours",
         "department_transfer_destinations",
         "department_transfer_requests",
       ].map((type) => ({ type }));

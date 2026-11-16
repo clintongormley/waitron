@@ -9,7 +9,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
     for (const table of [
       // A season day's range keys its period with no delete rule; the days take their ranges.
       "department_days",
-      "zone_days",
+      "opening_hours",
       "seasons",
 
       "special_days",

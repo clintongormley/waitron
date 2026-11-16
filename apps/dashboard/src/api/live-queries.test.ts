@@ -534,8 +534,7 @@ it("reads the categories' routing again when a season week changes", () => {
     "seasons",
     "department_days",
     "department_day_ranges",
-    "zone_days",
-    "zone_day_ranges",
+    "opening_hours",
   ])
     expect(query.dependencies).toContainEqual({ type });
 });
@@ -1132,8 +1131,7 @@ it.each(["Zone", "Department"] as const)(
       "menu_periods",
       "department_days",
       "department_day_ranges",
-      "zone_days",
-      "zone_day_ranges",
+      "opening_hours",
       "department_transfer_destinations",
       "department_transfer_requests",
       "floor_plan_sets",

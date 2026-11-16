@@ -12,7 +12,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  zoneDays,
+  openingHours,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -178,7 +178,7 @@ describe("saveSpecialDay", () => {
       await db.select().from(departmentDays).where(eq(departmentDays.specialDayDateId, removed.id)),
     ).toEqual([]);
     expect(
-      await db.select().from(zoneDays).where(eq(zoneDays.specialDayDateId, removed.id)),
+      await db.select().from(openingHours).where(eq(openingHours.specialDayDateId, removed.id)),
     ).toEqual([]);
   });
 
@@ -900,7 +900,7 @@ describe("deleteSpecialDay", () => {
     expect(
       await db.select().from(departmentDays).where(inArray(departmentDays.specialDayDateId, ids)),
     ).toEqual([]);
-    expect(await db.select().from(zoneDays).where(inArray(zoneDays.specialDayDateId, ids))).toEqual(
+    expect(await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids))).toEqual(
       [],
     );
   });

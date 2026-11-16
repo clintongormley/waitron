@@ -18,7 +18,7 @@ import {
   routingCellPeriods,
   routingCells,
   serviceSteps,
-  zoneDays,
+  openingHours,
   type Transaction,
 } from "@waitron/db";
 import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
@@ -309,7 +309,7 @@ export async function clearServiceDeleteSettings(
       selected.cells.map((row) => row.id),
     ),
   );
-  await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
+  await tx.delete(openingHours).where(inArray(openingHours.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
       .update(deviceProfileServiceAccess)

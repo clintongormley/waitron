@@ -20,8 +20,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -500,10 +499,9 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     );
     await scoped((tx) => writeZoneSeasonWeeks(tx, v.zoneId, [Winter!], week));
     const kinds = await db
-      .select({ kind: zoneDayRanges.kind })
-      .from(zoneDayRanges)
-      .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-      .where(eq(zoneDays.zoneId, v.zoneId));
+      .select({ kind: openingHours.kind })
+      .from(openingHours)
+      .where(eq(openingHours.zoneId, v.zoneId));
     expect(kinds).toEqual([{ kind: "closed" }]);
   });
 });
@@ -524,6 +522,10 @@ const weekWrites = (texts: readonly string[], days: string, ranges: string) => (
   dayDeletes: texts.filter((text) => text.startsWith(`delete from "${days}"`)).length,
   dayInserts: texts.filter((text) => text.startsWith(`insert into "${days}"`)).length,
   rangeInserts: texts.filter((text) => text.startsWith(`insert into "${ranges}"`)).length,
+});
+const zoneWrites = (texts: readonly string[]) => ({
+  deletes: texts.filter((text) => text.startsWith('delete from "opening_hours"')).length,
+  inserts: texts.filter((text) => text.startsWith('insert into "opening_hours"')).length,
 });
 const ONE_WRITE = { dayDeletes: 1, dayInserts: 1, rangeInserts: 1 };
 const NO_WRITE = { dayDeletes: 0, dayInserts: 0, rangeInserts: 0 };
@@ -570,7 +572,7 @@ describe("week writes", () => {
     expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
   });
 
-  it("writes every season's zone week in one delete and two inserts, and leaves a season already holding the week alone", async () => {
+  it("writes every season's zone week in one delete and one insert, and leaves a season already holding the week alone", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
@@ -583,22 +585,22 @@ describe("week writes", () => {
         Object.entries(await seasonIds()).map(([name, id]) => [id, name]),
       );
       const found = await db
-        .select({ id: zoneDays.id, seasonId: zoneDays.seasonId })
-        .from(zoneDays)
-        .where(eq(zoneDays.zoneId, v.zoneId));
+        .select({ id: openingHours.id, seasonId: openingHours.seasonId })
+        .from(openingHours)
+        .where(eq(openingHours.zoneId, v.zoneId));
       const bySeason: Record<string, string[]> = {};
       for (const row of found) (bySeason[names[row.seasonId!]!] ??= []).push(row.id);
       for (const ids of Object.values(bySeason)) ids.sort();
       return bySeason;
     };
-    expect(weekWrites(await save([night]), "zone_days", "zone_day_ranges")).toEqual(ONE_WRITE);
+    expect(zoneWrites(await save([night]))).toEqual({ deletes: 1, inserts: 1 });
     const first = await rows();
-    expect(weekWrites(await save([night]), "zone_days", "zone_day_ranges")).toEqual(NO_WRITE);
+    expect(zoneWrites(await save([night]))).toEqual({ deletes: 0, inserts: 0 });
     expect(await rows()).toEqual(first);
     const { Winter } = await seasonIds();
     await save([afternoon], Winter);
     const winter = (await rows()).Winter;
-    expect(weekWrites(await save([night]), "zone_days", "zone_day_ranges")).toEqual(ONE_WRITE);
+    expect(zoneWrites(await save([night]))).toEqual({ deletes: 1, inserts: 1 });
     const after = await rows();
     expect({ ...after, Winter: [] }).toEqual({ ...first, Winter: [] });
     expect(after.Winter).not.toEqual(winter);

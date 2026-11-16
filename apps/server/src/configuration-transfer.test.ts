@@ -7891,8 +7891,8 @@ describe("special days in a configuration transfer", () => {
       order by d.date, r.starts_at`);
     const zones = await db.execute(sql`
       select d.date, z.name as zone, r.kind, r.starts_at, r.ends_at
-      from special_day_dates d join zone_days zd on zd.special_day_date_id=d.id
-      join floor_zones z on z.id=zd.zone_id join zone_day_ranges r on r.day_id=zd.id
+      from special_day_dates d join opening_hours zd on zd.special_day_date_id=d.id
+      join floor_zones z on z.id=zd.zone_id join opening_hours r on r.day_id=zd.id
        order by d.date, r.starts_at`);
     return { paint: paint.rows, zones: zones.rows };
   }
@@ -7931,9 +7931,9 @@ describe("special days in a configuration transfer", () => {
       await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
         values (${randomUUID()}, ${restaurantDay}, ${department.id}, ${bar}, '20:00:00', '23:00:00'),
           (${randomUUID()}, ${restaurantDay}, ${department.id}, null, '12:00:00', '16:00:00')`);
-      await tx.execute(sql`insert into zone_days (id, zone_id, season_id, weekday, special_day_date_id)
+      await tx.execute(sql`insert into opening_hours (id, zone_id, season_id, weekday, special_day_date_id)
         values (${terraceDay}, ${terrace.id}, null, null, ${fifteenth})`);
-      await tx.execute(sql`insert into zone_day_ranges (id, day_id, kind, starts_at, ends_at)
+      await tx.execute(sql`insert into opening_hours (id, day_id, kind, starts_at, ends_at)
         values (${randomUUID()}, ${terraceDay}, 'closed', '21:00:00', '22:00:00')`);
     });
     const versions = await schemaVersionsByModule(

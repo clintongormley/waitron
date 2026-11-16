@@ -12,8 +12,7 @@ import {
   specialDayDates,
   specialDays,
   withTransaction,
-  zoneDayRanges,
-  zoneDays as zoneDayRows,
+  openingHours,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -509,12 +508,8 @@ async function specialDay(
         .values(ranges.map((range) => ({ ...range, dayId: row!.id, departmentId })));
   }
   for (const [zoneId, ranges] of Object.entries(options.zonePaint ?? {})) {
-    const [row] = await db
-      .insert(zoneDayRows)
-      .values({ zoneId, specialDayDateId: dated!.id })
-      .returning({ id: zoneDayRows.id });
     if (ranges.length > 0)
-      await db.insert(zoneDayRanges).values(ranges.map((range) => ({ ...range, dayId: row!.id })));
+      await db.insert(openingHours).values(ranges.map((range) => ({ ...range, zoneId, specialDayDateId: dated!.id })));
   }
   return day!.id;
 }

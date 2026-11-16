@@ -15,7 +15,6 @@ import {
 import type { CalendarColour } from "@waitron/shared";
 import { menuPeriods } from "./menus.js";
 import { departments } from "./service.js";
-import { floorZones } from "../floor-zones.js";
 
 export const ZONE_PAINT_KINDS = ["closed", "open"] as const;
 
@@ -144,66 +143,3 @@ export const departmentDayRanges = table(
   ],
 );
 
-export const zoneDays = table(
-  "zone_days",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    zoneId: id("zone_id").notNull(),
-    seasonId: id("season_id"),
-    weekday: count("weekday"), // 0 = Sunday, as weekdayOf
-    specialDayDateId: id("special_day_date_id"),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "zone_days_zone_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.seasonId],
-      foreignColumns: [seasons.id],
-      name: "zone_days_season_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.specialDayDateId],
-      foreignColumns: [specialDayDates.id],
-      name: "zone_days_date_fk",
-    }).onDelete("cascade"),
-    check(
-      "zone_days_one_day_ck",
-      sql`(${t.seasonId} is null) <> (${t.specialDayDateId} is null) and (${t.seasonId} is null) = (${t.weekday} is null)`,
-    ),
-    check("zone_days_weekday_ck", sql`${t.weekday} is null or ${t.weekday} between 0 and 6`),
-    uniqueIndex("zone_days_season_key")
-      .on(t.zoneId, t.seasonId, t.weekday)
-      .where(sql`${t.seasonId} is not null`),
-    uniqueIndex("zone_days_date_key")
-      .on(t.zoneId, t.specialDayDateId)
-      .where(sql`${t.specialDayDateId} is not null`),
-  ],
-);
-
-export const zoneDayRanges = table(
-  "zone_day_ranges",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    dayId: id("day_id").notNull(),
-    // "open" only on special-day dates (the writers check).
-    kind: enumType(ZONE_PAINT_KINDS)("kind").notNull().default("closed"),
-    startsAt: timeOfDay("starts_at").notNull(),
-    endsAt: timeOfDay("ends_at").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.dayId],
-      foreignColumns: [zoneDays.id],
-      name: "zone_day_ranges_day_fk",
-    }).onDelete("cascade"),
-    check("zone_day_ranges_kind_ck", enumCheck(t.kind)),
-    check(
-      "zone_day_ranges_step_ck",
-      sql`substr(${t.startsAt}, 4, 2) in ('00', '15', '30', '45') and substr(${t.endsAt}, 4, 2) in ('00', '15', '30', '45')`,
-    ),
-    index("zone_day_ranges_day_idx").on(t.dayId, t.startsAt),
-  ],
-);
