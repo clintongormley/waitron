@@ -869,7 +869,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "staffing_days_weekday_ck",
 ];
 
-// Scan every SQL file, including files outside the product journal.
+// This replay relies on no-tenant-column.test.ts for journal/file agreement.
 function buildSchema() {
   const connection = new DatabaseSync(":memory:");
   for (const module of modulesWithSets(ALL_MODULES)) {

@@ -46,6 +46,12 @@ describe("migrationJournal", () => {
       { idx: 0, tag: "0_x", when: 1 },
     ]);
   });
+
+  it("reports a journal without an entry list as missing", () => {
+    const root = fixtureRoot({ "packages/p/drizzle/meta/_journal.json": '{"version":"7"}' });
+    expect(migrationJournal(root, set)).toBeNull();
+    expect(headSnapshot(root, set)).toEqual({ kind: "missing" });
+  });
 });
 
 describe("filesUnder", () => {

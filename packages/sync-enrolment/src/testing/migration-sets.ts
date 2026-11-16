@@ -41,7 +41,8 @@ export function migrationJournal(
 ): { idx: number; tag: string; when: number }[] | null {
   const journal = join(repoRoot, set, "meta", "_journal.json");
   if (!existsSync(journal)) return null;
-  return JSON.parse(readFileSync(journal, "utf8")).entries;
+  const entries = JSON.parse(readFileSync(journal, "utf8")).entries;
+  return Array.isArray(entries) ? entries : null;
 }
 
 export function headSnapshot(repoRoot: string, set: string): HeadSnapshot {

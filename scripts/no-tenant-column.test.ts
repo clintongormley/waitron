@@ -95,7 +95,7 @@ describe("no tenant column", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("reads every SQL file declared by each migration set's journal", () => {
+  it("reads exactly the SQL files declared by each migration set's journal", () => {
     for (const set of sets) {
       const entries = migrationJournal(repoRoot, set);
       expect(entries, `${set}: missing journal`).not.toBeNull();
@@ -103,6 +103,11 @@ describe("no tenant column", () => {
       for (const entry of entries!) {
         expect(files, `${set}: missing ${entry.tag}.sql`).toContain(join(set, `${entry.tag}.sql`));
       }
+      const declared = entries!.map((entry) => join(set, `${entry.tag}.sql`));
+      expect(
+        files.filter((file) => !declared.includes(file)),
+        `${set}: unjournaled SQL`,
+      ).toEqual([]);
     }
   });
 

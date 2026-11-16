@@ -458,7 +458,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **Other server test files still hash fixed PINs and passwords on every test.**
   [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
 
-## Bundle: Vitest settings: what the guide says, what A490 left, the cold-cache check
+## Bundle: Vitest settings: remaining measurements and console policy
 
 3 entries, size M. Helper adoption and A902's guide receipt are complete; the remaining work is:
 

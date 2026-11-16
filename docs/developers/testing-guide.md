@@ -772,23 +772,9 @@ lock files, the inline Node script in `deploy/waitron.sh`, and script and bench 
 
 ## A small coverage merge check does not qualify a package's worker limit
 
-On 16 November 2026, Node v26.13.0 and Vitest/coverage-v8 4.1.12, a disposable two-file
-fixture exercised the two sides of one ternary expression. Each arm passed two tests and
-reported the same branch map and counts, `[1, 1]`, with `--maxWorkers 1` and `--maxWorkers 2`.
-The two-worker arm recorded distinct processes with overlapping test intervals. Running only
-the first file reported `[1, 0]` and failed the fixture's 100% branch threshold.
-
-Those runs check this small complementary-branch merge. They do not recreate a package's
-intermittent coverage loss under concurrent workspace load. The installed worker's
-`onAfterRunFiles` collects coverage and sends it through `onAfterSuiteRun`; reading that path
-is not a measurement of lost branches. Keep per-package worker limits until you measure the
-relevant loaded-runner condition.
-
-For the older payments observation, run `git show edeb8346656cd0690a0155147d4ac358723d278e`.
-Its #558 receipt records 100% branch coverage for `store.ts` alone, 83.78% in a parallel full
-run, then 100% with one fork. The same receipt's 24 September 2026 recheck found 170/174
-branches at both one and six workers. These are historical observations, not a current
-qualification of the other packages.
+Keep per-package worker limits until you measure the relevant loaded-runner condition. For the
+older payments observations and one/six-worker recheck, run
+`git show edeb8346656cd0690a0155147d4ac358723d278e` (#558).
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
