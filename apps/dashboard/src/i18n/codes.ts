@@ -3,6 +3,7 @@ import {
   codeOf,
   registerCodeMessages,
 } from "@waitron/dashboard-kit";
+import { formatBytes } from "@waitron/shared";
 import { t, currentLocale, pickLocale } from "./t.js";
 import { en, es } from "./strings.js";
 
@@ -79,6 +80,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "tax_office.export_running": {
     en: "Another month of invoices is already downloading. Try again once that download finishes.",
     es: "Ya se está descargando otro mes de facturas. Vuelve a intentarlo cuando termine esa descarga.",
+  },
+  "tax_office.space_low": {
+    en: "The server's disk is nearly full: it has {free} free, and preparing this file needs {needed}. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+    es: "El disco del servidor está casi lleno: tiene {free} libres y preparar este archivo necesita {needed}. Guardar menos copias de seguridad en el servidor, en Copias de seguridad, libera espacio; después vuelve a intentarlo.",
+  },
+  "tax_office.download_missing": {
+    en: "This file is no longer on the server. Choose Download again to prepare it.",
+    es: "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",
   },
   "invoice_customer.not_found": {
     en: "No full invoice names that tax number.",
@@ -1827,7 +1836,14 @@ export function fieldOf(error: unknown): string {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown; count?: unknown; seconds?: unknown; kind?: unknown },
+  params?: {
+    reason?: unknown;
+    count?: unknown;
+    seconds?: unknown;
+    kind?: unknown;
+    freeBytes?: unknown;
+    neededBytes?: unknown;
+  },
 ): string {
   if (
     code === "printer.bluetooth_command_busy" &&
@@ -1862,6 +1878,10 @@ export function codeMessage(
     const key = `cloud.emergency_${params!.reason}` as "cloud.emergency_setting_off";
     return pickLocale({ en: en[key], es: es[key] }, locale);
   }
+  if (code === "tax_office.space_low")
+    return registeredCodeMessage(code, locale)
+      .replace("{free}", formatBytes(params?.freeBytes, locale))
+      .replace("{needed}", formatBytes(params?.neededBytes, locale));
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "receipt.language_orders_open" && typeof params?.count === "number")
     return ordersOpenMessage(params.count, locale);

@@ -1,4 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import { unzipSync, strFromU8 } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -16,7 +19,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { endManagementSession, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   decimal,
@@ -35,9 +38,15 @@ import {
   voidInvoice,
   type OrderVenue,
 } from "./testing/order-venue.js";
-import { mountTaxOfficeApi, type TaxOfficeApiDeps } from "./tax-office-api.js";
+import { mountTaxOfficeApi, taxOfficeMonthSource } from "./tax-office-api.js";
+import {
+  createTaxOfficeMonthBuilds,
+  TAX_OFFICE_ROOM_BYTES,
+  type TaxOfficeMonthBuilds,
+} from "./tax-office-month-builds.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import { ZIP_LIMITS, zipStream } from "./download-archive.js";
-import { sessionHolding } from "./testing/session-holding.js";
+import { confineTo, sessionHolding } from "./testing/session-holding.js";
 import { invoicePdfFileName, type SaleCopy } from "./orders-invoice-pdf.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { renderTaxOfficeCsv } from "./tax-office-export.js";
@@ -62,8 +71,32 @@ let managerDashboard = "";
 let seriesIds: { full: string; standard: string; fA: string; fUnderA: string };
 const january: Record<string, string> = {};
 
-function mount(extra: Partial<TaxOfficeApiDeps> = {}, log: Logger = () => {}): Hono {
+const DOWNLOADS = join(mkdtempSync(join(tmpdir(), "tax-office-export-")), "tax-office");
+const buildsOf = new WeakMap<Hono, TaxOfficeMonthBuilds>();
+
+function mount(
+  extra: {
+    render?: (copy: SaleCopy) => Promise<Uint8Array>;
+    freeBytes?: () => Promise<number | null>;
+  } = {},
+  log: Logger = () => {},
+): Hono {
   const app = new Hono();
+  const builds = createTaxOfficeMonthBuilds({
+    dir: DOWNLOADS,
+    now: () => new Date(),
+    entries: taxOfficeMonthSource({
+      db: venue.db,
+      backend: venue.backend,
+      tradingContext: venue.cfg,
+      log,
+      ...(extra.render === undefined ? {} : { render: extra.render }),
+    }),
+    changed: () => {},
+    wake: () => {},
+    log,
+  });
+  buildsOf.set(app, builds);
   mountTaxOfficeApi(
     app,
     {
@@ -72,11 +105,17 @@ function mount(extra: Partial<TaxOfficeApiDeps> = {}, log: Logger = () => {}): H
       backend: venue.backend,
       tradingContext: venue.cfg,
       venueLocale: "es-ES",
-      ...extra,
+      builds,
+      freeBytes: extra.freeBytes ?? (() => Promise.resolve(null)),
     },
     log,
   );
   return app;
+}
+
+/** One pass of the builds' job, as the job runner would run it once woken. */
+function runBuild(app: Hono, signal: AbortSignal = new AbortController().signal) {
+  return buildsOf.get(app)!.job().pass({ now: new Date(), signal });
 }
 
 /** A sale issued at `iso` in `series`, naming a customer when it is a full invoice. */
@@ -213,13 +252,32 @@ async function numberOf(saleId: string): Promise<string> {
 const copyNumber = (copy: SaleCopy) => formatInvoiceNumber(copy.code, copy.number);
 const STUB_PDF = new TextEncoder().encode("%PDF-stub");
 
-function exportMonth(app: Hono, month: string, init: RequestInit & { cookie?: string } = {}) {
+function requestMonth(app: Hono, month: string, init: RequestInit & { cookie?: string } = {}) {
   const { cookie = managerDashboard, headers, ...rest } = init;
   return app.request(`/management-api/tax-office/months/${month}`, {
     method: "POST",
     headers: { cookie, ...(headers as Record<string, string> | undefined) },
     ...rest,
   });
+}
+
+const monthStatus = (app: Hono, cookie = managerDashboard) =>
+  app.request("/management-api/tax-office/month-download", { headers: { cookie } });
+
+const monthFile = (app: Hono, init: RequestInit & { cookie?: string } = {}) => {
+  const { cookie = managerDashboard, headers, ...rest } = init;
+  return app.request("/management-api/tax-office/month-download/file", {
+    headers: { cookie, ...(headers as Record<string, string> | undefined) },
+    ...rest,
+  });
+};
+
+/** Asks for the month, runs the build and fetches the file; a refused request answers as refused. */
+async function exportMonth(app: Hono, month: string, init: RequestInit & { cookie?: string } = {}) {
+  const asked = await requestMonth(app, month, init);
+  if (asked.status !== 202) return asked;
+  await runBuild(app);
+  return monthFile(app, { ...(init.cookie === undefined ? {} : { cookie: init.cookie }) });
 }
 
 async function unzipped(response: Response): Promise<Record<string, Uint8Array>> {
@@ -252,25 +310,6 @@ function countingRender() {
       return Promise.resolve(new TextEncoder().encode("%PDF-stub"));
     },
   };
-}
-
-async function readUntil(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  done: () => boolean,
-): Promise<void> {
-  while (!done()) {
-    const chunk = await reader.read();
-    if (chunk.done) throw new Error("the stream ended before the condition held");
-  }
-}
-
-/** Reads to the stream's end; answers the error that ended it, or null when it closed cleanly. */
-async function drain(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<unknown> {
-  try {
-    for (;;) if ((await reader.read()).done) return null;
-  } catch (error) {
-    return error;
-  }
 }
 
 const pdfDownloads = async () => (await db().select().from(invoicePdfDownloads)).length;
@@ -380,93 +419,58 @@ describe("the month's export", () => {
     });
   });
 
-  it("renders no further PDF once the request is aborted", async () => {
+  it("renders no further PDF once the build's job is stopped, and leaves nothing to save", async () => {
     const counter = countingRender();
-    const aborted = new AbortController();
-    const response = await exportMonth(mount({ render: counter.render }), "2026-01", {
-      signal: aborted.signal,
-    });
-    const reader = response.body!.getReader();
-    await readUntil(reader, () => counter.calls.length >= 1);
-    const rendered = counter.calls.length;
-    aborted.abort();
-    const ended = await drain(reader);
-    expect(counter.calls).toHaveLength(rendered);
-    expect(ended).toMatchObject({ name: "AbortError" });
-  });
-
-  it("stops when a handover closes the gate", async () => {
-    const counter = countingRender();
-    const gate = new AbortController();
-    const response = await exportMonth(
-      mount({ render: counter.render, closed: gate.signal }),
-      "2026-01",
-    );
-    const reader = response.body!.getReader();
-    await readUntil(reader, () => counter.calls.length >= 1);
-    const rendered = counter.calls.length;
-    gate.abort();
-    expect(await drain(reader)).toMatchObject({ code: "handover.stepping_down" });
-    expect(counter.calls).toHaveLength(rendered);
-  });
-
-  it("stops when a handover closes the gate after the last copy is drawn", async () => {
-    const gate = new AbortController();
-    const drawn: string[] = [];
-    const response = await exportMonth(
-      mount({
-        render: (copy) => {
-          drawn.push(copyNumber(copy));
-          if (drawn.length === 6) gate.abort();
-          return Promise.resolve(STUB_PDF);
-        },
-        closed: gate.signal,
-      }),
-      "2026-01",
-    );
-    expect(await drain(response.body!.getReader())).toMatchObject({
-      code: "handover.stepping_down",
-    });
-    expect(drawn).toHaveLength(6);
-  });
-
-  it("refuses a second export while one runs, and serves the next once it ends", async () => {
-    const counter = countingRender();
-    const app = mount({ render: counter.render });
-    const first = (await exportMonth(app, "2026-01")).body!.getReader();
-    await readUntil(first, () => counter.calls.length >= 1);
-    const second = await exportMonth(app, "2026-01");
-    expect(second.status).toBe(409);
-    expect(await second.json()).toMatchObject({ error: { code: "tax_office.export_running" } });
-    await first.cancel();
-    const third = await exportMonth(app, "2026-01");
-    expect(third.status).toBe(200);
-    expect(Object.keys(await unzipped(third))).toHaveLength(8);
-  });
-
-  it("frees the export for the next once one errors or finishes", async () => {
-    const aborted = new AbortController();
+    const stop = new AbortController();
     const app = mount({
-      render: () => {
-        aborted.abort();
-        return Promise.reject(new Error("render failed"));
+      render: (copy) => {
+        const bytes = counter.render(copy);
+        stop.abort();
+        return bytes;
       },
     });
-    const failed = (
-      await exportMonth(app, "2026-01", { signal: aborted.signal })
-    ).body!.getReader();
-    expect(await drain(failed)).toMatchObject({ name: "AbortError" });
-    const idle = await exportMonth(app, "2025-06");
-    expect(idle.status).toBe(200);
-    // A body nobody has read yet holds the export until it is cancelled.
-    expect((await exportMonth(app, "2025-06")).status).toBe(409);
-    await idle.body!.cancel();
-    const finished = await exportMonth(app, "2025-06");
-    expect(Object.keys(await unzipped(finished))).toHaveLength(2);
-    expect((await exportMonth(app, "2025-06")).status).toBe(200);
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app, stop.signal);
+    expect(counter.calls).toHaveLength(1);
+    expect(await (await monthStatus(app)).json()).toEqual({ status: "none" });
+    expect((await monthFile(app)).status).toBe(404);
   });
 
-  it("logs once and frees the export for the next when the ZIP refuses another entry", async () => {
+  it("stops when the build's job is stopped after the last copy is drawn", async () => {
+    const stop = new AbortController();
+    const drawn: string[] = [];
+    const app = mount({
+      render: (copy) => {
+        drawn.push(copyNumber(copy));
+        if (drawn.length === 6) stop.abort();
+        return Promise.resolve(STUB_PDF);
+      },
+    });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app, stop.signal);
+    expect(drawn).toHaveLength(6);
+    expect(await (await monthStatus(app)).json()).toEqual({ status: "none" });
+  });
+
+  it("refuses a second build while one runs, and serves the next once it ends", async () => {
+    const counter = countingRender();
+    const app = mount({ render: counter.render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    const inspector = await sessionHolding(db(), ["invoice.inspect"]);
+    for (const second of [
+      await requestMonth(app, "2026-01", { cookie: inspector.cookie }),
+      await requestMonth(app, "2025-06"),
+    ]) {
+      expect(second.status).toBe(409);
+      expect(await second.json()).toMatchObject({ error: { code: "tax_office.export_running" } });
+    }
+    await runBuild(app);
+    const third = await exportMonth(app, "2025-06", { cookie: inspector.cookie });
+    expect(third.status).toBe(200);
+    expect(Object.keys(await unzipped(third))).toHaveLength(2);
+  });
+
+  it("logs once and frees the build for the next when the ZIP refuses another entry", async () => {
     const { zipStream: realZipStream } =
       await vi.importActual<typeof import("./download-archive.js")>("./download-archive.js");
     vi.mocked(zipStream).mockImplementationOnce((entries, at) =>
@@ -477,16 +481,16 @@ describe("the month's export", () => {
     const app = mount({ render: counter.render }, (_level, event, fields) =>
       logged.push({ event, ...(fields ? { fields } : {}) }),
     );
-    const response = await exportMonth(app, "2026-01");
-    expect(await drain(response.body!.getReader())).toMatchObject({
-      message: "a ZIP without ZIP64 holds at most 3 entries",
-    });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
     expect(logged).toEqual([
       {
-        event: "tax_office.export_stopped",
-        fields: { month: "2026-01", errorCode: "unknown", errorClass: "Error" },
+        event: "tax_office.build_failed",
+        fields: { errorCode: "unknown", errorClass: "Error" },
       },
     ]);
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "failed" });
+    expect((await monthFile(app)).status).toBe(404);
     expect(Object.keys(await unzipped(await exportMonth(app, "2026-01")))).toHaveLength(8);
   });
 
@@ -529,27 +533,25 @@ describe("the month's export", () => {
     ]);
   });
 
-  it("still stops when the request is aborted while a copy fails", async () => {
-    const aborted = new AbortController();
+  it("still stops when the build's job is stopped while a copy fails", async () => {
+    const stop = new AbortController();
     const logged: string[] = [];
     const drawn: string[] = [];
-    const response = await exportMonth(
-      mount(
-        {
-          render: (copy) => {
-            drawn.push(copyNumber(copy));
-            aborted.abort();
-            return Promise.reject(new Error("cannot draw"));
-          },
+    const app = mount(
+      {
+        render: (copy) => {
+          drawn.push(copyNumber(copy));
+          stop.abort();
+          return Promise.reject(new Error("cannot draw"));
         },
-        (_level, event) => logged.push(event),
-      ),
-      "2026-01",
-      { signal: aborted.signal },
+      },
+      (_level, event) => logged.push(event),
     );
-    expect(await drain(response.body!.getReader())).toMatchObject({ name: "AbortError" });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app, stop.signal);
     expect(drawn).toHaveLength(1);
-    expect(logged).toEqual(["tax_office.export_stopped"]);
+    expect(logged).toEqual([]);
+    expect(await (await monthStatus(app)).json()).toEqual({ status: "none" });
   });
 
   it("draws every copy outside the write lock, oldest first, with a turn of the event loop between", async () => {
@@ -682,6 +684,149 @@ describe("the month's export", () => {
     expect(Object.keys(await unzipped(await exportMonth(app, "2025-06")))).toHaveLength(2);
   });
 });
+
+const tokenOf = (cookie: string) => cookie.slice(cookie.indexOf("=") + 1);
+
+describe("asking for the month's file and saving it", () => {
+  it("answers a request with the build's view and one activity entry, and a repeat with the same build", async () => {
+    const app = mount({ render: countingRender().render });
+    const inspector = await sessionHolding(db(), ["invoice.inspect"]);
+    const entriesBefore = (await monthEntries()).length;
+    const asked = await requestMonth(app, "2025-06", { cookie: inspector.cookie });
+    expect(asked.status).toBe(202);
+    const view = (await asked.json()) as { id: string };
+    expect(view).toEqual({ status: "building", id: expect.any(String), month: "2025-06" });
+    const again = await requestMonth(app, "2025-06", { cookie: inspector.cookie });
+    expect(again.status).toBe(202);
+    expect(await again.json()).toEqual(view);
+    const entries = await monthEntries();
+    expect(entries).toHaveLength(entriesBefore + 1);
+    expect(entries.at(-1)).toMatchObject({
+      personId: inspector.personId,
+      data: { month: "2025-06", invoices: 0 },
+    });
+    expect(await (await monthStatus(app, inspector.cookie)).json()).toEqual(view);
+    await runBuild(app);
+    expect(await (await monthStatus(app, inspector.cookie)).json()).toEqual({
+      status: "ready",
+      id: view.id,
+      month: "2025-06",
+      bytes: expect.any(Number),
+      expiresAt: expect.any(String),
+    });
+  });
+
+  it("refuses the status to a person without invoice.inspect", async () => {
+    const reporter = await sessionHolding(db(), ["report.view", "report.export"]);
+    const refused = await monthStatus(mount(), reporter.cookie);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  it("serves the file once, in full, to a browser's plain download by the person who asked", async () => {
+    const app = mount({ render: countingRender().render });
+    const asker = await sessionHolding(db(), ["invoice.inspect"]);
+    const other = await sessionHolding(db(), ["invoice.inspect"]);
+    expect((await requestMonth(app, "2026-01", { cookie: asker.cookie })).status).toBe(202);
+    await runBuild(app);
+    const ready = (await (await monthStatus(app, asker.cookie)).json()) as { bytes: number };
+    const notTheirs = await monthFile(app, { cookie: other.cookie });
+    expect(notTheirs.status).toBe(404);
+    expect(await notTheirs.json()).toMatchObject({
+      error: { code: "tax_office.download_missing" },
+    });
+    // What a browser's navigation sends: the cookie, and no custom or JSON headers.
+    const saved = await monthFile(app, {
+      cookie: asker.cookie,
+      headers: {
+        accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-dest": "document",
+      },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.headers.get("content-type")).toBe("application/zip");
+    expect(saved.headers.get("content-disposition")).toBe(
+      'attachment; filename="invoices-2026-01.zip"',
+    );
+    expect(saved.headers.get("cache-control")).toBe("no-store");
+    expect(saved.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(saved.headers.get("content-length")).toBe(String(ready.bytes));
+    const bytes = new Uint8Array(await saved.arrayBuffer());
+    expect(bytes.byteLength).toBe(ready.bytes);
+    expect(Object.keys(unzipSync(bytes))).toHaveLength(8);
+    expect(await (await monthStatus(app, asker.cookie)).json()).toEqual({ status: "none" });
+    const twice = await monthFile(app, { cookie: asker.cookie });
+    expect(twice.status).toBe(404);
+    expect(await twice.json()).toMatchObject({ error: { code: "tax_office.download_missing" } });
+  });
+
+  it("keeps the file for another try when a download is aborted part-way", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    const aborted = new AbortController();
+    const partial = await monthFile(app, { signal: aborted.signal });
+    expect(partial.status).toBe(200);
+    const reader = partial.body!.getReader();
+    expect((await reader.read()).done).toBe(false);
+    aborted.abort();
+    await reader.cancel();
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
+    const retried = await monthFile(app);
+    expect(retried.status).toBe(200);
+    expect(Object.keys(await unzipped(retried))).toHaveLength(8);
+  });
+
+  it("refuses the file to the person who asked once they no longer hold invoice.inspect", async () => {
+    const app = mount({ render: countingRender().render });
+    const asker = await sessionHolding(db(), ["invoice.inspect"]);
+    expect((await requestMonth(app, "2025-06", { cookie: asker.cookie })).status).toBe(202);
+    await runBuild(app);
+    await confineTo(db(), asker.personId, ["report.view"]);
+    const refused = await monthFile(app, { cookie: asker.cookie });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  it("refuses a request that would take the disk within the room of the low-space line", async () => {
+    const needed = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
+    let free = needed - 1;
+    const app = mount({ freeBytes: () => Promise.resolve(free) });
+    const entriesBefore = (await monthEntries()).length;
+    const refused = await requestMonth(app, "2025-06");
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "tax_office.space_low",
+        params: { freeBytes: needed - 1, neededBytes: needed },
+      },
+    });
+    expect(await monthEntries()).toHaveLength(entriesBefore);
+    expect(await (await monthStatus(app)).json()).toEqual({ status: "none" });
+    free = needed;
+    expect((await requestMonth(app, "2025-06")).status).toBe(202);
+    expect(await monthEntries()).toHaveLength(entriesBefore + 1);
+  });
+
+  it("finishes a build whose requesting session ended, for the same person's next session", async () => {
+    const app = mount({ render: countingRender().render });
+    const asker = await sessionHolding(db(), ["invoice.inspect"]);
+    expect((await requestMonth(app, "2025-06", { cookie: asker.cookie })).status).toBe(202);
+    await inTx(venue, (tx) => endManagementSession(tx, tokenOf(asker.cookie)));
+    await runBuild(app);
+    const next = await withNewSession(asker.personId);
+    expect(await (await monthStatus(app, next)).json()).toMatchObject({ status: "ready" });
+    const saved = await monthFile(app, { cookie: next });
+    expect(saved.status).toBe(200);
+    expect(Object.keys(await unzipped(saved))).toHaveLength(2);
+  });
+});
+
+async function withNewSession(personId: string): Promise<string> {
+  const session = await inTx(venue, (tx) => startManagementSession(tx, { personId }));
+  return `${MANAGEMENT_COOKIE}=${session.token}`;
+}
 
 describe("the month's CSV and README", () => {
   const row: TaxOfficeInvoice = {

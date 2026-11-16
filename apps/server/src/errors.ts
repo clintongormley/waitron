@@ -43,6 +43,10 @@ declare module "@waitron/shared" {
     "invoice_customer.not_found": Record<string, never>;
     /** Another month's export for the tax office is still being built; one runs at a time. */
     "tax_office.export_running": Record<string, never>;
+    /** Building the month's file would take the disk below the low-space line, room included. */
+    "tax_office.space_low": { freeBytes: number; neededBytes: number };
+    /** The person has no finished month file on the box: never asked, saved, expired or restarted. */
+    "tax_office.download_missing": Record<string, never>;
     "invoice_delivery.full_invoice_required": Record<string, never>;
     /** Paper instead of A4 would print nowhere: the till resolves no receipt printer. */
     "invoice_delivery.receipt_unavailable": Record<string, never>;

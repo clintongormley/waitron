@@ -39,6 +39,7 @@ import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { DEFAULT_PRINTER, layOutSaleReceipt } from "./receipt-print.js";
 import { mountTaxOfficeApi } from "./tax-office-api.js";
+import type { TaxOfficeMonthBuilds } from "./tax-office-month-builds.js";
 import { sessionHolding } from "./testing/session-holding.js";
 
 let venue: OrderVenue;
@@ -78,6 +79,9 @@ useVenueDb({
         backend: venue.backend,
         tradingContext: venue.cfg,
         venueLocale: "es-ES",
+        // The invoice PDF route never reads the month builds.
+        builds: {} as TaxOfficeMonthBuilds,
+        freeBytes: () => Promise.resolve(null),
       },
       () => {},
     );

@@ -1,4 +1,5 @@
 import "./errors.js";
+import { open } from "node:fs/promises";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readTaxpayer, recordActivity, withTransaction, type Database } from "@waitron/db";
@@ -6,7 +7,6 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager, withInspectorAdmitted } from "@waitron/identity";
 import { resolveVenueClock } from "@waitron/reporting";
 import {
-  codeOf,
   createErrorBoundary,
   requireEnum,
   requireManagementSession,
@@ -27,10 +27,11 @@ import {
   renderSaleCopy,
   type SaleCopy,
 } from "./orders-invoice-pdf.js";
-import { zipStream } from "./download-archive.js";
 import { toLanguage } from "./personal-data-export-api.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { taxOfficeMonthEntries, type TaxOfficeMonth } from "./tax-office-export.js";
+import { TAX_OFFICE_ROOM_BYTES, type TaxOfficeMonthBuilds } from "./tax-office-month-builds.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import { optionalSearch } from "./orders-list.js";
 import {
   countTaxOfficeInvoices,
@@ -48,10 +49,35 @@ export interface TaxOfficeApiDeps {
   backend: FiscalBackend;
   tradingContext: TradingContext;
   venueLocale: SupportedLocale;
-  /** The handover gate's: a month's export stops when it aborts. */
-  closed?: AbortSignal;
+  builds: TaxOfficeMonthBuilds;
+  /** The lowest free space of the disks the file and the backups share; null when unreadable. */
+  freeBytes: () => Promise<number | null>;
+}
+
+/** The month's ZIP entries for the builds' job, which passes its own stop check. */
+export function taxOfficeMonthSource(deps: {
+  db: Database;
+  backend: FiscalBackend;
+  tradingContext: TradingContext;
+  log: Logger;
   /** Default `renderSaleCopy`; a test passes a stub. */
   render?: (copy: SaleCopy) => Promise<Uint8Array>;
+}): (
+  month: TaxOfficeMonth,
+  stopIfAsked: () => void,
+) => AsyncIterable<{ name: string; content: string | Uint8Array }> {
+  return (month, stopIfAsked) =>
+    taxOfficeMonthEntries(
+      {
+        db: deps.db,
+        backend: deps.backend,
+        tradingContext: deps.tradingContext,
+        render: deps.render ?? renderSaleCopy,
+        stopIfAsked,
+        log: deps.log,
+      },
+      month,
+    );
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -62,7 +88,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "invoice_delivery.not_found": 404,
   "tax_office.export_running": 409,
+  "tax_office.space_low": 409,
+  "tax_office.download_missing": 404,
 };
+
+const FILE_CHUNK_BYTES = 64 * 1024;
 
 const run = createErrorBoundary(STATUS, "report.failed");
 
@@ -81,31 +111,6 @@ function requireMonth(raw: string): { from: string; to: string } {
   if (match === null) throw invalid("month");
   const last = new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate();
   return { from: `${raw}-01`, to: `${raw}-${String(last).padStart(2, "0")}` };
-}
-
-/** Releases on the generator's end, or on a `return()` or `throw()` that arrives before the first
- * `next()`, which an async generator answers without running its `finally`. */
-function releasing<T>(entries: AsyncGenerator<T>, release: () => void): AsyncIterable<T> {
-  let started = false;
-  const releaseIfUnstarted = () => {
-    if (!started) release();
-  };
-  return {
-    [Symbol.asyncIterator]: () => ({
-      next: () => {
-        started = true;
-        return entries.next();
-      },
-      return: (value?: unknown) => {
-        releaseIfUnstarted();
-        return entries.return(value);
-      },
-      throw: (error?: unknown) => {
-        releaseIfUnstarted();
-        return entries.throw(error);
-      },
-    }),
-  };
 }
 
 const invalid = (field: string) => new AppError("management.request_invalid", { field });
@@ -164,8 +169,6 @@ function readFilter(
 
 /** Every invoice the venue issued, for the tax office, under `invoice.inspect`. */
 export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger): void {
-  // One export at a time, so two never render at once.
-  let running: object | null = null;
   app.get("/management-api/tax-office/invoices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -210,17 +213,19 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const raw = c.req.param("month");
       const days = requireMonth(raw);
-      const mine = {};
-      const release = () => {
-        if (running === mine) running = null;
-      };
-      const month = await withTransaction(deps.db, async (tx): Promise<TaxOfficeMonth> => {
+      let claimedBy: string | null = null;
+      const asked = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "invoice.inspect",
         });
-        if (running !== null) throw new AppError("tax_office.export_running", {});
-        running = mine;
+        const freeBytes = await deps.freeBytes();
+        const neededBytes = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
+        if (freeBytes !== null && freeBytes < neededBytes)
+          throw new AppError("tax_office.space_low", { freeBytes, neededBytes });
+        const { claimed, view } = deps.builds.claim(authorizedBy, raw);
+        if (!claimed) return { personId: authorizedBy, view, month: null };
+        claimedBy = authorizedBy;
         const { timeZone } = await resolveVenueClock(tx, deps.cfg.nodeId);
         const issued = { ...days, timeZone };
         const locale = await withInspectorAdmitted(() =>
@@ -233,51 +238,90 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
           personId: authorizedBy,
           data: { month: raw, invoices: await countTaxOfficeInvoices(tx, issued) },
         });
-        return {
+        const month: TaxOfficeMonth = {
           month: raw,
           issued,
           language: toLanguage(locale),
           venue,
           at: new Date(),
         };
+        return { personId: authorizedBy, view, month };
       }).catch((error: unknown) => {
-        release();
+        if (claimedBy !== null) deps.builds.release(claimedBy);
         throw error;
       });
-      const signal = c.req.raw.signal;
-      async function* entries() {
-        try {
-          yield* taxOfficeMonthEntries(
-            {
-              db: deps.db,
-              backend: deps.backend,
-              tradingContext: deps.tradingContext,
-              render: deps.render ?? renderSaleCopy,
-              stopIfAsked: () => {
-                if (deps.closed?.aborted === true) throw new AppError("handover.stepping_down", {});
-                signal.throwIfAborted();
-              },
-              log,
-            },
-            month,
-          );
-        } catch (error) {
-          log("warn", "tax_office.export_stopped", {
-            month: raw,
-            errorCode: codeOf(error),
+      if (asked.month !== null) deps.builds.begin(asked.personId, asked.month);
+      c.header("Cache-Control", "no-store");
+      return c.json(asked.view, 202);
+    }),
+  );
+  app.get("/management-api/tax-office/month-download", (c) =>
+    run(c, log, async () => {
+      const personId = await inspectingPerson(deps.db, requireManagementSession(c));
+      c.header("Cache-Control", "no-store");
+      return c.json(deps.builds.view(personId));
+    }),
+  );
+  app.get("/management-api/tax-office/month-download/file", (c) =>
+    run(c, log, async () => {
+      const personId = await inspectingPerson(deps.db, requireManagementSession(c));
+      const file = deps.builds.file(personId);
+      if (file === null) throw new AppError("tax_office.download_missing", {});
+      const handle = await open(file.path, "r").catch((error: unknown) => {
+        if ((error as { code?: unknown }).code === "ENOENT")
+          throw new AppError("tax_office.download_missing", {});
+        throw error;
+      });
+      const connection = c.req.raw.signal;
+      // Node ends the process when it collects an open file handle, and a connection lost before
+      // the answer is written leaves nothing to read or cancel this stream, which would close it.
+      let closed = false;
+      const closeFile = () => {
+        if (closed) return;
+        closed = true;
+        connection.removeEventListener("abort", closeFile);
+        handle.close().catch((error: unknown) => {
+          log("error", "tax_office.file_close_failed", {
             errorClass: error instanceof Error ? error.name : typeof error,
           });
-          throw error;
-        } finally {
-          release();
-        }
-      }
-      return c.body(zipStream(releasing(entries(), release), month.at), 200, {
+        });
+      };
+      if (connection.aborted) closeFile();
+      else connection.addEventListener("abort", closeFile);
+      // Pulled only as the reader asks, so its end means every byte was taken by the connection.
+      const body = new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
+            const buffer = new Uint8Array(FILE_CHUNK_BYTES);
+            const { bytesRead } = await handle.read(buffer, 0, FILE_CHUNK_BYTES, null);
+            if (bytesRead > 0) {
+              controller.enqueue(buffer.subarray(0, bytesRead));
+              return;
+            }
+            controller.close();
+            const whole = !connection.aborted;
+            closeFile();
+            if (whole) deps.builds.sent(personId, file.id);
+          },
+          cancel: closeFile,
+        },
+        { highWaterMark: 0 },
+      );
+      return c.body(body, 200, {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="invoices-${raw}.zip"`,
+        "Content-Disposition": `attachment; filename="invoices-${file.month}.zip"`,
+        "Content-Length": String(file.bytes),
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       });
     }),
   );
+}
+
+/** The session's person, while they hold `invoice.inspect`. */
+async function inspectingPerson(db: Database, sessionId: string): Promise<string> {
+  const { authorizedBy } = await withTransaction(db, (tx) =>
+    authorizeManager(tx, { managementSessionId: sessionId, permission: "invoice.inspect" }),
+  );
+  return authorizedBy;
 }

@@ -1215,3 +1215,19 @@ it("a source preflight refusal keeps trading and names Stop and the handover gui
     "Este servidor no ha podido verificar los datos del local para el traspaso. Puedes seguir vendiendo aquí. Elige Parar y sigue la guía de traspaso antes de volver a intentarlo.",
   );
 });
+
+it("words the tax office's month-file refusals, with the disk's sizes in the language's style", () => {
+  const params = { freeBytes: 2_200_000_000, neededBytes: 2_415_919_104 };
+  expect(codeMessage("tax_office.space_low", "en", params)).toBe(
+    "The server's disk is nearly full: it has 2.2 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+  );
+  expect(codeMessage("tax_office.space_low", "es", params)).toBe(
+    "El disco del servidor está casi lleno: tiene 2,2 GB libres y preparar este archivo necesita 2,4 GB. Guardar menos copias de seguridad en el servidor, en Copias de seguridad, libera espacio; después vuelve a intentarlo.",
+  );
+  expect(codeMessage("tax_office.download_missing", "en")).toBe(
+    "This file is no longer on the server. Choose Download again to prepare it.",
+  );
+  expect(codeMessage("tax_office.download_missing", "es")).toBe(
+    "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",
+  );
+});
