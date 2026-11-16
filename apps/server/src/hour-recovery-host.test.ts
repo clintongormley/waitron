@@ -563,7 +563,7 @@ it("refuses a selected module that has no configured recovery contribution", asy
 
 it("refuses an unnamed recovery verifier even when its secret matches", async () => {
   const f = await host();
-  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${node.nodeId}`);
+  suite.node.run(sql`update box set recovery_key_name = '' where node_id = ${node.nodeId}`);
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: null },

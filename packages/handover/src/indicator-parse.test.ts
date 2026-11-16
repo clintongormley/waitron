@@ -30,7 +30,7 @@ function valid(): FinalStateIndicator {
       modules: [{ name: "payments", version: "1.2.0" }],
     },
     nodeLocal: [
-      { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
+      { item: "box", where: "node.db", class: "destination-owned", treatment: "own" },
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
       {
         item: "settings:modules",

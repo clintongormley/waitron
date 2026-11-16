@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
-import { nodeMode, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
+import { box, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, managementSessions } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -252,7 +252,7 @@ beforeEach(async () => {
     .insert(invoiceSeries)
     .values(bases.map((series) => ({ ...series, nodeId: primary.nodeId })));
   await suite.node
-    .insert(nodeMode)
+    .insert(box)
     .values({ nodeId: target.nodeId, mode: "mirror", singletonRole: "secondary" });
   await withTransaction(suite.db, (tx) =>
     establishDormantAllocation(tx, primary, target, reservation, trust, {

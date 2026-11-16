@@ -9,7 +9,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import { withTransaction, stampDeployment, readRecoveryPacks } from "@waitron/db";
-import { nodeRecoveryKey } from "@waitron/node-db";
+import { box } from "@waitron/node-db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
@@ -515,11 +515,11 @@ async function publicationFixture() {
 it("publishes only an exact checked commit and installs its retained verifier", async () => {
   const f = await publicationFixture();
   const stage = await f.runtime.keys.readStage(f.owner);
-  expect(await venue.node.select().from(nodeRecoveryKey)).toEqual([]);
+  expect(await venue.node.select().from(box)).toEqual([]);
   await expect(f.publish(f.state, f.checked)).resolves.toEqual(f.checked.venue);
   expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear"]);
   expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect(await venue.node.select().from(nodeRecoveryKey)).toMatchObject([
+  expect(await venue.node.select().from(box)).toMatchObject([
     {
       nodeId: f.checked.venue.nodeId,
       verifier: stage.verifier,
@@ -550,11 +550,11 @@ it.each(["selection", "identity", "settings", "trading", "clear"])(
       ),
     );
     f.owner.revision = after.revision;
-    const verifier = await venue.node.select().from(nodeRecoveryKey);
+    const verifier = await venue.node.select().from(box);
     const series = await venue.db.execute("select * from invoice_series order by id");
     await expect(f.publish(after, f.checked)).resolves.toEqual(f.checked.venue);
     expect((await f.runtime.store.read())!.status).toBe("complete");
-    expect(await venue.node.select().from(nodeRecoveryKey)).toEqual(verifier);
+    expect(await venue.node.select().from(box)).toEqual(verifier);
     expect(await venue.db.execute("select * from invoice_series order by id")).toEqual(series);
     expect(f.deps.provision).toHaveBeenCalledOnce();
   },
@@ -575,7 +575,7 @@ it.each(["status", "result", "digest"])(
       code: "setup.attempt_uncertain",
     });
     expect(f.steps).toEqual([]);
-    expect(await venue.node.select().from(nodeRecoveryKey)).toEqual([]);
+    expect(await venue.node.select().from(box)).toEqual([]);
     expect(await f.runtime.store.read()).toEqual(f.state);
   },
 );
@@ -641,7 +641,7 @@ it("a missing retained key stops publication before selection or identity work",
     code: "setup.attempt_uncertain",
   });
   expect(f.steps).toEqual([]);
-  expect(await venue.node.select().from(nodeRecoveryKey)).toEqual([]);
+  expect(await venue.node.select().from(box)).toEqual([]);
   expect(await f.runtime.store.read()).toEqual(f.state);
 });
 

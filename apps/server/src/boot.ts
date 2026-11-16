@@ -2496,7 +2496,7 @@ async function bootServer(
     const loaded = await readMirrorLink(store.node, config.node.nodeId);
     if (loaded === null) {
       throw new AppError("server.config_invalid", {
-        variable: "node_mirror_link",
+        variable: "box",
         reason: "mirror_requires_mirror_link",
       });
     }

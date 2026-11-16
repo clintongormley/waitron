@@ -81,7 +81,7 @@ function readAwaitingPlacement(nodePath: string, nodeId: string): AwaitingPlacem
     if (indicator?.envelope == null) {
       throw new Error(`the operation ${operationId} has no stored indicator`);
     }
-    const mode = node.prepare("select mode from node_mode where node_id = ?").get(nodeId) as
+    const mode = node.prepare("select mode from box where node_id = ?").get(nodeId) as
       { mode: string } | undefined;
     return {
       operationId,

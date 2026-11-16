@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
-import { nodeRecoveryKey } from "@waitron/node-db";
+import { box } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -77,7 +77,7 @@ async function verifierInSealedRow(nodeId: string, scratch: string): Promise<str
   const copy = new DatabaseSync(file, { readOnly: true });
   try {
     const row = copy
-      .prepare("select verifier from node_recovery_key where node_id = ?")
+      .prepare("select recovery_key_verifier from box where node_id = ?")
       .get(nodeId) as { verifier: string } | undefined;
     return row?.verifier ?? null;
   } finally {
@@ -88,9 +88,9 @@ async function verifierInSealedRow(nodeId: string, scratch: string): Promise<str
 async function putVerifier(node: NodeDatabase, nodeId: string, verifier: string): Promise<void> {
   await withNodeTransaction(node, async (tx) => {
     await tx
-      .insert(nodeRecoveryKey)
+      .insert(box)
       .values({ nodeId, verifier, keyName: "key-one" })
-      .onConflictDoUpdate({ target: nodeRecoveryKey.nodeId, set: { verifier } });
+      .onConflictDoUpdate({ target: box.nodeId, set: { verifier } });
   });
 }
 

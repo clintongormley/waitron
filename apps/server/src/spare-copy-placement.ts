@@ -42,7 +42,7 @@ export async function placeFirstCopy(deps: {
       let mirror: boolean;
       try {
         mirror =
-          node.prepare("select mode from node_mode where node_id = ?").get(deps.nodeId)?.mode ===
+          node.prepare("select mode from box where node_id = ?").get(deps.nodeId)?.mode ===
           "mirror";
       } finally {
         node.close();

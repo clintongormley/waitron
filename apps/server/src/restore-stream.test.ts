@@ -142,7 +142,7 @@ beforeAll(async () => {
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
   suite.node.run(
-    sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${T.nodeId}, 'mirror', 'secondary', 0)`,
+    sql`insert into box (node_id, mode, singleton_role, role_changed_at) values (${T.nodeId}, 'mirror', 'secondary', 0)`,
   );
   const nodeCopy = join(await fresh("waitron-stream-node-"), "node.db");
   await suite.node.archiveTo(nodeCopy);
@@ -1267,7 +1267,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     });
     const placed = new DatabaseSync(join(venueDir, "node.db"), { readOnly: true });
     try {
-      expect(placed.prepare("select node_id, mode from node_mode").all()).toEqual([
+      expect(placed.prepare("select node_id, mode from box").all()).toEqual([
         { node_id: T.nodeId, mode: "mirror" },
       ]);
     } finally {

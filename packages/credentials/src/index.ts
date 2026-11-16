@@ -28,7 +28,6 @@ export {
 export type { CredentialMeta, CredentialRef, CredentialRowMeta, RotationResult } from "./store.js";
 
 export {
-  deleteNodeSigningKeyOtherThanTx,
   establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,

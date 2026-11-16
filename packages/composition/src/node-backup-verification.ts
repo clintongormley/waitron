@@ -15,34 +15,34 @@ async function holdsAny(query: BackupVerificationContext["before"]): Promise<boo
   for (const table of tables) {
     for await (const row of query.rows(
       "select name from sqlite_schema where type='table' and name=?",
-      [table],
+      ["box"],
     )) {
-      if (row.name === table) return true;
+      if (row.name === "box") return true;
     }
   }
   return false;
 }
 
 const SOURCE_ROW = {
-  node_mode: "select node_id from node_mode where node_id=?",
-  node_recovery_key: "select node_id from node_recovery_key where node_id=?",
-  node_signing_key:
-    "select ciphertext, iv, auth_tag, key_version from node_signing_key where node_id=?",
+  role: "select node_id from box where node_id=? and mode is not null",
+  recovery: "select node_id from box where node_id=? and recovery_key_verifier is not null",
+  signing:
+    "select signing_key_ciphertext as ciphertext, signing_key_iv as iv, signing_key_auth_tag as auth_tag, signing_key_version as key_version from box where node_id=? and signing_key_ciphertext is not null",
 } as const;
 
 async function sourceRow(
   copy: BackupQuery,
-  table: keyof typeof SOURCE_ROW,
+  group: keyof typeof SOURCE_ROW,
   nodeId: string,
 ): Promise<BackupRow | undefined> {
   let present = false;
   for await (const row of copy.rows(
     "select name from sqlite_schema where type='table' and name=?",
-    [table],
+    ["box"],
   ))
-    present = row.name === table;
+    present = row.name === "box";
   if (!present) return undefined;
-  for await (const row of copy.rows(SOURCE_ROW[table], [nodeId])) return row;
+  for await (const row of copy.rows(SOURCE_ROW[group], [nodeId])) return row;
   return undefined;
 }
 
@@ -56,7 +56,7 @@ async function sourcePrivateKey(
   keyInputs: Readonly<Record<string, string>>,
   nodeId: string,
 ): Promise<string | null | "invalid"> {
-  const row = await sourceRow(copy, "node_signing_key", nodeId);
+  const row = await sourceRow(copy, "signing", nodeId);
   if (row === undefined) return null;
   if (
     typeof row.key_version === "bigint" &&
@@ -135,8 +135,8 @@ export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
           nodeId,
           privateKey,
           nodeCopyHoldsSource:
-            (await sourceRow(copy, "node_mode", nodeId)) !== undefined ||
-            (await sourceRow(copy, "node_recovery_key", nodeId)) !== undefined,
+            (await sourceRow(copy, "role", nodeId)) !== undefined ||
+            (await sourceRow(copy, "recovery", nodeId)) !== undefined,
         }))
           ? "passed"
           : "invalid";

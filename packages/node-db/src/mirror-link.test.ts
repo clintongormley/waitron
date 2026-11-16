@@ -10,7 +10,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
 import {
-  deleteNodeMirrorLinkOtherThanTx,
   readMirrorLink,
   writeMirrorLink,
   writeMirrorLinkTx,
@@ -35,12 +34,12 @@ describe("before any migration set has run", () => {
 
   it("is refused rather than read as unadopted", async () => {
     await expect(readMirrorLink(bare.node, NODE)).rejects.toThrow(
-      /no such table: node_mirror_link/,
+      /no such table: box/,
     );
   });
 });
 
-describe("node_mirror_link accessors", () => {
+describe("box accessors", () => {
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
@@ -56,7 +55,7 @@ describe("node_mirror_link accessors", () => {
 
   it("writes into node.db", async () => {
     await writeMirrorLink(suite.node, NODE, SAMPLE);
-    expect(suite.node.all(sql`select node_id from node_mirror_link`)).toEqual([{ node_id: NODE }]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: NODE }]);
   });
 
   it("reads a mirror link only for the node that was adopted", async () => {
@@ -87,7 +86,7 @@ describe("node_mirror_link accessors", () => {
       originNodeId: PRIMARY_NODE,
     });
     const [first] = suite.node.all<{ adopted_at: string }>(
-      sql`select adopted_at from node_mirror_link`,
+      sql`select mirror_adopted_at as adopted_at from box`,
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await writeMirrorLink(suite.node, NODE, {
@@ -97,7 +96,7 @@ describe("node_mirror_link accessors", () => {
       originNodeId: PRIMARY_NODE,
     });
     const count = await suite.node.execute<{ n: number }>(
-      sql`select count(*) as n from node_mirror_link`,
+      sql`select count(*) as n from box`,
     );
     expect(count.rows[0]?.n).toBe(1);
     expect(await readMirrorLink(suite.node, NODE)).toEqual({
@@ -107,7 +106,7 @@ describe("node_mirror_link accessors", () => {
       originNodeId: PRIMARY_NODE,
     });
     const [second] = suite.node.all<{ adopted_at: string }>(
-      sql`select adopted_at from node_mirror_link`,
+      sql`select mirror_adopted_at as adopted_at from box`,
     );
     expect(second?.adopted_at > first!.adopted_at).toBe(true);
   });
@@ -119,22 +118,10 @@ describe("node_mirror_link accessors", () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_mirror_link (node_id, origin_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
+          sql`insert into box (node_id, mirror_origin_url, mirror_box_hostname, mirror_box_ca_pem, mirror_origin_node_id, mirror_adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-  });
-});
-
-describe("deleteNodeMirrorLinkOtherThanTx", () => {
-  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  it("deletes every row but this node id's, and keeps this one's", async () => {
-    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
-      await withNodeTransaction(sweep.node, (tx) => writeMirrorLinkTx(tx, nodeId, SAMPLE));
-    }
-    await withNodeTransaction(sweep.node, (tx) => deleteNodeMirrorLinkOtherThanTx(tx, NODE));
-    expect(sweep.node.all(sql`select node_id from node_mirror_link`)).toEqual([{ node_id: NODE }]);
   });
 });

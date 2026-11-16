@@ -56,10 +56,7 @@ const OWN_HANDOVER = "each box keeps its own";
 const TLS = "M2 keeps its own; the venue authority reached it at joining";
 
 export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
-  { item: "node_mode", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
-  { item: "node_mirror_link", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   { item: "node_pair_link", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
-  { item: "node_primary_key", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   {
     item: "node_take_failures",
     where: "node.db",
@@ -67,13 +64,13 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: KEEPS_OWN,
   },
   {
-    item: "node_recovery_key",
+    item: "box",
     where: "node.db",
     class: "destination-owned",
-    treatment: "M2 keeps its own recovery-key check",
+    treatment: "M2 keeps its own role, recovery key, mirror link and pinned key",
   },
   {
-    item: "node_signing_key",
+    item: "box.signing_key",
     where: "node.db",
     class: "source-only",
     treatment: "M1's private key never leaves M1",

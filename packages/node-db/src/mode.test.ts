@@ -16,7 +16,6 @@ import {
   readNodeMode,
   readNodeModeRow,
   setNodeMode,
-  deleteNodeModeOtherThanTx,
   setNodeModeTx,
   setPrimaryRoleTx,
   setSingletonRole,
@@ -41,7 +40,7 @@ describe("a node file with no migration set applied", () => {
   // Every start migrates node.db before reading it; an unmigrated file is refused, never read as a
   // sole primary.
   it("is refused rather than read as a sole primary", async () => {
-    await expect(readNodeMode(bare.node, NODE)).rejects.toThrow(/no such table: node_mode/);
+    await expect(readNodeMode(bare.node, NODE)).rejects.toThrow(/no such table: box/);
   });
 });
 
@@ -76,13 +75,13 @@ describe("the role in node.db", () => {
   it("refuses a mode write while venue.db is unstamped, and writes nothing", async () => {
     const error = await rejection(setNodeMode(handles(), NODE, "mirror"));
     expect(error).toMatchObject({ code: "deployment.not_stamped" });
-    expect(suite.node.all(sql`select node_id from node_mode`)).toEqual([]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([]);
   });
 
   it("refuses a singleton-role write while venue.db is unstamped, and writes nothing", async () => {
     const error = await rejection(setSingletonRole(handles(), NODE, "secondary"));
     expect(error).toMatchObject({ code: "deployment.not_stamped" });
-    expect(suite.node.all(sql`select node_id from node_mode`)).toEqual([]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([]);
   });
 
   it("a mirror co-sets secondary, and primary keeps the singleton role as it is", async () => {
@@ -113,7 +112,7 @@ describe("the role in node.db", () => {
   it("a first mode write of primary creates a sole primary row", async () => {
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode(handles(), NODE, "primary");
-    expect(suite.node.all(sql`select node_id, mode, singleton_role from node_mode`)).toEqual([
+    expect(suite.node.all(sql`select node_id, mode, singleton_role from box`)).toEqual([
       { node_id: NODE, mode: "primary", singleton_role: "primary" },
     ]);
   });
@@ -153,24 +152,24 @@ describe("the role in node.db", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBe("production");
   });
 
-  it("refuses the singleton duties on a mirror (node_mode_role_valid_ck)", async () => {
+  it("refuses the singleton duties on a mirror (box_role_valid_ck)", async () => {
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode(handles(), NODE, "mirror");
     const error = await captureError(() => setSingletonRole(handles(), NODE, "primary"));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/node_mode_role_valid_ck/);
+    expect(engineErrorMessage(error)).toMatch(/box_role_valid_ck/);
   });
 
   it("the mode CHECK rejects any value outside primary/mirror", async () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_mode (node_id, mode, updated_at) values (${NODE}, 'bogus', ${new Date().toISOString()})`,
+          sql`insert into box (node_id, mode, singleton_role, role_changed_at) values (${NODE}, 'bogus', 'secondary', ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/node_mode_mode_ck/);
+    expect(engineErrorMessage(error)).toMatch(/box_mode_ck/);
   });
 
   it("a mode write goes to mirror and back to primary, the legitimate reverse", async () => {
@@ -231,16 +230,16 @@ describe("the role in node.db", () => {
   it("moves updated_at on every write", async () => {
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode(handles(), NODE, "mirror");
-    suite.node.run(sql`update node_mode set updated_at = '2000-01-01T00:00:00.000Z'`);
+    suite.node.run(sql`update box set role_changed_at = '2000-01-01T00:00:00.000Z'`);
     await setNodeMode(handles(), NODE, "primary");
     const [afterMode] = suite.node.all<{ updated_at: string }>(
-      sql`select updated_at from node_mode`,
+      sql`select role_changed_at as updated_at from box`,
     );
     expect(afterMode?.updated_at).not.toBe("2000-01-01T00:00:00.000Z");
-    suite.node.run(sql`update node_mode set updated_at = '2000-01-01T00:00:00.000Z'`);
+    suite.node.run(sql`update box set role_changed_at = '2000-01-01T00:00:00.000Z'`);
     await setSingletonRole(handles(), NODE, "primary");
     const [afterRole] = suite.node.all<{ updated_at: string }>(
-      sql`select updated_at from node_mode`,
+      sql`select role_changed_at as updated_at from box`,
     );
     expect(afterRole?.updated_at).not.toBe("2000-01-01T00:00:00.000Z");
   });
@@ -252,7 +251,7 @@ describe("the role in node.db", () => {
     "makes %s the sole primary, inside the caller's transaction",
     async (_label, mode, singletonRole) => {
       suite.node.run(
-        sql`insert into node_mode (node_id, mode, singleton_role, updated_at)
+        sql`insert into box (node_id, mode, singleton_role, role_changed_at)
           values (${NODE}, ${mode}, ${singletonRole}, '2000-01-01T00:00:00.000Z')`,
       );
       await withNodeTransaction(suite.node, (tx) => setPrimaryRoleTx(tx, NODE));
@@ -276,17 +275,5 @@ describe("the role in node.db", () => {
       mode: "mirror",
       singletonRole: "secondary",
     });
-  });
-});
-
-describe("deleteNodeModeOtherThanTx", () => {
-  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  it("deletes every row but this node id's, and keeps this one's", async () => {
-    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
-      await withNodeTransaction(sweep.node, (tx) => setNodeModeTx(tx, nodeId, "primary"));
-    }
-    await withNodeTransaction(sweep.node, (tx) => deleteNodeModeOtherThanTx(tx, NODE));
-    expect(sweep.node.all(sql`select node_id from node_mode`)).toEqual([{ node_id: NODE }]);
   });
 });

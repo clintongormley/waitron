@@ -329,7 +329,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
           const node = new DatabaseSync(nodePath, { readOnly: true });
           try {
             const held = node
-              .prepare("select verifier from node_recovery_key where node_id = ?")
+              .prepare("select recovery_key_verifier from box where node_id = ?")
               .get(a.nodeId) as { verifier: string } | undefined;
             return held !== undefined && (await verifySecretAsync(serverSecret, held.verifier))
               ? true

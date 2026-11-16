@@ -371,7 +371,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
+describe("mirror-mode boot (box.mode = 'mirror')", () => {
   it("issues no session locally and keeps the remote staff entrance closed", async () => {
     const [localPort, staffPort] = await freePorts(2);
     const certificate = mintSelfSignedServerCert({
@@ -978,7 +978,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("refuses a mirror boot that has no node_mirror_link row (a mirror REQUIRES its DB connection config)", async () => {
+  it("refuses a mirror boot that has no box row (a mirror REQUIRES its DB connection config)", async () => {
     let caught: unknown;
     try {
       await startServer({
@@ -993,7 +993,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     expect(isAppError(caught)).toBe(true);
     expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
     expect(isAppError(caught) && caught.params).toEqual({
-      variable: "node_mirror_link",
+      variable: "box",
       reason: "mirror_requires_mirror_link",
     });
   }, 60_000);

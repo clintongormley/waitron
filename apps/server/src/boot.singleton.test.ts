@@ -254,7 +254,7 @@ function backupBase() {
   };
 }
 
-describe("singleton-duty boot (node_mode.singleton_role gating)", () => {
+describe("singleton-duty boot (box.singleton_role gating)", () => {
   it("a sell-only local secondary (primary, secondary) runs no scheduled backup, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {

@@ -646,7 +646,7 @@ describe("the spare trusts only the box its link pins", () => {
   it("a box with no mirror link keeps it waiting, with nothing sent", async () => {
     const r = await rig();
     await r.listen(r.m1App({ restricted: false }));
-    suite.node.run(sql`delete from node_mirror_link where node_id = ${r.m2}`);
+    suite.node.run(sql`delete from box where node_id = ${r.m2}`);
     await r.start();
     await vi.waitFor(async () =>
       expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),

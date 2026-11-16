@@ -162,10 +162,10 @@ it("reads the selected copy's node-key name after the live box has replaced its 
 
 it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {
   suite.db.run(
-    sql`create table node_recovery_key (node_id text primary key, verifier text not null, key_name text not null, updated_at text not null)`,
+    sql`create table box (node_id text primary key, recovery_key_verifier text not null, recovery_key_name text not null, recovery_key_changed_at text not null)`,
   );
   suite.db.run(
-    sql`insert into node_recovery_key values (${NODE}, 'venue-held verifier', 'Venue-held name', '2026-10-01T08:00:00.000Z')`,
+    sql`insert into box values (${NODE}, 'venue-held recovery_key_verifier', 'Venue-held name', '2026-10-01T08:00:00.000Z')`,
   );
   artifact = await packSelected();
   expect(oldName).not.toBeNull();

@@ -61,7 +61,7 @@ const PAIR_LINK: NewPairLink = {
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
   await suite.db.execute(sql`delete from venue_credentials`);
-  suite.node.run(sql`delete from node_signing_key`);
+  suite.node.run(sql`delete from box`);
   suite.node.run(sql`delete from node_pair_link`);
 });
 
@@ -231,7 +231,7 @@ describe("rotateCredentials", () => {
 
     const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(result).toEqual({ rotated: 1, alreadyCurrent: 0 });
-    expect(suite.node.all(sql`select key_version from node_signing_key`)).toEqual([
+    expect(suite.node.all(sql`select signing_key_version as key_version from box`)).toEqual([
       { key_version: 2 },
     ]);
     expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(SIGNING_KEY);
@@ -254,7 +254,7 @@ describe("rotateCredentials", () => {
     expect((error as AppError).params).toEqual({ role: "streams" });
     expect([
       ...suite.db.all(sql`select key_version from venue_credentials`),
-      ...suite.node.all(sql`select key_version from node_signing_key`),
+      ...suite.node.all(sql`select signing_key_version as key_version from box`),
       ...suite.node.all(sql`select key_version from node_pair_link`),
     ]).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
   });

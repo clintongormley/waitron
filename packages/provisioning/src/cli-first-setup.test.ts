@@ -1301,7 +1301,7 @@ it("a setup whose node.db refuses to seal the key stamps no public key in venue.
   const { sql } = await import("drizzle-orm");
   const { readMembershipTrustSet } = await import("@waitron/db");
   await venue.node.execute(
-    sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+    sql.raw(`create trigger refuse_signing_key before insert on box
       begin select raise(abort, 'refused by test'); end`),
   );
   try {

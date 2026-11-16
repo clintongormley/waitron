@@ -1,6 +1,5 @@
-import { eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
-  now,
   requireStamp,
   withNodeTransaction,
   type DeploymentMode,
@@ -9,7 +8,8 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import type { VenueAndNodeHandles } from "./handles.js";
-import { nodeMode } from "./schema/node-mode.js";
+import { box } from "./schema/box.js";
+import { writeBoxRoleTx } from "./box.js";
 
 /**
  * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no row
@@ -20,11 +20,7 @@ export async function readNodeMode(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
-  const [row] = await node
-    .select({ mode: nodeMode.mode, singletonRole: nodeMode.singletonRole })
-    .from(nodeMode)
-    .where(eq(nodeMode.nodeId, nodeId));
-  return { mode: row?.mode ?? "primary", singletonRole: row?.singletonRole ?? "primary" };
+  return (await readNodeModeRow(node, nodeId)) ?? { mode: "primary", singletonRole: "primary" };
 }
 
 /** Like {@link readNodeMode}, but `null` for a node with no row, for a caller that must tell the two apart. */
@@ -33,10 +29,10 @@ export async function readNodeModeRow(
   nodeId: string,
 ): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole } | null> {
   const [row] = await node
-    .select({ mode: nodeMode.mode, singletonRole: nodeMode.singletonRole })
-    .from(nodeMode)
-    .where(eq(nodeMode.nodeId, nodeId));
-  return row ?? null;
+    .select({ mode: box.mode, singletonRole: box.singletonRole })
+    .from(box)
+    .where(eq(box.nodeId, nodeId));
+  return row?.mode == null ? null : { mode: row.mode, singletonRole: row.singletonRole! };
 }
 
 /**
@@ -64,16 +60,8 @@ export async function setNodeModeTx(
   nodeId: string,
   mode: DeploymentMode,
 ): Promise<void> {
-  await tx
-    .insert(nodeMode)
-    .values({ nodeId, mode, singletonRole: mode === "mirror" ? "secondary" : "primary" })
-    .onConflictDoUpdate({
-      target: nodeMode.nodeId,
-      set:
-        mode === "mirror"
-          ? { mode, singletonRole: "secondary", updatedAt: now() }
-          : { mode, updatedAt: now() },
-    });
+  const stored = await readNodeMode(tx, nodeId);
+  await writeBoxRoleTx(tx, nodeId, { mode, singletonRole: mode === "mirror" ? "secondary" : stored.singletonRole });
 }
 
 /** Sets one node's singleton role; refuses an unstamped `venue.db` as {@link setNodeMode} does. */
@@ -97,27 +85,12 @@ export async function setSingletonRoleTx(
   nodeId: string,
   role: SingletonRole,
 ): Promise<void> {
-  await tx
-    .insert(nodeMode)
-    .values({ nodeId, singletonRole: role })
-    .onConflictDoUpdate({
-      target: nodeMode.nodeId,
-      set: { singletonRole: role, updatedAt: now() },
-    });
+  const stored = await readNodeMode(tx, nodeId);
+  await writeBoxRoleTx(tx, nodeId, { mode: stored.mode, singletonRole: role });
 }
 
 /** Makes one node the sole primary (mode and singleton role both `primary`) on a caller's node
  * transaction; like the two writes it makes, it does not read the deployment stamp. */
 export async function setPrimaryRoleTx(tx: NodeTransaction, nodeId: string): Promise<void> {
-  // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
-  await setNodeModeTx(tx, nodeId, "primary");
-  await setSingletonRoleTx(tx, nodeId, "primary");
-}
-
-/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
-export async function deleteNodeModeOtherThanTx(
-  tx: NodeTransaction,
-  nodeId: string,
-): Promise<void> {
-  await tx.delete(nodeMode).where(ne(nodeMode.nodeId, nodeId));
+  await writeBoxRoleTx(tx, nodeId, { mode: "primary", singletonRole: "primary" });
 }

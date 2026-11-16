@@ -39,7 +39,7 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
-import { nodeRecoveryKey } from "@waitron/node-db";
+import { box } from "@waitron/node-db";
 import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -262,7 +262,7 @@ export async function stagedHourCrash(
         return {
           chainHeads: await copy.venue.select().from(cadenas),
           submissions: await copy.venue.select().from(envios),
-          nodeKeys: await copy.node.select().from(nodeRecoveryKey),
+          nodeKeys: await copy.node.select().from(box),
           allocations: await copy.venue.select().from(fiscalAllocations),
           registrations: await copy.venue.select().from(registroSif),
           series: await copy.venue.select().from(invoiceSeries),

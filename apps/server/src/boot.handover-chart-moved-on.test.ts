@@ -182,7 +182,7 @@ function readDisk() {
       .prepare("select count(*) as n from node_handover_events where kind = 'copy_placed'")
       .get() as { n: number };
     const mode = node
-      .prepare("select mode from node_mode where node_id = ?")
+      .prepare("select mode from box where node_id = ?")
       .get(standby.nodeId) as { mode: string };
     return {
       chartTerm: chart.term,
@@ -272,7 +272,7 @@ describe("a real restart after activating, then the same request again", () => {
   ];
   const roleLost = [
     ...activatedRecordLost,
-    "update node_mode set mode = 'mirror', singleton_role = 'secondary'",
+    "update box set mode = 'mirror', singleton_role = 'secondary'",
   ];
 
   it.each([

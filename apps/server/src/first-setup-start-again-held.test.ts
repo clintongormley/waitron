@@ -187,13 +187,13 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
 it("in the held state, a node.db whose recovery-key check names another node refuses Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
-  node.exec(`update node_recovery_key set node_id = '${crypto.randomUUID()}'`);
+  node.exec(`update box set node_id = '${crypto.randomUUID()}'`);
   node.close();
   expect(nodeHoldings(f)).toMatchObject({ node_recovery_key: 1 });
   holdingsRead.calls = 0;
   await expectRefused(f, {
     code: "setup.not_ready",
-    reason: "node.db holds another node's row: node_recovery_key",
+    reason: "node.db holds another node's row: box",
   });
   expect(holdingsRead.calls).toBe(0);
 });
@@ -202,13 +202,13 @@ it("in the held state, a node.db holding a mirror link refuses Start again setup
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
   node.exec(
-    `insert into node_mirror_link values ('${crypto.randomUUID()}', 'https://relay.test', 'box', 'pem', '${crypto.randomUUID()}', '2026-10-31T00:00:00.000Z')`,
+    `insert into box values ('${crypto.randomUUID()}', 'https://relay.test', 'box', 'pem', '${crypto.randomUUID()}', '2026-10-31T00:00:00.000Z')`,
   );
   node.close();
   holdingsRead.calls = 0;
   await expectRefused(f, {
     code: "setup.not_ready",
-    reason: "node.db holds a row: node_mirror_link",
+    reason: "node.db holds a row: box",
   });
   expect(holdingsRead.calls).toBe(0);
 });

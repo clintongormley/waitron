@@ -1,6 +1,7 @@
-import { eq, ne } from "drizzle-orm";
-import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
-import { nodeRecoveryKey } from "./schema/node-recovery-key.js";
+import { eq } from "drizzle-orm";
+import { type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import { box } from "./schema/box.js";
+import { writeBoxRecoveryKeyTx } from "./box.js";
 
 /**
  * This node's recovery-key verifier and the name of the key in force (`null` when blank), or
@@ -11,11 +12,11 @@ export async function readRecoveryKey(
   nodeId: string,
 ): Promise<{ verifier: string; keyName: string | null } | null> {
   const [row] = await node
-    .select({ verifier: nodeRecoveryKey.verifier, keyName: nodeRecoveryKey.keyName })
-    .from(nodeRecoveryKey)
-    .where(eq(nodeRecoveryKey.nodeId, nodeId));
-  if (row === undefined) return null;
-  return { verifier: row.verifier, keyName: row.keyName.trim() === "" ? null : row.keyName };
+    .select({ verifier: box.recoveryKeyVerifier, keyName: box.recoveryKeyName })
+    .from(box)
+    .where(eq(box.nodeId, nodeId));
+  if (row?.verifier == null) return null;
+  return { verifier: row.verifier, keyName: row.keyName!.trim() === "" ? null : row.keyName! };
 }
 
 /** This node's recovery-key verifier, or `null` when the table has no row for it. */
@@ -44,19 +45,5 @@ export async function setRecoveryKeyTx(
   verifier: string,
   keyName: string,
 ): Promise<void> {
-  await tx
-    .insert(nodeRecoveryKey)
-    .values({ nodeId, verifier, keyName })
-    .onConflictDoUpdate({
-      target: nodeRecoveryKey.nodeId,
-      set: { verifier, keyName, updatedAt: now() },
-    });
-}
-
-/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
-export async function deleteNodeRecoveryKeyOtherThanTx(
-  tx: NodeTransaction,
-  nodeId: string,
-): Promise<void> {
-  await tx.delete(nodeRecoveryKey).where(ne(nodeRecoveryKey.nodeId, nodeId));
+  await writeBoxRecoveryKeyTx(tx, nodeId, { verifier, keyName });
 }

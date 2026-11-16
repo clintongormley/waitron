@@ -27,15 +27,11 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase } from "@waitron/db";
 import {
   NODE_MIGRATIONS,
+  box,
   nodeHandoverEvents,
   nodeHandoverOperations,
   nodeHandoverRestriction,
-  nodeMirrorLink,
   nodePairLink,
-  nodeMode,
-  nodePrimaryKey,
-  nodeRecoveryKey,
-  nodeSigningKey,
   nodeTakeFailures,
 } from "@waitron/node-db";
 import { AppError, isUuid } from "@waitron/shared";
@@ -433,12 +429,8 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
  * own node's: its recovery-key check (`installStagedNodeKey`) and its signing key (publication).
  */
 const NODE_TABLES: readonly (readonly [SQLiteTable, number])[] = [
-  [nodeMode, 0],
-  [nodeMirrorLink, 0],
+  [box, 1],
   [nodePairLink, 0],
-  [nodePrimaryKey, 0],
-  [nodeRecoveryKey, 1],
-  [nodeSigningKey, 1],
   [nodeTakeFailures, 0],
   [nodeHandoverOperations, 0],
   [nodeHandoverEvents, 0],
@@ -493,6 +485,8 @@ function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): stri
     if (rows > 0 && (nodeId === undefined || count(name, "where node_id is not ?", nodeId) > 0))
       return `node.db holds another node's row: ${name}`;
   }
+  if (count("box", "where mode is not null or mirror_origin_url is not null or primary_node_id is not null") > 0)
+    return "node.db holds a row: box";
   return null;
 }
 

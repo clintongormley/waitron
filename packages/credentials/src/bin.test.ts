@@ -15,7 +15,7 @@ import {
   withNodeTransaction,
   venueCredentials,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
+import { NODE_MIGRATIONS, box } from "@waitron/node-db";
 import { processIo, runBin } from "./bin.js";
 import type { CliIo } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
@@ -199,8 +199,8 @@ setInterval(() => db, 1000);`;
     const after = await openVenueDatabase(venueDir, { exclusive: false });
     try {
       const rows = await after.node
-        .select({ keyVersion: nodeSigningKey.keyVersion })
-        .from(nodeSigningKey);
+        .select({ keyVersion: box.signingKeyVersion })
+        .from(box);
       expect(rows).toEqual([{ keyVersion: 2 }]);
     } finally {
       await after.close();
@@ -213,7 +213,7 @@ setInterval(() => db, 1000);`;
       try {
         return [
           ...store.venue.all(sql`select key_version from venue_credentials`),
-          ...store.node.all(sql`select key_version from node_signing_key`),
+          ...store.node.all(sql`select signing_key_version from box`),
         ];
       } finally {
         await store.close();
