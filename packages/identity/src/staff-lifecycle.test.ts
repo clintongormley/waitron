@@ -689,7 +689,9 @@ describe("deactivatePerson refusals", () => {
     await run((tx) =>
       deactivatePerson(tx, { managementSessionId: token, personId: target.toUpperCase() }),
     );
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(target)).toEqual(
+      withClearedSignInFactors("suspended", VERIFIED_AT),
+    );
   });
 
   it("refuses a staff actor with authorization.not_permitted, leaving the person active", async () => {
@@ -956,7 +958,6 @@ describe("a colliding row that lands after the pre-check", () => {
 
 const VERIFIED_AT = "2026-09-01T00:00:00.000Z";
 
-/** Gives a person every sign-in detail: the four columns and one row of each of the four tables. */
 async function seedSignInDetails(personId: string, email: string): Promise<void> {
   await suite.db.execute(sql`update persons
     set pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp',
@@ -1008,7 +1009,7 @@ async function signInDetailsOf(personId: string): Promise<unknown> {
   return { ...columns.rows[0], ...counts.rows[0] };
 }
 
-function withNoSignInDetails(status: string, emailVerifiedAt: string | null): unknown {
+function withClearedSignInFactors(status: string, emailVerifiedAt: string | null): unknown {
   return {
     status,
     pin_hash: null,
@@ -1020,6 +1021,7 @@ function withNoSignInDetails(status: string, emailVerifiedAt: string | null): un
     recovery_codes: 0,
     totp_setups: 0,
     challenges: 0,
+    // Pending Google links survive factor cleanup (pp2 plan, Task 2).
     pending_google_links: 1,
   };
 }
@@ -1040,7 +1042,7 @@ function withEverySignInDetail(personId: string, status: string): unknown {
   };
 }
 
-describe("disabling a person deletes their sign-in details", () => {
+describe("disabling a person clears their sign-in factors", () => {
   async function seedPair(
     targetStatus: "active" | "suspended",
   ): Promise<{ token: string; target: string; bystander: string }> {
@@ -1065,10 +1067,12 @@ describe("disabling a person deletes their sign-in details", () => {
   };
 
   for (const [name, act] of Object.entries(disable)) {
-    it(`${name} deletes an active person's sign-in details and nobody else's`, async () => {
+    it(`${name} clears an active person's sign-in factors and nobody else's`, async () => {
       const { token, target, bystander } = await seedPair("active");
       await act(token, target);
-      expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+      expect(await signInDetailsOf(target)).toEqual(
+        withClearedSignInFactors("suspended", VERIFIED_AT),
+      );
       expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
     });
   }
@@ -1076,7 +1080,9 @@ describe("disabling a person deletes their sign-in details", () => {
   it("the Disable action deletes the sign-in details an already inactive person still holds", async () => {
     const { token, target, bystander } = await seedPair("suspended");
     await disable["the Disable action"](token, target);
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(target)).toEqual(
+      withClearedSignInFactors("suspended", VERIFIED_AT),
+    );
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 
@@ -1091,14 +1097,14 @@ describe("disabling a person deletes their sign-in details", () => {
     await run((tx) =>
       reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
     );
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(target)).toEqual(withClearedSignInFactors("pending", null));
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 
-  it("reset login deletes every sign-in detail, the rows included", async () => {
+  it("reset login clears sign-in factors and keeps its pending Google link", async () => {
     const { token, target, bystander } = await seedPair("active");
     await run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: target }));
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(target)).toEqual(withClearedSignInFactors("pending", null));
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 });
