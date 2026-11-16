@@ -4071,7 +4071,7 @@ describe("the sharded jobs", () => {
 });
 
 describe("the lint and root-guards jobs", () => {
-  it.each(["lint", "root-guards"])("skips %s when workflow and changes are cancelled", (id) => {
+  it.each(["lint", "root-guards"])("does not start %s when workflow and changes are cancelled", (id) => {
     const context = routingContext();
     context.cancelled = () => true;
     context.needs.changes.result = "cancelled";
