@@ -622,6 +622,7 @@ está, no hace falta hacer nada más. Si era un pedido del Mostrador y sigue sin
 pedido original en **Mostrador** y elige **Tarjeta** con el mismo proveedor. Waitron registra un
 cobro guardado que coincida. Si el lector pide la tarjeta, cancela sin presentarla. Conserva los
 datos del cobro si no puedes completar este paso.
+
 ## Mover platos a otra cuenta {#move-dishes}
 
 Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuenta suya. Abre el menú

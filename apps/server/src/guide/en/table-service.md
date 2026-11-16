@@ -582,6 +582,7 @@ nothing more is needed. If it was a Counter order and is still unpaid, find the 
 at the **Counter** and choose **Card** using the same provider. Waitron records a matching saved
 charge. If the reader asks for the card, cancel without presenting it. Keep the payment details
 if you cannot finish this step.
+
 ## Move dishes to another bill {#move-dishes}
 
 When one guest decides to pay for their own drinks, move those dishes onto a bill of their own. Open

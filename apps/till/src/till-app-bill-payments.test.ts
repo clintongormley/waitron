@@ -4544,16 +4544,14 @@ describe("till-app: a partly paid order at the counter", () => {
       listWorkingOrders: vi
         .fn()
         .mockResolvedValue([held({ hasPayments: false, outstanding: "120.00" })]),
-      getBillBalance: vi
-        .fn()
-        .mockResolvedValue(
-          balanceOf({
-            workingOrderId: "wo-1",
-            received: "0.00",
-            payments: [],
-            outstanding: "120.00",
-          }),
-        ),
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          workingOrderId: "wo-1",
+          received: "0.00",
+          payments: [],
+          outstanding: "120.00",
+        }),
+      ),
       pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoiceOf("120.00") }),
     });
     emit(counter(el), "collect-card", {});
