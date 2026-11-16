@@ -687,7 +687,7 @@ describe("content-language configuration", () => {
     );
   });
 
-  it("saves menu-root names in the venue language when content languages are unset", async () => {
+  it("uses the venue fallback with unset languages and preserves stored names in other languages", async () => {
     const app = mountApp("es-ES");
     const created = await send(app, "POST", "/management-api/menus", {
       body: { name: "Venue fallback menu", names: { en: "Stored English menu" } },
