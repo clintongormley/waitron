@@ -295,7 +295,7 @@ export {
   type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
-export { withNodeTransaction, withTransaction } from "./tenancy.js";
+export { withNodeTransaction, withTransaction, withVenueAndNodeTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";
 export {
   checkFailed,

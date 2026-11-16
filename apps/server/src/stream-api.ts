@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
-  withNodeTransaction,
+  withVenueAndNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -252,11 +252,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
         await deps.sealedState.refresh();
         // Again, under node.db's lock: a join checks for these settings and writes its pair link
         // under the same lock (`mirror-bundle-api.ts`), so one of the two sees the other.
-        await withNodeTransaction(deps.node, async (nodeTx) => {
+        await withVenueAndNodeTransaction(deps.db, deps.node, async (tx, nodeTx) => {
           await refuseWhilePaired(nodeTx);
-          await withTransaction(deps.db, async (tx) => {
-            await writeStreamSettings(tx, deps.ring, bucket, personId);
-          });
+          await writeStreamSettings(tx, deps.ring, bucket, personId);
         });
         await deps.stream.reload();
         return c.json(await view());

@@ -51,3 +51,12 @@ export async function withNodeTransaction<T>(
 ): Promise<T> {
   return node.withWriteLock(async () => fn(node));
 }
+
+/** Each file commits separately; the venue commits before the node. */
+export async function withVenueAndNodeTransaction<T>(
+  db: Database & { readonly __file?: never },
+  node: NodeDatabase,
+  fn: (tx: Transaction, nodeTx: NodeTransaction) => Promise<T> | T,
+): Promise<T> {
+  return withNodeTransaction(node, (nodeTx) => withTransaction(db, (tx) => fn(tx, nodeTx)));
+}
