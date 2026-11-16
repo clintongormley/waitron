@@ -24,14 +24,28 @@ export interface RestrictedStartDeps {
   listen: (app: Hono, stopWork: () => Promise<void>) => StartedServer;
 }
 
+export const MONEY_AND_DRAWER_WRITES = [
+  "/api/sales",
+  "/api/pay",
+  "/api/working-orders/:id/payments",
+  "/api/working-orders/:id/payments/:paymentId/refunds",
+  "/api/working-orders/:id/collect",
+  "/api/transactions/:saleId/refunds",
+  "/api/tender-refunds/:refundId/retry",
+  "/api/invoice-corrections/:id/cash",
+  "/api/drawer/open",
+];
+
 /**
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
  * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
+ * It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code; any other route it does
+ * not serve stays a 404 (handover-refusal-words plan, step 5: "no new unknown-route case or blanket
+ * middleware").
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
-  deps.app.post("/api/sales", steppingDownResponse);
-  deps.app.post("/api/pay", steppingDownResponse);
+  for (const path of MONEY_AND_DRAWER_WRITES) deps.app.post(path, steppingDownResponse);
   mountNodeApi(
     deps.app,
     {

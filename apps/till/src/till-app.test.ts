@@ -12586,6 +12586,40 @@ describe("till-app", () => {
       ]);
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
     });
+    it.each([true, false])(
+      "Find a bill names a box handing over on a hand-keyed card collection only when no earlier send went unanswered (earlier unanswered: %s)",
+      async (unanswered) => {
+        const steppingDown = { code: "handover.stepping_down", status: 503 };
+        const collect = unanswered
+          ? vi
+              .fn()
+              .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+              .mockRejectedValue(steppingDown)
+          : vi.fn().mockRejectedValue(steppingDown);
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: collect,
+        });
+        const form = await openCollection(el);
+        const pay = async () => {
+          emit(form, "find-bill-pay", {
+            workingOrderId: "wo-debt",
+            tender: { method: "card", amount: "30.00", externalRef: "terminal-original" },
+            invoiced: true,
+          });
+          await flush(el);
+        };
+        if (unanswered) {
+          await pay();
+          expect(form.error).toBe("sale.unconfirmed");
+        }
+        await pay();
+        expect(collect).toHaveBeenCalledTimes(unanswered ? 2 : 1);
+        expect(form.error).toBe(
+          unanswered ? "sale.unconfirmed" : "sale.chain_handed_over_manual_card",
+        );
+      },
+    );
     describe("Find a bill's pay on a full disk and a wrong clock", () => {
       async function findBillRefused(refusal: object, tender: object) {
         const { el } = await mountApp({

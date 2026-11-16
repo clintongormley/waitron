@@ -1,5 +1,7 @@
 # Handover refusal words
 
+**2026-11-16, #3496:** step 5's "Bill routes remain unchanged" and step 6's kept bill-payment gap no longer hold. The restarted box answers `handover.stepping_down` (503) to sales, `/api/pay`, bill payments and their refunds, counter collect, sale refunds, the tender refund retry, invoice-correction cash and drawer open (`MONEY_AND_DRAWER_WRITES`, `apps/server/src/restricted-start.ts`). Every other till route it does not serve still answers 404, as step 5 decided. The stepdown gate's refusal now carries the venue's CORS headers. On a sale, bill payment or bill refund the till names the handover, unless an earlier attempt of the same send got no answer; then it still says the outcome is unknown.
+
 **Finish line:** truthful EN/ES refusals explain what happened and each available next step; cash and reader sales sent to a restarted old box receive handover.stepping_down instead of404. Source: Lane J HANDOVER-WORDS, docs/backlog.md’s two entries and replication-cloud.md’s Slice6 list. Separate Sol/high writer, driver correction, Claude388/80second reads. Watcher clearance (questions.md note labelled2026-11-16 05:04), not owner design approval, includes the three test cuts and both dispositions below. Publish this plan docs-only before building inline.
 
 Paths `src/` below are under apps/server unless another app is named.

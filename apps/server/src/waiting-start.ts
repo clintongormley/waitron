@@ -102,7 +102,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   const app = healthApp(deps.health, deps.now, {
     ...(deps.venueDir === undefined ? {} : { venueDir: deps.venueDir }),
   });
-  const gate = createHandoverGate();
+  const gate = createHandoverGate({ cors: deps.cors });
   app.use("*", gate.middleware);
   app.use("*", deps.pageCheck);
   mountDeclarationPages(app, {}, log);

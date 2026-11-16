@@ -818,8 +818,22 @@ function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
+/** A box handing over, or one that has handed over, answers this without running the sale or refund
+ * route, so after an earlier send of the same sale or refund that got no answer, that refusal leaves
+ * its outcome unknown. */
+function unknownAfterHandover(error: unknown, earlierUnanswered: boolean): boolean {
+  return (
+    earlierUnanswered && (error as { code?: unknown } | null)?.code === "handover.stepping_down"
+  );
+}
+
 /** What the pay card, and the presented bill's sheet, say of a refused whole payment. */
-function wholeTabErrorOf(error: unknown, tender: { manualCard: boolean }): CounterError {
+function wholeTabErrorOf(
+  error: unknown,
+  tender: { manualCard: boolean },
+  earlierUnanswered = false,
+): CounterError {
+  if (unknownAfterHandover(error, earlierUnanswered)) return "sale.unconfirmed";
   const saleRefusal = saleRefusalOf(error, tender);
   if (saleRefusal !== undefined) return saleRefusal;
   return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
@@ -3631,6 +3645,12 @@ export class TillApp extends LitElement {
    * a reader that did not answer; on the bill path, a send left unanswered or answered `not_checked`.
    * Neither path learns that card's fate later, so a bill stays marked for the page. */
   readonly #unknownCardOutcome = new Set<string>();
+  /** Orders with a counter sale send (pay, collect, the reader on the counter or the presented
+   * sheet) that got no answer, and since then neither an answer to a send for the order nor a
+   * refusal {@link paymentNotRecorded} names. Those are raised only after the server found no sale
+   * recorded for the order; other refusals may come before it looks. Whole payments keep theirs in
+   * `#unansweredWholePayments`. */
+  readonly #unansweredSales = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
   @state() private findBillBusy = false;
@@ -4086,6 +4106,19 @@ export class TillApp extends LitElement {
     return this.handheldMode
       ? "bill_pay.unconfirmed_elsewhere_handheld"
       : "bill_pay.unconfirmed_elsewhere";
+  }
+
+  /** Notes how a sale send for order `id` ended, answering whether its outcome is unknown. */
+  #saleSendEnded(id: string, error?: unknown): boolean {
+    if (error === undefined || paymentNotRecorded(error)) {
+      this.#unansweredSales.delete(id);
+      return false;
+    }
+    if (isNetworkFailure(error)) {
+      this.#unansweredSales.add(id);
+      return true;
+    }
+    return unknownAfterHandover(error, this.#unansweredSales.has(id));
   }
 
   /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */
@@ -7296,6 +7329,7 @@ export class TillApp extends LitElement {
         this.#store.dining,
         ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
+      this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -7308,6 +7342,7 @@ export class TillApp extends LitElement {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
+      const unknown = reachedFiscal && this.#saleSendEnded(id, error);
       if (session !== this.#operatorSession) return;
       if (
         tender.method === "card" &&
@@ -7333,6 +7368,7 @@ export class TillApp extends LitElement {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else if (unknown) this.errorKey = "sale.unconfirmed";
       else
         this.errorKey =
           saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
@@ -7472,6 +7508,7 @@ export class TillApp extends LitElement {
           }),
         id,
       );
+      this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
       if (out.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       if (out.outcome === "partial") {
@@ -7518,6 +7555,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
+      const unknown = reachedFiscal && this.#saleSendEnded(id, error);
       if (session !== this.#operatorSession) return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
@@ -7536,6 +7574,7 @@ export class TillApp extends LitElement {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else if (unknown) this.errorKey = "sale.unconfirmed";
       else
         this.errorKey =
           saleRefusalOf(error, { manualCard: false }) ??
@@ -8515,6 +8554,7 @@ export class TillApp extends LitElement {
     try {
       const language = this.#chosenReceiptLanguage(id);
       const result = await this.api.collectOrder(id, tender, language, guestCount, null);
+      this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id, true, {
@@ -8525,6 +8565,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
+      const unknown = this.#saleSendEnded(id, error);
       if (session !== this.#operatorSession) return;
       if (
         tender.method === "card" &&
@@ -8533,8 +8574,10 @@ export class TillApp extends LitElement {
         form?.restoreManualCard(tender);
       }
 
-      this.errorKey =
-        saleRefusalOf(error, { manualCard: tender.method === "card" }) ?? settlingErrorOf(error);
+      this.errorKey = unknown
+        ? "sale.unconfirmed"
+        : (saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
+          settlingErrorOf(error));
     } finally {
       this.submitting = false;
     }
@@ -9533,10 +9576,11 @@ export class TillApp extends LitElement {
       )
         this.#unansweredWholePayments.delete(key);
       if (!current()) return;
-      this.findBillError =
-        saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
-        profileRefusalOf(error) ??
-        settlingErrorOf(error);
+      this.findBillError = unknownAfterHandover(error, unanswered !== undefined)
+        ? "sale.unconfirmed"
+        : (saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
+          profileRefusalOf(error) ??
+          settlingErrorOf(error));
     } finally {
       this.submitting = false;
       if (current()) this.findBillBusy = false;
@@ -20436,7 +20480,7 @@ export class TillApp extends LitElement {
    * offered to it first, and goes to the screen only when it answers false. */
   async #payWholeTab(
     detail: ConfirmPaymentDetail,
-    refused?: (error: unknown) => boolean,
+    refused?: (error: unknown, earlierUnanswered: boolean) => boolean,
   ): Promise<boolean> {
     if (this.submitting || this.activeTabId === undefined) return false;
     const id = this.activeTabId;
@@ -20523,8 +20567,12 @@ export class TillApp extends LitElement {
       )
         return false;
       paidMeanwhile = isPaymentsReceived(error);
-      if (refused?.(error) !== true)
-        this.errorKey = wholeTabErrorOf(error, { manualCard: detail.method === "card" });
+      if (refused?.(error, unanswered !== undefined) !== true)
+        this.errorKey = wholeTabErrorOf(
+          error,
+          { manualCard: detail.method === "card" },
+          unanswered !== undefined,
+        );
     } finally {
       this.submitting = false;
       this.sendingTender = null;
@@ -20632,7 +20680,7 @@ export class TillApp extends LitElement {
             ...outsideCardValues(detail),
             ...guestCount,
           };
-    const paid = await this.#payWholeTab(tender, (error) => {
+    const paid = await this.#payWholeTab(tender, (error, earlierUnanswered) => {
       if (this.#presentedNow(open.id) === null) return false;
       if (isNetworkFailure(error)) {
         this.#closePresented(open.id);
@@ -20640,7 +20688,9 @@ export class TillApp extends LitElement {
       }
       this.#showPresentedRefusal(
         open.id,
-        this.#counterRefusal(wholeTabErrorOf(error, { manualCard: tender.method === "card" })),
+        this.#counterRefusal(
+          wholeTabErrorOf(error, { manualCard: tender.method === "card" }, earlierUnanswered),
+        ),
       );
       return true;
     });
@@ -20658,9 +20708,9 @@ export class TillApp extends LitElement {
     const manualCard = held.tender.method === "card";
     const paid = await this.#payWholeTab(
       { ...held.tender, ...(held.guestCount === undefined ? {} : { guestCount: held.guestCount }) },
-      (error) => {
+      (error, earlierUnanswered) => {
         if (this.#presentedNow(open.id) === null) return false;
-        if (!isNetworkFailure(error))
+        if (!isNetworkFailure(error) && !unknownAfterHandover(error, earlierUnanswered))
           this.#showPresentedRefusal(
             open.id,
             this.#counterRefusal(wholeTabErrorOf(error, { manualCard })),
@@ -20692,6 +20742,7 @@ export class TillApp extends LitElement {
       billId !== this.activeTabId;
     let paidMeanwhile = false;
     let readerLost = false;
+    let unknown = false;
     try {
       if (!(await this.#flushDraft()) || left() || !(await this.#flushPartyKitchenNote()) || left())
         return;
@@ -20712,10 +20763,12 @@ export class TillApp extends LitElement {
             })
             .then(
               (answer) => {
+                this.#saleSendEnded(billId);
                 if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
                 return answer;
               },
               (error: unknown) => {
+                unknown = this.#saleSendEnded(billId, error);
                 if (isNetworkFailure(error)) this.#unknownCardOutcome.add(billId);
                 throw error;
               },
@@ -20755,7 +20808,9 @@ export class TillApp extends LitElement {
           this.#counterRefusal(
             isReaderRefusal(error)
               ? "card_reader.not_set_up"
-              : wholeTabErrorOf(error, { manualCard: false }),
+              : unknown
+                ? "sale.unconfirmed"
+                : wholeTabErrorOf(error, { manualCard: false }),
           ),
         );
     } finally {
@@ -21385,13 +21440,14 @@ export class TillApp extends LitElement {
       if (!isLatestSend(this.#paymentSends, key, turn) || !this.#paymentsOut.delete(key)) return;
       void this.#afterPaymentOut(open.id, key);
     };
+    let noAnswer = false;
     const settle = (error?: unknown, pending = false) => {
       if (!isLatestSend(this.#paymentSends, key, turn)) return;
       this.#sendEndedAt.set(key, ++this.#payTicks);
       let unanswered =
         pending && submission.pendingRefusal !== undefined
           ? submission
-          : unansweredAfter(submission, error);
+          : unansweredAfter(submission, error, noAnswer);
       if (error !== undefined && submission.pendingRefusal?.code === "sale.charged_not_recorded")
         unanswered = { ...submission, unconfirmed: true };
       const code = (error as { code?: unknown } | undefined)?.code;
@@ -21418,7 +21474,6 @@ export class TillApp extends LitElement {
       else this.#unansweredPayments.set(key, unanswered);
       release();
     };
-    let noAnswer = false;
     const card = asked.pay.method === "card";
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
@@ -21828,17 +21883,22 @@ export class TillApp extends LitElement {
     open: BillRefunding,
     override?: { personId: string; pin: string },
   ): Promise<void> {
-    const submission = refundSubmissionFor(
-      open.billId,
-      open.payment.id,
-      open.asked!,
-      this.#unansweredRefund,
-    );
+    const previous = this.#unansweredRefund;
+    const keyed = refundSubmissionFor(open.billId, open.payment.id, open.asked!, previous);
+    // Some refusals come before the server looks the submission id up, so only an answer ends the
+    // doubt over a send of this refund that got none.
+    const submission: RefundSubmission =
+      previous?.unconfirmed === true && previous.key === keyed.key
+        ? { ...keyed, unconfirmed: true }
+        : keyed;
     const turn = ++this.#refundSends;
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    const settle = (error?: unknown) => {
-      if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
+    let noAnswer = false;
+    const settle = (error?: unknown): boolean => {
+      const unanswered = unansweredAfter(submission, error, noAnswer);
+      if (turn === this.#refundSends) this.#unansweredRefund = unanswered;
+      return unanswered?.unconfirmed === true;
     };
     await this.#holdingReload(async () => {
       try {
@@ -21852,18 +21912,21 @@ export class TillApp extends LitElement {
             ),
           limit.signal,
           () => session === this.#operatorSession,
+          () => {
+            noAnswer = true;
+          },
         );
         settle();
         await this.#onRefunded(open, result);
       } catch (error) {
-        settle(error);
+        const unconfirmed = settle(error);
         if (
           override === undefined &&
           (error as { code?: unknown }).code === "authorization.not_permitted" &&
           this.#billRefundingNow(open.id) !== null
         )
           await this.#askRefundApprover(open.id);
-        else await this.#onRefundRefused(open, error);
+        else await this.#onRefundRefused(open, error, unknownAfterHandover(error, unconfirmed));
       } finally {
         limit.done();
       }
@@ -21900,12 +21963,17 @@ export class TillApp extends LitElement {
   /**
    * A refusal of the approver's PIN shows in the PIN prompt; one naming a field goes under it, and
    * any other above the refund's action. The bill is read again after every refusal. A refusal
-   * after the operator has logged out changes nothing.
+   * after the operator has logged out changes nothing. With `outcomeUnknown`, the dialog says the
+   * refund may have been made instead of giving the refusal's own words.
    */
-  async #onRefundRefused(open: BillRefunding, error: unknown): Promise<void> {
+  async #onRefundRefused(
+    open: BillRefunding,
+    error: unknown,
+    outcomeUnknown = false,
+  ): Promise<void> {
     const now = this.#billRefundingNow(open.id);
     if (now === null) return;
-    const refusal = refusalOf(error);
+    const refusal = outcomeUnknown ? { code: "network" } : refusalOf(error);
     if (APPROVER_REFUSALS.has(refusal.code)) {
       this.refundApproverError = refusal.code;
       this.billRefunding = { ...now, busy: false };

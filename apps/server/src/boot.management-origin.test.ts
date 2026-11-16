@@ -24,6 +24,7 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+import { MONEY_AND_DRAWER_WRITES } from "./restricted-start.js";
 
 const served = vi.hoisted(() => ({
   listeners: [] as {
@@ -315,6 +316,15 @@ describe("a management change in the running server", () => {
       }
       expect(uncovered).toEqual([]);
     });
+  });
+});
+
+it("every money or drawer write the restricted start refuses is a POST the full start serves", async () => {
+  await withServer({}, async ({ app }) => {
+    const posts = new Set(
+      app.routes.filter((route) => route.method === "POST").map((route) => route.path),
+    );
+    expect(MONEY_AND_DRAWER_WRITES.filter((path) => !posts.has(path))).toEqual([]);
   });
 });
 

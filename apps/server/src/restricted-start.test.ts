@@ -39,8 +39,18 @@ describe("startRestricted", () => {
     });
   });
 
-  it.each(["/api/sales", "/api/pay"])(
-    "refuses a sale at %s with the handover code after restart",
+  it.each([
+    "/api/sales",
+    "/api/pay",
+    "/api/working-orders/wo-1/payments",
+    "/api/working-orders/wo-1/payments/pay-1/refunds",
+    "/api/working-orders/wo-1/collect",
+    "/api/transactions/s-1/refunds",
+    "/api/tender-refunds/r-1/retry",
+    "/api/invoice-corrections/c-1/cash",
+    "/api/drawer/open",
+  ])(
+    "refuses a money or drawer request at %s with the handover code after restart",
     async (path) => {
       const app = new Hono();
       startRestricted({

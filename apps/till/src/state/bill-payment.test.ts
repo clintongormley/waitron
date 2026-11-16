@@ -241,6 +241,30 @@ describe("the submission id of a confirmation", () => {
     expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
   });
 
+  it("is not held as unconfirmed after a handover refusal, which the box answers before any route runs", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+
+    expect(unansweredAfter(first, { code: "handover.stepping_down", status: 503 })).toEqual(first);
+  });
+
+  it("stays unconfirmed after a handover refusal when an earlier send got no answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, noAnswer)!;
+
+    expect(
+      unansweredAfter(unanswered, { code: "handover.stepping_down", status: 503 })?.unconfirmed,
+    ).toBe(true);
+  });
+
+  it("stays unconfirmed after a handover refusal when an earlier attempt of the same send got no answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+
+    expect(unansweredAfter(first, { code: "handover.stepping_down", status: 503 }, true)).toEqual({
+      ...first,
+      unconfirmed: true,
+    });
+  });
+
   it("is fresh after the device changed profile, whose refusal fails the payment recorded under the id", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, { code: "device.profile_changed", status: 409 });
@@ -660,5 +684,19 @@ describe("a payment's refunds", () => {
     expect(again.request.submissionId).toBe("sub-1");
     expect(confirmed.request).toEqual({ ...ask, manualConfirmed: true, submissionId: "sub-2" });
     expect(otherPayment.request.submissionId).toBe("sub-3");
+  });
+
+  it("holds a refund as unconfirmed after a handover refusal only when an earlier attempt of the same send got no answer", () => {
+    const refund = refundSubmissionFor(
+      "wo-1",
+      "pay-1",
+      { appliedAmount: "10.00", tipAmount: "0.00", reason: "Wrong bill" },
+      null,
+      () => "sub-1",
+    );
+    const steppingDown = { code: "handover.stepping_down", status: 503 };
+
+    expect(unansweredAfter(refund, steppingDown)).toEqual(refund);
+    expect(unansweredAfter(refund, steppingDown, true)).toEqual({ ...refund, unconfirmed: true });
   });
 });
