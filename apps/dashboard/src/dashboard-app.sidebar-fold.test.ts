@@ -409,6 +409,18 @@ it("a staff session's strip holds only Overview, with no magnifier", async () =>
   });
 });
 
+it("a session holding only invoice.inspect has a strip of its one section, with no magnifier", async () => {
+  await atSize(1280, 800, async () => {
+    localStorage.setItem(FOLDED_KEY, "true");
+    const { el } = await mountApp({
+      roleIds: ["tax-inspector"],
+      permissions: ["invoice.inspect"],
+      modules: [],
+    });
+    expect(strip(el).map((button) => button.dataset.test)).toEqual(["strip-reports"]);
+  });
+});
+
 it("the current section is marked by the highlight alone, its icon staying the text colour", async () => {
   await atSize(1280, 800, async () => {
     localStorage.setItem(FOLDED_KEY, "true");

@@ -2426,6 +2426,10 @@ export class DashboardApp extends LitElement {
     );
   }
 
+  #searchHidden(): boolean {
+    return this.#ownPagesOnly() || this.#confinedToInvoices();
+  }
+
   #ownPagesOnly(): boolean {
     if (this.#confinedToInvoices()) return false;
     return (
@@ -2652,7 +2656,7 @@ export class DashboardApp extends LitElement {
   /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     const permitted = this.#permittedNav();
-    if (this.#ownPagesOnly()) return permitted;
+    if (this.#searchHidden()) return permitted;
     return permitted.map(({ group, pages }) => {
       const heading = group.headerKey === undefined ? "" : t(group.headerKey);
       const matched = navMatches(this.navSearch, pages, heading);
@@ -2977,7 +2981,7 @@ export class DashboardApp extends LitElement {
     const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
     return html`<nav class="strip" aria-label=${t("nav.sections")}>
       ${
-        this.#ownPagesOnly()
+        this.#searchHidden()
           ? nothing
           : this.#stripButton(
               "search",
@@ -3033,7 +3037,7 @@ export class DashboardApp extends LitElement {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
         ${
-          this.#ownPagesOnly()
+          this.#searchHidden()
             ? nothing
             : html`<wt-input
                 type="search"
@@ -3110,7 +3114,7 @@ export class DashboardApp extends LitElement {
             </button>`,
         )}
         ${
-          this.#ownPagesOnly()
+          this.#searchHidden()
             ? nothing
             : html`<p class="nav-search-empty" role="status" data-test="nav-search-empty">
                 ${noMatch ? t("nav.no_matches") : nothing}

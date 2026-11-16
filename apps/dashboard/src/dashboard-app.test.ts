@@ -4501,6 +4501,17 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("a session holding only invoice.inspect has no page search in its sidebar", async () => {
+    history.replaceState(null, "", "/manage");
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-invoices]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-search]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-search-empty]")).toBeNull();
+  });
+
   it("a session holding only invoice.inspect reads no alerts, no disk stop and no live updates", async () => {
     history.replaceState(null, "", "/manage");
     const liveUpdates = { start: vi.fn(), stop: vi.fn() };
