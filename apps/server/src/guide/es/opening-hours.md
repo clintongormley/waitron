@@ -47,7 +47,7 @@ Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona
 
 Abre **Temporadas** en **Operaciones del local**. Elige una fila para cambiar su nombre, color o fecha de inicio, o **Añadir temporada** para crear una. Cada temporada dura hasta que empieza la siguiente. Usa el menú **⋯** de la fila para editar o eliminar una temporada; revisa qué horarios se perderán antes de confirmar la eliminación.
 
-Para planificar el personal de una temporada, elige **Personal** en **Calendario** y ábrela desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula.
+Para planificar el personal de una temporada, elige **Personal** en **Calendario** y abre la temporada desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula.
 
 ## Edita los periodos y consulta sus horarios {#periods}
 
