@@ -6,6 +6,7 @@ import {
   draftScopeFor,
   FormFeedback,
   saveActionState,
+  setContentLanguages,
   subscribeContentLanguages,
   type DraftScope,
   type LeaveCoordinator,
@@ -100,24 +101,21 @@ interface Typed {
   refused: boolean;
 }
 
-/** The first language whose text alone the patch's parser refuses, else the first language: a
- * refusal from merging with the stored text names no language. */
+/** A merge refusal can name no language whose text fails the patch parser. */
 function refusedLanguage(
   target: MenuPatchTarget,
   field: string,
   value: Record<string, string>,
-): string {
+): string | undefined {
   const languages = Object.keys(value);
-  return (
-    languages.find((language) => {
-      try {
-        parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
-        return false;
-      } catch {
-        return true;
-      }
-    }) ?? languages[0]!
-  );
+  return languages.find((language) => {
+    try {
+      parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
+      return false;
+    } catch {
+      return true;
+    }
+  });
 }
 
 /** One edited field, as the draft scope compares them. */
@@ -194,6 +192,7 @@ export class MenuPatchDialog extends LitElement {
    * check is not staged, and the draft keeps its base all the same (`MenuPatchDraft.hold`). */
   #typed = new Map<string, Typed>();
   #watching: string | null = null;
+  #applyingReload = false;
   /** A live version or language change that arrived while a patch was being sent. Applying it then
    * could drop a change the answer's refusal still has to place, so it waits for the answer. */
   #held: { answer?: LiveMenu | null; languages: boolean; reload?: boolean } | null = null;
@@ -228,7 +227,7 @@ export class MenuPatchDialog extends LitElement {
     this.addController({
       hostConnected: () => {
         unsubscribe = subscribeContentLanguages(() => {
-          if (this.live === null) return;
+          if (this.live === null || this.#applyingReload) return;
           if (this.busy) this.#held = { ...this.#held, languages: true };
           else this.#revalidate();
         });
@@ -348,7 +347,7 @@ export class MenuPatchDialog extends LitElement {
    * even when it holds work. A later live version has a higher number (`nextNumber`,
    * `refuseOvertaken` and `requeueAfter`, `packages/menu/src/menu-publication.ts`), so an
    * answer numbered below the newest one known is a late read and is ignored. */
-  #applyLive(answer: LiveMenu | null, reload = false): void {
+  #applyLive(answer: LiveMenu | null, reload = false, resetLosses = true): void {
     if (this.busy) {
       const held = this.#held;
       const late = answer !== null && held?.answer != null && answer.number < held.answer.number;
@@ -392,11 +391,12 @@ export class MenuPatchDialog extends LitElement {
       this.live = newest;
     } else if (!reload) return;
     // Reload checks the draft again even on the version shown: the venue's languages may differ.
-    this.#revalidate();
+    this.#revalidate(resetLosses);
   }
 
   /** Checks the draft against the shown version with the venue's content languages as they are. */
-  #revalidate(): void {
+  #revalidate(resetLosses = true): void {
+    if (resetLosses) this.dropped = 0;
     const { document } = this.live!;
     const { dropped, trimmed, fixed } = this.#draft!.rebase(document, currentContentLanguages());
     this.dropped += dropped;
@@ -473,7 +473,7 @@ export class MenuPatchDialog extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** After a rebase, a field neither staged nor failing its check shows the newer live value again.
+  /** An unstaged field keeps its typed spelling while it still means the live value.
    * A failing field whose failing language is removed, or now set by every folder, is checked again
    * in the text `#followHeld` has left it, which counted what that took. A failing field the form
    * can no longer draw is forgotten too, or nothing could clear it; returns how many of those there
@@ -505,11 +505,18 @@ export class MenuPatchDialog extends LitElement {
       if (typed.refused) {
         // A refused change is staged, so the rebase does any counting.
         if (!staged) forget(key, typed, field);
-        else if (!drawn) Object.assign(typed, { error: "", language: null, refused: false });
+        else if (!shown || !editable(typed))
+          Object.assign(typed, { error: "", language: null, refused: false });
         continue;
       }
       if (typed.error !== "" && !drawn) lost += 1;
-      if (!staged && (!drawn || typed.error === "")) forget(key, typed, field);
+      if (
+        !staged &&
+        (!drawn ||
+          (typed.error === "" &&
+            !this.#draft!.isLive({ target: typed.target, field, value: typed.value })))
+      )
+        forget(key, typed, field);
     }
     return lost;
   }
@@ -596,8 +603,8 @@ export class MenuPatchDialog extends LitElement {
       this.#held = null;
       if (held?.languages) this.#revalidate();
       if (held?.answer === undefined) return;
-      if (held.reload) await this.#reloaded(held.answer, !onField);
-      else this.#applyLive(held.answer);
+      if (held.reload) await this.#reloaded(held.answer, !onField, !held.languages);
+      else this.#applyLive(held.answer, false, !held.languages);
       return;
     }
     this.#scope?.commit(submitted);
@@ -612,6 +619,20 @@ export class MenuPatchDialog extends LitElement {
    * A failed read draws no form; the refusal stays under its field for when the read succeeds. */
   async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<boolean> {
     const placed = placeRefusal(error, sent);
+    if ("change" in placed && TRANSLATED.has(placed.change.field)) {
+      const { target, field, value } = placed.change;
+      if (
+        (error as AppError<"menu_patch.invalid">).params.reason === "content.translation_invalid" &&
+        refusedLanguage(target, field, value as Record<string, string>) === undefined
+      ) {
+        this.refusal = {
+          code: "menu_patch.invalid",
+          params: (error as AppError<"menu_patch.invalid">).params,
+        };
+        this.#refusedKey = changeKey(placed.change);
+        return false;
+      }
+    }
     if ("refusal" in placed) {
       this.refusal = placed.refusal;
       const named = sent[placed.refusal.params.change as number];
@@ -626,7 +647,8 @@ export class MenuPatchDialog extends LitElement {
     Object.assign(this.#typed.get(changeKey(change))!, {
       error: message,
       language: TRANSLATED.has(change.field)
-        ? refusedLanguage(change.target, change.field, change.value as Record<string, string>)
+        ? (refusedLanguage(change.target, change.field, change.value as Record<string, string>) ??
+          Object.keys(change.value as Record<string, string>)[0]!)
         : null,
       refused: true,
     });
@@ -642,8 +664,11 @@ export class MenuPatchDialog extends LitElement {
    * subscription delivered while the read was out. */
   async #reload(): Promise<void> {
     const session = this.#session;
-    const read = await this.api.getLiveMenu(this.menuId).then(
-      (answer) => ({ answer }),
+    const read = await Promise.all([
+      this.api.getLiveMenu(this.menuId),
+      this.api.getContentLanguages(),
+    ]).then(
+      ([answer, languages]) => ({ answer, languages }),
       (error: unknown) => ({ error }),
     );
     if (session !== this.#session) return;
@@ -651,6 +676,13 @@ export class MenuPatchDialog extends LitElement {
       this.reloadFailure = codeOf(read.error);
       return;
     }
+    this.#applyingReload = true;
+    try {
+      setContentLanguages(read.languages);
+    } finally {
+      this.#applyingReload = false;
+    }
+    if (this.busy) this.#held = { ...this.#held, languages: true };
     // A read answered during a send waits for the send's answer, still as a Reload.
     if (this.busy) this.#applyLive(read.answer, true);
     else {
@@ -662,9 +694,9 @@ export class MenuPatchDialog extends LitElement {
   /** The Reload button is usually gone afterwards, so with `focus` focus moves to Review, or to
    * Close while Review is unavailable. Without it, focus stays on the refused field unless the
    * version moved onto removed that field. */
-  async #reloaded(answer: LiveMenu | null, focus = true): Promise<void> {
+  async #reloaded(answer: LiveMenu | null, focus = true, resetLosses = true): Promise<void> {
     this.reloadFailure = null;
-    this.#applyLive(answer, true);
+    this.#applyLive(answer, true, resetLosses);
     if (!focus) {
       await this.updateComplete;
       if ((this.renderRoot as ShadowRoot).activeElement !== null) return;
@@ -752,7 +784,7 @@ export class MenuPatchDialog extends LitElement {
         value: raw,
         error: refusalText(field, error),
         language: TRANSLATED.has(field)
-          ? refusedLanguage(target, field, value as Record<string, string>)
+          ? (refusedLanguage(target, field, value as Record<string, string>) ?? null)
           : null,
         refused: false,
       });

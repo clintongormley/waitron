@@ -105,11 +105,16 @@ describe("image-upload", () => {
     });
     const changed = vi.fn();
     el.addEventListener("image-changed", changed);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image]")!.click();
+    const remove = el.shadowRoot!.querySelector("[data-test=remove-image]")!;
+    await userEvent.click(remove.shadowRoot!.querySelector("button")!);
     await el.updateComplete;
     expect(changed.mock.calls[0]![0].detail).toEqual({ image: null });
     expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
     expect(api.imageLibraryRequest).not.toHaveBeenCalled();
+    const choose = el.shadowRoot!.querySelector("[data-test=choose-image]")!;
+    await expect
+      .poll(() => choose.shadowRoot!.activeElement)
+      .toBe(choose.shadowRoot!.querySelector("button"));
   });
   it("announces pending selection and cancellation without changing an existing image", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
@@ -443,6 +448,7 @@ describe("image-upload as a thumbnail", () => {
     const box = button(el).getBoundingClientRect();
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
+    await userEvent.keyboard("{Tab}");
     button(el).focus();
     expect(el.shadowRoot!.activeElement).toBe(button(el));
     expect(getComputedStyle(button(el)).outlineStyle).not.toBe("none");
@@ -1195,6 +1201,10 @@ it("A651 chooses the full-size photo through the real nested picker and closes t
   await userEvent.click(library.shadowRoot!.querySelector("[data-test=select-preview]")!);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull());
   expect(el.image).toBe(mediaTestReference("bread.png"));
+  const choose = el.shadowRoot!.querySelector("[data-test=choose-image]")!;
+  await expect
+    .poll(() => choose.shadowRoot!.activeElement)
+    .toBe(choose.shadowRoot!.querySelector("button"));
   expect(changed).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({ detail: { image: mediaTestReference("bread.png") } }),
   );

@@ -1,3 +1,4 @@
+import { applyMenuPatch } from "@waitron/menu/src/menu-patch.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -128,6 +129,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   return {
     getLiveMenu: vi.fn(async () => live()),
     getMenuPublications: vi.fn(async () => publications()),
+    getContentLanguages: vi.fn(async () => currentContentLanguages()),
     patchLiveMenu: vi.fn(async () => patched),
     imageLibraryRequest: vi.fn(),
     ...overrides,
@@ -771,6 +773,19 @@ it(`fits a dish's variants and their values in the form at 390 px`, async () => 
       expect(box.right).toBeLessThanOrEqual(formBox.right + 0.5);
       expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
     }
+    const textBox = (el: Element) => {
+      const range = window.document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect();
+    };
+    const rows = form(el).querySelectorAll('[data-test="variant"]');
+    const link = rows[1]!.querySelector("button")!;
+    const values = textBox(rows[1]!.querySelector(".variant-values")!);
+    expect(values.top).toBeGreaterThanOrEqual(link.getBoundingClientRect().bottom - 0.5);
+    expect(values.left).toBeCloseTo(link.getBoundingClientRect().left + 8, 0);
+    const shortLink = rows[0]!.querySelector("button")!.getBoundingClientRect();
+    const shortValues = textBox(rows[0]!.querySelector(".variant-values")!);
+    expect(shortValues.left - shortLink.right).toBeCloseTo(8, 0);
   } finally {
     await page.viewport(before.width, before.height);
   }
@@ -1586,7 +1601,7 @@ it("explains a refusal that names no field shown, at the bottom, and keeps Put l
     ],
     [
       refusal("menu_patch.invalid", { change: 0, field: "target" }),
-      "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
+      "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu and content languages again and checks each change: it drops each one that does not fit, says how many, and keeps the rest.",
     ],
     [new Error("the box is unreachable"), codeMessage("server.internal")],
   ] as const) {
@@ -3268,4 +3283,167 @@ it("judges a field whose failing language was removed against the version shown 
       value: { en: "Refreshments", es: "Refrescos" },
     },
   ]);
+});
+
+it("Reload takes menu and languages together, applying neither after a language failure", async () => {
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live()).mockResolvedValue(live(4));
+  const getContentLanguages = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue({ defaultLanguage: "es", languages: ["es"] });
+  const el = await mount(
+    stubApi({
+      getLiveMenu,
+      getContentLanguages,
+      patchLiveMenu: vi
+        .fn()
+        .mockRejectedValue(refusal("menu_patch.invalid", { change: 0, field: "target" })),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await type(el, "wt-input", "customer-name-en", "Fresh soup");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  expect(getContentLanguages).toHaveBeenCalledTimes(1);
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  expect(currentContentLanguages().languages).toEqual(["en", "es"]);
+  expect(el.changes).toHaveLength(2);
+  expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(currentContentLanguages().languages).toEqual(["es"]);
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(trimmedNote(el)).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
+});
+
+it("reports losses from the latest recheck rather than from the whole opening", async () => {
+  const data = new LiveData();
+  const next = lunch();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live())
+    .mockImplementation(async () => live(4, next));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Bread");
+  await type(el, "wt-input", "name", "Toast");
+  (next.offers["mi-soup"]!.offeredModifiers[0] as { items: unknown[] }).items = [];
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  await pick(el, "Toppings");
+  await type(el, "wt-input", "name", "Add-ons");
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  next.offers["mi-soup"]!.offeredModifiers = [];
+  next.offers["mi-soup"]!.unitPrice = "4.00";
+  getLiveMenu.mockResolvedValue(live(5, next));
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toContain(newerNotice(5)));
+  await press(el, "reload");
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  expect(el.changes).toEqual([]);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await flush(el);
+  expect(droppedNote(el)).toBeNull();
+});
+
+it("keeps equal-live price spelling through language changes and Reload, until live really changes", async () => {
+  const getLiveMenu = vi.fn(async () => live());
+  const el = await mount(
+    stubApi({
+      getLiveMenu,
+      patchLiveMenu: vi
+        .fn()
+        .mockRejectedValue(refusal("menu_patch.invalid", { change: 0, field: "target" })),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "3");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await flush(el);
+  expect(field(el, "wt-price-input", "price").value).toBe("3");
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "Green salad");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  await pick(el, "Soup");
+  expect(field(el, "wt-price-input", "price").value).toBe("3");
+  const newer = lunch();
+  newer.offers["mi-soup"]!.unitPrice = "3.50";
+  getLiveMenu.mockResolvedValue(live(4, newer));
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  await pick(el, "Soup");
+  expect(field(el, "wt-price-input", "price").value).toBe("3.50");
+});
+
+it("puts a real switched-off-language refusal at the bottom rather than blaming filled Spanish", async () => {
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+  const document = lunch();
+  document.offers["mi-soup"]!.customerName = { es: "Soup", en: "Soup" };
+  const api = stubApi({
+    getLiveMenu: vi.fn(async () => live(3, document)),
+    patchLiveMenu: vi.fn(async (_menuId, { changes }) => {
+      applyMenuPatch(document, changes, { defaultLanguage: "es", languages: ["es"] });
+      return patched;
+    }),
+  });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-input", "customer-name-es", "Daily soup");
+  await type(el, "wt-input", "customer-name-en", "Fresh soup");
+  await press(el, "review");
+  await press(el, "put-live");
+  if (footerButton(el, "keep-editing") !== null) await press(el, "keep-editing");
+  expect(field(el, "wt-input", "customer-name-es").error).toBe("");
+  expect(field(el, "wt-input", "customer-name-en").error).toBe("");
+  expect(bottomMessage(el)).toContain("no longer fits");
+  expect(footerButton(el, "reload")).not.toBeNull();
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  await flush(el);
+  expect(bottomMessage(el)).toContain("no longer fits");
+  await type(el, "wt-input", "customer-name-es", "Soup");
+  expect(refusalsIn(el)).toBe("");
+});
+
+it("retires a server refusal when a newer folder locks its language, keeping the other edit", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live())
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.invalid", {
+          change: 0,
+          field: "names",
+          reason: "content.translation_required",
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "First dishes");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(field(el, "wt-input", "names-en").error).toBe(codeMessage("content.translation_required"));
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-en").disabled).toBe(true);
+  expect(field(el, "wt-input", "names-en").error).toBe("");
+  expect(node(el, "Starters").querySelector('[data-test="needs-correcting"]')).toBeNull();
+  expect(refusalsIn(el)).toBe("");
+  expect(el.changes).toHaveLength(1);
+  expect(footerButton(el, "review")!.disabled).toBe(false);
 });

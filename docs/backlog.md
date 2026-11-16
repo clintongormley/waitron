@@ -608,7 +608,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-- **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
 
 ### Service periods, opening hours and departments

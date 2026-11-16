@@ -2864,6 +2864,8 @@ menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new
 
 ### Forms
 
+A locked field always shows why it cannot be changed on a visible line under the field (owner, 2026-11-16).
+
 When you change a form for another reason, move it onto `FormFeedback` in the same change.
 
 `FormFeedback` from `@waitron/ui` shares attempt state, keyed refusal dismissal and
@@ -5767,7 +5769,7 @@ value fails its check. Following Forms, a field's own error, the tree's "!" and 
 appear only once Review has been pressed. That press stays on the item shown if one of its fields
 fails its check, otherwise opens the first item, in the order edited, with a field that fails, and
 focuses the first field marked on the item's form. A refusal placed under a field keeps its change staged and Review enabled, and
-its sentence goes when that field changes or the patch is sent again. The review step lists each change as "<item>:
+its sentence goes when that field changes, its language is removed or fixed by an included folder, or the patch is sent again. The review step lists each change as "<item>:
 <field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
 "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to

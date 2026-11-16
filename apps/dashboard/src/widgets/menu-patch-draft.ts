@@ -192,7 +192,7 @@ export class MenuPatchDraft {
 
   /** Whether `change` leaves its field as the live version holds it, judged as `applyMenuPatch`
    * would write it; a value the patch refuses never does, so the form can show the refusal. */
-  private isLive(change: MenuPatchChange): boolean {
+  isLive(change: MenuPatchChange): boolean {
     let value: unknown;
     try {
       value = parseMenuPatch([change])[0]!.value;

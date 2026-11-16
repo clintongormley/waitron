@@ -264,7 +264,7 @@ export class ImageUpload extends LitElement {
     this.#writeBusy = false;
     const closing = this.pickerOpen && !open;
     this.pickerOpen = open;
-    if (closing && (this.logo || this.venueLogo)) void this.#focusLogo();
+    if (closing && (this.logo || this.venueLogo || !this.thumbnail)) void this.#focusChooser();
     this.dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
     );
@@ -306,7 +306,7 @@ export class ImageUpload extends LitElement {
     this.#change(null);
   }
 
-  async #focusLogo(): Promise<void> {
+  async #focusChooser(): Promise<void> {
     await this.updateComplete;
     this.shadowRoot!.querySelector<HTMLElement>(
       "[data-test=replace-image], [data-test=choose-image]",
@@ -346,7 +346,7 @@ export class ImageUpload extends LitElement {
         ?disabled=${this.disabled}
         @click=${() => {
           this.#remove();
-          void this.#focusLogo();
+          void this.#focusChooser();
         }}
         >${t("image.remove_logo")}</wt-button
       >`;
@@ -390,7 +390,7 @@ export class ImageUpload extends LitElement {
           ?disabled=${this.disabled}
           @click=${() => {
             this.#remove();
-            void this.#focusLogo();
+            void this.#focusChooser();
           }}
           >${t("image.remove_logo")}</wt-button
         >
@@ -421,7 +421,10 @@ export class ImageUpload extends LitElement {
                 data-test="remove-image"
                 variant="secondary"
                 ?disabled=${this.disabled}
-                @click=${() => this.#remove()}
+                @click=${() => {
+                  this.#remove();
+                  void this.#focusChooser();
+                }}
                 >${t("image.remove")}</wt-button
               >`
             : this.inheritedImage

@@ -744,7 +744,7 @@ it("forgets a refusal once a fresh preview still lists its change but no longer 
   expect(refusalIn(panel(), "own-rename")).toBeNull();
 });
 
-it("forgets a refusal once a content language switched off takes its Undo away, and says nothing when it is back", async () => {
+it.each(["subscription", "patch Reload"])("retires Undo refusal after %s", async (source) => {
   const before = currentContentLanguages();
   try {
     const live = new LiveData();
@@ -768,7 +768,10 @@ it("forgets a refusal once a content language switched off takes its Undo away, 
     fake.state.languages = ["en", "es"];
     fake.state.preview = {
       ...previewOf([rename, mainsRenamed]),
-      live: { versionId: "v-2", document: menuDocument([mainsNamed("Principales")], {}, "Lunch") },
+      live: {
+        versionId: "v-2",
+        document: menuDocument([mainsNamed("Principales")], {}, "Lunch"),
+      },
       document: menuDocument([mainsNamed("Segundos")], {}),
     };
     const { panel } = await mount(fake.api);
@@ -783,11 +786,13 @@ it("forgets a refusal once a content language switched off takes its Undo away, 
     fake.getMenuRead.mockImplementation(() => new Promise<MenuReadResult>(() => undefined));
 
     fake.state.languages = ["en"];
-    live.invalidate([{ type: "settings.venue" }]);
+    if (source === "subscription") live.invalidate([{ type: "settings.venue" }]);
+    else setContentLanguages({ defaultLanguage: "en", languages: fake.state.languages });
     await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).toBeNull());
 
     fake.state.languages = ["en", "es"];
-    live.invalidate([{ type: "settings.venue" }]);
+    if (source === "subscription") live.invalidate([{ type: "settings.venue" }]);
+    else setContentLanguages({ defaultLanguage: "en", languages: fake.state.languages });
     await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).not.toBeNull());
     await settle();
     expect(refusalIn(panel(), "mains-renamed")).toBeNull();

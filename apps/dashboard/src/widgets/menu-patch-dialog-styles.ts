@@ -115,9 +115,10 @@ export const menuPatchDialogStyles = [
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      column-gap: var(--wt-space-2);
+      column-gap: 0;
     }
     .variant-values {
+      padding-inline-start: var(--wt-space-2);
       color: var(--wt-color-text-muted);
     }
     .dot {
