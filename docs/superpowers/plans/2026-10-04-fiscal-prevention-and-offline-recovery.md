@@ -688,6 +688,9 @@ not `docs/operations/fiscal-recovery.md`. The missing-history half of the test b
 `apps/server/src/restore-missing-history.e2e.test.ts`; it stands in for the start's internet time
 check until [A1420 PR 3b1 and 3b2](2026-11-13-a1420-restore-series-check.md) land.
 
+**16 November 2026:** both have landed and the test no longer stands in for it; it confirms the
+time through the waiting app.
+
 **Create:** `apps/server/src/fiscal-offline-recovery.e2e.test.ts`;
 `docs/operations/fiscal-recovery.md`. **Modify:** compliance findings with dated receipts,
 adviser questions as actual answers arrive, and W41s in the backlog.

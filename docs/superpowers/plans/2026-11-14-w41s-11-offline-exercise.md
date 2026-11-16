@@ -252,3 +252,8 @@ unchanged, stamp the deployment, the fake AEAT's five fixes, the two new questio
   backup copy stops with `pointer_newer_term` (`packages/stream/src/supervisor.ts`). That stops the
   backup copy, not sales; before the restored box writes its pointer, what happens was not
   established.
+
+**16 November 2026:** since [A1420 PR 3b2](2026-11-13-a1420-restore-series-check.md) (#3524) a
+restore whose start cannot confirm its time waits for a person to confirm it, so the test no longer
+stands in for the internet time reading: its first attempt is refused, a person confirms the time
+through the waiting app, and the second attempt restores.
