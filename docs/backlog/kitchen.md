@@ -16,7 +16,6 @@ does not exist.
 
 Left open:
 
-- A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
 - A switched-off printer's printing problem keeps showing until the printer is switched on
   and a Reprint prints there; there is no way to dismiss one.
 - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of

@@ -1752,6 +1752,7 @@ async function readGroups(
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
     })
     .from(workingOrderLines)
@@ -1770,18 +1771,22 @@ async function readGroups(
   const kitchen = await tx
     .select({
       groupId: workingOrderLines.groupId,
-      remaining: sql<number>`count(*) filter (where ${remaining})`,
-      ready: sql<number>`count(*) filter (where ${remaining} and ${ready})`,
+      remaining: sql<number>`count(*) filter (where ${initiatedItem()} and ${remaining})`,
+      ready: sql<number>`count(*) filter (where ${initiatedItem()} and ${remaining} and ${ready})`,
+      notReady: sql<number>`count(*) filter (where ${remaining} and not ${ready})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(orderGroups.partyId, partyId), initiatedItem(), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
     kitchen
       .filter((row) => row.remaining > 0 && row.ready === row.remaining)
       .map((row) => row.groupId!),
+  );
+  const kitchenWaiting = new Set(
+    kitchen.filter((row) => row.notReady > 0).map((row) => row.groupId!),
   );
   const linesByGroup = new Map<string, typeof lines>();
   const cancellations = await readLineCancellations(
@@ -1795,12 +1800,18 @@ async function readGroups(
   }
   return groups.map((group) => {
     const own = linesByGroup.get(group.id) ?? [];
-    const active = own
-      .map((line) => ({
-        ...line,
-        quantity: serviceQuantities(line.quantity, 0, cancellations.get(line.id) ?? 0).active,
-      }))
-      .filter((line) => line.quantity > 0);
+    const quantities = own.map((line) => ({
+      line,
+      ...serviceQuantities(line.quantity, line.servedQuantity, cancellations.get(line.id) ?? 0),
+    }));
+    const active = quantities
+      .filter(({ active }) => active > 0)
+      .map(({ line, active }) => ({ ...line, quantity: active }));
+    const isReady =
+      readyGroups.has(group.id) ||
+      (group.state === "fired" &&
+        !kitchenWaiting.has(group.id) &&
+        quantities.some(({ remaining }) => remaining > 0));
     const counts = new Map<string, number>();
     for (const line of active) {
       const label = staffPresentationName(line);
@@ -1811,7 +1822,7 @@ async function readGroups(
       ...groupNumberIdentity(group),
       ...(numberLabels.has(group.id) ? { numberPartyLabel: numberLabels.get(group.id)! } : {}),
       state: group.state as "held" | "fired",
-      ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
+      ...(isReady ? { ready: true as const } : {}),
       lineIds: active.map((line) => line.id),
       courseIds: [
         ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),

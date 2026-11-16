@@ -904,7 +904,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a-kitchen-display-forgets-its-chosen-language-on-a-reload)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
-  - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - Each new group Ready command moves the party's revision, so a waiter's open table screen meets
     `party.out_of_date` after it and reads again.
 

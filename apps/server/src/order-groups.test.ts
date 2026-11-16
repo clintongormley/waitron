@@ -3890,6 +3890,87 @@ describe("A773 no dispatch state — group readiness", () => {
       expect(await snapshot(v, s.partyId)).toEqual(before);
     },
   );
+
+  it.each(["served", "cancelled"] as const)(
+    "does not report a fired group with nothing for the kitchen ready once its dishes are %s",
+    async (completion) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const group = (await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water")] }]))
+        .groups[0]!;
+      const [water] = await linesIn(s.partyId, group.id);
+      if (completion === "served") {
+        await db
+          .update(workingOrderLines)
+          .set({ servedQuantity: 1000, servedAt: null })
+          .where(eq(workingOrderLines.id, water!.id));
+      } else {
+        await db.insert(lineServiceCancellations).values({
+          lineId: water!.id,
+          quantity: 1000,
+          cancelledAt: "2026-10-20T12:02:00.000Z",
+          wasStarted: false,
+          actorId: ALEX,
+        });
+      }
+      const before = await snapshot(v, s.partyId);
+
+      const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+      expect(read.ready).toBeUndefined();
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+
+  it("does not report a held group with nothing for the kitchen ready", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const group = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "water")] }]))
+      .groups[0]!;
+    const before = await snapshot(v, s.partyId);
+
+    const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+    expect(read.state).toBe("held");
+    expect(read.ready).toBeUndefined();
+    expect(await snapshot(v, s.partyId)).toEqual(before);
+  });
+
+  it("does not report a fired group ready while its kitchen dish beside the water is not ready", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const group = (
+      await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water"), line(v, "steak")] }])
+    ).groups[0]!;
+    expect(await groupTickets(group.id)).toHaveLength(1);
+    const before = await snapshot(v, s.partyId);
+
+    const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+    expect(read.ready).toBeUndefined();
+    expect(await snapshot(v, s.partyId)).toEqual(before);
+  });
+
+  it("reads a fired group ready once its kitchen dish is served and its water still waits", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const group = (
+      await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water"), line(v, "steak")] }])
+    ).groups[0]!;
+    const steak = (await linesIn(s.partyId, group.id)).find(
+      (row) => row.productId === v.productId.steak,
+    )!;
+    await db
+      .update(workingOrderLines)
+      .set({ servedQuantity: 1000, servedAt: null })
+      .where(eq(workingOrderLines.id, steak.id));
+    const before = await snapshot(v, s.partyId);
+
+    const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+    expect(read.ready).toBe(true);
+    expect(await snapshot(v, s.partyId)).toEqual(before);
+  });
 });
 
 describe("the pass by group (D1)", () => {
@@ -3964,7 +4045,7 @@ describe("the pass by group (D1)", () => {
     expect(await snapshot(v, s.partyId)).toEqual(before);
   });
 
-  it("never reads ready a fired group with nothing for the kitchen, since nobody recorded it", async () => {
+  it("reads ready a fired group with nothing for the kitchen while its dishes wait", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const { groups } = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water")] }]);
@@ -3972,7 +4053,7 @@ describe("the pass by group (D1)", () => {
 
     await ready(s.partyId, groups[0]!.id);
 
-    expect((await groupsOf(s.partyId)).groups[0]!.ready).toBeUndefined();
+    expect((await groupsOf(s.partyId)).groups[0]!.ready).toBe(true);
   });
 });
 
