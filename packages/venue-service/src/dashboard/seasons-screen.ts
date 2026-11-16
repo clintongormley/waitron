@@ -1,14 +1,20 @@
 import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, pageTitleStyles, UrlStateController, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  leftToBrowser,
+  pageTitleStyles,
+  UrlStateController,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, SeasonDeleteImpact } from "./opening-hours-client.js";
 import { draftOf, runsUntil, seasonReceivers, type SeasonRow } from "./season-draft.js";
 import { format, formatMonthDay } from "./hours-view.js";
-import { nativeLinkClick, seasonsPath } from "./opening-hours-paths.js";
+import { seasonsPath } from "./opening-hours-paths.js";
 import { SEASON_TINT_TOKENS } from "./season-tint.js";
 import { listOf } from "./painter-labels.js";
 import { seasonRefusalText } from "./season-refusal.js";
@@ -322,7 +328,7 @@ export class SeasonsScreen extends LitElement {
                     class="parent"
                     href=${seasonsPath}
                     @click=${(event: MouseEvent) => {
-                      if (nativeLinkClick(event)) return;
+                      if (leftToBrowser(event)) return;
                       event.preventDefault();
                       void this.shadowRoot!.querySelector("seasons-window")!.requestClose();
                     }}

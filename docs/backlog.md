@@ -1823,9 +1823,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **A1398. Test-file inventory only on a same-count mismatch** (1 conditional entry). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
-- **Tests copy the dashboard shell's link handler instead of calling it.**
-  [Detail](backlog/ci.md#tests-copy-the-dashboard-shells-link-handler-instead-of-calling-it).
-
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 

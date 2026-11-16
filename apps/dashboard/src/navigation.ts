@@ -1,5 +1,7 @@
 import type { UrlPathConfig } from "@waitron/ui";
 
+export { leftToBrowser } from "@waitron/ui";
+
 export const dashboardPath: UrlPathConfig = {
   basePath: "/manage",
   primary: "dashboard",
@@ -39,9 +41,3 @@ export const dashboardPath: UrlPathConfig = {
   // A Calendar view a module adds names its own address words, which no list here can know.
   keepUnlisted: ["opening-hours"],
 };
-
-/** A held modifier key or another button keeps the browser's own handling of a link, such as
- * opening a new tab. */
-export function leftToBrowser(event: MouseEvent): boolean {
-  return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
-}

@@ -174,6 +174,7 @@ export {
   type UrlPathConfig,
 } from "./url-state.js";
 export { NavigationGuard, navigationGuardFor, type NavigationLeave } from "./navigation-guard.js";
+export { captureAppLinks, leftToBrowser } from "./app-links.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
 export { WtMenuRow } from "./components/wt-menu-row.js";

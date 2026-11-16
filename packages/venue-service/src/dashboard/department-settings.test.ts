@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { html } from "lit";
 import { page, userEvent } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, captureAppLinks } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type VenueServiceView, type DepartmentSettingsInput } from "./client.js";
@@ -1057,42 +1057,7 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   const shell: string[] = [];
   const zones: unknown[] = [];
   el.addEventListener("zone-change", (e) => zones.push((e as CustomEvent).detail));
-  const capture = (event: MouseEvent) => {
-    if (event.defaultPrevented) return;
-    const anchor = event
-      .composedPath()
-      .find(
-        (node): node is HTMLAnchorElement =>
-          node instanceof HTMLAnchorElement && node.hasAttribute("href"),
-      );
-    if (!anchor) return;
-    if (anchor.getAttribute("aria-disabled") === "true") {
-      event.preventDefault();
-      return;
-    }
-    if (
-      event.button !== 0 ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.shiftKey ||
-      event.altKey ||
-      anchor.hasAttribute("data-own-click") ||
-      anchor.hasAttribute("download") ||
-      anchor.getAttribute("href")?.startsWith("#") ||
-      (anchor.target !== "" && anchor.target !== "_self")
-    )
-      return;
-    const url = new URL(anchor.href);
-    if (
-      url.origin !== location.origin ||
-      (url.pathname !== "/manage" && !url.pathname.startsWith("/manage/"))
-    )
-      return;
-    event.preventDefault();
-    event.stopPropagation();
-    shell.push(url.pathname + url.search);
-  };
-  hosts[0]!.addEventListener("click", capture, { capture: true });
+  captureAppLinks(hosts[0]!, "/manage", (url) => shell.push(url.pathname + url.search));
   const zone = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-zone=z1]")!;
   zone.click();
   expect(zones).toEqual([{ zoneId: "z1" }]);

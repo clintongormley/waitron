@@ -13,6 +13,7 @@ import {
   pageTitleStyles,
   decodePathSegment,
   leaveCoordinatorFor,
+  leftToBrowser,
   UrlStateController,
   navigationGuardFor,
 } from "@waitron/ui";
@@ -1315,14 +1316,7 @@ export class OpeningHoursScreen extends LitElement {
               slot="season-action"
               href=${this.painterUrl({ seasonId: season.id, departmentId: department?.active ? department.id : "", zoneId: "" }).href}
               @click=${(event: MouseEvent) => {
-                if (
-                  event.button !== 0 ||
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey
-                )
-                  return;
+                if (leftToBrowser(event)) return;
                 event.preventDefault();
                 act(() => this.openPainter(season.id))();
               }}

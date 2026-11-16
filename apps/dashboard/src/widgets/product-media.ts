@@ -2,6 +2,7 @@ import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
 import { isStoredColor } from "@waitron/shared";
 import { fill } from "../i18n/t.js";
+import { leftToBrowser } from "../navigation.js";
 
 export const productMediaStyles = css`
   wt-data-table::part(product-media) {
@@ -88,8 +89,7 @@ export function productMedia(options: {
         event.preventDefault();
         return;
       }
-      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-        return;
+      if (leftToBrowser(event)) return;
       if (!open) return;
       event.preventDefault();
       open();

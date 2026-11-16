@@ -1019,15 +1019,6 @@ helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/pro
 Move the set-up ones over; leave any test that is about hashing. Left open by A801.
 
 
-## Tests copy the dashboard shell's link handler instead of calling it
-
-`#onAppLink`
-(`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
-`packages/venue-service/src/testing/shell-link-capture.ts` (A719); a change to the real handler
-is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
-use. Left open by A719 (#1838).
-
-
 ## A999 residual: retain the other allergy-move failure if it recurs
 
 The original loaded

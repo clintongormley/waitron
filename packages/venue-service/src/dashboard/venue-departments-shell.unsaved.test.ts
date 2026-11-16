@@ -1,7 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
-import { applyTokens, LeaveController, UrlStateController, navigationGuardFor } from "@waitron/ui";
+import {
+  applyTokens,
+  captureAppLinks,
+  LeaveController,
+  UrlStateController,
+  navigationGuardFor,
+} from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { departmentHoursModel } from "../testing/department-hours-fixture.js";
@@ -56,27 +62,20 @@ class App extends LitElement {
           : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
     ) as DashboardRequest,
   );
+  private releaseLinks?: () => void;
+  override connectedCallback() {
+    super.connectedCallback();
+    this.releaseLinks = captureAppLinks(this, "/manage");
+  }
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.releaseLinks?.();
+    this.releaseLinks = undefined;
+  }
   override render() {
     return html`<venue-departments-shell
         .model=${this.model}
         .api=${this.api}
-        @click=${(event: MouseEvent) => {
-          const anchor = event
-            .composedPath()
-            .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
-          if (
-            !anchor ||
-            event.defaultPrevented ||
-            event.button ||
-            event.ctrlKey ||
-            event.metaKey ||
-            event.shiftKey ||
-            event.altKey
-          )
-            return;
-          event.preventDefault();
-          void navigationGuardFor(window)!.write(anchor.getAttribute("href")!);
-        }}
       ></venue-departments-shell
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }

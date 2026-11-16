@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { commands, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
+import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
@@ -20,7 +20,6 @@ import {
   storedDay,
   summaryOf,
 } from "../testing/special-day-painter-fixture.js";
-import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -345,7 +344,7 @@ class GuardedApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureShellLinks(this);
+    this.releaseLinks = captureAppLinks(this, "/manage");
   }
   override disconnectedCallback() {
     super.disconnectedCallback();

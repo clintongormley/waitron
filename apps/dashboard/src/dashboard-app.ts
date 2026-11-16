@@ -1,7 +1,12 @@
 import "./widgets/fresh-sign-in-dialog.js";
 import "./widgets/about-dialog.js";
-import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
-import { dashboardPath, leftToBrowser } from "./navigation.js";
+import {
+  captureAppLinks,
+  LeaveController,
+  navigationGuardFor,
+  type LeaveReason,
+} from "@waitron/ui";
+import { dashboardPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
@@ -993,6 +998,7 @@ export class DashboardApp extends LitElement {
   }
 
   #breakpoint?: MediaQueryList;
+  #releaseAppLinks?: () => void;
 
   readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
     this.narrow = e.matches;
@@ -1215,7 +1221,7 @@ export class DashboardApp extends LitElement {
     this.narrow = this.#breakpoint.matches;
     this.sidebarFolded = readStoredFold() ?? window.matchMedia(FOLDED_BY_DEFAULT).matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
-    this.addEventListener("click", this.#onAppLink, true);
+    this.#releaseAppLinks = captureAppLinks(this, dashboardPath.basePath);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
@@ -1233,7 +1239,8 @@ export class DashboardApp extends LitElement {
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
-    this.removeEventListener("click", this.#onAppLink, true);
+    this.#releaseAppLinks?.();
+    this.#releaseAppLinks = undefined;
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.removeEventListener("waitron-session-active", this.#onSessionActive);
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
@@ -2359,41 +2366,6 @@ export class DashboardApp extends LitElement {
       </div>
     </header>`;
   }
-
-  /** Listening in the capture phase, this runs before an anchor's own click handler, so an anchor
-   * that handles a plain click itself says so with `data-own-click`. A disabled anchor's navigation
-   * is cancelled here; its own click handler still runs. */
-  readonly #onAppLink = (event: MouseEvent): void => {
-    if (event.defaultPrevented) return;
-    const anchor = event
-      .composedPath()
-      .find(
-        (node): node is HTMLAnchorElement =>
-          node instanceof HTMLAnchorElement && node.hasAttribute("href"),
-      );
-    if (!anchor) return;
-    if (anchor.getAttribute("aria-disabled") === "true") {
-      event.preventDefault();
-      return;
-    }
-    if (
-      leftToBrowser(event) ||
-      anchor.hasAttribute("data-own-click") ||
-      anchor.hasAttribute("download") ||
-      anchor.getAttribute("href")?.startsWith("#") ||
-      (anchor.target !== "" && anchor.target !== "_self")
-    )
-      return;
-    const url = new URL(anchor.href);
-    if (
-      url.origin !== location.origin ||
-      (url.pathname !== "/manage" && !url.pathname.startsWith("/manage/"))
-    )
-      return;
-    event.preventDefault();
-    event.stopPropagation();
-    void navigationGuardFor(window)?.write(url);
-  };
 
   #selectScreen(screen: ScreenId, proceeded?: () => void): void {
     const destination = this.#permittedScreen(screen);

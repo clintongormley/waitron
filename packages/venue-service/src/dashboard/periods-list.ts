@@ -2,7 +2,13 @@ import type { CalendarColour } from "@waitron/shared";
 import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, pageTitleStyles, UrlStateController, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  leftToBrowser,
+  pageTitleStyles,
+  UrlStateController,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -11,12 +17,7 @@ import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
-import {
-  nativeLinkClick,
-  periodsPath,
-  seasonPainterPath,
-  specialDayPainterPath,
-} from "./opening-hours-paths.js";
+import { periodsPath, seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import type { OpeningHoursApi, PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
@@ -414,7 +415,7 @@ export class PeriodsList extends LitElement {
                     class="parent"
                     href=${periodsPath}
                     @click=${(event: MouseEvent) => {
-                      if (nativeLinkClick(event)) return;
+                      if (leftToBrowser(event)) return;
                       event.preventDefault();
                       void this.shadowRoot!.querySelector("period-dialog")!.requestClose();
                     }}
