@@ -32,6 +32,8 @@ export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
   deps.app.post("/api/sales", steppingDownResponse);
   deps.app.post("/api/pay", steppingDownResponse);
+  deps.app.post("/api/working-orders/:id/payments", steppingDownResponse);
+  deps.app.post("/api/working-orders/:id/payments/:paymentId/refunds", steppingDownResponse);
   mountNodeApi(
     deps.app,
     {

@@ -241,6 +241,21 @@ describe("the submission id of a confirmation", () => {
     expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
   });
 
+  it("is not held as unconfirmed after a handover refusal, which the box answers before any route runs", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+
+    expect(unansweredAfter(first, { code: "handover.stepping_down", status: 503 })).toEqual(first);
+  });
+
+  it("stays unconfirmed after a handover refusal when an earlier send got no answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, noAnswer)!;
+
+    expect(
+      unansweredAfter(unanswered, { code: "handover.stepping_down", status: 503 })?.unconfirmed,
+    ).toBe(true);
+  });
+
   it("is fresh after the device changed profile, whose refusal fails the payment recorded under the id", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, { code: "device.profile_changed", status: 409 });

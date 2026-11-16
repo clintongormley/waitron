@@ -1592,10 +1592,6 @@ Not in any track until the standalone primary is done.
   and the role, then killed, stays a mirror holding an activation row and its own SIF. Neither sold
   or filed in the runs, and no route clears them. Left open by A1018 Slice 5.
 
-- **Bill payments sent to an old box during or after its handover still have an unknown outcome.**
-  The till treats the stepping-down gate’s 503 and the restarted box’s non-JSON 404 as uncertain
-  outcomes, instead of the definite handover refusal used by sales and reader sales.
-
 - **The spare's wait loop: back-off, reasons, stop signals** (4 remaining entries, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.

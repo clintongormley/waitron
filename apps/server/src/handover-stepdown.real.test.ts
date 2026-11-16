@@ -19,11 +19,12 @@ import { scheduledRuns } from "@waitron/payments";
 import { readHandoverRestriction } from "@waitron/node-db";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { readBillEditState } from "./bill-editing.js";
 import type { StartedServer } from "./boot.js";
 import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
+import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -181,6 +182,7 @@ function hold() {
 interface Observed {
   stepdown: { status: number; body: unknown };
   refused: { status: number; body: unknown };
+  billPayment: { status: number; body: unknown; collectCalls: number };
   sale: { status: number; body: Record<string, unknown> };
   salesForOrder: number;
   restarts: number;
@@ -265,6 +267,8 @@ describe("a card sale in flight when the box steps down", () => {
       state: "succeeded",
       attempts: 1,
     });
+    const billId = await tabWith(venue, "Caña");
+    const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, billId));
     let restarts = 0;
     const restarted = hold();
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
@@ -387,6 +391,25 @@ describe("a card sale in flight when the box steps down", () => {
       }),
     });
     const refused = { status: afterBegan.status, body: await afterBegan.json() };
+    const billPaid = await fetch(`${base}/api/working-orders/${billId}/payments`, {
+      method: "POST",
+      headers: { cookie: venue.cookie2, "content-type": "application/json" },
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "3.00",
+        method: "card",
+        entry: "reader",
+        applied: "3.00",
+        tip: "0.00",
+        expectedEdit,
+      }),
+    });
+    const billPayment = {
+      status: billPaid.status,
+      body: await billPaid.json(),
+      collectCalls: card!.collectCalls.length,
+    };
 
     aeat.release();
     sweep.release();
@@ -405,6 +428,7 @@ describe("a card sale in flight when the box steps down", () => {
     observed = {
       stepdown,
       refused,
+      billPayment,
       sale,
       salesForOrder: n,
       restarts,
@@ -443,6 +467,16 @@ describe("a card sale in flight when the box steps down", () => {
     expect(seen().refused).toEqual({
       status: 503,
       body: { error: { code: "handover.stepping_down", params: {} } },
+    });
+  });
+
+  // Control, run locally and not committed: with this payment sent before the stepdown instead,
+  // this case fails receiving status 200, outcome "received" and collectCalls 2.
+  it("a reader bill payment made after the stepdown began is refused handover.stepping_down and asks no reader", () => {
+    expect(seen().billPayment).toEqual({
+      status: 503,
+      body: { error: { code: "handover.stepping_down", params: {} } },
+      collectCalls: 1,
     });
   });
 

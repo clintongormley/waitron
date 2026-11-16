@@ -19,3 +19,5 @@ Paths `src/` below are under apps/server unless another app is named.
 **Bounds:** no third-box escape, permissions, protocol, status record/framework, fiscal identity/hash/series/allocation/alta/registerSif/restoreFiscal changes. Forecast production +115/−100, tests +210/−25, support0, docs +90/−45 =585lines (about590); watcher before material departure or1.5×growth. Three active hours through PR, recorded outside waits excluded.
 
 **Review correction, 2026-11-16:** step 3’s shared opening is superseded by “This server is handing over or has handed over the venue, so it refused this action.” / “Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción.” Keep the separate till-following and dashboard-address instructions. The gate refuses more than sales but still allows health and handover requests; the message describes this refused action without claiming every request is blocked.
+
+**2026-11-16:** the bill-payment gap kept in steps 5 and 6 is closed by branch fix/bill-pay-handover-refusal: the restarted box answers bill payments and refunds with `handover.stepping_down`, and the till treats it as a definite refusal.

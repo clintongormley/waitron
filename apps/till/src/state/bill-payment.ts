@@ -220,6 +220,8 @@ function billPaymentUnconfirmed(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   if ((typeof code === "string" && FRESH_ID_AFTER.has(code)) || paymentNotRecorded(error))
     return false;
+  // The gate and the restarted box both answer this before any payment route runs.
+  if (code === "handover.stepping_down") return false;
   const status = (error as { status?: unknown } | null)?.status;
   return (
     isNetworkFailure(error) ||

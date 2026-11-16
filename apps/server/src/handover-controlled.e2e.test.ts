@@ -767,6 +767,7 @@ interface StepdownSeen {
   m1SweepsAtRestart: number;
   m1Restricted: { nodeId: string; acceptingSales: boolean };
   m1RefusedSale: { status: number; text: string };
+  m1RefusedBillPayment: { status: number; text: string };
   inFlightAfterStepdown: string | undefined;
   m1Certificate: CertificateCard;
 }
@@ -985,6 +986,19 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     body: saleBody(boxes),
   });
   const m1RefusedSale = { status: refused.status, text: await refused.text() };
+  const refusedBill = await ask(m1, `/api/working-orders/${randomUUID()}/payments`, {
+    cookie: boxes.venue.cookie,
+    body: {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      method: "card",
+      entry: "reader",
+      applied: "3.00",
+      tip: "0.00",
+    },
+  });
+  const m1RefusedBillPayment = { status: refusedBill.status, text: await refusedBill.text() };
 
   return {
     records: { filed, inFlight, waiting },
@@ -999,6 +1013,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     m1SweepsAtRestart,
     m1Restricted,
     m1RefusedSale,
+    m1RefusedBillPayment,
     inFlightAfterStepdown,
     m1Certificate,
   };
@@ -2045,11 +2060,15 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(run.inFlightAfterStepdown).toBe("aceptado");
   });
 
-  it("after its restart M1 answers acceptingSales false and serves no sale", () => {
+  it("after its restart M1 answers acceptingSales false and serves no sale or bill payment", () => {
     const { b, run } = seen();
     expect(run.m1Restricted).toMatchObject({ nodeId: b.m1.nodeId, acceptingSales: false });
     expect(run.m1RefusedSale.status, run.m1RefusedSale.text).toBe(503);
     expect(JSON.parse(run.m1RefusedSale.text)).toEqual({
+      error: { code: "handover.stepping_down", params: {} },
+    });
+    expect(run.m1RefusedBillPayment.status, run.m1RefusedBillPayment.text).toBe(503);
+    expect(JSON.parse(run.m1RefusedBillPayment.text)).toEqual({
       error: { code: "handover.stepping_down", params: {} },
     });
   });
