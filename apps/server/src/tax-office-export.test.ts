@@ -36,6 +36,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { mountTaxOfficeApi, type TaxOfficeApiDeps } from "./tax-office-api.js";
+import { ZIP_LIMITS, zipStream } from "./download-archive.js";
 import { confineTo, sessionHolding } from "./testing/session-holding.js";
 import { invoicePdfFileName, type SaleCopy } from "./orders-invoice-pdf.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
@@ -45,6 +46,11 @@ import type { TaxOfficeInvoice } from "./tax-office-list.js";
 vi.mock("./receipt-print.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./receipt-print.js")>();
   return { ...actual, resolveReceiptPrinter: vi.fn(actual.resolveReceiptPrinter) };
+});
+// The real entry limit would need a month of over 65,000 invoices.
+vi.mock("./download-archive.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./download-archive.js")>();
+  return { ...actual, zipStream: vi.fn(actual.zipStream) };
 });
 
 const TICKET_58MM = 164.41;
@@ -469,6 +475,30 @@ describe("the month's export", () => {
     const finished = await exportMonth(app, "2025-06");
     expect(Object.keys(await unzipped(finished))).toHaveLength(2);
     expect((await exportMonth(app, "2025-06")).status).toBe(200);
+  });
+
+  it("logs once and frees the export for the next when the ZIP refuses another entry", async () => {
+    const { zipStream: realZipStream } =
+      await vi.importActual<typeof import("./download-archive.js")>("./download-archive.js");
+    vi.mocked(zipStream).mockImplementationOnce((entries, at) =>
+      realZipStream(entries, at, { ...ZIP_LIMITS, entries: 3 }),
+    );
+    const logged: { event: string; fields?: Record<string, unknown> }[] = [];
+    const counter = countingRender();
+    const app = mount({ render: counter.render }, (_level, event, fields) =>
+      logged.push({ event, ...(fields ? { fields } : {}) }),
+    );
+    const response = await exportMonth(app, "2026-01");
+    expect(await drain(response.body!.getReader())).toMatchObject({
+      message: "a ZIP without ZIP64 holds at most 3 entries",
+    });
+    expect(logged).toEqual([
+      {
+        event: "tax_office.export_stopped",
+        fields: { month: "2026-01", errorCode: "unknown", errorClass: "Error" },
+      },
+    ]);
+    expect(Object.keys(await unzipped(await exportMonth(app, "2026-01")))).toHaveLength(8);
   });
 
   it("leaves out a copy that cannot be drawn, names it in failed.txt and logs it", async () => {

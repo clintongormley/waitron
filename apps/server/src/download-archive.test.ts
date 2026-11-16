@@ -385,16 +385,17 @@ describe("zipStream", () => {
     for (let index = 0; index < count; index++) yield { name: `${index}.pdf`, content: byte };
   }
 
-  it("writes 65,535 entries, the most a ZIP without ZIP64 can count", async () => {
-    const zip = await readAll(zipStream(tiny(65_535), AT));
-    expect(Object.keys(unzipSync(zip))).toHaveLength(65_535);
+  // 65,535 in the end record's count means "read the ZIP64 record", which fflate never writes.
+  it("writes 65,534 entries, the most a ZIP without ZIP64 can count", async () => {
+    const zip = await readAll(zipStream(tiny(65_534), AT));
+    expect(Object.keys(unzipSync(zip))).toHaveLength(65_534);
   });
 
-  it("errors the stream when the source offers a 65,536th entry, and stops the source", async () => {
+  it("errors the stream when the source offers a 65,535th entry, and stops the source", async () => {
     const state = { pulled: 0, finished: false };
     async function* source(): AsyncGenerator<Entry> {
       try {
-        for await (const entry of tiny(65_537)) {
+        for await (const entry of tiny(65_536)) {
           state.pulled++;
           yield entry;
         }
@@ -403,10 +404,101 @@ describe("zipStream", () => {
       }
     }
     await expect(readAll(zipStream(source(), AT))).rejects.toThrow(
-      "a ZIP without ZIP64 holds at most 65,535 entries",
+      "a ZIP without ZIP64 holds at most 65,534 entries",
     );
-    expect(state.pulled).toBe(65_536);
+    expect(state.pulled).toBe(65_535);
     expect(state.finished).toBe(true);
+  });
+
+  /** A generator over `count` one-byte entries that records each error its own `catch` sees,
+   * as the tax-office route's source logs them, and whether its `finally` ran. `fail` makes its
+   * own body throw before the entry at that index. */
+  function catching(count: number, fail?: number) {
+    const state = { caught: [] as unknown[], finished: false };
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        for (let index = 0; index < count; index++) {
+          if (index === fail) throw new Error("the month's sales could not be read");
+          yield { name: `${index}.pdf`, content: new Uint8Array([1]) };
+        }
+      } catch (error) {
+        state.caught.push(error);
+        throw error;
+      } finally {
+        state.finished = true;
+      }
+    }
+    return { state, iterable: source() };
+  }
+
+  it("hands its own refusal to the source's catch once, and errors the stream with it", async () => {
+    const two = { ...ZIP_LIMITS, entries: 2 };
+    const { state, iterable } = catching(3);
+    const failure = await readAll(zipStream(iterable, AT, two)).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ message: "a ZIP without ZIP64 holds at most 2 entries" });
+    expect(state.caught).toEqual([failure]);
+    expect(state.finished).toBe(true);
+  });
+
+  it("hands fflate's refusal of an entry to the source's catch", async () => {
+    const caught: unknown[] = [];
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        yield { name: `${"a".repeat(70_000)}.json`, content: "{}" };
+      } catch (error) {
+        caught.push(error);
+        throw error;
+      }
+    }
+    await expect(readAll(zipStream(source(), AT))).rejects.toThrow("filename too long");
+    expect(caught).toEqual([expect.objectContaining({ message: "filename too long" })]);
+  });
+
+  it("does not hand the source's own failure back to its catch", async () => {
+    const { state, iterable } = catching(3, 1);
+    await expect(readAll(zipStream(iterable, AT))).rejects.toThrow(
+      "the month's sales could not be read",
+    );
+    expect(state.caught).toHaveLength(1);
+    expect(state.finished).toBe(true);
+  });
+
+  it("still errors with its own refusal when the source's catch throws something else", async () => {
+    let finished = false;
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        yield* tiny(3);
+      } catch {
+        throw new Error("the source failed while stopping");
+      } finally {
+        finished = true;
+      }
+    }
+    await expect(readAll(zipStream(source(), AT, { ...ZIP_LIMITS, entries: 2 }))).rejects.toThrow(
+      "a ZIP without ZIP64 holds at most 2 entries",
+    );
+    expect(finished).toBe(true);
+  });
+
+  it("stops a source that carries on after its catch", async () => {
+    let finished = false;
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        for (let index = 0; ; index++) {
+          try {
+            yield { name: `${index}.pdf`, content: new Uint8Array([1]) };
+          } catch {
+            // Carries on to the next entry.
+          }
+        }
+      } finally {
+        finished = true;
+      }
+    }
+    await expect(readAll(zipStream(source(), AT, { ...ZIP_LIMITS, entries: 2 }))).rejects.toThrow(
+      "a ZIP without ZIP64 holds at most 2 entries",
+    );
+    expect(finished).toBe(true);
   });
 
   it("errors the stream on an entry that takes the archive past its byte limit, and stops the source", async () => {

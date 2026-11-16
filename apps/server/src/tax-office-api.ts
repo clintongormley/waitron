@@ -83,10 +83,13 @@ function requireMonth(raw: string): { from: string; to: string } {
   return { from: `${raw}-01`, to: `${raw}-${String(last).padStart(2, "0")}` };
 }
 
-/** Releases on the generator's end, or on a `return()` that arrives before the first `next()`,
- * which an async generator answers without running its `finally`. */
+/** Releases on the generator's end, or on a `return()` or `throw()` that arrives before the first
+ * `next()`, which an async generator answers without running its `finally`. */
 function releasing<T>(entries: AsyncGenerator<T>, release: () => void): AsyncIterable<T> {
   let started = false;
+  const releaseIfUnstarted = () => {
+    if (!started) release();
+  };
   return {
     [Symbol.asyncIterator]: () => ({
       next: () => {
@@ -94,8 +97,12 @@ function releasing<T>(entries: AsyncGenerator<T>, release: () => void): AsyncIte
         return entries.next();
       },
       return: (value?: unknown) => {
-        if (!started) release();
+        releaseIfUnstarted();
         return entries.return(value);
+      },
+      throw: (error?: unknown) => {
+        releaseIfUnstarted();
+        return entries.throw(error);
       },
     }),
   };

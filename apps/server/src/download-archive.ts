@@ -91,14 +91,15 @@ export async function zipArchiveInTurns(
 }
 
 /** fflate writes no ZIP64: its end record's entry count is two bytes and every offset and size
- * four, each written without a check, so a larger value wraps and the archive reads back wrong. An
- * offset of 0xFFFFFFFF itself tells a reader to look for ZIP64. */
-export const ZIP_LIMITS = { entries: 0xffff, bytesBeforeDirectory: 0xfffffffe };
+ * four, each written without a check, so a larger value wraps and the archive reads back wrong. A
+ * count of 0xFFFF or an offset of 0xFFFFFFFF itself tells a reader to look for ZIP64. */
+export const ZIP_LIMITS = { entries: 0xfffe, bytesBeforeDirectory: 0xfffffffe };
 
 /** `zipArchiveInTurns`' ZIP as a stream that takes the next entry only when the reader asks for
  * more, so no more than one entry's bytes wait in memory. It gives the event loop no turn of its
  * own between entries: a source whose entries are slow to make must give those turns itself. An
- * entry past `limits` errors the stream instead of being written. */
+ * entry past `limits` errors the stream instead of being written. A refusal of the stream's own
+ * is thrown into the source, so its `catch` sees it as it sees a failure of its own. */
 export function zipStream(
   entries: AsyncIterable<{ name: string; content: string | Uint8Array }>,
   at: Date,
@@ -138,12 +139,19 @@ export function zipStream(
           chunks = [];
           if (next.done) controller.close();
         } catch (error) {
-          // An erroring stream does not call `cancel`, and the source's `finally` may release
-          // something only it holds.
+          // An erroring stream does not call `cancel`. A generator that failed by itself has
+          // finished, so `throw` reaches no `catch` of its own a second time.
+          try {
+            await iterator.throw?.(error);
+          } catch {
+            // The reader needs the first failure, not this one.
+          }
+          // A source whose `catch` carried on, or that has no `throw`, still holds what its
+          // `finally` releases.
           try {
             await iterator.return?.();
           } catch {
-            // The reader needs the first failure, not this one.
+            // As above.
           }
           throw error;
         }
