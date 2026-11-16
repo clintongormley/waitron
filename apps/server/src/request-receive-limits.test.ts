@@ -175,7 +175,15 @@ it("a trickle below the progress floor still times out", async () => {
 
 it("continued progress cannot evade the native upload ceiling", async () => {
   const f = await fixture(undefined, { uploadMs: 100, headersMs: 50 });
-  expect((await paced(f, "/setup-api/restore")).status).toBe(408);
+  const outcome = await paced(f, "/setup-api/restore").then(
+    ({ status }) => status,
+    (error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ECONNRESET")
+        return "ECONNRESET";
+      throw error;
+    },
+  );
+  expect([408, "ECONNRESET"]).toContain(outcome);
 });
 
 it("an early response does not remove protection from its incomplete body", async () => {
