@@ -4,16 +4,19 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
+  kitchenPrintJobs,
+  kitchenPrintJobLines,
   printJobs,
   printers,
   stationPrinterPairs,
   ticketItems,
+  ticketItemMoves,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
-import { printJobInTrouble, UNPRINTED_STATUSES } from "./print-job-trouble.js";
+import { printJobInTrouble, printedOrResent, UNPRINTED_STATUSES } from "./print-job-trouble.js";
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
@@ -106,7 +109,12 @@ export async function stationPrintersDown(
     .map((r) => ({ ...r, since: r.since! }));
 }
 
-export function waitingDishesQuery(tx: Transaction, now: Date, stationIds?: readonly string[]) {
+export function waitingDishesQuery(
+  tx: Transaction,
+  now: Date,
+  stationIds?: readonly string[],
+  options: { withoutPrintedPaper?: boolean } = {},
+) {
   const since = new Date(now.getTime() - WAITING_WINDOW_MS).toISOString();
   return tx
     .selectDistinct({ stationId: kitchenStations.id })
@@ -120,6 +128,19 @@ export function waitingDishesQuery(tx: Transaction, now: Date, stationIds?: read
         inArray(ticketItems.state, ["queued", "preparing"]),
         gte(ticketItems.firedAt, since),
         kitchenWork(),
+        options.withoutPrintedPaper
+          ? sql`not exists (select 1 from ${kitchenPrintJobLines}
+              join ${kitchenPrintJobs} on ${kitchenPrintJobs.printJobId} = ${kitchenPrintJobLines.printJobId}
+              join ${printJobs} on ${printJobs.id} = ${kitchenPrintJobLines.printJobId}
+              where ${kitchenPrintJobLines.workingOrderLineId} = ${ticketItems.workingOrderLineId}
+              and ${kitchenPrintJobs.stationId} = ${ticketItems.stationId}
+              and ${printJobs.createdAt} >= max(${ticketItems.firedAt}, coalesce(
+                (select max(${ticketItemMoves.movedAt}) from ${ticketItemMoves}
+                  where ${ticketItemMoves.workingOrderLineId} = ${ticketItems.workingOrderLineId}
+                  and ${ticketItemMoves.toStationId} = ${ticketItems.stationId}),
+                ${ticketItems.firedAt}))
+              and ${printedOrResent(printJobs)})`
+          : undefined,
       ),
     );
 }
@@ -165,10 +186,17 @@ export async function stationScreensDark(tx: Transaction, now: Date): Promise<Da
   }
   const dark = [...lastSeen].filter(([, at]) => at === null || at < darkBefore);
   if (dark.length === 0) return [];
-  const waiting = await stationsWithWaitingDishes(
-    tx,
-    now,
-    dark.map(([stationId]) => stationId),
+  const waiting = new Set(
+    (
+      await waitingDishesQuery(
+        tx,
+        now,
+        dark.map(([stationId]) => stationId),
+        {
+          withoutPrintedPaper: true,
+        },
+      )
+    ).map((row) => row.stationId),
   );
   if (waiting.size === 0) return [];
   const darkSince = new Map(dark);

@@ -1,6 +1,10 @@
-import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  seedActivityActor,
+  seedDeviceProfiles,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
@@ -9,6 +13,8 @@ import { requireDevice, requireDeviceProof } from "./device-session.js";
 import {
   devices,
   kitchenStations,
+  kitchenPrintJobs,
+  kitchenPrintJobLines,
   printJobs,
   printers,
   ticketItems,
@@ -19,6 +25,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
+import { closeStationForToday } from "@waitron/venue-service";
+import { withStationDishes } from "./station-closing.js";
 import {
   stationPrintersDown,
   passScreensDark,
@@ -30,6 +38,7 @@ import {
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { kitchenScreenDevice, profile } from "./testing/kitchen-screen-device.js";
 import { waitingDish } from "./testing/waiting-dish.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -86,14 +95,18 @@ async function darkScreenAlertKeys(f: Awaited<ReturnType<typeof setup>>): Promis
 }
 
 async function job(printerId: string, values: Partial<typeof printJobs.$inferInsert> = {}) {
-  await suite.db.insert(printJobs).values({
-    printerId,
-    payload: Uint8Array.of(1),
-    createdAt: "2026-10-02T18:00:00.000Z",
-    status: "failed",
-    attempts: 5,
-    ...values,
-  });
+  const [row] = await suite.db
+    .insert(printJobs)
+    .values({
+      printerId,
+      payload: Uint8Array.of(1),
+      createdAt: "2026-10-02T18:00:00.000Z",
+      status: "failed",
+      attempts: 5,
+      ...values,
+    })
+    .returning({ id: printJobs.id });
+  return row!.id;
 }
 
 function waitingItem(
@@ -237,6 +250,153 @@ describe("station output status", () => {
         ),
       );
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
+  });
+
+  describe("paper delivery", () => {
+    async function paperFixture(useBar = false) {
+      const f = await setup();
+      const station = useBar ? f.bar : f.grill;
+      const printerId = await f.printer(station, "Kitchen printer");
+      const firedAt = "2026-10-02T17:50:00.000Z";
+      const orderId = await waitingItem(f.venue, station, firedAt);
+      const [line] = await suite.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      const screenId = await stationScreenDevice({
+        stationId: station,
+        deviceProfileId: await profile(suite.db, "kds"),
+        label: "Dark kitchen",
+        tokenHash: "hash",
+        lastSeenAt: "2026-10-02T18:00:00.000Z",
+      });
+      const paper = async (
+        values: Partial<typeof printJobs.$inferInsert> = {},
+        stationId = station,
+      ) => {
+        const id = await job(printerId, { status: "done", createdAt: firedAt, ...values });
+        await suite.db.insert(kitchenPrintJobs).values({
+          printJobId: id,
+          workingOrderId: orderId,
+          stationId,
+          reprint: false,
+        });
+        await suite.db.insert(kitchenPrintJobLines).values({
+          printJobId: id,
+          workingOrderLineId: line!.id,
+        });
+        return id;
+      };
+      return { ...f, printerId, firedAt, orderId, lineId: line!.id, screenId, paper };
+    }
+
+    it("clears a dark-screen alert after same-millisecond linked paper prints, keeping waiting work", async () => {
+      const f = await paperFixture();
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+      await f.paper();
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+      expect(
+        await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at, [f.grill])),
+      ).toEqual(new Set([f.grill]));
+    });
+
+    it("keeps unprinted linked jobs dark until a staff resend completes on another printer", async () => {
+      const f = await paperFixture();
+      const id = await f.paper({ status: "queued" });
+      for (const status of ["queued", "printing", "failed"] as const) {
+        await suite.db.update(printJobs).set({ status }).where(eq(printJobs.id, id));
+        expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+      }
+      const alternate = await f.printer(f.bar, "Alternate printer");
+      await job(alternate, { status: "done", resendOf: id });
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("keeps warning for an unprinted neighbour beside a printed dish", async () => {
+      const f = await paperFixture();
+      await f.paper();
+      await waitingItem(f.venue, f.grill, f.firedAt);
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+    });
+
+    it("warns after a dish returns to its station when only its old ticket printed", async () => {
+      const f = await paperFixture();
+      await f.paper();
+      for (const [stationId, time] of [
+        [f.bar, "17:51"],
+        [f.grill, "17:52"],
+      ] as const) {
+        vi.useFakeTimers({ toFake: ["Date"], now: new Date(`2026-10-02T${time}:00.000Z`) });
+        try {
+          await withTransaction(suite.db, (tx) =>
+            moveDishesToStation(
+              tx,
+              f.venue.cfg,
+              f.orderId,
+              { submissionId: randomUUID(), lineIds: [f.lineId], stationId },
+              { deviceId: f.screenId, personId: null },
+            ),
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+      const failed = await suite.db
+        .update(printJobs)
+        .set({ status: "failed" })
+        .where(
+          and(
+            eq(printJobs.printerId, f.printerId),
+            eq(printJobs.createdAt, "2026-10-02T17:52:00.000Z"),
+          ),
+        )
+        .returning({ id: printJobs.id });
+      expect(failed).toHaveLength(1);
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+      await suite.db
+        .update(printJobs)
+        .set({ status: "done" })
+        .where(eq(printJobs.id, failed[0]!.id));
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("keeps completed paper valid when a station closes with its dishes left in place", async () => {
+      const f = await paperFixture(true);
+      await f.paper();
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-02T17:55:00.000Z") });
+      try {
+        await withTransaction(suite.db, (tx) =>
+          withStationDishes(
+            tx,
+            f.venue.cfg,
+            f.bar,
+            undefined,
+            "leave",
+            async (time) => {
+              await closeStationForToday(tx, f.bar, f.grill, time, await seedActivityActor(tx));
+            },
+            { deviceId: f.screenId, personId: null },
+          ),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("does not count a completed line link for another station", async () => {
+      const f = await paperFixture();
+      await f.paper({}, f.bar);
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+    });
+
+    it("does not count older linked paper but clears after a new linked document completes", async () => {
+      const f = await paperFixture();
+      await f.paper({ createdAt: "2026-10-02T17:49:59.999Z" });
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+      await f.paper({ createdAt: "2026-10-02T17:51:00.000Z" });
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
   });
 
   it("does not call a station with no screen dark, and a second live screen clears a dark one", async () => {

@@ -77,13 +77,6 @@ Left open:
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. A773 assigns requests to cook held work to the waiter.
 
-## The dark-screen alert can be wrong
-
-- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
-  may never mark dishes ready on its screen. With that screen switched off, each send can raise
-  the dark-screen alert for up to an hour while those dishes remain waiting. Improve how the alert
-  distinguishes a kitchen using paper.
-
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
 
 The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
