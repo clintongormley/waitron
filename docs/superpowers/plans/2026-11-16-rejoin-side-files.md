@@ -1,6 +1,6 @@
 # Rejoin side files implementation plan
 
-**Status:** Plan only; watcher clearance pending. No owner design approval is claimed.
+**Status:** Implemented and cleared by the watcher on 2026-11-16 in this PR. No owner design approval is claimed.
 **Source:** `/Users/clintongormley/waitron-campaign-f/queue.md`, REJOIN-SIDE-FILES, watcher 2026-11-16 01:35.
 **Verbatim ask:** “`docs/backlog.md:1881` (detail `docs/backlog/ci.md:6`): `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe; add the rejoin-level case with the database's side files present on disk (the wipe itself is pinned by `db-wipe.test.ts`). Test only; small; one PR; delete the entry.”
 
@@ -12,18 +12,18 @@
 
 ## One task: strengthen the existing real-wipe case
 
-- [ ] Strengthen the case near line 154: “drives the real wipe closure: both database files go, then the directory is re-migrated and trading.env cleared”.
-- [ ] Keep `openVenueDatabase(venueDir)` open until cleanup. Retain marker-table creation; insert one row per database through `live.venue.run` and `live.node.run`.
-- [ ] Before `run`, assert these exist: `venue.db`, `venue.db-wal`, `venue.db-shm`, `node.db`, `node.db-wal`, `node.db-shm`. Both WALs (write-ahead logs) must have `stat(...).size > 0`. Reuse one local filename list before/after.
-- [ ] Retain injected `openDb`, `rejoin`, `closePreWipe` and `migrate`. Keep the separate real handle open through the wipe and assertions, preventing close from removing side files first.
-- [ ] Preserve `code === 0`, all six post-wipe `stat` rejections with `code: "ENOENT"`, `migrated === [venueDir]`, and the `trading.env` absence assertion.
-- [ ] Use `let live: VenueDatabase | undefined`; in `finally`, use `await live?.close().catch(() => {})`, then remove `stateDir`, matching `db-wipe.test.ts` and preserving assertion failures. The case owns the wipeable resource so it can assert removal before closing it.
-- [ ] Leave `migrate` unchanged; it records the directory without recreating files. Preserve its target assertion.
-- [ ] Reuse the driver’s already-created detached shared clone, which already has its own `pnpm install --frozen-lockfile` install.
-- [ ] There only, change `apps/server/src/db-wipe.ts`'s suffix loop to `[""]`, omitting side-file removal. Run the original case: expect PASS without side files at wipe time.
-- [ ] Apply the strengthened test there: expect FAIL on the remaining `venue.db-wal` absence assertion, not setup/cleanup. Record output.
-- [ ] Restore `db-wipe.ts`; rerun for PASS. Remove only that disposable clone and its temporary parent after collecting receipts. Feature-branch production stays untouched.
-- [ ] Delete the backlog entry by its exact heading, “`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe”, in `docs/backlog.md` and `docs/backlog/ci.md`; the quoted ask’s line number has drifted. Preserve adjacent entries.
+- [x] Strengthen the case near line 154: “drives the real wipe closure: both database files go, then the directory is re-migrated and trading.env cleared”.
+- [x] Keep `openVenueDatabase(venueDir)` open until cleanup. Retain marker-table creation; insert one row per database through `live.venue.run` and `live.node.run`.
+- [x] Before `run`, assert these exist: `venue.db`, `venue.db-wal`, `venue.db-shm`, `node.db`, `node.db-wal`, `node.db-shm`. Both WALs (write-ahead logs) must have `stat(...).size > 0`. Reuse one local filename list before/after.
+- [x] Retain injected `openDb`, `rejoin`, `closePreWipe` and `migrate`. Keep the separate real handle open through the wipe and assertions, preventing close from removing side files first.
+- [x] Preserve `code === 0`, all six post-wipe `stat` rejections with `code: "ENOENT"`, `migrated === [venueDir]`, and the `trading.env` absence assertion.
+- [x] Use `let live: VenueDatabase | undefined`; in `finally`, use `await live?.close().catch(() => {})`, then remove `stateDir`, matching `db-wipe.test.ts` and preserving assertion failures. The case owns the wipeable resource so it can assert removal before closing it.
+- [x] Leave `migrate` unchanged; it records the directory without recreating files. Preserve its target assertion.
+- [x] Reuse the driver’s already-created detached shared clone, which already has its own `pnpm install --frozen-lockfile` install.
+- [x] There only, change `apps/server/src/db-wipe.ts`'s suffix loop to `[""]`, omitting side-file removal. Run the original case: expect PASS without side files at wipe time.
+- [x] Apply the strengthened test there: expect FAIL on the remaining `venue.db-wal` absence assertion, not setup/cleanup. Record output.
+- [x] Restore `db-wipe.ts`; rerun for PASS. Remove only that disposable clone and its temporary parent after collecting receipts. Feature-branch production stays untouched.
+- [x] Delete the backlog entry by its exact heading, “`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe”, in `docs/backlog.md` and `docs/backlog/ci.md`; the quoted ask’s line number has drifted. Preserve adjacent entries.
 
 **Named verification commands (from the checkout root):**
 

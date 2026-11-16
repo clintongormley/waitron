@@ -149,6 +149,7 @@ describe("waitron-rejoin rejoin", () => {
     expect(received?.acceptLoss).toBe(true);
   });
 
+  // A mocked wipe would not prove that the database files were removed from disk.
   it("drives the real wipe closure: both databases and their side files go, then the directory is re-migrated and trading.env cleared", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "rejoin-live-"));
     const venueDir = join(stateDir, "venue");
