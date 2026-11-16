@@ -415,6 +415,8 @@ own, can also make scheduled backups, and can export your setup to start another
 
 The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
 
+If **Backups** says the emergency code changed, make a new pack. If the code is missing, ask someone with permission to manage the box to make it.
+
 ## If personal data is lost or exposed {#breach}
 
 When personal data is lost, stolen or seen by someone who should not see it, the law gives you

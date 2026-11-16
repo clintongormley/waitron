@@ -1493,6 +1493,17 @@ export const en = {
   "recovery_pack_dialog.remake": "Make a new pack with a new server key",
   "recovery_pack_dialog.try_again": "Try again",
   "recovery_pack_dialog.stop": "Stop",
+  "cloud.emergency_print_pack": "Print recovery pack",
+  "recovery_pack.row.emergency": "Emergency code issued",
+  "recovery_pack.emergency_absent": "Not in this pack.",
+  "recovery_pack.reason.emergency_changed": "The emergency code changed on {date}.",
+  "recovery_pack.reason.emergency_missing":
+    "A person with permission to manage the box must make the pack to include the emergency code.",
+  "recovery_pack.reason.emergency_unknown":
+    "The emergency code could not be checked. Try again when Cloud answers.",
+  "recovery_pack.reason.emergency_removed": "Emergency start is closed.",
+  "recovery_pack.cannot_check":
+    "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro":
     "One printed document with what you need when the box fails: the emergency-start code, the restore codes for your bucket copy and archives, and the server key. Keep it locked away, off the box.",
@@ -5841,6 +5852,17 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
   "recovery_pack_dialog.try_again": "Volver a intentarlo",
   "recovery_pack_dialog.stop": "Parar",
+  "cloud.emergency_print_pack": "Imprimir paquete de recuperación",
+  "recovery_pack.row.emergency": "Código de emergencia emitido",
+  "recovery_pack.emergency_absent": "No está en este paquete.",
+  "recovery_pack.reason.emergency_changed": "El código de emergencia cambió el {date}.",
+  "recovery_pack.reason.emergency_missing":
+    "Una persona con permiso para gestionar el servidor debe hacer el paquete para incluir el código de emergencia.",
+  "recovery_pack.reason.emergency_unknown":
+    "No se pudo comprobar el código de emergencia. Vuelve a intentarlo cuando Cloud responda.",
+  "recovery_pack.reason.emergency_removed": "El inicio de emergencia está cerrado.",
+  "recovery_pack.cannot_check":
+    "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
     "Un documento impreso con lo que necesitas si el servidor falla: el código de inicio de emergencia, los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos del servidor.",

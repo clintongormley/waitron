@@ -61,7 +61,7 @@ import "./errors.js";
 
 export interface BackupRecoveryPackMakeDeps {
   cloud?: {
-    connection: Pick<CloudConnection, "status" | "emergencyCode">;
+    connection: Pick<CloudConnection, "status" | "emergencyCode" | "emergency">;
     managementOrigin: string;
     isPrimary: () => boolean;
   };
@@ -230,6 +230,29 @@ async function readPackEmergency(
         return { state: "absent", reason };
     }
     return { state: "failed", failedWith: isAppError(error) ? error.code : "unexpected" };
+  }
+}
+
+async function readEmergencyCheck(
+  deps: BackupRecoveryPackMakeDeps,
+  signal: AbortSignal,
+): Promise<CurrentChecks["emergency"]> {
+  const cloud = deps.cloud;
+  if (!cloud?.isPrimary()) return undefined;
+  try {
+    if ((await cloud.connection.status()).state !== "complete") return undefined;
+    const read = await cloud.connection.emergency(
+      cloud.managementOrigin,
+      AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+    );
+    if (read.stale || read.emergency.status !== "ready") return null;
+    return {
+      asOf: read.asOf,
+      open: read.emergency.open,
+      codeIssuedAt: read.emergency.codeIssuedAt,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -440,10 +463,20 @@ export function mountBackupRecoveryPackMakeApi(
     c.header("Cache-Control", "no-store");
     return makeRun(c, log, async () => {
       const token = requireManagementSession(c);
+      await authorizeManager(deps.db, {
+        managementSessionId: token,
+        permission: "system.manage",
+        touch: false,
+      });
+      const emergency = await readEmergencyCheck(deps, c.req.raw.signal);
       const env = await deps.readBoxEnv();
       const { key: fileKey } = await readHeldKey(async () => loadRecoveryKey(env));
       const status = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId: token, permission: "system.manage" });
+        await authorizeManager(tx, {
+          managementSessionId: token,
+          permission: "system.manage",
+          touch: false,
+        });
         const records = await readRecoveryPacks(tx, nodeId);
         const makers = [...new Set(records.flatMap((r) => (r.madeBy === null ? [] : [r.madeBy])))];
         const names = new Map(
@@ -462,7 +495,10 @@ export function mountBackupRecoveryPackMakeApi(
             ...r,
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
           })),
-          current: await currentChecks(tx, deps, env, filesInvoices),
+          current: {
+            ...(await currentChecks(tx, deps, env, filesInvoices)),
+            emergency: deps.cloud?.isPrimary() ? emergency : undefined,
+          },
           retention: loaded.retention,
           schedule: loaded.schedule,
           backupsUseOlderKey:

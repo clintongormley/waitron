@@ -448,3 +448,71 @@ describe("backups still on the older key", () => {
     expect(status([], { backupsUseOlderKey: value }).backupsUseOlderKey).toBe(value);
   });
 });
+
+describe("emergency-code freshness", () => {
+  const issued = "2026-10-10T08:00:00.000Z";
+  const made = "2026-10-12T09:00:00.000Z";
+  const fresh = "2026-10-12T09:01:00.000Z";
+  const old = "2026-10-12T08:59:00.000Z";
+  const changed = "2026-10-11T08:00:00.000Z";
+  it.each([
+    ["matching cached code", { asOf: old, open: true, codeIssuedAt: issued }, "included", []],
+    [
+      "changed code",
+      { asOf: fresh, open: true, codeIssuedAt: changed },
+      "included",
+      [{ part: "emergency", kind: "code_changed", at: changed }],
+    ],
+    [
+      "older differing observation",
+      { asOf: old, open: true, codeIssuedAt: changed },
+      "included",
+      [{ part: "emergency", kind: "cannot_check" }],
+    ],
+    [
+      "closed after printing",
+      { asOf: fresh, open: false, codeIssuedAt: issued },
+      "included",
+      [{ part: "emergency", kind: "removed" }],
+    ],
+    [
+      "closed before printing",
+      { asOf: old, open: false, codeIssuedAt: issued },
+      "included",
+      [{ part: "emergency", kind: "cannot_check" }],
+    ],
+    ["unavailable", null, "included", [{ part: "emergency", kind: "cannot_check" }]],
+    ["not applicable", undefined, "included", [{ part: "emergency", kind: "cannot_check" }]],
+    [
+      "missing code on an open venue",
+      { asOf: fresh, open: true, codeIssuedAt: issued },
+      "absent",
+      [{ part: "emergency", kind: "code_missing" }],
+    ],
+    [
+      "pack made before the emergency page existed",
+      { asOf: fresh, open: true, codeIssuedAt: issued },
+      "unrecorded",
+      [{ part: "emergency", kind: "code_missing" }],
+    ],
+    ["closed venue without code", { asOf: fresh, open: false, codeIssuedAt: null }, "absent", []],
+    ["no Cloud without code", undefined, "absent", []],
+    ["unavailable without code", null, "absent", [{ part: "emergency", kind: "cannot_check" }]],
+  ] as const)("%s", (_label, emergency, state, reasons) => {
+    const record = pack(1, made, {
+      parts:
+        state === "unrecorded"
+          ? []
+          : [
+              {
+                part: "emergency",
+                state,
+                ...(state === "included" ? { codeIssuedAt: issued } : {}),
+              },
+            ],
+    });
+    const answer = status([record], { current: { ...current, emergency } });
+    expect(answer.reasons).toEqual(reasons);
+    expect(answer.upToDate).toBe(reasons.length === 0);
+  });
+});

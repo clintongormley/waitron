@@ -983,3 +983,48 @@ it("does not claim an emergency-only pack carries a backup key", async () => {
     fill("recovery_pack.backup_key_absent", { number: "3", date: DAYS["en-GB"].made }),
   );
 });
+
+it.each(["en-GB", "es-ES"])(
+  "shows the printed emergency issue time in the venue zone (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({
+            parts: [{ part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
+          }),
+          upToDate: true,
+        }),
+      ),
+    );
+    expect(row(el, "emergency-code")).toContain("2026");
+    expect(row(el, "emergency-code")).toContain("12:00");
+  },
+);
+
+it("does not call an unknown emergency code out of date or ask for another pack", async () => {
+  const el = await mount(
+    stubApi(status({ latest: latest(), reasons: [{ part: "emergency", kind: "cannot_check" }] })),
+  );
+  expect(line(el)).toContain(
+    fill("recovery_pack.cannot_check", { number: "3", date: DAYS["en-GB"].made }),
+  );
+  expect(line(el)).not.toContain(t("recovery_pack.make_new"));
+});
+
+it.each(["en-GB", "es-ES"])("explains changed and missing emergency codes (%s)", async (locale) => {
+  setLocale(locale);
+  for (const reason of [
+    { part: "emergency", kind: "code_changed", at: MADE_AT },
+    { part: "emergency", kind: "code_missing" },
+  ] as const) {
+    const el = await mount(stubApi(status({ latest: latest(), reasons: [reason] })));
+    expect(line(el)).toContain(
+      reason.kind === "code_changed"
+        ? fill("recovery_pack.reason.emergency_changed", { date: DAYS[locale].made })
+        : t("recovery_pack.reason.emergency_missing"),
+    );
+    expect(line(el)).toContain(t("recovery_pack.make_new"));
+  }
+});

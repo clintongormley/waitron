@@ -1202,7 +1202,7 @@ export class BackupScreen extends LitElement {
     const alertKey = this.errorKey ?? this.refreshErrorKey;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
-      ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
+      ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .openRequested=${new URL(location.href).searchParams.get("recovery-pack") === "make"} .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
       ${alertKey === "authorization.not_permitted" && !this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}

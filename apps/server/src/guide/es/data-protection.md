@@ -451,6 +451,8 @@ configuración para poner en marcha otro local.
 
 El paquete de recuperación también puede contener la dirección y el código de emergencia para una copia bloqueada en Cloud. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Inicio de emergencia en Cloud](servers.md#cloud-emergency).
 
+Si **Copias de seguridad** indica que el código de emergencia ha cambiado, haz un paquete nuevo. Si falta el código, pide a alguien con permiso para gestionar el servidor que lo haga.
+
 ## Si se pierden o se exponen datos personales {#breach}
 
 Cuando se pierden o se roban datos personales, o los ve alguien que no debería verlos, la ley te da
