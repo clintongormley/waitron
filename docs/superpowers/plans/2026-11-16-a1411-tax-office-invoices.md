@@ -370,7 +370,7 @@ Amended 2026-11-16 (Task 8 review): the CSV writes money with the decimal mark o
 
 Amended 2026-11-16 (Task 8a): the route is `POST /management-api/tax-office/months/:month`, not GET, because the download writes its activity entry and the own-page check covers POSTs, as Task 3's review made the single PDF a POST.
 
-Amended 2026-11-16 (Task 8 review): the path has no `.zip`; each copy comes from `copyOfSale`, split out of `readSaleCopy`, which writes no `invoice_pdf_downloads` row (the month writes one `tax_office.month_downloaded` activity entry instead); a sale whose copy cannot be made is left out, logged as `tax_office.copy_failed` and listed in `failed.txt`, instead of ending the month.
+Amended 2026-11-16 (Task 8 review): the path has no `.zip`; each copy comes from `copyOfSale` (split out of `readSaleCopy`), which, unlike `readSaleCopy`, writes no `invoice_pdf_downloads` row (the month writes one `tax_office.month_downloaded` activity entry instead); a sale whose copy cannot be made is left out, logged as `tax_office.copy_failed` and listed in `failed.txt`, instead of ending the month.
 
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,
   `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included, each

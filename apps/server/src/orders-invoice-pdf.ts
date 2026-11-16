@@ -38,7 +38,7 @@ export async function readInvoiceForDownload(
   };
 }
 
-/** The receipt printer a device's tickets are laid out for now, or `undefined` for none. */
+/** The receipt printer a device's tickets are laid out for, or `undefined` for none. */
 export type ReceiptPrinterOf = (
   tx: Transaction,
   deviceId: string,
@@ -77,7 +77,8 @@ export async function readSaleCopy(
 
 /**
  * Any issued sale as a duplicate in its original format: a sale naming no customer (an F2 or R5)
- * as its selling device's receipt printer lays it out now (else `DEFAULT_PRINTER`), or on A4 when
+ * as the receipt printer `receiptPrinterOf` gives for its selling device lays it out (else
+ * `DEFAULT_PRINTER`), or on A4 when
  * that ticket cannot be drawn whole on one page (past the decoder's limits, or taller than a PDF
  * page may be); any other on A4. An unknown id is `invoice_delivery.not_found`.
  */
