@@ -489,10 +489,10 @@ for (const pkg of mutationCallers(
   });
 }
 
-describe("db's committed cost table", () => {
-  const tablePath = join(packageDir("db"), "mutation-costs.json");
+describe.each(["db", "ui-core"])("%s's committed cost table", (pkg) => {
+  const tablePath = join(packageDir(pkg), "mutation-costs.json");
 
-  it("exists, so db's shards are packed by estimated seconds rather than bytes", () => {
+  it("exists, so its shards are packed by estimated seconds rather than bytes", () => {
     expect(existsSync(tablePath)).toBe(true);
   });
 
@@ -502,14 +502,14 @@ describe("db's committed cost table", () => {
     expect(entries.length).toBeGreaterThan(0);
     for (const [path, seconds] of entries) {
       expect(path).toMatch(/^src\/.+\.ts$/);
-      expect(Object.hasOwn(HEAVY_FILES.db, path)).toBe(false);
+      expect(Object.hasOwn(HEAVY_FILES[pkg], path)).toBe(false);
       expect(typeof seconds === "number" && seconds > 0).toBe(true);
     }
   });
 
-  it("names only files db's stryker config still mutates, so a rename or deletion fails here", () => {
+  it("names only files its stryker config still mutates, so a rename or deletion fails here", () => {
     const table = JSON.parse(readFileSync(tablePath, "utf8"));
-    const selected = packageSelection("db").paths;
+    const selected = packageSelection(pkg).paths;
     expect(Object.keys(table).filter((path) => !selected.includes(path))).toEqual([]);
   });
 });

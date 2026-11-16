@@ -1099,8 +1099,42 @@ list.
 
 `scripts/mutation-shard.mjs` packs every `packages/db` file into thirteen nightly shards by `packages/db/mutation-costs.json`, a table of
 estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
-table's own seconds per byte. `ui`, `ui-core` and `shared` have no table and are still packed by
-bytes.
+table's own seconds per byte. `ui-core` uses its own recorded-duration table (below); `ui` and
+`shared` have no table and are still packed by bytes.
+
+**ui-core, 16 November 2026.** Run [43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319)
+packed `derive.ts` and `colour.ts` together by bytes; that shard reached its 25-minute limit.
+`packages/ui-core/mutation-costs.json` uses the four completed reports from
+[43559793352](https://github.com/clintongormley/waitron/actions/runs/43559793352), with four test runners.
+Its weights sum tested mutants' recorded milliseconds per file, excluding `NoCoverage`, `Ignored`,
+`CompileError` and `RuntimeError`, rounded to tenths of a second and clamped to 0.1. These are
+ranking weights, not elapsed job predictions. Keep the four whole-file shards and the 25-minute
+limit. New files use the same seconds-per-byte fallback as db. Do not regenerate this table with
+the db-calibrated `scripts/mutation-costs.mjs`: its extra 82.2 seconds per timeout is not fitted
+to these browser reports, whose timeout durations are already recorded. Refresh from four complete
+reports downloaded under `<scratch>` using this recipe from the repository root:
+
+```js
+import { readFileSync, writeFileSync } from "node:fs";
+import { packageSelection } from "./scripts/mutation-shard.mjs";
+const selected = new Set(packageSelection("ui-core").paths);
+const costs = {};
+for (let n = 1; n <= 4; n++) {
+  const report = JSON.parse(readFileSync(`<scratch>/mutation-report-ui-core-shard-${n}/mutation.json`));
+  for (const [path, file] of Object.entries(report.files)) {
+    if (!selected.has(path)) continue;
+    const milliseconds = file.mutants
+      .filter((m) => !["NoCoverage", "Ignored", "CompileError", "RuntimeError"].includes(m.status))
+      .reduce((sum, m) => sum + m.duration, 0);
+    costs[path] = Math.max(0.1, Math.round(milliseconds / 100) / 10);
+  }
+}
+writeFileSync("packages/ui-core/mutation-costs.json", JSON.stringify(
+  Object.fromEntries(Object.entries(costs).sort(([a], [b]) => a.localeCompare(b))), null, 2) + "\n");
+```
+
+The cost-table guards check both tables' existence, positive weights and current mutation paths,
+not freshness or the weight formula. A manual main run must still verify the new UI packing.
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
@@ -2791,7 +2825,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | ci.yml             | publish                           | 3.2                            | 10    |
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | mutation.yml       | select                            | not yet measured               | 5     |
-| mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (shard 1; shards 2 and 3 not timed) | 25    |
+| mutation.yml       | mutation-ui-core (matrix shards)  | 23.8 (run 43559793352); run 43808061319 hit the limit | 25    |
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
@@ -2812,6 +2846,10 @@ from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a ten-minute retry
 window. The observed API status lag and chosen margins are recorded under "How the second step
 reads the API" above; the table's 0.7-minute measurement predates this change.
+
+**16 November 2026:** the paragraph below records the original limit rationale. CI now supplies
+[recorded-duration packing](#dbs-mutation-shards-are-packed-by-estimated-cost); the table above
+includes its later CI evidence.
 
 Until A841 slice 1, ui-core ran as one job, the `mutation` matrix, at a 15-minute limit: its longest
 measured run was `39373226000` (2026-10-20), 6m44s for 612 mutants at 4 test runners; the

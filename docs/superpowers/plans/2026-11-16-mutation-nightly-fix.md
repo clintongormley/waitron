@@ -1,6 +1,6 @@
 # Mutation nightly repair
 
-**Goal:** Restore db’s mutation dry run and rebalance ui-core’s four shards, then verify both in a manual main run. Source: Lane I `MUTATION-NIGHTLY-FIX`; its exact ask is quoted in the review briefs. Codex drafted this plan; Claude read it (170s) and its corrections (90s). Watcher clearance is pending; no owner design approval is claimed.
+**Goal:** Restore db’s mutation dry run and rebalance ui-core’s four shards, then verify both in a manual main run. Source: Lane I `MUTATION-NIGHTLY-FIX`; its exact ask is quoted in the review briefs. Codex drafted this plan; Claude read it (170s) and its corrections (90s). The watcher cleared the corrected plan at 07:40 on 16 November in Lane I questions.md, choosing cost-table packing and retaining the deadline; no owner design approval is claimed.
 
 **Evidence:** Run 43808061319 failed db’s classification check at `packages/db/packages/db/drizzle`; the driver reproduced that exact failure with the targeted Stryker command below, while normal Vitest passed 25 tests. `digest-mismatch: error` is the pinned action’s default policy input (`action.yml:43–47`), not a reported disagreement. Aggregation failed with 0 db/3 ui-core reports: ui-core shard 2 reached its 25-minute deadline at 641/678 mutants, 59 timeouts. The failed run wrote no per-file timeout distribution.
 
@@ -8,7 +8,7 @@ In prior 43559793352, ui-core jobs 1–4 took 98/831/324/1428 s; post-dry-run ph
 
 ## Build and prove
 
-- [ ] Obtain watcher clearance, including the deadline choice below, before implementation.
+- [x] Obtain watcher clearance, including the deadline choice below, before implementation.
 - [ ] In `packages/db/src/classification.test.ts`, use existing `CORE_MIGRATIONS.migrationsFolder` as the root for `migrationSqlFiles(folder, "")` and read its returned paths from that folder. Preserve all table/classification/append-only assertions and shared-reader API. The existing failing test supplies red evidence.
 - [ ] Run `pnpm --filter @waitron/db exec vitest run src/classification.test.ts` and `pnpm --filter @waitron/db exec stryker run --dryRunOnly --mutate src/classification.ts --testFiles src/classification.test.ts --concurrency 1`. Search other shared-reader callers for repository-root assumptions, then run package-wide `pnpm --filter @waitron/db exec stryker run --dryRunOnly --concurrency 1` for this specific nightly failure. Require actual passing counts and dry-run completion.
 - [ ] Parameterise the existing committed-cost-table cases in `scripts/mutation-shard.test.mjs` for db/ui-core, retaining every assertion and mandatory-table check. Observe ui-core’s missing-table failure first. Existing all-caller guards own exact nonempty partitions; add no placement pin.
