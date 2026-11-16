@@ -144,7 +144,10 @@ export async function ask(
   // readline's output is thrown away in the echo-off case, so the question goes to stdout here.
   if (!echo) stdout.write(question);
   try {
-    const ended = once(rl, "close").then(() => "");
+    // readline never sees an `end` emitted before it was created, so it would never close.
+    const ended = (stdin as { readableEnded?: boolean }).readableEnded
+      ? Promise.resolve("")
+      : once(rl, "close").then(() => "");
     return await Promise.race([rl.question(echo ? question : ""), ended]);
   } catch (error) {
     if (isAbort(error)) return "";

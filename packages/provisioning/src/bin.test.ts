@@ -194,6 +194,16 @@ describe("ask", () => {
     expect(await answer).toBe("");
   });
 
+  it("returns an empty answer when stdin had already ended before the question", async () => {
+    const { input, output } = streams();
+    const first = ask("Name? ", true, input, output);
+    input.end();
+    expect(await first).toBe("");
+    const hung = new Promise((resolve) => setTimeout(resolve, 2_000, "still waiting"));
+    expect(await Promise.race([ask("Legal name? ", true, input, output), hung])).toBe("");
+    expect(await Promise.race([ask("PIN: ", false, input, output), hung])).toBe("");
+  });
+
   it("returns an empty answer when the operator presses Ctrl+D at a terminal", async () => {
     const { input, output, written } = streams(true);
     const answer = ask("PIN: ", false, input, output);
