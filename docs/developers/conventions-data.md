@@ -2897,7 +2897,8 @@ itself and keeps nothing.
   dependency, which `boot.ts` wires to `withTransaction`. Weaker than its name: it reads text, so a
   `transaction` reached by destructuring, `["transaction"]` or an alias escapes; it does not check
   that a listed site runs inside a write-queue transaction; and it reads only `apps/<name>/src` and
-  `packages/<name>/src` product `.ts` files, leaving `packages/store/src/` out as the implementation.
+  `packages/<name>/src` product `.ts` files, leaving out `packages/store/src/` as the implementation
+  and `packages/ui/src/document-delivery-recovery.ts`, whose calls are the browser's IndexedDB.
 
 ### A full disk stops the till's writes
 

@@ -1,7 +1,9 @@
 /** Weaker than its name: reads text, so a `transaction` reached another way (destructured,
  * `["transaction"]`, an alias) escapes; it does not check that a listed site really runs inside a
  * write-queue transaction; it reads only product `.ts` files under `apps/<name>/src` and
- * `packages/<name>/src`; comment blanking shares blankComments' documented guesses. */
+ * `packages/<name>/src`, and skips `packages/store/src/` and the browser's IndexedDB calls in
+ * `packages/ui/src/document-delivery-recovery.ts`; comment blanking shares blankComments'
+ * documented guesses. */
 // Why: docs/developers/conventions-data.md, "A full disk sometimes ends the whole transaction".
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,7 +32,7 @@ const excluded = (path: string) =>
   path === "packages/ui/src/document-delivery-recovery.ts";
 
 function transactionCalls(source: string): number {
-  return blankComments(source).match(/\.transaction\s*\(/g)?.length ?? 0;
+  return blankComments(source).match(/\.transaction\s*[<(]/g)?.length ?? 0;
 }
 const files = ["apps", "packages"]
   .flatMap((dir) => sourceFilesIn(root, dir))
@@ -60,6 +62,7 @@ it.each([
   ["await db.transaction(fn);", 1],
   ["await this.opts.db.transaction((tx) => insert(tx));", 1],
   ["await tx.transaction (async () => {});", 1],
+  ["await db.transaction<number>(fn);", 1],
   ["const x = 1; // await db.transaction(fn);", 0],
   ["/* await db.transaction(fn); */ const x = 1;", 0],
   ['const p = "/*"; await db.transaction(fn); // */', 1],

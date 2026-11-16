@@ -147,8 +147,9 @@ export function adaptNodeSqlite(connections: Connections) {
      * failure without running. The record is the connection pair's, not the body's: an outermost
      * `transaction()` opened outside the queue while a queue body's transaction is ended clears it
      * early, and the body's later writes can then be kept (`scripts/no-bare-transaction.test.ts`
-     * refuses one in product code). A full disk that left the transaction open is not recorded:
-     * code that catches it may carry on.
+     * refuses a `.transaction(` in product code outside its named list, weaker than its name: it
+     * reads text). A full disk that left the transaction open is not recorded: code that catches it
+     * may carry on.
      *
      * A nested level whose transaction the engine ended throws an error of its own, never the
      * object its body threw: a caller that tells "my body's failure, already undone" from "the
