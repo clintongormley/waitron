@@ -141,6 +141,17 @@ case walking `apps` and `packages` and parsing every non-test source file under 
 server's included) and the modules' `src/dashboard` folders with the TypeScript compiler
 (`scripts/action-menu-styles.test.ts:140-157`) — is read, not measured. The log is kept at `~/waitron-campaign-b/ci-logs/pr3399-run43766044951-attempt1-root-guards.log`.
 
+16 November 2026: PR #3494's `test-server (13)`
+([run 43862896971, attempt 1](https://github.com/clintongormley/waitron/actions/runs/43862896971/job/133284679660))
+failed `apps/server/scripts/demo-seed/seed.test.ts:355`, "rates a seeded deli sale's cola at 21% and a
+seeded restaurant sale's cola at 10%": no seeded restaurant sale held a cola (`expected 0 to be greater
+than 0`); 1,808 other cases passed. The case was added that day by #3448; #3494 changes no demo seed,
+menu or sale code. On the same commit (8628115a04) it passed locally three times as a whole file, under
+`TZ=UTC`, under `LANG`/`LC_ALL` set to `C.UTF-8`, `C` and `POSIX`, and in the whole of shard 13/24
+with CI's excludes (1,809 passed). The seed's random numbers come from a fixed LCG
+(`scripts/demo-seed/seed-sales.ts:115`) and the case freezes `Date`, so what differed on the runner is
+not found. The log is kept at `~/waitron-campaign-b/ci-logs/pr3494-run43862896971-test-server-13.log`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
