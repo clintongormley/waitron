@@ -1226,11 +1226,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   one has not.**
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
 
-- **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
-  compares the class names a screen's own stylesheet styles against the class names it puts inside
-  `wt-data-table` cell callbacks looks feasible; nobody has tried to write it. Left open by product
-  categories (#340).
-
 - **Contrast-theme styles for the remaining primitives** (size M). The floor map and its overdue
   and forgotten rings remain.
   [Detail](backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives)

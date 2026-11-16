@@ -1644,6 +1644,14 @@ Cost: the categories
 screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
 cannot see it, so assert a computed width or colour when you add a styled cell.
+`scripts/data-table-cell-classes.test.ts` reports a class that one file both puts on cell markup
+and styles in its own `css`, and is weaker than its name. It reads each file alone: cell markup is
+the value of a `cell` property and of a `.rowControls=${…}` binding, plus the functions and methods
+of the same file those call by name. Markup passed to a helper as an argument (the till's find-bill
+screen builds its columns that way) and helpers imported from another file are not reached. It
+reads only the static text of `class="…"` and the keys of `classMap({…})`, so a class written as
+`class=${…}`, or joined to a placeholder, is invisible. It reads only the file's own `css`
+templates, never a stylesheet imported from another module.
 
 **A last column with `pinned: "end"` stays at the trailing edge of the table's box while the other
 columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
