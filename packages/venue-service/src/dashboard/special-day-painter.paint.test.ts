@@ -5,7 +5,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { painterFloorPlans } from "../testing/season-painter-fixture.js";
 import type { LocalDate } from "../hours-types.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
   drag,
   frame,
@@ -875,7 +875,7 @@ describe("a period deleted with a replacement before the stored day is read agai
       expect(frame(painter).refusal).toBe(
         locale === "en"
           ? "The replacement hours are not loaded yet. Save will try again."
-          : "Aún no se han cargado los horarios de sustitución. Guardar lo intentará de nuevo.",
+          : VENUE_SERVICE_STRINGS.es["special.replacement_pending"],
       );
       expect(reads()).toBe(1);
       saveButton(painter).click();
