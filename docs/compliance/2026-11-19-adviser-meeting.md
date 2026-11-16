@@ -97,7 +97,10 @@ when staff record that the table has left with part unpaid. It carries the date 
 - (a) Does the meal end when the last dish is served, or when the guests finish and leave?
   Example: the last dish is served at 23:40 on the 1st; the guests have coffee, then pay and leave
   at 00:30 on the 2nd. We would date the ticket the 2nd, with no separate date of the meal. Is that
-  right, or is the date of the meal the 1st?
+  right, or is the date of the meal the 1st? Waitron decides this by the venue's trading day, which
+  ends at the start-of-day time the venue sets: with 05:00, a meal paid at 00:30 belongs to the
+  evening's service and its ticket carries one date; a venue whose day starts at midnight would get
+  the 1st as a separate date of the meal. Is dating by the venue's trading day acceptable?
 - (b) A regular eats on Monday and, by arrangement, pays on Thursday. Must the ticket be issued on
   Monday, still unpaid, or may it wait until Thursday and show Monday as the date of the meal? His
   answer 1.4 mentions invoices issued after payment by bank transfer; his answer 1.3 says issuing
@@ -535,7 +538,11 @@ momento.
 - (a) ¿Termina la comida al servirse el último plato, o cuando los clientes acaban y se marchan?
   Ejemplo: el último plato se sirve a las 23:40 del día 1; después toman café, y pagan y se marchan
   a las 00:30 del día 2. Fecharíamos el tique el día 2, sin otra fecha de operación. ¿Es correcto, o
-  la fecha de la operación es el día 1?
+  la fecha de la operación es el día 1? Waitron lo decide según la jornada comercial del local, que
+  termina a la hora de inicio del día que el local fija: con las 05:00, una comida pagada a las 00:30
+  pertenece al servicio de la noche y su tique lleva una sola fecha; un local cuyo día empiece a
+  medianoche indicaría el día 1 como fecha de la operación. ¿Es aceptable fechar según la jornada
+  comercial del local?
 - (b) Un cliente habitual come el lunes y, por acuerdo, paga el jueves. ¿Debe expedirse el tique el
   lunes, aún sin cobrar, o puede esperar al jueves indicando el lunes como fecha de la operación? Su
   respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la
