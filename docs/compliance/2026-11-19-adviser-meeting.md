@@ -261,7 +261,13 @@ connection or public address is needed (Orden EHA/962/2007 art. 5.3; DGT 0289-04
 from its own office, a copy of the period on a USB drive or through a temporary download link is
 enough.
 
-*We ask:* Is that right?
+*How a copy looks.* On the inspector's Invoices page, a full invoice downloads as its A4 PDF and a
+ticket (simplified invoice) as a ticket-width PDF laid out like the printed till ticket, each
+stamped "DUPLICADO". A cancelled ticket, or one later replaced by a full invoice, downloads exactly
+as it was issued; the list and the export say "Cancelled" or "Replaced by invoice <number>".
+
+*We ask:* Is that right? And should the copy itself also say "Cancelled on <date>" or "Replaced by
+invoice <number>"?
 
 Yes / No / Note: ____________________________________________
 
