@@ -78,6 +78,20 @@ vi.mock("./sealed-state.js", async (original) => {
   };
 });
 
+/** While set, every `openVenueDatabase` call is refused and counted. */
+const venueOpen = vi.hoisted(() => ({ refuse: false, refused: 0 }));
+vi.mock("@waitron/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/db")>();
+  return {
+    ...actual,
+    openVenueDatabase: (...args: Parameters<typeof actual.openVenueDatabase>) => {
+      if (!venueOpen.refuse) return actual.openVenueDatabase(...args);
+      venueOpen.refused += 1;
+      return Promise.reject(new Error("unable to open database file"));
+    },
+  };
+});
+
 /** When set, every call to an archive destination waits until it is stopped, or until `release`. */
 const stall = vi.hoisted(() => ({
   on: false,
@@ -153,6 +167,8 @@ let serverRunning = false;
 afterEach(async () => {
   serverRunning = false;
   streamCheck.refuse = false;
+  venueOpen.refuse = false;
+  venueOpen.refused = 0;
   sealing.fail = false;
   stall.on = false;
   stall.started = [];
@@ -406,6 +422,35 @@ describe("trading with dashboard archive settings the box cannot use", () => {
         return {};
       },
       (lines, http) => expectArchivesOffFor("backup.recovery_key_missing", cookie, lines, http),
+    );
+  }, 60_000);
+});
+
+describe("trading when the backup duty cannot open the venue database", () => {
+  // Unavailability: a test seam stands in for a venue database the backup duty cannot open.
+  it("starts, sells and answers /health with archives off", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        await storeArchiveRecord(boxRing(), join(scratch, "backups"));
+        cookie = await managerCookie();
+        return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+      },
+      async (lines, { base, via }) => {
+        await waitForEvent(lines, "backup.disabled_open_failed");
+        venueOpen.refuse = false;
+        expect(venueOpen.refused).toBe(1);
+        const status = await fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
+        expect(status.status).toBe(200);
+        expect(await status.json()).toMatchObject({
+          enabled: false,
+          isPrimary: true,
+          loadErrorCode: null,
+          backupStatus: { configured: false },
+        });
+      },
+      // After the server's own open, before the backup duty's.
+      { observeApp: () => void (venueOpen.refuse = true) },
     );
   }, 60_000);
 });
