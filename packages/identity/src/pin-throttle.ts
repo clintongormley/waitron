@@ -29,7 +29,7 @@ export const PIN_THROTTLE_MAX_KEYS_PER_SLOT = 2_000;
 export const PIN_THROTTLE_FULL_RETRY_SECONDS = 60;
 
 export interface PinThrottleOptions {
-  /** Elapsed milliseconds from a clock that only moves forward; policy constants stay fixed. */
+  /** Only the clock is injectable, so the delay policy stays fixed; elapsed milliseconds never decrease. */
   now?: () => number;
 }
 
