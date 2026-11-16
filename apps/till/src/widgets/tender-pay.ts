@@ -1189,14 +1189,9 @@ export class TillTenderPay extends LitElement {
     return html`
       <div class="card-extras">
         ${this.#renderReaderControl()}
-        ${cardSlipChoice(
-          this.cardProvider !== "none" && this.#slipAvailable(),
-          this.printCardSlip,
-          this.busy,
-          (value) => {
-            this.printCardSlip = value;
-          },
-        )}
+        ${cardSlipChoice(this.#slipAvailable(), this.printCardSlip, this.busy, (value) => {
+          this.printCardSlip = value;
+        })}
         ${
           this.cardProvider === "simulator" && this.chosenReaderId === undefined
             ? html`<div
