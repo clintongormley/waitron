@@ -137,10 +137,10 @@ describe("season staffing", () => {
     const v = await venue();
     await inTx(async (tx) => {
       await seedBusinessDay(tx, { dayCutover: "04:00:00" });
-      await tx.insert(dayCutoverChanges).values({
-        effectiveBusinessDay: "2026-12-01",
-        dayCutover: "02:00:00",
-      });
+      await tx.insert(dayCutoverChanges).values([
+        { effectiveBusinessDay: "2026-12-01", dayCutover: "02:00:00" },
+        { effectiveBusinessDay: "2027-04-01", dayCutover: "05:00:00" },
+      ]);
       await tx.insert(seasons).values({ name: "Spring", startsOn: "03-01" });
       const menuId = randomUUID();
       await tx.insert(menus).values({ id: menuId, name: "Early service" });
@@ -165,6 +165,7 @@ describe("season staffing", () => {
     expect((await read("2026-11")).cutover).toBe("04:00");
     expect((await read("2026-12")).cutover).toBe("02:00");
     expect((await read("2027-01")).cutover).toBe("02:00");
+    expect((await read("2027-01")).weekdayCutovers[2]).toEqual(["04:00", "02:00"]);
     expect(
       (await read("2026-12")).guides[`department:${v.departmentId}`]![2]!.map((g) => g.startsAt),
     ).toEqual(["03:00", "05:00"]);

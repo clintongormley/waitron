@@ -137,7 +137,7 @@ it("marks crossing blocks before saving and clears the mark when corrected", asy
   const read = seasonStaffing();
   read.cutover = "04:00";
   read.cutoverChanges = [{ effectiveBusinessDay: "2027-01-05", dayCutover: "02:00" }];
-  read.weekdayCutovers = { 2: ["04:00", "02:00"] };
+  read.weekdayCutovers[2] = ["04:00", "02:00"];
   read.areas[0]!.weekdays[2] = [{ ...headChef, startsAt: "01:00", endsAt: "03:00" }];
   const { painter, request } = await mount({ read: async () => read });
   expect(grid(painter).columnErrors.get("2")).toContain("02:00");
@@ -155,7 +155,33 @@ it("marks crossing blocks before saving and clears the mark when corrected", asy
   await paint(painter, "2", [headChef]);
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(saveButton(painter).disabled).toBe(false);
+  read.weekdayCutovers[4] = [];
+  await paint(painter, "4", [{ ...headChef, startsAt: "03:00", endsAt: "05:00" }]);
+  expect(grid(painter).columnErrors.get("4")).toContain("04:00");
 });
+
+it.each([false, true])(
+  "locates invalid areas without instructing viewers to edit (readOnly=%s)",
+  async (readOnly) => {
+    const read = seasonStaffing();
+    read.weekdayCutovers[2] = ["06:00", "02:00"];
+    read.areas[1]!.weekdays[2] = [{ ...headChef, startsAt: "01:00", endsAt: "03:00" }];
+    const { painter } = await mount({
+      read: async () => read,
+      readOnly,
+      area: readOnly ? "department:dep-bar" : undefined,
+    });
+    if (readOnly) {
+      expect(frame(painter).refusal).toBe("");
+      expect(grid(painter).columnErrors.size).toBe(0);
+    } else {
+      await paint(painter, "3", [dinner]);
+      expect(grid(painter).columnErrors.size).toBe(0);
+      expect(frame(painter).refusal).toContain("Bar");
+      expect(saveButton(painter).disabled).toBe(true);
+    }
+  },
+);
 
 it("reloads the same season when the Calendar month changes", async () => {
   let reads = 0;
@@ -753,6 +779,9 @@ it("says the save went through but the staffing could not be read again, until a
   saveButton(painter).click();
   await settle(painter);
   expect(frame(painter).refusal).toMatch(/^Saved; could not refresh: /);
+  await paint(painter, "4", [{ ...dinner, startsAt: "05:00", endsAt: "07:00" }]);
+  expect(frame(painter).refusal).toContain("Saved; could not refresh:");
+  expect(saveButton(painter).disabled).toBe(true);
   await paint(painter, "4", [dinner]);
   expect(frame(painter).refusal).toMatch(/^Saved; could not refresh: /);
   saveButton(painter).click();

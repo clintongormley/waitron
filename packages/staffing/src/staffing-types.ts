@@ -37,7 +37,7 @@ export interface StaffingGuideRange {
 
 /** A season's staffing for every active area; `weekdays` holds 0 (Sunday) to 6, empty when unpainted. */
 export interface SeasonStaffing {
-  /** The start in force on the first season date in the shown month, `HH:MM`. */
+  /** The grid start for the selected season occurrence, `HH:MM`. */
   cutover: string;
   month: string;
   cutoverChanges: { effectiveBusinessDay: string; dayCutover: string }[];

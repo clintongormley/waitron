@@ -71,18 +71,6 @@ export class StaffingGrid extends LitElement {
     periodColourStyles,
     paintGridStyles,
     css`
-      .column-error {
-        contain: inline-size;
-        position: static;
-        grid-column: 1 / -1;
-        grid-row: 2;
-        inline-size: auto;
-        block-size: auto;
-        overflow: visible;
-        clip: auto;
-        white-space: normal;
-        font-weight: var(--wt-font-weight-normal);
-      }
       .block,
       .preview {
         --lane-width: calc((100% - 2 * var(--wt-space-1)) / var(--lanes));
@@ -867,7 +855,10 @@ export class StaffingGrid extends LitElement {
               >
                 <span>${column.label}</span>${
                   this.columnErrors.has(column.key)
-                    ? html`<span class="column-error" id=${`column-error-${column.key}`}
+                    ? html`<span
+                        part="column-error"
+                        class="column-error"
+                        id=${`column-error-${column.key}`}
                         >${this.columnErrors.get(column.key)}</span
                       >`
                     : nothing

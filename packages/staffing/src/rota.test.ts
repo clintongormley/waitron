@@ -194,7 +194,7 @@ describe("the rota week", () => {
           weekday: 2,
           blocks: [
             { staffRoleId: v.staffRoleId, headcount: 1, startsAt: "03:00", endsAt: "03:30" },
-            { staffRoleId: v.staffRoleId, headcount: 1, startsAt: "05:00", endsAt: "05:30" },
+            { staffRoleId: v.staffRoleId, headcount: 1, startsAt: "07:00", endsAt: "07:30" },
           ],
         },
       ]);
@@ -210,7 +210,7 @@ describe("the rota week", () => {
       const early = match.slots.find((s) => s.slot.startsAt === "03:00")!;
       expect(early.slot).toMatchObject({ businessDay, start, end });
       expect(early.status).toEqual({ kind: "filled", shiftId, outsideRole: false });
-      expect(match.slots.find((s) => s.slot.startsAt === "05:00")!.status).toEqual({
+      expect(match.slots.find((s) => s.slot.startsAt === "07:00")!.status).toEqual({
         kind: "unfilled",
       });
       const month = await tx((t) =>

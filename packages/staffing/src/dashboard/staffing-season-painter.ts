@@ -5,6 +5,7 @@ import {
 } from "@waitron/venue-service/dashboard/hours-view";
 import { css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { conjunctionList } from "@waitron/shared";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -72,6 +73,18 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     paintRowStyles,
     painterStyles,
     css`
+      staffing-grid::part(column-error) {
+        contain: inline-size;
+        position: static;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        inline-size: auto;
+        block-size: auto;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+        font-weight: var(--wt-font-weight-normal);
+      }
       .season {
         display: inline-flex;
         align-items: center;
@@ -249,6 +262,7 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
   }
 
   private invalidColumns(read: SeasonStaffing, area: string): ReadonlyMap<string, string> {
+    if (this.readOnly) return NOTHING_BY_KEY;
     const errors = new Map<string, string>();
     for (const [weekday, blocks] of this.draft.get(area) ?? []) {
       const starts = read.weekdayCutovers[Number(weekday)];
@@ -291,8 +305,14 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
 
   override render() {
     const read = this.read;
-    const invalid =
-      read?.areas.some(({ area }) => this.invalidColumns(read, areaKey(area)).size) ?? false;
+    const invalidAreas =
+      read?.areas
+        .filter(({ area }) => this.invalidColumns(read, areaKey(area)).size)
+        .map(({ name }) => name) ?? [];
+    const invalid = invalidAreas.length > 0;
+    const invalidMessage = invalid
+      ? tf("staffing.painter.fix_blocks", { areas: conjunctionList(invalidAreas, currentLocale()) })
+      : "";
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
     const shownArea = read?.areas.find(({ area }) => areaKey(area) === shown);
@@ -309,7 +329,7 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
         .coordinator=${this.coordinator}
         .dirty=${!invalid && (this.scope?.isDirty() ?? false)}
         .busy=${this.saving}
-        .refusal=${invalid ? t("staffing.painter.fix_blocks") : (this.refused?.message ?? [this.refreshError, this.notice].filter(Boolean).join(" "))}
+        .refusal=${[invalidMessage, this.refused?.message ?? [this.refreshError, this.notice].filter(Boolean).join(" ")].filter(Boolean).join(" ")}
         .readOnly=${this.readOnly}
         @painter-save=${() => {
           if (!invalid) void this.save();

@@ -202,7 +202,7 @@ const en = {
   "staffing.grid.people_other": "{count} people",
   "staffing.painter.crosses_start":
     "Change this block so it does not cross the {time} business-day start.",
-  "staffing.painter.fix_blocks": "Correct the marked staffing blocks before saving.",
+  "staffing.painter.fix_blocks": "Correct the marked staffing blocks in {areas} before saving.",
   "staffing.painter.start_changes": "The business day starts at {time} from {date}.",
   "staffing.painter.heading": "Staffing",
   "staffing.painter.week": "{season}: standard week",
@@ -431,7 +431,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.people_other": "{count} personas",
   "staffing.painter.crosses_start":
     "Cambia este bloque para que no cruce el inicio del día de trabajo a las {time}.",
-  "staffing.painter.fix_blocks": "Corrige los bloques de personal marcados antes de guardar.",
+  "staffing.painter.fix_blocks":
+    "Corrige los bloques de personal marcados en {areas} antes de guardar.",
   "staffing.painter.start_changes": "El día de trabajo empieza a las {time} desde el {date}.",
   "staffing.painter.heading": "Personal",
   "staffing.painter.week": "{season}: semana estándar",

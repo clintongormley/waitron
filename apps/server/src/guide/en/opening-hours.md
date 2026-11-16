@@ -47,6 +47,8 @@ Review public holidays after changing the venue’s city. Choosing another holid
 
 Open **Seasons** under **Venue operations**. Choose a row to change its name, colour or start date, or **Add season** to create one. Each season runs until the next starts. Use the row’s **⋯** menu to edit or delete a season; check which hours will be lost before confirming a deletion.
 
+To plan staffing for a season, choose **Staffing** in **Calendar** and open it from the month you want to plan. Check any dated change to the business-day start above the grid.
+
 ## Edit periods and check their hours {#periods}
 
 Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
