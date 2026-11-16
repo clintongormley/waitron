@@ -35,6 +35,7 @@ export async function openBreakGlassVenue(
  * resets the password (and optionally the PIN), clears the admin's other login factors and pending passkey challenges, and
  * reactivates the account.
  *
+ * Physical recovery has no management session for identity's gated reset.
  * Secrets come from the environment, never argv, which `ps` shows.
  *
  * Returns the exit code: 0 on success, 2 on a usage or config error, 1 on an operational error.

@@ -512,7 +512,7 @@ sign-ins; a dashboard sign-in belongs to the person. So an admin opens **Users**
 passkeys, two-factor settings, recovery codes and Google link, and sends them a new invitation if
 email is set up. Waitron refuses it for the venue's only active admin who can sign in to the
 dashboard. Reset takes effect immediately and invalidates invitations already delivered. If no new
-invitation arrives, check **Email settings**, wait a minute and send it again. The browser also
+invitation arrives, check **Email**, wait a minute and send it again. The browser also
 keeps the person's email address if they chose **Remember my email on this device** when signing
 in. If the phone or laptop was also used as a till, follow the steps for a stolen till device as
 well.
@@ -560,7 +560,7 @@ for the person. Both sign the person out everywhere and delete their PIN, passwo
 settings, Google link, passkeys and recovery codes. **Reset login** sends a new invitation if
 email is set up, and **Disable** keeps the person out until an admin chooses **Enable and send
 invitation**. Reset takes effect immediately and invalidates invitations already delivered. If no
-new invitation arrives, check **Email settings**, wait a minute and send it again. Then look at
+new invitation arrives, check **Email**, wait a minute and send it again. Then look at
 what was done under the account: download the person's copy of their data, and check **Orders**.
 See [Account access](staff.md#account-access).
 
