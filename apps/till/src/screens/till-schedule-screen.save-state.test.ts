@@ -358,6 +358,42 @@ describe("the forms contract", () => {
     retry.resolve({ swapId: "sw9" });
   });
 
+  for (const [width, painted] of [
+    [1280, "rgb(1, 2, 3)"],
+    [390, "rgb(4, 5, 6)"],
+  ] as const)
+    it(`each form's button row paints what is behind it at ${width}px: the card, or at phone width the page`, async () => {
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mountLoaded();
+        el.style.setProperty("--wt-color-surface", "rgb(1, 2, 3)");
+        el.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+        el.style.setProperty("--wt-form-actions-surface", "var(--wt-color-bg)");
+        for (const form of ["cover", "request-absence"] as const)
+          expect(getComputedStyle(actions(el, form)).backgroundColor).toBe(painted);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+  it("a refusal and a field cleared after it show together, the refusal first", async () => {
+    const api = stubApi();
+    api.requestSwap.mockImplementationOnce(() => Promise.reject({ code: "swap.not_permitted" }));
+    const { el } = await mountLoaded(api);
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    await press(el, "cover-submit");
+    await vi.waitFor(() =>
+      expect(actions(el, "cover").error).toBe(codeMessage("swap.not_permitted")),
+    );
+    await choose(el, "cover-colleague", "");
+    expect(fieldError(el, "cover-colleague")).toBe(t("schedule.cover_colleague_required"));
+    expect(actions(el, "cover").error).toBe(
+      `${codeMessage("swap.not_permitted")} ${t("form.fix_fields")}`,
+    );
+    expect(await state(el, "cover-submit")).toEqual(blocked);
+  });
+
   it("a refused absence request says why below its own form, leaves the button working, and the next press clears it", async () => {
     const api = stubApi();
     const retry = deferred<{ absenceId: string }>();
