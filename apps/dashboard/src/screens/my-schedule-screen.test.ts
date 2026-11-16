@@ -223,7 +223,7 @@ describe("my-schedule-screen", () => {
     expect(api.requestAbsence).not.toHaveBeenCalled();
   });
 
-  it("surfaces a rejected action as the notice banner (never the raw code) and releases busy for a retry", async () => {
+  it("surfaces a rejected swap accept as the notice banner (never the raw code) and releases busy for a retry", async () => {
     const api = stubApi({
       acceptSwap: vi.fn().mockRejectedValue({ code: "swap.not_acceptable" }),
     });
