@@ -233,7 +233,6 @@ interface RawRow extends Record<string, unknown> {
 /** A series code and an invoice number, as in `A/12`. */
 export const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
 const BARE_NUMBER = /^\d{1,9}$/;
-/** The longest text, trimmed, a person may type into an order search or the Orders table filter. */
 export const FILTER_TEXT_MAX = 100;
 
 /** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
