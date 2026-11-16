@@ -44,7 +44,6 @@ export async function waitingDish(
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("unused")),
   });
   await placeOrder(
     { admission: testTradingAdmission(), db, backend, clock },

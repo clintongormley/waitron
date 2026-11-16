@@ -12,7 +12,6 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import { deviceOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
-import { createFakeAeat } from "@waitron/verifactu/testing";
 import { applyVenue as applyDirectVenue } from "./venue-apply.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
@@ -125,8 +124,6 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
       deploymentEnvironment: "preproduction",
       clock: steadyClock,
       db: suite.db,
-      // Required by the constructor; recordSale never submits.
-      resolveClient: () => Promise.resolve(createFakeAeat().client()),
     });
 
     const standardSeriesId = venue.seriesIds[0]!;

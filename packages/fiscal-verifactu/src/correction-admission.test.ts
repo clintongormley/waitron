@@ -6,7 +6,7 @@ import { saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { envios } from "./schema/envios.js";
@@ -32,7 +32,6 @@ beforeEach(async () => {
   backend = new VerifactuBackend({
     deploymentEnvironment: "preproduction",
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
     clock,
   });
 });

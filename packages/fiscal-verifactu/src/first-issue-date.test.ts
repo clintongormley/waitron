@@ -3,7 +3,7 @@ import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { AltaInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { staticResolver, fakeClient, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { TEST_SISTEMA } from "./testing/seed.js";
 import { VerifactuBackend } from "./backend.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
@@ -114,7 +114,6 @@ describe("VerifactuBackend refuses the same readings", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     const reading = { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 };
     expect(() => backend.assertRecordableAt(reading)).toThrow(

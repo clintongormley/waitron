@@ -4,7 +4,7 @@ import { recordSale } from "@waitron/core";
 import { withOperationAuthority } from "@waitron/module";
 import { seriesId } from "@waitron/shared";
 import { seedVenueNodes, TENANT_A } from "./fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "./write-path-fixtures.js";
+import { saleInput, steadyClock } from "./write-path-fixtures.js";
 import { createHourPreparation } from "../src/hour-preparation.js";
 import { activatePreparedModuleAllocation } from "../src/allocation-preparation.js";
 import { compareHourClocks } from "../src/hour-clock.js";
@@ -96,7 +96,6 @@ export async function seedLiveConflict(
     db,
     clock: steadyClock,
     deploymentEnvironment: "preproduction",
-    resolveClient: staticResolver(fakeClient),
   });
   const original = await withTransaction(db, (tx) =>
     recordSale(tx, backend, saleInput({ nodeId: node.nodeId, seriesId: seriesId(series!.id) })),

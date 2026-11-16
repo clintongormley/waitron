@@ -141,7 +141,6 @@ describe("closeBillDeferredTx, replay", () => {
       db: t.venue.db,
       environment: deploymentEnvironment(process.env),
       deploymentEnvironment: deploymentEnvironment(process.env),
-      resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
     });
     const before = await t.ledger();
 

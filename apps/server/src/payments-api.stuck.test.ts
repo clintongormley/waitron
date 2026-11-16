@@ -133,8 +133,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("payments-api.stuck.test: resolveClient must never be called")),
   });
 });
 

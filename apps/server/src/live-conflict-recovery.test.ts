@@ -20,12 +20,7 @@ import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { FISCAL_ROUTES, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import {
-  fakeClient,
-  saleInput,
-  staticResolver,
-  steadyClock,
-} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import type { ConflictRef } from "@waitron/fiscal-verifactu/src/conflict-evidence.js";
 import type {
@@ -482,7 +477,6 @@ it.each([false, true])(
       db: suite.db,
       clock: steadyClock,
       deploymentEnvironment: "preproduction",
-      resolveClient: staticResolver(fakeClient),
     });
     const sale = withTransaction(suite.db, async (tx) => {
       saleEntered = true;

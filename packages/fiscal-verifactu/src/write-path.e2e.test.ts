@@ -38,7 +38,7 @@ import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
 let deviceId: DeviceId;
@@ -72,7 +72,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: pg.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

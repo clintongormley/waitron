@@ -259,7 +259,6 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
     db: suite.db,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("Local sale contacted AEAT")),
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {

@@ -99,8 +99,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("party venue: filing a sale never contacts AEAT")),
   });
   const venue: VenueResult = await applyVenue(
     planVenue(

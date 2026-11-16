@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
@@ -60,7 +60,6 @@ function backend(): VerifactuBackend {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 }
 

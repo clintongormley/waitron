@@ -222,7 +222,6 @@ async function prepareSale(observeClock?: () => void) {
     db: suite.db,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("Local sale contacted AEAT")),
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   return () =>
@@ -1228,7 +1227,6 @@ describe("venue detail consumer reads", () => {
       db: suite.db,
       environment: "preproduction",
       deploymentEnvironment: "preproduction",
-      resolveClient: () => Promise.reject(Error("No external filing permitted")),
     });
     await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       zoneId: offers.zoneId,
@@ -1602,7 +1600,6 @@ describe("open kitchen work during venue corrections", () => {
       db: suite.db,
       environment: "preproduction",
       deploymentEnvironment: "preproduction",
-      resolveClient: () => Promise.reject(Error("No external filing permitted")),
     });
     const id = randomUUID();
     await withTransaction(suite.db, (tx) =>

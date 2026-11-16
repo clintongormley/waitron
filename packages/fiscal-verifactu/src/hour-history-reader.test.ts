@@ -20,7 +20,7 @@ import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { VerifactuBackend } from "./backend.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 async function readInventory() {
   const environment = await readDeploymentEnvironment(suite.db);
@@ -426,7 +426,6 @@ it("the shared history never carries the newest fiscal record's time", async () 
     deploymentEnvironment: "preproduction",
     clock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
   const [standard] = await suite.db
     .select()

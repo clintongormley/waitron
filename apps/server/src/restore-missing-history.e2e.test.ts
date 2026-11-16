@@ -62,10 +62,6 @@ afterEach(async () => {
   fixture = undefined;
 });
 
-const offline = async () => {
-  throw new TypeError("offline");
-};
-
 it.each(["archive", "stream"] as const)(
   "a %s restore, with its start's internet time check stood in for, sells on a new series and later lists the old box's invoices AEAT holds",
   async (kind) => {
@@ -90,7 +86,6 @@ it.each(["archive", "stream"] as const)(
       db: suite.db,
       deploymentEnvironment: "preproduction",
       clock: steadyClock,
-      resolveClient: offline,
     });
     const oldSeries = await readStandardSeriesId(suite.db, f.node.nodeId);
     await withTransaction(suite.db, (tx) =>
@@ -152,7 +147,6 @@ it.each(["archive", "stream"] as const)(
         db: store.venue,
         clock,
         deploymentEnvironment: "preproduction",
-        resolveClient: offline,
       });
       const standard = (purpose: "live" | "retired") =>
         restored.series.find(

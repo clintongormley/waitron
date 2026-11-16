@@ -14,7 +14,7 @@ import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
-import { FISCAL_SLOT, makeVerifactuBackend, rejectResolveClient } from "./slot.js";
+import { FISCAL_SLOT, makeVerifactuBackend } from "./slot.js";
 
 // Never the real mtlsFetch: no test may open a connection to AEAT.
 const refusedFetch = vi.fn<typeof globalThis.fetch>(async () => {
@@ -51,10 +51,6 @@ describe("FISCAL_SLOT", () => {
     expect(backend.id).toBe(FISCAL_SLOT.id);
     expect(FISCAL_SLOT.id).toBe("verifactu");
     expect(FISCAL_SLOT.activationReadiness).toBe("accepted-test-submission");
-  });
-
-  it("never resolves an AEAT client on the sale path", async () => {
-    await expect(rejectResolveClient()).rejects.toThrow(/never be called/);
   });
 });
 

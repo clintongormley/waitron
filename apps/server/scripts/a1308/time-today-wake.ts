@@ -91,7 +91,6 @@ try {
       db: store.venue,
       environment: "preproduction",
       deploymentEnvironment: "preproduction",
-      resolveClient: () => Promise.reject(new Error("timing never files")),
     });
     const log = (...entry: unknown[]) => console.error(...entry);
     mountTillApi(

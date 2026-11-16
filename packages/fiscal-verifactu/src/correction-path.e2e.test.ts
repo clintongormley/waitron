@@ -17,7 +17,7 @@ import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedSale, seedNode, type SeededNode } from "./testing/seed.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 
@@ -49,7 +49,6 @@ beforeEach(async () => {
     // `db` is only read by `pendingCount`, which this suite never calls; `recordSale`/
     // `recordCorrection` act on the transaction they are handed.
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

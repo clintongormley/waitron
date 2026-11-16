@@ -8,7 +8,7 @@ import { AppError } from "@waitron/shared";
 import { registrosFacturacion } from "./schema/registros.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -109,7 +109,6 @@ describe("refuseNewIssuance after a handover", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
   }
 

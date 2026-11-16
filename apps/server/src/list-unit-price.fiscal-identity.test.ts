@@ -174,7 +174,6 @@ async function fileOneSale(db: Database) {
     db,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("resolveClient must never be called")),
   });
 
   await recordTillSale({ admission: testTradingAdmission(), db, backend, clock: fixedClock }, cfg, {

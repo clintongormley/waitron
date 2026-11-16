@@ -84,8 +84,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("vat-class-at-line-add.test: resolveClient must never be called")),
   });
 });
 

@@ -169,7 +169,6 @@ describe("the category report reconciles with the till's sales", () => {
       db: suite.db,
       environment: deploymentEnvironment(process.env),
       deploymentEnvironment: deploymentEnvironment(process.env),
-      resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
     });
     const deps = { db: suite.db, backend, clock };
 

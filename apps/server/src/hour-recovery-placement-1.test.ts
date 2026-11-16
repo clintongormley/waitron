@@ -188,7 +188,6 @@ describe("selected-hour admission before archive placement", () => {
           clock,
           deploymentEnvironment: "preproduction",
           environment: "preproduction",
-          resolveClient: async () => aeatClients(),
         });
       const sell = (db: Database, id: string) =>
         withTransaction(db, (tx) =>

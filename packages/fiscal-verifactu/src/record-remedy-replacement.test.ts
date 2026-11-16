@@ -56,9 +56,6 @@ const backend = () =>
     clock: steadyClock,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => {
-      throw new Error("A local replacement must not contact AEAT");
-    },
   });
 
 /** A simplified invoice (or, naming `customer`, a full one) AEAT refused with `codigo`, and its open case. */

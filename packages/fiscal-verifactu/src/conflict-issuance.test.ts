@@ -8,7 +8,7 @@ import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import type { FilingCaseCause } from "./filing-cases.js";
@@ -24,7 +24,6 @@ beforeEach(async () => {
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "production",
-    resolveClient: staticResolver(fakeClient),
   });
   original = await withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue)));
 });

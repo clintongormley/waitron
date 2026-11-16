@@ -12,7 +12,7 @@ import type {
 import type { ErrorParams, NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { confirmClockStep } from "./clock-step.js";
 import { recordCorrected } from "./clock-corrected-incident.js";
@@ -38,7 +38,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

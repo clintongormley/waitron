@@ -11,7 +11,7 @@ import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { anulacionFor } from "./testing/seed.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 // What this file asserts is decided in application code, before or instead of the insert — a
 // refusal, or a warning incident raised beside a record that is written anyway. Nothing here
@@ -29,7 +29,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

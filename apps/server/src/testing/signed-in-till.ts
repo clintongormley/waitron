@@ -159,7 +159,6 @@ export async function provisionSignedInTill<S extends TillSeed>(
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("signed-in-till: resolveClient is never called")),
   });
   const app = new Hono();
   mountTillApi(

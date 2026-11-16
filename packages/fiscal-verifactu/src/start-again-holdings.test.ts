@@ -6,7 +6,7 @@ import { recordSale } from "@waitron/core";
 import type { ModuleOperationHost } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
 import { envios } from "./schema/envios.js";
@@ -30,7 +30,6 @@ describe("startAgainHoldings", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     for (let sale = 0; sale < 2; sale++)
       await withTransaction(suite.db, (tx) =>
@@ -61,7 +60,6 @@ describe("startAgainHoldings", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),
@@ -153,7 +151,6 @@ describe("startAgainHoldings with an invoice record and the envios table missing
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),

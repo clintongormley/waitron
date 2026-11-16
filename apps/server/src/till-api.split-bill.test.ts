@@ -521,7 +521,6 @@ describe("a split-off check after the till that made it has forgotten it", () =>
           db,
           environment: deploymentEnvironment(process.env),
           deploymentEnvironment: deploymentEnvironment(process.env),
-          resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
         }),
         clock,
         cfg: venueCfg,

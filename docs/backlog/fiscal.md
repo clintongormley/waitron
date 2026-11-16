@@ -186,10 +186,10 @@ No stored fiscal row is to be rewritten.
     rejection.
   - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
     header says so); the protection it gives a losing attempt has no test holding it.
-  - `write-path.e2e.test.ts` (lines 414 and 418) points at `test/fixtures.ts:249-256` for a
+  - `write-path.e2e.test.ts` (lines 410 and 414) points at `test/fixtures.ts:249-256` for a
     receipt of one basket hashing differently filed 16th and filed standalone, and at
     `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
-    `test/fixtures.ts:285-289` and `steadyClock` at `test/write-path-fixtures.ts:27-39`. Correct
+    `test/fixtures.ts:264-267` and `steadyClock` at `test/write-path-fixtures.ts:22-34`. Correct
     them only in a change allowed to touch that file.
 
 ## Reporting — the fiscal remainder (parked)

@@ -18,7 +18,7 @@ import {
 import { hasReturnedInvoices, returnedInvoices, storedBases } from "./returned-invoices.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
 import { VerifactuBackend } from "./backend.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 
 vi.mock("node:crypto", async (original) => {
   const actual = await original<typeof import("node:crypto")>();
@@ -307,7 +307,6 @@ it("answers the returned invoice through the backend's own methods", async () =>
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: receiver.db,
-    resolveClient: staticResolver(fakeClient),
   });
   const node = await fixture();
   const id = await append(node, 1);

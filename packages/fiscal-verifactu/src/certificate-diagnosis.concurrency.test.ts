@@ -21,7 +21,7 @@ import {
 import { SIN_DATOS_BODY } from "../test/certificate-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { credentialRevision, loadKeyRing } from "@waitron/credentials";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
@@ -100,7 +100,6 @@ describe("certificate diagnosis without a sale or install lock", () => {
         deploymentEnvironment: "production",
         clock: steadyClock,
         db: suite.db,
-        resolveClient: staticResolver(fakeClient),
       });
       const { saleId } = await withTransaction(suite.db, (tx) =>
         recordSale(tx, backend, saleInput({ nodeId, seriesId })),

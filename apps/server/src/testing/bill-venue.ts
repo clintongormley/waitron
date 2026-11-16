@@ -130,7 +130,6 @@ export async function provisionBillVenue(
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
   });
   const provisioned = await (options.apply ?? applyVenue)(
     planVenue(

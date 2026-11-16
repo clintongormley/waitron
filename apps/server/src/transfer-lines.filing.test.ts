@@ -225,8 +225,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("transfer-lines: resolveClient must never be called by recordSale")),
   });
 });
 

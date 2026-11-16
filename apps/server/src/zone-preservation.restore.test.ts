@@ -49,9 +49,6 @@ it.each(["archive", "bucket"] as const)(
       clock: source,
       deploymentEnvironment: "preproduction",
       environment: "preproduction",
-      resolveClient: async () => {
-        throw new Error("no inline filing");
-      },
     });
     await withTransaction(suite.db, (tx) =>
       recordSale(
@@ -160,7 +157,6 @@ it.each(["archive", "bucket"] as const)(
         },
         deploymentEnvironment: "preproduction",
         environment: "preproduction",
-        resolveClient: async () => client,
       });
       for (const sale of before.sales) {
         const filed = await withTransaction(db, (tx) =>
