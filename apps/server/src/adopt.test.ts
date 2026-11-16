@@ -10,6 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   NODE_CLASSIFICATION,
+  nodeHandoverEvents,
   readMirrorLink,
   readNodeMode,
   readPairLink,
@@ -238,6 +239,25 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
     const ownNodeId = persistedTrading[0]!.nodeId;
     expect((await readNodeMode(suite.node, ownNodeId)).mode).toBe("mirror");
+    expect(
+      await suite.node
+        .select({
+          nodeId: nodeHandoverEvents.nodeId,
+          operationId: nodeHandoverEvents.operationId,
+          kind: nodeHandoverEvents.kind,
+          detail: nodeHandoverEvents.detail,
+          envelope: nodeHandoverEvents.envelope,
+        })
+        .from(nodeHandoverEvents),
+    ).toEqual([
+      {
+        nodeId: ownNodeId,
+        operationId: null,
+        kind: "box.role_changed",
+        detail: { mode: "mirror", singletonRole: "secondary", cause: "adopt" },
+        envelope: null,
+      },
+    ]);
     const cfg = (await readMirrorLink(suite.node, ownNodeId))!;
     expect(cfg.originUrl).toBe("https://box.deli.test");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);

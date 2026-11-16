@@ -93,6 +93,7 @@ async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {
     await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId, "promote"));
   } catch (error) {
+    // The role and its event contain no secrets, so an engine refusal's message is logged too.
     deps.log("warn", "promotion.role_write_failed", {
       errorCode: codeOf(error),
       ...(isAppError(error)
