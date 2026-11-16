@@ -194,7 +194,7 @@ beforeEach(async () => {
   m1Revisions = [(await selectOnM1("first", true)).revision];
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
-  await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
   key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });

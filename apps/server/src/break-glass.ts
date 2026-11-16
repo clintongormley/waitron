@@ -76,7 +76,7 @@ export async function mintBreakGlassKeyTx(
   made: BreakGlassSecret,
 ): Promise<{ secret: string; name: string }> {
   const name = await chooseBreakGlassKeyName(venue, tx, nodeId);
-  await setRecoveryKeyTx(tx, nodeId, made.verifier, name);
+  await setRecoveryKeyTx(tx, nodeId, made.verifier, name, null);
   return { secret: made.secret, name };
 }
 

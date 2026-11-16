@@ -136,7 +136,7 @@ async function halfAdoptedBox(joined = false): Promise<{
   const store = await openVenueDatabase(venueDir);
   try {
     await stampDeployment(store.venue, "preproduction");
-    await setNodeMode({ venue: store.venue, node: store.node }, NODE_ID, "mirror");
+    await setNodeMode({ venue: store.venue, node: store.node }, NODE_ID, "mirror", "adopt");
     await writeMirrorLink(store.node, NODE_ID, {
       originUrl: "https://relay.example",
       boxHostname: "waitron.local",

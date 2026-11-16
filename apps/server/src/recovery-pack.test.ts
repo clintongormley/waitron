@@ -141,6 +141,7 @@ it("refuses a key replaced while a module is preparing the pack and rolls the re
           node.nodeId,
           hashSecret("replacement-secret"),
           "replacement-name",
+          null,
         );
         return { register: "public-snapshot" };
       },

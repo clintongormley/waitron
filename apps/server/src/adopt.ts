@@ -251,7 +251,7 @@ export async function adoptFromPrimary(
     for (const { table } of NODE_CLASSIFICATION) {
       await ABANDONED_ROW_SWEEPS[table]?.(tx, standby.nodeId);
     }
-    await setNodeModeTx(tx, standby.nodeId, "mirror");
+    await setNodeModeTx(tx, standby.nodeId, "mirror", "adopt");
     await sealNodeSigningKeyTx(tx, ring, standby.nodeId, standby.privateKey);
     await writeMirrorLinkTx(tx, standby.nodeId, {
       originUrl: bundle.primaryUrl,

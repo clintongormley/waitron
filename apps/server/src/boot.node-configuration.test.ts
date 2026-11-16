@@ -320,7 +320,7 @@ it.each(["mirror", "primary"] as const)(
     );
     await stampDeployment(source.db, "preproduction");
     if (mode === "mirror") {
-      await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror");
+      await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror", "adopt");
       await writeMirrorLink(source.node, NODE, {
         originUrl: "http://127.0.0.1:1/",
         boxHostname: "origin-box.local",

@@ -120,7 +120,7 @@ describe("scoped recovery-key authority", () => {
       whileChangingNodeOnLockRequest(
         suite.node,
         async (tx) => {
-          await setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "Replacement");
+          await setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "Replacement", null);
         },
         () =>
           perform(async () => {

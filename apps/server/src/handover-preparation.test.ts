@@ -243,7 +243,7 @@ beforeEach(async () => {
     );
   });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
-  await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 
@@ -1299,7 +1299,7 @@ describe("setting the spare's clock from this device", () => {
     const s = service(fiscalModules, box.correction);
     // The setup a join wrote while this box was a mirror stays in its state folder once promoted.
     await setupFromAJoin(s);
-    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary", "promote");
     const app = new Hono();
     mountPromoteApi(app, {
       appDb: suite.db,
@@ -1441,7 +1441,7 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
 
   it("a box that is not a mirror writes nothing, and its module refuses for want of a setup", async () => {
     await controlledAtFilingAssumed();
-    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary", "promote");
     const before = await venueRows();
     expect(await challenge(route(service()))).toMatchObject({
       status: 400,

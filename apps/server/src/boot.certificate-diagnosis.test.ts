@@ -90,7 +90,7 @@ async function prepared(posture: "primary" | "mirror" | "fenced" = "primary", fi
   if (posture !== "primary") {
     await stampDeployment(suite.db, "preproduction");
     if (posture === "mirror") {
-      await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
+      await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror", "adopt");
       await writeMirrorLink(suite.node, venue.cfg.nodeId, {
         originUrl: "https://127.0.0.1:1/",
         boxHostname: "box.test",

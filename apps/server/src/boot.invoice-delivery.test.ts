@@ -327,7 +327,7 @@ describe("invoice delivery recovery at trading boot", () => {
 
   it("leaves inherited delivery claims unchanged when the trading node is read-only", async () => {
     const ctx = await fixture();
-    await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror", "adopt");
     await writeMirrorLink(suite.node, ctx.node, {
       originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
       boxHostname: "waitron.local",
@@ -718,7 +718,12 @@ describe("invoice email worker at trading boot", () => {
     let server: StartedServer | undefined;
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
-      await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, "secondary");
+      await setSingletonRole(
+        { venue: suite.db, node: suite.node },
+        ctx.node,
+        "secondary",
+        "fenced",
+      );
       const before = await delivery(email.id);
       server = await startServer(ctx.env);
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
@@ -736,7 +741,7 @@ describe("invoice email worker at trading boot", () => {
     let server: StartedServer | undefined;
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
-      await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
+      await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror", "adopt");
       await writeMirrorLink(suite.node, ctx.node, {
         originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
         boxHostname: "waitron.local",
@@ -886,7 +891,7 @@ describe("queued account mail primary admission at real boot", () => {
       if (role === "primary")
         await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
       await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, loadKeyRing(ctx.env), smtp.smtp));
-      await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, role);
+      await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, role, "fenced");
       let server: StartedServer | undefined;
       try {
         server = await startServer(ctx.env);

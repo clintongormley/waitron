@@ -91,10 +91,9 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
  */
 async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {
-    await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId));
+    await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId, "promote"));
   } catch (error) {
-    // An engine refusal carries no code of ours, so its message is logged too. These statements
-    // write only the mode, the role and the node id, so the message can hold nothing secret.
+    // The role and its event contain no secrets, so an engine refusal's message is logged too.
     deps.log("warn", "promotion.role_write_failed", {
       errorCode: codeOf(error),
       ...(isAppError(error)

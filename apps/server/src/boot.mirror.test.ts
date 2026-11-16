@@ -306,6 +306,7 @@ beforeAll(async () => {
     { venue: db.mirror, node: stores.mirror.node },
     TILL_ENV.WAITRON_NODE_ID,
     "mirror",
+    "adopt",
   );
   await stampDeployment(db.primary, "preproduction");
   await stampDeployment(db.noConfig, "preproduction");
@@ -313,6 +314,7 @@ beforeAll(async () => {
     { venue: db.noConfig, node: stores.noConfig.node },
     TILL_ENV.WAITRON_NODE_ID,
     "mirror",
+    "adopt",
   );
   // Adoption-pending: stamped and mode 'mirror', but deliberately NOT seeded with the till identity.
   await stampDeployment(db.adopting, "preproduction");
@@ -320,6 +322,7 @@ beforeAll(async () => {
     { venue: db.adopting, node: stores.adopting.node },
     TILL_ENV.WAITRON_NODE_ID,
     "mirror",
+    "adopt",
   );
 
   // `noConfig` deliberately gets none.

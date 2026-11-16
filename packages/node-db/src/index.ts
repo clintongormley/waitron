@@ -42,6 +42,7 @@ export {
   setSingletonRole,
   setSingletonRoleTx,
 } from "./mode.js";
+export type { BoxRoleCause } from "./mode.js";
 export {
   readRecoveryKey,
   readRecoveryKeyName,

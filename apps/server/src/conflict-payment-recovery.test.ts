@@ -182,7 +182,7 @@ it("finalises an already captured bill once after the actual administrator switc
   const key = "synthetic-conflict-current-key";
   await stampDeployment(suite.db, "preproduction");
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, hashSecret(key), "key-1"),
+    setRecoveryKeyTx(tx, node.nodeId, hashSecret(key), "key-1", null),
   );
   scratch = await mkdtemp(join(tmpdir(), "conflict-payment-"));
   const preparation = createNodeOperationPreparation({

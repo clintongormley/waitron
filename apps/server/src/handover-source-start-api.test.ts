@@ -212,7 +212,7 @@ beforeEach(async () => {
   await stampDeployment(spareBox.db, "preproduction");
   await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring: RING }, self);
   await establishNodeIdentity({ ownerDb: spareBox.db, node: spareBox.node, ring: RING }, spare);
-  await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror");
+  await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror", "adopt");
   selfKey = await readNodeIdentityKey(mainBox.node, RING, self);
   spareKey = await readNodeIdentityKey(spareBox.node, RING, spare);
   await pinMainBoxKey(spareBox.node, spare, {
@@ -378,7 +378,9 @@ describe("a valid start", () => {
     expect(verdict.signerNodeId).toBe(self);
     expect(verdict.body.authorisedBy).toBe(personId);
     expect(verdict.body.binding).toEqual(operations()[0]!.binding);
-    expect(events(spareBox)[0]!.envelope).toBe(offer!.envelope);
+    expect(events(spareBox).filter((event) => event.operationId === OP)[0]!.envelope).toBe(
+      offer!.envelope,
+    );
     expect((verdict.body as unknown as { imageMigrations: string }).imageMigrations).toBe(
       imageMigrationsDigest(null),
     );
@@ -792,12 +794,12 @@ function bindingFor(operationId: string): HandoverBinding {
 
 describe("an offer the spare refuses", () => {
   it("not a spare, on a real spare: `abandoned`, the box selling, and a new handover allowed", async () => {
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary", "promote");
 
     expect(await start()).toEqual(refusal(409, "handover.not_a_spare"));
 
     await expectAbandoned("handover.not_a_spare");
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror", "adopt");
     expect((await start({ operationId: NEXT_OP })).status).toBe(200);
     expect(operations().map((row) => [row.operationId, row.state])).toEqual(
       expect.arrayContaining([
@@ -1007,7 +1009,7 @@ describe("an offer the spare refuses", () => {
 
 describe("the same operation again", () => {
   it("a stored abandonment answers the same refusal, asking the spare nothing", async () => {
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary", "promote");
     const first = await start();
     exchanged = [];
 
@@ -1071,7 +1073,7 @@ describe("the same operation again", () => {
     expect(exchanged).toEqual([OFFER_PATH]);
     expect(JSON.parse(resent as string)).toEqual(JSON.parse(sent!));
     expect(events()).toHaveLength(1);
-    expect(events(spareBox)).toHaveLength(1);
+    expect(events(spareBox).filter((event) => event.operationId === OP)).toHaveLength(1);
     expect(stepDownAfterOffer).toHaveBeenCalledTimes(2);
   });
 
@@ -1300,9 +1302,9 @@ describe("two requests at once", () => {
   });
 
   it("a refusal lets the next request run", async () => {
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "primary", "promote");
     await start();
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror", "adopt");
     expect((await start({ operationId: NEXT_OP })).status).toBe(200);
   });
 });
@@ -1327,9 +1329,10 @@ describe("the settings the offer carries", () => {
 
   /** Asks first and then checks, so a spare that accepted prints its row. */
   async function expectRefusedByTheSpare(code: string, params: object = {}): Promise<void> {
+    const before = events(spareBox);
     const answer = await start();
     expect(operations(spareBox).map((row) => row.state)).toEqual([]);
-    expect(events(spareBox)).toEqual([]);
+    expect(events(spareBox)).toEqual(before);
     expect(answer).toEqual(refusal(409, code, params));
     await expectAbandoned(code, params);
   }

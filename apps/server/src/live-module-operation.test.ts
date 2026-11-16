@@ -38,7 +38,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "live-module-operation-"));
   await stampDeployment(suite.db, "preproduction");
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, verifier, "paper-1"),
+    setRecoveryKeyTx(tx, node.nodeId, verifier, "paper-1", null),
   );
   writable = true;
 });
@@ -164,11 +164,11 @@ it.each(["key", "role", "writable"])(
     const s = service(async () => {
       if (changed === "key")
         await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
+          setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2", null),
         );
       if (changed === "role")
         await withNodeTransaction(suite.node, (tx) =>
-          setSingletonRoleTx(tx, node.nodeId, "secondary"),
+          setSingletonRoleTx(tx, node.nodeId, "secondary", "fenced"),
         );
       if (changed === "writable") writable = false;
     });
@@ -191,11 +191,11 @@ it.each(["key", "role", "writable"])(
       s.withLiveRecovery(binding, secret, isolation, async (scope) => {
         if (changed === "key")
           await withNodeTransaction(suite.node, (tx) =>
-            setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
+            setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2", null),
           );
         if (changed === "role")
           await withNodeTransaction(suite.node, (tx) =>
-            setSingletonRoleTx(tx, node.nodeId, "secondary"),
+            setSingletonRoleTx(tx, node.nodeId, "secondary", "fenced"),
           );
         if (changed === "writable") writable = false;
         return scope.commit(async () => {

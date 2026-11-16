@@ -366,7 +366,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect(await spare.db.select().from(fiscalReservations)).toHaveLength(1);
   expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
   expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
-  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(
     { venue: spare.db, node: spare.node },
     held.standby.nodeId,
@@ -409,7 +409,7 @@ it("refuses premature series and leaves no spare node, reservation or signing ke
 it("retains a dormant spare when independent current consumption is absent at takeover", async () => {
   const held = await reserve();
   await establish(held);
-  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(
     { venue: spare.db, node: spare.node },
     held.standby.nodeId,
@@ -427,7 +427,7 @@ it("retains a dormant spare when independent current consumption is absent at ta
 it("retains the dormant reservation and all fiscal rows after a refused membership write", async () => {
   const held = await reserve();
   await establish(held);
-  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(
     { venue: spare.db, node: spare.node },
     held.standby.nodeId,

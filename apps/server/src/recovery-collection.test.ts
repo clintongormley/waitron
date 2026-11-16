@@ -81,7 +81,7 @@ it("refuses a changed key after outside collection and before entering the local
       async (_authority, commit) => {
         consumedOutside = true;
         await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "replacement"),
+          setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "replacement", null),
         );
         return commit();
       },

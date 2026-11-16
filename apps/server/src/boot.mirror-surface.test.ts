@@ -147,7 +147,7 @@ async function boot(
       taxModule: "vat",
     });
     await stampDeployment(suite.db, "preproduction");
-    await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror", "adopt");
     await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
     await writePendingAdoption(stateDir, LATCH);
   } else {
@@ -156,7 +156,7 @@ async function boot(
     await stampDeployment(suite.db, "preproduction");
     await seedModuleSettings(suite.db, { "fiscal-none": false });
     if (start === "mirror" || start === "mirror-zone-repair") {
-      await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
+      await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror", "adopt");
       await writeMirrorLink(suite.node, NODE, {
         originUrl: "http://127.0.0.1:1/",
         boxHostname: "main-box.local",

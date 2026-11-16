@@ -1572,7 +1572,7 @@ describe("the spare's duty runs the real comparison", () => {
       endorsements: [endorseKey(r.m2.nodeId, nodeSigningPublicKey(r.m2Key), r.m1.nodeId, r.m1Key)],
     });
     await stampDeployment(r.db, "preproduction");
-    await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "mirror");
+    await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "mirror", "adopt");
     await writeMirrorLink(suite.node, r.m2.nodeId, {
       originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
@@ -2244,7 +2244,7 @@ describe("the spare's duty runs the real comparison", () => {
       it("a box left alone off mirror does not ask, on a running duty or a new one (R6)", async () => {
         let asked = 0;
         const { r, duty } = await assumed(() => (asked += 1));
-        await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "primary");
+        await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "primary", "promote");
         duty.wake();
         await new Promise((resolve) => setTimeout(resolve, 200));
         const settled = asked;

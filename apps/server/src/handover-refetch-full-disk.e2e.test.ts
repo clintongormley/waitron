@@ -108,7 +108,7 @@ async function rig(small: SmallDisk, name: string) {
       membershipTerm: 3,
     }),
   );
-  await setNodeMode({ venue: db, node: suite.node }, m2, "mirror");
+  await setNodeMode({ venue: db, node: suite.node }, m2, "mirror", "adopt");
   await writeMirrorLink(suite.node, m2, {
     originUrl: "http://127.0.0.1:1/",
     boxHostname: "box.local",

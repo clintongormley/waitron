@@ -203,7 +203,8 @@ export function createFirstSetupNodeKeys(options: Options) {
             // The first-hour step's "I kept it" confirmed this pack reached the person.
             await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
           });
-          if (!keyStaged) await setRecoveryKeyTx(nodeTx, stage.nodeId, stage.verifier, stage.name);
+          if (!keyStaged)
+            await setRecoveryKeyTx(nodeTx, stage.nodeId, stage.verifier, stage.name, null);
         });
       });
     },

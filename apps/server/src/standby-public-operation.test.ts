@@ -159,7 +159,7 @@ beforeEach(async () => {
   );
 });
 async function promotionApp() {
-  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   const holders = createDeploymentHolders("mirror", "secondary");
   const app = new Hono();
@@ -447,7 +447,7 @@ it("returns the committed promotion result after a lost response without consult
   expect(collected).toEqual(["promote"]);
 });
 it("refuses a promotion runner redirected to another node before collecting evidence", async () => {
-  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,

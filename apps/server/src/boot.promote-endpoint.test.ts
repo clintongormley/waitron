@@ -217,7 +217,7 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
   });
 
   await stampDeployment(db, "production");
-  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror");
+  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror", "adopt");
   // Throws if the seed left no reserved standard series.
   await readStandardSeriesId(db, standby.nodeId);
   return { nodeId: standby.nodeId };
@@ -319,7 +319,12 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
   }, 60_000);
 
   it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
-    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "primary");
+    await setSingletonRole(
+      { venue: appDb, node: appNode },
+      TILL_ENV.WAITRON_NODE_ID,
+      "primary",
+      "fenced",
+    );
     await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
 
@@ -342,7 +347,12 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
 
   it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
     // A held document marking this node sell-only: boot demotes it and mounts the read-only gate.
-    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "primary");
+    await setSingletonRole(
+      { venue: appDb, node: appNode },
+      TILL_ENV.WAITRON_NODE_ID,
+      "primary",
+      "fenced",
+    );
     await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
 

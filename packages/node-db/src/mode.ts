@@ -10,6 +10,29 @@ import {
 import type { VenueAndNodeHandles } from "./handles.js";
 import { box } from "./schema/box.js";
 import { writeBoxRoleTx } from "./box.js";
+import { appendHandoverEventTx } from "./handover.js";
+
+export type BoxRoleCause = "adopt" | "promote" | "fenced";
+type NodeRole = { mode: DeploymentMode; singletonRole: SingletonRole };
+
+async function writeRoleTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  stored: NodeRole,
+  next: NodeRole,
+  cause: BoxRoleCause,
+): Promise<void> {
+  await writeBoxRoleTx(tx, nodeId, next);
+  if (stored.mode !== next.mode || stored.singletonRole !== next.singletonRole) {
+    await appendHandoverEventTx(tx, {
+      nodeId,
+      operationId: null,
+      kind: "box.role_changed",
+      detail: { ...next, cause },
+      envelope: null,
+    });
+  }
+}
 
 /**
  * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no recorded role
@@ -44,9 +67,10 @@ export async function setNodeMode(
   handles: VenueAndNodeHandles,
   nodeId: string,
   mode: DeploymentMode,
+  cause: BoxRoleCause,
 ): Promise<void> {
   await requireStamp(handles.venue);
-  await withNodeTransaction(handles.node, (tx) => setNodeModeTx(tx, nodeId, mode));
+  await withNodeTransaction(handles.node, (tx) => setNodeModeTx(tx, nodeId, mode, cause));
 }
 
 /**
@@ -59,12 +83,19 @@ export async function setNodeModeTx(
   tx: NodeTransaction,
   nodeId: string,
   mode: DeploymentMode,
+  cause: BoxRoleCause,
 ): Promise<void> {
   const stored = await readNodeMode(tx, nodeId);
-  await writeBoxRoleTx(tx, nodeId, {
-    mode,
-    singletonRole: mode === "mirror" ? "secondary" : stored.singletonRole,
-  });
+  await writeRoleTx(
+    tx,
+    nodeId,
+    stored,
+    {
+      mode,
+      singletonRole: mode === "mirror" ? "secondary" : stored.singletonRole,
+    },
+    cause,
+  );
 }
 
 /** Sets one node's singleton role; refuses an unstamped `venue.db` as {@link setNodeMode} does. */
@@ -72,9 +103,10 @@ export async function setSingletonRole(
   handles: VenueAndNodeHandles,
   nodeId: string,
   role: SingletonRole,
+  cause: BoxRoleCause,
 ): Promise<void> {
   await requireStamp(handles.venue);
-  await withNodeTransaction(handles.node, (tx) => setSingletonRoleTx(tx, nodeId, role));
+  await withNodeTransaction(handles.node, (tx) => setSingletonRoleTx(tx, nodeId, role, cause));
 }
 
 /**
@@ -87,13 +119,19 @@ export async function setSingletonRoleTx(
   tx: NodeTransaction,
   nodeId: string,
   role: SingletonRole,
+  cause: BoxRoleCause,
 ): Promise<void> {
   const stored = await readNodeMode(tx, nodeId);
-  await writeBoxRoleTx(tx, nodeId, { mode: stored.mode, singletonRole: role });
+  await writeRoleTx(tx, nodeId, stored, { mode: stored.mode, singletonRole: role }, cause);
 }
 
 /** Makes one node the sole primary (mode and singleton role both `primary`) on a caller's node
  * transaction; it does not read the deployment stamp. */
-export async function setPrimaryRoleTx(tx: NodeTransaction, nodeId: string): Promise<void> {
-  await writeBoxRoleTx(tx, nodeId, { mode: "primary", singletonRole: "primary" });
+export async function setPrimaryRoleTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  cause: BoxRoleCause,
+): Promise<void> {
+  const stored = await readNodeMode(tx, nodeId);
+  await writeRoleTx(tx, nodeId, stored, { mode: "primary", singletonRole: "primary" }, cause);
 }

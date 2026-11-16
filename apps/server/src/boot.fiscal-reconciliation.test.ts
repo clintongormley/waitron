@@ -136,7 +136,7 @@ describe("boot's fiscal reconciliation duty", () => {
         await seedSharedVenue(venue.store.venue);
         if (secondary) {
           await stampDeployment(venue.store.venue, "preproduction");
-          await setSingletonRole(venue.store, KEY_ENV.WAITRON_NODE_ID, "secondary");
+          await setSingletonRole(venue.store, KEY_ENV.WAITRON_NODE_ID, "secondary", "fenced");
         }
         await copyMigrationsRoot(migrations);
         server = await startServer({

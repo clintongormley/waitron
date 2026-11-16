@@ -90,7 +90,12 @@ describe("attendance response boot with permanent workforce", () => {
         }
         await stampDeployment(suite.db, "preproduction");
         if (mode === "mirror") {
-          await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
+          await setNodeMode(
+            { venue: suite.db, node: suite.node },
+            venue.cfg.nodeId,
+            "mirror",
+            "adopt",
+          );
           await writeMirrorLink(suite.node, venue.cfg.nodeId, {
             originUrl: "https://127.0.0.1:1/",
             boxHostname: "box.test",
@@ -121,7 +126,7 @@ describe("attendance response boot with permanent workforce", () => {
           );
         } else if (mode === "secondary")
           await withNodeTransaction(suite.node, (tx) =>
-            setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"),
+            setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary", "fenced"),
           );
         const scratch = await mkdtemp(join(tmpdir(), "waitron-response-boot-"));
         let server: StartedServer | undefined;

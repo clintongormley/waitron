@@ -30,7 +30,8 @@ afterAll(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 async function build(mirror = false, servesDashboard = false) {
-  if (mirror) await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "mirror"));
+  if (mirror)
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "mirror", "adopt"));
   await beginHandover(
     { node: suite.node, nodeId: NODE },
     {
@@ -91,7 +92,7 @@ it("serves the literal emergency page only on a mirror, before operation lookup"
   const slash = await app.request("/handover/emergency/");
   expect(slash.status).toBe(302);
   expect(slash.headers.get("location")).toBe("/handover/emergency");
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "primary"));
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "primary", "promote"));
   expect((await app.request("/handover/emergency")).status).toBe(404);
   expect((await app.request(`/handover/${OP}`, { headers: { Accept: "text/html" } })).status).toBe(
     200,

@@ -257,7 +257,7 @@ beforeAll(async () => {
 
   const [mDir, mId, mDb, mNode] = await seededVenue();
   mirror = { dir: mDir, nodeId: mId };
-  await setNodeMode({ venue: mDb, node: mNode }, mId, "mirror");
+  await setNodeMode({ venue: mDb, node: mNode }, mId, "mirror", "adopt");
   await linkMirror(mNode, mId);
   await beginHandover(
     { node: mNode, nodeId: mId },
@@ -274,7 +274,7 @@ beforeAll(async () => {
 
   // A mirror partway through taking over as the main box.
   const [hDir, hId, hDb, hNode] = await seededVenue();
-  await setNodeMode({ venue: hDb, node: hNode }, hId, "mirror");
+  await setNodeMode({ venue: hDb, node: hNode }, hId, "mirror", "adopt");
   await linkMirror(hNode, hId);
   const handingStore = { node: hNode, nodeId: hId };
   await beginHandover(
@@ -305,7 +305,7 @@ beforeAll(async () => {
 
   // A second mirror with no open operation, holding a chart that names the main box.
   const [sDir, sId, sDb, sNode] = await seededVenue();
-  await setNodeMode({ venue: sDb, node: sNode }, sId, "mirror");
+  await setNodeMode({ venue: sDb, node: sNode }, sId, "mirror", "adopt");
   await linkMirror(sNode, sId);
   const spareKey = await readNodeIdentityKey(sNode, RING, sId);
   const chartBody: MembershipDocumentBody = {
@@ -366,10 +366,10 @@ beforeAll(async () => {
   // A held chart marking this box sell-only: boot fences it and mounts the read-only gate.
   const [fDir, fId, fDb, fNode] = await seededVenue();
   fenced = { dir: fDir, nodeId: fId };
-  await setSingletonRole({ venue: fDb, node: fNode }, fId, "primary");
+  await setSingletonRole({ venue: fDb, node: fNode }, fId, "primary", "fenced");
   await writeNodeMembership(fDb, sellOnlyChart(fId));
   const [proofDir, proofId, proofDb, proofNode] = await seededVenue();
-  await setSingletonRole({ venue: proofDb, node: proofNode }, proofId, "primary");
+  await setSingletonRole({ venue: proofDb, node: proofNode }, proofId, "primary", "fenced");
   const key = await readNodeIdentityKey(proofNode, RING, proofId);
   const proofBody: MembershipDocumentBody = {
     term: 5,

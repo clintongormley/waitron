@@ -57,7 +57,7 @@ export async function finishPromotedRole(
   );
   if (!verified.valid) return "nothing";
 
-  await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId));
+  await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId, "promote"));
   deps.log("warn", "promotion.role_finished", { term: held.body.term });
   return "finished";
 }

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { box } from "./schema/box.js";
 import { writeBoxRecoveryKeyTx } from "./box.js";
+import { appendHandoverEventTx } from "./handover.js";
 
 /**
  * This node's recovery-key verifier and the name of the key in force (`null` when blank), or
@@ -44,6 +45,17 @@ export async function setRecoveryKeyTx(
   nodeId: string,
   verifier: string,
   keyName: string,
+  personId: string | null,
 ): Promise<void> {
+  const verifierBefore = await readRecoveryKeyVerifier(tx, nodeId);
   await writeBoxRecoveryKeyTx(tx, nodeId, { verifier, keyName });
+  if (verifierBefore !== null && verifierBefore !== verifier) {
+    await appendHandoverEventTx(tx, {
+      nodeId,
+      operationId: null,
+      kind: "box.recovery_key_replaced",
+      detail: { keyName, personId },
+      envelope: null,
+    });
+  }
 }

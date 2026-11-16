@@ -33,7 +33,7 @@ beforeEach(async () => {
   nodeId = await seedNode(box.db);
   await stampDeployment(box.db, "preproduction");
   await establishNodeIdentity({ ownerDb: box.db, node: box.node, ring: RING }, nodeId);
-  await setNodeMode({ venue: box.db, node: box.node }, nodeId, "mirror");
+  await setNodeMode({ venue: box.db, node: box.node }, nodeId, "mirror", "adopt");
   personId = await seedPerson(box.db);
   await setBuiltInRoleForTest(box.db, personId, "admin");
 });
@@ -79,7 +79,7 @@ describe("checking a switch proof", () => {
 
   it("refuses a proof once this box is no longer a spare", async () => {
     const proof = await makeSwitchProof(deps(), personId);
-    await setNodeMode({ venue: box.db, node: box.node }, nodeId, "primary");
+    await setNodeMode({ venue: box.db, node: box.node }, nodeId, "primary", "promote");
     expect(await verdictOf(proof)).toBe("not_a_spare");
   });
 

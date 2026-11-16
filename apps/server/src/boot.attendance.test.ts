@@ -254,7 +254,12 @@ describe("attendance boot with permanent workforce", () => {
           let server: StartedServer | undefined;
           await stampDeployment(suite.db, "preproduction");
           if (mode === "mirror") {
-            await setNodeMode({ venue: suite.db, node: suite.node }, f.venue.cfg.nodeId, "mirror");
+            await setNodeMode(
+              { venue: suite.db, node: suite.node },
+              f.venue.cfg.nodeId,
+              "mirror",
+              "adopt",
+            );
             await writeMirrorLink(suite.node, f.venue.cfg.nodeId, {
               originUrl: "https://127.0.0.1:1/",
               boxHostname: "box.test",
@@ -282,7 +287,7 @@ describe("attendance boot with permanent workforce", () => {
             );
           } else if (mode === "secondary") {
             await withNodeTransaction(suite.node, (tx) =>
-              setSingletonRoleTx(tx, f.venue.cfg.nodeId, "secondary"),
+              setSingletonRoleTx(tx, f.venue.cfg.nodeId, "secondary", "fenced"),
             );
           }
           const loopSpy = vi.spyOn(attendance, "runAttendanceLoop"),

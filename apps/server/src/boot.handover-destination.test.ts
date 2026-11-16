@@ -246,7 +246,12 @@ async function boot(
   });
   await beginHandover({ node: suite.node, nodeId }, binding(OP), "destination");
   await beforeStart(nodeId, own, binding(OP));
-  await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
+  await setNodeMode(
+    { venue: suite.db, node: suite.node },
+    nodeId,
+    mode,
+    mode === "mirror" ? "adopt" : "promote",
+  );
   await writeMirrorLink(suite.node, nodeId, {
     originUrl: "http://127.0.0.1:1/",
     boxHostname: "box.local",

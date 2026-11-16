@@ -169,7 +169,12 @@ beforeAll(async () => {
   await seedIdentity(appDb, appNode);
 
   await stampDeployment(appDb, "production");
-  await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  await setSingletonRole(
+    { venue: appDb, node: appNode },
+    TILL_ENV.WAITRON_NODE_ID,
+    "secondary",
+    "fenced",
+  );
   expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).mode).toBe("primary");
   expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe("secondary");
 }, 180_000);
@@ -249,7 +254,12 @@ const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 /** A prior test may have promoted the shared directory's node. Its chart goes too, or the start
  * would finish that promotion's role from it. */
 async function resetLocalSecondary(): Promise<void> {
-  await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  await setSingletonRole(
+    { venue: appDb, node: appNode },
+    TILL_ENV.WAITRON_NODE_ID,
+    "secondary",
+    "fenced",
+  );
   await appDb.execute(sql`delete from node_membership`);
 }
 
@@ -411,7 +421,7 @@ async function seedMirrorIdentity(
 
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(db, "production");
-  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror");
+  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror", "adopt");
   return { nodeId: standby.nodeId, fixture };
 }
 

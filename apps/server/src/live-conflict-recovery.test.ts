@@ -69,7 +69,7 @@ beforeEach(async () => {
     },
   });
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, verifier, "key-1"),
+    setRecoveryKeyTx(tx, node.nodeId, verifier, "key-1", null),
   );
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   monotonic = 0;
@@ -336,7 +336,7 @@ it("a management cookie cannot authorise without the current key", async () => {
     ).status,
   ).toBe(401);
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
+    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2", null),
   );
   expect((await m.send(request())).status).toBe(401);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
@@ -397,7 +397,7 @@ it("refuses a key replaced while comparing clocks and writes no activation", asy
   );
   await entered.promise;
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
+    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2", null),
   );
   release.resolve();
   const refused = await pending;
@@ -421,7 +421,13 @@ it("rechecks the current key in the activation commit after preparation", async 
             commit: async (run) => {
               if (rotate && ++commits === 3)
                 await withNodeTransaction(suite.node, (tx) =>
-                  setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
+                  setRecoveryKeyTx(
+                    tx,
+                    node.nodeId,
+                    identity.hashSecret("replacement"),
+                    "key-2",
+                    null,
+                  ),
                 );
               return scope.commit(run);
             },

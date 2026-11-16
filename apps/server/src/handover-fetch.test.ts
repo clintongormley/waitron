@@ -171,7 +171,12 @@ async function rig({ mode = "mirror" as "mirror" | "primary", closedOperation = 
   }
   await beginHandover(m1Store, binding(OP), "source");
   await beginHandover(m2Store, binding(OP), "destination");
-  await setNodeMode({ venue: db, node: suite.node }, m2, mode);
+  await setNodeMode(
+    { venue: db, node: suite.node },
+    m2,
+    mode,
+    mode === "mirror" ? "adopt" : "promote",
+  );
 
   // Plain http ignores the pin; the TLS cases write their own link.
   await writeMirrorLink(suite.node, m2, {
@@ -1020,7 +1025,7 @@ describe("what the duty works on", () => {
     await r.listen(r.m1App({ restricted: false }));
     await r.start();
     await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(0));
-    await setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary");
+    await setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary", "promote");
     await settle();
     const reads = r.statusReads();
     await settle();
@@ -1181,7 +1186,7 @@ describe("a stop or a changed row while a request is out", () => {
     await r.listen(r.m1App({ restricted: true }));
     const compare = vi.fn(async () => ({ ok: true as const }));
     const download = downloadThen(() =>
-      setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary"),
+      setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary", "promote"),
     );
     await r.start({ compare, download });
     await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });

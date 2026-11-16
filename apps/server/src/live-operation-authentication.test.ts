@@ -29,7 +29,7 @@ const deps = {
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, binding.targetNodeId, verifier, "paper-1"),
+    setRecoveryKeyTx(tx, binding.targetNodeId, verifier, "paper-1", null),
   );
 });
 
@@ -98,7 +98,13 @@ it("rechecks a key replaced while the authenticated operation waits before commi
       secret,
       async (_authority, commit) => {
         await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, binding.targetNodeId, hashSecret("replacement-key"), "paper-2"),
+          setRecoveryKeyTx(
+            tx,
+            binding.targetNodeId,
+            hashSecret("replacement-key"),
+            "paper-2",
+            null,
+          ),
         );
         return commit(async () => {
           committed = true;

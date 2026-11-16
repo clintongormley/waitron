@@ -291,10 +291,14 @@ describe("placeAcceptedCopyAtStart", () => {
     await advanceHandover(storeDeps(), OP, "copy_accepted", {});
     if (state === "filing_assumed") await advanceHandover(storeDeps(), OP, "filing_assumed", {});
     if (mode !== null) {
-      await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, mode));
+      await withNodeTransaction(suite.node, (tx) =>
+        setNodeModeTx(tx, NODE, mode, mode === "mirror" ? "adopt" : "promote"),
+      );
     }
     if (options.anotherBoxIsAMirror === true) {
-      await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, OTHER_NODE, "mirror"));
+      await withNodeTransaction(suite.node, (tx) =>
+        setNodeModeTx(tx, OTHER_NODE, "mirror", "adopt"),
+      );
     }
     const nodePath = join(venueDir, "node.db");
     suite.node.run(sql`vacuum into ${nodePath}`);

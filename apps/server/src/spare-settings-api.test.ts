@@ -62,7 +62,7 @@ beforeEach(async () => {
   self = await seedNode(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
-  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror", "adopt");
   await pinMainBoxKey(suite.node, self, MAIN);
   const selfKey = await readNodeIdentityKey(suite.node, RING, self);
   const body: MembershipDocumentBody = {
@@ -172,7 +172,7 @@ describe("POST /api/node/backup-settings", () => {
 
   it("refuses on a box that is not a mirror, writing nothing", async () => {
     await holdOwnSettings();
-    await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
     expect(await send(envelopeOf())).toEqual(refusal(409, "spare.settings_not_a_spare"));
     expect(await backupEnv()).toBe(SPARES_OWN);
   });
@@ -295,7 +295,7 @@ describe("POST /api/node/backup-settings", () => {
   });
 
   it("on a box that is not a mirror, refuses without waiting for a turn in the backup queue", async () => {
-    await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
     const asked = vi.fn();
     const turns: Turns = (body) => {
       asked();

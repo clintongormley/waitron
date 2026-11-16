@@ -90,7 +90,8 @@ beforeEach(async () => {
   self = await seedNode(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
-  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror", "adopt");
+  eventsAfterRoleSetup = allEvents();
   const selfKey = await readNodeIdentityKey(suite.node, RING, self);
   const body: MembershipDocumentBody = {
     term: 3,
@@ -170,14 +171,14 @@ function refusal(status: number, code: string, params: object = {}) {
   return { status, body: { error: { code, params } } };
 }
 
-function events(): {
-  operationId: string;
+function allEvents(): {
+  operationId: string | null;
   kind: string;
   detail: string;
   envelope: string | null;
 }[] {
   return suite.node.all<{
-    operationId: string;
+    operationId: string | null;
     kind: string;
     detail: string;
     envelope: string | null;
@@ -187,9 +188,14 @@ function events(): {
   );
 }
 
+let eventsAfterRoleSetup: ReturnType<typeof allEvents>;
+function events(operationId = OP) {
+  return allEvents().filter((event) => event.operationId === operationId);
+}
+
 async function expectNothingRecorded(): Promise<void> {
   expect(await readHandoverOperation(suite.node, self, OP)).toBeNull();
-  expect(events()).toEqual([]);
+  expect(allEvents()).toEqual(eventsAfterRoleSetup);
 }
 
 async function signedStatusOf(answer: { status: number; body: unknown }) {
@@ -330,7 +336,7 @@ describe("POST /api/node/handover/offer", () => {
 
     it("a replay answers on a box that is no longer a mirror, whose chart has moved on", async () => {
       await post(envelopeOf());
-      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
       const body = { ...held.body, term: 4 };
       const selfKey = await readNodeIdentityKey(suite.node, RING, self);
       await writeNodeMembership(suite.db, {
@@ -451,7 +457,7 @@ describe("POST /api/node/handover/offer", () => {
     });
 
     it("says first that a box which is not a mirror is not a spare", async () => {
-      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
       const envelope = envelopeOf({ sourceNodeId: BYSTANDER.nodeId }, BYSTANDER);
       expect(await post(envelope)).toEqual(refusal(409, "handover.not_a_spare"));
     });
@@ -551,7 +557,7 @@ describe("POST /api/node/handover/offer", () => {
       expect(await post(envelopeOf({ scenario: "emergency" }))).toEqual(
         refusal(400, "handover.request_invalid", { field: "scenario" }),
       );
-      expect(events()).toEqual([]);
+      expect(allEvents()).toEqual(eventsAfterRoleSetup);
     });
 
     // A later step names a folder after the operation id.
@@ -567,20 +573,21 @@ describe("POST /api/node/handover/offer", () => {
       expect(await post(envelopeOf({ operationId }))).toEqual(
         refusal(400, "handover.request_invalid", { field: "operationId" }),
       );
-      expect(events()).toEqual([]);
+      expect(allEvents()).toEqual(eventsAfterRoleSetup);
       expect(suite.node.all(sql`select 1 from node_handover_operations`)).toEqual([]);
     });
   });
 
   describe("on a box that is not a mirror", () => {
     it("refuses `handover.not_a_spare`", async () => {
-      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
+      eventsAfterRoleSetup = allEvents();
       expect(await post(envelopeOf())).toEqual(refusal(409, "handover.not_a_spare"));
       await expectNothingRecorded();
     });
 
     it("says so before comparing the chart", async () => {
-      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
       const membership = { term: 2, digest: binding.membership.digest };
       expect(await post(envelopeOf({ membership }))).toEqual(refusal(409, "handover.not_a_spare"));
     });
@@ -642,7 +649,7 @@ describe("POST /api/node/handover/offer", () => {
         refusal(409, "handover.operation_in_progress", { operationId: OTHER_OP }),
       );
       expect(await readHandoverOperation(suite.node, self, OP)).toBeNull();
-      expect(events().map((event) => event.operationId)).toEqual([OTHER_OP]);
+      expect(events(OTHER_OP).map((event) => event.operationId)).toEqual([OTHER_OP]);
     });
 
     it("refuses `handover.operation_conflict` for this id under another binding", async () => {
@@ -654,7 +661,7 @@ describe("POST /api/node/handover/offer", () => {
       expect(await post(envelopeOf())).toEqual(
         refusal(409, "handover.operation_conflict", { operationId: OP }),
       );
-      expect(events()).toEqual([]);
+      expect(allEvents()).toEqual(eventsAfterRoleSetup);
     });
   });
 
@@ -898,7 +905,8 @@ describe("POST /api/node/handover/offer", () => {
       expect(await post(offerWith(differing, { membership: { term: 9, digest: DIGEST } }))).toEqual(
         refusal(409, "handover.membership_mismatch", { operationId: OP }),
       );
-      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary", "promote");
+      eventsAfterRoleSetup = allEvents();
       expect(await post(offerWith(differing))).toEqual(refusal(409, "handover.not_a_spare"));
       await expectNothingRecorded();
     });

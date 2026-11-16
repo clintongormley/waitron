@@ -205,7 +205,12 @@ export function placedSpareFixture(boxes: {
       standby.nodeId,
     );
     await stampDeployment(spareBefore.db, "preproduction");
-    await setNodeMode({ venue: spareBefore.db, node: spareBefore.node }, standby.nodeId, "mirror");
+    await setNodeMode(
+      { venue: spareBefore.db, node: spareBefore.node },
+      standby.nodeId,
+      "mirror",
+      "adopt",
+    );
 
     const spareKey = await readNodeIdentityKey(spareBefore.node, ring, standby.nodeId);
     const mainKey = await readNodeIdentityKey(mainBox.node, ring, primary.nodeId);

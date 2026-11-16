@@ -153,7 +153,7 @@ function observeStart(options: StartCase): () => Observed {
     const nodeHandles = { venue: suite.db, node: suite.node };
     await stampDeployment(suite.db, "preproduction");
     if (options.mirror === true) {
-      await setNodeMode(nodeHandles, box, "mirror");
+      await setNodeMode(nodeHandles, box, "mirror", "adopt");
       await writeMirrorLink(suite.node, box, {
         originUrl: "https://127.0.0.1:1/",
         boxHostname: "box.test",
@@ -161,7 +161,8 @@ function observeStart(options: StartCase): () => Observed {
         originNodeId: first,
       });
     }
-    if (options.localSecondary === true) await setSingletonRole(nodeHandles, box, "secondary");
+    if (options.localSecondary === true)
+      await setSingletonRole(nodeHandles, box, "secondary", "fenced");
     const ring = loadKeyRing(KEY_ENV);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {

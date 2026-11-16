@@ -62,8 +62,13 @@ vi.mock("./promote-api.js", async (original) => {
       app.post("/management-api/promote", async (c) => {
         const server = serverStores.find((s) => s.venue === deps.appDb);
         if (server === undefined) throw new Error("the promoted server's store was not captured");
-        await setNodeMode({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
-        await setSingletonRole({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
+        await setNodeMode({ venue: deps.appDb, node: server.node }, NODE_B, "primary", "promote");
+        await setSingletonRole(
+          { venue: deps.appDb, node: server.node },
+          NODE_B,
+          "primary",
+          "fenced",
+        );
         return c.body(null, 204);
       });
     },
@@ -300,7 +305,7 @@ beforeAll(async () => {
   // 'primary'/'primary' through `readNodeMode`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
-  await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror");
+  await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror", "adopt");
   await writeMirrorLink(storeB.node, NODE_B, {
     originUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",

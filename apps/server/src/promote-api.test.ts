@@ -369,7 +369,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, hashSecret(GOOD_SECRET), "paper-1"),
+      setRecoveryKeyTx(tx, NODE, hashSecret(GOOD_SECRET), "paper-1", null),
     );
     app = new Hono();
     mountPromoteApi(app, {

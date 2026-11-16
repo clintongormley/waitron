@@ -374,7 +374,7 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
   expect(held.reserved.series).toEqual([]);
   await establish(held);
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
-  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(
     { venue: spare.db, node: spare.node },
     held.standby.nodeId,
@@ -402,7 +402,7 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
 it("refuses absent current outside consumption through HTTP and retains the dormant reservation", async () => {
   const held = await reserve();
   await establish(held);
-  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(
     { venue: spare.db, node: spare.node },
     held.standby.nodeId,

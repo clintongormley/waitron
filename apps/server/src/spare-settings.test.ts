@@ -141,7 +141,7 @@ beforeEach(async () => {
   spareId = await seedNode(spareBox.db);
   await stampDeployment(spareBox.db, "preproduction");
   await establishNodeIdentity({ ownerDb: spareBox.db, node: spareBox.node, ring: RING }, spareId);
-  await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spareId, "mirror");
+  await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spareId, "mirror", "adopt");
   await pinMainBoxKey(spareBox.node, spareId, MAIN);
   const spareKey = await readNodeIdentityKey(spareBox.node, RING, spareId);
   const body = chartBody(SPARE_URL);

@@ -686,6 +686,14 @@ describe("the start check on a real start", () => {
     expect(booted.acceptingSales).toBe(false);
     expect((await readNodeMembership(suite.db))?.body.term).toBe(2);
     expect(await readHandoverRestriction(suite.node, booted.nodeId)).toBeNull();
+    expect(
+      suite.node
+        .all<{ detail: string }>(
+          sql`select detail from node_handover_events
+      where node_id = ${booted.nodeId} and kind = 'box.role_changed'`,
+        )
+        .map(({ detail }) => JSON.parse(detail)),
+    ).toEqual([{ mode: "primary", singletonRole: "secondary", cause: "fenced" }]);
   }, 60_000);
 
   it("a joined spare whose key the main box does not hold: its answer cannot be checked, so the box waits", async () => {
