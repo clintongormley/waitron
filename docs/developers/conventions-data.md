@@ -2892,12 +2892,12 @@ itself and keeps nothing.
     [{"body":"outside"},{"body":"part 2"}]` — the run resolved and the body's write was kept, and
     so was the outside transaction's own write, although its body threw.
 
-  Not closed, because product writes go through `withTransaction` (`packages/db/src/tenancy.ts`),
-  which runs inside `withWriteLock`.
-  `/usr/bin/grep -rnE "\b(db|venue|database|store\.venue|deps\.db|target)\.transaction\(" packages apps --include='*.ts'`,
-  less `*.test.*` files, re-run 2026-10-21 at `475d06c38`, found seven calls, every one under a
-  `test/` or `src/testing/` folder — weaker than "none in product code": a receiver with another
-  name is not matched. The backlog holds the ways to close it.
+  Guard: `scripts/no-bare-transaction.test.ts` refuses a `.transaction(` in product sources
+  outside its named list of nested-savepoint sites and the clock-correction `transaction`
+  dependency, which `boot.ts` wires to `withTransaction`. Weaker than its name: it reads text, so a
+  `transaction` reached by destructuring, `["transaction"]` or an alias escapes; it does not check
+  that a listed site runs inside a write-queue transaction; and it reads only `apps/<name>/src` and
+  `packages/<name>/src` product `.ts` files, leaving `packages/store/src/` out as the implementation.
 
 ### A full disk stops the till's writes
 

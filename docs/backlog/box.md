@@ -1755,23 +1755,6 @@ below records the gap that prompted the design, not a new runtime measurement.
   opening a connection", and one title ("rather than opening the working directory") rests on the
   false reason in the empty-venue-directory section above.
 
-## A transaction opened outside the write queue can let a body's writes after a full disk commit
-
-Left open by A798-B slice 1 (#1936). The store's record of a transaction
-the engine ended belongs to the connection pair, not to the body, so an outermost `db.transaction`
-opened outside the write queue clears it, and the body's later writes are kept. What was measured,
-in two orderings, and the grep behind "no product code is known to open one" are in the
-[receipt](../developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction),
-under "Weaker than the rule".
-
-Not closed in slice 1, because product writes go through `withTransaction`, which runs inside
-`withWriteLock`. Two ways to close it:
-
-- key the record to the body, which needs a token for the body carried through every nested
-  savepoint; or
-- a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
-  product code.
-
 ## Backup data verification and Cloud release
 
 The A850 interface checks a private restored copy without running ordinary restore hooks or
