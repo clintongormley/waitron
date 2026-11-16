@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   backgroundDuties,
   stopBackgroundDuties,
   type BackgroundDutyHandles,
 } from "./background-duties.js";
+import { createJobRunner } from "./job-runner.js";
 
 const ABORTS = [
   "controller",
@@ -26,7 +27,6 @@ const CLOSERS = [
   "certificateDiagnosis",
   "invoiceEmailLoop",
   "mailLoop",
-  "cloudSnapshots",
   "unsubscribeFromChanges",
   "boxEmails",
   "spareSettings",
@@ -37,6 +37,7 @@ const CLOSERS = [
   "chartPost",
   "spareStore",
   "jobRunnerServices",
+  "cloudSnapshots",
 ];
 
 /** Every handle records its own name when the duty table touches it. */
@@ -112,7 +113,6 @@ describe("background duties", () => {
       "stop certificateDiagnosis",
       "await invoiceEmailLoop",
       "await mailLoop",
-      "await cloudSnapshots",
       "call unsubscribeFromChanges",
       "stop boxEmails",
       "stop spareSettings",
@@ -123,7 +123,58 @@ describe("background duties", () => {
       "stop chartPost",
       "stop spareStore",
       "stop jobRunnerServices",
+      "await cloudSnapshots",
     ]);
+  });
+
+  it("gives the stream its final 4500ms before waiting for a slow Cloud snapshot", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const cloud = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls: string[] = [];
+    const runner = createJobRunner({
+      now: () => new Date(),
+      log: vi.fn(),
+      subscribe: () => () => {},
+    });
+    let streamStopped = false;
+    let closed = false;
+    let closing: Promise<void> | undefined;
+    try {
+      await runner.addService({
+        name: "stream",
+        applies: () => true,
+        start: async () => {},
+        suspend: async () => {},
+        describe: () => ({ running: true, reason: null }),
+        stop: async () => {
+          calls.push("stop stream");
+          await new Promise((resolve) => setTimeout(resolve, 4500));
+          streamStopped = true;
+        },
+      });
+      closing = stopBackgroundDuties(
+        backgroundDuties(recordingHandles(calls, { jobRunner: runner, cloudSnapshots: cloud })),
+      ).then(() => {
+        closed = true;
+      });
+      await vi.advanceTimersByTimeAsync(7999);
+      expect(streamStopped).toBe(true);
+      expect(calls.indexOf("await loop")).toBeLessThan(calls.indexOf("stop stream"));
+      expect(closed).toBe(false);
+      release();
+      await closing;
+      expect(closed).toBe(true);
+    } finally {
+      release();
+      await vi.runAllTimersAsync();
+      await closing;
+      await runner.stopJobs();
+      await runner.stopServices();
+      vi.useRealTimers();
+    }
   });
 
   it("skips the duties a box did not start", async () => {
@@ -141,7 +192,7 @@ describe("background duties", () => {
     expect(calls).not.toContain("stop certificateDiagnosis");
     expect(calls).not.toContain("stop handoverDestinationDuty");
     expect(calls).not.toContain("stop spareStore");
-    expect(calls.at(-1)).toBe("stop jobRunnerServices");
+    expect(calls.at(-1)).toBe("await cloudSnapshots");
   });
 
   it("stops a spare's store, which carries a reason, after the chart post and before the runner's services", async () => {
@@ -152,10 +203,11 @@ describe("background duties", () => {
     expect(closer?.reason).not.toBe("");
     expect(closer?.reason).toBeDefined();
     await stopBackgroundDuties(duties);
-    expect(calls.slice(-3)).toEqual([
+    expect(calls.slice(-4)).toEqual([
       "stop chartPost",
       "stop spareStore",
       "stop jobRunnerServices",
+      "await cloudSnapshots",
     ]);
   });
 
@@ -175,7 +227,7 @@ describe("background duties", () => {
       boxEmails: { stop: () => Promise.reject(new Error("box email failed")) },
     });
     await expect(stopBackgroundDuties(backgroundDuties(handles))).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("stop jobRunnerServices");
+    expect(calls.at(-1)).toBe("await cloudSnapshots");
     expect(calls).toContain("stop handoverDestinationDuty");
   });
 
@@ -211,7 +263,7 @@ describe("background duties", () => {
 
     finish();
     await expect(stopping).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("stop jobRunnerServices");
+    expect(calls.at(-1)).toBe("await cloudSnapshots");
   });
 
   it("awaits a stop called early in its place, without calling it again", async () => {
@@ -240,7 +292,7 @@ describe("background duties", () => {
     finish();
     await stopping;
     expect(stops).toBe(1);
-    expect(calls.at(-1)).toBe("stop jobRunnerServices");
+    expect(calls.at(-1)).toBe("await cloudSnapshots");
   });
 
   it("rethrows a closer's first synchronous failure on a later call, without calling it again", () => {

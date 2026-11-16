@@ -1192,6 +1192,40 @@ describe("stream-settings-panel: Start the copy again", () => {
     }
   });
 
+  it.each([
+    [
+      "en-GB",
+      "Stopped — the copy pointer disappeared and could not be recreated.",
+      "Start the copy again",
+    ],
+    [
+      "es-ES",
+      "Detenida: el puntero de la copia desapareció y no se pudo volver a crear.",
+      "Volver a iniciar la copia",
+    ],
+  ])("explains the missing pointer and offers recovery in %s", async (locale, message, label) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      const restartStream = vi.fn().mockResolvedValue(ON);
+      const api = stubApi(
+        { restartStream },
+        withStatus({ ...STREAMING, state: "refused", reason: "pointer_missing" }),
+      );
+      const { el } = await mount(api);
+      expect(text(el, "[data-test=stream-state]")).toBe(message);
+      expect(text(el, "[data-test=restart]")).toBe(label);
+      expect(disabled(el, "restart")).toBe(false);
+      expect(alertMessage("backup.stream_stopped", {}, locale)).toContain(
+        locale === "en-GB" ? "Start the copy again" : "Volver a iniciar la copia",
+      );
+      await press(el, "restart");
+      expect(restartStream).toHaveBeenCalledOnce();
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("is offered when the box could not start the copy", async () => {
     const { el } = await mount(
       stubApi({}, withStatus({ state: "off", reason: "start_failed", stateSince: "x" })),

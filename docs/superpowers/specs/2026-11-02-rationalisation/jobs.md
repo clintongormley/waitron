@@ -2,6 +2,10 @@
 
 # Background jobs — a rationalised design
 
+_2026-11-16: [The bucket stop-order change](../../plans/2026-11-16-bucket-pointer-and-stop.md) moves
+only the Cloud snapshot wait after the stream stop. The stream still stops after venue-database
+writers; earlier slow waits can still consume its shutdown budget._
+
 > **2026-11-11, jr16:** the agent now asks for a held pull with a 30-second client limit.
 > Quiet holds end after 13 seconds, before printer reports go stale. Receipt and page changes wake
 > them; drawer expiry and claim leases shorten them. Pending print work and discovery keep a

@@ -215,17 +215,6 @@ Left open by A39 (#671): each stop is written twice, once in the failed-start un
 list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
 (`background-duties.ts`), whose order `background-duties.test.ts` pins.
 
-## A deleted bucket pointer can still look like another writer
-
-- A `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
-  to a missing object with 412 (SeaweedFS; the in-memory test store), can still make the box
-  refuse itself. That refusal's alert
-  (`backup.stream_refused`) still says another box is writing. On a bucket that answers that write
-  with 404 instead (AWS, as it documents; versitygw, as measured), the deleted pointer surfaces as
-  `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
-  `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
-  reaching `refused`.
-
 ## The status and `errorName` on the stream's log lines other than the pause check's 403 were shown by reading
 
 - On 2026-10-14 Amazon S3's 403 to the paused supervisor's listing was logged as
@@ -367,12 +356,11 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
 
 ## Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
 
-- A bucket pointer deleted after the supervisor read it can still look like another writer.
-  [Detail](#a-deleted-bucket-pointer-can-still-look-like-another-writer)
-- The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
-  large database Litestream may not finish its last upload (it is still told to stop). Litestream's
-  `shutdown-timeout: 4500ms` (`litestreamConfig`) caps its own stop at 4.5 seconds, before the
-  5-second forced kill, and that counts against the 8.
+- Earlier work can still consume the stream's final-upload time inside the server's 8-second
+  shutdown: running jobs (including scheduled backups), the archive supervisor, the sending loop
+  and pending stream-service work. The Cloud snapshot pass is now awaited after the stream stops,
+  but those earlier waits remain unbounded within that deadline. Litestream's own
+  `shutdown-timeout: 4500ms` and its 5-second forced kill still count against the 8.
 
 ## Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
 
@@ -1262,7 +1250,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 3 entries, size S.
 
 - **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
-  The shutdown budget and the deleted-pointer refusal remain open.
+  Earlier shutdown waits can still consume the stream's final-upload time.
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-6-590-the-litestream-supervisor)
 - **Loose ends left by A549.**
   Bound local level-0 growth and qualify starts during an outage and venue conditions.

@@ -25,6 +25,8 @@ import {
 import { generationName, isKeySegment } from "./names.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
+  pointerBytes,
+  pointerKey,
   pointerMessage,
   readPointer,
   writePointer,
@@ -475,9 +477,9 @@ export class StreamSupervisor {
           (within) => (moving = this.#movePointer(pointer, previous?.etag ?? null, within)),
           signal,
         );
-        if (!moved) {
+        if (moved !== true) {
           await this.#stopChild();
-          this.#refuse("pointer_changed");
+          this.#refuse(moved);
           return null;
         }
         signal.throwIfAborted();
@@ -538,18 +540,12 @@ export class StreamSupervisor {
     }
   }
 
-  /**
-   * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
-   * refused. `writePointer` already counts a refusal of this box's own landed write as success. A
-   * refusal because the pointer now holds one this box sent earlier (a stopped supervisor's
-   * write landing late) is retried against that version, with a pause after the first retry, since
-   * a bucket whose reads lag its conditional check would otherwise be asked again without pause.
-   */
+  /** Only exact recorded bytes identify our own write; absence permits a create-only retry. */
   async #movePointer(
     pointer: SignedPointer,
     previousEtag: string | null,
     signal: AbortSignal,
-  ): Promise<boolean> {
+  ): Promise<true | "pointer_changed" | "pointer_missing"> {
     let expected = previousEtag;
     let retriedAtOnce = false;
     this.#sentPointers.add(pointer);
@@ -577,8 +573,40 @@ export class StreamSupervisor {
         }
       } catch (error) {
         signal.throwIfAborted();
-        if (isPreconditionFailure(error)) return false;
         this.#deps.log("warn", "stream.pointer_write_failed", failureFields(error));
+        const refused =
+          isPreconditionFailure(error) ||
+          (isAppError(error) &&
+            hasCode(error, "backup.stream_request_failed") &&
+            error.params.operation === "put" &&
+            error.params.status === 404);
+        if (refused || expected === null) {
+          // A failed read never proves absence, nor permits another refused create.
+          let current: Awaited<ReturnType<ObjectStore["get"]>>;
+          for (;;) {
+            try {
+              current = await this.#store.get(pointerKey(), { signal });
+              signal.throwIfAborted();
+              break;
+            } catch (readError) {
+              signal.throwIfAborted();
+              this.#deps.log("warn", "stream.pointer_read_failed", failureFields(readError));
+              await this.#sleep(OPEN_RETRY_MS, signal);
+            }
+          }
+          if (current !== null) {
+            if (Buffer.compare(current.body, pointerBytes(pointer)) === 0) return true;
+            if (!this.#sentPointers.includes(current.body)) return "pointer_changed";
+            expected = current.etag;
+          } else {
+            if (refused && expected === null) return "pointer_missing";
+            expected = null;
+          }
+          if (refused && !retriedAtOnce) {
+            retriedAtOnce = true;
+            continue;
+          }
+        }
       }
       await this.#sleep(OPEN_RETRY_MS, signal);
     }

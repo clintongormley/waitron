@@ -449,7 +449,7 @@ describe("opening a generation", () => {
     expect((await readPointer(h.store, VENUE))?.pointer.body.nodeId).toBe("node-b");
   });
 
-  it("stops and refuses when the pointer was deleted after it was read", async () => {
+  it.each([412, 404])("recreates a deleted pointer after a %s replace refusal", async (status) => {
     const h = await harness();
     await writePointer(
       h.store,
@@ -460,10 +460,116 @@ describe("opening a generation", () => {
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
     await h.store.delete(pointerKey());
+    if (status === 404)
+      h.store.failNext({
+        operation: "put",
+        key: pointerKey(),
+        error: new AppError("backup.stream_request_failed", { operation: "put", status: 404 }),
+      });
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state !== "opening", 8);
+    expect(h.supervisor.status().state).toBe("streaming");
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(
+      h.supervisor.status().generation,
+    );
+    expect(h.litestream.replicas()).toHaveLength(1);
+  });
+
+  it.each([
+    { status: 412, replacing: false },
+    { status: 404, replacing: false },
+    { status: 412, replacing: true },
+    { status: 404, replacing: true },
+  ])(
+    "reports persistent absence after $status, replacing=$replacing",
+    async ({ status, replacing }) => {
+      const h = await harness();
+      if (replacing)
+        await writePointer(
+          h.store,
+          VENUE,
+          pointerFrom("node-b", 2, "gen-2-node-b-20260923T110000Z"),
+          null,
+        );
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      const error =
+        status === 412
+          ? new AppError("backup.stream_precondition_failed", { key: pointerKey() })
+          : new AppError("backup.stream_request_failed", { operation: "put", status: 404 });
+      if (replacing) {
+        await h.store.delete(pointerKey());
+        h.store.failNext({ operation: "put", key: pointerKey(), error });
+      }
+      h.store.failNext({ operation: "put", key: pointerKey(), error });
+      h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+      await h.clock.until(() => h.supervisor.status().state !== "opening", 8);
+      expect(h.supervisor.status()).toMatchObject({ state: "refused", reason: "pointer_missing" });
+      expect(h.store.has(pointerKey())).toBe(false);
+      expect(h.litestream.replicas().every((child) => child.killed)).toBe(true);
+    },
+  );
+
+  it("lets a competing create win after confirming the old pointer is gone", async () => {
+    const h = await harness();
+    await writePointer(
+      h.store,
+      VENUE,
+      pointerFrom("node-b", 2, "gen-2-node-b-20260923T110000Z"),
+      null,
+    );
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    await h.store.delete(pointerKey());
+    const competitor = pointerFrom("node-b", 2, "gen-2-node-b-20260923T115959Z");
+    const put = h.store.put.bind(h.store);
+    h.store.put = async (key, body, condition, call) => {
+      if (key === pointerKey() && condition && "ifNoneMatch" in condition) {
+        await put(
+          key,
+          new TextEncoder().encode(JSON.stringify(competitor)),
+          { ifNoneMatch: "*" },
+          call,
+        );
+      }
+      return put(key, body, condition, call);
+    };
     h.store.upload(fullCopyOf(h.supervisor.status().generation!));
     await h.clock.until(() => h.supervisor.status().state === "refused");
     expect(h.supervisor.status().reason).toBe("pointer_changed");
-    expect(h.store.has(pointerKey())).toBe(false);
+    expect((await readPointer(h.store, VENUE))?.pointer).toEqual(competitor);
+  });
+
+  it("waits for a successful reread before retrying a refused create", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    let writes = 0;
+    const put = h.store.put.bind(h.store);
+    h.store.put = async (key, body, condition, call) => {
+      if (key === pointerKey()) {
+        writes += 1;
+        throw new AppError("backup.stream_precondition_failed", { key });
+      }
+      return put(key, body, condition, call);
+    };
+    const get = h.store.get.bind(h.store);
+    let readable = false;
+    let reads = 0;
+    h.store.get = async (key, call) => {
+      if (key === pointerKey()) {
+        reads += 1;
+        if (reads > 1 && !readable) throw new Error("read connection lost");
+      }
+      return get(key, call);
+    };
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => reads >= 3);
+    expect(writes).toBe(1);
+    readable = true;
+    await h.clock.until(() => h.supervisor.status().state !== "opening");
+    expect(h.supervisor.status()).toMatchObject({ state: "refused", reason: "pointer_missing" });
+    expect(writes).toBe(1);
   });
 
   it("treats its own pointer write as done when only the answer was lost", async () => {
