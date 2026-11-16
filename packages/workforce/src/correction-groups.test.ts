@@ -147,7 +147,6 @@ it("proposes a historical manager pair and applies it only after the worker acce
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db.select().from(timeEntries).orderBy(timeEntries.nodeId, timeEntries.sequenceNo),
   };
 }
 async function refused(action: () => Promise<unknown>, code = "correction.invalid") {

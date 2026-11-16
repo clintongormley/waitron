@@ -206,7 +206,6 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db.select().from(timeEntries).orderBy(timeEntries.nodeId, timeEntries.sequenceNo),
     receipts: await suite.db
       .select()
       .from(attendanceResponseCommands)

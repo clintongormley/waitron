@@ -1,3 +1,6 @@
+> 2026-11-16, A1308 pp6: `workforce_chains` is deleted; its head is read from
+> the newest `time_entries` row. The inventory below records the earlier layout.
+
 > 2026-11-16, A1308 pa4a: `card_reader_holders` folds into
 > `card_readers.held_by_device_id`, and enabled status comes from `disabled_at`.
 > The inventory below records the A760 layout before that fold.

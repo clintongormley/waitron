@@ -171,7 +171,6 @@ it.each([undefined, false])(
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid", params: { reason: "empty_extension" } });
     expect(suite.db.execute(sql`select id from time_entries`).rows).toEqual([]);
-    expect(suite.db.execute(sql`select * from time_entries`).rows).toEqual([]);
   },
 );
 
@@ -197,7 +196,6 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
     params: { reason: "self_approval_shape" },
   });
   expect(suite.db.execute(sql`select id from time_entries`).rows).toEqual([]);
-  expect(suite.db.execute(sql`select * from time_entries`).rows).toEqual([]);
 });
 
 it.each(["chain", "record"])(

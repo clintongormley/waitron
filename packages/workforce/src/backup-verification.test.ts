@@ -233,7 +233,7 @@ function invalid(result: Awaited<ReturnType<typeof run>>, code: (typeof codes)[n
 }
 
 describe("complete captured workforce backup evidence", () => {
-  it("walks every node's time chain and stored head including retired nodes", async () => {
+  it("walks every node's time chain including retired nodes", async () => {
     expect(await run()).toEqual(passed);
     expect(original.db.all(sql`select distinct node_id from time_entries`)).toHaveLength(2);
   });
@@ -441,13 +441,6 @@ describe("complete captured workforce backup evidence", () => {
   it("accepts a captured closure prefix without inventing external completeness evidence", async () => {
     await both("delete from pay_period_closures where sequence_no=3");
     expect(await run()).toEqual(passed);
-  });
-  it("never creates entries for honestly empty data", async () => {
-    for (const db of [original.db, restored.db])
-      await corrupt(db, "delete from time_entries; delete from pay_period_closures");
-    expect(await run()).toEqual(passed);
-    expect(original.db.all(sql`select * from time_entries`)).toEqual([]);
-    expect(restored.db.all(sql`select * from time_entries`)).toEqual([]);
   });
   it("admits absent source tables only into empty migrated state", async () => {
     for (const db of [original.db, restored.db])

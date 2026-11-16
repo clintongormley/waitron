@@ -26,6 +26,7 @@ import {
 import { verifyChain } from "./chain-hash.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
+import { planningEveryStatement } from "../test/query-plans.js";
 import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 // Concurrent appenders are ./chain.concurrency.test.ts's subject, not this suite's.
@@ -254,6 +255,7 @@ describe("appendToChain", () => {
   });
 
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
+    // Weaker than its name: this proves exhaustion, but still passes without the savepoint.
     const error = await suite.db
       .transaction(async (tx) => {
         await tx.execute(
@@ -471,11 +473,13 @@ describe("appendToChain commits the correction and capture content to the hash",
 
 describe("readChainHead", () => {
   it("reads a chain's head through the chain-position index", async () => {
-    const { rows } = await suite.db.execute<{ detail: string }>(sql`
-      explain query plan select id, entry_hash, recorded_at, sequence_no from time_entries
-      where node_id = ${nodeId} order by sequence_no desc limit 1`);
-    expect(rows.some((row) => row.detail.includes("time_entries_chain_position_uq"))).toBe(true);
-    expect(rows.some((row) => row.detail.includes("SCAN time_entries"))).toBe(false);
+    const plans = await suite.db.transaction(async (tx) => {
+      const { recording, statements } = planningEveryStatement(tx);
+      await readChainHead(recording, key());
+      return statements.flatMap((statement) => statement.plan());
+    });
+    expect(plans.some((line) => line.includes("time_entries_chain_position_uq"))).toBe(true);
+    expect(plans.filter((line) => /SCAN time_entries|TEMP B-TREE/.test(line))).toEqual([]);
   });
 
   it("reads an empty chain without creating a head row", async () => {
