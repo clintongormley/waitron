@@ -285,6 +285,7 @@ describe("password login backoff under a flood of made-up addresses", () => {
     fail(throttle, REAL, 4);
     forgetAll(throttle, "a");
     now = 2000;
+    // Touch the owner first so it folds first, leaving the other count to exercise overflow.
     for (let i = 0; i < 256; i++) {
       throttle.begin(REAL)("error");
       throttle.begin(other!)("invalid");
