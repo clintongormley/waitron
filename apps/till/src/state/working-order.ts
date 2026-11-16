@@ -901,6 +901,14 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
+  /** A saved order's way as the server switched it, at the revision the switch answered. */
+  adoptSwitchedDining(dining: Dining, revision: number): void {
+    this.#revision = revision;
+    if (this.#dining === dining) return;
+    this.#dining = dining;
+    this.emit("changed");
+  }
+
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does
    * not collide with the settled one. */
   clear(): void {

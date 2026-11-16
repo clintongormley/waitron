@@ -2,6 +2,7 @@ import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import {
   floorPartyBills,
   partyBillOf,
@@ -2142,6 +2143,64 @@ describe("A768 the order screen shows at once", () => {
       draft: { id: draftId, billId: "wo-new" },
       edit: { billId: "wo-new", draftId },
     });
+  });
+
+  it("Take away chosen before the table is seated is switched on its new bill, and the round sends it (A1522)", async () => {
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    let newBill = partyBillOf("v-new", "wo-new", 1, { diningChoice: "open", revision: 0 });
+    const tillChoice = {
+      ...menu("v1"),
+      context: { ...menu("v1").context, dining: { policy: "till_choice", startsAs: "eat_in" } },
+    };
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(tillChoice),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
+      seatTable: vi.fn(async () => {
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+      getPartyBills: vi.fn(async (partyId: string) => (partyId === "v-new" ? [newBill] : [])),
+      switchDining: vi.fn(async (_id: string, dining: "eat_in" | "takeaway", revision: number) => {
+        newBill = { ...newBill, dining, revision: revision + 1 };
+        return { revision: revision + 1 };
+      }),
+    });
+    await openTable(el, "t9");
+    await tap(el, "Beer");
+    const control = tableOrder(el)!.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["wt-segmented-control"]
+    >("wt-segmented-control[name='dining']")!;
+    await control.updateComplete;
+    await userEvent.click(
+      [...control.shadowRoot!.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Take away",
+      )!,
+    );
+    await flush(el);
+    expect(tableOrder(el)!.dining).toBe("takeaway");
+    expect(api.switchDining).not.toHaveBeenCalled();
+
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+
+    expect(api.switchDining).toHaveBeenCalledExactlyOnceWith(
+      "wo-new",
+      "takeaway",
+      0,
+      expect.objectContaining({ billId: "wo-new" }),
+    );
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
+      .click();
+    await flush(el);
+    await flush(el, 6);
+    expect(server.submitDraft).toHaveBeenCalledOnce();
+    expect(server.submitDraft.mock.calls[0]![2].dining).toBe("takeaway");
   });
 });
 

@@ -1782,6 +1782,20 @@ describe("the way an order sells (A1522)", () => {
     expect(store.dining).toBe("takeaway");
   });
 
+  it("a saved order takes the way the server switched it to, at the revision it answered", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [{ product: coffee, quantity: "1" }], undefined, 3, undefined, "eat_in");
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.adoptSwitchedDining("takeaway", 4);
+    expect([store.dining, store.revision, store.persisted, changes]).toEqual([
+      "takeaway",
+      4,
+      true,
+      1,
+    ]);
+  });
+
   it("a retrieved takeaway order in a department since set to eat in holds takeaway", () => {
     const store = new WorkingOrderStore();
     store.setDiningStart({ policy: "eat_in", startsAs: "eat_in" });

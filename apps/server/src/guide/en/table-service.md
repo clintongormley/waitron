@@ -638,6 +638,9 @@ asks **How it sells**: **Eaten in**, **Taken away** or **Chosen on the till**. W
 till**, staff choose for each order, and **Starts as** sets how a counter order begins; a table
 order starts eaten here. Orders already open keep their way when you change this.
 
+On the till, tap **Eat here** or **Take away** above the order before you send it to the kitchen
+or take a payment; after that the order keeps its way. A set lunch can only be sold to eat here.
+
 ## Name a bill {#bill-names}
 
 A party's bills are numbered, and the till shows each one with its number and any name you give it,

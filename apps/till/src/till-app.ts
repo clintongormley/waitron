@@ -746,6 +746,16 @@ const TABLE_REFUSALS = new Set([
   "station.no_default",
   "department.operation_description_required",
   "sale.department_missing",
+  "order.dining_fixed",
+  "order.dining_locked",
+  "order.dining_differs",
+]);
+
+/** A switch of the way an order sells refused because the stored order has moved on: it is read
+ * again, so the screen shows the way it now has. */
+const STORED_WAY_CHANGED: ReadonlySet<string> = new Set([
+  "order.dining_locked",
+  "working_order.out_of_date",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
@@ -855,6 +865,8 @@ function isPartyOutOfDate(error: unknown): boolean {
 function tableWriteError(error: unknown): CounterError {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined) return recovery;
+  const setLunch = setLunchTakeawayOf(error);
+  if (setLunch !== undefined) return setLunch;
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   const refused = error as { code?: string; tableId?: unknown } | undefined;
@@ -1056,6 +1068,8 @@ const ACTIONABLE_REFUSALS = new Set([
   "clock.unconfirmed",
   "menu_period.ended",
   "station.no_default",
+  "order.dining_fixed",
+  "order.dining_locked",
 ]);
 
 /** A counter basket save refused because it would change, lower or leave out a dish already sent. */
@@ -1122,9 +1136,17 @@ function periodRefusal(error: unknown): CounterError | undefined {
   return { code, ...(typeof menuId === "string" ? { menuId } : {}) };
 }
 
+/** `order.set_lunch_takeaway`, keeping whether the order may still switch to eaten here. */
+function setLunchTakeawayOf(error: unknown): CounterError | undefined {
+  const { code, canSwitch } = (error ?? {}) as { code?: unknown; canSwitch?: unknown };
+  return code === "order.set_lunch_takeaway" ? { setLunchTakeaway: canSwitch === true } : undefined;
+}
+
 function counterError(error: unknown, fallback: StringKey): CounterError {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined) return recovery;
+  const setLunch = setLunchTakeawayOf(error);
+  if (setLunch !== undefined) return setLunch;
   const unsent = billUnsentOf(error);
   if (unsent !== undefined) return { unsentBill: unsent };
   const period = periodRefusal(error);
@@ -1628,7 +1650,9 @@ type CounterError =
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey | { code: string } }
-  | { sentDishRefused: SentDishRefusal };
+  | { sentDishRefused: SentDishRefusal }
+  /** A set lunch refused on a takeaway order: whether the order may still switch to eaten here. */
+  | { setLunchTakeaway: boolean };
 
 /** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
 interface SentDishRefusal {
@@ -1796,6 +1820,24 @@ function errorText(
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
   if ("sentDishRefused" in error) return sentDishRefusalText(error.sentDishRefused);
+  if ("setLunchTakeaway" in error) {
+    const said = codeMessage("order.set_lunch_takeaway");
+    return error.setLunchTakeaway
+      ? html`<span class="error-part">${said}. ${t("dining.switch_to_eat_in_explained")}</span
+          ><span class="error-action"
+            ><wt-button
+              variant="secondary"
+              size="sm"
+              data-switch-eat-in
+              @click=${(event: Event) =>
+                event.currentTarget!.dispatchEvent(
+                  new CustomEvent("switch-to-eat-in", { bubbles: true, composed: true }),
+                )}
+              >${t("dining.switch_to_eat_in")}</wt-button
+            ></span
+          >`
+      : said;
+  }
   if ("clockUnusable" in error)
     return clockUnusableText(
       error.clockUnusable.clockAt,
@@ -3299,6 +3341,8 @@ export class TillApp extends LitElement {
   };
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
+  /** The way staff chose for {@link #partylessDraft}; null while none was chosen. */
+  #partylessDining: Dining | null = null;
   readonly #partylessOwner = {};
   #partylessScope?: DraftScope<string>;
   #partylessUnsubscribe?: () => void;
@@ -3341,6 +3385,7 @@ export class TillApp extends LitElement {
     this.#partylessUnsubscribe = undefined;
     this.#partylessDraft.clear();
     this.#partylessDraft = new WorkingOrderStore();
+    this.#partylessDining = null;
     this.#syncPartylessDraft();
   }
   /** {@link #draftSync} has been read, so the screen may show it. */
@@ -9245,13 +9290,109 @@ export class TillApp extends LitElement {
   }
 
   /** A table bill's own way as the party's bills read it; a bill not read yet starts as the zone
-   * starts a new order. */
-  #tableBillDining(billId: string): Dining {
+   * starts a new order, and a table with no bill yet as staff chose. */
+  #tableBillDining(billId: string | undefined): Dining {
     return (
-      this.partyBills.find((bill) => bill.workingOrderId === billId)?.dining ??
+      (billId === undefined
+        ? this.#partylessDining
+        : this.partyBills.find((bill) => bill.workingOrderId === billId)?.dining) ??
       this.#tableDining?.startsAs ??
       "eat_in"
     );
+  }
+
+  /** A switch of the way an order sells is out; a second tap waits for its answer. */
+  #diningSwitching = false;
+
+  #onDiningChange(event: CustomEvent<{ dining: Dining }>): Promise<void> {
+    event.stopPropagation();
+    return (event.target as Element | null)?.localName === "till-table-order-screen"
+      ? this.#switchTableDining(event.detail.dining)
+      : this.#switchCounterDining(event.detail.dining);
+  }
+
+  #onSwitchToEatIn(): Promise<void> {
+    this.errorKey = undefined;
+    return this.#orderScreenShown()
+      ? this.#switchTableDining("eat_in")
+      : this.#switchCounterDining("eat_in");
+  }
+
+  /** A refused switch leaves the screen's control on the way the order still has. */
+  #redrawDining(): void {
+    for (const screen of this.renderRoot.querySelectorAll<LitElement>(
+      "till-table-order-screen, till-counter-screen",
+    ))
+      screen.requestUpdate();
+  }
+
+  /** An unsaved basket holds the way until its sale or save; a saved order is switched on the
+   * server, and is read again when the server says it can no longer switch. */
+  async #switchCounterDining(dining: Dining): Promise<void> {
+    const store = this.#store;
+    if (!store.persisted) {
+      store.setDining(dining);
+      return;
+    }
+    if (this.#diningSwitching) return;
+    const id = store.id;
+    const visit = store.loadGeneration;
+    const session = this.#operatorSession;
+    const current = () =>
+      store.id === id && store.loadGeneration === visit && session === this.#operatorSession;
+    this.errorKey = undefined;
+    this.#diningSwitching = true;
+    try {
+      const { revision } = await this.api.switchDining(
+        id,
+        dining,
+        store.revision,
+        this.#counterExpectedEdit(id),
+      );
+      if (current()) store.adoptSwitchedDining(dining, revision);
+    } catch (error) {
+      if (!current()) return;
+      this.errorKey = counterError(error, "dining.switch_failed");
+      if (STORED_WAY_CHANGED.has((error as { code?: string } | undefined)?.code ?? ""))
+        await this.#reloadCounterOrder(id, session);
+      this.#redrawDining();
+    } finally {
+      this.#diningSwitching = false;
+    }
+  }
+
+  /** A table with no bill yet holds the way until its first bill is made; a bill is switched on
+   * the server under the bill's editing, and the party's bills are read again either way. */
+  async #switchTableDining(dining: Dining): Promise<void> {
+    const billId = this.activeTabId;
+    if (billId === undefined) {
+      this.#partylessDining = dining;
+      this.requestUpdate();
+      return;
+    }
+    const bill = this.partyBills.find((each) => each.workingOrderId === billId);
+    const party = this.orderParty;
+    if (bill === undefined || party === null || this.#diningSwitching) return;
+    const visit = this.#orderVisit;
+    const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
+    const expectedEdit = this.#billChoiceEdit(billId);
+    if (expectedEdit === null) return;
+    this.errorKey = undefined;
+    this.#diningSwitching = true;
+    try {
+      await this.api.switchDining(billId, dining, bill.revision, expectedEdit);
+    } catch (error) {
+      if (!live()) return;
+      const refused = asRefusal(error);
+      if (refused !== undefined && DRAFT_REFUSALS.has(refused.refused)) {
+        this.errorKey = draftRefusalError(refused);
+        await this.#refreshBillDraft();
+      } else await this.#onTableRefusal(error, live);
+    } finally {
+      this.#diningSwitching = false;
+    }
+    if (live()) await this.#loadPartyBills();
+    this.#redrawDining();
   }
 
   /** Whether the server still lets a table bill switch its way: null while no bill is saved, and
@@ -12607,6 +12748,7 @@ export class TillApp extends LitElement {
           note: unassigned.kitchenNote,
           lines: unassigned.lines.slice(),
           carrier: this.#sessionPersonId,
+          dining: this.#partylessDining,
         }
       : undefined;
     const offerRequest = ++this.#tableOfferRequest;
@@ -12662,7 +12804,7 @@ export class TillApp extends LitElement {
     offerRequest: number,
     withTableIds?: string[],
     left: () => boolean = () => false,
-    carried?: { note: string | null; lines: OrderLine[]; carrier: string },
+    carried?: { note: string | null; lines: OrderLine[]; carrier: string; dining: Dining | null },
     shownEarly = false,
     fromBar = false,
     billId?: string,
@@ -12841,6 +12983,12 @@ export class TillApp extends LitElement {
           return;
         }
         await this.#reloadOrder();
+        if (left() || session !== this.#operatorSession) return;
+        // The new bill was made the way a table's first bill starts; the way staff chose before
+        // seating is switched on it before anything is sent.
+        const chosen = carried?.dining ?? null;
+        if (chosen !== null && chosen !== this.#tableBillDining(this.activeTabId))
+          await this.#switchTableDining(chosen);
         if (left() || session !== this.#operatorSession) return;
       }
       if (left()) return;
@@ -22265,7 +22413,7 @@ export class TillApp extends LitElement {
       .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
       .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
       .bills=${this.partyBills}
-      .dining=${this.#tableBillDining(this.activeTabId ?? "")}
+      .dining=${this.#tableBillDining(this.activeTabId)}
       .diningChoice=${this.#tableBillDiningChoice(this.activeTabId)}
       .diningStart=${this.#tableDining}
       .receiptLanguages=${this.receiptLanguages}
@@ -22452,7 +22600,7 @@ export class TillApp extends LitElement {
           .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
           .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
           .bills=${this.partyBills}
-          .dining=${this.#tableBillDining(this.activeTabId ?? "")}
+          .dining=${this.#tableBillDining(this.activeTabId)}
           .diningChoice=${this.#tableBillDiningChoice(this.activeTabId)}
           .diningStart=${this.#tableDining}
           .receiptLanguages=${this.receiptLanguages}
@@ -22888,6 +23036,11 @@ export class TillApp extends LitElement {
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
+        @dining-change=${(event: CustomEvent<{ dining: Dining }>) => void this.#onDiningChange(event)}
+        @switch-to-eat-in=${(event: Event) => {
+          event.stopPropagation();
+          void this.#onSwitchToEatIn();
+        }}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}

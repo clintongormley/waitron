@@ -682,6 +682,9 @@ pregunta **Cómo se vende**: **Para tomar aquí**, **Para llevar** o **Se elige 
 un pedido de mostrador; un pedido en mesa empieza para tomar aquí. Los pedidos ya abiertos siguen
 como estaban cuando cambias esto.
 
+En la caja, toca **Para tomar aquí** o **Para llevar** sobre el pedido antes de enviarlo a cocina
+o de cobrarlo; después, el pedido se queda como está. Un menú del día solo se vende para tomar aquí.
+
 ## Poner nombre a una cuenta {#bill-names}
 
 Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su número y el nombre que

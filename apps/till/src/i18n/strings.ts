@@ -1514,6 +1514,10 @@ export const en = {
   "dining.eat_in": "Eat here",
   "dining.takeaway": "Take away",
   "dining.label": "Eat here or take away",
+  "dining.switch_to_eat_in": "Switch to eat here",
+  "dining.switch_failed": "Could not switch the order between eat here and take away, try again",
+  "dining.switch_to_eat_in_explained":
+    "Switch to eat here sells the whole order to eat here and keeps the set lunch",
   "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",
@@ -3603,6 +3607,11 @@ export const es: Record<StringKey, string> = {
   "dining.eat_in": "Para tomar aquí",
   "dining.takeaway": "Para llevar",
   "dining.label": "Para tomar aquí o para llevar",
+  "dining.switch_to_eat_in": "Cambiar a para tomar aquí",
+  "dining.switch_failed":
+    "No se pudo cambiar el pedido entre para tomar aquí y para llevar, inténtalo de nuevo",
+  "dining.switch_to_eat_in_explained":
+    "Cambiar a para tomar aquí vende todo el pedido para tomar aquí y conserva todos sus platos",
   "table.draft_title": "Nuevo pedido",
   "table.view_menu": "Carta",
   "table.view_order": "Pedido",
