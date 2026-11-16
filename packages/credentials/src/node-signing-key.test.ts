@@ -73,16 +73,14 @@ describe("the box's signing key in node.db", () => {
   async function insertRaw(nodeId: string, aad: string, plaintext: string, keyVersion = 1) {
     const sealed = seal(Buffer.from(K1, "base64"), aadFor(aad), plaintext);
     await withNodeTransaction(suite.node, (tx) =>
-      tx
-        .insert(box)
-        .values({
-          nodeId,
-          signingKeyCiphertext: sealed.ciphertext,
-          signingKeyIv: sealed.iv,
-          signingKeyAuthTag: sealed.authTag,
-          signingKeyVersion: keyVersion,
-          signingKeyChangedAt: new Date(),
-        }),
+      tx.insert(box).values({
+        nodeId,
+        signingKeyCiphertext: sealed.ciphertext,
+        signingKeyIv: sealed.iv,
+        signingKeyAuthTag: sealed.authTag,
+        signingKeyVersion: keyVersion,
+        signingKeyChangedAt: new Date(),
+      }),
     );
   }
 
