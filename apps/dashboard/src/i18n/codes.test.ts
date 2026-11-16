@@ -1044,8 +1044,8 @@ it("explains an invalid contains tag in both languages", () => {
 it.each([
   [
     "handover.stepping_down",
-    "This server is not taking requests, so this action was refused. Use the main server’s address once that server is taking sales.",
-    "Este servidor no atiende solicitudes, así que se ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
+    "This server is handing over or has handed over the venue, so it refused this action. Use the main server’s address once that server is taking sales.",
+    "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   ],
   [
     "handover.known_handover",

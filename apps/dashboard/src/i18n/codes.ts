@@ -1550,8 +1550,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La base de datos contiene cambios que esta versión de Waitron no reconoce. Instala la misma versión de Waitron o una más reciente antes de volver a intentarlo.",
   },
   "handover.stepping_down": {
-    en: "This server is not taking requests, so this action was refused. Use the main server’s address once that server is taking sales.",
-    es: "Este servidor no atiende solicitudes, así que se ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
+    en: "This server is handing over or has handed over the venue, so it refused this action. Use the main server’s address once that server is taking sales.",
+    es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   },
   "handover.known_handover": {
     en: "This server has already handed over the venue. Open the current main server’s address to continue.",
