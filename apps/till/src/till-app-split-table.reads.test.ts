@@ -268,7 +268,7 @@ describe("a refusal's own reads have a time limit", () => {
     expect(sources).toHaveBeenCalledTimes(2);
   });
 
-  it("a panel left with its rows still owed: the next panel's first read has no limit", async () => {
+  it("a panel left with its rows still owed: the next panel's first read gets its own 25 seconds", async () => {
     const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
     api.getSplitSources!.mockReset().mockImplementation(never);
     await press(el, "[data-split-confirm]");
@@ -283,12 +283,18 @@ describe("a refusal's own reads have a time limit", () => {
     await flush(el);
 
     await press(el, '[data-target="t5"]');
-    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await vi.advanceTimersByTimeAsync(LIMIT - 1);
+    await flush(el);
+    expect(tableOrder(el)!.splitRead).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
     await flush(el);
 
     expect(panelOpen(el)).toBe(true);
     expect(picker(el)).toBeNull();
-    expect(tableOrder(el)!.splitRead).toBeNull();
+    expect(tableOrder(el)!.splitRead).toBe("failed");
+    expect((q(el, "[data-split-pick] wt-form-actions") as unknown as { error: string }).error).toBe(
+      t("table.split_read_failed"),
+    );
   });
 
   it("a late drafts answer writes nothing: the edit state stays, and the retry carries it", async () => {

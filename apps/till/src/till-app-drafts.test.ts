@@ -2333,6 +2333,40 @@ describe("till-app: sending the draft", () => {
       },
     );
 
+    it("a course-place repair saved after a newer party read keeps that party and its orders", async () => {
+      const { el, store, detail } = await raced("submit");
+      let release!: () => void;
+      let repairing = false;
+      const saved = new Promise<void>((resolve) => (release = resolve));
+      const save = server.saveDraft.getMockImplementation()!;
+      api
+        .saveDraft!.mockImplementationOnce(save)
+        .mockImplementationOnce(async (...args: Parameters<TillApi["saveDraft"]>) => {
+          repairing = true;
+          await saved;
+          return save(args[0], args[1]);
+        });
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(repairing).toBe(true));
+      api.setPartyName = vi.fn().mockResolvedValue({ revision: 5 });
+      api.getTablesState!.mockResolvedValue([
+        { ...table4, party: { ...table4.party!, revision: 5, name: "Lunch" } },
+        table7,
+      ]);
+      api.listGroups!.mockResolvedValue({ revision: 5, groups: [], printProblems: [] });
+      api.readCurrentOrders!.mockResolvedValue({ ...current, revision: 5, nextDisplayNumber: 12 });
+      emit(tableOrder(el)!, "name-party", { name: "Lunch" });
+      await vi.waitFor(() => expect(tableOrder(el)!.party?.revision).toBe(5));
+      await vi.waitFor(() => expect(tableOrder(el)!.currentOrders?.nextDisplayNumber).toBe(12));
+      release();
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await flush(el, 6);
+      expect(tableOrder(el)!.party?.revision).toBe(5);
+      expect(tableOrder(el)!.party?.name).toBe("Lunch");
+      expect(tableOrder(el)!.currentOrders?.nextDisplayNumber).toBe(12);
+      expect(tableOrder(el)!.groups).toEqual([]);
+    });
+
     it("shows the printing problems the recovery read with the groups", async () => {
       const problems: PrintProblem[] = [
         {

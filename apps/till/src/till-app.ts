@@ -3544,11 +3544,9 @@ export class TillApp extends LitElement {
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
-  /** Set when Split a table took the bill on screen, the bills read after it failed, and no bill known
-   * before it stayed: the next successful bills read for this party on this visit shows
-   * {@link billToShow}'s choice ({@link #followBillsRead}) and ends the wait, even when it lists no
-   * bill. */
-  #billAfterSplit?: { partyId: string; visit: number };
+  /** Failed split follow-up reads leave the shown bill's fate unknown until a successful read on
+   * this visit. An explicit bill choice ends that wait. */
+  #billAfterSplit?: { partyId: string; visit: number; billId?: string };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -4618,6 +4616,7 @@ export class TillApp extends LitElement {
       orders.revision !== party.revision
     )
       throw { code: "party.out_of_date" };
+    if (party.revision < this.orderParty!.revision) return;
     this.#applyTables(tablesRead, tables);
     this.orderParty = party;
     this.tabGroups = groups.groups;
@@ -13659,9 +13658,9 @@ export class TillApp extends LitElement {
 
   #draftReadBounds(): DraftReadBounds | undefined {
     const refusal = this.#splitRefusalReading;
-    return refusal === undefined
+    return refusal === undefined && this.#splitReadDepth === 0
       ? undefined
-      : { limitMs: SPLIT_REFUSAL_READ_LIMIT_MS, stop: refusal.ended.signal };
+      : { limitMs: SPLIT_REFUSAL_READ_LIMIT_MS, stop: refusal?.ended.signal };
   }
 
   async #refreshBillDraft(): Promise<void> {
@@ -14017,12 +14016,28 @@ export class TillApp extends LitElement {
     )
       return;
     const gone = this.activeTabId;
-    const next = billToShow(gone, bills);
     const afterSplit =
-      gone === undefined &&
+      this.#billAfterSplit?.billId === gone &&
       this.#billAfterSplit?.partyId === partyId &&
       this.#billAfterSplit.visit === this.#orderVisit;
-    if (gone === undefined) this.#billAfterSplit = undefined;
+    const paidAfterSplit =
+      afterSplit &&
+      gone !== undefined &&
+      bills.some((bill) => bill.workingOrderId === gone && !owing(bill));
+    const paying = this.billPaying;
+    if (
+      paidAfterSplit &&
+      (this.#billPaymentHeld(gone!) ||
+        (paying?.surface === "table" &&
+          paying.billId === gone &&
+          (paying.busy ||
+            paying.taken?.pending !== undefined ||
+            this.#pendingReread?.dialogId === paying.id ||
+            (this.billRefunding?.payId === paying.id && this.billRefunding.busy))))
+    )
+      return;
+    const next = billToShow(paidAfterSplit ? undefined : gone, bills);
+    if (afterSplit || gone === undefined) this.#billAfterSplit = undefined;
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
     const sync = this.#draftSync;
@@ -14254,6 +14269,7 @@ export class TillApp extends LitElement {
           outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
         return true;
       }
+      if (party.revision < this.orderParty!.revision) return true;
       this.#applyTables(tablesRead, tables);
       this.orderParty = party;
       this.tabGroups = groups.groups;
@@ -17307,6 +17323,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (!live()) return;
+    this.floorCarried = carryRevisions(this.floorCarried, result.zoneRevisions);
     await this.#refreshBillDraft();
     if (!live()) return;
     await this.#reloadTables();
@@ -17893,17 +17910,36 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A refusal's sentence waits on its reads. One still out at the limit counts as failed, and what
-   * it answers later goes nowhere. */
-  async #splitRefusalRead<T>(read: () => Promise<T>): Promise<T> {
-    const refusal = this.#splitRefusalReading;
-    if (refusal === undefined) return read();
-    const limit = limited(SPLIT_REFUSAL_READ_LIMIT_MS, refusal.ended.signal);
+  #splitReadDepth = 0;
+
+  async #withSplitReadLimit<T>(read: () => Promise<T>): Promise<T> {
+    this.#splitReadDepth++;
+    try {
+      return await read();
+    } finally {
+      this.#splitReadDepth--;
+    }
+  }
+
+  /** A read still out at the limit counts as failed; its later answer cannot replace state. */
+  async #splitRefusalRead<T>(
+    read: (signal?: AbortSignal) => Promise<T>,
+    stop?: AbortSignal,
+  ): Promise<T> {
+    const bounds = this.#draftReadBounds();
+    if (bounds === undefined && stop === undefined) return read();
+    const stopped =
+      stop === undefined
+        ? bounds?.stop
+        : bounds?.stop === undefined
+          ? stop
+          : AbortSignal.any([stop, bounds.stop]);
+    const limit = limited(SPLIT_REFUSAL_READ_LIMIT_MS, stopped);
     try {
       return await Promise.race([
-        read(),
+        read(limit.signal),
         pause(limit.signal).then(() => {
-          throw new DOMException("A refusal's read ended", "AbortError");
+          throw new DOMException("A split read ended", "AbortError");
         }),
       ]);
     } finally {
@@ -18105,8 +18141,9 @@ export class TillApp extends LitElement {
       revision: this.orderParty?.revision,
     };
     try {
-      const read = await this.#splitRefusalRead(() =>
-        this.api.getSplitSources(partyId, { signal: controller.signal }),
+      const read = await this.#splitRefusalRead(
+        (signal) => this.api.getSplitSources(partyId, { signal }),
+        controller.signal,
       );
       if (generation === this.#splitReadGeneration) {
         this.#splitReadAbort = undefined;
@@ -18146,7 +18183,7 @@ export class TillApp extends LitElement {
       this.activeTabId === undefined &&
       billToShow(undefined, bills) !== undefined
     )
-      void this.#reloadSplitParty();
+      void this.#withSplitReadLimit(() => this.#reloadSplitParty());
   }
 
   /** An answer can be newer than the bills list, whose rows the panel's are joined with. */
@@ -18156,7 +18193,7 @@ export class TillApp extends LitElement {
       read.bills.some(({ billId }) => !known.has(billId)) ||
       (this.activeTabId === undefined && read.bills.length > 0)
     )
-      void this.#reloadSplitParty();
+      void this.#withSplitReadLimit(() => this.#reloadSplitParty());
   }
 
   /** A party with no sync stops being a special case the moment it has a bill: this makes the sync
@@ -18296,7 +18333,7 @@ export class TillApp extends LitElement {
       );
       if (went !== true) return;
     }
-    await this.#followSplit(asked, party, tableId, selection);
+    await this.#withSplitReadLimit(() => this.#followSplit(asked, party, tableId, selection));
   }
 
   /** D17: the till stays with the staying party at its other table. */
@@ -18341,6 +18378,8 @@ export class TillApp extends LitElement {
     }
     const [, { bills: reread }] = await this.#loadLinesAndBills();
     if (paidUnseen && live()) {
+      if (reread === null)
+        this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit, billId: shown };
       const remaining = reread?.find((bill) => bill.workingOrderId === shown);
       const next = billToShow(undefined, reread ?? []);
       if (remaining !== undefined && !owing(remaining) && next !== undefined && next !== shown) {
@@ -20131,6 +20170,7 @@ export class TillApp extends LitElement {
    * later than any read still followed; any other (a seat's, a split's, + New bill's, an answer's)
    * is unknown to every bills read sent so far. */
   #chooseBill(billId: string): void {
+    this.#billAfterSplit = undefined;
     this.activeTabId = billId;
     this.#billChosenRead = this.partyBills.some((bill) => bill.workingOrderId === billId)
       ? 0

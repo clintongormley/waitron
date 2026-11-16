@@ -3820,7 +3820,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
 
   /** Opens table 2, whose party's only bill is wo-8, and splits table 3 off with that bill. Each
    * bills read after the split takes the next of `reads`, the last repeating; an Error is thrown. */
-  async function splitOffOnlyBill(reads: (PartyBill[] | Error)[]) {
+  async function splitOffOnlyBill(reads: (PartyBill[] | Error)[], loose = false) {
     let floorAfter = false;
     const t3 = { id: "t3", label: "3" };
     const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
@@ -3847,7 +3847,9 @@ describe("A803 action results: the bill on screen after a table action", () => {
     const screen = await toTableOrder(mounted.el);
     emit(screen, "split-table", {
       tableId: "t3",
-      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      selection: loose
+        ? { wholeBillIds: [], loose: [{ billId: "wo-8", lineIds: ["line-1"] }] }
+        : { wholeBillIds: ["wo-8"], loose: [] },
       guestCounts: { staying: null, leaving: null },
     });
     await flush(mounted.el);
@@ -3860,6 +3862,84 @@ describe("A803 action results: the bill on screen after a table action", () => {
     await flush(el);
     await flush(el);
   }
+
+  it("a first draft arriving during split follow-up keeps the staying table and its bill", async () => {
+    let split = false;
+    let followStarted = false;
+    let releaseFloor!: () => void;
+    let releaseDraft!: (value: Awaited<ReturnType<TillApi["listDrafts"]>>) => void;
+    const floorHeld = new Promise<void>((resolve) => (releaseFloor = resolve));
+    const draftHeld = new Promise<Awaited<ReturnType<TillApi["listDrafts"]>>>(
+      (resolve) => (releaseDraft = resolve),
+    );
+    const t3 = { id: "t3", label: "3" };
+    const { el } = await mountApp({
+      listDrafts: vi
+        .fn()
+        .mockImplementationOnce(() => draftHeld)
+        .mockImplementation(drafts.listDrafts),
+      getTablesState: vi.fn(async () => {
+        if (split) {
+          followStarted = true;
+          await floorHeld;
+        }
+        return split
+          ? [
+              seated(openTable, { revision: 4, tableIds: ["t2"] }),
+              seated(t3, { id: "v-new", tableIds: ["t3"] }),
+            ]
+          : [seated(openTable, { tableIds: ["t2", "t3"] }), seated(t3, { tableIds: ["t2", "t3"] })];
+      }),
+      getPartyBills: vi.fn().mockResolvedValue([partyBill("wo-7", "v-2", 1)]),
+      splitTable: vi.fn(async () => {
+        split = true;
+        return { partyId: "v-new", billIds: [] };
+      }),
+    });
+    const screen = await toTableOrder(el);
+    emit(screen, "split-table", {
+      tableId: "t3",
+      guestCounts: { staying: 1, leaving: 1 },
+      selection: { wholeBillIds: [], loose: [] },
+    });
+    await vi.waitFor(() => expect(followStarted).toBe(true));
+    releaseDraft(await drafts.listDrafts("v-2"));
+    await flush(el);
+    releaseFloor();
+    await flush(el);
+    await flush(el);
+    expect(tableOrder(el)!.party?.tableIds).toEqual(["t2"]);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(await nextSavedBill(el)).toBe("wo-7");
+    expect(api.splitTable).toHaveBeenCalledOnce();
+  });
+
+  it("after a loose split and two failed bills reads, the next read leaves the paid bill for the lowest owing bill", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      const reads: (PartyBill[] | Error)[] = [
+        new TypeError("Failed to fetch"),
+        new TypeError("Failed to fetch"),
+      ];
+      const { el } = await splitOffOnlyBill(reads, true);
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(reads).toHaveLength(1);
+      reads.splice(0, reads.length, [
+        partyBill("wo-8", "v-2", 1, "settled"),
+        partyBill("wo-9", "v-2", 3),
+        partyBill("wo-10", "v-2", 2),
+      ]);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-10");
+      expect(api.getTabLines).toHaveBeenLastCalledWith("wo-10");
+      expect(await nextSavedBill(el)).toBe("wo-10");
+      expect(api.splitTable).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("Split a table giving away the staying party's only bill shows the empty bill the server made for it once a bills read succeeds after one that failed", async () => {
     const reads: (PartyBill[] | Error)[] = [
@@ -3982,7 +4062,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
      * `answerTheSplit`. */
     async function splitWithReadHeld(
       formFactor: FormFactor,
-      { readRevision = 12, holdAnswer = false } = {},
+      { readRevision = 12, holdAnswer = false, lostReply = false } = {},
     ) {
       const room = { revision: 1 };
       const t3 = { id: "t3", label: "3" };
@@ -4028,6 +4108,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
             await answered;
             answerHeld = false;
           }
+          if (lostReply) throw new TypeError("Failed to fetch");
           return { partyId: "v-new", billIds: ["wo-8"], zoneRevisions: { z1: 9 } };
         }),
         updateLayoutToday,
@@ -4086,6 +4167,74 @@ describe("A803 action results: the bill on screen after a table action", () => {
         updateLayoutToday,
       };
     }
+
+    it("Move guests carries the changed room revision before its floor read answers", async () => {
+      let moved = false;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const before = { revision: 3, tableIds: ["t2", "t3"] };
+      const t3 = { id: "t3", label: "3" };
+      const getTablesState = vi.fn(async () => {
+        if (moved) {
+          await held;
+          return [
+            inRoom({ ...openTable, party: null, hasOpenTab: false, state: "free" }, 9),
+            inRoom(seated(t3, { revision: 4, tableIds: ["t3"] }), 9),
+          ];
+        }
+        return [inRoom(seated(openTable, before), 1), inRoom(seated(t3, before), 1)].map(
+          (table) => ({
+            ...table,
+            today: { ...table.today!, joinId: "joined-t2-t3", joinSeats: 8 },
+          }),
+        );
+      });
+      const updateLayoutToday = vi.fn<TillApi["updateLayoutToday"]>(async () => ({
+        zoneId: "z1",
+        revision: 10,
+      }));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: tillFormFactor,
+          capabilities: ["take-orders"],
+        }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: tillFormFactor }),
+        listZones: vi.fn().mockResolvedValue([layoutOffer]),
+        getTablesState,
+        moveGuests: vi.fn(async () => {
+          moved = true;
+          return { partyId: "v-2", billIds: ["wo-7"], zoneRevisions: { z1: 9 } };
+        }),
+        updateLayoutToday,
+      });
+      const screen = await toTableOrder(el);
+      emit(screen, "move-guests", { toTableId: "t3" });
+      await flush(el);
+      await flush(el);
+      expect(api.moveGuests).toHaveBeenCalledOnce();
+      emit(screen, "back-to-floor");
+      await flush(el);
+      await flush(el);
+      floor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-update-layout]")!.click();
+      await flush(el);
+      expect(updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([9]);
+      release();
+      await flush(el);
+    });
+
+    it("a split whose reply is lost keeps the occupancy-confirming floor revision", async () => {
+      const floorEdit = await splitWithReadHeld(tillFormFactor, { lostReply: true });
+      await floorEdit.letTheReadAnswer();
+      await floorEdit.backToFloor();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([
+        12,
+      ]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
 
     it("A803 applies split room revision before reload", async () => {
       const floorEdit = await splitWithReadHeld(tillFormFactor);

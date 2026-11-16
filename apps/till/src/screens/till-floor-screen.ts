@@ -1317,6 +1317,8 @@ export class TillFloorScreen extends LitElement {
     this.#sendTodayAction(table, "leave-here", (api, sent) => api.leaveHereToday(table.id, sent));
   }
 
+  readonly #todayTurns = new Map<string | null, Promise<void>>();
+
   #sendTodayAction(
     table: TableState,
     action: TodayAction,
@@ -1328,13 +1330,19 @@ export class TillFloorScreen extends LitElement {
     if (this.sendingToday.has(table.id)) return;
     this.refusal = null;
     this.sendingToday = new Map(this.sendingToday).set(table.id, action);
-    void this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent))).finally(
-      () => {
+    const previous = this.#todayTurns.get(table.zoneId) ?? Promise.resolve();
+    const turn = previous
+      .then(() => {
+        this.refusal = null;
+        return this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)));
+      })
+      .finally(() => {
         const sending = new Map(this.sendingToday);
         sending.delete(table.id);
         this.sendingToday = sending;
-      },
-    );
+        if (this.#todayTurns.get(table.zoneId) === turn) this.#todayTurns.delete(table.zoneId);
+      });
+    this.#todayTurns.set(table.zoneId, turn);
   }
 
   #emit(type: string, detail: unknown): void {

@@ -726,7 +726,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
     });
 
     it.each(["floor", "bills"] as const)(
-      "the first bill reload's %s read: Split stays pressable, also across Back, reopening and leaving",
+      "the first bill reload's %s read expires and permits recovery, also across Back, reopening and leaving",
       async (stuck) => {
         const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
         const el = await mounted({
@@ -764,23 +764,22 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
         };
         expectPressable();
 
-        const floorReads = api.getTablesState!.mock.calls.length;
-        await vi.advanceTimersByTimeAsync(5 * 60_000);
+        await vi.advanceTimersByTimeAsync(24_999);
+        await flush(el);
+        expect(tableOrder(el)!.orderId).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
         await flush(el);
         expectPressable();
-        expect(api.getTablesState!.mock.calls.length, "no second reload on that panel").toBe(
-          floorReads,
-        );
+        expect(tableOrder(el)!.orderId).toBe(stuck === "floor" ? "b9" : undefined);
+        await timedRead(el);
+        expect(tableOrder(el)!.orderId).toBe("b9");
 
         await press(el, "[data-action-back]");
         await press(el, '[data-target="t5"]');
         await flush(el);
         expectPressable();
         await timedRead(el);
-        expect(
-          api.getTablesState!.mock.calls.length,
-          "a new panel's timed read reloads",
-        ).toBeGreaterThan(floorReads);
+        expect(tableOrder(el)!.orderId).toBe("b9");
 
         emit(tableOrder(el)!, "back-to-floor");
         await flush(el);
@@ -989,19 +988,26 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
     });
   });
 
-  describe("what this does not reach", () => {
-    const never = () => new Promise(() => {});
-
-    it("a first read that never answers leaves a blank panel, Split quiet, with no words, until Back and the table read again", async () => {
-      const el = await mounted({ getSplitSources: vi.fn().mockImplementation(never) });
+  describe("the first read's time limit", () => {
+    it("a first read expires at 25 seconds, ignores a late answer and recovers on reopening", async () => {
+      const late = held<SplitSources>();
+      const el = await mounted({ getSplitSources: vi.fn().mockImplementation(late.read) });
       await toPanel(el);
-      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await vi.advanceTimersByTimeAsync(24_999);
       await flush(el);
-
+      expect(said(el)).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await flush(el);
       expect(picker(el)).toBeNull();
       expect(splitButton(el)!.disabled).toBe(true);
       expect(splitButton(el)!.variant).toBe("secondary");
-      expect(said(el)).toBeNull();
+      expect(
+        (q(el, "[data-split-pick] wt-form-actions") as unknown as { error: string }).error,
+      ).toBe(t("table.split_read_failed"));
+      expect(api.getSplitSources!.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+      late.calls[0]!.answer(rowsAt(3, "20.00"));
+      await flush(el);
+      expect(picker(el)).toBeNull();
 
       const rowsRead = api.getSplitSources!.mock.calls.length;
       api.getSplitSources!.mockResolvedValue(rowsAt(3, "20.00"));

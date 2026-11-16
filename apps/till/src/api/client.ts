@@ -2265,7 +2265,7 @@ export interface TableActionRevisions {
 }
 
 /** A move or join's answer: the party the guests are in now and its bills, in number order; no
- * bill is merged. `zoneRevisions` is the rooms' revisions after a join that merged tables. */
+ * bill is merged. `zoneRevisions` carries the revisions when a room changed. */
 export interface TableActionResult {
   partyId: string;
   billIds: string[];

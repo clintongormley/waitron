@@ -178,6 +178,61 @@ describe("A669 live table editor", () => {
     expect(save.mock.calls[1]![1].submissionId).not.toBe(save.mock.calls[0]![1].submissionId);
   });
 
+  it("a late allergy metadata read keeps the newer party, groups and current orders", async () => {
+    const preview = vi.fn(async (_id: string, target: AllergySendTarget) => {
+      const view = allergyView(null, target);
+      return { ...view, snapshot: { ...view.snapshot, revision: 4 } };
+    });
+    const { el } = await mountApp({ previewPartyAllergy: preview });
+    const screen = await openTable(el);
+    await addDish(el);
+    let answer!: () => void;
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve({ revision: 4, groups: [], printProblems: [] });
+        }),
+    );
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    await userEvent.click(
+      screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    api.setPartyName = vi.fn().mockResolvedValue({ revision: 5 });
+    api.getTablesState!.mockResolvedValue([
+      table("t4", "4", party({ revision: 5, name: "Lunch" })),
+    ]);
+    api.listGroups!.mockResolvedValue({ revision: 5, groups: [], printProblems: [] });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 5,
+      hasGroups: false,
+      nextDisplayNumber: 8,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    emit(screen, "name-party", { name: "Lunch" });
+    await vi.waitFor(() => expect(screen.party?.revision).toBe(5));
+    await vi.waitFor(() => expect(screen.currentOrders?.nextDisplayNumber).toBe(8));
+    answer();
+    await flush(el, 6);
+    expect(screen.party?.revision).toBe(5);
+    expect(screen.party?.name).toBe("Lunch");
+    expect(screen.currentOrders?.nextDisplayNumber).toBe(8);
+    emit(screen, "name-party", { name: "Dinner" });
+    await vi.waitFor(() => expect(api.setPartyName).toHaveBeenLastCalledWith("v1", "Dinner", 5));
+  });
+
   it("shows the printing problems the refresh after a stale editor refusal reads with the groups", async () => {
     const problems: PrintProblem[] = [
       {
