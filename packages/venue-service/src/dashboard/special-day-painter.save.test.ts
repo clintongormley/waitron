@@ -475,15 +475,13 @@ describe("a live refresh that takes away a department or zone with edits", () =>
     expect(saveButton(painter).disabled).toBe(false);
     part(painter, "add-dates")!.click();
     await settle(painter);
-    painter
-      .shadowRoot!.querySelector("add-dates-calendar")!
-      .dispatchEvent(
-        new CustomEvent("add-dates", {
-          detail: { dates: ["2026-12-31"] },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+    painter.shadowRoot!.querySelector("add-dates-calendar")!.dispatchEvent(
+      new CustomEvent("add-dates", {
+        detail: { dates: ["2026-12-31"] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await settle(painter);
     await save(painter, writes);
     expect(body(writes[0]!).expectedClockRevision).toBe(5);
