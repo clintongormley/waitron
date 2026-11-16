@@ -6,8 +6,8 @@ import {
   DOTS_PER_COLUMN,
   dpiValue,
   esc,
-  SETTING_WIDTHS,
   TEXT_BAND_HEIGHT,
+  textGrid,
   type EscSetting,
   type MonoRaster,
 } from "@waitron/printing";
@@ -15,11 +15,18 @@ import { previewPrintJob, type PrintPreviewBlock } from "./print-job-preview.js"
 import { formatReceipt } from "./receipt-ticket.js";
 import { sampleDocument } from "./sample-receipt.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { renderTicketPdf } from "./ticket-pdf.js";
+import { renderTicketPdf, ticketDrawing } from "./ticket-pdf.js";
 
 const QR_TEXT = { caption: "QR tributario:", legend: "VERI*FACTU" };
 const PRINTER_80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 const PRINTER_58: EscSetting = { paperWidth: "58mm", resolution: "203dpi" };
+const ISSUED_AT = new Date("2026-08-17T22:34:00Z");
+
+async function renderTicket(bytes: Uint8Array, printer: EscSetting): Promise<Buffer> {
+  const drawing = ticketDrawing(bytes, printer, ISSUED_AT);
+  expect(drawing).toBeDefined();
+  return renderTicketPdf(drawing!);
+}
 
 /** A checked 96 × 40 picture, so a misplaced run of dots shows. */
 const LOGO: MonoRaster = {
@@ -35,9 +42,13 @@ function ticket(printer: EscSetting): Uint8Array {
 }
 
 function widthDotsOf(printer: EscSetting): number {
-  return SETTING_WIDTHS.find(
-    (each) => each.paperWidth === printer.paperWidth && each.resolution === printer.resolution,
-  )!.widthDots;
+  return textGrid(printer.paperWidth, printer.resolution).widthDots;
+}
+
+/** The whole dots between the paper's edge and the centred print area. */
+function marginOf(printer: EscSetting): number {
+  const paperDots = (Number.parseInt(printer.paperWidth, 10) / 25.4) * dpiValue(printer.resolution);
+  return Math.floor((paperDots - widthDotsOf(printer)) / 2);
 }
 
 type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;
@@ -69,6 +80,7 @@ async function read(pdf: Buffer, printer: EscSetting) {
     await page.render({ canvas: canvas as never, canvasContext: context as never, viewport })
       .promise;
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+    const { fnArray } = await page.getOperatorList();
     const size = page.getViewport({ scale: 1 });
     const scale = dpiValue(printer.resolution) / 72;
     const pieces = content.items.flatMap((item) =>
@@ -85,6 +97,7 @@ async function read(pdf: Buffer, printer: EscSetting) {
     return {
       pieces,
       pages: document.numPages,
+      operators: fnArray,
       width: size.width,
       height: size.height,
       // pdfjs splits a line at its runs of spaces; the pieces of one line share a baseline.
@@ -128,7 +141,7 @@ function sameDots(
   return set;
 }
 
-describe("renderTicketPdf", () => {
+describe("ticketDrawing and renderTicketPdf", () => {
   it.each([
     [PRINTER_80, 226.77],
     [PRINTER_58, 164.41],
@@ -136,7 +149,7 @@ describe("renderTicketPdf", () => {
     "draws one page as wide as the paper, holding every printed line in order",
     async (printer, width) => {
       const bytes = ticket(printer);
-      const page = await read(await renderTicketPdf(bytes, printer), printer);
+      const page = await read(await renderTicket(bytes, printer), printer);
       expect(page.pages).toBe(1);
       expect(page.width).toBeCloseTo(width, 2);
       const printed = printedLines(bytes)
@@ -152,10 +165,8 @@ describe("renderTicketPdf", () => {
     async (printer) => {
       const bytes = ticket(printer);
       const widthDots = widthDotsOf(printer);
-      const page = await read(await renderTicketPdf(bytes, printer), printer);
-      const paperDots =
-        (Number.parseInt(printer.paperWidth, 10) / 25.4) * dpiValue(printer.resolution);
-      const margin = Math.floor((paperDots - widthDots) / 2);
+      const page = await read(await renderTicket(bytes, printer), printer);
+      const margin = marginOf(printer);
 
       const images = imagesOf(bytes, widthDots);
       const topOf = (index: number) =>
@@ -182,12 +193,8 @@ describe("renderTicketPdf", () => {
     async (printer) => {
       const bytes = ticket(printer);
       const widthDots = widthDotsOf(printer);
-      const page = await read(await renderTicketPdf(bytes, printer), printer);
-      const margin = Math.floor(
-        ((Number.parseInt(printer.paperWidth, 10) / 25.4) * dpiValue(printer.resolution) -
-          widthDots) /
-          2,
-      );
+      const page = await read(await renderTicket(bytes, printer), printer);
+      const margin = marginOf(printer);
       const lines = imagesOf(bytes, widthDots).filter((image) => image.text?.trim());
       expect(lines.map((line) => line.text)).toContain("PRUEBA - SIN COBRO REAL");
       const ys = [...new Set(page.pieces.map((piece) => piece.y))];
@@ -225,64 +232,124 @@ describe("renderTicketPdf", () => {
   it("puts a right-aligned picture's dots against the print area's right edge", async () => {
     const bytes = esc(PRINTER_80).init().align("right").bitmap(LOGO).cut().bytes();
     const widthDots = widthDotsOf(PRINTER_80);
-    const page = await read(await renderTicketPdf(bytes, PRINTER_80), PRINTER_80);
-    const margin = Math.floor(((80 / 25.4) * 180 - widthDots) / 2);
+    const page = await read(await renderTicket(bytes, PRINTER_80), PRINTER_80);
+    const margin = marginOf(PRINTER_80);
     const [logo] = imagesOf(bytes, widthDots);
     expect(logo!.align).toBe("right");
     expect(sameDots(page, logo!, margin + widthDots - LOGO.widthDots, margin)).toBeGreaterThan(100);
   });
 
-  it("paints each picture the ticket prints as one image, and no shapes", async () => {
+  it("puts a centred picture's dots where they print when it starts mid-byte", async () => {
+    const odd: MonoRaster = {
+      widthDots: 104,
+      heightDots: 40,
+      bits: Uint8Array.from({ length: 13 * 40 }, (_, index) => (index * 37) & 0xff),
+    };
+    const bytes = esc(PRINTER_80).init().align("center").bitmap(odd).cut().bytes();
+    const widthDots = widthDotsOf(PRINTER_80);
+    const page = await read(await renderTicket(bytes, PRINTER_80), PRINTER_80);
+    const margin = marginOf(PRINTER_80);
+    const [picture] = imagesOf(bytes, widthDots);
+    const offset = Math.floor((widthDots - odd.widthDots) / 2);
+    expect(offset % 8).not.toBe(0);
+    expect(sameDots(page, picture!, margin + offset, margin)).toBeGreaterThan(1_000);
+  });
+
+  it("paints every picture the ticket prints as one image, and no shapes", async () => {
     const bytes = ticket(PRINTER_80);
+    const { operators } = await read(await renderTicket(bytes, PRINTER_80), PRINTER_80);
+    expect(imagesOf(bytes, widthDotsOf(PRINTER_80)).length).toBeGreaterThan(10);
+    expect(operators.filter((op) => op === OPS.paintImageXObject)).toHaveLength(1);
+    expect(operators).not.toContain(OPS.constructPath);
+  });
+
+  it("refuses a ticket laid out wider than the printer's print area", async () => {
+    await expect(renderTicket(ticket(PRINTER_80), PRINTER_58)).rejects.toThrow(
+      "wider than the print area",
+    );
+  });
+
+  it("refuses a ticket that prints nothing", async () => {
+    await expect(renderTicket(esc(PRINTER_80).init().cut().bytes(), PRINTER_80)).rejects.toThrow(
+      "prints nothing",
+    );
+  });
+
+  it("answers none for bytes the preview cut short, and refuses bytes it could not read", async () => {
+    const whole = ticket(PRINTER_80);
+    expect(previewPrintJob(whole.subarray(0, whole.length - 100)).truncated).toBe(true);
+    expect(ticketDrawing(whole.subarray(0, whole.length - 100), PRINTER_80, ISSUED_AT)).toBe(
+      undefined,
+    );
+    const unknown = Uint8Array.from([...whole, 0x1b, 0x21, 0x00]);
+    expect(previewPrintJob(unknown).unsupported).toBe(true);
+    await expect(renderTicket(unknown, PRINTER_80)).rejects.toThrow("could not be read whole");
+    const tooWide = Uint8Array.from([0x1d, 0x76, 0x30, 0, 1, 1, 1, 0, ...new Uint8Array(257)]);
+    expect(previewPrintJob(tooWide).omittedGraphics).toBe(true);
+    await expect(renderTicket(tooWide, PRINTER_80)).rejects.toThrow("could not be read whole");
+  });
+
+  it("refuses bytes sent as text, a feed that is not straight before the cut, and a line after it", async () => {
+    await expect(
+      renderTicket(esc(PRINTER_80).init().line("A").bytes(), PRINTER_80),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(renderTicket(Uint8Array.from([0x41, 0x0a]), PRINTER_80)).rejects.toThrow(
+      "sends bytes as text",
+    );
+    await expect(
+      renderTicket(esc(PRINTER_80).init().line("A").feed(2).line("B").cut().bytes(), PRINTER_80),
+    ).rejects.toThrow("feeds paper other than before its cut");
+    await expect(
+      renderTicket(esc(PRINTER_80).init().line("A").feedAndCut().bytes(), PRINTER_80),
+    ).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      renderTicket(esc(PRINTER_80).init().line("A").cut().line("B").bytes(), PRINTER_80),
+    ).rejects.toThrow("past its cut");
+  });
+
+  it("dates the document when the sale was issued", async () => {
     const loading = getDocument({
-      data: Uint8Array.from(await renderTicketPdf(bytes, PRINTER_80)),
+      data: Uint8Array.from(await renderTicket(ticket(PRINTER_80), PRINTER_80)),
       useSystemFonts: false,
     });
     try {
-      const page = await (await loading.promise).getPage(1);
-      const { fnArray } = await page.getOperatorList();
-      expect(fnArray.filter((op) => op === OPS.paintImageXObject)).toHaveLength(
-        imagesOf(bytes, widthDotsOf(PRINTER_80)).length,
+      const { info } = await (await loading.promise).getMetadata();
+      expect((info as { CreationDate: string; ModDate: string }).CreationDate).toBe(
+        "D:20260817223400Z",
       );
-      expect(fnArray).not.toContain(OPS.constructPath);
+      expect((info as { CreationDate: string; ModDate: string }).ModDate).toBe("D:20260817223400Z");
     } finally {
       await loading.destroy();
     }
   });
 
-  it("refuses a ticket laid out wider than the printer's print area", async () => {
-    await expect(renderTicketPdf(ticket(PRINTER_80), PRINTER_58)).rejects.toThrow(
-      "wider than the print area",
-    );
-  });
-
-  it("refuses bytes the preview cannot read whole", async () => {
-    const whole = ticket(PRINTER_80);
-    expect(previewPrintJob(whole.subarray(0, whole.length - 100)).truncated).toBe(true);
-    await expect(
-      renderTicketPdf(whole.subarray(0, whole.length - 100), PRINTER_80),
-    ).rejects.toThrow();
-    const unknown = Uint8Array.from([...whole, 0x1b, 0x21, 0x00]);
-    expect(previewPrintJob(unknown).unsupported).toBe(true);
-    await expect(renderTicketPdf(unknown, PRINTER_80)).rejects.toThrow();
-    const tooWide = Uint8Array.from([0x1d, 0x76, 0x30, 0, 1, 1, 1, 0, ...new Uint8Array(257)]);
-    expect(previewPrintJob(tooWide).omittedGraphics).toBe(true);
-    await expect(renderTicketPdf(tooWide, PRINTER_80)).rejects.toThrow();
-  });
-
-  it("refuses bytes sent as text, a feed that is not straight before the cut, and a line after it", async () => {
-    await expect(
-      renderTicketPdf(esc(PRINTER_80).init().line("A").bytes(), PRINTER_80),
-    ).resolves.toBeInstanceOf(Buffer);
-    await expect(renderTicketPdf(Uint8Array.from([0x41, 0x0a]), PRINTER_80)).rejects.toThrow();
-    await expect(
-      renderTicketPdf(esc(PRINTER_80).init().line("A").feed(2).line("B").cut().bytes(), PRINTER_80),
-    ).rejects.toThrow();
-    await expect(
-      renderTicketPdf(esc(PRINTER_80).init().line("A").feedAndCut().bytes(), PRINTER_80),
-    ).resolves.toBeInstanceOf(Buffer);
-    await expect(
-      renderTicketPdf(esc(PRINTER_80).init().line("A").cut().line("B").bytes(), PRINTER_80),
-    ).rejects.toThrow("past its cut");
-  });
+  it.each([PRINTER_80, PRINTER_58])(
+    "draws a page up to 14,400 points tall, its margins counted, and answers none past it",
+    async (printer) => {
+      const dpi = dpiValue(printer.resolution);
+      const margin = marginOf(printer);
+      const tallest = (14_400 * dpi) / 72 - 2 * margin;
+      expect(Number.isInteger(tallest)).toBe(true);
+      // The preview reads a picture at most 2,048 dots high, so the strip is drawn in pieces.
+      const strip = (heightDots: number) => {
+        const builder = esc(printer).init();
+        for (let left = heightDots; left > 0; left -= 2_000) {
+          const height = Math.min(left, 2_000);
+          builder.bitmap({ widthDots: 8, heightDots: height, bits: new Uint8Array(height) });
+        }
+        return builder.cut().bytes();
+      };
+      const loading = getDocument({
+        data: Uint8Array.from(await renderTicket(strip(tallest), printer)),
+        useSystemFonts: false,
+      });
+      try {
+        const page = await (await loading.promise).getPage(1);
+        expect(page.view[3]).toBeCloseTo(14_400, 2);
+      } finally {
+        await loading.destroy();
+      }
+      expect(ticketDrawing(strip(tallest + 1), printer, ISSUED_AT)).toBe(undefined);
+    },
+  );
 });
