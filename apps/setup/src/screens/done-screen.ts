@@ -271,11 +271,19 @@ export class SetupDoneScreen extends LitElement {
       this.#missed(answer);
       return;
     }
+    if (answer.result === "same_machine") {
+      this.#compareAgain = false;
+      this.clockNote = "done.clock.on_box";
+      return;
+    }
+    // Answered without times (`challenge`: the round trip was too slow or the box's clock moved).
+    if (answer.deviceMs === undefined || answer.serverMs === undefined) {
+      this.#missed("failed");
+      return;
+    }
     this.#compareAgain = false;
     if (this.clockNote === "done.clock.unanswered") this.clockNote = undefined;
-    if (answer.result === "same_machine") this.clockNote = "done.clock.on_box";
-    if (answer.deviceMs !== undefined && answer.serverMs !== undefined)
-      this.clockTimes = { deviceMs: answer.deviceMs, serverMs: answer.serverMs };
+    this.clockTimes = { deviceMs: answer.deviceMs, serverMs: answer.serverMs };
   }
 
   async #press(press: "confirm" | "set"): Promise<void> {

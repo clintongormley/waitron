@@ -608,11 +608,11 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "This page could not get an answer from the server, so the two times are not shown, and Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
+      "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
     ],
     [
       "es-ES",
-      "Esta página no ha podido obtener respuesta del servidor, así que no se muestran las dos horas, y Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
+      "Esta página no ha podido obtener las dos horas del servidor, así que Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
     ],
   ] as const)(
     "while no comparison has answered, says so, keeps both choices off and asks again, in %s",
@@ -673,6 +673,44 @@ describe("setup-done-screen", () => {
     expect(compares).toBe(2);
   });
 
+  it.each([
+    ["a too-slow or clock-moved round trip", { result: "challenge" }],
+    ["an answer without times", { result: "agrees" }],
+  ])("compares again after %s, then shows both times", async (_label, first) => {
+    let compares = 0;
+    const restoreClock = vi.fn(async (route: string) => {
+      if (route === "challenge") return { id: "challenge" };
+      compares += 1;
+      if (compares === 1) return first;
+      return { result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS };
+    });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(q(el, "[data-test=clock-note]")).toBeNull();
+    expect(
+      (q(el, "[data-test=clock-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false);
+    expect(compares).toBe(2);
+  });
+
+  it("does not compare again on the server's own screen", async () => {
+    const clock = clockApi({ compare: { result: "same_machine" } });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-note]")).not.toBeNull());
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(5));
+    expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(1);
+  });
+
   it("sends nothing more with the key once it leaves the page while a challenge is pending", async () => {
     const sent: string[] = [];
     let answerChallenge!: () => void;
@@ -730,7 +768,7 @@ describe("setup-done-screen", () => {
     q(el, "[data-test=clock-confirm]")!.click();
     await vi.waitFor(() =>
       expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toMatch(
-        /^This page could not get an answer from the server/,
+        /^This page could not get the two times from the server/,
       ),
     );
     expect(q(el, "[data-test=clock-server]")?.textContent).toBe("");
