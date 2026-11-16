@@ -24,12 +24,26 @@ export interface RestrictedStartDeps {
   listen: (app: Hono, stopWork: () => Promise<void>) => StartedServer;
 }
 
+const MONEY_AND_DRAWER_WRITES = [
+  "/api/sales",
+  "/api/pay",
+  "/api/working-orders/:id/payments",
+  "/api/working-orders/:id/payments/:paymentId/refunds",
+  "/api/working-orders/:id/collect",
+  "/api/transactions/:saleId/refunds",
+  "/api/tender-refunds/:refundId/retry",
+  "/api/invoice-corrections/:id/cash",
+  "/api/drawer/open",
+];
+
 /**
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
  * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
+ * It refuses the till's money and drawer writes with the handover code.
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
+  for (const path of MONEY_AND_DRAWER_WRITES) deps.app.post(path, steppingDownResponse);
   mountNodeApi(
     deps.app,
     {
@@ -41,8 +55,6 @@ export function startRestricted(deps: RestrictedStartDeps): StartedServer {
     deps.log,
   );
   for (const mount of deps.routes) mount(deps.app);
-  // Last, so it answers only what nothing above serves, as the stepdown gate did before the restart.
-  deps.app.post("/api/*", steppingDownResponse);
   const duties = restrictedBackgroundDuties(deps.returnRecords);
   return deps.listen(deps.app, () => stopBackgroundDuties(duties));
 }

@@ -541,6 +541,10 @@ describe("a card sale in flight when the box steps down", () => {
     });
   });
 
+  // Control, run locally and not committed: with `{ cors: corsForVenue(allowOrigin) }` dropped from
+  // `createHandoverGate` in boot.ts, this case fails with
+  //   expected { …(3) } to deeply equal { …(3) }
+  // receiving the preflight as status 503 and both allowOrigin values null.
   it("a till on the venue's other box gets its preflight answered and can read the bill payment's refusal, and no reader is asked", () => {
     expect(seen().fromOtherBox).toEqual({
       preflight: { status: 204, allowOrigin: OTHER_BOX },
@@ -553,6 +557,9 @@ describe("a card sale in flight when the box steps down", () => {
     });
   });
 
+  // Control, run locally and not committed: with the same change, this case fails with
+  //   expected { …(2) } to deeply equal { …(2) }
+  // receiving the preflight as status 503 rather than 204.
   it("a page on an origin the venue does not admit is named no allowed origin, on the preflight or the refusal", () => {
     expect(seen().fromStranger).toEqual({
       preflight: { status: 204, allowOrigin: null },

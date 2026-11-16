@@ -45,39 +45,38 @@ describe("startRestricted", () => {
     "/api/working-orders/wo-1/payments",
     "/api/working-orders/wo-1/payments/pay-1/refunds",
     "/api/working-orders/wo-1/collect",
-    "/api/orders/o-1/collect",
     "/api/transactions/s-1/refunds",
     "/api/tender-refunds/r-1/retry",
-    "/api/parties/p-1/unpaid-departure",
-    "/api/working-orders/wo-1/close-deferred",
     "/api/invoice-corrections/c-1/cash",
     "/api/drawer/open",
-    "/api/session",
-  ])("refuses a POST to %s, which it does not serve, with the handover code", async (path) => {
-    const app = new Hono();
-    startRestricted({
-      app,
-      nodeId: "old-main",
-      environment: "preproduction",
-      readMembership: async () => null,
-      cors: corsForVenue(async (origin) => origin === "https://new-main.test"),
-      routes: [],
-      log: () => {},
-      listen: () => ({ health: createHealthState(new Date()), close: async () => {} }),
-    });
+  ])(
+    "refuses a money or drawer request at %s with the handover code after restart",
+    async (path) => {
+      const app = new Hono();
+      startRestricted({
+        app,
+        nodeId: "old-main",
+        environment: "preproduction",
+        readMembership: async () => null,
+        cors: corsForVenue(async (origin) => origin === "https://new-main.test"),
+        routes: [],
+        log: () => {},
+        listen: () => ({ health: createHealthState(new Date()), close: async () => {} }),
+      });
 
-    const response = await app.request(path, {
-      method: "POST",
-      headers: { origin: "https://new-main.test", "content-type": "application/json" },
-      body: "{}",
-    });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: { code: "handover.stepping_down", params: {} },
-    });
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("access-control-allow-origin")).toBe("https://new-main.test");
-  });
+      const response = await app.request(path, {
+        method: "POST",
+        headers: { origin: "https://new-main.test", "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.stepping_down", params: {} },
+      });
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://new-main.test");
+    },
+  );
 
   it("answers a till on another of the venue's origins, and no stranger", async () => {
     const app = new Hono();
