@@ -678,7 +678,8 @@ called weaker than its name, the topic file lists what it does not see.
   venue reset, said in the PR's first line. Nothing guards it.
 - **Drizzle selects migrations by `max(created_at)` alone; keep journal times strictly increasing.**
   Guard: `scripts/journal-monotonic.test.ts`, weaker than a universal check: only sets with multiple
-  entries. Start a drizzle bump with `grep -rn 'dialect.js'`.
+  entries. Start a drizzle bump by grepping for the outgoing version number and
+  `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
 - **Only boot, bucket rebuild and the contained upgrade data checker call `assertNotAhead` (a handover's compare refuses such a copy itself); a checked manual `waitron.sh install <ref>`
