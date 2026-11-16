@@ -3320,7 +3320,7 @@ it("Reload takes menu and languages together, applying neither after a language 
   );
 });
 
-it("reports losses from the latest recheck rather than from the whole opening", async () => {
+it("reports losses per event, retaining the notice through automatic zero-loss updates", async () => {
   const data = new LiveData();
   const next = lunch();
   const getLiveMenu = vi
@@ -3346,9 +3346,21 @@ it("reports losses from the latest recheck rather than from the whole opening", 
   await press(el, "reload");
   expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
   expect(el.changes).toEqual([]);
+  getLiveMenu.mockResolvedValue(live(6, next));
+  data.invalidate([{ type: "menu_versions", id: "v-6" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 6 of Lunch Menu"));
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await flush(el);
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "5");
+  getLiveMenu.mockResolvedValue(live(7, next));
+  data.invalidate([{ type: "menu_versions", id: "v-7" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toContain(newerNotice(7)));
+  await press(el, "reload");
   expect(droppedNote(el)).toBeNull();
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "5.00" }]);
 });
 
 it("keeps equal-live price spelling through language changes and Reload, until live really changes", async () => {
@@ -3401,7 +3413,8 @@ it("puts a real switched-off-language refusal at the bottom rather than blaming 
   await type(el, "wt-input", "customer-name-en", "Fresh soup");
   await press(el, "review");
   await press(el, "put-live");
-  if (footerButton(el, "keep-editing") !== null) await press(el, "keep-editing");
+  expect(footerButton(el, "keep-editing")).not.toBeNull();
+  await press(el, "keep-editing");
   expect(field(el, "wt-input", "customer-name-es").error).toBe("");
   expect(field(el, "wt-input", "customer-name-en").error).toBe("");
   expect(bottomMessage(el)).toContain("no longer fits");
