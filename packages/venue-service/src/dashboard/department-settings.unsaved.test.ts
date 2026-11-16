@@ -380,10 +380,10 @@ it("destination deactivation retains other drafts against their original baselin
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
   await expect.poll(() => bodies.length).toBe(1);
-  expect((bodies[0] as { transfers: unknown }).transfers).toEqual({
-    receivingProfileId: null,
-    destinationDepartmentIds: [],
-  });
+  expect(bodies[0]).not.toHaveProperty("transfers");
+  expect(
+    el.shadowRoot!.querySelector<HTMLInputElement>("[name=transferDestination-d2]"),
+  ).toBeNull();
 });
 
 async function nativeSettingsDraft(kind: "tradingName" | "receivingProfileId" | "destination") {
@@ -491,13 +491,14 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          needsClearing: false,
-          lateSendNeedsManager: false,
-          courseSettings: [],
-          transfers: {
-            receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
-            destinationDepartmentIds: [],
-          },
+          ...(kind === "receivingProfileId"
+            ? {
+                transfers: {
+                  receivingProfileId: "p1",
+                  destinationDepartmentIds: [],
+                },
+              }
+            : {}),
         },
       ],
     ]);
@@ -553,13 +554,14 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          needsClearing: false,
-          lateSendNeedsManager: false,
-          courseSettings: [],
-          transfers: {
-            receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
-            destinationDepartmentIds: [],
-          },
+          ...(kind === "receivingProfileId"
+            ? {
+                transfers: {
+                  receivingProfileId: "p1",
+                  destinationDepartmentIds: [],
+                },
+              }
+            : {}),
         },
       ],
     ]);
@@ -628,10 +630,6 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        needsClearing: false,
-        lateSendNeedsManager: false,
-        courseSettings: [],
-        transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
     expect(writes).toHaveLength(1);
@@ -716,9 +714,6 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          needsClearing: false,
-          lateSendNeedsManager: false,
-          courseSettings: [],
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],

@@ -463,16 +463,31 @@ describe("a live refresh that takes away a department or zone with edits", () =>
   });
 
   it("when only dropped edits made the draft changed, Save is quiet again and the next edit clears the notice", async () => {
-    const { painter } = await mount();
+    const { painter, writes } = await mount();
     await paintOldBar(painter);
     expect(saveButton(painter).disabled).toBe(false);
-    painter.model = painterModel();
+    painter.model = { ...painterModel(), clockRevision: 5 };
     await settle(painter);
     expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
     expect(saveButton(painter).disabled).toBe(true);
     await paintDinner(painter, DEC_15);
     expect(frame(painter).refusal).toBe("");
     expect(saveButton(painter).disabled).toBe(false);
+    part(painter, "add-dates")!.click();
+    await settle(painter);
+    painter
+      .shadowRoot!.querySelector("add-dates-calendar")!
+      .dispatchEvent(
+        new CustomEvent("add-dates", {
+          detail: { dates: ["2026-12-31"] },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    await settle(painter);
+    await save(painter, writes);
+    expect(body(writes[0]!).expectedClockRevision).toBe(5);
+    expect(body(writes[0]!).dates).toContainEqual({ date: "2026-12-31", closedAllDay: false });
   });
 
   it("keeps the stored paint of an owner it drops edits from, and a refresh that takes nothing away says nothing", async () => {
@@ -1000,7 +1015,11 @@ describe("a live update while the day is open", () => {
   });
 
   it("a date another manager removed stays while the draft has changed its Closed tick, beside a removal it follows", async () => {
-    const days = { sd1: storedDay() };
+    const days = {
+      sd1: storedDay({
+        paint: [{ departmentId: "d1", date: DEC_14, ranges: [dinner("20:00", "21:00")] }],
+      }),
+    };
     const { painter, writes } = await mount({ days });
     painter
       .shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_14}"]`)!
@@ -1011,6 +1030,7 @@ describe("a live update while the day is open", () => {
     await expect.poll(() => dates(painter)).toEqual([DEC_14, DEC_25]);
     await save(painter, writes);
     expect(body(writes[0]!).dates).toEqual([{ date: DEC_14, closedAllDay: true }, FACTS.dates[2]]);
+    expect(body(writes[0]!)).not.toHaveProperty("paint");
   });
 
   it("a date the draft repainted follows another manager's Closed tick on it", async () => {

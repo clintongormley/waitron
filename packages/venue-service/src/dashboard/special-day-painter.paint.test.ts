@@ -862,25 +862,39 @@ describe("a period deleted with a replacement before the stored day is read agai
     expect(reads()).toBe(1);
   });
 
-  it("refuses a press beside Save when its re-read fails, keeping Save offered, and a later press reads again and sends the replacement", async () => {
-    let failing = true;
-    const { painter, writes, reads } = await deleteLunch(() =>
-      failing ? Promise.reject(new Error("offline")) : undefined,
-    );
-    expect(reads()).toBe(1);
-    saveButton(painter).click();
-    await expect.poll(() => frame(painter).refusal).toBe(t("menu.save_error"));
-    await settle(painter);
-    expect(reads()).toBe(2);
-    expect(writes).toEqual([]);
-    expect(frame(painter).busy).toBe(false);
-    expectSaveOffered(painter);
-    failing = false;
-    saveButton(painter).click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(sentPaint(writes[0]!)).toEqual([{ departmentId: "d1", date: DEC_15, ranges: refilled }]);
-    expect(reads()).toBe(3);
-  });
+  it.each(["en", "es"] as const)(
+    "%s: refuses a press beside Save when its re-read fails, keeping Save offered, and a later press reads again and sends the replacement",
+    async (locale) => {
+      let failing = true;
+      const { painter, writes, reads } = await deleteLunch(() =>
+        failing ? Promise.reject(new Error("offline")) : undefined,
+      );
+      setLocale(locale);
+      painter.requestUpdate();
+      await settle(painter);
+      expect(frame(painter).refusal).toBe(
+        locale === "en"
+          ? "The replacement hours are not loaded yet. Save will try again."
+          : "Aún no se han cargado los horarios de sustitución. Guardar lo intentará de nuevo.",
+      );
+      expect(reads()).toBe(1);
+      saveButton(painter).click();
+      await expect.poll(() => frame(painter).refusal).toBe(t("menu.save_error"));
+      await settle(painter);
+      expect(reads()).toBe(2);
+      expect(writes).toEqual([]);
+      expect(frame(painter).busy).toBe(false);
+      expectSaveOffered(painter);
+      failing = false;
+      saveButton(painter).click();
+      await expect.poll(() => writes.length).toBe(1);
+      expect(sentPaint(writes[0]!)).toEqual([
+        { departmentId: "d1", date: DEC_15, ranges: refilled },
+      ]);
+      expect(reads()).toBe(3);
+      expect(frame(painter).refusal).toBe("");
+    },
+  );
 
   for (const leaving of ["closed first", "switched while open"] as const)
     it(`reads nothing while a later save's write is out, after a press waiting on a hung re-read is left behind (${leaving})`, async () => {

@@ -47,9 +47,9 @@ export interface DepartmentSettingsInput extends Pick<
 > {
   name: string;
   tradingName: string;
-  needsClearing: boolean;
-  lateSendNeedsManager: boolean;
-  courseSettings: DepartmentCourseSetting[];
+  needsClearing?: boolean;
+  lateSendNeedsManager?: boolean;
+  courseSettings?: DepartmentCourseSetting[];
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
 }

@@ -364,9 +364,6 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        needsClearing: false,
-        lateSendNeedsManager: false,
-        courseSettings: [],
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
     },
@@ -803,6 +800,8 @@ it("hiding transfers during a pending save releases the action and never sends h
 });
 it("a same-department snapshot updates pristine fields but leaves a dirty draft and its baseline intact", async () => {
   const { el } = await mount();
+  await change(el, "name", " Restaurant ");
+  expect(save(el).disabled).toBe(true);
   const updated = structuredClone(model);
   updated.departments[0]!.name = "Live name";
   updated.salePolicies.departments[0]!.paidWhen = "ticket_then_pay";
@@ -1602,7 +1601,7 @@ it("switching it on enables Save and saves it with the department", async () => 
   expect(writes[0]!.body).toMatchObject({ needsClearing: true });
   await expect.poll(() => save(el).disabled).toBe(true);
 });
-it("saving a name change sends the stored minutes unchanged", async () => {
+it("saving a name change leaves stored course settings out of the request", async () => {
   const view = structuredClone(model);
   view.courseSettingsByDepartment = {};
   const { el, writes } = await mount(view);
@@ -1611,8 +1610,8 @@ it("saving a name change sends the stored minutes unchanged", async () => {
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.body).toMatchObject({
     name: "Restaurant revised",
-    courseSettings: [],
   });
+  expect(writes[0]!.body).not.toHaveProperty("courseSettings");
 });
 it("a refusal naming the switch, sent while Details shows, brings back Tables and marks it", async () => {
   const { el } = await mount(structuredClone(model), {
@@ -1717,7 +1716,8 @@ it("switching the late-send switch on enables Save and saves it with the departm
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
-  expect(writes[0]!.body).toMatchObject({ lateSendNeedsManager: true, needsClearing: false });
+  expect(writes[0]!.body).toMatchObject({ lateSendNeedsManager: true });
+  expect(writes[0]!.body).not.toHaveProperty("needsClearing");
   await expect.poll(() => save(el).disabled).toBe(true);
 });
 it("a refusal naming the late-send switch, sent while Details shows, brings back Service and marks it", async () => {
@@ -1981,6 +1981,53 @@ it("follows a reminder another dashboard sets while the form is clean, and keeps
   expect(reminder(el).value).toBe("30");
   expect(el.hasUnsavedChanges).toBe(true);
   expect(save(el).disabled).toBe(false);
+});
+it("a name-only save follows another manager's reminder Off and Needs clearing", async () => {
+  const view = reminderView(10);
+  view.needsClearingDepartmentIds = ["d1"];
+  const { el, writes } = await mount(view);
+  await change(el, "name", "Evening restaurant");
+  const newer = reminderView(null);
+  el.model = newer;
+  await el.updateComplete;
+  await reminder(el).updateComplete;
+  await needsClearing(el).updateComplete;
+  expect(reminder(el).value).toBe("");
+  expect(needsClearing(el).shadowRoot!.querySelector("input")!.checked).toBe(false);
+  expect(field(el, "name").shadowRoot!.querySelector("input")!.value).toBe("Evening restaurant");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).not.toHaveProperty("courseSettings");
+  expect(writes[0]!.body).not.toHaveProperty("needsClearing");
+  expect(writes[0]!.body).not.toHaveProperty("lateSendNeedsManager");
+  await expect.poll(() => el.hasUnsavedChanges).toBe(false);
+  expect(el.model!.courseSettingsByDepartment.d1![0]!.reminderMinutes).toBeNull();
+});
+it("a touched reminder stays while the untouched name and other course follow", async () => {
+  const view = reminderView(10);
+  view.courses.push({ ...view.courses[0]!, id: "desserts", name: "Desserts" });
+  const { el, writes } = await mount(view);
+  await chooseReminder(el, "30");
+  const newer = structuredClone(view);
+  newer.departments[0]!.name = "Live restaurant";
+  newer.courseSettingsByDepartment.d1 = [
+    { courseId: "mains", heldUntilFired: true, reminderMinutes: null },
+    { courseId: "desserts", heldUntilFired: true, reminderMinutes: 5 },
+  ];
+  el.model = newer;
+  await el.updateComplete;
+  expect(field(el, "name").value).toBe("Live restaurant");
+  expect(reminder(el).value).toBe("30");
+  expect(el.hasUnsavedChanges).toBe(true);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({
+    name: "Live restaurant",
+    courseSettings: [
+      { courseId: "mains", heldUntilFired: true, reminderMinutes: 30 },
+      { courseId: "desserts", heldUntilFired: true, reminderMinutes: 5 },
+    ],
+  });
 });
 it("reads the reminder in Spanish", async () => {
   setLocale("es");
