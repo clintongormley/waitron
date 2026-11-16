@@ -199,6 +199,8 @@ export class TillPassScreen extends LitElement {
   #request = 0;
   #appliedRequest = 0;
   #failedRequest = 0;
+  /** Set by a Fire with no answer only: a background read failing never scrolls a wall monitor. */
+  #revealStale = false;
   /** Card keys with a Fire out. */
   @state() private sending: ReadonlySet<string> = new Set();
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
@@ -340,6 +342,10 @@ export class TillPassScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    if (this.#revealStale) {
+      this.#revealStale = false;
+      this.#reveal("[data-stale]");
+    }
     if (changed.has("tableChanged") && this.tableChanged) this.#reveal("[data-table-changed]");
     if (changed.has("leverError") && this.leverError) this.#reveal("[data-lever-error]");
     if (changed.has("reprintErrorCode") && this.reprintErrorCode)
@@ -397,6 +403,7 @@ export class TillPassScreen extends LitElement {
         if (this.#isCurrent(boardId)) {
           this.stale = true;
           this.#failedRequest = this.#request;
+          this.#revealStale = true;
         }
       } else {
         this.#asks.delete(key);

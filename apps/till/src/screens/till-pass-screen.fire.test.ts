@@ -659,6 +659,38 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
       expectInView(leverError(el));
     });
 
+    it(`at ${width} px, brings the stale line into view when a Fire gets no answer`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.releaseDevicePass).toHaveBeenCalledOnce();
+      expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+      expectInView(el.shadowRoot!.querySelector<HTMLElement>("[data-stale]"));
+    });
+
+    it(`at ${width} px, scrolls nothing when a background read fails`, async () => {
+      await pageAt(width, height);
+      await withFakeTimers(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+        const low = () => fireButton(el, "group:g-12")!;
+        low().scrollIntoView({ block: "end" });
+        expect(scroller().scrollTop).toBeGreaterThan(0);
+        const shownAt = low().getBoundingClientRect().top;
+        await refresh(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+        // The page's scroll position moves by the line's height, so the card is what stays put.
+        expect(low().getBoundingClientRect().top).toBe(shownAt);
+      });
+    });
+
     it(`at ${width} px, brings the refreshed line naming the table into view when a group Ready is refused as out of date`, async () => {
       await pageAt(width, height);
       const ready = vi.fn().mockRejectedValue(refused("party.out_of_date"));
