@@ -68,8 +68,15 @@ describe("unit operations", () => {
       tx.run(sql`update units set hardware_unit = 'g' where id = ${made.id}`),
     );
     const off = await run((tx) => updateUnit(tx, made.id, { measure: false }, "en"));
-    const { measure: _measure, ...unmeasured } = made;
-    expect(off).toEqual({ ...unmeasured, hardwareUnit: "g" });
+    expect(off).toEqual({
+      id: made.id,
+      staffName: "Weight",
+      staffAbbreviation: "w",
+      name: {},
+      abbreviation: {},
+      precision: 0,
+      hardwareUnit: "g",
+    });
     expect(await run((tx) => getUnit(tx, made.id))).toEqual(off);
     expect(await run((tx) => updateUnit(tx, made.id, {}, "en"))).toEqual(off);
     expect(await run((tx) => listUnits(tx))).toEqual([off]);
