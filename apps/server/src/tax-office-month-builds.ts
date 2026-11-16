@@ -82,6 +82,35 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     }
   };
 
+  const systemCodeOf = (error: unknown): { systemCode?: string } => {
+    const code = (error as { code?: unknown } | null)?.code;
+    return typeof code === "string" && /^E[A-Z]+$/.test(code) ? { systemCode: code } : {};
+  };
+
+  // Best-effort: a file that cannot be deleted is logged and left to the next start's scratch
+  // sweep, never allowed to keep a record in `building`.
+  const removeNow = (path: string): void => {
+    try {
+      rmSync(path, { force: true });
+    } catch (error) {
+      deps.log("warn", "tax_office.file_remove_failed", systemCodeOf(error));
+    }
+  };
+  const remove = async (path: string): Promise<void> => {
+    try {
+      await rm(path, { force: true });
+    } catch (error) {
+      deps.log("warn", "tax_office.file_remove_failed", systemCodeOf(error));
+    }
+  };
+
+  /** A ready or failed record past its hour is gone to every reader, before a pass deletes it. */
+  const live = (personId: string): BuildRecord | undefined => {
+    const record = records.get(personId);
+    if (record === undefined || record.status === "building") return record;
+    return record.until <= deps.now().getTime() ? undefined : record;
+  };
+
   const building = (): [string, Extract<BuildRecord, { status: "building" }>] | null => {
     for (const [personId, record] of records)
       if (record.status === "building") return [personId, record];
@@ -91,7 +120,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
   const forget = (personId: string, record: BuildRecord): void => {
     if (records.get(personId) !== record) return;
     records.delete(personId);
-    if (record.status === "ready") rmSync(pathOf(record.id), { force: true });
+    if (record.status === "ready") removeNow(pathOf(record.id));
     deps.changed();
   };
 
@@ -102,6 +131,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     signal: AbortSignal,
   ): Promise<void> {
     const path = pathOf(record.id);
+    let outcome: BuildRecord | null = null;
     try {
       await mkdir(deps.dir, { recursive: true });
       const zip = zipStream(
@@ -114,31 +144,33 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
       );
       signal.throwIfAborted();
       const { size } = await stat(path);
-      records.set(personId, {
+      outcome = {
         status: "ready",
         id: record.id,
         month: record.month,
         bytes: size,
         until: deps.now().getTime() + keepMs,
-      });
+      };
     } catch (error) {
-      await rm(path, { force: true });
-      if (signal.aborted) {
-        records.delete(personId);
-      } else {
+      if (!signal.aborted) {
         deps.log("error", "tax_office.build_failed", {
           errorCode: codeOf(error),
           errorClass: error instanceof Error ? error.name : typeof error,
+          ...systemCodeOf(error),
         });
-        records.set(personId, {
+        outcome = {
           status: "failed",
           id: record.id,
           month: record.month,
           until: deps.now().getTime() + keepMs,
-        });
+        };
       }
+      await remove(path);
+    } finally {
+      if (outcome === null) records.delete(personId);
+      else records.set(personId, outcome);
+      deps.changed();
     }
-    deps.changed();
   }
 
   async function expire(): Promise<Date | null> {
@@ -148,7 +180,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
       if (record.status === "building") continue;
       if (record.until <= at) {
         records.delete(personId);
-        if (record.status === "ready") await rm(pathOf(record.id), { force: true });
+        if (record.status === "ready") await remove(pathOf(record.id));
         deps.changed();
       } else if (next === null || record.until < next) {
         next = record.until;
@@ -177,7 +209,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
   };
 
   return {
-    view: (personId) => viewOf(records.get(personId)),
+    view: (personId) => viewOf(live(personId)),
     claim(personId, month) {
       const current = building();
       if (current !== null) {
@@ -187,7 +219,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         throw new AppError("tax_office.export_running", {});
       }
       const earlier = records.get(personId);
-      if (earlier?.status === "ready") rmSync(pathOf(earlier.id), { force: true });
+      if (earlier?.status === "ready") removeNow(pathOf(earlier.id));
       const record: BuildRecord = {
         status: "building",
         id: randomUUID(),
@@ -210,7 +242,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
       if (record?.status === "building" && !record.started) forget(personId, record);
     },
     file(personId) {
-      const record = records.get(personId);
+      const record = live(personId);
       if (record?.status !== "ready") return null;
       return { id: record.id, path: pathOf(record.id), bytes: record.bytes, month: record.month };
     },

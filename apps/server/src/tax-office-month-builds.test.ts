@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
@@ -157,7 +157,10 @@ it("records a build whose entries throw as failed, logs once, and accepts the ne
   t.builds.claim(ANA, "2026-01");
   const id = idOf(t.builds, ANA);
   t.builds.begin(ANA, input("2026-01"));
-  await expect(t.pass()).resolves.toMatchObject({ nextDueAt: expect.any(Date) });
+  await expect(t.pass()).resolves.toEqual({
+    nextDueAt: new Date(Date.parse("2026-02-01T10:00:00.000Z") + TAX_OFFICE_KEEP_MS),
+  });
+  expect(t.changed).toHaveBeenCalledTimes(2);
   expect(t.builds.view(ANA)).toEqual({ status: "failed", id, month: "2026-01" });
   expect(t.builds.file(ANA)).toBeNull();
   expect(t.files()).toEqual([]);
@@ -184,6 +187,7 @@ it("leaves no record and no file when the job is stopped mid-build", async () =>
   await t.pass();
   expect(t.builds.view(ANA)).toEqual({ status: "none" });
   expect(t.files()).toEqual([]);
+  expect(t.changed).toHaveBeenCalledTimes(2);
   expect(t.log).not.toHaveBeenCalledWith("error", "tax_office.build_failed", expect.anything());
 });
 
@@ -194,8 +198,10 @@ it("deletes an unsaved file and its record once it has been kept long enough", a
   t.advance(TAX_OFFICE_KEEP_MS - 1);
   expect((await t.pass()).nextDueAt).not.toBeNull();
   expect(existsSync(path)).toBe(true);
+  expect(t.changed).toHaveBeenCalledTimes(2);
   t.advance(1);
   expect(await t.pass()).toEqual({ nextDueAt: null });
+  expect(t.changed).toHaveBeenCalledTimes(3);
   expect(existsSync(path)).toBe(false);
   expect(t.builds.view(ANA)).toEqual({ status: "none" });
 });
@@ -208,3 +214,56 @@ it("frees the claim on release", async () => {
   expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
   expect(t.changed).toHaveBeenCalledTimes(3);
 });
+
+it("offers no file and shows no record once the hour has ended, before any pass", async () => {
+  const t = setup();
+  await readyFor(t, ANA, "2026-01");
+  t.advance(TAX_OFFICE_KEEP_MS - 1);
+  expect(t.builds.file(ANA)).not.toBeNull();
+  expect(t.builds.view(ANA)).toMatchObject({ status: "ready" });
+  t.advance(1);
+  expect(t.builds.file(ANA)).toBeNull();
+  expect(t.builds.view(ANA)).toEqual({ status: "none" });
+});
+
+it("logs the system's error code of a failed build beside its error code and class", async () => {
+  const t = setup(async function* () {
+    yield { name: "README.txt", content: "hello" };
+    throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+  });
+  t.builds.claim(ANA, "2026-01");
+  t.builds.begin(ANA, input("2026-01"));
+  await t.pass();
+  expect(t.log.mock.calls).toEqual([
+    [
+      "error",
+      "tax_office.build_failed",
+      { errorCode: "unknown", errorClass: "Error", systemCode: "ENOSPC" },
+    ],
+  ]);
+});
+
+it.skipIf(process.getuid?.() === 0)(
+  "frees the claim when a failed build's file cannot be deleted",
+  async () => {
+    let dir = "";
+    const t = setup(async function* () {
+      yield { name: "README.txt", content: "hello" };
+      while (!existsSync(dir) || readdirSync(dir).length === 0)
+        await new Promise((resolve) => setImmediate(resolve));
+      chmodSync(dir, 0o500);
+      throw new AppError("storage.disk_full", {});
+    });
+    dir = t.dir;
+    try {
+      t.builds.claim(ANA, "2026-01");
+      t.builds.begin(ANA, input("2026-01"));
+      await expect(t.pass()).resolves.toMatchObject({ nextDueAt: expect.any(Date) });
+      expect(t.files()).toHaveLength(1);
+      expect(t.builds.view(ANA)).toMatchObject({ status: "failed" });
+      expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+  },
+);
