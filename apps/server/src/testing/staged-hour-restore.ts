@@ -38,6 +38,7 @@ import {
   type HourTestClock,
 } from "./hour-test-clock.js";
 
+// Load this fixture before recovery-key consumers so they receive its memoised verifier.
 vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
   const answers = new Map<string, Map<string, Promise<boolean>>>();

@@ -1052,7 +1052,7 @@ these, which it did not build (local figures, 2 November 2026):
   On 16 November, a Mac probe measured six stepdown children from spawn to started at 13.070s
   total (51% of that file's 25.534s baseline median), and five activation children from spawn to
   imports ready at 9.168s (41% of 22.453s). These include startup beyond `tsx`, so are upper bounds
-  on loader savings. The watcher cleared a measurement-only cut; no compiled-child probe was built.
+  on loader savings; measure a concrete loader candidate before changing these children.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run
