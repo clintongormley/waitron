@@ -58,6 +58,7 @@ const markerOf = (generation: string) => markerKey(generation);
 const hex16 = (n: number) => n.toString(16).padStart(16, "0");
 
 interface HarnessOptions {
+  persistPointers?: (entries: string[]) => Promise<void>;
   preserveBucketProblemSince?: boolean;
   term?: number;
   streamId?: string;
@@ -121,7 +122,7 @@ async function harness(options: HarnessOptions = {}) {
   let walHeld: Promise<void> | undefined;
   let walWaiting = false;
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
-  const sentPointers = new SentPointers();
+  const sentPointers = new SentPointers(options.persistPointers);
   const deps: SupervisorDeps = {
     preserveBucketProblemSince: options.preserveBucketProblemSince,
     litestreamBin: options.litestreamBin ?? "litestream",
@@ -989,6 +990,46 @@ describe("opening a generation", () => {
     return { ...h, next };
   }
 
+  it("persists pointer history before sending its first pointer put", async () => {
+    let release!: () => void;
+    let saved: string[] | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const h = await harness({
+      persistPointers: async (entries) => {
+        saved = entries;
+        await gate;
+      },
+    });
+    try {
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+      await h.clock.until(() => saved !== undefined || h.supervisor.status().state === "streaming");
+      expect(saved).toHaveLength(1);
+      expect(h.events).not.toContain(`put ${pointerKey()}`);
+    } finally {
+      release();
+    }
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.events).toContain(`put ${pointerKey()}`);
+  });
+
+  it("logs a failed history save and still sends the pointer", async () => {
+    const h = await harness({
+      persistPointers: async () => {
+        throw new Error("disk full");
+      },
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.logs.map((entry) => entry.event)).toContain("stream.pointer_history_save_failed");
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(
+      h.supervisor.status().generation,
+    );
+  });
+
   it("takes a pointer its predecessor sent before a reload, landing late, as this box's own, and streams on", async () => {
     const h = await reloadWithLateWrite();
     const first = (await readPointer(h.store, VENUE))!.pointer.body.generation;
@@ -1645,7 +1686,7 @@ describe("generation housekeeping", () => {
     },
   );
 
-  it("warns without pruning while the marker is absent, and clears at the successful daily read", async () => {
+  it.each(["absent", "fails"])("warns while the clock marker %s", async (failure) => {
     const h = await harness();
     const list = h.store.list.bind(h.store);
     let markerReads = 0;
@@ -1653,6 +1694,7 @@ describe("generation housekeeping", () => {
     h.store.list = async (prefix) => {
       if (!prefix.endsWith("opened.json")) return list(prefix);
       markerReads += 1;
+      if (missing && failure === "fails") throw new Error("connection reset");
       return missing ? [] : list(prefix);
     };
     await h.supervisor.start();

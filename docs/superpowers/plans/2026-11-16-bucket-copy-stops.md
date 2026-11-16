@@ -20,3 +20,11 @@ Driver inspects this plan; Claude reviews through `claude-seat.sh review-branch`
 Reserve 10 minutes for tracing, 20 for focused verification/finishing and 15 slack: **three active hours**. Forecast committed added/removed lines: production **120/20**, tests **150/25**, support **0/0**, docs **65/20** (400 total); the disposable Linux probe is uncommitted measurement work, estimated separately at 160 lines. Growth beyond 1.5× or material redesign returns to watcher.
 
 Update completed backlog portions and dated evidence while preserving excluded leftovers. Exclude shutdown budget, other-provider errors, L0 limits, A394 status, fiscal/restore behavior, schemas and unrelated systems. Each fix uses failing test, observed failure, minimal implementation and focused pass. No broad local package runs; normal `finish-branch` reviews, hook and current-head CI follow in one PR.
+
+Dated clearance, 2026-11-16: Claude's completed plan read took 347 seconds
+(`~/waitron-campaign-i/receipts/bucket-copy-stops-20261116/plan-review.md`). The driver applied its
+corrections. Lane I's watcher cleared this corrected plan at 01:40 in `questions.md`:
+“Always download and verify the pinned archive on each setup run; setup failing offline with a
+matching binary installed is acceptable (rare, and the message must say so plainly). Best-effort
+storage, the Docker Desktop Linux measurement and the same-id-clone limit are cleared. One PR.
+Not an owner approval.”

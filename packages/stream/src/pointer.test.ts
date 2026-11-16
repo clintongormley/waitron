@@ -264,6 +264,32 @@ describe("writePointer", () => {
 });
 
 describe("SentPointers", () => {
+  it("reloads exact pointer bytes for this node, retaining the bounded order", async () => {
+    const sent = new SentPointers();
+    const mine = signPointer(body(), KEYS.privateKey);
+    const foreign = signPointer(
+      body({ nodeId: "node-other", generation: "gen-2-node-other-20260923T100500Z" }),
+      OTHER_KEYS.privateKey,
+    );
+    sent.add(mine);
+    sent.add(foreign);
+    const loaded = new SentPointers();
+    loaded.load(sent.snapshot(), mine.body.nodeId);
+    const store = createMemoryObjectStore();
+    await writePointer(store, VENUE, mine, null);
+    expect(loaded.includes((await store.get(pointerKey()))!.body)).toBe(true);
+    await writePointer(store, VENUE, foreign, (await readPointer(store, VENUE))!.etag);
+    expect(loaded.includes((await store.get(pointerKey()))!.body)).toBe(false);
+    expect(loaded.snapshot()).toEqual(sent.snapshot().slice(0, 1));
+  });
+
+  it.each([null, {}, ["not a pointer"], [42], [Buffer.from("{}").toString("base64")]])(
+    "refuses malformed saved pointer history %j",
+    (value) => {
+      expect(() => new SentPointers().load(value, "node-a")).toThrow(AppError);
+    },
+  );
+
   it("holds the exact bytes writePointer stored, and not a pointer that differs only in its signature", async () => {
     const store = createMemoryObjectStore();
     const mine = signPointer(body(), KEYS.privateKey);
@@ -287,6 +313,10 @@ describe("SentPointers", () => {
     const bytes = (pointer: SignedPointer) =>
       new TextEncoder().encode(canonicalize(pointer as unknown as CanonicalValue));
     for (const pointer of pointers) sent.add(pointer);
+    const loaded = new SentPointers();
+    loaded.load(sent.snapshot(), pointers[0]!.body.nodeId);
+    expect(loaded.snapshot()).toHaveLength(SENT_POINTERS_KEPT);
+    expect(loaded.includes(bytes(pointers[0]!))).toBe(false);
     expect(sent.includes(bytes(pointers[0]!))).toBe(false);
     expect(pointers.slice(1).every((pointer) => sent.includes(bytes(pointer)))).toBe(true);
   });

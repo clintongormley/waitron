@@ -51,7 +51,13 @@ import {
 } from "./stream-host.js";
 import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import { LiveEvents } from "./live-api.js";
-import { STREAM_DIR, TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, TLS_DIR } from "@waitron/store";
+import {
+  STREAM_DIR,
+  STREAM_SENT_POINTERS_FILE,
+  TLS_CLIENT_CERT_FILE,
+  TLS_CLIENT_KEY_FILE,
+  TLS_DIR,
+} from "@waitron/store";
 import { caCertPath } from "./box-secrets.js";
 import {
   issueClientCert,
@@ -1031,9 +1037,38 @@ describe("the live copy's wiring", () => {
         },
       );
 
+      it.each(["malformed", "unwritable"])(
+        "streams with %s local pointer history",
+        async (problem) => {
+          logs = [];
+          const file = join(stateDir!, STREAM_SENT_POINTERS_FILE);
+          await mkdir(join(stateDir!, STREAM_DIR), { recursive: true });
+          await rm(file, { recursive: true, force: true });
+          if (problem === "malformed") await writeFile(file, "not json");
+          else await mkdir(file);
+          const store = new SwitchableStore(() => new Date());
+          const litestream = new FakeLitestream();
+          const rt = runtime({ spawn: litestream.spawn, store });
+          try {
+            await rt.start();
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+            store.upload(`${generationOf(rt.status())}/0000/0000000000000001-0000000000000001.ltx`);
+            await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), {
+              timeout: 10_000,
+            });
+            expect(logs).toContain("stream.pointer_history_load_failed");
+            if (problem === "unwritable")
+              expect(logs).toContain("stream.pointer_history_save_failed");
+          } finally {
+            await rt.stop();
+            await rm(file, { recursive: true, force: true });
+          }
+        },
+      );
+
       // The old supervisor's pointer write is held in flight through the reload and lands just after
       // the next supervisor has read the pointer, so the next one's conditional write is refused.
-      it("keeps streaming after a reload when the old supervisor's pointer write lands late", async () => {
+      it.each(["reload", "fresh host"])("recognises a late pointer after %s", async (restart) => {
         const store = new SwitchableStore(() => new Date());
         const put = store.put.bind(store);
         const get = store.get.bind(store);
@@ -1053,7 +1088,7 @@ describe("the live copy's wiring", () => {
         };
         const litestream = new FakeLitestream();
         let recoveryKey = "backup-key-for-test-0123456789";
-        const rt = runtime({
+        let rt = runtime({
           spawn: litestream.spawn,
           store,
           readRecoveryKey: async () => recoveryKey,
@@ -1067,7 +1102,16 @@ describe("the live copy's wiring", () => {
           const oldKey = litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY;
           reloaded = true;
           recoveryKey = "replacement-backup-key-0123456789";
-          await rt.reload();
+          if (restart === "reload") await rt.reload();
+          else {
+            await rt.stop();
+            rt = runtime({
+              spawn: litestream.spawn,
+              store,
+              readRecoveryKey: async () => recoveryKey,
+            });
+            await rt.start();
+          }
           // The status names the next generation only once it is claimed and Litestream started,
           // which can trail the old write landing.
           await vi.waitFor(
