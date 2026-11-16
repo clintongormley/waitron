@@ -599,12 +599,11 @@ describe("approval through the route (plan D6)", () => {
           submissionId: randomUUID(),
           expectedRevision: await revisionOf(billId),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-          lineId: null,
           note: null,
           ...(await comp(billId)),
           approver,
         };
-        const { result, outside, order } = await watchingDerivations(() =>
+        const { result, outside, order } = await watchingDerivations(async () =>
           venue.app.request(`/api/working-orders/${billId}/adjustments`, {
             method: "POST",
             headers: { "content-type": "application/json", cookie: venue.cookie.staff },
