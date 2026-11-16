@@ -1610,7 +1610,7 @@ describe("card payments stuck after a restart", () => {
         );
         if (!listed)
           expect(result(el)!.textContent).toContain(
-            locale === "en" ? "Whole bill and Card" : "Toda la cuenta y Tarjeta",
+            locale === "en" ? "table bill already presented" : "cuenta de mesa ya presentada",
           );
         expect(q(el, "[data-test=stuck-pay-1]") !== null).toBe(listed);
         const evidence = q(el, "[data-test=stuck-failed-evidence]")!.textContent!;

@@ -169,7 +169,7 @@ returned; its status alone cannot establish what remains collected.
 
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
-- Repair a card charge that Waitron still cannot record after retries. The fault guidance preserves the original order and payment details and forbids a second charge; no repair for a persistent recording fault is built.
+- A1089: repair a charged card payment that Waitron still cannot record after retries, preserving its original details and preventing a second charge.
 - SumUp has no permanent lock: its sweep resolves every `attempting` row this box owns against
   SumUp, and fails one SumUp has never heard of after 15 minutes, with an incident. It also leaves uncertain refund evidence attempting for another check. The manager action refuses a SumUp payment
   (`payment.resolve_unsupported`).

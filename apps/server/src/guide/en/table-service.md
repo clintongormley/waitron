@@ -581,9 +581,10 @@ charge but recording failed, Waitron does not retry that recording automatically
 provider confirms payment, first check whether the original order is already paid. If it is,
 nothing more is needed. If it was a Counter order and is still unpaid, find the original order
 at the **Counter** and choose **Card** using the same provider. Waitron records a matching saved
-charge. For a table bill, reopen the original bill and choose **Pay**, then **Whole bill** and
-**Card** using the same provider. If the reader asks for the card, cancel without presenting it. If recording keeps failing, this is a fault in Waitron or this box. Keep the order and
-payment details and do not charge again.
+charge. For a table bill already presented to the guests, reopen the original bill and choose
+**Pay**, then **Card** using the same provider. If the reader asks for the card, cancel without
+presenting it. If recording keeps failing, this is a fault in Waitron or this box. Keep the
+order and payment details and do not charge again.
 
 For a table payment listed under **Bill payments and refunds awaiting a card provider**,
 choose **Check with provider** there. Once it is recorded, reopen the bill to see what remains

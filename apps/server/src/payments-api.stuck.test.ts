@@ -69,6 +69,7 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { readBillEditState } from "./bill-editing.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
@@ -1137,10 +1138,22 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
               })
             ).tabId;
           });
-    const { paymentId, piId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
+    if (surface === "table")
+      await placeOrder(
+        { db: suite.db, backend, admission: testTradingAdmission(), clock },
+        v.cfg,
+        orderId,
+        v.managerId,
+      );
+    const { paymentId, piId } = await strandPayment(
+      v,
+      orderId,
+      {
+        status: "succeeded",
+        amountReceived: 150,
+      },
+      surface === "table" ? { mark: null } : {},
+    );
     const spy = vi
       .spyOn(backend, "recordSale")
       .mockRejectedValueOnce(new Error("recording unavailable"));
@@ -1165,7 +1178,9 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       },
     ]);
     expect(saleIdsFor(orderId)).toEqual([]);
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+    expect(await orderOf(orderId)).toEqual(
+      surface === "table" ? { status: "placed", mark: null } : { status: "open", mark: MARK },
+    );
     expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
     expect(await (await send(v, "GET", "/management-api/payments/held")).json()).toEqual([]);
     expect((await errorOf(await send(v, "POST", resolvePath(paymentId)))).code).toBe(
@@ -1209,15 +1224,26 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       },
       noopLog,
     );
-    const listed = await tillApp.request("/api/working-orders", { headers: { cookie } });
-    expect(listed.status).toBe(200);
-    if (surface === "Counter")
+    if (surface === "Counter") {
+      const listed = await tillApp.request("/api/working-orders", { headers: { cookie } });
+      expect(listed.status).toBe(200);
       expect(((await listed.json()) as { id: string }[]).map((row) => row.id)).toContain(orderId);
-    const retrieved = await tillApp.request(`/api/working-orders/${orderId}`, {
-      headers: { cookie },
-    });
-    expect(retrieved.status).toBe(200);
-    expect(await retrieved.json()).toMatchObject({ id: orderId });
+      const retrieved = await tillApp.request(`/api/working-orders/${orderId}`, {
+        headers: { cookie },
+      });
+      expect(retrieved.status).toBe(200);
+      expect(await retrieved.json()).toMatchObject({ id: orderId });
+    } else {
+      const [order] = await suite.db
+        .select({ partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, orderId));
+      const retrieved = await tillApp.request(`/api/parties/${order!.partyId}/bills`, {
+        headers: { cookie },
+      });
+      expect(retrieved.status).toBe(200);
+      expect(await retrieved.json()).toMatchObject([{ workingOrderId: orderId, status: "placed" }]);
+    }
     const [reader] = await suite.db
       .insert(cardReaders)
       .values({ provider: "stripe", providerRef: "reader_recovery", name: "Recovery reader" })
@@ -1226,6 +1252,10 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       .update(cardReaders)
       .set({ heldByDeviceId: tillDevice })
       .where(eq(cardReaders.id, reader!.id));
+    const expectedEdit =
+      surface === "table"
+        ? await withTransaction(suite.db, (tx) => readBillEditState(tx, orderId))
+        : null;
     const pay = () =>
       tillApp.request("/api/pay", {
         method: "POST",
@@ -1234,9 +1264,9 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
           id: orderId,
           dining: "eat_in",
           lines: [],
-          expectedEdit: null,
+          expectedEdit,
           readerId: reader!.id,
-          zoneId: v.zoneId,
+          ...(surface === "Counter" ? { zoneId: v.zoneId } : {}),
         }),
       });
     if (surface === "table") {

@@ -622,8 +622,8 @@ confirmó el cobro pero falló su registro, Waitron no reintenta el registro aut
 el proveedor confirma el cobro, comprueba primero si el pedido original ya está pagado. Si lo
 está, no hace falta hacer nada más. Si era un pedido del Mostrador y sigue sin pagar, busca el
 pedido original en **Mostrador** y elige **Tarjeta** con el mismo proveedor. Waitron registra un
-cobro guardado que coincida. Para una cuenta de mesa, vuelve a abrir la cuenta original y
-elige **Cobrar** y después **Toda la cuenta** y **Tarjeta** con el mismo proveedor. Si el lector
+cobro guardado que coincida. Para una cuenta de mesa ya presentada al cliente, vuelve a abrir
+la cuenta original y elige **Cobrar** y después **Tarjeta** con el mismo proveedor. Si el lector
 pide la tarjeta, cancela sin presentarla. Si el registro sigue fallando, es un fallo de Waitron
 o de este servidor. Conserva los datos del pedido y del cobro y no vuelvas a cobrar.
 
