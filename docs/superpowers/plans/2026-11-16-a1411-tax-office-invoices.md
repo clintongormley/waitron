@@ -269,6 +269,14 @@ stays true).
 
 #### Task 3b: a ticket as the till printed it
 
+**As built (2026-11-16):** two changes from the steps below. The A4 fallback is decided inside the
+transaction by the decoder's own `truncated` flag on the laid-out ticket, not by catching
+`renderTicketPdf`'s error afterwards: the extra decode measured under 11 ms at 2,100 lines, and
+laying the ticket out is the cost either way. The RUN sent each image block to one 1-bit PNG; in
+`node:26-slim` a 60-line ticket renders in 17 ms at 69 KB, and a 1,000-line one in 75 ms at 792 KB,
+still over 500 KB (receipts in the PR). The hidden text is drawn in the shipped Noto Sans Mono, so
+each character sits over its printed cell.
+
 **Files:** create `apps/server/src/ticket-pdf.ts` and `ticket-pdf.test.ts`;
 `apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.
 
