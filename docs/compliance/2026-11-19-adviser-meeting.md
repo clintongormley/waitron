@@ -2,8 +2,9 @@
 
 Written 15 November 2026 for the owner, and rewritten the same day so that each question can be
 read on its own. Updated 16 November: questions 3 and 7 now carry the owner's decisions on when a
-ticket is issued and on changes to a quarter already filed, and the Spanish question 12 now matches
-the English. Nothing here has been sent.
+ticket is issued and on changes to a quarter already filed, question 15 asks whether we read the
+answers on money paid towards a bill correctly, question 16 asks what keeping "None" risks, and the
+Spanish question 12 now matches the English. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question explains the situation, says what Waitron
@@ -333,26 +334,40 @@ Yes / No / Note: ____________________________________________
 
 ### Follow-ups on the adviser's answers of 15 November
 
-**15. A payment on account during the meal (answer 1.3).**
+**15. Money paid towards the bill before the meal ends (answers 1.3 and 1.8).**
 
-*The situation.* At a table, one guest sometimes pays part of the bill before the meal is over and
-leaves. The adviser answered that money paid before the table has been fully served is an advance payment:
-VAT is due on it at once, so it needs its own ticket (LIVA 75.Dos; RD 1619/2012 art. 2.1), provided
-what it pays for is clearly identified (European Court of Justice, C‑419/02, BUPA).
+*The situation.* Guests sometimes pay part of the bill before the meal is over without naming what
+it pays for: one guest leaves early and pays something, or a group puts money towards a tab. The
+adviser answered that money paid before the table has been fully served is an advance payment: VAT
+is due on it at once, so it needs its own ticket (LIVA 75.Dos; RD 1619/2012 art. 2.1), provided
+what it pays for is clearly identified (European Court of Justice, C‑419/02, BUPA). For deposits
+(answer 1.8), a deposit for an identified booking (date, number of guests, menu or price) is an
+advance, and one that identifies nothing is not.
 
-*Example.* A table of four has €120 on its bill and has not ordered desserts. At 21:30 Ana pays
-€30 "towards the bill" and leaves; the others pay the rest at 23:00.
+*Examples.*
 
-*What Waitron would do, if Ana's €30 is an advance.* Issue Ana a ticket for €30 at 21:30, and show
-on the final ticket the whole bill less Ana's advance, the way a deposit is deducted.
+- A table of four has €120 on its bill and has not ordered desserts. At 21:30 Ana pays €30
+  "towards the bill" and leaves; the others pay the rest at 23:00.
+- A group pays €1,000 towards its tab at the start of the evening, naming nothing.
+- A company pays €1,000 for its dinner on the 14th: 40 guests, set menu.
+
+*How we read the answers, and what Waitron proposes.* An amount that names no dishes and no booking
+is not an advance, by the same line answer 1.8 draws for deposits. It gets no ticket of its own:
+Waitron holds it against the bill, and the ticket issued when the meal ends covers everything
+served and shows the amount as already paid. That covers Ana's €30 and the group's €1,000. The
+company's €1,000 names a date, the guests and a menu, so it is an advance: it gets its own ticket
+when paid, and the final ticket deducts it as answer 1.8 describes for a deposit. A separate ticket
+for Ana alone is possible only if she pays for particular dishes, as a separate bill (answer 1.9).
 
 *We ask:*
 
-- (a) Are Ana's €30 an advance payment, when they are an amount rather than particular dishes and
-  the table may still order more?
-- (b) If so, may her ticket list the dishes ordered so far as paid on account, and the final ticket
-  show the total less the advance's amount before VAT and its VAT, as the adviser described for a deposit
-  (answer 1.8)?
+- (a) Have we read answers 1.3 and 1.8 correctly? Or is money paid towards this table's meal
+  already "clearly identified", because it is for this meal at this table, even though it names no
+  dishes and the table may still order more?
+- (b) If it is an advance, what should its ticket describe when it names no dishes: "payment on
+  account for the meal at table 7", at 10%? Or may it list the dishes ordered so far as paid on
+  account? And may the final ticket show the total less the advance's amount before VAT and its
+  VAT, as for a deposit (answer 1.8)?
 
 Yes / No / Note: ____________________________________________
 
@@ -363,9 +378,10 @@ Printing it only on request, or never, breaches the rule; showing it on a screen
 email or a download link needs the customer's informed consent (RD 1619/2012 art. 9), given after
 being told how the ticket will arrive and that paper is available.
 
-*What Waitron will do.* Print every ticket at payment unless the customer chooses email. For email,
-staff ask "paper or email?", and the till shows "We'll email your ticket to this address. You can
-ask for a paper copy at any time." and records that it was shown.
+*What Waitron will do.* Staff ask "paper or email?". For email, the till shows "We'll email your
+ticket to this address. You can ask for a paper copy at any time." and records that it was shown.
+Waitron also keeps a "None" choice, for a customer who wants neither: most customers don't want the
+ticket, and printing every one wastes paper (owner, 16 November).
 
 *We ask:*
 
@@ -373,6 +389,9 @@ ask for a paper copy at any time." and records that it was shown.
   table or says they don't want it?
 - (b) Is the email step above informed consent, and is sending the email enough to show delivery,
   or must the customer open or download it?
+- (c) If the customer wants neither and staff choose None, what does the venue risk? Is there a way
+  to avoid printing that meets the rule, for example a QR code shown at payment with which the
+  customer downloads the ticket?
 
 Yes / No / Note: ____________________________________________
 
@@ -818,27 +837,41 @@ Sí / No / Nota: ____________________________________________
 
 ### A partir de sus respuestas del 15 de noviembre
 
-**15. Un pago a cuenta durante la comida (su respuesta 1.3).**
+**15. Lo pagado a cuenta antes de terminar la comida (sus respuestas 1.3 y 1.8).**
 
-*Situación.* En una mesa, a veces un comensal paga parte de la cuenta antes de terminar la comida y
-se marcha. Indica que lo pagado antes de que la mesa esté servida del todo es un pago anticipado: el
-IVA se devenga al cobrarlo, y necesita su propia factura (LIVA art. 75.Dos; RD 1619/2012, art. 2.1),
-siempre que lo que se paga esté claramente identificado (STJUE C-419/02, BUPA).
+*Situación.* A veces los clientes pagan parte de la cuenta antes de terminar la comida sin indicar
+qué pagan: un comensal se marcha antes y paga algo, o un grupo deja dinero a cuenta de su consumo.
+Indica que lo pagado antes de que la mesa esté servida del todo es un pago anticipado: el IVA se
+devenga al cobrarlo, y necesita su propia factura (LIVA art. 75.Dos; RD 1619/2012, art. 2.1),
+siempre que lo que se paga esté claramente identificado (STJUE C-419/02, BUPA). Para las señales
+(su respuesta 1.8), la de una reserva identificada (fecha, número de comensales, menú o precio) es un
+anticipo, y la que no identifica nada no lo es.
 
-*Ejemplo.* Una mesa de cuatro lleva 120 € consumidos y aún no ha pedido postres. A las 21:30 Ana paga
-30 € «a cuenta» y se marcha; los demás pagan el resto a las 23:00.
+*Ejemplos.*
 
-*Lo que haría Waitron si los 30 € de Ana son un anticipo.* Expedir a Ana un tique de 30 € a las 21:30,
-y mostrar en el tique final el total de la cuenta menos el anticipo de Ana, como se descuenta una
-señal.
+- Una mesa de cuatro lleva 120 € consumidos y aún no ha pedido postres. A las 21:30 Ana paga 30 €
+  «a cuenta» y se marcha; los demás pagan el resto a las 23:00.
+- Un grupo deja 1.000 € a cuenta de su consumo al empezar la noche, sin indicar nada más.
+- Una empresa paga 1.000 € por su cena del día 14: 40 comensales, menú cerrado.
+
+*Cómo leemos sus respuestas, y propuesta de Waitron.* Un importe que no indica platos ni reserva no
+es un anticipo, con el mismo criterio que su respuesta 1.8 aplica a las señales. No lleva tique
+propio: Waitron lo anota en la cuenta, y el tique expedido al terminar la comida recoge todo lo
+servido e indica el importe ya pagado. Así se tratan los 30 € de Ana y los 1.000 € del grupo. Los
+1.000 € de la empresa indican fecha, comensales y menú, de modo que son un anticipo: llevan su propio
+tique al cobrarse, y el tique final los descuenta como describe su respuesta 1.8 para una señal. Un
+tique aparte solo para Ana es posible si paga platos concretos, como cuenta separada (su respuesta
+1.9).
 
 *Preguntamos:*
 
-- (a) ¿Son esos 30 € un pago anticipado, si son un importe y no platos concretos y la mesa aún puede
-  pedir más?
-- (b) Si lo son, ¿puede su tique recoger como pagados a cuenta los platos pedidos hasta ese momento,
-  y el tique final mostrar el total menos la base y la cuota del anticipo, como indica para una señal
-  (su respuesta 1.8)?
+- (a) ¿Hemos leído bien sus respuestas 1.3 y 1.8? ¿O lo pagado a cuenta de la comida de esta mesa
+  ya está «claramente identificado», por ser para esta comida y esta mesa, aunque no indique platos
+  y la mesa aún pueda pedir más?
+- (b) Si es un anticipo, ¿qué debe describir su tique cuando no indica platos: «pago a cuenta de la
+  comida de la mesa 7», al 10 %? ¿O puede recoger como pagados a cuenta los platos pedidos hasta ese
+  momento? ¿Y puede el tique final mostrar el total menos la base y la cuota del anticipo, como para
+  una señal (su respuesta 1.8)?
 
 Sí / No / Nota: ____________________________________________
 
@@ -849,10 +882,11 @@ solo si se pide, o nunca, lo incumple; mostrarlo en pantalla no es entregarlo; e
 un enlace de descarga exigen el consentimiento informado del cliente (RD 1619/2012, art. 9), tras
 informarle de cómo lo recibirá y de que puede pedirlo en papel.
 
-*Lo que hará Waitron.* Imprimir todos los tiques al cobrar, salvo que el cliente elija el correo.
-Para el correo, el empleado pregunta «¿en papel o por correo?»; la caja muestra «Le enviaremos el
-tique a esta dirección. Puede pedir una copia en papel en cualquier momento» y registra que se
-mostró.
+*Lo que hará Waitron.* El empleado pregunta «¿en papel o por correo?». Para el correo, la caja
+muestra «Le enviaremos el tique a esta dirección. Puede pedir una copia en papel en cualquier
+momento» y registra que se mostró. Waitron mantiene además la opción «Ninguno», para el cliente que
+no quiere ni una cosa ni otra: la mayoría de los clientes no quiere el tique, e imprimirlos todos
+malgasta papel.
 
 *Preguntamos:*
 
@@ -860,6 +894,9 @@ mostró.
   la mesa o diga que no lo quiere?
 - (b) ¿Es consentimiento informado el paso del correo descrito, y basta el envío del correo como
   prueba de entrega, o hace falta que el cliente lo abra o lo descargue?
+- (c) Si el cliente no quiere ninguna de las dos cosas y el empleado elige «Ninguno», ¿qué riesgo
+  asume el local? ¿Hay alguna forma de no imprimir que cumpla la norma, por ejemplo un código QR
+  mostrado al cobrar con el que el cliente descarga el tique?
 
 Sí / No / Nota: ____________________________________________
 

@@ -2,7 +2,7 @@
 
 Written 15 November 2026 for the owner, to go through before the meeting with the adviser on
 Thursday 19 November. Rewritten the same day so that each section can be read on its own. Updated
-16 November with your decisions D1, D6 and D12, and with corrections from a review.
+16 November with your decisions D1, D2, D6 and D12, and with corrections from a review.
 
 ## About this document
 
@@ -121,8 +121,8 @@ also sends its record to AEAT.
 - Money paid *before the table has been fully served* is, for VAT, an **advance payment**. VAT is
   due on it the moment it is received (LIVA 75.Dos), so it needs a ticket of its own at that moment
   (RD 1619/2012 art. 2.1). This applies when what the money pays for is clearly identified (European
-  Court of Justice, C‑419/02, BUPA). Whether "€30 towards the bill" is identified enough is
-  Thursday's question 15.
+  Court of Justice, C‑419/02, BUPA). Whether "€30 towards the bill", or €1,000 put towards a
+  tab, is identified enough is Thursday's question 15.
 - Once the meal is over, several payments may share one ticket, but that ticket is due **when the
   meal ends**. In the adviser's words, "its issue cannot be made conditional on the bill being paid in
   full". If the table leaves with part unpaid, it still gets a ticket for everything it was served,
@@ -193,18 +193,24 @@ the customer never got an original.
 
 **What should change.**
 
-1. Print every ticket at payment, unless the customer chose email. Remove None.
+1. Print every ticket at payment, unless the customer chose email. Remove None. *You decided
+   against this on 16 November (D2).*
 2. In the email step, show a sentence such as "We'll email your ticket to this address. You can ask
    for a paper copy at any time.", and record that it was shown.
 3. A reprint from the list of past receipts counts as the original when no original was delivered
-   before. A first print that failed is already handled: resent from the printer queue, it prints
-   as the original (Part A).
+   before. With None kept, this matters whenever a customer who had None comes back for the ticket.
+   A first print that failed is already handled: resent from the printer queue, it prints as the
+   original (Part A).
 4. A QR code or link for the customer to download the ticket is not built. Build it only if you
    want it, with proof of download and a paper fallback.
 
-**Your decision (D2).** Make changes 1 to 3? This reverses your 9 October decision on email
-consent. *Recommended: yes.* Thursday's question 16 asks what counts as delivered when a customer
-leaves the paper behind, and whether the sentence above is enough consent.
+**Your decision (D2).** *Owner, 16 November: keep None. Most customers don't want the ticket, and
+printing every one wastes paper.* By the adviser's answer, a ticket the customer never receives
+breaches the delivery rule, so this is a risk you are choosing to take. Thursday's question 16 asks
+what it costs, and whether something short of printing, such as a QR code to download the ticket,
+would meet the rule. Changes 2 and 3 are not yet decided; change 2 reverses your 9 October decision
+on email consent. *Recommended: make them.* Question 16 also asks what counts as delivered when a
+customer leaves the paper behind, and whether the sentence above is enough consent.
 
 ### B3. Undoing a ticket when nothing was served or paid
 
@@ -543,7 +549,7 @@ Each is explained in full in its section.
 | Decision | About | Section | Recommendation |
 | --- | --- | --- | --- |
 | D1 | Issue the ticket when the meal ends, paid or not | B1 | Decided 16 November: yes; advance tickets after question 15 |
-| D2 | Print every ticket; consent wording for email | B2 | Yes |
+| D2 | Print every ticket; consent wording for email | B2 | Decided 16 November: keep None. Consent wording and reprint-as-original: recommended, not decided |
 | D3 | Cancellation record instead of a corrective when nothing was served or paid | B3 | Yes |
 | D4 | A free item takes its share of the price | B4 | Build A445 now |
 | D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 17 |
