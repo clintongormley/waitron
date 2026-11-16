@@ -1019,27 +1019,16 @@ Fix idea: at join, also pin the main box's own trusted keys.
 Raised by the finish-branch simplify review (2026-11-01) and not applied there, because each is a
 restructuring wider than a review fix:
 
-- The key ring's file format (`WAITRON_CREDENTIALS_KEY*`) is spelled out in
-  `apps/server/src/box-secrets.ts` (`keyRingEnv`) and `mirror-bundle.ts` (`encodeKeyRing`) as well
-  as `packages/credentials/src/keyring.ts`; adopt decodes the bundle's ring through the env format.
-  Own the format in `keyring.ts`.
 - `node.dump` is opened twice in one verification run: read-only with an authorizer
   (`backup-verification-compatibility.ts`) and writable in memory without one
   (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened
   opener.
-- `packages/provisioning/src/first-setup-start-again-set-aside.ts` (`writeRingFile`) repeats
-  `writeFileDurable` (`fs-atomic.ts`) plus an exact mode and a refusal to overwrite; add those as
-  options instead.
 - The venue and node handles travel as separate fields under four names (`nodeDb`, `node`,
   `ownerNode`, `nodeDatabase()`), with three near-identical pair types (`VenueDatabase`,
   `VenueAndNodeHandles`, `MigrationFiles`). Pass one pair type.
 - "Opening a staged folder must not create an empty `node.db`" is enforced by about fifteen
   callers (`writeStagedNodeCopy`, `openStagedCopy` and `assertStagedNodeCopy`). Let
   `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
-- The rule "take `node.db`'s lock outside `venue.db`'s" lives only in comments at four nesting
-  sites; one `withVenueAndNodeTransaction` helper would enforce it.
-- `collectStateParts`'s `snapshotNode` callback is the same expression at two of its callers
-  (`backup-sweep.ts`, `sealed-state.ts`).
 
 ## A1279: a local secondary promotes only over a chart it signed itself
 
