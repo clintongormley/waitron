@@ -453,7 +453,7 @@ describe("a full start's stepdown, through its test seam", () => {
     );
     expect(response.status).toBe(403);
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
-      "authorization.not_permitted",
+      "node.operation_page_required",
     );
   }, 60_000);
 

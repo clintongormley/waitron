@@ -374,10 +374,12 @@ it("the handover prompt refuses recovery codes before sending and continues with
 
 it.each([
   ["en-GB", "Open the box's HTTPS address"],
-  ["es-ES", "Abre la dirección HTTPS del servidor"],
+  ["es-ES", codeMessage("node.operation_page_required", "es-ES")],
 ])("explains the handover connection refusal in %s", async (locale, words) => {
   const { el, start, status } = await mount();
   setLocale(locale);
+  expect(words).toContain("HTTPS");
+  if (locale === "es-ES") expect(words).not.toContain("This operation");
   const real = new DashboardApi(
     "",
     async () =>

@@ -3,6 +3,7 @@ import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
 import { format, setLocale, t } from "../i18n/t.js";
+import { handoverEs } from "../i18n/strings/handover.js";
 import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
@@ -1967,10 +1968,12 @@ it("a passkey take the held copy refused, then sent to the held copy, keeps the 
 
 it.each([
   ["en-GB", "Open the box's HTTPS address"],
-  ["es-ES", "Abre la dirección HTTPS del servidor"],
+  ["es-ES", handoverEs["handover.emergency.connection"]],
 ] as const)("shows HTTPS advice without taking a newer copy in %s", async (locale, words) => {
   setLocale(locale);
   const { el, posts } = await mount({ refusal: "node.operation_page_required" });
+  expect(words).toContain("HTTPS");
+  if (locale === "es-ES") expect(words).not.toContain("This operation");
   await edit(el, "handover-email", signIn.email);
   await edit(el, "handover-password", signIn.password);
   q(el, "[data-test=emergency-preview]").click();
