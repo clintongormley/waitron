@@ -221,17 +221,6 @@ list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
 Test titles #653 could not touch in `boot.test.ts` carry the history tags
 "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
 
-## The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there
-
-- The empty-venue-directory reason #561 deleted from `packages/provisioning` ("an empty value would
-  stand a venue up in the working directory") is false there: measured 2026-09-24 on Node v26.7.0,
-  `openVenueDatabase("")` fails `ENOENT: no such file or directory, mkdir ''`, and a real path as
-  the control created `venue.db` and `node.db`. The same reason still stands in
-  `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph
-  on `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`"). The test title in
-  `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
-  title is code, so a pruning PR cannot rename it).
-
 ## A deleted bucket pointer can still look like another writer
 
 - A `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
@@ -1745,15 +1734,15 @@ below records the gap that prompted the design, not a new runtime measurement.
   processor time (A751); see
   [the timing receipt](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-## `packages/provisioning` code found by #561 and not changed
+## `src/bin.ts` in `packages/provisioning` is still left out of coverage
 
-- The `quoteLiteral` re-export in
-  `identifiers.ts` is used only by its own suite; the `action.email === undefined` branch in
-  `venue-apply.ts`'s seed-admin cannot run, because the action's `email` is a required string; the
-  coverage config leaves `src/bin.ts` out with no reason stated any more, which may hide code a
-  test could reach; and `cli.test.ts` test titles still say "before connecting" and "before
-  opening a connection", and one title ("rather than opening the working directory") rests on the
-  false reason in the empty-venue-directory section above.
+- `bin.ts` can now be imported without running the command, and `src/bin.test.ts` covers its two
+  failure prints, both `setup.not_ready` refusals, the prompts and the venue it opens. Taking
+  `src/bin.ts` out of `vitest.config.ts`'s coverage `exclude` still leaves the package at 97.96%
+  statements against 98%: the uncovered lines are the `firstSetupDeployment` and successful
+  `configureFirstSetup` closures in `main`, the rethrow of a non-abort readline error in `ask`, and
+  the run-when-invoked-directly block at the foot. Covering the first two needs a test that builds a
+  first-setup runtime and deployment, which so far would assert little beyond their construction.
 
 ## Backup data verification and Cloud release
 

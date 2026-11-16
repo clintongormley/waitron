@@ -1081,11 +1081,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   option should go is open.
   [Detail](box.md#server-comment-pruning-notes)
 
-- **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
-  [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
-- **`packages/provisioning` code found by #561 and not changed.** The coverage config leaves
-  `src/bin.ts` out with no reason stated any more, which may hide code a test could reach.
-  [Detail](box.md#packagesprovisioning-code-found-by-561-and-not-changed)
+- **`src/bin.ts` in `packages/provisioning` is still left out of coverage.** Six of its
+  statements stay untested; bringing it in leaves the package just under 98% statements.
+  [Detail](box.md#srcbints-in-packagesprovisioning-is-still-left-out-of-coverage)
 - **Schema files keep `v8 ignore` pairs with no stated reason.**
   [Detail](ci.md#schema-files-keep-v8-ignore-pairs-with-no-stated-reason).
 - **Fiscal source comments still describe the migration sets A760 retired.**

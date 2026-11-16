@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { once } from "node:events";
+import { realpathSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   deploymentTableExists,
@@ -27,22 +29,32 @@ import { applyVenue } from "./venue-apply.js";
  * alone leaves the scrollback intact. */
 const CLEAR = "\u001B[3J\u001B[H\u001B[2J";
 
+/** The parts of the process the command touches; the shim at the foot of this file passes the
+ * real ones. */
+export interface BinProcess {
+  argv: readonly string[];
+  env: NodeJS.ProcessEnv;
+  stdin: NodeJS.ReadableStream & { isTTY?: boolean };
+  stdout: NodeJS.WritableStream;
+  stderr: NodeJS.WritableStream;
+}
+
 /**
  * The only file in this package that touches the process. No storage is opened here: `venue` opens
  * its own directory and `keyring` needs none.
  */
-async function main(): Promise<number> {
+export async function main(proc: BinProcess, run: typeof runCli = runCli): Promise<number> {
   let database: Database | undefined;
   try {
-    return await runCli(process.argv.slice(2), {
+    return await run(proc.argv.slice(2), {
       io: {
-        stdout: (line) => void process.stdout.write(`${line}\n`),
-        stderr: (line) => void process.stderr.write(`${line}\n`),
-        prompt: (question) => ask(question, true),
-        promptSecret: (question) => ask(question, false),
-        clearScreen: () => void process.stdout.write(CLEAR),
+        stdout: (line) => void proc.stdout.write(`${line}\n`),
+        stderr: (line) => void proc.stderr.write(`${line}\n`),
+        prompt: (question) => ask(question, true, proc.stdin, proc.stdout),
+        promptSecret: (question) => ask(question, false, proc.stdin, proc.stdout),
+        clearScreen: () => void proc.stdout.write(CLEAR),
       },
-      env: process.env,
+      env: proc.env,
       openVenue: async (directory) => {
         const store = await openVenueDatabase(directory);
         database = store.venue;
@@ -55,14 +67,14 @@ async function main(): Promise<number> {
         };
       },
       firstSetupDeployment: ({ runtime, db, node }) =>
-        createFirstSetupCommandDeployment({ runtime, db, node, environment: process.env }),
+        createFirstSetupCommandDeployment({ runtime, db, node, environment: proc.env }),
       applyVenue,
       modules: ALL_MODULES,
       configureFirstSetup: (venueDir) => {
-        const stateDir = process.env.WAITRON_STATE_DIR;
+        const stateDir = proc.env.WAITRON_STATE_DIR;
         if (stateDir === undefined || stateDir === "") throw new AppError("setup.not_ready", {});
         return createFirstSetupRuntime({
-          environment: Object.freeze({ ...process.env }),
+          environment: Object.freeze({ ...proc.env }),
           stateDir,
           venueDir,
           modules: ALL_MODULES,
@@ -80,16 +92,16 @@ async function main(): Promise<number> {
     // Never the message: a query error's message can embed the failed statement. A class name
     // carries no value.
     if (isAppError(error)) {
-      process.stderr.write(`${formatAppError(error)}\n`);
+      proc.stderr.write(`${formatAppError(error)}\n`);
       return 1;
     }
     const name = error instanceof Error ? error.name : "UnknownError";
-    process.stderr.write(`unexpected failure (${name})\n`);
+    proc.stderr.write(`unexpected failure (${name})\n`);
     return 1;
   }
 }
 
-function writeModuleConfigTo(database: () => Database | undefined) {
+export function writeModuleConfigTo(database: () => Database | undefined) {
   const definition = modulesSettings(ALL_MODULES);
   return async (config: ModuleConfig) => {
     const db = database();
@@ -119,16 +131,21 @@ const SINK = new Writable({
  * The race exists because `rl.question` never settles when stdin ends before an answer; an
  * exhausted stdin returns `""` instead. So does Ctrl+D (`ABORT_ERR`), an operator saying "stop".
  */
-async function ask(question: string, echo: boolean): Promise<string> {
+export async function ask(
+  question: string,
+  echo: boolean,
+  stdin: NodeJS.ReadableStream & { isTTY?: boolean },
+  stdout: NodeJS.WritableStream,
+): Promise<string> {
   const rl = echo
-    ? createInterface({ input: process.stdin, output: process.stdout })
+    ? createInterface({ input: stdin, output: stdout })
     : createInterface({
-        input: process.stdin,
+        input: stdin,
         output: SINK,
-        terminal: process.stdin.isTTY === true,
+        terminal: stdin.isTTY === true,
       });
   // readline's output is thrown away in the echo-off case, so the question goes to stdout here.
-  if (!echo) process.stdout.write(question);
+  if (!echo) stdout.write(question);
   try {
     const ended = once(rl, "close").then(() => "");
     return await Promise.race([rl.question(echo ? question : ""), ended]);
@@ -138,7 +155,7 @@ async function ask(question: string, echo: boolean): Promise<string> {
   } finally {
     rl.close();
     // The newline the operator's Enter would have echoed.
-    if (!echo) process.stdout.write("\n");
+    if (!echo) stdout.write("\n");
   }
 }
 
@@ -150,5 +167,12 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
-process.exitCode = await main();
+// Run only when invoked directly: an import would otherwise run the command with the importing
+// process's argv and environment.
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
+  process.exitCode = await main(process);
+}
