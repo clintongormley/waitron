@@ -36,7 +36,7 @@ const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
 const absent = useVenueDb({
-  migrations: [CORE_MIGRATIONS],
+  migrations: [],
 });
 const id = "10000000-0000-4000-8000-000000000001";
 const menu = "10000000-0000-4000-8000-000000000002";
@@ -67,14 +67,14 @@ beforeEach(async () => {
     });
   }
 });
-async function run(missingBefore = false, sourceSchema = 1) {
+async function run(missingBefore = false, sourceSchema = 1, target = restored) {
   const path = (suite: typeof original) =>
     suite.db
       .all<{ file: string }>(sql`pragma database_list`)
       .find((row) => row.file.endsWith("venue.db"))!.file;
   const before = await openBackupQuery(path(missingBefore ? absent : original));
   try {
-    const after = await openBackupQuery(path(restored));
+    const after = await openBackupQuery(path(target));
     try {
       return await OWNER.verifyRestoredData({
         before: before.query,
@@ -298,9 +298,11 @@ describe("media backup evidence", () => {
           activatesAt: stamp,
           ...(state === "cancelled" ? { cancelledAt: stamp, cancelledBy: id } : {}),
         });
+      }
+      expect(await run()).toEqual(passed);
+      for (const suite of [original, restored])
         for (const table of ["media_images", "media_blobs"])
           await corrupt(suite, `delete from "${table}"`);
-      }
       expect((await run()).status).toBe(
         state === "live" || state === "queued" ? "invalid" : "passed",
       );
@@ -309,9 +311,30 @@ describe("media backup evidence", () => {
   it("accepts honest absence and rejects target-only invented blobs", async () => {
     for (const table of ["media_images", "media_blobs"])
       await corrupt(restored, `delete from "${table}"`);
-    expect(await run(true)).toEqual(passed);
+    expect(await run(true, 0)).toEqual(passed);
     await restored.db.insert(mediaBlobs).values({ hash, bytes, format: "webp" });
-    expect((await run(true)).status).toBe("invalid");
+    expect((await run(true, 0)).status).toBe("invalid");
+  });
+  it("refuses photo metadata when its blob table is absent", async () => {
+    const [{ statement }] = original.db.all<{ statement: string }>(
+      sql`select sql as statement from sqlite_schema where name = 'media_images'`,
+    );
+    absent.db.run(sql.raw(statement!));
+    absent.db.run(sql`pragma foreign_keys = off`);
+    try {
+      await absent.db.insert(mediaImages).values({
+        id,
+        filename,
+        originalHash: hash,
+        names: { en: "Bread" },
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+      expect((await run(true, 1, absent)).status).toBe("invalid");
+    } finally {
+      absent.db.run(sql`drop table media_images`);
+      absent.db.run(sql`pragma foreign_keys = on`);
+    }
   });
   it("declares actual database state without file or effect obligations", () => {
     const owner = validateBackupVerificationContribution(OWNER);
@@ -320,6 +343,17 @@ describe("media backup evidence", () => {
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });
+});
+
+it("accepts a restored department logo with its photo and original bytes", async () => {
+  for (const suite of [original, restored])
+    await suite.db.insert(departments).values({
+      id: "receipt-department",
+      name: "Dining",
+      tradingName: "Dining",
+      receiptLogoImageId: id,
+    });
+  expect(await run()).toEqual(passed);
 });
 
 it("refuses a copy with a department logo id naming no image", async () => {
