@@ -114,8 +114,7 @@ Elige un equipo con espacio libre suficiente para la base de datos recuperada y 
 temporales necesarias para abrir la copia de seguridad.
 
 Para una copia grande, conecta el dispositivo por cable o a la red del local antes de cargarla.
-Elige un archivo de hasta 4 GiB. Cada carga debe terminar en cinco minutos: una conexión de
-20 Mbit/s puede enviar unos 715 MiB y una de 100 Mbit/s unos 3,49 GiB, sin contar la sobrecarga.
+Elige un archivo de hasta 4 GiB. Una carga lenta puede tardar hasta 12 horas.
 Si la carga no termina, conserva el archivo seleccionado, mejora la conexión y vuelve a intentarlo.
 
 Después elige **Revisar copia**. La página muestra la copia elegida: su origen, el negocio, el

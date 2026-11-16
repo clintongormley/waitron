@@ -5465,8 +5465,14 @@ routes stream ciphertext into a private 0700 folder and 0600 file under `scratch
 They share the provisioning latch through receipt and validation; a restore keeps it until restart.
 The file validator authenticates ciphertext before decoding it. Publication moves and flushes the
 archive before writing the durable restore marker; input cleanup removes the upload folder.
-Node's 300-second receiving limit remains; client upload failures explain retrying over a cable
-or the venue network. The unused archive-preparation and emergency handover paths retain their
+The setup HTTPS listener gives these three POST uploads a 12-hour native receiving ceiling and
+requires at least 64 KiB of received progress per two-minute window. Completed smaller bodies are
+accepted. Headers stay bounded at 60 seconds; ordinary setup requests have a 300-second budget
+from the secure connection or the last response finish already observed. The other listeners keep
+Node's original receiving limits. Progress is read from socket byte counts without consuming the
+body; backpressure that stops transport reads counts as no progress. A completed body stops the
+receive check; an early response with an incomplete body does not. Client upload failures explain
+retrying over a cable or the venue network. The unused archive-preparation and emergency handover paths retain their
 256 MiB buffered reader. `setup-archive-upload.test.ts` exercises a real Node receiving timeout;
 `restore-full-disk.e2e.test.ts` exercises refusal and cleanup on its small filesystem.
 Capture reservations still use uncompressed estimates; a nearly full box may refuse a backup
