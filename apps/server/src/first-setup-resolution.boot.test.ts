@@ -29,7 +29,7 @@ import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
 import { escapeHtml } from "./html-page.js";
-import { OPERATOR_WORDS } from "./i18n/recovery-page.js";
+import { OPERATOR_WORDS, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -510,19 +510,29 @@ const REFUSED_TEXT = {
   },
 } as const;
 
+/**
+ * The page's own disk lines, not any word "disk": the log tail and stack trace carry the checkout's
+ * path, which may contain it.
+ */
+function expectNoDiskLine(body: string, locale: "en-GB" | "es-ES") {
+  const words = RECOVERY_PAGE_WORDS[locale];
+  expect(body).not.toContain(escapeHtml(words.freeSpace("\u0000").split("\u0000")[0]!));
+  expect(body).not.toContain(escapeHtml(words.uncountedStatus("recovery")));
+}
+
 /** The page names `code` in both languages, with the refused-start status line and no disk line. */
 async function expectRefusedPage(port: number, code: keyof typeof REFUSED_TEXT) {
   const en = await overHttps(port, "/", "en-GB");
   expect(en.status).toBe(200);
   for (const text of [REFUSED_TEXT[code].title, REFUSED_TEXT[code].action, STATUS_EN])
     expect(en.body).toContain(escapeHtml(text));
-  expect(en.body).not.toMatch(/disk/i);
+  expectNoDiskLine(en.body, "en-GB");
   const es = await overHttps(port, "/", "es-ES");
   expect(es.status).toBe(200);
   const spanish = OPERATOR_WORDS[code]!["es-ES"];
   for (const text of [spanish.title, spanish.action, STATUS_ES])
     expect(es.body).toContain(escapeHtml(text));
-  expect(es.body).not.toMatch(/disco/i);
+  expectNoDiskLine(es.body, "es-ES");
   const status = await overHttps(port, "/recovery-api/status");
   expect(JSON.parse(status.body)).toMatchObject({
     failures: 0,

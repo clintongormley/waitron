@@ -61,16 +61,6 @@ It does not fetch FNMT or check its translations.
   what the server kept is untested — write a test that stages configuration in one mode, switches,
   and asserts what survives.
 
-## The setup app's catch-all redirect was not proven by deleting it
-
-**Still open after #334:**
-
-Unknown setup addresses go
-  to `/` while real files and API routes keep their own responses. The reviews checked this by
-  running the route tests and the full server suites, not by removing each exclusion one at a time
-  and watching a test fail, and no separate probe confirmed the trading app is untouched by the
-  redirect.
-
 ## In Demo, a server refusal of a field Demo hides can only be retried unchanged
 
 **Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
@@ -267,11 +257,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   switches mode, what the server kept is untested — write a test that stages configuration in
   one mode, switches, and asserts what survives.
   [Detail](#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
-- The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
-  running the route tests and the full server suites, not by removing each exclusion one at a
-  time and watching a test fail, and no separate probe confirmed the trading app is untouched by
-  the redirect.
-  [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
@@ -281,13 +266,6 @@ filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write file
 snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
 on every box. Detail:
 A1127's design, "Open, not measured".
-
-## A boot test's disk assertion reads the checkout's path
-
-`apps/server/src/first-setup-resolution.boot.test.ts`'s two supervised cases assert the page does
-not match `/disk/i`, and the page prints a stack trace holding the checkout's path, so the cases fail
-in any worktree whose path contains "disk" (A1127's own worktree, `…-full-disk-spare-file`). They pass
-in a copy at another path and on `main`.
 
 ## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
 

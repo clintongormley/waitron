@@ -1497,6 +1497,42 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  it("a trading boot with the setup app configured does not send unknown browser paths to the root", async () => {
+    const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-setup-spa-"));
+    const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-till-spa-"));
+    writeFileSync(join(wizardApp, "index.html"), "<html>setup-wizard</html>");
+    writeFileSync(join(tillApp, "index.html"), "<html>till-page</html>");
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-trading-spa-state-"));
+    await seedModuleSettings(sharedVenueDir, { "fiscal-none": false });
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+        WAITRON_SETUP_APP_DIR: wizardApp,
+        WAITRON_TILL_APP_DIR: tillApp,
+      });
+      const html = { headers: { Accept: "text/html" }, redirect: "manual" as const };
+      const unknown = await fetch(`http://127.0.0.1:${httpPort()}/anything/else`, html);
+      expect(unknown.status).toBe(404);
+      expect(unknown.headers.get("location")).toBeNull();
+      const tabs = await fetch(`http://127.0.0.1:${httpPort()}/tabs/counter`, html);
+      expect(tabs.status).toBe(200);
+      expect(await tabs.text()).toBe("<html>till-page</html>");
+    } finally {
+      await server?.close();
+      await rm(stateDir, { recursive: true, force: true });
+      rmSync(wizardApp, { recursive: true, force: true });
+      rmSync(tillApp, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("fails the boot LOUDLY when WAITRON_SETUP_APP_DIR is set but holds no index.html, naming the var", async () => {
     // A configured-but-unbuilt wizard dir fails the boot before storage is touched; were the check to
     // run after the stamp probe, the unopenable venue directory would fail with `ENOTDIR` instead.
