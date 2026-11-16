@@ -1,6 +1,6 @@
+import { loadRecoveryPackFonts } from "./recovery-pdf-node.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
-import { readFileSync } from "node:fs";
 import { renderRecoveryPack } from "@waitron/recovery-pack";
 import { beforeEach, expect, it } from "vitest";
 
@@ -60,8 +60,7 @@ for (const locale of ["en", "es"] as const)
       const bytes = await renderRecoveryPack({
         locale,
         timeZone: "UTC",
-        loadFont: async () =>
-          readFileSync(new URL("./assets/register-noto-sans.ttf", import.meta.url)),
+        loadFonts: loadRecoveryPackFonts,
         cover: {
           legalName: "Waitron SL",
           taxId: "89890001K",

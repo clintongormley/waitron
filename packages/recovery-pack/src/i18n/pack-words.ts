@@ -14,7 +14,6 @@ type Words = {
   partColumn: string;
   lastChangedColumn: string;
   checkColumn: string;
-  sameChecks: string;
   couldNotBeDrawn: string;
   lockedAway: string;
   /** For a pack holding a restore code or the recovery key, and not the server key. */
@@ -55,8 +54,6 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     partColumn: "Part",
     lastChangedColumn: "Last changed",
     checkColumn: "Check",
-    sameChecks:
-      "The dashboard's Backups screen shows the same checks. If one differs, this pack is out of date: make a new one.",
     couldNotBeDrawn: "Could not be drawn",
     lockedAway: "Keep this pack locked away, and off the box.",
     anyoneHoldingBackups:
@@ -118,8 +115,6 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     partColumn: "Parte",
     lastChangedColumn: "Último cambio",
     checkColumn: "Comprobación",
-    sameChecks:
-      "La pantalla Copias de seguridad del panel muestra las mismas comprobaciones. Si alguna no coincide, este paquete está desfasado: haz uno nuevo.",
     couldNotBeDrawn: "No se pudo generar",
     lockedAway: "Guarda este paquete bajo llave, y fuera del servidor.",
     anyoneHoldingBackups:

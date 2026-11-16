@@ -139,13 +139,13 @@ export function createHourInitialSetup(
         createdAt: new Date().toISOString(),
         nodeKey: document.key,
       };
-      const { loadRecoveryFont } = await import("./recovery-pdf-node.js");
+      const { loadRecoveryPackFonts } = await import("./recovery-pdf-node.js");
       const { renderSetupRecoveryPack } = await import("./setup-recovery-pack.js");
       const bytes = await renderSetupRecoveryPack(
         recovery,
         document.locale,
         document.identity.timeZone,
-        loadRecoveryFont,
+        loadRecoveryPackFonts,
       );
       return { bytes, statement: recoveryDocumentPublic(recovery) };
     },

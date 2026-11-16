@@ -108,7 +108,7 @@ describe("the bucket part", () => {
       qr: true,
     });
     expect(page.rows).toEqual([
-      { label: "Bucket", value: "eu-west-1 · venue-bucket" },
+      { label: "Bucket", value: "eu-west-1 · venue-bucket", mono: true },
       { label: "Recovery key", value: "changed on 20 September 2026" },
     ]);
     expect(page.notes).toEqual(PART_WORDS.en.bucket.steps);
@@ -133,6 +133,7 @@ describe("the bucket part", () => {
     expect(built.part.page!.rows[0]).toEqual({
       label: "Bucket",
       value: "s3.example.net:9000 · venue-bucket",
+      mono: true,
     });
     expect(built.part.page!.title).toBe("Copia en el bucket");
   });
@@ -216,6 +217,7 @@ describe("the archives part", () => {
     expect(built.part.page!.rows[0]).toEqual({
       label: "Archive folder",
       value: "/var/backups/venue",
+      mono: true,
     });
     expect(built.part.page!.notes).toEqual(PART_WORDS.en.archives.stepsFolder);
   });

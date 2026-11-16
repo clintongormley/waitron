@@ -105,7 +105,7 @@ export function serverKeyPage(
       { label: w.environment, value: w[document.scope.environment] },
       { label: w.softwareId, value: document.scope.softwareId },
       { label: w.serverId, value: shortNodeId(document.nodeKey.nodeId) },
-      { label: w.keyName, value: document.nodeKey.name },
+      { label: w.keyName, value: document.nodeKey.name, mono: true },
       { label: w.created, value: created },
     ],
     notes: secret === undefined ? [w.keepOlder] : [w.keepSafe, w.notABackup, w.keepOlder],

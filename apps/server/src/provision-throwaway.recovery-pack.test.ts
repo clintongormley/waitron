@@ -19,7 +19,7 @@ import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
-import { invoiceFontBytes } from "./invoice-font.js";
+import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { ALL_MODULES } from "./modules.js";
 import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
@@ -108,7 +108,7 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
         recoveryKey: KEY,
       }),
       documentEvidence: (module) => readRecoveryDocumentEvidence(roots, module),
-      loadFont: async () => invoiceFontBytes,
+      loadFonts: loadRecoveryPackFonts,
       now: () => new Date("2026-10-16T12:00:00.000Z"),
     },
     () => {},

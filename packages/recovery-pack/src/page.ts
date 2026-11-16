@@ -4,7 +4,7 @@ import type { PartKind } from "./i18n/pack-words.js";
 export type RecoveryPackPage = {
   title: string;
   intro?: string;
-  rows: { label: string; value: string }[];
+  rows: { label: string; value: string; mono?: true }[];
   address?: { label: string; text: string; qr: true };
   secret?: {
     label: string;

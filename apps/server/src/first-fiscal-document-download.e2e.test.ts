@@ -384,8 +384,8 @@ it.each(["en", "es"] as const)(
         })
         .toBe(
           locale === "en"
-            ? "Enter the key from the sheet below."
-            : "Introduce abajo la clave de la hoja.",
+            ? "Enter the key from the recovery pack or older sheet below."
+            : "Introduce abajo la clave del paquete de recuperación o de la hoja antigua.",
         );
       expect(await recovered()).toBeUndefined();
       await fill(

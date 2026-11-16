@@ -563,7 +563,7 @@ describe("waitron-restore restore --from-archive", () => {
     [
       "no pack in it",
       "nothing to see here\n",
-      "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue",
+      "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the recovery pack PDF or archive recovery pack file saved for this venue",
     ],
     [
       "a damaged pack",
@@ -860,7 +860,9 @@ describe("waitron-restore restore --from-archive, the arguments it accepts", () 
     });
     expect(code).toBe(2);
     expect(out).toEqual([
-      expect.stringMatching(/^usage: .*--from-archive <pack-file> --archive-key <name>/),
+      expect.stringMatching(
+        /^usage: .*--from-archive <pack-pdf-or-archive-pack-file> --archive-key <name>/,
+      ),
     ]);
     expect(restore).not.toHaveBeenCalled();
     expect(restoreStream).not.toHaveBeenCalled();

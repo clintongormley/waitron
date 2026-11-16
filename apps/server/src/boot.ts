@@ -468,7 +468,7 @@ import {
   readRecoveryDocumentEvidence,
   type RecoveryDocumentEvidence,
 } from "./recovery-document-evidence.js";
-import { invoiceFontBytes } from "./invoice-font.js";
+import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -4108,7 +4108,7 @@ async function bootServer(
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       backups: () => backupSupervisor.current(),
       documentEvidence,
-      loadFont: async () => invoiceFontBytes,
+      loadFonts: loadRecoveryPackFonts,
       now,
     },
     log,

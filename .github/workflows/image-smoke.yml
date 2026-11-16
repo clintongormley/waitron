@@ -409,6 +409,8 @@ jobs:
           set -euo pipefail
           app=$(docker compose ps -q app)
           docker exec "$app" sh -c 'test -s /app/assets/invoice-noto-sans.ttf \
+            && test -s /app/assets/invoice-noto-sans-mono.ttf \
+            && test -s /app/third-party/noto-sans-mono/OFL.txt \
             && test -s /app/third-party/noto-sans/OFL.txt \
             && test -s /app/third-party/cups-raster/NOTICES.txt \
             && grep -q "SIL OPEN FONT LICENSE Version 1.1" /app/third-party/noto-sans/OFL.txt \

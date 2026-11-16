@@ -1,6 +1,6 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
-import { loadRecoveryFont } from "./recovery-pdf-node.js";
+import { loadRecoveryPackFonts } from "./recovery-pdf-node.js";
 import type { RecoveryDocument } from "./recovery-document.js";
 import { renderSetupRecoveryPack } from "./setup-recovery-pack.js";
 
@@ -48,7 +48,7 @@ it.each(["en", "es"] as const)(
         { ...document, taxpayerName, venueName },
         locale,
         "Europe/Madrid",
-        loadRecoveryFont,
+        loadRecoveryPackFonts,
       ),
     );
     expect(texts).toHaveLength(2);

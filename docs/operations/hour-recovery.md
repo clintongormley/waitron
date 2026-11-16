@@ -1,7 +1,7 @@
-# Recover a box with its recovery sheet
+# Recover a box with its recovery pack or older sheet
 
-Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery sheet whose
-key name matches that copy. A newer sheet may contain a replacement key that an older backup
+Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack or older sheet whose
+key name matches that copy. A newer pack may contain a replacement key that an older backup
 does not accept. Keep the archive password or Cloud login separate from the server key.
 
 ## Switch a running box after an invoice identity conflict

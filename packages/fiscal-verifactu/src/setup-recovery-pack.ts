@@ -7,13 +7,13 @@ export async function renderSetupRecoveryPack(
   input: RecoveryDocument,
   locale: "en" | "es",
   timeZone: string,
-  loadFont: () => Promise<Uint8Array>,
+  loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const document = await parseRecoveryDocument(input);
   return renderRecoveryPack({
     locale,
     timeZone,
-    loadFont,
+    loadFonts,
     cover: {
       legalName: document.taxpayerName,
       taxId: document.scope.taxpayerNif,

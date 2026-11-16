@@ -1531,6 +1531,26 @@ describe("the invoice renderer's bundled font", () => {
   });
 });
 
+describe("the recovery pack's mono font", () => {
+  it("ships matching server/browser bytes with the pinned source and licence", () => {
+    const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans-mono.ttf`);
+    expect(
+      readFileSync(
+        `${ROOT}packages/fiscal-verifactu/src/assets/register-noto-sans-mono.ttf`,
+      ).equals(font),
+    ).toBe(true);
+    expect(read("deploy/third-party/noto-sans-mono/README.md")).toContain(
+      createHash("sha256").update(font).digest("hex"),
+    );
+    expect(read("deploy/third-party/noto-sans-mono/OFL.txt")).toContain(
+      "SIL OPEN FONT LICENSE Version 1.1",
+    );
+    expect(IMAGE_SMOKE).toContain("test -s /app/assets/invoice-noto-sans-mono.ttf");
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/noto-sans-mono/OFL.txt");
+    expect(noticeSection("Recovery pack mono font")).toContain("noto-sans-mono/OFL.txt");
+  });
+});
+
 describe("the invoice raster encoder's CUPS attribution", () => {
   it("ships the adapted raster source notices with the Apache licence", () => {
     const notices = read("deploy/third-party/cups-raster/NOTICES.txt");

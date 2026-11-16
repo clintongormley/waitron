@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { create, type Font } from "fontkit";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDFDocument } from "pdf-lib";
 import type { RecoveryPackFile } from "./pack-file.js";
 import { MAX_PACK_PDF, readRecoveryPackPdf } from "./read-pack-pdf.js";
@@ -11,7 +12,12 @@ import { renderRecoveryPack, type PackPart, type RenderPackInput } from "./rende
 const fontBytes = new Uint8Array(
   readFileSync(new URL("../../../apps/server/src/assets/invoice-noto-sans.ttf", import.meta.url)),
 );
-const loadFont = async () => fontBytes;
+const monoBytes = new Uint8Array(
+  readFileSync(
+    new URL("../../../apps/server/src/assets/invoice-noto-sans-mono.ttf", import.meta.url),
+  ),
+);
+const loadFonts = async () => ({ regular: fontBytes, mono: monoBytes });
 
 const bucketCode = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(124);
 const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(80);
@@ -74,7 +80,7 @@ function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
   return {
     locale: "en",
     timeZone: "Europe/Madrid",
-    loadFont,
+    loadFonts,
     cover: {
       legalName: "Bar Nora S.L.",
       taxId: "B12345678",
@@ -380,7 +386,7 @@ describe("long names", () => {
     const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
     try {
       const items = (await (await (await loading.promise).getPage(page)).getTextContent()).items;
-      const item = items.find((i) => "str" in i && i.str.startsWith(text));
+      const item = items.find((i) => "str" in i && i.str.startsWith(text.split(" ")[0]!));
       return (item as { transform: number[] }).transform[3];
     } finally {
       await loading.destroy();
@@ -785,9 +791,20 @@ describe("the secrets on the pages", () => {
 
   it("draws a character the font lacks as its code point", async () => {
     const pages = await rendered(
-      await renderRecoveryPack(input({ cover: { ...input().cover, venueName: "Bar 🍷" } })),
+      await renderRecoveryPack(
+        input({
+          cover: { ...input().cover, venueName: "Bar 🍷" },
+          parts: [
+            {
+              ...bucket,
+              page: { ...bucket.page!, secret: { label: "Code", text: "→🍷", qr: true } },
+            },
+          ],
+        }),
+      ),
     );
     expect(pages[0]!.text).toContain("Bar [U+1F377]");
+    expect(pages[1]!.text).toContain("→[U+1F377]");
   });
 });
 
@@ -870,6 +887,127 @@ it.each(["en", "es"] as const)(
       expect(codes).toEqual(["https://rescue.venue.example/", "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ"]);
     } finally {
       await loading.destroy();
+    }
+  },
+);
+
+describe("pack typography", () => {
+  it("uses equal-width glyphs for Latin codes and visible spaces", () => {
+    const mono = create(monoBytes as never) as Font;
+    const characters =
+      Array.from({ length: 224 }, (_, i) => String.fromCodePoint(i + 32))
+        .filter((c) => !/[\u007f-\u009f]/u.test(c))
+        .join("") + "\u02fd";
+    for (const character of characters) {
+      expect(mono.hasGlyphForCodePoint(character.codePointAt(0)!), character).toBe(true);
+      expect(mono.glyphForCodePoint(character.codePointAt(0)!).advanceWidth, character).toBe(600);
+    }
+  });
+
+  it.each(["en", "es"] as const)(
+    "embeds mono for codes, addresses, Check and marked rows, with stroked headings (%s)",
+    async (locale) => {
+      const code = "Il10O-aB2";
+      const address = "https://rescue.venue.example/";
+      const name = "2026-11-16-Il10O";
+      const part: PackPart = {
+        ...bucket,
+        check: name,
+        page: {
+          title: "Recovery page",
+          address: { label: "Address", text: address, qr: true },
+          secret: { label: "Code", text: code, qr: true },
+          rows: [{ label: "Key name", value: name, mono: true }],
+          notes: ["Keep this pack."],
+        },
+      };
+      const bytes = await renderRecoveryPack(input({ locale, parts: [part] }));
+      const task = getDocument({
+        data: bytes.slice(),
+        useSystemFonts: false,
+        fontExtraProperties: true,
+      });
+      try {
+        const pdf = await task.promise;
+        expect(pdf.numPages).toBe(2);
+        for (const [pageNumber, values] of [
+          [1, [name]],
+          [2, [address, code, name]],
+        ] as const) {
+          const page = await pdf.getPage(pageNumber);
+          const ops = await page.getOperatorList();
+          const content = await page.getTextContent();
+          for (const value of values) {
+            const item = content.items.find((item) => "str" in item && item.str === value);
+            expect(item, value).toBeDefined();
+            if (item && "fontName" in item)
+              expect(page.commonObjs.get(item.fontName).name).toContain("NotoSansMono");
+          }
+          const modes = ops.fnArray.flatMap((op, i) =>
+            op === OPS.setTextRenderingMode ? [ops.argsArray[i]![0]] : [],
+          );
+          expect(modes).toContain(2);
+          const ink = { bold: [] as string[], plain: [] as string[] };
+          let mode = 0;
+          const saved: number[] = [];
+          ops.fnArray.forEach((op, i) => {
+            if (op === OPS.save) saved.push(mode);
+            if (op === OPS.restore) mode = saved.pop()!;
+            if (op === OPS.setTextRenderingMode) mode = ops.argsArray[i]![0];
+            if (op === OPS.showText) {
+              const glyphs = ops.argsArray[i]![0] as ({ unicode: string } | number)[];
+              ink[mode === 2 ? "bold" : "plain"].push(
+                glyphs.map((glyph) => (typeof glyph === "number" ? "" : glyph.unicode)).join(""),
+              );
+            }
+          });
+          const words = PACK_WORDS[locale];
+          const headings =
+            pageNumber === 1
+              ? [
+                  words.title,
+                  words.whichPage,
+                  words.whatIsIn,
+                  words.whatHappened,
+                  words.partColumn,
+                  words.lastChangedColumn,
+                  words.checkColumn,
+                  words.lockedAway,
+                ]
+              : [part.page!.title];
+          for (const text of headings) expect(squash(ink.bold.join(" "))).toContain(squash(text));
+          const plain = pageNumber === 1 ? [name] : [address, code, name, "Keep this pack."];
+          for (const text of plain) expect(squash(ink.plain.join(" "))).toContain(squash(text));
+        }
+        const pages = await rendered(bytes);
+        expect(pages[0]!.text).not.toContain(
+          locale === "en" ? "shows the same checks" : "muestra las mismas comprobaciones",
+        );
+        expect(await readRecoveryPackPdf(bytes)).toEqual(file);
+      } finally {
+        await task.destroy();
+      }
+    },
+  );
+});
+
+it.each(["en", "es"] as const)(
+  "keeps long mono locations whole on one page per part (%s)",
+  async (locale) => {
+    const endpoint = `https://${"location-".repeat(10)}example.net:9000`;
+    const bucketName = "venue-" + "b".repeat(57);
+    const prefix = "year/" + "folder-".repeat(24);
+    const values = [`${endpoint} · ${bucketName}`, `${bucketName} / ${prefix}`];
+    const parts: PackPart[] = values.map((value) => ({
+      ...bucket,
+      page: { ...bucket.page!, rows: [{ label: "Location", value, mono: true }] },
+    }));
+    const pages = await rendered(await renderRecoveryPack(input({ locale, parts })));
+    expect(pages).toHaveLength(3);
+    for (const [i, value] of values.entries()) {
+      expect(squash(pages[i + 1]!.text)).toContain(squash(value));
+      expect(pages[i + 1]!.text).not.toContain("…");
+      expect(squash(pages[i + 1]!.text)).toContain(bucketCode);
     }
   },
 );
