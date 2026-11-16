@@ -3212,11 +3212,11 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
 ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1197, A1198, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
+landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261, A1265 and A1267. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1349 and A1358–A1360. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval

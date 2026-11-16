@@ -702,7 +702,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1349 and A1358–A1360. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -712,15 +712,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Table screen panels that do not fit** (bundle of 3, size S). Holds A1359, A1265, A1290. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 
-- **A1360. The demo's Counter device says "This device isn't set up — ask to join this venue" under
-  the Demo banner (seen in A803 slice 4c's LOOK).** On every screen after sign-in. The words are
-  main's (`apps/till/src/i18n/codes.ts`); why it shows was not looked into.
-
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
-
-- **A1237. The English till's "dishes not served" window showed the reason «No servido» (seen in
-  A803 slice 2's LOOK, on the demo venue).** Not traced: it may be the demo venue's own reason
-  name rather than a till string. Believed to predate the slice; not run on main.
 
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
   Owner question 2, #2360).** Correct invoice (A802) does not issue a full invoice; offer one
