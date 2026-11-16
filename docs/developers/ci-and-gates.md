@@ -1916,8 +1916,8 @@ root `scripts/` is scanned.
 
 `lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are enabled
 on workflows that have not been cancelled, except a `server_probe` dispatch, so a regression in
-a path the gated test jobs skip is caught there only as far as the root suites exercise it. On a pull request or ordinary `main`
-push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
+a path the gated test jobs skip is caught there only as far as the root suites exercise it.
+On a pull request or ordinary `main` push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
 (see "The lint job reuses earlier results except on a full run").
 
 Main uses the newest completed successful main ancestor to scope quick checks. A later docs

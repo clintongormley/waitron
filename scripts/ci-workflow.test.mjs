@@ -4071,12 +4071,15 @@ describe("the sharded jobs", () => {
 });
 
 describe("the lint and root-guards jobs", () => {
-  it.each(["lint", "root-guards"])("does not start %s when workflow and changes are cancelled", (id) => {
-    const context = routingContext();
-    context.cancelled = () => true;
-    context.needs.changes.result = "cancelled";
-    expect(jobCondition(job(id).body, context)).toBe(false);
-  });
+  it.each(["lint", "root-guards"])(
+    "does not start %s when workflow and changes are cancelled",
+    (id) => {
+      const context = routingContext();
+      context.cancelled = () => true;
+      context.needs.changes.result = "cancelled";
+      expect(jobCondition(job(id).body, context)).toBe(false);
+    },
+  );
 
   // The repo-level project runs in a job of its own so its time runs beside lint's rather than
   // inside it.
