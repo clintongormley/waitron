@@ -854,7 +854,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
 
-- **Joined-table writers keep their rows right** (bundle of 2, size M, waits for another entry). Holds A592, A594. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
+- **Joined-table writers keep their rows right** (bundle of 1, size M, waits for another entry). Holds A594. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 
 - **One rule for what holds a table back at a reset** (bundle of 3, 1 important, size M, waits for another entry). Holds A565, A566, A860. [Detail](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 

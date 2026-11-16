@@ -1,7 +1,14 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { partyTables, tableMerges, mergeOf, LEFT_MERGE, todaySet, diningTables } from "@waitron/db";
 import type { Transaction, MergeMember } from "@waitron/db";
-import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
+import {
+  AppError,
+  compareLabels,
+  freeSide,
+  touchingPlace,
+  type JoinPlace,
+  type JoinSide,
+} from "@waitron/shared";
 import {
   refuseNeedsMoving,
   refuseUnfree,
@@ -70,18 +77,22 @@ export async function leaveMergesRestoring(
   await leaveMerges(tx, tableIds);
 }
 
-/** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. */
+/**
+ * Every member of `tableId`'s merge by label number order, then table id, `tableId` included, or []
+ * when it is in none. The seat and join writers add members in this order, and a party's tables are
+ * read by join time, then writing order.
+ */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
   const own = tx
     .select({ joinId: diningTables.mergeId })
     .from(diningTables)
     .where(eq(diningTables.id, tableId));
   const members = await tx
-    .select({ tableId: diningTables.id })
+    .select({ tableId: diningTables.id, label: diningTables.label })
     .from(diningTables)
     .where(inArray(diningTables.mergeId, own))
     .orderBy(asc(diningTables.id));
-  return members.map((m) => m.tableId);
+  return members.sort((a, b) => compareLabels(a.label, b.label)).map((m) => m.tableId);
 }
 
 /**
@@ -95,8 +106,10 @@ export async function seatMergeMembers(
   tableId: string,
 ): Promise<void> {
   const others = (await mergeMembers(tx, tableId)).filter((id) => id !== tableId);
-  await refuseUnfree(tx, others);
-  await refuseNeedsMoving(tx, others);
+  // A refusal names the first member by table id, not by label.
+  const byId = [...others].sort();
+  await refuseUnfree(tx, byId);
+  await refuseNeedsMoving(tx, byId);
   for (const other of others) {
     await tx.insert(partyTables).values({ partyId, tableId: other });
   }
