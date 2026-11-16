@@ -2344,7 +2344,7 @@ describe("the Calendar's module views", () => {
     vi.setSystemTime(new Date("2027-03-05T12:00:00Z"));
     history.replaceState(null, "", "/manage/opening-hours/view/staffing");
     const el = await mountCalendar(undefined, true);
-    await settle(el);
+    await el.updateComplete;
     const content = el.shadowRoot!.querySelector("[data-test=stub-staffing]");
     expect(content).not.toBeNull();
     expect(content!.textContent).toContain("2027-03");
@@ -2365,22 +2365,23 @@ describe("the Calendar's module views", () => {
   it("waits for a successful hours read before drawing its business month", async () => {
     vi.setSystemTime(new Date("2027-04-01T01:30:00Z"));
     history.replaceState(null, "", "/manage/opening-hours/view/staffing");
-    const ready = Promise.withResolvers<OpeningHoursModel>();
-    const read = vi
-      .spyOn(OpeningHoursApi.prototype, "readOpeningHours")
-      .mockReturnValue(ready.promise);
+    let release!: (value: OpeningHoursModel) => void;
+    const pending = new Promise<OpeningHoursModel>((resolve) => {
+      release = resolve;
+    });
+    const read = vi.spyOn(OpeningHoursApi.prototype, "readOpeningHours").mockReturnValue(pending);
     try {
       const el = await mountCalendar();
-      await settle(el);
+      await el.updateComplete;
       const before = el.shadowRoot!.querySelector("[data-test=stub-staffing]")?.textContent ?? null;
-      ready.resolve(model());
+      release(model());
       await expect
         .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]")?.textContent)
         .toContain("2027-03");
       const after = el.shadowRoot!.querySelector("[data-test=stub-staffing]")!.textContent;
       expect([before, after]).toEqual([null, "2027-03 {}"]);
     } finally {
-      ready.resolve(model());
+      release(model());
       read.mockRestore();
     }
   });
