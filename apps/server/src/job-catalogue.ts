@@ -41,7 +41,10 @@ export const JOB_CATALOGUE = {
   },
   stream: {
     kind: "service",
-    stepdown: { keepRunning: "stops last, after anything that may still write venue.db" },
+    stepdown: {
+      keepRunning:
+        "stops after venue.db writers; Cloud snapshots read that database and are awaited afterwards",
+    },
   },
   "cloud.connection": stop,
   housekeeping: stop,

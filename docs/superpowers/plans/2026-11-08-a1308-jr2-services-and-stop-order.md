@@ -1,5 +1,9 @@
 # A1308 jr2 — services on the runner, the stop order, and the box noticing a role change — Implementation Plan
 
+_2026-11-16: [The bucket stop-order change](2026-11-16-bucket-pointer-and-stop.md) moves
+only the Cloud snapshot wait after the stream stop. The stream still stops after venue-database
+writers; earlier slow waits can still consume its shutdown budget._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Owner lands:** no (rules §6: nothing fiscal, no AEAT sending).

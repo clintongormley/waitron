@@ -27,7 +27,10 @@ describe("job catalogue", () => {
   it("the bucket copy is a service that keeps running until the close", () => {
     expect(JOB_CATALOGUE.stream).toEqual({
       kind: "service",
-      stepdown: { keepRunning: "stops last, after anything that may still write venue.db" },
+      stepdown: {
+        keepRunning:
+          "stops after venue.db writers; Cloud snapshots read that database and are awaited afterwards",
+      },
     });
   });
 });

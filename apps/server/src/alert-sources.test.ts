@@ -531,21 +531,24 @@ describe("backupAlertSource and the bucket copy", () => {
     ).toEqual([["backup.stream_settings_unusable", since]]);
   });
 
-  it("raises backup.stream_stopped, naming the reason, for a refusal it has no wording for", async () => {
-    const alerts = await src(configured, none, () =>
-      stream({ state: "refused", reason: "something_new", stateSince: "2026-09-15T11:40:00.000Z" }),
-    ).read(ctx);
-    expect(alerts).toEqual([
-      {
-        key: "backup.stream_stopped",
-        code: "backup.stream_stopped",
-        params: { reason: "something_new" },
-        severity: "error",
-        since: "2026-09-15T11:40:00.000Z",
-        screen: "backup",
-      },
-    ]);
-  });
+  it.each(["something_new", "pointer_missing"])(
+    "raises backup.stream_stopped for %s",
+    async (reason) => {
+      const alerts = await src(configured, none, () =>
+        stream({ state: "refused", reason, stateSince: "2026-09-15T11:40:00.000Z" }),
+      ).read(ctx);
+      expect(alerts).toEqual([
+        {
+          key: "backup.stream_stopped",
+          code: "backup.stream_stopped",
+          params: { reason },
+          severity: "error",
+          since: "2026-09-15T11:40:00.000Z",
+          screen: "backup",
+        },
+      ]);
+    },
+  );
 
   for (const reason of ["supervisor_failed", "litestream_unavailable"]) {
     it(`raises backup.stream_stopped for a copy that stopped itself (${reason}), which is not current`, async () => {

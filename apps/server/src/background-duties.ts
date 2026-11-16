@@ -122,11 +122,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       reason: LOOP_WAIT,
     },
     {
-      name: "cloudSnapshots",
-      close: () => h.cloudSnapshots,
-      reason: LOOP_WAIT,
-    },
-    {
       name: "unsubscribeFromChanges",
       close: h.unsubscribeFromChanges,
       reason: "only stops hearing local changes",
@@ -192,7 +187,13 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "jobRunnerServices",
       close: () => h.jobRunner.stopServices(),
-      reason: "stops last, after anything that may still write venue.db",
+      reason:
+        "stops after venue.db writers; Cloud snapshots read that database and are awaited afterwards",
+    },
+    {
+      name: "cloudSnapshots",
+      close: () => h.cloudSnapshots,
+      reason: LOOP_WAIT,
     },
   ];
   return {
