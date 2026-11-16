@@ -6353,12 +6353,10 @@ describe("A884 deleted lists", () => {
     await inTx((tx) => deleteExtraList(tx, v.extrasListId));
     for (const republish of [false, true]) {
       if (republish) await inTx((tx) => republishMenus(tx));
-      await saveWhole(
-        v,
-        s.tabId,
-        [{ workingOrderLineId: dish!.id, menuItemId: v.offer("steak"), quantity: "1", extras }],
-        MIA,
-      );
+      const kept = [
+        { workingOrderLineId: dish!.id, menuItemId: v.offer("steak"), quantity: "1", extras },
+      ];
+      await saveWhole(v, s.tabId, kept, MIA);
       expect(await rows()).toEqual(before);
       expect(before.map((row) => [row.productId, row.lineTotal])).toEqual([
         [v.productId.steak, 2200],
