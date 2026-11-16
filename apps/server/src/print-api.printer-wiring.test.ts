@@ -84,9 +84,11 @@ beforeAll(async () => {
       role: "staff",
     });
     const managerSession = await startManagementSession(tx, {
+      method: "password",
       personId: mgr!.id,
     });
     const staffSession = await startManagementSession(tx, {
+      method: "password",
       personId: stf!.id,
     });
     return { managerSid: managerSession.token, staffSid: staffSession.token };
@@ -1214,7 +1216,10 @@ describe("printer delete routes (hardware.manage)", () => {
         pinHash: hashPin("1234"),
         role: "manager",
       });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       return { personId: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
     });
     const read = await send(app, "GET", `/management-api/printers/${p.printerId}/delete-impact`, {

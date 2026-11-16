@@ -49,7 +49,7 @@ it.each(operations)(
     if (operation !== "passkey") await suite.db.delete(webauthnCredentials);
     const actorId = operation === "passkey" || operation === "google" ? target!.id : other!.id;
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: actorId }),
+      startManagementSession(tx, { method: "password", personId: actorId }),
     );
     await suite.db.update(dashboardSessions).set({ provedAt: new Date().toISOString() });
     const invoke = () =>

@@ -31,7 +31,7 @@ const suite = useVenueDb({
 async function person(role: "manager" | "staff") {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: role, pinHash: hashPin("1234"), role });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     await setFreshManagementSignIn(tx, session.token);
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });

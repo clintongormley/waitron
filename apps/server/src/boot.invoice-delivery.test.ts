@@ -886,7 +886,7 @@ describe("queued account mail primary admission at real boot", () => {
         role: "admin",
       });
       const session = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId }),
+        startManagementSession(tx, { method: "password", personId }),
       );
       if (role === "primary")
         await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));

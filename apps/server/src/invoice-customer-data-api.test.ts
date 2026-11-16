@@ -103,7 +103,10 @@ async function ownAdmin() {
       displayName: `Case Admin ${ownAdmins}`,
       role: "admin",
     });
-    const { token } = await startManagementSession(tx, { personId: person!.id });
+    const { token } = await startManagementSession(tx, {
+      method: "password",
+      personId: person!.id,
+    });
     return { id: person!.id, token, cookie: `${MANAGEMENT_COOKIE}=${token}` };
   });
 }

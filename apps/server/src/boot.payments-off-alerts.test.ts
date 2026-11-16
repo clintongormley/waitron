@@ -68,7 +68,7 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
       role: "admin",
     });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     const adminCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     const [port] = await freePorts(1);

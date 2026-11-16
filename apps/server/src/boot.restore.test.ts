@@ -199,7 +199,7 @@ describe("startServer, against a migrated venue directory", () => {
       role: "admin",
     });
     const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-sealed-failed-"));
@@ -506,7 +506,7 @@ describe("startServer, against a migrated venue directory", () => {
       role: "admin",
     });
     const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-failed-"));
@@ -642,7 +642,7 @@ describe("startServer, against a migrated venue directory", () => {
             role: "admin",
           });
           const session = await withTransaction(db, (tx) =>
-            startManagementSession(tx, { personId: admin!.id }),
+            startManagementSession(tx, { method: "password", personId: admin!.id }),
           );
           await venue.store.close();
           if (drop) {

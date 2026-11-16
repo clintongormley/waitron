@@ -72,8 +72,8 @@ beforeEach(async () => {
       role: "staff",
     });
     return {
-      manager: (await startManagementSession(tx, { personId: mgr!.id })).token,
-      staff: (await startManagementSession(tx, { personId: stf!.id })).token,
+      manager: (await startManagementSession(tx, { method: "password", personId: mgr!.id })).token,
+      staff: (await startManagementSession(tx, { method: "password", personId: stf!.id })).token,
     };
   });
   managerCookie = `${MANAGEMENT_COOKIE}=${sessions.manager}`;

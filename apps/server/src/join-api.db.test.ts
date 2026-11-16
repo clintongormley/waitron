@@ -1061,7 +1061,7 @@ describe("device pairing: check, claim, approve", () => {
       .from(persons)
       .where(eq(persons.displayName, "The Manager"));
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: mgr!.id }),
+      startManagementSession(tx, { method: "password", personId: mgr!.id }),
     );
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   }

@@ -41,7 +41,7 @@ let supervisor: Person;
 async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }

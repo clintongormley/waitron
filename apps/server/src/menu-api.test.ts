@@ -617,9 +617,11 @@ const suite = useVenueDb({
         role: "staff",
       });
       const managerSession = await startManagementSession(tx, {
+        method: "password",
         personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
+        method: "password",
         personId: stf!.id,
       });
       managerPersonId = mgr!.id;
@@ -6675,7 +6677,10 @@ describe("menu settings routes", () => {
         .values({ name: "Menu only", nameFolded: "menu only", permissions: ["menu.manage"] })
         .returning({ id: roles.id });
       await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
     const app = mountWithVenueDefaults();

@@ -76,7 +76,7 @@ beforeEach(async () => {
   cookie = await withTransaction(
     suite.db,
     async (tx) =>
-      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: marthaId })).token}`,
+      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId: marthaId })).token}`,
   );
 });
 

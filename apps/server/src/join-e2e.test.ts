@@ -1280,7 +1280,7 @@ describe("a deleted device comes back as the same device", () => {
         .from(persons)
         .where(eq(persons.displayName, "The Manager"));
       const session = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: mgr!.id }),
+        startManagementSession(tx, { method: "password", personId: mgr!.id }),
       );
       const other = { ...venue, managerCookie: `${MANAGEMENT_COOKIE}=${session.token}` };
       const otherHold = await openWindow(app, other);

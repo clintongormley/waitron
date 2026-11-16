@@ -79,7 +79,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: venue.adminId }),
+      startManagementSession(tx, { method: "password", personId: venue.adminId }),
     );
     managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   },

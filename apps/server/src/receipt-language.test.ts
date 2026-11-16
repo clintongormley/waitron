@@ -2340,7 +2340,8 @@ describe("a sale files in the receipt language saved on its order", () => {
             cancelUrl: "https://x/c",
           },
         });
-        return (await startManagementSession(tx, { personId: venue.adminId })).token;
+        return (await startManagementSession(tx, { method: "password", personId: venue.adminId }))
+          .token;
       });
       const seat = createStripeCardProvider((() => {
         throw new Error("the seat's own Stripe SDK is never built");

@@ -288,7 +288,7 @@ async function venue() {
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });
-    const session = await startManagementSession(tx, { personId: manager!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: manager!.id });
     const zone = await createZone(tx, { name: "Bar" });
     return {
       managerCookie: `${MANAGEMENT_COOKIE}=${session.token}`,

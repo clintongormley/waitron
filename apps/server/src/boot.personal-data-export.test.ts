@@ -39,7 +39,7 @@ describe("the personal-data downloads in a real start", () => {
     beforeServerStarts();
     const venue = await createClockVenue(suite.db, () => new Date(), modules);
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: venue.personId }),
+      startManagementSession(tx, { method: "password", personId: venue.personId }),
     );
     const clockedIn = await venue.app.request("/api/clock/in", {
       method: "POST",
@@ -53,9 +53,15 @@ describe("the personal-data downloads in a real start", () => {
       { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
     ]);
     const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => {
-      const adminSession = await startManagementSession(tx, { personId: admin!.id });
+      const adminSession = await startManagementSession(tx, {
+        method: "password",
+        personId: admin!.id,
+      });
       await setFreshManagementSignIn(tx, adminSession.token);
-      return [adminSession, await startManagementSession(tx, { personId: manager!.id })];
+      return [
+        adminSession,
+        await startManagementSession(tx, { method: "password", personId: manager!.id }),
+      ];
     });
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));

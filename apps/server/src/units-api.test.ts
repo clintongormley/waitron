@@ -35,7 +35,7 @@ beforeEach(async () => {
       pinHash: fixturePinHash("1234"),
       role: "manager",
     });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   });
 });

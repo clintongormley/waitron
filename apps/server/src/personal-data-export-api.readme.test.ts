@@ -88,7 +88,8 @@ beforeEach(async () => {
   marthaId = martha!.id;
   marthaToken = await withTransaction(
     suite.db,
-    async (tx) => (await startManagementSession(tx, { personId: marthaId })).token,
+    async (tx) =>
+      (await startManagementSession(tx, { method: "password", personId: marthaId })).token,
   );
 });
 

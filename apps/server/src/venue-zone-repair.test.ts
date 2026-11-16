@@ -44,8 +44,11 @@ beforeEach(async () => {
   scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
-  token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
-    .token;
+  token = (
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId: actor }),
+    )
+  ).token;
 });
 const confirm = (input: unknown = body) =>
   withTransaction(suite.db, (tx) => confirmVenueZone(tx, scope, token, input, AT));

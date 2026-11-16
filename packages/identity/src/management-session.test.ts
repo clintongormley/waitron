@@ -52,7 +52,7 @@ describe("management session lifecycle", () => {
 
   it("a new login has no fresh proof", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const [row] = (
       await suite.db.execute<Record<string, unknown>>(
         sql`select * from dashboard_sessions where token_hash = ${hashSessionToken(session.token)}`,
@@ -63,7 +63,7 @@ describe("management session lifecycle", () => {
 
   it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     await run((tx) => tx.execute(agedTo(minutesAgo(10), session.token)));
     const before = await run((tx) => resolveManagementSession(tx, session.token, { touch: false }));
     const passive = await withPassiveManagementRead(() =>
@@ -77,7 +77,7 @@ describe("management session lifecycle", () => {
   });
   it("an ordinary read stores the new last-seen time on the session's own row", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const aged = minutesAgo(10);
     await run((tx) => tx.execute(agedTo(aged, session.token)));
     await run((tx) => resolveManagementSession(tx, session.token));
@@ -91,7 +91,7 @@ describe("management session lifecycle", () => {
 
   it("starts and resolves a session, returning the person's authority and locale", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.token));
     const [row] = (
       await suite.db.execute<{ id: string }>(
@@ -122,7 +122,7 @@ describe("management session lifecycle", () => {
   it("returns the person's set locale, not just the null default", async () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.token));
     expect(resolved.locale).toBe("es-ES");
   });
@@ -136,7 +136,7 @@ describe("management session lifecycle", () => {
 
   it("throws management_session.required after endManagementSession", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     expect(await run((tx) => endManagementSession(tx, session.token))).toBe(true);
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.required");
@@ -144,7 +144,7 @@ describe("management session lifecycle", () => {
 
   it("refuses deleting the person behind a dashboard session", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const error = await captureError(() =>
       run((tx) => tx.execute(sql`delete from persons where id = ${personId}`)),
     );
@@ -156,7 +156,7 @@ describe("management session lifecycle", () => {
 
   it("throws management_session.expired past the idle timeout", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.token)));
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.expired");
@@ -175,7 +175,9 @@ describe("management session lifecycle", () => {
 
     it("throws management_session.expired once last-seen is more than the idle timeout ahead", async () => {
       const personId = await seedPerson(suite.db, "manager");
-      const session = await run((tx) => startManagementSession(tx, { personId }));
+      const session = await run((tx) =>
+        startManagementSession(tx, { method: "password", personId }),
+      );
       await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS + 1), session.token)));
       const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
       expect(code).toBe("management_session.expired");
@@ -183,7 +185,9 @@ describe("management session lifecycle", () => {
 
     it("accepts a last-seen exactly the idle timeout ahead", async () => {
       const personId = await seedPerson(suite.db, "manager");
-      const session = await run((tx) => startManagementSession(tx, { personId }));
+      const session = await run((tx) =>
+        startManagementSession(tx, { method: "password", personId }),
+      );
       await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS), session.token)));
       const resolved = await run((tx) => resolveManagementSession(tx, session.token));
       expect(resolved.personId).toBe(personId);
@@ -191,7 +195,9 @@ describe("management session lifecycle", () => {
 
     it("accepts a last-seen ten minutes ahead, and the touch stamps it back at the clock", async () => {
       const personId = await seedPerson(suite.db, "manager");
-      const session = await run((tx) => startManagementSession(tx, { personId }));
+      const session = await run((tx) =>
+        startManagementSession(tx, { method: "password", personId }),
+      );
       await run((tx) => tx.execute(agedTo(aheadBy(10 * 60_000), session.token)));
       const before = Date.now();
       await run((tx) => resolveManagementSession(tx, session.token));
@@ -208,7 +214,7 @@ describe("management session lifecycle", () => {
 
   it("throws person.suspended when the person is suspended mid-session", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );
@@ -220,7 +226,7 @@ describe("management session lifecycle", () => {
     // Refused as "required" (sign in again), not "suspended": only an ACTIVE person holds a
     // management session, and nothing has been withdrawn from a pending one.
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     await run((tx) =>
       tx.execute(sql`update persons set status = 'pending' where id = ${personId}`),
     );
@@ -232,7 +238,7 @@ describe("management session lifecycle", () => {
 describe("what the table holds, as anyone reading a copy of the database sees it", () => {
   it("stores the token's hash and never the token", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const rows = await suite.db.execute<{ id: string; token_hash: string }>(
       sql`select id, token_hash from dashboard_sessions where person_id = ${personId}`,
     );
@@ -244,7 +250,7 @@ describe("what the table holds, as anyone reading a copy of the database sees it
 
   it("refuses the row's own id and its stored hash as a token, and accepts the token", async () => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const [row] = (
       await suite.db.execute<{ id: string; token_hash: string }>(
         sql`select id, token_hash from dashboard_sessions where person_id = ${personId}`,
@@ -266,7 +272,7 @@ it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as con
   "checks a management session without a write or activity stamp: %s",
   async (state) => {
     const personId = await seedPerson(suite.db, "manager");
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     const at = minutesAgo(state === "expired" ? 31 : 10);
     await run((tx) => tx.execute(agedTo(at, session.token)));
     if (state === "suspended" || state === "pending")
@@ -305,7 +311,7 @@ async function sessionHolding(permissions: string[]): Promise<{ token: string; p
       .values({ name, nameFolded: name.toLowerCase(), permissions })
       .returning({ id: roles.id });
     await tx.insert(personRoles).values({ personId, roleId: role!.id });
-    const { token } = await startManagementSession(tx, { personId });
+    const { token } = await startManagementSession(tx, { method: "password", personId });
     return { token, personId };
   });
 }
@@ -396,7 +402,9 @@ describe("a session holding invoice.inspect alone", () => {
 
   it("leaves an administrator resolving as before", async () => {
     const personId = await seedPerson(suite.db, "admin");
-    const { token } = await run((tx) => startManagementSession(tx, { personId }));
+    const { token } = await run((tx) =>
+      startManagementSession(tx, { method: "password", personId }),
+    );
     expect((await run((tx) => resolveManagementSession(tx, token))).personId).toBe(personId);
   });
 });

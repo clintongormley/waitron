@@ -73,7 +73,7 @@ beforeEach(async () => {
   aeat = createFakeAeat({ serverNow: T0, tiempoEsperaInicial: 5 });
   personId = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
-    token = (await startManagementSession(tx, { personId: person!.id })).token;
+    token = (await startManagementSession(tx, { method: "password", personId: person!.id })).token;
     await setFreshManagementSignIn(tx, token);
     return person!.id;
   });
@@ -472,7 +472,7 @@ it("refuses a second administrator's reuse of the first administrator's action k
   expect((await send()).status).toBe(200);
   token = await withTransaction(suite.db, async (tx) => {
     const [other] = await seedPersons(tx, { displayName: "Second administrator", role: "admin" });
-    const session = await startManagementSession(tx, { personId: other!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: other!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });

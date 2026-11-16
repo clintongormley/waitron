@@ -129,7 +129,7 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
 
 async function cookieFor(personId: string, fresh = true): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    const session = await startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { method: "password", personId });
     if (fresh) await setFreshManagementSignIn(tx, session.token);
     return session;
   });

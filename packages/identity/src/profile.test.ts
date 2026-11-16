@@ -44,7 +44,9 @@ async function fixture() {
   await seedTaxpayer(suite.db);
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
-  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   await suite.db.run(
     sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
   );
@@ -356,7 +358,9 @@ describe("your profile", () => {
 
   it("changes the password and ends other sessions while preserving this one", async () => {
     const f = await fixture();
-    const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, f));
+    const other = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: f.personId, method: "password" }),
+    );
     await expect(
       withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, {

@@ -60,7 +60,7 @@ it("the actual trading listener makes a recovery pack from the first-setup sourc
       pinHash: "unused",
       passwordHash: "unused",
     });
-    const session = await startManagementSession(tx, { personId: admin!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: admin!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });

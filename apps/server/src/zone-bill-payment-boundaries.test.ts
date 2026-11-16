@@ -416,7 +416,7 @@ describe("bill payment admission and issue clocks", () => {
       const id = await v.bill();
       const p = await v.pending(id);
       const session = await withTransaction(v.db, (tx) =>
-        startManagementSession(tx, { personId: v.adminId }),
+        startManagementSession(tx, { method: "password", personId: v.adminId }),
       );
       const app = new Hono();
       mountPaymentsApi(

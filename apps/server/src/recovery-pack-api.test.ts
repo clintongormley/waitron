@@ -36,7 +36,10 @@ beforeEach(async () => {
         pinHash: "unused",
         passwordHash: "unused",
       });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       await setFreshManagementSignIn(tx, session.token);
       if (role === "manager") managerToken = session.token;
       else staffToken = session.token;

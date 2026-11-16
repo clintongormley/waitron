@@ -241,7 +241,7 @@ describe("a card sale in flight when the box steps down", () => {
       }),
     );
     const adminSession = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: venue.adminId }),
+      startManagementSession(tx, { method: "password", personId: venue.adminId }),
     );
     const adminCookie = `${MANAGEMENT_COOKIE}=${adminSession.token}`;
     const binding: HandoverBinding = {

@@ -56,7 +56,7 @@ export async function saveThemeThroughRoute(
       displayName: `manager ${randomUUID()}`,
       role: "manager",
     });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });
   const app = new Hono();

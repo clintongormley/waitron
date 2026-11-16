@@ -36,7 +36,9 @@ beforeEach(async () => {
   ]);
   personId = workers[0]!.id;
   otherId = workers[1]!.id;
-  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   await suite.db.insert(convenioConfig).values({});
   app = new Hono();
@@ -158,7 +160,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
   it("a permission refusal commits no invalidation or shift edit", async () => {
     const id = await add(await version());
     const staff = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: otherId }),
+      startManagementSession(tx, { method: "password", personId: otherId }),
     );
     cookie = `${MANAGEMENT_COOKIE}=${staff.token}`;
     await cleanQueue();

@@ -112,7 +112,7 @@ describe("account mail owner", () => {
       sql`update persons set password_hash=${hashPassword("correct horse")} where id=${personId}`,
     );
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId }),
+      startManagementSession(tx, { method: "password", personId }),
     );
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };

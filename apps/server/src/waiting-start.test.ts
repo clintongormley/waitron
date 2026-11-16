@@ -1191,7 +1191,7 @@ describe("the waiting start", () => {
     /** Enrols an authenticator for `personId` and returns its recovery codes. */
     const enrolWithCodes = (personId: string) =>
       withTransaction(suite.db, async (tx) => {
-        const { token } = await startManagementSession(tx, { personId });
+        const { token } = await startManagementSession(tx, { method: "password", personId });
         await setFreshManagementSignIn(tx, token);
         const { enrollmentId, secret } = await beginOwnTotpEnrollment(tx, {
           managementSessionId: token,

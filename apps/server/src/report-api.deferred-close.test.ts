@@ -28,7 +28,7 @@ useVenueDb({
 
 async function get(path: string) {
   const { token } = await withTransaction(t.venue.db, (tx) =>
-    startManagementSession(tx, { personId: t.venue.adminId }),
+    startManagementSession(tx, { method: "password", personId: t.venue.adminId }),
   );
   const app = new Hono();
   mountReportApi(

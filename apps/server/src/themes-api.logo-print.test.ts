@@ -75,7 +75,10 @@ beforeEach(async () => {
     async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor" | "staff") => {
         const [person] = await seedPersons(tx, { displayName: role, role });
-        const session = await startManagementSession(tx, { personId: person!.id });
+        const session = await startManagementSession(tx, {
+          method: "password",
+          personId: person!.id,
+        });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
       };
       const cookies = [

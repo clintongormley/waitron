@@ -356,7 +356,10 @@ for (const spain of [false, true]) {
         if (spain) {
           managementCookie = await withTransaction(suite.db, async (tx) => {
             const admin = (await listAdminHolders(tx))[0]!;
-            const session = await startManagementSession(tx, { personId: admin.id });
+            const session = await startManagementSession(tx, {
+              method: "password",
+              personId: admin.id,
+            });
             return `waitron_management_session=${session.token}`;
           });
           await suite.db.insert(convenioConfig).values({

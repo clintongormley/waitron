@@ -81,7 +81,7 @@ it.each([
         role: "admin",
       });
       const session = await withTransaction(store.venue, (tx) =>
-        startManagementSession(tx, { personId: person!.id }),
+        startManagementSession(tx, { method: "password", personId: person!.id }),
       );
       const manager = `${MANAGEMENT_COOKIE}=${session.token}`;
       const app = new Hono();

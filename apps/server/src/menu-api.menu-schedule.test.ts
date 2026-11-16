@@ -56,8 +56,14 @@ const suite = useVenueDb({
         role: "staff",
       });
       managerId = manager!.id;
-      const managerSession = await startManagementSession(tx, { personId: manager!.id });
-      const staffSession = await startManagementSession(tx, { personId: staff!.id });
+      const managerSession = await startManagementSession(tx, {
+        method: "password",
+        personId: manager!.id,
+      });
+      const staffSession = await startManagementSession(tx, {
+        method: "password",
+        personId: staff!.id,
+      });
       return { managerSid: managerSession.token, staffSid: staffSession.token };
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
@@ -206,7 +212,7 @@ async function reschedule(
 /** Signs the manager in again at the faked clock's time, past the first session's idle limit. */
 async function signInAgain(): Promise<void> {
   const { token } = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: managerId }),
+    startManagementSession(tx, { method: "password", personId: managerId }),
   );
   managerCookie = `${MANAGEMENT_COOKIE}=${token}`;
 }

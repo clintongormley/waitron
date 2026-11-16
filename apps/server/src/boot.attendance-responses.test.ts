@@ -63,7 +63,7 @@ describe("attendance response boot with permanent workforce", () => {
           .from(persons)
           .where(eq(persons.email, "owner@example.test"));
         const management = await withTransaction(suite.db, (tx) =>
-          startManagementSession(tx, { personId: manager!.id }),
+          startManagementSession(tx, { method: "password", personId: manager!.id }),
         );
         const managerCookie = `${MANAGEMENT_COOKIE}=${management.token}`;
         const oldSeenAt = new Date(Date.now() - 60_000).toISOString();

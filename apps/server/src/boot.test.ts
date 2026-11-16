@@ -374,7 +374,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
       .returning();
     const departmentId = department!.id;
     const policy = { printTradingName: true } as const;
-    const session = await startManagementSession(db, { personId });
+    const session = await startManagementSession(db, { method: "password", personId });
     return { personId, departmentId, policy, session };
   });
   try {
@@ -2263,7 +2263,7 @@ describe("startServer, against a migrated venue directory", () => {
       role: "manager",
     });
     const session = await withTransaction(sharedDb, (tx) =>
-      startManagementSession(tx, { personId: person!.id }),
+      startManagementSession(tx, { method: "password", personId: person!.id }),
     );
     const port = await freePort();
     const server = await startServer(
@@ -3482,7 +3482,7 @@ describe("the dev-device header reaches the live device routes only under devMod
       role: "staff",
     });
     const session = await withTransaction(sharedDb, (tx) =>
-      startManagementSession(tx, { personId: person!.id }),
+      startManagementSession(tx, { method: "password", personId: person!.id }),
     );
     const port = await freePort();
     const server = await startServer(
@@ -3577,7 +3577,7 @@ describe("startServer — what a trading boot wires behind its management routes
       role: "admin",
     });
     const session = await withTransaction(db, async (tx) => {
-      const session = await startManagementSession(tx, { personId: admin!.id });
+      const session = await startManagementSession(tx, { method: "password", personId: admin!.id });
       await setFreshManagementSignIn(tx, session.token);
       return session;
     });

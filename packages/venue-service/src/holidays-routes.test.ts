@@ -88,7 +88,7 @@ async function fixture(address: Address = {}): Promise<Fixture> {
         pinHash: hashPin("1234"),
         role,
       });
-      return (await startManagementSession(tx, { personId: row!.id })).token;
+      return (await startManagementSession(tx, { method: "password", personId: row!.id })).token;
     };
     return {
       manager: await person("manager"),

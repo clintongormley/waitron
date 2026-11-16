@@ -45,7 +45,10 @@ const suite = useVenueDb({
           pinHash: hashPin("1234"),
           role,
         });
-        const session = await startManagementSession(tx, { personId: person!.id });
+        const session = await startManagementSession(tx, {
+          method: "password",
+          personId: person!.id,
+        });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
       };
       await seedVenue(tx, {

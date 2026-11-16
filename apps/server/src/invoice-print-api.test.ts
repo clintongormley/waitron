@@ -651,7 +651,7 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
       pinHash: fixturePinHash("1234"),
       role: "manager",
     });
-    return startManagementSession(tx, { personId: person!.id });
+    return startManagementSession(tx, { method: "password", personId: person!.id });
   });
   return async (path: string, body: unknown, method = "POST") =>
     ctx.app.request(path, {
@@ -1478,7 +1478,7 @@ describe("completed receipt original management actions", () => {
       });
       const session = await withTransaction(suite.db, async (tx) => {
         const [person] = await tx.select().from(persons);
-        return startManagementSession(tx, { personId: person!.id });
+        return startManagementSession(tx, { method: "password", personId: person!.id });
       });
       const listing = await ctx.app.request("/management-api/print-jobs", {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },

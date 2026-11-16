@@ -104,8 +104,8 @@ async function venue(opts: { render?: Render } = {}) {
       role: "staff",
     });
     return {
-      manager: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: manager!.id })).token}`,
-      staff: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: staff!.id })).token}`,
+      manager: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId: manager!.id })).token}`,
+      staff: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId: staff!.id })).token}`,
     };
   });
   const state = { now: at(0), reads: 0 };

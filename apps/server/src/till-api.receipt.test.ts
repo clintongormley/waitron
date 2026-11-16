@@ -1220,7 +1220,10 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
         displayName: "Translation manager",
         role: "manager",
       });
-      const session = await startManagementSession(tx, { personId: manager!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: manager!.id,
+      });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
     const path = "/management-api/content-translations";

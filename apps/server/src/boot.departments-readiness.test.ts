@@ -70,7 +70,7 @@ it.each(["ES-common", "GB-vat"])(
       const files = suite.db.all<{ name: string; file: string }>(sql`pragma database_list`);
       const [port] = await freePorts(1);
       const session = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: venue.adminId }),
+        startManagementSession(tx, { method: "password", personId: venue.adminId }),
       );
       server = await startServer({
         WAITRON_VENUE_DIR: dirname(files.find((file) => file.name === "main")!.file),

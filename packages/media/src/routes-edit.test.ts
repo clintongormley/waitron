@@ -37,7 +37,7 @@ async function fixture(
     role,
   });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   const { image } = await withTransaction(suite.db, (tx) =>
     uploadImage(tx, { image: first, names: { en: "First" } }, { fallbackLanguage: "en" }),

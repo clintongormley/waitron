@@ -30,7 +30,7 @@ let supervisorCookie: string;
 async function seedCookie(role: BuiltInRoleKey, name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });
 }

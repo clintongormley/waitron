@@ -391,7 +391,7 @@ beforeAll(async () => {
       passwordHash: hashPassword("correct password"),
       pinHash: "unused",
     });
-    return (await startManagementSession(tx, { personId: person!.id })).token;
+    return (await startManagementSession(tx, { method: "password", personId: person!.id })).token;
   });
   fencedProof = { dir: proofDir, nodeId: proofId, token, db: proofDb };
 }, 180_000);

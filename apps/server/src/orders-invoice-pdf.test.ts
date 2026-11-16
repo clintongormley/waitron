@@ -58,7 +58,10 @@ useVenueDb({
         pinHash: hashPin("4444"),
         role: "manager",
       });
-      const session = await startManagementSession(tx, { personId: manager!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: manager!.id,
+      });
       managerDashboard = `${MANAGEMENT_COOKIE}=${session.token}`;
       const [series] = await tx
         .select({ id: invoiceSeries.id })

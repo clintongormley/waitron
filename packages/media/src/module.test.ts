@@ -116,7 +116,7 @@ describe("the media module descriptor", () => {
         role,
       });
       const session = await suite.db.transaction((tx) =>
-        startManagementSession(tx, { personId: person!.id }),
+        startManagementSession(tx, { method: "password", personId: person!.id }),
       );
       const response = await app.request("/management-api/images", {
         headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.token}` },

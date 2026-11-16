@@ -132,9 +132,11 @@ const suite = useVenueDb({
         role: "staff",
       });
       const managerSession = await startManagementSession(tx, {
+        method: "password",
         personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
+        method: "password",
         personId: stf!.id,
       });
       return { managerSid: managerSession.token, staffSid: staffSession.token };

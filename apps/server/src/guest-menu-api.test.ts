@@ -33,8 +33,8 @@ async function fixture(delivery?: Parameters<typeof mountGuestMenuApi>[1]["deliv
       { displayName: "Manager", role: "manager" },
       { displayName: "Staff", role: "staff" },
     ]);
-    const m = await startManagementSession(tx, { personId: manager!.id });
-    const s = await startManagementSession(tx, { personId: staff!.id });
+    const m = await startManagementSession(tx, { method: "password", personId: manager!.id });
+    const s = await startManagementSession(tx, { method: "password", personId: staff!.id });
     const preview = await previewMenu(tx, f.lunch);
     await publishMenu(tx, f.lunch, preview.hash, manager!.id);
     return {

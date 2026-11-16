@@ -513,7 +513,7 @@ async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true
   registerModulePermissions([{ permission: "sample.accept", defaultHolders: [] }]);
   return database.withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: `Operator ${role}`, role });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     await setFreshManagementSignIn(tx, session.token, fresh);
     return { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, personId: person!.id };
   });

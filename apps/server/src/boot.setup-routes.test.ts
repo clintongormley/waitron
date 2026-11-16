@@ -2440,7 +2440,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           .from(persons)
           .where(eq(persons.email, "admin@waitron.dev"));
         const session = await withTransaction(source.store.venue, async (tx) => {
-          const session = await startManagementSession(tx, { personId: admin!.id });
+          const session = await startManagementSession(tx, {
+            method: "password",
+            personId: admin!.id,
+          });
           await setFreshManagementSignIn(tx, session.token);
           return session;
         });

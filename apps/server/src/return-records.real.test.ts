@@ -187,7 +187,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   registerModulePermissions(FISCAL_PERMISSIONS);
   const token = await withTransaction(current.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });

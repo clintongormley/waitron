@@ -528,7 +528,7 @@ beforeEach(async () => {
 
   const sessionCookie = (personId: string) =>
     withTransaction(suite.db, async (tx) => {
-      const session = await startManagementSession(tx, { personId });
+      const session = await startManagementSession(tx, { method: "password", personId });
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });

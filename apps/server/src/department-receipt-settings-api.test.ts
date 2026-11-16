@@ -74,7 +74,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
   await seedDepartmentReceipt(suite.db, department!.id, savedReceipt);
   const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   const app = new Hono();
   mountDepartmentReceiptSettingsApi(

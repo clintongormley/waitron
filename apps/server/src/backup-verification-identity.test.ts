@@ -39,7 +39,7 @@ describe("archived operational TOTP derivation", () => {
         role: "manager",
       });
       const session = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: person!.id }),
+        startManagementSession(tx, { method: "password", personId: person!.id }),
       );
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
       await withTransaction(suite.db, (tx) =>

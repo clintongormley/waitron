@@ -110,7 +110,7 @@ async function routed() {
         pinHash: hashPin("1234"),
         role,
       });
-      return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
+      return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId: row!.id })).token}`;
     };
     return {
       restaurant,

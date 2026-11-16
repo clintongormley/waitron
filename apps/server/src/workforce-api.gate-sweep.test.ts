@@ -77,12 +77,8 @@ async function setupVenue(): Promise<Venue> {
       pinHash: fixturePinHash("1234"),
       role: "staff",
     });
-    const mSes = await startManagementSession(tx, {
-      personId: mgr!.id,
-    });
-    const sSes = await startManagementSession(tx, {
-      personId: stf!.id,
-    });
+    const mSes = await startManagementSession(tx, { method: "password", personId: mgr!.id });
+    const sSes = await startManagementSession(tx, { method: "password", personId: stf!.id });
     return { personId: mgr!.id, mSid: mSes.token, sSid: sSes.token };
   });
   return {

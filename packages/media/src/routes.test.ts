@@ -35,7 +35,7 @@ async function fixture(
     role: role as "manager" | "staff",
   });
   const session = await suite.db.transaction((tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   const app = new Hono();
   MEDIA_ROUTES.mount(

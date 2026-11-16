@@ -103,12 +103,15 @@ async function fixture(
         role: "supervisor",
       });
       const managerSession = await startManagementSession(tx, {
+        method: "password",
         personId: manager!.id,
       });
       const staffSession = await startManagementSession(tx, {
+        method: "password",
         personId: staff!.id,
       });
       const supervisorSession = await startManagementSession(tx, {
+        method: "password",
         personId: supervisor!.id,
       });
       return {

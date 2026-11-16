@@ -343,7 +343,10 @@ describe.each(paths)("invoice email after %s", (path) => {
             role: "admin",
             email: "owner@example.test",
           });
-          const session = await startManagementSession(tx, { personId: person!.id });
+          const session = await startManagementSession(tx, {
+            method: "password",
+            personId: person!.id,
+          });
           await setFreshManagementSignIn(tx, session.token);
           return session;
         });

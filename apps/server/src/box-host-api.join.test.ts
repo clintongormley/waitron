@@ -53,7 +53,7 @@ async function seedPerson(role: BuiltInRoleKey, name: string, id?: string): Prom
       pinHash: hashPin("1234"),
       role,
     });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }

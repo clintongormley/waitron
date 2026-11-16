@@ -46,7 +46,7 @@ useVenueDb({
     );
     if (settled.status !== 200) throw new Error(`setup sale answered ${settled.status}`);
     const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: venue.adminId }),
+      startManagementSession(tx, { method: "password", personId: venue.adminId }),
     );
     managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     await withTransaction(db, (tx) =>

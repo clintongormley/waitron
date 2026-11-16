@@ -40,7 +40,7 @@ interface Manager {
 async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Manager> {
   return withTransaction(venue.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }

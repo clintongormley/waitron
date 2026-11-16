@@ -129,11 +129,13 @@ beforeEach(async () => {
   colleagueId = colleague!.id;
   marthaToken = await withTransaction(
     suite.db,
-    async (tx) => (await startManagementSession(tx, { personId: marthaId })).token,
+    async (tx) =>
+      (await startManagementSession(tx, { method: "password", personId: marthaId })).token,
   );
   colleagueToken = await withTransaction(
     suite.db,
-    async (tx) => (await startManagementSession(tx, { personId: colleagueId })).token,
+    async (tx) =>
+      (await startManagementSession(tx, { method: "password", personId: colleagueId })).token,
   );
 });
 

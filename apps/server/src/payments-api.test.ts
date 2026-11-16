@@ -127,9 +127,13 @@ async function seedVenueWithStaff(): Promise<Venue> {
       role: "staff",
     });
     const managerSession = await startManagementSession(tx, {
+      method: "password",
       personId: mgr!.id,
     });
-    const staffSession = await startManagementSession(tx, { personId: stf!.id });
+    const staffSession = await startManagementSession(tx, {
+      method: "password",
+      personId: stf!.id,
+    });
     await setFreshManagementSignIn(tx, managerSession.token);
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
@@ -3193,7 +3197,7 @@ describe("provider On/Off", () => {
     });
     const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     for (const [body, field] of [
@@ -3502,7 +3506,7 @@ it.each(["saved-off", "unapplied"])(
     const venue = await seedVenueWithStaff();
     const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     const app = mountApp(venue, PROVIDERS, suite.db, { paymentsEnabled: state !== "unapplied" });

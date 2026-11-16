@@ -33,7 +33,7 @@ const PATH = "/management-api/fiscal-filing";
 async function sessionCookie(role: BuiltInRoleKey): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: role, pinHash: hashPin("1234"), role });
-    const session = await startManagementSession(tx, { personId: person!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });
 }

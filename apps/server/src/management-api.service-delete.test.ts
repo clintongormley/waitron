@@ -76,7 +76,10 @@ beforeEach(async () => {
     const result: string[] = [];
     for (const role of ["manager", "staff", "manager"] as const) {
       const [person] = await seedPersons(tx, { displayName: randomUUID(), role });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       result.push(`${MANAGEMENT_COOKIE}=${session.token}`);
       if (result.length === 3)
         await tx

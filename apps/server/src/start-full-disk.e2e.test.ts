@@ -366,7 +366,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   async function seedPerson(role: BuiltInRoleKey, name: string) {
     return withTransaction(db, async (tx) => {
       const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
-      const session = await startManagementSession(tx, { personId: p!.id });
+      const session = await startManagementSession(tx, { method: "password", personId: p!.id });
       await setFreshManagementSignIn(tx, session.token);
       return {
         personId: p!.id,

@@ -37,7 +37,7 @@ for (const enabled of [true, false]) {
           pinHash: hashPin("1234"),
           role: "manager",
         });
-        return startManagementSession(tx, { personId: person!.id });
+        return startManagementSession(tx, { method: "password", personId: person!.id });
       });
       await seedVenue(suite.db, {
         name: "Stream hierarchy",

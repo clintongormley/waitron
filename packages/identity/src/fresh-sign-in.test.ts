@@ -33,7 +33,9 @@ it.each([
 
 it("proof reuse neither extends the window nor proves another browser, and logout ends it", async () => {
   const { token, personId } = await openManagementSession(suite.db, "admin");
-  const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  const other = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   await suite.db
     .update(dashboardSessions)
     .set({ provedAt: "2026-11-09T11:59:00.000Z" })

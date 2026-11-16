@@ -523,7 +523,7 @@ describe("loginManager and loginManagerById with a check", () => {
 
 async function ownSession(): Promise<{ personId: string; managementSessionId: string }> {
   const { personId } = await manager();
-  const session = await run((tx) => startManagementSession(tx, { personId }));
+  const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
   return { personId, managementSessionId: session.token };
 }
 

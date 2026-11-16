@@ -15,7 +15,7 @@ export async function enrolAuthenticator(
   keyRing: TotpKeyRing,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { token } = await startManagementSession(tx, { personId });
+    const { token } = await startManagementSession(tx, { method: "password", personId });
     await setFreshManagementSignIn(tx, token);
     const { enrollmentId, secret } = await beginOwnTotpEnrollment(tx, {
       managementSessionId: token,

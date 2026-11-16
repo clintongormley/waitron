@@ -50,7 +50,10 @@ describe("accountant export download", () => {
           pinHash: fixturePinHash("1234"),
           role,
         });
-        const session = await startManagementSession(tx, { personId: person!.id });
+        const session = await startManagementSession(tx, {
+          method: "password",
+          personId: person!.id,
+        });
         const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
         if (role === "manager") manager = { id: person!.id, cookie };
         else supervisorCookie = cookie;

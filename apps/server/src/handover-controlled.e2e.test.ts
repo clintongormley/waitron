@@ -657,7 +657,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
     }),
   );
   const adminSession = await withTransaction(m1Files.db, (tx) =>
-    startManagementSession(tx, { personId: venue.adminId }),
+    startManagementSession(tx, { method: "password", personId: venue.adminId }),
   );
   await withTransaction(m1Files.db, (tx) => setFreshManagementSignIn(tx, adminSession.token));
 
