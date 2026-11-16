@@ -95,6 +95,20 @@ changed, and only when the two share a code file. So a test `main` left alone, a
 in a package the branch did not change (even one that depends on a package the branch changed), and
 a test `main` added when the two share no code file are still found only by the next full run.
 
+**When `main` moves again before the merge, the checks are redone only if the move could change
+their answer** (owner, 2026-11-16). `/land-branch` runs them without the shared landing lock and
+records the `main` they ran against (`CHECKED`); once it holds the lock it fetches again. If `main`
+has moved, it redoes them only when `git diff --name-only CHECKED..origin/main` names, outside
+documentation (`docs/**`, `*.md`), a file the branch also changed, a file in a package the checks
+covered (each package both sides changed and every package depending on one, as the typecheck's
+`...<package>` filter selected them; `pnpm --filter "...<package>" exec pwd` prints their folders),
+or root configuration those packages read (`package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`,
+`tsconfig.base.json`, `patches/`, `.nvmrc`). Otherwise it merges on the checks already run, and the
+PR comment names the commits `main` gained after them (`git log --oneline CHECKED..origin/main`) and
+why none needed a redo. Redoing on every move restarted the checks six times, about 40 minutes,
+while five `BEHIND` pull requests landed on 16 November 2026, often for other lanes' documentation
+landings.
+
 The post-merge `main` run and the next full run then check it, with the same delay as above.
 Rebase in the worktree only for `CONFLICTING` or a failed check — `pnpm install`, then push through
 the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit carries no
