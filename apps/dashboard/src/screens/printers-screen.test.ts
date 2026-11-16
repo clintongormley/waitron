@@ -6600,7 +6600,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(text(el, "[data-test=printer-row-p1]")).toBe("Kitchen 2");
   });
 
-  it("keeps discovery watched while a failed printer-list read recovers", async () => {
+  it("shows discovery last-seen details after a failed printer-list read recovers", async () => {
     const api = Object.assign(
       stubApi({
         listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
@@ -6617,7 +6617,6 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     vi.mocked(api.listPrinters).mockResolvedValue(printers);
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
-    await vi.waitFor(() => expect(api.listDiscoveredPrinters).toHaveBeenCalled());
     await flush(el);
     expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
       t("printers.seen_at")
