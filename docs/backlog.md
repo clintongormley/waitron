@@ -1123,12 +1123,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
-- **Stripe's reconciler reversal records only after the provider call, with a fresh key each time.**
-  Next: give the reconciler's reversal the same durable-attempt rule.
-  [Detail](backlog/payments.md#the-reconcilers-card-reversal-records-only-after-the-provider-call-with-a-fresh-key-each-time)
-
-
-
 - **The SumUp Solo experiments.** Still open after the 9 November cross-account session: signature-required
   cards, declined-card behavior, the statement/fee check, remaining connection
   probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
@@ -1145,7 +1139,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
   itself, and polling must go through the passive-session controller.
 
-- **The SumUp reconciler** — backup-machine hardware/signature qualification. Stripe's durable reversal work (W44) stays separate. The November
+- **The SumUp reconciler** — backup-machine hardware/signature qualification. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
   identified refunds.

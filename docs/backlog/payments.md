@@ -5,17 +5,6 @@ _2026-11-15, A1529: The recovery and comparison pages below moved to **Check car
 The open entries are listed in [the backlog](../backlog.md), under "Payments and card readers". This file holds
 their full text.
 
-## The reconciler's card reversal records only after the provider call, with a fresh key each time
-
-`reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()`
-idempotency key on every call and writes `payment_refunds` only after the call returns, so a
-crash between the two leaves no record, and a repeat would send a new key. Its product caller
-is the Stripe reconciler's reversal of an abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`); refunding a bill's card payment before
-its invoice goes through the separate durable path of Task 14 (design §6b). **Next action:**
-give the reconciler's reversal the same durable-attempt rule.
-Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
-the request before sending, keeps `tr_<refundId>` on retry and recovers pending outcomes.
-
 ## Turn off Stripe's on-reader tip screen, or read the tip back
 
 SumUp remains the go-live provider (owner, 2026-10-21). A1389's 2026-11-08 cut-back reads the cloud
@@ -148,7 +137,7 @@ source, machine and operation number, current payment state and successful refun
 
 **A949, owner 2026-10-21:** build after the reference experiments establish the matching inputs.
 The backup-machine software and SumUp abandoned-order refunds are built; hardware qualification
-and Stripe's W44 durable reversal work remain. The
+remains. The
 [November
 session](../research/2026-09-10-sumup-solo-experiments.md#10-a949-solo-session-2026-11-05)
 establishes supplied-reference acceptance and lookup after payment, duplicate creation, separate

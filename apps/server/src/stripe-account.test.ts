@@ -50,7 +50,8 @@ describe("stripeAccountResolver", () => {
     // key settles real money against the wrong merchant with no error anywhere.
     expect(keys).toEqual(["sk_test_taxpayer_one"]);
     expect(typeof account.report.listSettlements).toBe("function");
-    expect(typeof account.refund.refund).toBe("function");
+    expect(typeof account.refund.createRefund).toBe("function");
+    expect(typeof account.refund.listRefunds).toBe("function");
   });
 
   it("surfaces the vault's own code when the taxpayer has no Stripe credential", async () => {

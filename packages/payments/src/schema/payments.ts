@@ -77,8 +77,7 @@ export const payments = table(
     requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
     settledAt: tsString("settled_at"),
-    /** Stamped when the reconcile sweep ATTEMPTS to reverse an orphan, whether or not the
-     * reversal succeeds, so one that cannot be refunded is not retried on every sweep. */
+    /** Committed before reversing an orphan; the provider's reconciler owns recovery of this claim. */
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),

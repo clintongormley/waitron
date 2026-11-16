@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -728,9 +728,16 @@ export async function listReconcilable(
   });
 }
 
-export async function listAbandonedRefundOutcomes(tx: Transaction, provider: string) {
+export async function listAbandonedRefundOutcomes(
+  tx: Transaction,
+  provider: string,
+  paymentRef?: string,
+  openOnly = false,
+) {
   const rows = await tx
-    .select({
+    .selectDistinct({
+      paymentId: payments.id,
+      hasFailedRefund: sql<boolean>`${paymentRefunds.id} is not null`.mapWith(Boolean),
       paymentRef: payments.paymentRef,
       workingOrderId: payments.workingOrderId,
       externalRef: payments.externalRef,
@@ -740,7 +747,18 @@ export async function listAbandonedRefundOutcomes(tx: Transaction, provider: str
       state: payments.state,
     })
     .from(payments)
-    .where(and(eq(payments.provider, provider), isNotNull(payments.reconcileRemediatedAt)))
+    .leftJoin(
+      paymentRefunds,
+      and(eq(paymentRefunds.paymentId, payments.id), eq(paymentRefunds.state, "failed")),
+    )
+    .where(
+      and(
+        eq(payments.provider, provider),
+        isNotNull(payments.reconcileRemediatedAt),
+        paymentRef === undefined ? undefined : eq(payments.paymentRef, paymentRef),
+        openOnly ? and(ne(payments.state, "refunded"), isNull(paymentRefunds.id)) : undefined,
+      ),
+    )
     .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);
   return rows.map(({ state, ...row }) => ({
     ...withDecimalAmount(row),

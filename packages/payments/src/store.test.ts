@@ -1889,17 +1889,29 @@ describe("listAbandonedRefundOutcomes", () => {
     await withTransaction(suite.db, async (tx) => {
       await markReconcileRemediated(tx, { ...confirmed, at });
       await markReconcileRemediated(tx, { ...unconfirmed, at });
+    });
+    const openBefore = await withTransaction(suite.db, (tx) =>
+      listAbandonedRefundOutcomes(tx, "fake", undefined, true),
+    );
+    expect(openBefore.map((row) => row.paymentRef)).toEqual([
+      "refund-confirmed",
+      "refund-unconfirmed",
+    ]);
+    await withTransaction(suite.db, async (tx) => {
       await recordRefund(tx, {
         ...confirmed,
         amount: decimal("10.00"),
         providerRefundRef: "provider-refund-1",
       });
       await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
+      await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
     });
     const read = (provider: string) =>
       withTransaction(suite.db, (tx) => listAbandonedRefundOutcomes(tx, provider));
     expect(await read("fake")).toEqual([
       {
+        paymentId: (await getRow(confirmed))!.id,
+        hasFailedRefund: false,
         paymentRef: "refund-confirmed",
         workingOrderId: seeded.workingOrderId,
         externalRef: null,
@@ -1909,6 +1921,8 @@ describe("listAbandonedRefundOutcomes", () => {
         outcome: "confirmed",
       },
       {
+        paymentId: (await getRow(unconfirmed))!.id,
+        hasFailedRefund: true,
         paymentRef: "refund-unconfirmed",
         workingOrderId: seeded.workingOrderId,
         externalRef: null,
@@ -1919,6 +1933,20 @@ describe("listAbandonedRefundOutcomes", () => {
       },
     ]);
     expect(await read("other-provider")).toEqual([]);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "fake", undefined, true),
+      ),
+    ).toEqual([]);
+    const selected = await withTransaction(suite.db, (tx) =>
+      listAbandonedRefundOutcomes(tx, "fake", "refund-unconfirmed"),
+    );
+    expect(selected.map((row) => row.paymentRef)).toEqual(["refund-unconfirmed"]);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "other-provider", "refund-unconfirmed"),
+      ),
+    ).toEqual([]);
     await withTransaction(suite.db, (tx) =>
       recordRefund(tx, { ...unconfirmed, amount: decimal("4.00"), providerRefundRef: "partial" }),
     );
