@@ -444,16 +444,6 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
   `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
 
-## `createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback
-
-From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
-
-- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/menu/src/unit-validation.ts` and the
-  till's `product-name.ts` with nothing pinning them equal. Since W75 (2026-10-04) `EACH_UNIT_ID`
-  lives in that module, which the till already imports (`apps/till/src/state/working-order.ts`), so
-  the till could import it instead of keeping its own literal.
-
 ## Smaller things #379 surfaced and did not take
 
 From **The product editor and menu (#345, #379, #387) — what is left open.**
@@ -876,12 +866,8 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: Each unit literal
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/menu/src/unit-validation.ts` and the
-  till's `product-name.ts` with nothing pinning them equal.
-  [Detail](menu.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
 - **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
   A918 slice 4, #2141).** `packages/menu/src/units.ts:26-34` is never written into a venue, but the
   receipt reads its abbreviations to decide whether a line prints a unit

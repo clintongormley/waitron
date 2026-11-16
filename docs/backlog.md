@@ -590,7 +590,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
   action:** decide whether the picker should list variants.
 
-- **Each unit literal** (bundle of 2, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
+- **Each unit literal** (bundle of 1, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
 
 - **The combined end-to-end journey has not been walked**
   [Detail](backlog/menu.md#the-combined-end-to-end-journey-has-not-been-walked)

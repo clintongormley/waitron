@@ -3,6 +3,7 @@ import type { ProductPresentation } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { TillProduct } from "../api/client.js";
 
 /** The till carries the six name fields OPTIONALLY; the shared resolvers take them present-and-nullable. */
@@ -68,7 +69,7 @@ export function productUnit(
           hardwareUnit: "kg" as const,
         }
       : {
-          id: "00000000-0000-0000-0000-000000000001",
+          id: EACH_UNIT_ID,
           staffName: "Each",
           staffAbbreviation: "ea",
           name: { en: "each", es: "unidad" },

@@ -1,8 +1,7 @@
 import { AppError, MAX_QUANTITY_INTEGER_DIGITS } from "@waitron/shared";
 import "./errors.js";
 
-/** The id a product with NO stored unit reads as: Each. It matches the till's own "each" fallback
- * (apps/till/src/widgets/product-name.ts) so server and till agree. */
+/** The id a product with NO stored unit reads as: Each. */
 export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
 
 export const MAX_UNIT_PRECISION = 3;

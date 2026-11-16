@@ -498,7 +498,7 @@ describe("menu operations", () => {
           unitPrice: "0.00",
           vatClass: "general",
         }),
-      ).rejects.toMatchObject({ code: "product.invalid" });
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "unitId" } });
     });
   });
 
@@ -553,6 +553,47 @@ describe("menu operations", () => {
         code: "product.invalid",
         params: { field: "pricingUnit" },
       });
+    });
+  });
+
+  it("legacy pricingUnit 'each' on update clears a product's unit", async () => {
+    await asVenue(async (tx) => {
+      const ham = await createProduct(tx, {
+        categoryId: null,
+        name: "ham",
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, ham.id, { pricingUnit: "each" });
+      expect(await storedUnitId(tx, ham.id)).toBeNull();
+    });
+  });
+
+  it("refuses legacy pricingUnit 'weight' on create and update when no kg seed is kept", async () => {
+    await asVenue(async (tx) => {
+      const ham = await createProduct(tx, {
+        categoryId: null,
+        name: "ham",
+        unitId: eachUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await tx.execute(sql`update units set seed_key = null where id = ${kgUnitId}`);
+      await expect(
+        createProduct(tx, {
+          categoryId: null,
+          name: "salami",
+          pricingUnit: "weight",
+          unitPrice: "24.90",
+          vatClass: "reduced",
+        }),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "unitId" } });
+      await expect(updateProduct(tx, ham.id, { pricingUnit: "weight" })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "unitId" },
+      });
+      expect(await storedUnitId(tx, ham.id)).toBe(eachUnitId);
     });
   });
 
