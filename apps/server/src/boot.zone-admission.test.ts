@@ -254,6 +254,7 @@ function noDuties(accountMail = 1) {
   if (accountMail)
     expect(vi.mocked(startMailSender).mock.calls[0]![0].owners.map((owner) => owner.kind)).toEqual([
       "account_action",
+      "security_change",
     ]);
 }
 

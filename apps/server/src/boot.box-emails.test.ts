@@ -408,6 +408,9 @@ describe("the running server's notice and email checks", () => {
     try {
       await bootServer(booted, venue, { intent: "prepare", development: false });
       expect(holder.mail!.owners).toContainEqual(
+        expect.objectContaining({ kind: "security_change", deliveryRule: "notice" }),
+      );
+      expect(holder.mail!.owners).toContainEqual(
         expect.objectContaining({ kind: "email_changed", deliveryRule: "notice" }),
       );
       expect(holder.mail!.owners).toContainEqual(
@@ -511,6 +514,48 @@ describe("the running server's notice and email checks", () => {
       }
     },
   );
+
+  it("delivers a pending security notice while the venue time zone needs repair", async () => {
+    const venue = await setupVenue(suite.db);
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Security recipient",
+      email: "security@example.test",
+      locale: "en-GB",
+    });
+    const now = new Date();
+    const queued = await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "security_change",
+        dedupeKey: "repair-security",
+        personId: person!.id,
+        params: { change: "password_changed" },
+        now,
+        notAfter: new Date(now.getTime() + 86400000),
+      }),
+    );
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
+    const booted: Booted = {};
+    try {
+      await bootServer(booted, venue, { intent: "demo", development: false });
+      await expect
+        .poll(() => holder.sent.filter((mail) => mail.recipient === "security@example.test"), {
+          timeout: 10000,
+        })
+        .toHaveLength(1);
+      const notice = holder.sent.find((mail) => mail.recipient === "security@example.test")!;
+      expect(notice).toMatchObject({
+        subject: "Your account security changed",
+        text: expect.stringContaining("Your password was changed."),
+      });
+      expect(
+        (await suite.db.select().from(outgoingMail).where(eq(outgoingMail.id, queued.id)))[0],
+      ).toMatchObject({ status: "sent", recipient: "security@example.test" });
+    } finally {
+      await shutDown(booted);
+    }
+  });
 
   it("boot emails the managers when the disk is full, once", async () => {
     const venue = await setupVenue(suite.db);

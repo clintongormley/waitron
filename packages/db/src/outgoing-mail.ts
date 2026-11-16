@@ -11,6 +11,7 @@ export const MAIL_LIFETIME_MS: Readonly<
   box_alert: 86400000,
   role_membership_changed: 86400000,
   email_changed: 86400000,
+  security_change: 86400000,
 };
 export interface MailRequest {
   kind: OutgoingMailKind;

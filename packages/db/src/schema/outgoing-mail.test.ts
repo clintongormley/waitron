@@ -75,6 +75,12 @@ describe("outgoing mail database protections", () => {
     }
     expect(suite.db.get<{ n: number }>(sql`select count(*) as n from outgoing_mail`)?.n).toBe(9);
   });
+  it("accepts an account security notice", () => {
+    insert({ kind: "security_change" });
+    expect(suite.db.get<{ kind: string }>(sql`select kind from outgoing_mail`)?.kind).toBe(
+      "security_change",
+    );
+  });
   it.each([
     ["kind", { kind: "bad" }],
     ["status", { status: "bad" }],

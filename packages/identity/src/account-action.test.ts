@@ -191,6 +191,11 @@ describe("management account actions", () => {
       sql`select status, pin_hash from persons where id = ${personId}`,
     );
     expect(rows.rows[0]).toMatchObject({ status: "active", pin_hash: expect.any(String) });
+    expect(
+      suite.db.all(
+        sql`select id from outgoing_mail where kind='security_change' and person_id=${personId}`,
+      ),
+    ).toEqual([]);
   });
 
   it("stores only a token hash and consumes an invitation into a fresh session", async () => {
@@ -522,6 +527,25 @@ describe("management account actions", () => {
       sql`select totp_secret from persons where id = ${personId}`,
     );
     expect(person.rows[0]!.totp_secret).toBe("sealed-placeholder");
+    expect(
+      suite.db.all(
+        sql`select person_id, params from outgoing_mail where kind='security_change' and person_id=${personId}`,
+      ),
+    ).toEqual([{ person_id: personId, params: JSON.stringify({ change: "password_changed" }) }]);
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          token: issued.token,
+          purpose: "password_reset",
+          password: "a replacement secure password",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "account_action.invalid" });
+    expect(
+      suite.db.all(
+        sql`select id from outgoing_mail where kind='security_change' and person_id=${personId}`,
+      ),
+    ).toHaveLength(1);
   });
 
   it("refuses an expired token", async () => {

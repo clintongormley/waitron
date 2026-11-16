@@ -1238,10 +1238,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   existing request state until its own adoption.
   [Detail and decision](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
 
-- **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
-  passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
-  connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
-  address on an email change; wording when an admin made the change; grouping a burst.
+- **Account security email decisions still open** (owner, 2026-09-12): notify the old address on an
+  email change; wording when an administrator made the change; grouping a burst.
 
 - **Typed values are only partly checked — a generic phone-format check landed, a country-specific
   one has not.**

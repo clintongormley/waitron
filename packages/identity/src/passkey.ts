@@ -1,3 +1,4 @@
+import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
   generateAuthenticationOptions,
@@ -236,6 +237,7 @@ export async function finishPasskeyRegistration(
     if (isUniqueViolation(error)) throw new AppError("passkey.already_registered", {});
     throw error;
   }
+  await queueSecurityChangeMail(tx, { personId, change: "passkey_added" });
   return { credentialId: cred.id };
 }
 

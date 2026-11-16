@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { generateSync } from "otplib";
@@ -258,6 +258,11 @@ describe("passkey registration", () => {
     );
     expect(credential).toHaveProperty("aaguid", GOOGLE);
     expect(credential).toHaveProperty("name", "Google Password Manager");
+    expect(
+      suite.db.all(
+        sql`select person_id, params from outgoing_mail where kind='security_change' and person_id=${personId}`,
+      ),
+    ).toEqual([{ person_id: personId, params: JSON.stringify({ change: "passkey_added" }) }]);
   });
 
   it.each([["   "], [undefined]])(
@@ -359,7 +364,7 @@ describe("passkey registration", () => {
   });
 
   it("throws passkey.verification_failed when the ceremony does not verify", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
+    const { token, personId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue({ verified: false });
 
     const begun = await begin(token);
@@ -374,6 +379,11 @@ describe("passkey registration", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
+    expect(
+      suite.db.all(
+        sql`select id from outgoing_mail where kind='security_change' and person_id=${personId}`,
+      ),
+    ).toEqual([]);
   });
 
   it("throws passkey.verification_failed when no challenge is on file for the handle", async () => {

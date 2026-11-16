@@ -1,3 +1,4 @@
+import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
   createHash,
@@ -339,6 +340,8 @@ async function finishClaimedAction(
     .update(managementSessions)
     .set({ endedAt: nowIso })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
+  if (input.purpose === "password_reset")
+    await queueSecurityChangeMail(tx, { personId, change: "password_changed" });
   return {
     personId,
     session: input.purpose === "invitation" ? await startManagementSession(tx, { personId }) : null,

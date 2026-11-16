@@ -87,6 +87,12 @@ describe("Google OpenID Connect state", () => {
     ).toBe("google.already_linked");
     const session = await run((tx) => loginWithGoogle(tx, { subject: "google-123" }));
     expect(session.personId).toBe(first);
+    await run((tx) => completeGoogleLink(tx, { personId: first, subject: "google-123" }));
+    expect(
+      suite.db.all(
+        sql`select person_id, params from outgoing_mail where kind='security_change' and person_id in (${first},${second})`,
+      ),
+    ).toEqual([{ person_id: first, params: JSON.stringify({ change: "google_connected" }) }]);
   });
 
   it("refuses to link a person who is not active, or who does not exist, and writes no subject", async () => {
