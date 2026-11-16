@@ -184,7 +184,7 @@ export async function readStaffActivityFacts(
           const context = clocks.get(row.personId)!;
           const preceding = context.events.filter((e) => Date.parse(e.eventAt) <= time);
           const latest = preceding.at(-1),
-            latestIn = preceding.findLast((e) => e.entryKind === "in");
+            latestIn = preceding.filter((e) => e.entryKind === "in").at(-1);
           const open = !latest || latest.entryKind === "in" || context.unmarked.has(latest.entryId);
           const assigned =
             own ??
