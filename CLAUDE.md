@@ -343,7 +343,9 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that
   literal key; a data column must use another key.
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a
-  CSS class.** Receipt: [design-system.md](docs/developers/design-system.md#primitives).
+  CSS class.** Guard: `scripts/data-table-cell-classes.test.ts`, weaker than its name: reads each
+  file's text alone, so imported helpers and styles, inherited methods and `class=${…}` escape it.
+  Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours,
   `rem` or `em`; system colours only inside `@media (forced-colors: active)`, which nothing guards.** Guards:
   `packages/ui/src/no-hardcoded-chrome.test.ts` (UI package only),
