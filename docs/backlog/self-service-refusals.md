@@ -42,7 +42,7 @@ referrals, not completed recovery experiments.
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
 | [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; since 2026-11-16 the `attempt_invalid` words name reload, Reconnect, a new tab, Start again and Recover from backup instead of support; the repair page can still refuse Start again (A1158, A1159, A1161). |
-| [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
+| [Setup environment](#setup-environment) | A Live setup refused after its production stamp, then restarted, cannot start or be moved aside: stamp only once activation has started (queued in lane K). |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
@@ -541,6 +541,8 @@ State: A partially prepared database carries a stamp for another environment. Ch
 
 Route: The authenticated reset route only accepts a half-finished adopt, as setup-api.ts:1067 checks. It is not a general reset for this state. Missing: an applicable self-service fresh-server/reinstall path that does not erase trading data.
 
+_2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed): the wizard's handling of this code and these words are deleted. A run of the real setup routes found the wizard never receives `deployment.already_stamped`: after a refused attempt the server answers first with that attempt's own refusal. The dead end that remains is under [setup-environment](#setup-environment). The rest of this entry records the earlier tree._
+
 ### `shell.reset.resetting`
 
 Screen: Setup wizard. Fix: [setup-reset](#setup-reset).
@@ -779,7 +781,7 @@ still block Start again on this path.
 
 ### setup-environment
 
-**A different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
+**A Live setup refused after its production stamp, then restarted, has no way out.** The wizard's Live path stamps the database production (`apps/server/src/provision.ts:148`) before the attempt is marked activation started, unlike the command path (`packages/provisioning/src/first-setup-command-deployment.ts:280`). A refusal in that window (the probe used a full disk) followed by a restart makes the start refuse `deployment.environment_mismatch`, and the recovery page's Move asks for an administrator password that does not exist yet (a 2026-11-16 probe: 403 for the setup owner's password, nothing moved). Without a restart, retrying Live carries on. The fix (stamp only once activation has started) is queued in lane K.
 
 ### setup-reset
 
@@ -1260,6 +1262,8 @@ The earlier server-page inventory did not exercise those recovery procedures.
 _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now says, if Retry fails again, to switch the box off and on, which ends any program holding the database, instead of asking whoever installed the box. The other rows' installer referrals are still open._
 
 _2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
+
+_2026-11-16, SETUP-OTHER-ENVIRONMENT: a box left in this state by a refused first Live setup has no administrator yet, so the password check refuses and nothing moves; see [setup-environment](#setup-environment)._
 
 _2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_WORDS` or `GENERIC_WORDS` (then `OPERATOR_TEXT` and `GENERIC_TEXT`) in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box; `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). Each other row that named the installer now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, restore or reinstall step it already offered; the generic row now says to press Retry a normal boot; the two restore rows (`provisioning.database_ahead`, `provisioning.schema_mismatch`) instead say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, and the owner's answer plans none beyond what each row names. Guards: the "sends nobody to someone else" cases in `apps/server/src/i18n/recovery-page.test.ts` and `apps/server/src/recovery-start-again.test.ts`. The lead paragraph records the earlier tree._
 
