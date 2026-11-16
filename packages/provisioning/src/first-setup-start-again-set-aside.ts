@@ -11,7 +11,7 @@ import {
   parseEnvFile,
 } from "@waitron/store";
 import { singleLineKeyRingVariables } from "@waitron/credentials";
-import { mkdirDurable } from "./fs-atomic.js";
+import { mkdirDurable, stagedPath, writeFileDurable } from "./fs-atomic.js";
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -55,21 +55,8 @@ const LEFTOVER_PROBE =
   /^\.first-setup-set-aside-probe-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODE = 0o700;
 const RING = SECRETS_ENV_FILE;
-const RING_TEMP = ".secrets.env.set-aside-";
 const LEFTOVER_RING_TEMP =
   /^\.secrets\.env\.set-aside-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-async function writeRingFile(path: string, bytes: Buffer, mode: number): Promise<void> {
-  const handle = await fs.open(path, "wx", mode);
-  try {
-    // The umask may have narrowed `mode` at creation.
-    await handle.chmod(mode);
-    await handle.writeFile(bytes);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
 
 const codeOf = (error: unknown) =>
   String(
@@ -161,7 +148,10 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
   // A half-written copy of the key ring a cut left; only a plain file this code named.
   for (const folder of stemFolders)
     for (const name of await list(folder))
-      if (LEFTOVER_RING_TEMP.test(name) && (await io.lstat(join(folder, name))).isFile())
+      if (
+        (LEFTOVER_RING_TEMP.test(name) || name === stagedPath(RING)) &&
+        (await io.lstat(join(folder, name))).isFile()
+      )
         await fs.unlink(join(folder, name));
 }
 
@@ -431,10 +421,11 @@ async function keepRingCopy(
     if (present) return;
     await io.mkdir(stemFolder, { recursive: true, mode: MODE });
     for (const folder of chain(roots.stateDir, stemFolder)) await syncFolder(folder);
-    const temp = join(stemFolder, `${RING_TEMP}${process.pid}-${randomUUID()}`);
-    await (io.writeRing ?? writeRingFile)(temp, ring.bytes, ring.mode);
-    await io.rename(temp, copy);
-    await syncFolder(stemFolder);
+    const publish =
+      io.writeRing ??
+      ((path: string, bytes: Buffer, mode: number) =>
+        writeFileDurable(path, bytes, mode, { exactMode: true, overwrite: false }));
+    await publish(copy, ring.bytes, ring.mode);
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw failed(codeOf(error), label);

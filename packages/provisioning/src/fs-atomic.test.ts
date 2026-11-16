@@ -22,7 +22,7 @@ const newDir = async () => {
   return d;
 };
 
-/** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
+/** Each file or folder sync and publication, in order, while `run` runs. */
 async function syncsAndRenames(run: () => Promise<void>): Promise<string[]> {
   const events: string[] = [];
   const real = await vi.importActual<typeof fs>("node:fs/promises");
@@ -39,11 +39,16 @@ async function syncsAndRenames(run: () => Promise<void>): Promise<string[]> {
     events.push(`rename ${String(from)} ${String(to)}`);
     return real.rename(from, to);
   });
+  vi.mocked(fs.link).mockImplementation(async (from, to) => {
+    events.push(`link ${String(from)} ${String(to)}`);
+    return real.link(from, to);
+  });
   try {
     await run();
   } finally {
     vi.mocked(fs.open).mockReset();
     vi.mocked(fs.rename).mockReset();
+    vi.mocked(fs.link).mockReset();
   }
   return events;
 }
@@ -334,5 +339,58 @@ describe("mkdirDurable", () => {
 
     expect(events).toEqual([`sync ${real}`]);
     expect((await stat(join(real, "tls"))).isDirectory()).toBe(true);
+  });
+});
+
+describe("create-only durable files", () => {
+  it("sets the exact mode before publishing despite a restrictive umask", async () => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    const old = process.umask(0o777);
+    try {
+      await writeFileDurable(target, "ring", 0o600, { exactMode: true, overwrite: false });
+      expect((await stat(target)).mode & 0o777).toBe(0o600);
+      expect(await readFile(target, "utf8")).toBe("ring");
+    } finally {
+      process.umask(old);
+    }
+  });
+
+  it.each(["file", "symlink"])("refuses an existing %s without changing it", async (kind) => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    if (kind === "file") await writeFile(target, "kept");
+    else {
+      await writeFile(join(d, "original"), "kept");
+      await fs.symlink(join(d, "original"), target);
+    }
+    await expect(
+      writeFileDurable(target, "replacement", 0o600, { overwrite: false }),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(target, "utf8")).toBe("kept");
+    expect((await fs.lstat(target)).isSymbolicLink()).toBe(kind === "symlink");
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("leaves a stale staging file it did not create intact", async () => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    await writeFile(`${target}.tmp`, "another attempt");
+    await expect(
+      writeFileDurable(target, "replacement", 0o600, { overwrite: false }),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(`${target}.tmp`, "utf8")).toBe("another attempt");
+    await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("flushes bytes before exclusive publication and flushes the folder after removing staging", async () => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    const events = await syncsAndRenames(() =>
+      writeFileDurable(target, "ring", 0o600, { overwrite: false }),
+    );
+    expect(events).toEqual([`sync ${target}.tmp`, `link ${target}.tmp ${target}`, `sync ${d}`]);
+    expect(await readFile(target, "utf8")).toBe("ring");
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
