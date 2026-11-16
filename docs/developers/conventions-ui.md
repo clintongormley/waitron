@@ -1291,7 +1291,8 @@ its Bluetooth steps, so a new call is checked only once a step runs it too. It a
 Bluetooth sender, `apps/print-agent/src/rfcomm-send.py`, invoked directly rather than through the
 agent's `RfcommTransport`, and only as far as creating its socket, because the runner's kernel has
 no Bluetooth; it fails when the helper does not exit 1 with its `rfcomm … [Errno` line, or when
-that error is errno 13 (the profile refusing the socket). It pairs through its own
+that error is errno 13 (the profile refusing the socket). The addressed `sdptool` step checks the
+installed command and socket refusal likewise; it does not discover a real printer’s channel. It pairs through its own
 driver, `scripts/bluetoothctl-pair.mjs`, not the agent's Pair code, so a bus message the agent's Pair
 starts sending is checked only once the driver sends it too. It reads the kernel log with the
 kernel's printk rate limit switched off and requires at least one refusal logged during the step

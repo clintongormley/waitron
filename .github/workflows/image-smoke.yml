@@ -565,6 +565,16 @@ jobs:
           grep -qF "rfcomm 66:55:44:33:22:11 channel 1: [Errno " "$RUNNER_TEMP/bt-send.txt"
           if grep -qF "[Errno 13]" "$RUNNER_TEMP/bt-send.txt"; then exit 1; fi
 
+      - name: Serial-channel discovery is installed and its socket is allowed
+        run: |
+          set -euo pipefail
+          agent=$(docker compose ps -q print-agent)
+          docker exec "$agent" test -x /usr/bin/sdptool
+          if timeout 10 docker exec "$agent" sdptool search --bdaddr 66:55:44:33:22:11 SP > "$RUNNER_TEMP/bt-sdp.txt" 2>&1; then exit 1; fi
+          cat "$RUNNER_TEMP/bt-sdp.txt"
+          grep -qF 'Failed to connect to SDP server on 66:55:44:33:22:11:' "$RUNNER_TEMP/bt-sdp.txt"
+          if grep -Eiq 'Permission denied|Operation not permitted' "$RUNNER_TEMP/bt-sdp.txt"; then exit 1; fi
+
       - name: The print-agent image carries its Python's copyright files
         run: |
           set -euo pipefail

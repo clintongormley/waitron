@@ -333,8 +333,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
   },
   "printer.bluetooth_command_busy": {
-    en: "Several Bluetooth requests are already waiting for this print agent. Wait a moment and try again.",
-    es: "Ya hay varias solicitudes Bluetooth esperando a este agente de impresión. Espera un momento e inténtalo de nuevo.",
+    en: "A Bluetooth request is already running. Wait for its answer, then try again.",
+    es: "Ya hay una solicitud Bluetooth en curso. Espera su respuesta e inténtalo de nuevo.",
   },
   "printer.bluetooth_not_discovered": {
     en: "This print agent has not found that Bluetooth device recently. Scan for printers, then try again.",
@@ -1795,8 +1795,30 @@ export function fieldOf(error: unknown): string {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown; count?: unknown; seconds?: unknown },
+  params?: { reason?: unknown; count?: unknown; seconds?: unknown; kind?: unknown },
 ): string {
+  if (
+    code === "printer.bluetooth_command_busy" &&
+    typeof params?.seconds === "number" &&
+    (params.kind === "pair" || params.kind === "forget")
+  ) {
+    const operation = pickLocale(
+      {
+        en: params.kind === "pair" ? "Pairing" : "Unpairing",
+        es: params.kind === "pair" ? "El emparejamiento" : "La desvinculación",
+      },
+      locale,
+    );
+    return pickLocale(
+      {
+        en: "{operation} is still running. Its request expires in about {seconds} seconds; try again then.",
+        es: "{operation} sigue en curso. La solicitud vence en unos {seconds} segundos; inténtalo de nuevo entonces.",
+      },
+      locale,
+    )
+      .replace("{operation}", operation)
+      .replace("{seconds}", String(params.seconds));
+  }
   if (code === "cloud.emergency_code_rate_limited" && typeof params?.seconds === "number")
     return registeredCodeMessage(code, locale).replace("{seconds}", String(params.seconds));
   if (

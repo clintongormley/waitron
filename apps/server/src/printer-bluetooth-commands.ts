@@ -37,13 +37,9 @@ interface AgentCommands {
   results: Map<string, Result>;
 }
 
-/** No more than the agent reads from one reply, so every pending command reaches it in each reply. */
-const MAX_PENDING_PER_AGENT = BLUETOOTH_COMMAND_LIMIT;
-/** As many as one full queue settles, so no outcome evicts another from the same pull. */
 const MAX_RESULTS_PER_AGENT = BLUETOOTH_COMMAND_LIMIT;
 /** Outlasts one command the agent starts at once: 10 s to register, a 75 s pair timeout and 5 s exit
- * grace (apps/print-agent/src/bluetooth-command.ts), then the pull that carries its outcome. A
- * command queued behind another can still expire. */
+ * grace (apps/print-agent/src/bluetooth-command.ts), then the pull that carries its outcome. */
 const COMMAND_TTL_MS = 120_000;
 const RESULT_TTL_MS = 60_000;
 /** Each method that names an agent prunes that agent, and at most once per interval every agent, so
@@ -68,8 +64,8 @@ export function createPrinterBluetoothCommands(
     pin?: string,
   ): BluetoothCommandStatus;
   current(agentId: string): BluetoothCommand[];
-  /** The addresses whose pending unpairing `outcomes` report succeeded; settles nothing. */
-  unpaired(agentId: string, outcomes: BluetoothCommandOutcome[]): string[];
+  /** Issued unpairings reported succeeded, including remembered expired IDs; settles nothing. */
+  unpaired(agentId: string, outcomes: BluetoothCommandOutcome[], paired?: string[]): string[];
   accept(agentId: string, outcomes: BluetoothCommandOutcome[]): void;
   latest(agentId: string, address: string): BluetoothCommandStatus | undefined;
   /** How many agents hold entries. */
@@ -78,6 +74,7 @@ export function createPrinterBluetoothCommands(
   const now = options.now ?? (() => Date.now());
   const newId = options.id ?? randomUUID;
   const agents = new Map<string, AgentCommands>();
+  const expiredUnpairs = new Map<string, { agentId: string; address: string }>();
   let nextSweepAt = 0;
 
   /** An end further ahead than its own limit was set before a backward step of the clock. */
@@ -85,8 +82,15 @@ export function createPrinterBluetoothCommands(
     expiresAt <= instant || expiresAt - instant > ttl;
 
   function pruneAgent(agentId: string, agent: AgentCommands, instant: number): void {
-    for (const [address, entry] of agent.pending)
-      if (ended(entry.expiresAt, COMMAND_TTL_MS, instant)) agent.pending.delete(address);
+    for (const [address, entry] of agent.pending) {
+      if (!ended(entry.expiresAt, COMMAND_TTL_MS, instant)) continue;
+      if (entry.command.kind === "forget") {
+        expiredUnpairs.set(entry.command.id, { agentId, address });
+        if (expiredUnpairs.size > BLUETOOTH_COMMAND_LIMIT)
+          expiredUnpairs.delete(expiredUnpairs.keys().next().value!);
+      }
+      agent.pending.delete(address);
+    }
     for (const [address, entry] of agent.results)
       if (ended(entry.expiresAt, RESULT_TTL_MS, instant)) agent.results.delete(address);
     if (agent.pending.size === 0 && agent.results.size === 0) agents.delete(agentId);
@@ -112,9 +116,12 @@ export function createPrinterBluetoothCommands(
       const existing = held?.pending.get(address);
       if (existing?.command.kind === kind && existing.command.pin === heldPin)
         return statusOf(existing, instant);
-      if (!existing && (held?.pending.size ?? 0) >= MAX_PENDING_PER_AGENT)
-        throw new AppError("printer.bluetooth_command_busy", {});
-      // A changed kind or PIN takes a fresh id: the agent never reruns an id it has taken.
+      const running = held?.pending.values().next().value;
+      if (running)
+        throw new AppError("printer.bluetooth_command_busy", {
+          kind: running.command.kind,
+          seconds: Math.ceil((running.expiresAt - instant) / 1000),
+        });
       const command: BluetoothCommand = { id: newId(), kind, address };
       if (heldPin !== undefined) command.pin = heldPin;
       const agent = held ?? { pending: new Map(), results: new Map() };
@@ -130,17 +137,33 @@ export function createPrinterBluetoothCommands(
       return [...pending].map(({ command }) => ({ ...command }));
     },
 
-    unpaired(agentId, outcomes) {
+    unpaired(agentId, outcomes, paired = []) {
       const first = new Map<string, boolean>();
       for (const { id, ok } of outcomes) if (!first.has(id)) first.set(id, ok);
       const pending = prune(agentId).agent?.pending ?? new Map<string, Pending>();
-      return [...pending]
-        .filter(([, { command }]) => command.kind === "forget" && first.get(command.id) === true)
-        .map(([address]) => address);
+      return [
+        ...new Set([
+          ...[...pending]
+            .filter(
+              ([, { command }]) => command.kind === "forget" && first.get(command.id) === true,
+            )
+            .map(([address]) => address),
+          ...[...expiredUnpairs]
+            .filter(
+              ([id, entry]) =>
+                entry.agentId === agentId &&
+                first.get(id) === true &&
+                !paired.includes(entry.address),
+            )
+            .map(([, entry]) => entry.address),
+        ]),
+      ];
     },
 
     accept(agentId, outcomes) {
       const { instant, agent } = prune(agentId);
+      for (const { id } of outcomes)
+        if (expiredUnpairs.get(id)?.agentId === agentId) expiredUnpairs.delete(id);
       if (!agent) return;
       for (const outcome of outcomes) {
         for (const [address, { command }] of agent.pending) {

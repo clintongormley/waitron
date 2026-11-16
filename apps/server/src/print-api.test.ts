@@ -3767,6 +3767,51 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(res.status).toBe(202);
   });
 
+  it("replaces complete paired snapshots for only their agent and preserves malformed snapshots' valid positives", async () => {
+    const app = mountApp();
+    const holder = await joinAndAccept(app, "Holder");
+    const other = await joinAndAccept(app, "Other");
+    const first = randomMac();
+    const second = randomMac();
+    await pull(app, holder.token, {
+      scanned: [scannedMac(first), scannedMac(second)],
+      pairedBluetooth: [{ localKey: first }],
+    });
+    await pull(app, other.token, { pairedBluetooth: [{ localKey: first }] });
+    for (const inventory of [
+      {},
+      { pairedBluetooth: {} },
+      { pairedBluetooth: [null, { localKey: second }] },
+    ]) {
+      await pull(app, holder.token, inventory);
+      expect(
+        (await discoveredRows(app)).find(
+          (r) => r.agentId === holder.agentId && r.localKey === first,
+        )?.paired,
+      ).toBe(true);
+    }
+    expect(
+      (await discoveredRows(app)).find((r) => r.agentId === holder.agentId && r.localKey === second)
+        ?.paired,
+    ).toBe(true);
+    await pull(app, holder.token, { pairedBluetooth: [{ localKey: second }] });
+    let rows = await discoveredRows(app);
+    expect(
+      rows.find((r) => r.agentId === holder.agentId && r.localKey === first),
+    ).not.toHaveProperty("paired");
+    expect(rows.find((r) => r.agentId === other.agentId && r.localKey === first)?.paired).toBe(
+      true,
+    );
+    await pull(app, holder.token, { pairedBluetooth: [] });
+    rows = await discoveredRows(app);
+    expect(
+      rows.find((r) => r.agentId === holder.agentId && r.localKey === second),
+    ).not.toHaveProperty("paired");
+    const refusal = await command(app, holder.agentId, "forget", { address: second });
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ error: { code: "printer.bluetooth_not_paired" } });
+  });
+
   it("refuses Forget with printer.bluetooth_not_paired when the agent reports no pairing, even one it scanned", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
@@ -3877,29 +3922,28 @@ describe("Bluetooth Pair and Forget commands", () => {
     const lastReport = start + 11 * PASS_MS;
     vi.spyOn(Date, "now").mockReturnValue(lastReport + 45_000);
     expect(await listed()).toEqual(everything);
-    expect((await command(app, agentId, "pair", { address: scannedOnly, pin: PIN })).status).toBe(
-      202,
-    );
+    const pairing = await command(app, agentId, "pair", { address: scannedOnly, pin: PIN });
+    expect(pairing.status).toBe(202);
+    const { command: running } = (await pairing.json()) as { command: { id: string } };
+    await pull(app, token, { bluetoothOutcomes: [{ id: running.id, ok: true }] });
     expect((await command(app, agentId, "forget", { address: paired })).status).toBe(202);
     vi.spyOn(Date, "now").mockReturnValue(lastReport + 45_001);
     expect(await listed()).toEqual([]);
   });
 
-  it("refuses the ninth distinct address for one agent with printer.bluetooth_command_busy", async () => {
+  it("refuses a second differing command with the current action and its remaining deadline", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
-    const macs = Array.from({ length: 9 }, randomMac);
+    const macs = [randomMac(), randomMac()];
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
     await pull(app, token, { scanned: macs.map((mac) => scannedMac(mac)) });
-
-    for (const mac of macs.slice(0, 8)) {
-      expect((await command(app, agentId, "pair", { address: mac, pin: PIN })).status).toBe(202);
-    }
-    const ninth = await command(app, agentId, "pair", { address: macs[8], pin: PIN });
-    expect(ninth.status).toBe(429);
-    expect(await ninth.json()).toEqual({
-      error: { code: "printer.bluetooth_command_busy", params: {} },
+    expect((await command(app, agentId, "pair", { address: macs[0], pin: PIN })).status).toBe(202);
+    const refused = await command(app, agentId, "pair", { address: macs[1], pin: PIN });
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({
+      error: { code: "printer.bluetooth_command_busy", params: { kind: "pair", seconds: 120 } },
     });
-    expect((await pull(app, token)).bluetoothCommands).toHaveLength(8);
+    expect((await pull(app, token)).bluetoothCommands).toHaveLength(1);
   });
 
   it("refuses a malformed address or PIN with management.request_invalid naming the field", async () => {
@@ -4050,20 +4094,22 @@ describe("Bluetooth Pair and Forget commands", () => {
     const ids: string[] = [];
     for (const address of [known, unknown]) {
       const res = await command(app, agentId, "forget", { address });
-      ids.push(((await res.json()) as { command: { id: string } }).command.id);
+      const id = ((await res.json()) as { command: { id: string } }).command.id;
+      ids.push(id);
+      await pull(app, token, {
+        pairedBluetooth: paired,
+        bluetoothOutcomes: [
+          address === known
+            ? {
+                id,
+                ok: false,
+                error: "No default controller available",
+                reason: "bluetooth_unavailable",
+              }
+            : { id, ok: false, error: "printer melted", reason: "printer_melted" },
+        ],
+      });
     }
-    await pull(app, token, {
-      pairedBluetooth: paired,
-      bluetoothOutcomes: [
-        {
-          id: ids[0],
-          ok: false,
-          error: "No default controller available",
-          reason: "bluetooth_unavailable",
-        },
-        { id: ids[1], ok: false, error: "printer melted", reason: "printer_melted" },
-      ],
-    });
     const rows = await discoveredRows(app);
     expect(rows.find((r) => r.localKey === known)?.bluetoothCommand).toEqual({
       id: ids[0],
@@ -4138,10 +4184,10 @@ describe("Bluetooth Pair and Forget commands", () => {
     const start = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(start);
     await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
-    await command(app, agentId, "pair", { address: first, pin: PIN });
     const res = await command(app, agentId, "pair", { address: second, pin: PIN });
     const { command: queued } = (await res.json()) as { command: { id: string } };
     await pull(app, token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
+    await command(app, agentId, "pair", { address: first, pin: PIN });
 
     vi.spyOn(Date, "now").mockReturnValue(start + 59_999);
     await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
@@ -4189,21 +4235,21 @@ describe("Bluetooth Pair and Forget commands", () => {
     const straddled = randomMac();
     const scanned = [scannedMac(plain), scannedMac(straddled)];
     await pull(app, token, { scanned });
-    const ids: string[] = [];
     for (const mac of [plain, straddled]) {
       const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
       expect(res.status).toBe(202);
-      ids.push(((await res.json()) as { command: { id: string } }).command.id);
+      const id = ((await res.json()) as { command: { id: string } }).command.id;
+      await pull(app, token, {
+        scanned,
+        bluetoothOutcomes: [
+          {
+            id,
+            ok: false,
+            error: mac === plain ? `Pair failed for PIN ${PIN}` : `${"x".repeat(497)}${PIN}`,
+          },
+        ],
+      });
     }
-
-    await pull(app, token, {
-      scanned,
-      bluetoothOutcomes: [
-        { id: ids[0], ok: false, error: `Pair failed for PIN ${PIN}` },
-        // Past the 500-character bound, so bounding before withholding would keep "Zq7".
-        { id: ids[1], ok: false, error: `${"x".repeat(497)}${PIN}` },
-      ],
-    });
     const listed = await send(app, "GET", "/management-api/discovered-printers", {
       cookie: managerCookie,
     });
@@ -4530,6 +4576,41 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(res.status).toBe(202);
       return ((await res.json()) as { command: { id: string } }).command.id;
     }
+
+    it("retries an expired Unpair after a rolled-back pull, while a valid positive pairing protects another printer", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const start = Date.now();
+      vi.spyOn(Date, "now").mockReturnValue(start);
+      const id = await queueUnpair(app, agentId, token, mac);
+      vi.spyOn(Date, "now").mockReturnValue(start + 120_001);
+      await suite.db.execute(sql`create trigger fail_unpair_pull before update of active on printers
+        begin select raise(abort, 'test unpair rollback'); end`);
+      try {
+        const refused = await send(app, "POST", "/print-api/agent/jobs", {
+          bearer: token,
+          body: { bluetoothOutcomes: [{ id, ok: true }] },
+        });
+        expect(refused.status).toBe(500);
+        expect(await isActive(printerId)).toBe(true);
+      } finally {
+        await suite.db.execute(sql`drop trigger fail_unpair_pull`);
+      }
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
+      expect(await isActive(printerId)).toBe(false);
+
+      const otherMac = randomMac();
+      const otherId = await registerBluetooth(app, otherMac);
+      const next = await queueUnpair(app, agentId, token, otherMac);
+      vi.spyOn(Date, "now").mockReturnValue(start + 240_002);
+      await pull(app, token, {
+        pairedBluetooth: [null, { localKey: otherMac }],
+        bluetoothOutcomes: [{ id: next, ok: true }],
+      });
+      expect(await isActive(otherId)).toBe(true);
+    });
 
     it("switches off the printer at the address once the agent reports the unpairing succeeded, and that pull hands out none of its jobs", async () => {
       const app = mountApp();
@@ -6277,6 +6358,9 @@ it("publishes a scanned Bluetooth device becoming paired, but not its pairing re
   expect(changes).toEqual([event, event]);
   await pull(app, token, { pairedBluetooth: [{ localKey: device.localKey }] });
   expect(changes).toEqual([event, event]);
+  await pull(app, token, { pairedBluetooth: [] });
+  expect((await read())[0]?.paired).toBeUndefined();
+  expect(changes).toEqual([event, event, event]);
 });
 
 describe("held print pulls", () => {

@@ -34,6 +34,19 @@ it("explains each emergency closure and the code-read wait in both languages", (
   }
 });
 
+it.each([
+  ["en", "pair", "Pairing", "try again then"],
+  ["es", "forget", "La desvinculación", "inténtalo de nuevo entonces"],
+])(
+  "explains the running Bluetooth action and retry deadline in %s",
+  (locale, kind, action, retry) => {
+    const message = codeMessage("printer.bluetooth_command_busy", locale, { kind, seconds: 87 });
+    expect(message).toContain(action);
+    expect(message).toContain("87");
+    expect(message).toContain(retry);
+  },
+);
+
 it("degrades an unknown code to the generic message, NEVER the raw code", () => {
   const message = codeMessage("totally.made.up", "en");
   expect(message).toBe("Something went wrong, try again");

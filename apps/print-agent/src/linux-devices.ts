@@ -85,6 +85,7 @@ export function createLinuxDevices(
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
+  let listingForgets = 0;
   let recentPaired:
     { startedAt: number; forgetsBefore: number; devices: BluetoothDevice[] } | undefined;
   // Counted rather than timed, so a forget made after a backward step still follows every listing
@@ -116,9 +117,14 @@ export function createLinuxDevices(
   };
   // One listing at a time: the timer's check and the job poll share one already running.
   const sharedListing = (): Promise<BluetoothDevice[]> => {
-    listing ??= listPaired().finally(() => {
-      listing = undefined;
-    });
+    if (listing !== undefined && listingForgets !== forgets)
+      return listing.catch(() => {}).then(() => sharedListing());
+    if (listing === undefined) {
+      listingForgets = forgets;
+      listing = listPaired().finally(() => {
+        listing = undefined;
+      });
+    }
     return listing;
   };
   // Also due when the last listing started further ahead than the interval: the clock stepped back.

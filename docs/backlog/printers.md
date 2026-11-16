@@ -139,17 +139,6 @@ chosen destination.
   the agent has joined and is not out of touch, `/status.json` answers only loopback callers
   (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
-## A device unpaired outside Waitron still reads as paired for a short while
-
-- **A device unpaired outside Waitron still reads as paired for a short while** (found in C103's
-  review, narrowed in A405's, read, not run). The server calls a Bluetooth device paired while the agent's last
-  "paired" report is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while
-  a discovery window is open, 15 otherwise). A successful Unpair sent from Waitron now clears that
-  report; a device unpaired some other way, such as on the printer itself, keeps it, so Pair again
-  can find it still paired and switch it on without pairing it. Clearing `pairedAt` when an
-  agent's paired list leaves the device out would end it, but the pull handler does not yet tell
-  an empty list from an absent one.
-
 ## Measure one-job print pulls on the box
 
 A517 uses one job per pull to eliminate unsent leased tails. Every job now repeats the agent's
@@ -233,7 +222,8 @@ every unpaired device from the list).
 A real RFCOMM connection
 and print from inside the container under the shipped profile — CI's runners cannot load
 Bluetooth at all — and whether the printer gets every byte before the connection closes. The
-owner printed on channel 1 from the host only. image-smoke runs the helper directly with its own
+owner printed on channel 1 from the host only. Automatic channel discovery has not run on a real
+printer. image-smoke runs the helper directly with its own
 arguments, not through `RfcommTransport`, and only as far as creating the socket; and
 `scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
 prove the bundle's default helper path resolves inside the image. The helper's 20 + 20 second
@@ -320,25 +310,6 @@ digits as paper does.
   header can therefore end a page with the items starting on the next, and a table that runs onto
   a further page shows no header there. Keep the header with the first row, and repeat it at the
   top of each continuation page.
-
-## A command queued behind a slow pair can run out of time
-
-The 120 seconds count from queueing
-(`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
-time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
-agent up to about 90 seconds (`REGISTER_TIMEOUT_MS`, `PAIR_TIMEOUT_MS` and `EXIT_GRACE_MS`,
-10, 75 and 5 seconds, in `apps/print-agent/src/bluetooth-command.ts`). A second command
-waiting behind that pair can therefore expire on the server before it runs; its outcome is
-then ignored and the screen says "No answer from the print agent — try again" whatever
-actually happened.
-
-## An Unpair outcome that reaches the server after it dropped the command leaves the printer on
-
-- **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
-  (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
-  delete the printer to stop it and end its waiting jobs. The printer's waiting jobs otherwise stay
-  in that case, after a server restart (the command store is held in memory), and for a printer
-  unpaired outside Waitron.
 
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
@@ -512,22 +483,6 @@ Hardware and inbox checks to complete in the owner session.
   with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
   "A clock jump"). Left open by A798-B slice 9 (#2025).
 
-## Bundle: Bluetooth pairing commands
-
-4 entries, size M.
-
-- **A device unpaired outside Waitron still reads as paired for a short while** — found in C103's review, narrowed in A405's, read, not run. A successful Unpair from Waitron now clears the paired report; one done elsewhere keeps it for up to 45 seconds. [Detail](printers.md#a-device-unpaired-outside-waitron-still-reads-as-paired-for-a-short-while)
-- **A command queued behind a slow pair can run out of time.** A second command waiting behind that
-  pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
-  says "No answer from the print agent — try again" whatever actually happened.
-  [Detail](printers.md#a-command-queued-behind-a-slow-pair-can-run-out-of-time)
-- **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
-  (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
-  delete the printer to stop it and end its waiting jobs.
-  [Detail](printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
-- **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
-  port is on another channel fails each job with the connection error.
-
 ## Bundle: Receipt layout pass
 
 4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -577,6 +532,14 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
+
+- **Bluetooth command limits (watcher, 2026-11-16 03:02).** One pending operation per agent;
+  exact retries keep their ID and deadline. Channel discovery caches a successful lookup, including
+  an inconclusive answer's channel-1 fallback; a failed send drops it for the next job. The server
+  remembers only the last eight expired Unpair IDs across all agents, until accepted or evicted.
+  After eviction or a server restart, a late Unpair cannot switch the printer off. Jobs also remain
+  waiting for a printer unpaired outside Waitron; delete it to end its waiting jobs.
+  [Plan](../superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
   (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the

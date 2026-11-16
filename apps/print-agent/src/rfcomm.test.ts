@@ -16,6 +16,7 @@ const STUB = [
   "#!/bin/sh",
   'if [ -n "$WT_RFCOMM_EARLY" ]; then printf \'%s\\n\' "$WT_RFCOMM_STDERR" >&2; exit 1; fi',
   'printf \'%s\\n\' "$@" > "$WT_RFCOMM_OUT/argv"',
+  'echo sent >> "$WT_RFCOMM_OUT/helper-calls"',
   'echo $$ > "$WT_RFCOMM_OUT/pid"',
   'cat > "$WT_RFCOMM_OUT/stdin"',
   'if [ -n "$WT_RFCOMM_HANG" ]; then exec sleep 30; fi',
@@ -73,10 +74,14 @@ const CONTROLS = [
   "WT_RFCOMM_SIGNAL",
   "WT_RFCOMM_STDERR",
   "WT_RFCOMM_EXIT",
+  "WT_SDP_RESPONSE",
+  "WT_SDP_EXIT",
+  "WT_SDP_HANG",
 ] as const;
 
 let bin: string;
 let stub: string;
+let sdpBin: string;
 let fakeSocketDir: string;
 let out: string;
 let savedPath: string | undefined;
@@ -88,6 +93,21 @@ beforeAll(async () => {
   stub = join(bin, "python3");
   await writeFile(stub, `${STUB}\n`);
   await chmod(stub, 0o755);
+  sdpBin = join(bin, "sdp");
+  await mkdir(sdpBin);
+  const sdp = join(sdpBin, "sdptool");
+  await writeFile(
+    sdp,
+    [
+      "#!/bin/sh",
+      'printf \'%s\\n\' "$*" >> "$WT_RFCOMM_OUT/sdp-args"',
+      'if [ -n "$WT_SDP_HANG" ]; then echo $$ > "$WT_RFCOMM_OUT/sdp-pid"; exec sleep 30; fi',
+      "printf '%s\\n' \"$WT_SDP_RESPONSE\"",
+      'exit "${WT_SDP_EXIT:-0}"',
+      "",
+    ].join("\n"),
+  );
+  await chmod(sdp, 0o755);
   fakeSocketDir = join(bin, "fake-socket");
   await mkdir(fakeSocketDir);
   await writeFile(join(fakeSocketDir, "sitecustomize.py"), `${FAKE_SOCKET}\n`);
@@ -100,6 +120,7 @@ beforeEach(async () => {
   out = await mkdtemp(join(tmpdir(), "print-agent-rfcomm-out-"));
   process.env.WT_RFCOMM_OUT = out;
   savedPath = process.env.PATH;
+  process.env.PATH = `${sdpBin}${delimiter}${savedPath ?? ""}`;
   savedPythonPath = process.env.PYTHONPATH;
 });
 afterEach(async () => {
@@ -125,6 +146,66 @@ const argv = async (): Promise<string[]> =>
   (await readFile(join(out, "argv"), "utf8")).split("\n").slice(0, -1);
 
 describe("RfcommTransport", () => {
+  it("discovers the addressed serial channel and caches it without changing the bytes", async () => {
+    process.env.WT_SDP_RESPONSE = 'Protocol Descriptor List:\n  "RFCOMM" (0x0003)\n    Channel: 7';
+    const transport = new RfcommTransport({ python: stub });
+    const bytes = new Uint8Array([0, 255, 65]);
+    await transport.send(target(), bytes);
+    await transport.send(target(), bytes);
+    expect(await argv()).toContain("7");
+    expect(new Uint8Array(await readFile(join(out, "stdin")))).toEqual(bytes);
+    expect(await readFile(join(out, "sdp-args"), "utf8")).toBe(`search --bdaddr ${ADDRESS} SP\n`);
+  });
+
+  it.each(["", "Channel: 3\nChannel: 7", "Channel: 0\nChannel: 31"])(
+    "caches channel 1 after a successful inconclusive lookup (%s)",
+    async (response) => {
+      process.env.WT_SDP_RESPONSE = response;
+      const transport = new RfcommTransport({ python: stub });
+      await transport.send(target(), new Uint8Array([65]));
+      await transport.send(target(), new Uint8Array([66]));
+      expect((await argv())[2]).toBe("1");
+      expect((await readFile(join(out, "sdp-args"), "utf8")).trim().split("\n")).toHaveLength(1);
+    },
+  );
+
+  it("does not cache a failed lookup, and rediscovers after a failed send without sending twice", async () => {
+    const transport = new RfcommTransport({ python: stub });
+    process.env.WT_SDP_EXIT = "1";
+    await transport.send(target(), new Uint8Array([65]));
+    delete process.env.WT_SDP_EXIT;
+    process.env.WT_SDP_RESPONSE = "Channel: 7";
+    process.env.WT_RFCOMM_EXIT = "1";
+    await expect(transport.send(target(), new Uint8Array([66]))).rejects.toThrow();
+    delete process.env.WT_RFCOMM_EXIT;
+    process.env.WT_SDP_RESPONSE = "Channel: 9";
+    await transport.send(target(), new Uint8Array([67]));
+    expect((await argv())[2]).toBe("9");
+    expect((await readFile(join(out, "sdp-args"), "utf8")).trim().split("\n")).toHaveLength(3);
+    expect((await readFile(join(out, "helper-calls"), "utf8")).trim().split("\n")).toHaveLength(3);
+  });
+
+  it("bounds a stalled channel lookup, falling back without caching and killing that child", async () => {
+    process.env.WT_SDP_HANG = "1";
+    const transport = new RfcommTransport({ python: stub, lookupTimeoutMs: 50 });
+    await transport.send(target(), new Uint8Array([65]));
+    expect((await argv())[2]).toBe("1");
+    const pid = Number(await readFile(join(out, "sdp-pid"), "utf8"));
+    await expect.poll(() => isAlive(pid), { timeout: 2000 }).toBe(false);
+    delete process.env.WT_SDP_HANG;
+    process.env.WT_SDP_RESPONSE = "Channel: 8";
+    await transport.send(target(), new Uint8Array([65]));
+    expect((await argv())[2]).toBe("8");
+  });
+
+  it("uses channel 1 when sdptool is missing", async () => {
+    await new RfcommTransport({ python: stub, sdptool: join(bin, "absent") }).send(
+      target(),
+      new Uint8Array([65]),
+    );
+    expect((await argv())[2]).toBe("1");
+  });
+
   it("hands the script, address, channel and timeout in seconds to the interpreter, and the job's bytes on its standard input", async () => {
     const bytes = new Uint8Array([0x1b, 0x40, 0x00, 0x0a, 0xff, 0x41]);
     const transport = new RfcommTransport({
@@ -135,11 +216,12 @@ describe("RfcommTransport", () => {
     });
     await expect(transport.send(target(), bytes)).resolves.toBeUndefined();
     expect(await argv()).toStrictEqual(["/opt/helper/rfcomm-send.py", ADDRESS, "3", "1.5"]);
+    await expect(readFile(join(out, "sdp-args"))).rejects.toThrow(/ENOENT/);
     expect(new Uint8Array(await readFile(join(out, "stdin")))).toStrictEqual(bytes);
   });
 
   it("runs python3 from PATH on the helper beside this module, over channel 1 with a 20 second timeout, by default", async () => {
-    process.env.PATH = `${bin}${delimiter}${savedPath ?? ""}`;
+    process.env.PATH = `${bin}${delimiter}${sdpBin}${delimiter}${savedPath ?? ""}`;
     await new RfcommTransport().send(target(), new Uint8Array([0x41]));
     expect(await argv()).toStrictEqual([
       fileURLToPath(new URL("./rfcomm-send.py", import.meta.url)),

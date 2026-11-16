@@ -1141,6 +1141,7 @@ export class PrintersScreen extends LitElement {
   /** The server refused the PIN; shown under the field until it changes. */
   @state() private pairRefused = false;
   @state() private pairErrorKey: string | null = null;
+  #bluetoothBusyParams?: { kind?: unknown; seconds?: unknown };
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
   #pairScope?: DraftScope<string>;
@@ -2186,7 +2187,12 @@ export class PrintersScreen extends LitElement {
       if (codeOf(error) === "management.request_invalid" && refusedField(error) === "pin") {
         this.pairRefused = true;
         this.#focusFirstInvalid("[data-test=pair-printer-modal]");
-      } else this.pairErrorKey = codeOf(error);
+      } else {
+        this.#bluetoothBusyParams = (
+          error as { params?: { kind?: unknown; seconds?: unknown } } | null
+        )?.params;
+        this.pairErrorKey = codeOf(error);
+      }
     } finally {
       if (epoch === this.#pairEpoch) this.pairSubmitting = false;
     }
@@ -2315,7 +2321,7 @@ export class PrintersScreen extends LitElement {
       }}
     >
       ${this.#renderRefreshError()}${status}
-      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}>
+      <wt-form-actions slot="footer" .error=${bottomMessage(this.#bluetoothRefusal(this.errorKey))}>
         <wt-button
           slot="cancel"
           data-test="cancel-pair-again"
@@ -2356,6 +2362,12 @@ export class PrintersScreen extends LitElement {
     return p.transport === "bluetooth" ? this.#pairedReports.get(p.id) : undefined;
   }
 
+  #bluetoothRefusal(code: string | null): string | null {
+    return code === "printer.bluetooth_command_busy"
+      ? codeMessage(code, undefined, this.#bluetoothBusyParams)
+      : refusal(code);
+  }
+
   async #forget(device: DiscoveredPrinter): Promise<void> {
     this.errorKey = null;
     this.forgettingKey = this.#commandKeyOf(device);
@@ -2363,6 +2375,9 @@ export class PrintersScreen extends LitElement {
       const { command } = await this.api.forgetBluetoothPairing(device.agentId, device.localKey!);
       this.#trackCommand(device.agentId, command);
     } catch (error) {
+      this.#bluetoothBusyParams = (
+        error as { params?: { kind?: unknown; seconds?: unknown } } | null
+      )?.params;
       this.errorKey = codeOf(error);
     } finally {
       this.forgettingKey = null;
@@ -2812,7 +2827,7 @@ export class PrintersScreen extends LitElement {
           >${this.scanningAgents ? t("printers.scan_loading") : t("printers.scan_agents")}</wt-button
         >
       </section>
-      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}
+      <wt-form-actions slot="footer" .error=${bottomMessage(this.#bluetoothRefusal(this.errorKey))}
         ><wt-button
           slot="cancel"
           data-test="cancel-new-agent"
@@ -2831,7 +2846,7 @@ export class PrintersScreen extends LitElement {
       .open=${true}
       .impact=${{ target: { id: agent.id, name: agent.name }, refusals: [], ends: [], removes: [] }}
       .submitting=${this.submitting}
-      .actionError=${this.errorKey ? codeMessage(this.errorKey) : ""}
+      .actionError=${this.errorKey ? this.#bluetoothRefusal(this.errorKey) : ""}
       .copy=${{ ...printerDeleteCopy(), heading: t("printers.delete_agent_heading"), irreversible: t("printers.delete_agent_hint") }}
       .opener=${this.#agentDeleteOpener}
       @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
@@ -2885,7 +2900,7 @@ export class PrintersScreen extends LitElement {
       <p>${t("printers.last_seen")}: ${this.#timestamp(agent.lastSeenAt)}</p>
       <wt-form-actions
         slot="footer"
-        .error=${bottomMessage(refusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
+        .error=${bottomMessage(this.#bluetoothRefusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
       >
         <wt-button
           slot="cancel"
@@ -4388,7 +4403,7 @@ export class PrintersScreen extends LitElement {
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
     const bottom = bottomMessage(
-      refusal(this.errorKey),
+      this.#bluetoothRefusal(this.errorKey),
       refusal(this.testError),
       ...Object.values(errors),
     );
@@ -4718,7 +4733,7 @@ export class PrintersScreen extends LitElement {
       </div>
       <wt-form-actions
         slot="footer"
-        .error=${bottomMessage(refusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
+        .error=${bottomMessage(this.#bluetoothRefusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
       >
         <wt-button
           slot="cancel"
@@ -4781,7 +4796,7 @@ export class PrintersScreen extends LitElement {
       </div>
       <wt-form-actions
         slot="footer"
-        .error=${bottomMessage(refusal(this.pairErrorKey), pinError === "" ? null : t("form.fix_fields"))}
+        .error=${bottomMessage(this.#bluetoothRefusal(this.pairErrorKey), pinError === "" ? null : t("form.fix_fields"))}
       >
         <wt-button
           slot="cancel"
@@ -5164,7 +5179,7 @@ export class PrintersScreen extends LitElement {
       )}
       <wt-form-actions
         slot="footer"
-        .error=${this.namingPrinter ? "" : bottomMessage(refusal(this.errorKey))}
+        .error=${this.namingPrinter ? "" : bottomMessage(this.#bluetoothRefusal(this.errorKey))}
       >
         <wt-button
           slot="cancel"
@@ -5384,7 +5399,7 @@ export class PrintersScreen extends LitElement {
       ${
         dialogOpen
           ? nothing
-          : html`${this.#renderTestPageSent()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
       ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderReprint()}
