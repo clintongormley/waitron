@@ -17,7 +17,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignMenuToVenue,
@@ -81,8 +82,8 @@ async function setup() {
     simplifiedInvoiceLimit: null,
   };
   const [anna, sam] = await seedPersons(db, [
-    { displayName: "Anna", pinHash: hashPin("5555"), role: "staff" },
-    { displayName: "Sam", pinHash: hashPin("6666"), role: "staff" },
+    { displayName: "Anna", pinHash: fixturePinHash("5555"), role: "staff" },
+    { displayName: "Sam", pinHash: fixturePinHash("6666"), role: "staff" },
   ]);
   const stocked = await withTransaction(db, async (tx) => {
     const early = await createCourse(tx, { name: "Starters", displayOrder: 0 });

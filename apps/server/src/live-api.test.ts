@@ -23,13 +23,13 @@ import {
   seedZone,
 } from "@waitron/db/testing/seed.js";
 import {
-  hashPin,
   hashSessionToken,
   managementSessions,
   persons,
   startManagementSession,
   resolveManagementSession,
 } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import * as identity from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ResourceChange } from "@waitron/shared";
@@ -45,7 +45,7 @@ async function fixture() {
     // generators a raw insert never reaches.
     const [p] = await seedPersons(tx, {
       displayName: "Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     return startManagementSession(tx, { personId: p!.id });

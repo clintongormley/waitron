@@ -6,13 +6,13 @@ import { incidents, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncidentOnce } from "@waitron/core";
 import {
-  hashPin,
   hashSessionToken,
   managementSessions,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
 } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, backupOrigin } from "@waitron/shared";
@@ -43,7 +43,7 @@ let stoppedSince: Date | null;
 
 async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
-    const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
+    const [p] = await seedPersons(tx, { displayName: name, pinHash: fixturePinHash("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });

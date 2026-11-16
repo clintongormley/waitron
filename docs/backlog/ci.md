@@ -371,7 +371,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 
-3 entries, size L. The fixed-secret entry covers the remaining setup.
+3 entries, size L. The fixed-secret entry covers held, unconverted and uninspected setup.
 
 - **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
@@ -932,8 +932,10 @@ once per file and tests about hashing. Find candidates with `rg -l 'hashPin\(|ha
 -g '*.test.ts' -g '**/testing/**'`, then inspect their call sites.
 
 Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
-`src/bill-payments-api.test.ts` and `src/attendance-till-api.test.ts`, plus the shared
-`src/testing/handover-placed-copy.ts`. The two staged-hour salt helpers remain in
+`src/bill-payments-api.test.ts`, plus the shared `src/testing/handover-placed-copy.ts`.
+Also inspect the unconverted repeated setup in `src/workforce-api.gate-sweep.test.ts`,
+`src/personal-data-export-api.workforce.test.ts`, `src/till-api.availability.test.ts`
+and `src/device-zones-api.test.ts`; they were outside the cleared twelve-file pass. The two staged-hour salt helpers remain in
 [the existing speed-up entry](#server-test-time-levers-left-after-a1297).
 
 

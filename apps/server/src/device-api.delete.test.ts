@@ -8,13 +8,8 @@ import { describe, expect, it } from "vitest";
 import { devices, joinRequests, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPin,
-  hashDeviceToken,
-  hashSessionToken,
-  loginWithPin,
-  sessions,
-} from "@waitron/identity";
+import { hashDeviceToken, hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { payments } from "@waitron/payments";
 import type { DeleteImpact } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
@@ -111,7 +106,7 @@ async function enrol(
 async function openTillSession(deviceId: string): Promise<string> {
   const [person] = await seedPersons(suite.db, {
     displayName: `Server ${randomUUID()}`,
-    pinHash: hashPin("4321"),
+    pinHash: fixturePinHash("4321"),
     role: "staff",
   });
   const session = await withTransaction(suite.db, (tx) =>

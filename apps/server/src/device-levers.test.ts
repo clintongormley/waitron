@@ -19,7 +19,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { PERSON_HEADER } from "@waitron/shared";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { LEVER_STATUS, mountDeviceApi } from "./device-api.js";
@@ -104,7 +104,7 @@ async function fixture() {
   );
   const [anna] = await seedPersons(suite.db, {
     displayName: "Anna",
-    pinHash: hashPin("5555"),
+    pinHash: fixturePinHash("5555"),
     role: "admin",
   });
   /** A seated party with one Burger held in a group of its own. */
