@@ -22,10 +22,11 @@ Vitest 4.1.11 reads it.
 
 ## What the landing-port fix (A80, PR #740) left open
 
-Within the setup/recovery slice, the remaining callers include `fiscal-readiness-first-setup.test.ts`, `start-full-disk.e2e.test.ts`,
-`start-from-spare.e2e.test.ts`, the `first-fiscal-*`, `handover-*` and `hour-*` suites,
-and configured-port boot cases and unused-peer ports. Audit their configured addresses,
-advertised origins and listener-release assertions before choosing a bind-time or retained fixture.
+The setup/recovery callers still to audit include `fiscal-readiness-first-setup.test.ts`,
+`start-full-disk.e2e.test.ts` and `start-from-spare.e2e.test.ts`.
+Remaining `freePorts` callers in the `first-fiscal-*`, `handover-*` and `hour-*` suites,
+configured-port boot cases and unused-peer cases also need an audit.
+Keep configured addresses, advertised origins and listener-release assertions when choosing fixtures.
 Later same-port rebinds inside one process still need their own handoff audit.
 Other `freePorts` callers also need an audit of whether they require a released configured port.
 
