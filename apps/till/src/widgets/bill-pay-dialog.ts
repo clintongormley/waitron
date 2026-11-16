@@ -22,7 +22,8 @@ import {
 } from "@waitron/shared";
 import {
   baseStyles,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   formatDecimalInput,
   submitOnEnter,
   leaveCoordinatorFor,
@@ -564,13 +565,14 @@ export class TillBillPayDialog extends LitElement {
   @state() private outside: OutsideCardDetails = {};
   @state() private tipMode: TipMode = "none";
   @state() private tipAmount = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private tipAttempted = false;
   /** Unset, the server uses the device's own reader. */
   @state() private chosenReaderId?: string;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
-  /** The refusal still shown: it goes when the field it names changes, or at the next request. */
-  @state() private shownRefusal: PayRefusal | null = null;
+  get #shownRefusal(): PayRefusal | null {
+    return this.#feedback.remaining({ refusal: this.refusal }).refusal ?? null;
+  }
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
@@ -679,7 +681,7 @@ export class TillBillPayDialog extends LitElement {
     this.outside = value.outside;
     this.chosenReaderId = value.readerId;
     this.simulationOutcome = value.simulationOutcome;
-    this.attempted = false;
+    this.#feedback.attempted = false;
   }
 
   #syncDrafts(): void {
@@ -756,7 +758,7 @@ export class TillBillPayDialog extends LitElement {
       this.#tip = undefined;
       this.#tipBaseline = undefined;
       this.#noTip();
-      this.shownRefusal = null;
+      this.#feedback.dismiss("refusal");
       this.#emit("bill-pay-edit");
     };
     if (this.#tip)
@@ -781,7 +783,7 @@ export class TillBillPayDialog extends LitElement {
       this.picks = picks;
     }
     if (changed.has("refusal")) {
-      this.shownRefusal = this.refusal;
+      this.#feedback.newRefusal();
       const shownPending = (changed.get("taken") as PayTaken | null | undefined)?.pending;
       if (
         (this.#runPending.size > 0 || shownPending !== undefined) &&
@@ -909,7 +911,9 @@ export class TillBillPayDialog extends LitElement {
     this.cardTip = "";
     this.externalRef = "";
     this.outside = {};
-    this.attempted = false;
+    const refusalDismissed = this.#shownRefusal === null;
+    this.#feedback.reset();
+    if (refusalDismissed) this.#feedback.dismiss("refusal");
     this.guestsEntry = undefined;
     this.guestsAttempted = false;
     this.#noTip();
@@ -1077,15 +1081,15 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #refusalField(): Field | null {
-    return this.shownRefusal === null
+    return this.#shownRefusal === null
       ? null
-      : refusalField(this.shownRefusal, this.method, this.chosenWay);
+      : refusalField(this.#shownRefusal, this.method, this.chosenWay);
   }
 
   #refusalMessage(field: Field): string {
     return field === "tendered"
       ? t("bill_pay.tendered_short")
-      : refusalText(this.shownRefusal!, { checkTime: this.checkTimeOffered, billPayment: true });
+      : refusalText(this.#shownRefusal!, { checkTime: this.checkTimeOffered, billPayment: true });
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
@@ -1098,18 +1102,25 @@ export class TillBillPayDialog extends LitElement {
   /** The one message above the action: the generic one while a field is marked, then a refusal
    * that names no field, in its own words. */
   #bottomMessage(fieldErrors: ReadonlyMap<Field, string>, extra?: string): string {
-    const parts: string[] = [];
-    if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
-    if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(
-        refusalText(this.shownRefusal, { checkTime: this.checkTimeOffered, billPayment: true }),
-      );
-    if (extra !== undefined) parts.push(extra);
-    return parts.join(" ");
+    const refusal = this.#shownRefusal;
+    return bottomMessage(
+      this.#feedback.message({}, new Set(fieldErrors.keys()), t("form.fix_fields")),
+      this.#feedback.message(
+        {
+          refusal:
+            refusal !== null && this.#refusalField() === null
+              ? refusalText(refusal, { checkTime: this.checkTimeOffered, billPayment: true })
+              : undefined,
+          extra,
+        },
+        new Set(),
+        t("form.fix_fields"),
+      ),
+    );
   }
 
   #changed(field: Field): void {
-    if (this.#refusalField() === field) this.shownRefusal = null;
+    if (this.#refusalField() === field) this.#feedback.dismiss("refusal");
   }
 
   #emit(type: string, detail: unknown = {}): void {
@@ -1119,11 +1130,9 @@ export class TillBillPayDialog extends LitElement {
   async #continue(): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy || !this.#canAsk()) return;
     if (this.#heldForEquipment(this.method)) return;
-    this.attempted = true;
-    this.shownRefusal = null;
+    this.#feedback.press("refusal");
     if (this.#ownErrors().size > 0) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     if (this.method !== "cash" && !this.confirmationLocked && this.#cardInProgress()) {
@@ -1294,7 +1303,7 @@ export class TillBillPayDialog extends LitElement {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
     const actions = html`<wt-form-actions slot="footer"
-      >${recoveryLink(this.shownRefusal)}
+      >${recoveryLink(this.#shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1321,8 +1330,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   async #focusInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.shadowRoot!);
+    await this.#feedback.focus(this.shadowRoot!);
   }
 
   #guestsDetail(shown: boolean): ReceiptGuestsDetail {
@@ -1611,7 +1619,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #form(): SheetView {
-    const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
     const body = html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
@@ -1639,7 +1647,7 @@ export class TillBillPayDialog extends LitElement {
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       ${this.#methods().length === 0 ? this.#notice() : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${bottom}
-      >${recoveryLink(this.shownRefusal)}
+      >${recoveryLink(this.#shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -2021,7 +2029,7 @@ export class TillBillPayDialog extends LitElement {
   /** Asks the server again with `addedTip` as the tip left from the change. */
   #askWithTip(asked: PayRequest, cash: CashPay, addedTip: string | undefined): void {
     const pay: CashPay = { method: "cash", tendered: cash.tendered };
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     this.#emit("bill-pay-preview", {
       ...asked,
       pay: addedTip === undefined ? pay : { ...pay, addedTip },
@@ -2058,7 +2066,7 @@ export class TillBillPayDialog extends LitElement {
         return;
       }
     }
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     const reader =
       this.handheld && onReader && !this.confirmationLocked ? this.#readyReader() : null;
     this.#sent = reader === null ? null : sentCard(reader, preview.charged!);
@@ -2188,7 +2196,7 @@ export class TillBillPayDialog extends LitElement {
       }
       ${guestsShown ? this.#guests(errors.get("guests")) : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${bottom}
-      >${recoveryLink(this.shownRefusal)} ${this.#backButton()}
+      >${recoveryLink(this.#shownRefusal)} ${this.#backButton()}
       <wt-button
         variant="primary"
         data-pay-confirm
@@ -2206,7 +2214,7 @@ export class TillBillPayDialog extends LitElement {
               : readerButtonLabel(
                   reader.name,
                   this.#money(preview.charged!),
-                  this.shownRefusal?.code === "declined",
+                  this.#shownRefusal?.code === "declined",
                 )
         }
       </wt-button>
@@ -2264,7 +2272,7 @@ export class TillBillPayDialog extends LitElement {
     return {
       body,
       actions: html`<wt-form-actions slot="footer" .error=${bottom}
-        >${recoveryLink(this.shownRefusal)}${this.#backButton()}</wt-form-actions
+        >${recoveryLink(this.#shownRefusal)}${this.#backButton()}</wt-form-actions
       >`,
     };
   }
@@ -2286,7 +2294,7 @@ export class TillBillPayDialog extends LitElement {
 
   #choose(asked: PayRequest, allocation: AllocationChoice): void {
     if (!this.isConnected || !this.#active || this.busy) return;
-    this.shownRefusal = null;
+    this.#feedback.dismiss("refusal");
     this.#noTip();
     this.#emit("bill-pay-preview", { ...asked, allocation } satisfies PayRequest);
   }
