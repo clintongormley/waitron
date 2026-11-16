@@ -268,8 +268,6 @@ describe("settled-tender refundable balances", () => {
     const returned = (amount: number) =>
       store.db.insert(paymentRefunds).values({
         paymentId: payment.id,
-        provider: payment.provider,
-        paymentRef: payment.paymentRef,
         providerRefundRef: randomUUID(),
         amount,
         state: "succeeded",
@@ -364,8 +362,6 @@ describe("settled-tender refundable balances", () => {
     const payment = await capture(target.saleId, { state: "partially_refunded" });
     await store.db.insert(paymentRefunds).values({
       paymentId: payment.id,
-      provider: payment.provider,
-      paymentRef: payment.paymentRef,
       amount: 1050,
       state: "succeeded",
     });
@@ -493,8 +489,6 @@ describe("settled-tender refundable balances", () => {
     });
     await store.db.insert(paymentRefunds).values({
       paymentId: payment.id,
-      provider: payment.provider,
-      paymentRef: payment.paymentRef,
       amount: 200,
       state: "succeeded",
       providerRefundRef: "re_done",
@@ -510,15 +504,11 @@ describe("settled-tender refundable balances", () => {
     await store.db.insert(paymentRefunds).values([
       {
         paymentId: payment.id,
-        provider: "fake",
-        paymentRef: payment.paymentRef,
         amount: 400,
         state: "succeeded",
       },
       {
         paymentId: payment.id,
-        provider: "fake",
-        paymentRef: payment.paymentRef,
         amount: 600,
         state: "failed",
       },
@@ -528,8 +518,6 @@ describe("settled-tender refundable balances", () => {
     ]);
     await store.db.insert(paymentRefunds).values({
       paymentId: payment.id,
-      provider: "fake",
-      paymentRef: payment.paymentRef,
       amount: 700,
       state: "succeeded",
     });
@@ -595,8 +583,6 @@ describe("settled-tender refundable balances", () => {
     });
     await store.db.insert(paymentRefunds).values({
       paymentId: payment.id,
-      provider: "fake",
-      paymentRef: payment.paymentRef,
       amount: 200,
       state: "succeeded",
       providerRefundRef: "re_old",

@@ -182,7 +182,7 @@ export default tseslint.config(
   {
     // packages/payments/src/reconciliation-schedule is a duty-NEUTRAL runner: duties are injected
     // and typed structurally, so it must never import a duty's own code, the rest of payments
-    // included, though it lives in that package. `scheduled_runs` is declared in payments' schema,
+    // included, though it lives in that package. `reconciliation_runs` is declared in payments' schema,
     // which is the one payments file outside this folder the runner may import (`except` below).
     //
     // Test files are exempt: the fit test and the AppError-code augmentation both name payments
@@ -208,7 +208,7 @@ export default tseslint.config(
               // Absolute globs: a `./` form does not match.
               except: [
                 import.meta.dirname + "/packages/payments/src/reconciliation-schedule/**",
-                import.meta.dirname + "/packages/payments/src/schema/scheduled-runs.*",
+                import.meta.dirname + "/packages/payments/src/schema/reconciliation-runs.*",
               ],
               message:
                 "packages/payments/src/reconciliation-schedule is a duty-neutral runner and must " +

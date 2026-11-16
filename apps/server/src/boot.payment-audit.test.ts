@@ -64,7 +64,7 @@ describe("boot payment audits", () => {
       });
       await vi.waitFor(() => {
         const runs = suite.db.all<{ duty: string; summary: string; state: string }>(
-          sql`select duty, summary, state from scheduled_runs`,
+          sql`select duty, summary, state from reconciliation_runs`,
         );
         expect(
           runs.some((run) => run.duty === "payments.reconcile.sumup" && run.state === "succeeded"),
@@ -79,7 +79,7 @@ describe("boot payment audits", () => {
         admit: expect.any(Function),
       });
       const run = suite.db.all<{ summary: string }>(
-        sql`select summary from scheduled_runs where state = 'succeeded' limit 1`,
+        sql`select summary from reconciliation_runs where state = 'succeeded' limit 1`,
       )[0]!;
       expect(JSON.parse(run.summary)).toMatchObject({ unlinkedCharges: 0, remediated: 0 });
       expect(suite.db.all(sql`select * from payment_refunds`)).toEqual([]);

@@ -63,6 +63,7 @@ const EXPECTED = [
   "order_portion_events",
   "order_portions",
   "pay_period_closures",
+  "payment_refunds",
   "receipt_reprints",
   "registros_facturacion",
   "returned_invoice_records",

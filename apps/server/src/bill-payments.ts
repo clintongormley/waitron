@@ -1362,6 +1362,7 @@ export async function takeBillPayment(
           externalRef: req.externalRef,
           ...outsideCardDetails(req),
           billPaymentId: payment.id,
+          requestedBy: operator.personId,
         });
         await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
       } else {
@@ -1690,6 +1691,7 @@ export async function takeReaderBillPayment(
         ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
         simulationOutcome: req.simulationOutcome,
         billPaymentId: payment.id,
+        requestedBy: operator.personId,
       });
     } catch (error) {
       if (isAppError(error) && REFUSED_START.has(error.code)) {

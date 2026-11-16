@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, billPayments } from "@waitron/db";
@@ -14,6 +15,10 @@ const SETTLED = new Date("2026-07-23T09:00:00Z");
 describe("recordManualCardPayment", () => {
   it("stores the device the card payment was keyed on", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await seedPerson(suite.db, {
+      id: "22222222-2222-4222-8222-222222222222",
+      displayName: "Starter",
+    });
     const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -21,12 +26,17 @@ describe("recordManualCardPayment", () => {
         nodeId: seeded.nodeId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
+        requestedBy: "22222222-2222-4222-8222-222222222222",
       }),
     );
     const rows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
-      sql`select source, device_id from payments where payment_ref = ${result.paymentRef}`,
+      sql`select source, device_id, requested_by from payments where payment_ref = ${result.paymentRef}`,
     );
-    expect(rows.rows[0]).toEqual({ source: "device", device_id: seeded.deviceId });
+    expect(rows.rows[0]).toEqual({
+      source: "device",
+      device_id: seeded.deviceId,
+      requested_by: "22222222-2222-4222-8222-222222222222",
+    });
   });
 
   it("writes a captured row under the manual provider, with external_ref and a minted manual- ref", async () => {
@@ -88,6 +98,7 @@ describe("recordManualRefund", () => {
   it("records a refund under the manual provider and advances the payment to refunded", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     const authorizedBy = "11111111-1111-1111-1111-111111111111";
+    await seedPerson(suite.db, { id: authorizedBy, displayName: "Refund authoriser" });
     const paid = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -111,8 +122,8 @@ describe("recordManualRefund", () => {
       amount: number;
       authorized_by: string | null;
     }>(sql`
-      select provider, amount, authorized_by from payment_refunds
-      where payment_ref = ${paid.paymentRef}
+      select payments.provider, payment_refunds.amount, authorized_by from payment_refunds
+      join payments on payments.id = payment_refunds.payment_id where payments.payment_ref = ${paid.paymentRef}
     `);
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0]).toMatchObject({

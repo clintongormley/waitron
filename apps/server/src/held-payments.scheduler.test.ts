@@ -90,7 +90,7 @@ async function openAlertNames(): Promise<string[] | null> {
 /** The days, among those the held payments settled on, with a re-check still waiting to run. */
 async function pendingRechecks(): Promise<string[]> {
   const { rows } = await suite.db.execute<{ period_from: string }>(
-    sql`select period_from from scheduled_runs where state = 'pending' order by period_from`,
+    sql`select period_from from reconciliation_runs where state = 'pending' order by period_from`,
   );
   return rows
     .map((row) => new Date(row.period_from).toISOString().slice(0, 10))

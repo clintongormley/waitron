@@ -1,6 +1,17 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, label, money, newId, nowIso, table, tsString } from "@waitron/db";
+import {
+  enumCheck,
+  enumType,
+  id,
+  label,
+  money,
+  newId,
+  nowIso,
+  persons,
+  table,
+  tsString,
+} from "@waitron/db";
 import { payments } from "./payments.js";
 
 export const paymentRefundState = enumType(["succeeded", "failed"]);
@@ -14,8 +25,6 @@ export const paymentRefunds = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     paymentId: id("payment_id").notNull(),
-    provider: label("provider").notNull(),
-    paymentRef: label("payment_ref").notNull(),
     amount: money("amount").notNull(),
     state: paymentRefundState("state").notNull(),
     authorizedBy: id("authorized_by"),
@@ -28,6 +37,11 @@ export const paymentRefunds = table(
       columns: [t.paymentId],
       foreignColumns: [payments.id],
       name: "payment_refunds_payment_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.authorizedBy],
+      foreignColumns: [persons.id],
+      name: "payment_refunds_authorized_by_fk",
     }).onDelete("restrict"),
     index("payment_refunds_payment_idx").on(t.paymentId),
     check("payment_refunds_amount_ck", sql`${t.amount} > 0`),

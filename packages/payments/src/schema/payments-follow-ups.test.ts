@@ -57,6 +57,7 @@ async function insert(fields: Fields) {
 
 it.each<Fields>([
   {},
+  { requested_by: PERSON },
   resolution,
   { ...resolution, resolved_by: PERSON },
   hold,
@@ -99,9 +100,26 @@ it.each<[string, Fields]>([
 );
 
 it.each<Fields>([
+  { requested_by: "missing" },
   { ...resolution, resolved_by: "missing" },
   { ...outcome, hold_decided_by: "missing" },
 ])("refuses an actor who is not a person: %j", async (fields) => {
   const error = await captureError(() => insert(fields));
   expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+});
+
+it.each([null, PERSON, "missing"])("checks the refund authoriser: %s", async (authorizedBy) => {
+  const { rows } = await insert({});
+  const write = () =>
+    suite.db.execute(sql`insert into payment_refunds
+    (id, payment_id, amount, state, authorized_by, created_at)
+    values (${newId()}, ${rows[0]!.id}, 100, 'succeeded', ${authorizedBy}, ${AT})`);
+  if (authorizedBy === "missing") {
+    const error = await captureError(write);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  } else {
+    await write();
+    const saved = await suite.db.execute(sql`select authorized_by from payment_refunds`);
+    expect(saved.rows).toEqual([{ authorized_by: authorizedBy }]);
+  }
 });

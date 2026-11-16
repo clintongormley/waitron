@@ -14,7 +14,7 @@ const OWNED = [
   "device_card_readers",
   "device_profile_card_readers",
   "card_reader_holders",
-  "scheduled_runs",
+  "reconciliation_runs",
 ];
 
 /**

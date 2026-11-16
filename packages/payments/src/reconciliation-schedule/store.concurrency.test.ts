@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { scheduledRuns } from "../schema/scheduled-runs.js";
+import { reconciliationRuns } from "../schema/reconciliation-runs.js";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
 
@@ -79,7 +79,7 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
     // Passes the `unfinished > 0` guard and makes the nested insert refuse, so `enqueueSuccessor`'s
     // own catch decides what happens.
     const refusal = refusalError({
-      unique: { table: "scheduled_runs", columns: ["duty", "period_from", "generation"] },
+      unique: { table: "reconciliation_runs", columns: ["duty", "period_from", "generation"] },
     });
     const fakeTx = {
       select: () => ({
@@ -103,7 +103,7 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
   });
 
   it("rethrows a refusal that is not a unique violation", async () => {
-    const other = refusalError({ notNull: { table: "scheduled_runs", column: "duty" } });
+    const other = refusalError({ notNull: { table: "reconciliation_runs", column: "duty" } });
     const fakeTx = {
       select: () => ({
         from: () => ({ where: () => Promise.resolve([{ unfinished: 0, highest: 0 }]) }),
@@ -130,12 +130,12 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
       let refused = false;
       try {
         await tx.transaction(async (attempt) => {
-          await attempt.insert(scheduledRuns).values({
+          await attempt.insert(reconciliationRuns).values({
             duty: DUTY,
             periodFrom: first.from.toISOString(),
             periodTo: first.to.toISOString(),
             // The generation `enqueueSuccessor` just used, so this collides on
-            // `scheduled_runs_key` rather than inserting a second row.
+            // `reconciliation_runs_key` rather than inserting a second row.
             generation: 0,
             state: "pending",
             attempts: 0,
@@ -155,16 +155,22 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
 
     const rows = await suite.db
       .select()
-      .from(scheduledRuns)
+      .from(reconciliationRuns)
       .where(
-        and(eq(scheduledRuns.duty, DUTY), eq(scheduledRuns.periodFrom, first.from.toISOString())),
+        and(
+          eq(reconciliationRuns.duty, DUTY),
+          eq(reconciliationRuns.periodFrom, first.from.toISOString()),
+        ),
       );
     expect(rows).toHaveLength(1);
     const later = await suite.db
       .select()
-      .from(scheduledRuns)
+      .from(reconciliationRuns)
       .where(
-        and(eq(scheduledRuns.duty, DUTY), eq(scheduledRuns.periodFrom, second.from.toISOString())),
+        and(
+          eq(reconciliationRuns.duty, DUTY),
+          eq(reconciliationRuns.periodFrom, second.from.toISOString()),
+        ),
       );
     expect(later).toHaveLength(1);
   });

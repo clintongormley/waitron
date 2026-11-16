@@ -146,8 +146,8 @@ export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.j
 export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
-export { runState, scheduledRuns } from "./schema/scheduled-runs.js";
-export type { RunState } from "./schema/scheduled-runs.js";
+export { runState, reconciliationRuns } from "./schema/reconciliation-runs.js";
+export type { RunState } from "./schema/reconciliation-runs.js";
 export type { DutyOutcome, PeriodDuty, RunPeriod } from "./reconciliation-schedule/duty.js";
 export { DEFAULTS } from "./reconciliation-schedule/derive.js";
 export { runDue } from "./reconciliation-schedule/run.js";

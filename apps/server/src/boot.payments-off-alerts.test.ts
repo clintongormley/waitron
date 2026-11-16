@@ -201,7 +201,7 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
           .poll(
             () =>
               suite.db.all(
-                sql`select id from scheduled_runs where duty = 'payments.reconcile.stripe' and state = 'succeeded'`,
+                sql`select id from reconciliation_runs where duty = 'payments.reconcile.stripe' and state = 'succeeded'`,
               ).length,
           )
           .toBeGreaterThan(0);

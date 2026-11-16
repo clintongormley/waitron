@@ -1,3 +1,4 @@
+import { getTableColumns } from "drizzle-orm";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -456,7 +457,16 @@ describe("settled-tender refund command local transaction", () => {
       tipAmount: "1.00",
       completedAt: AT,
     });
-    expect(await store.db.select().from(paymentRefunds)).toMatchObject([
+    expect(
+      await store.db
+        .select({
+          ...getTableColumns(paymentRefunds),
+          provider: payments.provider,
+          paymentRef: payments.paymentRef,
+        })
+        .from(paymentRefunds)
+        .innerJoin(payments, eq(payments.id, paymentRefunds.paymentId)),
+    ).toMatchObject([
       {
         provider: "manual",
         paymentRef: t.paymentRef,
@@ -771,7 +781,16 @@ describe("settled-tender connected refund orchestration", () => {
       providerRefundRef: "event-1",
       providerStatus: "completed",
     });
-    expect(await store.db.select().from(paymentRefunds)).toMatchObject([
+    expect(
+      await store.db
+        .select({
+          ...getTableColumns(paymentRefunds),
+          provider: payments.provider,
+          paymentRef: payments.paymentRef,
+        })
+        .from(paymentRefunds)
+        .innerJoin(payments, eq(payments.id, paymentRefunds.paymentId)),
+    ).toMatchObject([
       {
         paymentRef: t.paymentRef,
         amount: 1100,
@@ -1114,8 +1133,6 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     });
     await store.db.insert(paymentRefunds).values({
       paymentId: payment!.id,
-      provider: "fake",
-      paymentRef: t.paymentRef,
       amount: 100,
       state: "failed",
       providerRefundRef: "provider-failed",
@@ -1127,8 +1144,6 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
       .where(eq(payments.paymentRef, other.t.paymentRef));
     await store.db.insert(paymentRefunds).values({
       paymentId: otherPayment!.id,
-      provider: "fake",
-      paymentRef: other.t.paymentRef,
       amount: 100,
       state: "failed",
       providerRefundRef: "unrelated",

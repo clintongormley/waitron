@@ -226,6 +226,7 @@ export class FakePaymentProvider implements PaymentProvider {
       paymentRef,
       amount: params.amount,
       billPaymentId: params.billPaymentId,
+      requestedBy: params.requestedBy,
       readerId: params.readerId,
     };
     const crash = this.crashNext;

@@ -73,7 +73,7 @@ it.each([
   ],
   [
     "scheduler",
-    "insert into scheduled_runs(id, duty, period_from, period_to, state, created_at, updated_at) values ('run', 'close', '2026-10-15', '2026-10-16', 'succeeded', '2026-10-16', '2026-10-16')",
+    "insert into reconciliation_runs(id, duty, period_from, period_to, state, created_at, updated_at) values ('run', 'close', '2026-10-15', '2026-10-16', 'succeeded', '2026-10-16', '2026-10-16')",
   ],
 ])("refuses retained %s rows without a taxpayer or venue", async (_name, insert) => {
   expect(await inspect((connection) => connection.exec(insert))).toBe(false);
@@ -81,8 +81,8 @@ it.each([
 it.each([
   ["unknown table", 'create table "retained""data" (value text)'],
   ["unknown journal", 'create table "__drizzle_migrations_unknown" (hash text)'],
-  ["missing module table", 'drop table "scheduled_runs"'],
-  ["missing module column", 'alter table "scheduled_runs" drop column "summary"'],
+  ["missing module table", 'drop table "reconciliation_runs"'],
+  ["missing module column", 'alter table "reconciliation_runs" drop column "summary"'],
   ["missing module journal", 'drop table "__drizzle_migrations_bookings"'],
   ["view", 'create view "retained_view" as select * from menus'],
 ])("refuses a %s instead of certifying an incomplete or unknown schema", async (_name, edit) => {

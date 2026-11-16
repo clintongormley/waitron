@@ -129,7 +129,12 @@ async function heldCard(billId: string, amount: string, opts: { cookie?: string 
 async function providerRowOf(billPaymentId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
-      .select({ state: payments.state, saleId: payments.saleId, amount: payments.amount })
+      .select({
+        state: payments.state,
+        saleId: payments.saleId,
+        amount: payments.amount,
+        requestedBy: payments.requestedBy,
+      })
       .from(payments)
       .where(eq(payments.billPaymentId, billPaymentId)),
   );
@@ -158,7 +163,10 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       payment: { state: "received", applied: "20.00" },
       balance: { received: "20.00", reserved: "0.00", outstanding: "33.00" },
     });
-    expect(await providerRowOf(rows[0]!.id)).toMatchObject({ state: "captured" });
+    expect(await providerRowOf(rows[0]!.id)).toMatchObject({
+      state: "captured",
+      requestedBy: venue.operatorId,
+    });
   });
 
   it("stores the received balance without counting another reader's pending reservation", async () => {

@@ -1,3 +1,4 @@
+import { payments } from "./schema/payments.js";
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -29,7 +30,8 @@ async function captured(externalRef: string | null = "processor-1") {
     suite.db
       .select({ amount: paymentRefunds.amount, state: paymentRefunds.state })
       .from(paymentRefunds)
-      .where(eq(paymentRefunds.paymentRef, key.paymentRef));
+      .innerJoin(payments, eq(paymentRefunds.paymentId, payments.id))
+      .where(eq(payments.paymentRef, key.paymentRef));
   return { key, row, refunds };
 }
 

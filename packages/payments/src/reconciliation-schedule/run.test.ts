@@ -10,7 +10,7 @@ import { AppError } from "@waitron/shared";
 // `declare module "@waitron/shared"` augmentation.
 import "../errors.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { scheduledRuns } from "../schema/scheduled-runs.js";
+import { reconciliationRuns } from "../schema/reconciliation-runs.js";
 import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import * as store from "./store.js";
@@ -79,9 +79,9 @@ describe("runDue", () => {
     // because a raw select bypasses the column's JSON codec and returns the stored string.
     const stored = await withTransaction(db, (tx) =>
       tx
-        .select({ summary: scheduledRuns.summary })
-        .from(scheduledRuns)
-        .where(eq(scheduledRuns.duty, "test.duty")),
+        .select({ summary: reconciliationRuns.summary })
+        .from(reconciliationRuns)
+        .where(eq(reconciliationRuns.duty, "test.duty")),
     );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.summary).toEqual({
@@ -159,14 +159,14 @@ describe("runDue", () => {
       return withTransaction(db, (tx) =>
         tx
           .select({
-            generation: scheduledRuns.generation,
-            state: scheduledRuns.state,
-            attempts: scheduledRuns.attempts,
-            nextAttemptAt: scheduledRuns.nextAttemptAt,
+            generation: reconciliationRuns.generation,
+            state: reconciliationRuns.state,
+            attempts: reconciliationRuns.attempts,
+            nextAttemptAt: reconciliationRuns.nextAttemptAt,
           })
-          .from(scheduledRuns)
-          .where(eq(scheduledRuns.periodFrom, PERIOD_FROM))
-          .orderBy(scheduledRuns.generation),
+          .from(reconciliationRuns)
+          .where(eq(reconciliationRuns.periodFrom, PERIOD_FROM))
+          .orderBy(reconciliationRuns.generation),
       );
     }
 
@@ -478,7 +478,7 @@ describe("runDue: retry times stamped ahead of the clock", () => {
   ): Promise<void> {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     await withTransaction(db, (tx) =>
-      tx.insert(scheduledRuns).values({
+      tx.insert(reconciliationRuns).values({
         duty: "test.duty",
         periodFrom: period.from.toISOString(),
         periodTo: period.to.toISOString(),

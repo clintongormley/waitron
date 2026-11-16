@@ -77,6 +77,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       paymentRef,
       amount: params.amount,
       billPaymentId: params.billPaymentId,
+      requestedBy: params.requestedBy,
     };
     await withTransaction(this.db, async (tx) => {
       if (unanswered) await insertAttempting(tx, common);

@@ -8,7 +8,7 @@ import {
   insertCapturedPayment,
   insertFailedPayment,
   recordRefund,
-  scheduledRuns,
+  reconciliationRuns,
 } from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { captureAlerts, heldAlerts } from "@waitron/payments/test/capture-alerts.js";
@@ -466,8 +466,8 @@ it("keeps refund evidence in the audit and never sends or changes financial rows
       paymentRef: "returned",
       amount: decimal("2.35"),
       providerRefundRef: "refund-1",
+      at: new Date("2026-07-01T13:00:00.000Z"),
     });
-    await tx.execute(sql`update payment_refunds set created_at = '2026-07-01T13:00:00.000Z'`);
   });
   const client = new FakeSumUp();
   const send = vi.spyOn(client, "sendRefund").mockResolvedValue({ httpStatus: 201 });
@@ -542,10 +542,10 @@ it.each([false, true, "midnight"])(
         provider: "manual",
         paymentRef: "backup-return",
         amount: decimal("10.00"),
+        at: new Date("2026-07-01T13:00:00.000Z"),
       });
-      await tx.execute(sql`update payment_refunds set created_at = '2026-07-01T13:00:00.000Z'`);
       if (historical)
-        await tx.insert(scheduledRuns).values({
+        await tx.insert(reconciliationRuns).values({
           duty: "payments.reconcile.sumup",
           periodFrom:
             historical === "midnight" ? "2026-06-02T00:00:00.000Z" : "2026-06-01T00:00:00.000Z",

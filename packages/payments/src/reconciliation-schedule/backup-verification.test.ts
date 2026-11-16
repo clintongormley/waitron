@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { scheduledRuns } from "../schema/scheduled-runs.js";
+import { reconciliationRuns } from "../schema/reconciliation-runs.js";
 import * as api from "./index.js";
 
 const original = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
@@ -15,7 +15,7 @@ const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] 
 const invalid = { status: "invalid", checks: [{ code: "data", status: "invalid" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db.insert(scheduledRuns).values({
+    await suite.db.insert(reconciliationRuns).values({
       id: "record",
       duty: "archived-duty",
       periodFrom: "2026-10-19T00:00:00.000Z",
@@ -70,17 +70,17 @@ async function run(
   }
 }
 it("preserves all captured values without running any duty or action", async () => {
-  const before = original.db.all(sql`select * from scheduled_runs`);
-  const after = restored.db.all(sql`select * from scheduled_runs`);
+  const before = original.db.all(sql`select * from reconciliation_runs`);
+  const after = restored.db.all(sql`select * from reconciliation_runs`);
   expect(await run()).toEqual(passed);
-  expect(original.db.all(sql`select * from scheduled_runs`)).toEqual(before);
-  expect(restored.db.all(sql`select * from scheduled_runs`)).toEqual(after);
+  expect(original.db.all(sql`select * from reconciliation_runs`)).toEqual(before);
+  expect(restored.db.all(sql`select * from reconciliation_runs`)).toEqual(after);
 });
 it("declares exactly its real table and no private inputs or restore effects", () => {
   const owner = validateBackupVerificationContribution(api.SCHEDULER_BACKUP_VERIFICATION);
   expect(owner.data).toEqual({
     kind: "custom",
-    tables: ["scheduled_runs"],
+    tables: ["reconciliation_runs"],
     immutableTables: [],
     checks: ["data"],
   });
@@ -94,31 +94,31 @@ it("declares exactly its real table and no private inputs or restore effects", (
   ]).toEqual([[], [], [], null, "absent_tables_and_entries", "empty_after_migration"]);
 });
 it.each([
-  "update scheduled_runs set summary = '{\"retained\":false}'",
-  "update scheduled_runs set attempts = 4",
-  "update scheduled_runs set generation = 3",
-  "update scheduled_runs set state = 'failed'",
-  "update scheduled_runs set duty = 'changed-duty'",
-  "update scheduled_runs set period_from = '2026-10-18T00:00:00.000Z'",
-  "update scheduled_runs set period_to = '2026-10-21T00:00:00.000Z'",
-  "update scheduled_runs set next_attempt_at = null",
-  "update scheduled_runs set started_at = null",
-  "update scheduled_runs set finished_at = '2026-10-20T08:00:00.000Z'",
-  "update scheduled_runs set error_code = null",
-  "update scheduled_runs set created_at = '2026-10-18T23:00:00.000Z'",
-  "update scheduled_runs set updated_at = '2026-10-20T08:00:00.000Z'",
-  "update scheduled_runs set id = 'replacement'",
+  "update reconciliation_runs set summary = '{\"retained\":false}'",
+  "update reconciliation_runs set attempts = 4",
+  "update reconciliation_runs set generation = 3",
+  "update reconciliation_runs set state = 'failed'",
+  "update reconciliation_runs set duty = 'changed-duty'",
+  "update reconciliation_runs set period_from = '2026-10-18T00:00:00.000Z'",
+  "update reconciliation_runs set period_to = '2026-10-21T00:00:00.000Z'",
+  "update reconciliation_runs set next_attempt_at = null",
+  "update reconciliation_runs set started_at = null",
+  "update reconciliation_runs set finished_at = '2026-10-20T08:00:00.000Z'",
+  "update reconciliation_runs set error_code = null",
+  "update reconciliation_runs set created_at = '2026-10-18T23:00:00.000Z'",
+  "update reconciliation_runs set updated_at = '2026-10-20T08:00:00.000Z'",
+  "update reconciliation_runs set id = 'replacement'",
 ])("detects a retained value replaced: %s", async (change) => {
   expect(await run()).toEqual(passed);
   restored.db.run(sql.raw(change));
   expect(await run()).toEqual(invalid);
 });
 it("detects a deleted captured row", async () => {
-  restored.db.run(sql`delete from scheduled_runs`);
+  restored.db.run(sql`delete from reconciliation_runs`);
   expect(await run()).toEqual(invalid);
 });
 it("detects a new restored-only row", async () => {
-  original.db.run(sql`delete from scheduled_runs`);
+  original.db.run(sql`delete from reconciliation_runs`);
   expect(await run()).toEqual(invalid);
 });
 it("refuses a missing restored table", async () => {
@@ -133,7 +133,7 @@ it.each([0, null])(
 it.each([0, null])(
   "admits absent source and newly empty target (schema %s)",
   async (sourceSchema) => {
-    restored.db.run(sql`delete from scheduled_runs`);
+    restored.db.run(sql`delete from reconciliation_runs`);
     expect(await run({ absentBefore: true, sourceSchema })).toEqual(passed);
   },
 );
@@ -145,6 +145,6 @@ it.each([0, null])(
 );
 
 it("refuses an applied source schema whose owned table is absent", async () => {
-  restored.db.run(sql`delete from scheduled_runs`);
+  restored.db.run(sql`delete from reconciliation_runs`);
   expect(await run({ absentBefore: true })).toEqual(invalid);
 });

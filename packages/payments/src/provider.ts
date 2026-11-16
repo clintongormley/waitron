@@ -28,6 +28,7 @@ export interface ProviderCapabilities {
 }
 
 export interface CollectParams {
+  requestedBy?: string;
   /** The device the payment is started on, written on the provider's `payments` row. */
   origin: DeviceOrigin;
   workingOrderId: WorkingOrderId;

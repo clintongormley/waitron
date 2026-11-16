@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, withTransaction, captureError, isUniqueViolation } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { dayPeriod } from "./derive.js";
@@ -11,7 +11,7 @@ import {
   readSnapshot,
   reclaimStale,
 } from "./store.js";
-import { scheduledRuns } from "../schema/scheduled-runs.js";
+import { reconciliationRuns } from "../schema/reconciliation-runs.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
@@ -37,7 +37,34 @@ describe("claimGap", () => {
     expect(new Date(claimed!.periodFrom).toISOString()).toBe("2026-07-24T00:00:00.000Z");
   });
 
-  // The insert IS the lock — a second claim of the same period conflicts on scheduled_runs_key.
+  it("does not mistake an unrelated primary-key conflict for an already claimed period", async () => {
+    const existing = await withTransaction(suite.db, (tx) =>
+      claimGap(tx, {
+        duty: "test.primary",
+        period: PERIOD,
+        now: NOW,
+      }),
+    );
+    const id = vi
+      .spyOn(reconciliationRuns.id as { defaultFn: () => string }, "defaultFn")
+      .mockReturnValue(existing!.id);
+    try {
+      const error = await captureError(() =>
+        withTransaction(suite.db, (tx) =>
+          claimGap(tx, {
+            duty: "test.different",
+            period: PERIOD,
+            now: NOW,
+          }),
+        ),
+      );
+      expect(isUniqueViolation(error)).toBe(true);
+    } finally {
+      id.mockRestore();
+    }
+  });
+
+  // The insert IS the lock — a second claim of the same period conflicts on reconciliation_runs_key.
   it("returns null when the row already exists", async () => {
     const again = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { duty: DUTY, period: PERIOD, now: NOW }),
@@ -214,7 +241,7 @@ describe("claimRow", () => {
   it("returns null for a pending row with no next_attempt_at set", async () => {
     const [inserted] = await withTransaction(suite.db, (tx) =>
       tx
-        .insert(scheduledRuns)
+        .insert(reconciliationRuns)
         .values({
           duty: DUTY,
           periodFrom: dayPeriod(new Date("2026-07-16T00:00:00Z")).from.toISOString(),
@@ -223,7 +250,7 @@ describe("claimRow", () => {
           state: "pending",
           attempts: 0,
         })
-        .returning({ id: scheduledRuns.id }),
+        .returning({ id: reconciliationRuns.id }),
     );
     const claimed = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: inserted!.id, now: NOW, longestWaitMs: DAY }),

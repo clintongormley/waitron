@@ -13,7 +13,13 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedPerson,
+  seedDevice,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -203,8 +209,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const target = await paid("card", { bill: true, captured: 1500, state: "partially_refunded" });
     await store.db.insert(paymentRefunds).values({
       paymentId: target.capture!.id,
-      provider: "fake",
-      paymentRef: target.capture!.paymentRef,
       providerRefundRef: "before-retention",
       amount: 400,
       state: "succeeded",
@@ -551,8 +555,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     await prior(target, { providerRefundRef: "already-returned" });
     await store.db.insert(paymentRefunds).values({
       paymentId: target.capture!.id,
-      provider: "fake",
-      paymentRef: target.capture!.paymentRef,
       amount: 300,
       state: "succeeded",
       providerRefundRef: "already-returned",
@@ -585,8 +587,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     });
     await store.db.insert(paymentRefunds).values({
       paymentId: target.capture!.id,
-      provider: "fake",
-      paymentRef: target.capture!.paymentRef,
       amount: 300,
       state: "succeeded",
       providerRefundRef: "preinvoice",
@@ -626,11 +626,10 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     });
   });
   it("uses provider evidence to limit the remaining card money", async () => {
+    await seedPerson(store.db, { id: ACTOR.authorizedBy, displayName: "Refund authoriser" });
     const target = await paid("card");
     await store.db.insert(paymentRefunds).values({
       paymentId: target.capture!.id,
-      provider: "fake",
-      paymentRef: target.capture!.paymentRef,
       amount: 900,
       state: "succeeded",
       authorizedBy: ACTOR.authorizedBy,

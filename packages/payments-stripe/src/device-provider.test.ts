@@ -81,12 +81,20 @@ describe("StripeOnDeviceProvider.collect", () => {
   it("online capture writes a captured row with the PI id in external_ref", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = providerFor(new FakeStripeDevice());
-    const r = await provider.collect(collectParams(s));
+    const r = await provider.collect({
+      ...collectParams(s),
+      requestedBy: "22222222-2222-4222-8222-222222222222",
+    });
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
     const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
+    const [stored] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.paymentRef, r.paymentRef));
+    expect(stored?.requestedBy).toBe("22222222-2222-4222-8222-222222222222");
     expect(row?.state).toBe("captured");
     expect(row?.externalRef).toMatch(/^pi_/);
   });

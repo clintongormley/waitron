@@ -5,7 +5,7 @@ export interface RunPeriod {
 }
 
 export interface DutyOutcome {
-  /** Stored verbatim in `scheduled_runs.summary`. Structured data only — never prose, and never a
+  /** Stored verbatim in `reconciliation_runs.summary`. Structured data only — never prose, and never a
    * `Date` (serialise to ISO first). */
   summary: Record<string, unknown>;
   /**
@@ -20,7 +20,7 @@ export interface DutyOutcome {
 
 /**
  * One recurring duty over calendar periods. Typed structurally and injected, so no non-test file in
- * this folder imports the rest of payments (beyond the `scheduled_runs` table it declares) or
+ * this folder imports the rest of payments (beyond the `reconciliation_runs` table it declares) or
  * fiscal code.
  *
  * `drain` must not become a `PeriodDuty`: it keeps its own persisted schedule

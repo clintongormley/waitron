@@ -2,7 +2,6 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { recordIncidentOnce } from "@waitron/core";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -43,7 +42,7 @@ import {
   deviceProfileCardReaders,
   deviceCardReaders,
   payments,
-  scheduledRuns,
+  reconciliationRuns,
   recordRefund,
   type CardProviderContribution,
 } from "@waitron/payments";
@@ -3319,7 +3318,7 @@ describe("backup-machine audit read", () => {
       ["2026-07-01", 2, "failed", { backupMatches: [], backupUnmatched: [] }],
       ["2026-07-02", 0, "succeeded", { backupMatches: [], backupUnmatched: [] }],
     ] as const)
-      await suite.db.insert(scheduledRuns).values({
+      await suite.db.insert(reconciliationRuns).values({
         duty: "payments.reconcile.sumup",
         periodFrom: `${from}T00:00:00.000Z`,
         periodTo: from === "2026-07-01" ? "2026-07-02T00:00:00.000Z" : "2026-07-03T00:00:00.000Z",
@@ -3372,7 +3371,7 @@ it.each(["sumup", "manual"])(
       settledAt: provider === "manual" ? "2026-06-01T23:59:00.000Z" : "2026-06-01T12:00:00.000Z",
     });
     for (const day of ["2026-07-01", "2026-07-02"])
-      await suite.db.insert(scheduledRuns).values({
+      await suite.db.insert(reconciliationRuns).values({
         duty: "payments.reconcile.sumup",
         periodFrom: `${day}T00:00:00.000Z`,
         periodTo: new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString(),
@@ -3394,7 +3393,7 @@ it.each(["sumup", "manual"])(
         },
       });
     if (provider === "manual")
-      await suite.db.insert(scheduledRuns).values({
+      await suite.db.insert(reconciliationRuns).values({
         duty: "payments.reconcile.sumup",
         periodFrom: "2026-06-02T00:00:00.000Z",
         periodTo: "2026-06-03T00:00:00.000Z",
@@ -3421,8 +3420,8 @@ it.each(["sumup", "manual"])(
         paymentRef: "refund-payment",
         amount: decimal("2.35"),
         ...(provider === "sumup" ? { providerRefundRef: "refund-1" } : {}),
+        at: new Date("2026-07-02T12:01:00.000Z"),
       });
-      await tx.update(paymentRefunds).set({ createdAt: "2026-07-02T12:01:00.000Z" });
     });
     const result = await read();
     expect(result.refundAudit[provider === "sumup" ? "matches" : "agreements"]).toMatchObject([
@@ -3430,7 +3429,9 @@ it.each(["sumup", "manual"])(
     ]);
     expect(result.refundAudit.exceptions).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
-    expect(await suite.db.select().from(scheduledRuns)).toHaveLength(provider === "manual" ? 3 : 2);
+    expect(await suite.db.select().from(reconciliationRuns)).toHaveLength(
+      provider === "manual" ? 3 : 2,
+    );
   },
 );
 

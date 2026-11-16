@@ -19,7 +19,7 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { cardReaders } from "./schema/card-readers.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { payments } from "./schema/payments.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { reconciliationRuns } from "./schema/reconciliation-runs.js";
 import {
   assertReversible,
   associatePaymentWithSale,
@@ -99,6 +99,52 @@ async function seedSecondSale(seeded: Seeded): Promise<string> {
   const node2 = await seedNode(suite.db);
   return seedSale(suite.db, { ...seeded, nodeId: node2 });
 }
+
+describe("the payment starter", () => {
+  it.each(["attempting", "captured", "failed", "initiated"] as const)(
+    "stores the initiating person for a first %s row",
+    async (state) => {
+      const seeded = await seedTaxpayer();
+      const params = {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
+        provider: "fake",
+        paymentRef: "starter",
+        amount: decimal("10.00"),
+        requestedBy: "22222222-2222-4222-8222-222222222222",
+      };
+      await withTransaction(suite.db, async (tx) => {
+        if (state === "attempting") await insertAttempting(tx, params);
+        else if (state === "captured")
+          await insertCapturedPayment(tx, { ...params, settledAt: SETTLED });
+        else if (state === "failed") await insertFailedPayment(tx, params);
+        else await insertInitiated(tx, { ...params, externalRef: "checkout" });
+      });
+      const [row] = await suite.db.select().from(payments);
+      expect(row?.requestedBy).toBe(params.requestedBy);
+      if (state === "attempting") {
+        await withTransaction(suite.db, (tx) =>
+          captureAttempting(tx, {
+            provider: "fake",
+            paymentRef: "starter",
+            settledAt: SETTLED,
+            externalRef: "captured",
+          }),
+        );
+        const [captured] = await suite.db.select().from(payments);
+        expect(captured?.requestedBy).toBe(params.requestedBy);
+      }
+    },
+  );
+
+  it("stores null when no initiating person is supplied", async () => {
+    const seeded = await seedTaxpayer();
+    await capture(seeded, "no-starter");
+    const [row] = await suite.db.select().from(payments);
+    expect(row?.requestedBy).toBeNull();
+  });
+});
 
 describe("insertCapturedPayment", () => {
   it("stores the source and device the payment was started on", async () => {
@@ -180,7 +226,7 @@ describe("recordRefund", () => {
     const row = await getRow(key);
     expect(row?.state).toBe("refunded");
     const refunds = await suite.db.execute<{ amount: number }>(
-      sql`select amount from payment_refunds where payment_ref = ${"p5"}`,
+      sql`select payment_refunds.amount from payment_refunds join payments on payments.id = payment_refunds.payment_id where payment_ref = ${"p5"}`,
     );
     expect(refunds.rows).toHaveLength(1);
     // Read straight from the column: the stored count of cents for 20.00.
@@ -190,6 +236,7 @@ describe("recordRefund", () => {
   it("writes authorized_by when supplied, and NULL when omitted", async () => {
     const seeded = await seedTaxpayer();
     const authorizer = "11111111-1111-1111-1111-111111111111";
+    await seedPerson(suite.db, { id: authorizer, displayName: "Refund authoriser" });
     const withKey = await capture(seeded, "auth-with", "20.00");
     await suite.db.transaction((tx) =>
       recordRefund(tx, { ...withKey, amount: decimal("20.00"), authorizedBy: authorizer }),
@@ -199,7 +246,7 @@ describe("recordRefund", () => {
       recordRefund(tx, { ...withoutKey, amount: decimal("20.00") }),
     );
     const rows = await suite.db.execute<{ payment_ref: string; authorized_by: string | null }>(
-      sql`select payment_ref, authorized_by from payment_refunds order by payment_ref`,
+      sql`select payment_ref, authorized_by from payment_refunds join payments on payments.id = payment_refunds.payment_id order by payment_ref`,
     );
     expect(rows.rows).toEqual([
       { payment_ref: "auth-with", authorized_by: authorizer },
@@ -744,7 +791,7 @@ describe("externalRef on read-back + failed refunds", () => {
     await suite.db.transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }));
     expect((await getRow(key))?.state).toBe("captured");
     const refunds = await suite.db.execute<{ state: string }>(
-      sql`select state from payment_refunds where payment_ref = ${"e2"}`,
+      sql`select payment_refunds.state from payment_refunds join payments on payments.id = payment_refunds.payment_id where payment_ref = ${"e2"}`,
     );
     expect(refunds.rows).toEqual([{ state: "failed" }]);
   });
@@ -752,6 +799,7 @@ describe("externalRef on read-back + failed refunds", () => {
   it("recordFailedRefund writes authorized_by when supplied, and NULL when omitted", async () => {
     const seeded = await seedTaxpayer();
     const authorizer = "22222222-2222-2222-2222-222222222222";
+    await seedPerson(suite.db, { id: authorizer, displayName: "Refund authoriser" });
     const withKey = await capture(seeded, "fauth-with", "20.00");
     await suite.db.transaction((tx) =>
       recordFailedRefund(tx, { ...withKey, amount: decimal("5.00"), authorizedBy: authorizer }),
@@ -761,8 +809,8 @@ describe("externalRef on read-back + failed refunds", () => {
       recordFailedRefund(tx, { ...withoutKey, amount: decimal("5.00") }),
     );
     const rows = await suite.db.execute<{ payment_ref: string; authorized_by: string | null }>(
-      sql`select payment_ref, authorized_by from payment_refunds
-          where state = 'failed' order by payment_ref`,
+      sql`select payment_ref, authorized_by from payment_refunds join payments on payments.id = payment_refunds.payment_id
+          where payment_refunds.state = 'failed' order by payment_ref`,
     );
     expect(rows.rows).toEqual([
       { payment_ref: "fauth-with", authorized_by: authorizer },
@@ -1522,22 +1570,16 @@ describe("the link from a provider payment to its bill payment", () => {
     const mine = await linked("mine", billPaymentId);
     const theirs = await linked("theirs", other);
     const unlinked = await linked("unlinked", undefined);
-    const refund = (key: { provider: string; paymentRef: string }, ref?: string) =>
+    const refund = (key: { provider: string; paymentRef: string }, ref?: string, at?: Date) =>
       suite.db.transaction((tx) =>
-        recordRefund(tx, { ...key, amount: decimal("5.00"), providerRefundRef: ref }),
+        recordRefund(tx, { ...key, amount: decimal("5.00"), providerRefundRef: ref, at }),
       );
     // Written in the opposite order to their dates, so only the ordering by date puts them right.
-    await refund(mine, "re_later");
-    await refund(mine, "re_earlier");
+    await refund(mine, "re_later", new Date("2026-07-22T10:05:00.000Z"));
+    await refund(mine, "re_earlier", new Date("2026-07-22T10:01:00.000Z"));
     await refund(mine);
     await refund(theirs, "re_theirs");
     await refund(unlinked, "re_unlinked");
-    await suite.db.execute(
-      sql`update payment_refunds set created_at = '2026-07-22T10:05:00.000Z' where provider_refund_ref = 're_later'`,
-    );
-    await suite.db.execute(
-      sql`update payment_refunds set created_at = '2026-07-22T10:01:00.000Z' where provider_refund_ref = 're_earlier'`,
-    );
 
     const refs = await suite.db.transaction((tx) => recordedRefundRefs(tx, billPaymentId));
 
@@ -1562,7 +1604,9 @@ describe("recordRefund: the provider's refund id", () => {
     const rows = await suite.db.execute<{
       payment_ref: string;
       provider_refund_ref: string | null;
-    }>(sql`select payment_ref, provider_refund_ref from payment_refunds order by payment_ref`);
+    }>(
+      sql`select payment_ref, provider_refund_ref from payment_refunds join payments on payments.id = payment_refunds.payment_id order by payment_ref`,
+    );
     expect(rows.rows).toEqual([
       { payment_ref: "ref-with", provider_refund_ref: "re_123" },
       { payment_ref: "ref-without", provider_refund_ref: null },
@@ -1686,8 +1730,6 @@ describe("rows written within one millisecond", () => {
       await suite.db.insert(paymentRefunds).values({
         id: id(),
         paymentId: payment!.id,
-        provider: "fake",
-        paymentRef: "refunded",
         amount: 100,
         state: "succeeded",
         providerRefundRef,
@@ -1807,22 +1849,19 @@ describe("refund audit facts", () => {
         paymentRef: "refund-parent",
         amount: decimal("2.35"),
         providerRefundRef: "refund-1",
+        at: new Date("2026-07-23T12:00:00.000Z"),
       });
       await recordRefund(tx, {
         provider: "fake",
         paymentRef: "refund-parent",
         amount: decimal("1.25"),
+        at: new Date("2026-07-23T12:01:00.000Z"),
       });
       await recordFailedRefund(tx, {
         provider: "fake",
         paymentRef: "refund-parent",
         amount: decimal("3.00"),
       });
-      await tx.update(paymentRefunds).set({ createdAt: "2026-07-23T12:00:00.000Z" });
-      await tx
-        .update(paymentRefunds)
-        .set({ createdAt: "2026-07-23T12:01:00.000Z" })
-        .where(eq(paymentRefunds.amount, 125));
     });
     const period = { from: new Date("2026-07-23T00:00:00Z"), to: new Date("2026-07-24T00:00:00Z") };
     const rows = await withTransaction(suite.db, (tx) =>
@@ -1847,7 +1886,10 @@ describe("refund audit facts", () => {
         ],
       },
     ]);
-    await suite.db.update(paymentRefunds).set({ createdAt: "2026-07-22T12:00:00.000Z" });
+    const laterPeriod = {
+      from: new Date("2026-07-24T00:00:00Z"),
+      to: new Date("2026-07-25T00:00:00Z"),
+    };
     await liftPaymentGuard(suite.db, () =>
       suite.db
         .update(payments)
@@ -1855,20 +1897,22 @@ describe("refund audit facts", () => {
         .where(eq(payments.paymentRef, "refund-parent")),
     );
     const late = await withTransaction(suite.db, (tx) =>
-      listRefundAuditRows(tx, "fake", period, [], ["refund-parent"]),
+      listRefundAuditRows(tx, "fake", laterPeriod, [], ["refund-parent"]),
     );
     expect(late.map((row) => [row.paymentRef, row.provider, row.refunds.length])).toEqual([
       ["refund-parent", "manual", 2],
     ]);
     expect(
-      await withTransaction(suite.db, (tx) => listRefundAuditRows(tx, "sumup", period, [], [])),
+      await withTransaction(suite.db, (tx) =>
+        listRefundAuditRows(tx, "sumup", laterPeriod, [], []),
+      ),
     ).toEqual([]);
   });
 });
 
 it("reads only the latest successful payment audit generation for each requested UTC day", async () => {
   for (const generation of [0, 1, 2])
-    await suite.db.insert(scheduledRuns).values({
+    await suite.db.insert(reconciliationRuns).values({
       duty: "payments.reconcile.sumup",
       periodFrom: "2026-06-01T00:00:00.000Z",
       periodTo: "2026-06-02T00:00:00.000Z",
@@ -2003,7 +2047,7 @@ it.each([
       });
     if (state === "refunded" || state === "failed refund")
       await tx.execute(
-        sql`insert into payment_refunds (id, payment_id, provider, payment_ref, amount, state, created_at) select 'existing', id, provider, payment_ref, 100, ${state === "refunded" ? "succeeded" : "failed"}, ${SETTLED.toISOString()} from payments`,
+        sql`insert into payment_refunds (id, payment_id, amount, state, created_at) select 'existing', id, 100, ${state === "refunded" ? "succeeded" : "failed"}, ${SETTLED.toISOString()} from payments`,
       );
     if (state === "bill") {
       await tx.insert(billPayments).values({

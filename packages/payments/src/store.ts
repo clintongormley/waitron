@@ -13,7 +13,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { reconciliationRuns } from "./schema/reconciliation-runs.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, CollectionOwners, PaymentState } from "./provider.js";
@@ -38,6 +38,7 @@ interface Key {
 }
 
 interface NewPayment {
+  requestedBy?: string;
   /** The device the payment was started on. */
   origin: DeviceOrigin;
   workingOrderId: string;
@@ -86,6 +87,7 @@ async function insertPayment(
     source: params.origin.source,
     deviceId: params.origin.deviceId,
     workingOrderId: params.workingOrderId,
+    requestedBy: params.requestedBy ?? null,
     nodeId: params.nodeId,
     provider: params.provider,
     paymentRef: params.paymentRef,
@@ -254,8 +256,6 @@ export async function recordRefund(
   }
   await tx.insert(paymentRefunds).values({
     paymentId: row.id,
-    provider: params.provider,
-    paymentRef: params.paymentRef,
     amount: decimalToCents(params.amount),
     state: "succeeded",
     authorizedBy: params.authorizedBy ?? null,
@@ -283,8 +283,6 @@ export async function recordFailedRefund(
   }
   await tx.insert(paymentRefunds).values({
     paymentId: row.id,
-    provider: params.provider,
-    paymentRef: params.paymentRef,
     amount: decimalToCents(params.amount),
     state: "failed",
     authorizedBy: params.authorizedBy ?? null,
@@ -822,17 +820,17 @@ export async function listPaymentAuditRuns(
   provider: string,
   starts: readonly string[],
 ) {
-  const latest = new Map<string, typeof scheduledRuns.$inferSelect>();
+  const latest = new Map<string, typeof reconciliationRuns.$inferSelect>();
   const dates = [...new Set(starts)];
   for (let i = 0; i < dates.length; i += CHUNK_SIZE) {
     const rows = await tx
       .select()
-      .from(scheduledRuns)
+      .from(reconciliationRuns)
       .where(
         and(
-          eq(scheduledRuns.duty, `payments.reconcile.${provider}`),
-          eq(scheduledRuns.state, "succeeded"),
-          inArray(scheduledRuns.periodFrom, dates.slice(i, i + CHUNK_SIZE)),
+          eq(reconciliationRuns.duty, `payments.reconcile.${provider}`),
+          eq(reconciliationRuns.state, "succeeded"),
+          inArray(reconciliationRuns.periodFrom, dates.slice(i, i + CHUNK_SIZE)),
         ),
       );
     for (const row of rows)

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "02aa07fd-103c-4915-8790-aa12925fbd6f",
+  "id": "32af32b7-2d2b-4280-bfbd-9098c4cd619c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_reader_holders": {
@@ -305,20 +305,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "payment_ref": {
-          "name": "payment_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "amount": {
           "name": "amount",
           "type": "integer",
@@ -371,6 +357,19 @@
           "tableTo": "payments",
           "columnsFrom": [
             "payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "payment_refunds_authorized_by_fk": {
+          "name": "payment_refunds_authorized_by_fk",
+          "tableFrom": "payment_refunds",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by"
           ],
           "columnsTo": [
             "id"
@@ -639,6 +638,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -720,6 +726,19 @@
           "tableTo": "devices",
           "columnsFrom": [
             "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "payments_requested_by_fk": {
+          "name": "payments_requested_by_fk",
+          "tableFrom": "payments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
           ],
           "columnsTo": [
             "id"
@@ -888,8 +907,8 @@
         }
       }
     },
-    "scheduled_runs": {
-      "name": "scheduled_runs",
+    "reconciliation_runs": {
+      "name": "reconciliation_runs",
       "columns": {
         "id": {
           "name": "id",
@@ -993,8 +1012,8 @@
         }
       },
       "indexes": {
-        "scheduled_runs_key": {
-          "name": "scheduled_runs_key",
+        "reconciliation_runs_key": {
+          "name": "reconciliation_runs_key",
           "columns": [
             "duty",
             "period_from",
@@ -1007,21 +1026,21 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "scheduled_runs_state_ck": {
-          "name": "scheduled_runs_state_ck",
-          "value": "\"scheduled_runs\".\"state\" in ('pending', 'running', 'succeeded', 'failed', 'parked')"
+        "reconciliation_runs_state_ck": {
+          "name": "reconciliation_runs_state_ck",
+          "value": "\"reconciliation_runs\".\"state\" in ('pending', 'running', 'succeeded', 'failed', 'parked')"
         },
-        "scheduled_runs_period_ck": {
-          "name": "scheduled_runs_period_ck",
-          "value": "\"scheduled_runs\".\"period_from\" < \"scheduled_runs\".\"period_to\""
+        "reconciliation_runs_period_ck": {
+          "name": "reconciliation_runs_period_ck",
+          "value": "\"reconciliation_runs\".\"period_from\" < \"reconciliation_runs\".\"period_to\""
         },
-        "scheduled_runs_generation_ck": {
-          "name": "scheduled_runs_generation_ck",
-          "value": "\"scheduled_runs\".\"generation\" >= 0"
+        "reconciliation_runs_generation_ck": {
+          "name": "reconciliation_runs_generation_ck",
+          "value": "\"reconciliation_runs\".\"generation\" >= 0"
         },
-        "scheduled_runs_attempts_ck": {
-          "name": "scheduled_runs_attempts_ck",
-          "value": "\"scheduled_runs\".\"attempts\" >= 0"
+        "reconciliation_runs_attempts_ck": {
+          "name": "reconciliation_runs_attempts_ck",
+          "value": "\"reconciliation_runs\".\"attempts\" >= 0"
         }
       }
     }

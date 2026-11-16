@@ -100,8 +100,14 @@ export const payments = table(
     holdNote: label("hold_note"),
     holdDecidedBy: id("hold_decided_by"),
     holdDecidedAt: tsString("hold_decided_at"),
+    requestedBy: id("requested_by"),
   },
   (t) => [
+    foreignKey({
+      columns: [t.requestedBy],
+      foreignColumns: [persons.id],
+      name: "payments_requested_by_fk",
+    }).onDelete("restrict"),
     unique("payments_provider_ref_key").on(t.provider, t.paymentRef),
     // `manual` is left out: a hand-keyed operation number is a human's transcription, so two
     // manual tenders may carry the same one.

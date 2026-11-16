@@ -1,3 +1,4 @@
+import { payments } from "./schema/payments.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -49,7 +50,8 @@ describe("concurrent reversals of one payment", () => {
     const refunds = await suite.db
       .select({ amount: paymentRefunds.amount, state: paymentRefunds.state })
       .from(paymentRefunds)
-      .where(eq(paymentRefunds.paymentRef, "c1"));
+      .innerJoin(payments, eq(paymentRefunds.paymentId, payments.id))
+      .where(eq(payments.paymentRef, "c1"));
     // Both refunds were written, and both succeeded — neither was lost and neither was refused.
     expect(refunds.map((r) => r.amount).sort((a, b) => a - b)).toEqual([800, 1200]);
     expect(refunds.map((r) => r.state)).toEqual(["succeeded", "succeeded"]);
