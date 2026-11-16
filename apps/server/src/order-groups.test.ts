@@ -6338,7 +6338,7 @@ describe("A884 deleted lists", () => {
       { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
     ];
     const placed = await submit(v, s.partyId, [
-      { release: "now", lines: [{ ...line(v, "steak"), extras }] },
+      { release: "fire", lines: [{ ...line(v, "steak"), extras }] },
     ]);
     const [dish] = await linesIn(s.partyId, placed.groups[0]!.id);
     const rows = () =>
@@ -6347,6 +6347,7 @@ describe("A884 deleted lists", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, s.tabId))
         .orderBy(asc(workingOrderLines.lineNo));
+    expect((await ticketsOf(s.partyId))[0]!.firedAt).not.toBeNull();
     const before = await rows();
     const notices = await inTx((tx) => listStationNotices(tx, v.stationId));
     await inTx((tx) => deleteExtraList(tx, v.extrasListId));

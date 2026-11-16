@@ -102,7 +102,10 @@ products before you confirm. Deleting cannot be undone.
 
 **An open order does not block a delete, and you are not told to finish or void one.** The delete
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
-answer is stored as the wording that was chosen.
+answer is stored as the wording that was chosen. The next save of a parked counter order drops
+answers from deleted options lists.
+
+To remove a deleted list from the guest menu too, publish that menu again.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes
