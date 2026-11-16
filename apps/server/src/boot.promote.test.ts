@@ -1,6 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,8 @@ import { writeAllocationInput } from "./testing/allocation-input.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
+import { resolveAccountKey } from "./account-key.js";
+import { writeTradingEnv } from "./trading-config.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -414,20 +416,27 @@ async function seedMirrorIdentity(
 }
 
 describe("historical promote: mirror → primary, in-process, restart-into-primary", () => {
-  it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
+  it("exposes promoteMirrorToPrimary, promotes, and leaves the trading.env its join wrote untouched", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
     const secret = await mintBreakGlassSecret({ venue: mirrorDb, node: mirrorNode }, seed.nodeId);
     const port = await freePort();
-    // Its own state dir, so the rewritten `trading.env` can be read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
 
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
+    // As the spare's join writes it (`adopt.ts`).
+    const tradingEnv = await writeTradingEnv(stateDir, {
+      nodeId: seed.nodeId,
+      environment: "production",
+      accountKey: resolveAccountKey({}, loadKeyRing(KEY_ENV)).toString("base64"),
+    });
+    const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
+
     const server = await startServer(
       {
         ...KEY_ENV,
-        WAITRON_NODE_ID: seed.nodeId,
+        ...parseEnvFile(joined.bytes),
         WAITRON_VENUE_DIR: mirrorVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -490,6 +499,10 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       await delay(50);
       expect(restartAsked).toHaveBeenCalled();
 
+      expect({
+        ino: (await stat(tradingEnv)).ino,
+        bytes: await readFile(tradingEnv, "utf8"),
+      }).toEqual(joined);
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
       expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(activeSeriesId);

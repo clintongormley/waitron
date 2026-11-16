@@ -221,7 +221,7 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   countries needs its own design.
 - The dashboard shows the configuration export card where the export route is not served, so its
   download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
-  as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
+  as a promoted mirror (its join writes none, `apps/server/src/adopt.ts`). The route is mounted only when the
   intent is preparation or live (`apps/server/src/boot.ts`).
 
 ## Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).

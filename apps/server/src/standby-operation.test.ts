@@ -204,7 +204,6 @@ async function mirror(activate: StandbyProvisioning["activate"]) {
     nodeId: TARGET,
     holders: createDeploymentHolders("mirror", "secondary"),
     log: () => {},
-    persistTradingEnv: async () => {},
     modules: [
       regime(
         async () => ({ state: {} }),
@@ -376,7 +375,6 @@ describe("opaque authenticated standby carriers", () => {
           nodeId: TARGET,
           holders,
           log: () => {},
-          persistTradingEnv: async () => {},
           modules: [module],
           moduleOperations: operations(authority, scope),
         },
@@ -458,19 +456,9 @@ describe("opaque authenticated standby carriers", () => {
         .insert(invoiceSeries)
         .values({ nodeId: node.nodeId, code: "A-P000042", purpose: "standard" });
     });
-    let persisted = false;
-    await expect(
-      promoteMirrorToPrimary(
-        {
-          ...deps,
-          persistTradingEnv: async () => {
-            persisted = true;
-          },
-        },
-        { oldNodeNeutralised: true },
-      ),
-    ).rejects.toMatchObject({ code: "series.no_full_for_node" });
-    expect(persisted).toBe(false);
+    await expect(promoteMirrorToPrimary(deps, { oldNodeNeutralised: true })).rejects.toMatchObject({
+      code: "series.no_full_for_node",
+    });
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
     expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
     expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
@@ -578,50 +566,12 @@ describe("opaque authenticated standby carriers", () => {
       enter();
       await released;
     });
-    let persisted = false;
     let pending!: Promise<unknown>;
     await withOperationAuthority(scope, "admin", async (authority) => {
       pending = promoteMirrorToPrimary(
         {
           ...deps,
           moduleOperations: operations(authority, scope),
-          persistTradingEnv: async () => {
-            persisted = true;
-          },
-        },
-        { oldNodeNeutralised: true },
-      );
-      await entered;
-    });
-    const refused = expect(pending).rejects.toMatchObject({ code: "module.operation_invalid" });
-    release();
-    await refused;
-    expect(persisted).toBe(false);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
-  });
-
-  it("refuses authority revoked during the trading-settings write", async () => {
-    const scope = { ...binding, action: "promote" };
-    let enter!: () => void;
-    let release!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      enter = resolve;
-    });
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const deps = await mirror(activateSeries);
-    let pending!: Promise<unknown>;
-    await withOperationAuthority(scope, "admin", async (authority) => {
-      pending = promoteMirrorToPrimary(
-        {
-          ...deps,
-          moduleOperations: operations(authority, scope),
-          persistTradingEnv: async () => {
-            enter();
-            await released;
-          },
         },
         { oldNodeNeutralised: true },
       );
@@ -748,24 +698,6 @@ describe("opaque authenticated standby carriers", () => {
     ).toBe(0);
   });
 
-  it("rolls back promotion if the trading-settings write fails", async () => {
-    const deps = await mirror(activateSeries);
-    await expect(
-      promoteMirrorToPrimary(
-        {
-          ...deps,
-          persistTradingEnv: async () => {
-            throw new Error("settings write refused");
-          },
-        },
-        { oldNodeNeutralised: true },
-      ),
-    ).rejects.toThrow("settings write refused");
-    expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
-    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
-  });
-
   it.each(["module", "action", "targetNodeId"] as const)(
     "refuses mismatched promotion %s before activation",
     async (key) => {
@@ -803,7 +735,6 @@ describe("opaque authenticated standby carriers", () => {
           nodeId: TARGET,
           holders: createDeploymentHolders("mirror", "secondary"),
           log: () => {},
-          persistTradingEnv: async () => {},
         },
         { oldNodeNeutralised: true },
       ),

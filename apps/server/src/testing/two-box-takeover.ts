@@ -138,7 +138,6 @@ export function takeoverRoutes(args: {
           modules: args.modules,
           holders: createDeploymentHolders("mirror", "secondary"),
           log: () => {},
-          persistTradingEnv: async () => {},
           withModuleOperations: runner,
         },
         attestation,

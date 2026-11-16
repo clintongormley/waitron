@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,6 +10,8 @@ import { openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { loadKeyRing } from "@waitron/credentials";
+import { resolveAccountKey } from "./account-key.js";
 import { loadBoxEnv } from "./box-env.js";
 import type { StartedServer } from "./boot.js";
 import { parseEnvFile } from "./env-file.js";
@@ -30,6 +32,7 @@ import {
   standby,
 } from "./testing/handover-placed-copy.js";
 import { holdChart } from "./testing/place-copy-box.js";
+import { writeTradingEnv } from "./trading-config.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@hono/node-server", async () => {
@@ -115,6 +118,11 @@ async function spareEnv(): Promise<Record<string, string>> {
 async function killedActivating(at: ActivationKillPoint) {
   const placed = await fixture.placeRealCopy();
   await placed.close();
+  await killChild(at);
+  return placed;
+}
+
+async function killChild(at: ActivationKillPoint): Promise<void> {
   const { spareState, spareVenue } = dirs();
   const args: ActivationKillArgs = {
     venueDir: spareVenue,
@@ -134,7 +142,6 @@ async function killedActivating(at: ActivationKillPoint) {
     ),
     { signal: "SIGKILL", stdout: `killed at ${at}\n` },
   );
-  return placed;
 }
 
 /** The real start, with the real start check: M1 is switched off, so nothing answers it. */
@@ -323,10 +330,23 @@ describe("a box killed while activating, then a real start with its old box swit
     });
   }, 180_000);
 
-  it("killed after trading.env and before the commit, the box stays a mirror with the leftover file, and can activate", async () => {
-    await killedActivating("trading-env");
+  it("killed inside the venue transaction, the box stays a mirror with its trading.env untouched, and can activate", async () => {
     const { spareState } = dirs();
-    const written = parseEnvFile(await readFile(join(spareState, "trading.env"), "utf8"));
+    const placed = await fixture.placeRealCopy();
+    await placed.close();
+    // As the spare's join writes it (`adopt.ts`).
+    const tradingEnv = await writeTradingEnv(spareState, {
+      nodeId: standby.nodeId,
+      environment: "preproduction",
+      accountKey: resolveAccountKey({}, loadKeyRing(await spareEnv())).toString("base64"),
+    });
+    const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
+    await killChild("before-commit");
+    expect({
+      ino: (await stat(tradingEnv)).ino,
+      bytes: await readFile(tradingEnv, "utf8"),
+    }).toEqual(joined);
+    const written = parseEnvFile(joined.bytes);
     expect(Object.keys(written).sort()).toEqual([
       "WAITRON_ACCOUNT_KEY",
       "WAITRON_ENV",
@@ -340,6 +360,7 @@ describe("a box killed while activating, then a real start with its old box swit
     // The node id comes from the file here, as on a box.
     const env = await spareEnv();
     delete env.WAITRON_NODE_ID;
+    delete env.WAITRON_ENV;
     const restarts = await startAfterTheKill(
       (await loadBoxEnv(env, spareState)) as Record<string, string>,
     );

@@ -155,7 +155,6 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
             modules: fiscalModules,
             holders: createDeploymentHolders("mirror", "secondary"),
             log: () => {},
-            persistTradingEnv: async () => {},
             withModuleOperations: runner,
           },
           attestation,

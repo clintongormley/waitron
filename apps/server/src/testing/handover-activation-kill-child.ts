@@ -5,7 +5,7 @@ import { registerHooks } from "node:module";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 
-export type ActivationKillPoint = "trading-env" | "venue-commit" | "role";
+export type ActivationKillPoint = "before-commit" | "venue-commit" | "role";
 
 export interface ActivationKillArgs {
   venueDir: string;
@@ -54,13 +54,11 @@ const [
   { loadKeyRing },
   { openVenueDatabase },
   { createFirstSetupCoordinator },
-  { resolveAccountKey },
   { createDeploymentHolders },
   { mountHandoverActivationApi },
   { mountHandoverPreparationApi },
   { createNodeOperationPreparation },
   { promoteMirrorToPrimary },
-  { writeTradingEnv },
   { TOTP_KEY_RING },
 ] = await Promise.all([
   import("hono"),
@@ -68,13 +66,11 @@ const [
   import("@waitron/credentials"),
   import("@waitron/db"),
   import("@waitron/provisioning"),
-  import("../account-key.js"),
   import("../deployment-holders.js"),
   import("../handover-activation.js"),
   import("../handover-preparation.js"),
   import("../node-operation-preparation.js"),
   import("../promote.js"),
-  import("../trading-config.js"),
   import("./authenticator.js"),
 ]);
 
@@ -121,16 +117,12 @@ mountHandoverActivationApi(app, {
         modules,
         holders: createDeploymentHolders("mirror", "secondary"),
         log: () => {},
-        persistTradingEnv: async () => {
-          await writeTradingEnv(args.stateDir, {
-            nodeId: args.nodeId,
-            environment: "preproduction",
-            accountKey: resolveAccountKey({}, ring).toString("base64"),
-          });
-          killedAt("trading-env");
-        },
         withModuleOperations: async (context, consume) => {
-          const series = await runner(context, consume);
+          const series = await runner(context, async (tx, operations) => {
+            const inTransaction = await consume(tx, operations);
+            killedAt("before-commit");
+            return inTransaction;
+          });
           killedAt("venue-commit");
           return series;
         },

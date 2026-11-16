@@ -483,7 +483,6 @@ it("hands over from built Servers through a real copy, placement restart and clo
               modules: fiscalModules,
               holders: createDeploymentHolders("mirror", "secondary"),
               log,
-              persistTradingEnv: async () => {},
               withModuleOperations: runner,
             },
             attestation,

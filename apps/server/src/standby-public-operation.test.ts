@@ -179,7 +179,6 @@ async function promotionApp() {
           holders,
           modules,
           withModuleOperations,
-          persistTradingEnv: async () => {},
           log: () => {},
         },
         attestation,

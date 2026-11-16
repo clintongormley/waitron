@@ -4185,14 +4185,6 @@ async function bootServer(
         ...promoteDeps,
         modules: enabledAtStart,
         withModuleOperations,
-        persistTradingEnv: async () => {
-          const next: TradingConfig = {
-            nodeId: tradingContext.nodeId,
-            environment: config.environment,
-            accountKey: accountKey.toString("base64"),
-          };
-          await writeTradingEnv(config.stateDir, next);
-        },
       },
       attestation,
     );

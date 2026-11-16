@@ -160,9 +160,6 @@ function spareOn(
         modules: fiscalModules,
         holders,
         log: () => {},
-        persistTradingEnv: async () => {
-          steps.push("trading env");
-        },
         withModuleOperations: runner,
       },
       attestation,
@@ -560,7 +557,7 @@ describe("activating on a real placed copy", () => {
     const store = await placedSpare();
     const { app, steps } = spareOn(store);
     await activate(app, (await selectName(app)).input);
-    expect(steps).toEqual(["trading env", "role primary", "restart at activated"]);
+    expect(steps).toEqual(["role primary", "restart at activated"]);
     expect((await operationRow(store))?.state).toBe("activated");
   }, 60_000);
 
