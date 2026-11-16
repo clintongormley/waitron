@@ -70,7 +70,8 @@ afterEach(() => {
 // the real one; `cp` does the same with WT_CP_FAIL. `cmp` exits 2, its status for trouble, when
 // WT_CMP_FAIL=1, and is the one stub not logged (see `quietStub`). `curl` asked for the script itself
 // copies WT_SELF_SCRIPT's file into the existing output file, keeping that file's mode as the real
-// curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_RECOVERY_UNIT=1 models Docker's dependency on
+// curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
+// another host operation holds the lock. WT_RECOVERY_UNIT=1 models Docker's dependency on
 // the upgrade recovery service, which takes the host lock itself: once a `flock -n 9` has succeeded
 // in the case, `systemctl start waitron-upgrade-recovery.service` and `systemctl enable --now docker`
 // fail until that service has run; with WT_UPGRADE_BUSY=1 as well, the service exits 75, as it does
@@ -2995,7 +2996,9 @@ it.each([
   writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed gate");
   const result = run(sb, args, { WT_RECOVERY_FAIL: "1" });
   expect(result.status).toBe(1);
-  expect(result.stderr).toContain("upgrade recovery service did not start");
+  expect(result.stderr).toContain(
+    "the upgrade recovery service did not start, so nothing was refreshed or reset — run 'systemctl status waitron-upgrade-recovery.service' to see why",
+  );
   expect(result.stderr).not.toContain("another host operation is running");
   expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
 });
