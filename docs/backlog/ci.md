@@ -108,6 +108,13 @@ was this case. Earlier sightings were not searched further. The log is kept at
 turning while it checks a copy that takes the main thread over one timer period”, failed at
 `restore-stream.test.ts:989` with zero timer ticks after returning the expected intact result.
 [Run 43689826000, server shard 17](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327)
+
+`apps/server/src/boot.setup-routes.test.ts` "while setup mode runs, another process cannot take the
+venue lock" failed twice in loaded local runs, each time with `child.status` null at line 600 (its
+10-second `spawnSync` limit ran out) and then passed alone: lane B's six-file run on 15 November
+2026, and lane A's 129-file run on 16 November (#3562's merged-tree check; the file then passed
+45/45 twice alone). Not yet seen in CI. Next: measure the child's own run time under load and set
+the limit above it, per the `spawnSync` rule in CLAUDE.md §4.
 passed 1,872 other cases. `git blame` dates this test to #2540; #3309 changes no restore/integrity
 runtime or test. Sixty recent failed CI runs were inspected; none of the earlier failed server shard logs
 read from non-Dependabot runs held this same assertion. A separate Linux Node 26.13.0 probe of the same worker
