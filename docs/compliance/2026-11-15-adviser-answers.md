@@ -207,10 +207,10 @@ the customer never got an original.
 **Your decision (D2).** *Owner, 16 November: keep None. Most customers don't want the ticket, and
 printing every one wastes paper.* By the adviser's answer, a ticket the customer never receives
 breaches the delivery rule, so this is a risk you are choosing to take. Thursday's question 15 asks
-what it costs, and whether something short of printing, such as a QR code to download the ticket,
-would meet the rule. Changes 2 and 3 are not yet decided; change 2 reverses your 9 October decision
-on email consent. *Recommended: make them.* Question 15 also asks what counts as delivered when a
-customer leaves the paper behind, and whether the sentence above is enough consent.
+what it costs. You also take a ticket printed and left with the bill as delivered, even if the
+customer leaves it behind. Changes 2 and 3 are not yet decided; change 2 reverses your 9 October
+decision on email consent. *Recommended: make them.* Question 15 also asks whether the sentence
+above is enough consent.
 
 ### B3. Undoing a ticket when nothing was served or paid
 

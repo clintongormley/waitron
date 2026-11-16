@@ -392,17 +392,14 @@ being told how the ticket will arrive and that paper is available.
 *What Waitron will do.* Staff ask "paper or email?". For email, the till shows "We'll email your
 ticket to this address. You can ask for a paper copy at any time." and records that it was shown.
 Waitron also keeps a "None" choice, for a customer who wants neither: most customers don't want the
-ticket, and printing every one wastes paper (owner, 16 November).
+ticket, and printing every one wastes paper (owner, 16 November). A ticket printed and left with the bill
+counts as delivered, even if the customer leaves it on the table or says they don't want it.
 
 *We ask:*
 
-- (a) Is a ticket printed and left with the bill delivered, even if the customer leaves it on the
-  table or says they don't want it?
-- (b) Is the email step above informed consent, and is sending the email enough to show delivery,
+- (a) Is the email step above informed consent, and is sending the email enough to show delivery,
   or must the customer open or download it?
-- (c) If the customer wants neither and staff choose None, what does the venue risk? Is there a way
-  to avoid printing that meets the rule, for example a QR code shown at payment with which the
-  customer downloads the ticket?
+- (b) If the customer wants neither and staff choose None, what does the venue risk?
 
 Yes / No / Note: ____________________________________________
 
@@ -907,17 +904,15 @@ informarle de cómo lo recibirá y de que puede pedirlo en papel.
 muestra «Le enviaremos el tique a esta dirección. Puede pedir una copia en papel en cualquier
 momento» y registra que se mostró. Waitron mantiene además la opción «Ninguno», para el cliente que
 no quiere ni una cosa ni otra: la mayoría de los clientes no quiere el tique, e imprimirlos todos
-malgasta papel.
+malgasta papel. El tique impreso y dejado con la cuenta se considera entregado, aunque el cliente lo
+deje en la mesa o diga que no lo quiere.
 
 *Preguntamos:*
 
-- (a) ¿Se considera entregado el tique impreso y dejado con la cuenta, aunque el cliente lo deje en
-  la mesa o diga que no lo quiere?
-- (b) ¿Es consentimiento informado el paso del correo descrito, y basta el envío del correo como
+- (a) ¿Es consentimiento informado el paso del correo descrito, y basta el envío del correo como
   prueba de entrega, o hace falta que el cliente lo abra o lo descargue?
-- (c) Si el cliente no quiere ninguna de las dos cosas y el empleado elige «Ninguno», ¿qué riesgo
-  asume el local? ¿Hay alguna forma de no imprimir que cumpla la norma, por ejemplo un código QR
-  mostrado al cobrar con el que el cliente descarga el tique?
+- (b) Si el cliente no quiere ninguna de las dos cosas y el empleado elige «Ninguno», ¿qué riesgo
+  asume el local?
 
 Sí / No / Nota: ____________________________________________
 
