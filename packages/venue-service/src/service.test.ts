@@ -28,6 +28,7 @@ describe("VENUE_SERVICE", () => {
       "copyProfileKitchenScreens",
       "copyTicketAllergy",
       "declineDepartmentTransfer",
+      "diningStartOf",
       "dueFloorLayouts",
       "findOrderContext",
       "findOrderModes",
@@ -130,7 +131,6 @@ describe("VENUE_SERVICE", () => {
       "writeDepartmentReceipt",
       "writeKitchenNote",
       "writePartyAllergy",
-      "zoneDining",
     ]);
   });
 

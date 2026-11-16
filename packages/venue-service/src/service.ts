@@ -99,8 +99,8 @@ import {
   applyDepartmentDining,
   findOrdersWithDiningChoice,
   resolveOrderDining,
+  diningStartOf,
   venueChargesTakeawayVat,
-  zoneDining,
 } from "./dining.js";
 import {
   acknowledgeKitchenNotice,
@@ -196,7 +196,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   keepZoneOpen,
   resolveSalePolicy,
   resolveOrderDining,
-  zoneDining,
+  diningStartOf,
   venueChargesTakeawayVat,
   findOrdersWithDiningChoice,
   applyDepartmentDining,

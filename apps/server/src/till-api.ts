@@ -1544,9 +1544,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             profileId: device.deviceProfileId,
           });
         }
-        await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
+        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
+        const takeawayVat = await VENUE_SERVICE.venueChargesTakeawayVat(tx);
         return {
-          context: { ...context, dining: await VENUE_SERVICE.zoneDining(tx, context.zoneId) },
+          context: { ...context, dining: VENUE_SERVICE.diningStartOf(policy, takeawayVat) },
           zones: (await VENUE_SERVICE.listServiceZones(tx)).filter((zone) =>
             counters.some((counter) => counter.id === zone.id),
           ),
@@ -1568,9 +1569,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const tx = deps.db;
         await checkZones(tx, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
-        await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
+        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
+        const takeawayVat = await VENUE_SERVICE.venueChargesTakeawayVat(tx);
         return {
-          context: { ...context, dining: await VENUE_SERVICE.zoneDining(tx, zoneId) },
+          context: { ...context, dining: VENUE_SERVICE.diningStartOf(policy, takeawayVat) },
           ...(await VENUE_SERVICE.listZoneOffers(tx, zoneId)),
         };
       });
@@ -1668,10 +1670,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           at,
           menuState.menus.map((menu) => menu.menuId),
         );
-        return {
-          state: { ...menuState, defaultMenuId, dining: await VENUE_SERVICE.zoneDining(tx, zone) },
-          setupRead: await readTillSetup(tx, deps, device),
-        };
+        const setupRead = await readTillSetup(tx, deps, device);
+        const dining = VENUE_SERVICE.diningStartOf(
+          await VENUE_SERVICE.resolveSalePolicy(tx, zone),
+          setupRead.setup.takeawayVat,
+        );
+        return { state: { ...menuState, defaultMenuId, dining }, setupRead };
       });
       return c.json({
         ...state,

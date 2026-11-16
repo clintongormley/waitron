@@ -60,41 +60,24 @@ export async function findOrdersWithDiningChoice(
   return new Set(rows.map((row) => row.id));
 }
 
-interface ZoneDiningRow {
-  zoneOrderStart: string | null;
-  departmentOrderStart: string | null;
+/** What a zone's way of starting an order is worked out from: its effective sale policy's fields. */
+export interface ZoneDiningPolicy {
+  orderStart: string | null;
   dining: DiningPolicy;
-  startsAs: Dining;
-}
-
-async function readZoneDiningRow(tx: Transaction, zoneId: string): Promise<ZoneDiningRow> {
-  const [zone] = await tx
-    .select({
-      zoneOrderStart: floorZones.orderStart,
-      departmentOrderStart: departments.orderStart,
-      dining: departments.dining,
-      startsAs: departments.diningStartsAs,
-    })
-    .from(floorZones)
-    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(eq(floorZones.id, zoneId));
-  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  return zone;
-}
-
-function startOf(zone: ZoneDiningRow, takeawayVat: boolean): DiningStart | null {
-  if (!takeawayVat) return null;
-  if (zone.dining !== "till_choice") return { policy: zone.dining, startsAs: zone.dining };
-  const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
-  return { policy: "till_choice", startsAs: atTable ? "eat_in" : zone.startsAs };
+  diningStartsAs: Dining;
 }
 
 /**
- * How `zoneId`'s department sells and the way a new order there starts; null where the region
- * charges no takeaway VAT, so every order is eaten here.
+ * How a zone's department sells and the way a new order there starts, from its sale policy and
+ * whether the region charges takeaway VAT; null where it does not, so every order is eaten here.
  */
-export async function zoneDining(tx: Transaction, zoneId: string): Promise<DiningStart | null> {
-  return startOf(await readZoneDiningRow(tx, zoneId), await venueChargesTakeawayVat(tx));
+export function diningStartOf(zone: ZoneDiningPolicy, takeawayVat: boolean): DiningStart | null {
+  if (!takeawayVat) return null;
+  if (zone.dining !== "till_choice") return { policy: zone.dining, startsAs: zone.dining };
+  return {
+    policy: "till_choice",
+    startsAs: zone.orderStart === "table" ? "eat_in" : zone.diningStartsAs,
+  };
 }
 
 /**
@@ -107,7 +90,25 @@ export async function resolveOrderDining(
   zoneId: string,
   requested: Dining | undefined,
 ): Promise<Dining> {
-  const start = startOf(await readZoneDiningRow(tx, zoneId), await venueChargesTakeawayVat(tx));
+  const [zone] = await tx
+    .select({
+      zoneOrderStart: floorZones.orderStart,
+      departmentOrderStart: departments.orderStart,
+      dining: departments.dining,
+      diningStartsAs: departments.diningStartsAs,
+    })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(eq(floorZones.id, zoneId));
+  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+  // An eaten-in department sells eaten in in every region, so the region is not read.
+  const start: DiningStart | null =
+    zone.dining === "eat_in"
+      ? { policy: "eat_in", startsAs: "eat_in" }
+      : diningStartOf(
+          { ...zone, orderStart: zone.zoneOrderStart ?? zone.departmentOrderStart },
+          await venueChargesTakeawayVat(tx),
+        );
   const fixed: Dining | null =
     start === null ? "eat_in" : start.policy === "till_choice" ? null : start.policy;
   if (fixed !== null) {
