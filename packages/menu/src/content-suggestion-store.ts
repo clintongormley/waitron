@@ -1,3 +1,4 @@
+import { setImmediate } from "node:timers/promises";
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { and, asc, eq, gt, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
@@ -395,10 +396,12 @@ export async function countOfferedSuggestions(
 ): Promise<number> {
   const rows = await tx.select().from(contentSuggestions).where(isNotNull(contentSuggestions.text));
   let count = 0;
-  for (const batch of batches(rows))
+  for (const batch of batches(rows)) {
     count += (await projectSuggestions(tx, batch, settings)).filter(
       ({ offered }) => offered,
     ).length;
+    await setImmediate();
+  }
   return count;
 }
 

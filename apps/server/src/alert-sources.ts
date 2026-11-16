@@ -916,6 +916,7 @@ export function contentSuggestionsAlertSource(context: TranslationContext): Aler
   return {
     area: "content",
     permission: "menu.manage",
+    readOutsideTransaction: true,
     async read({ tx }): Promise<readonly OngoingAlert[]> {
       const run = await readSuggestionRun(tx);
       if (run === null || run.opened || run.waiting === 0 || (await readActiveSuggestionJob(tx)))

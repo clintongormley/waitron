@@ -3,7 +3,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { contentSuggestions, optionLabels, optionLists, products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
+import {
+  resolveTranslationTargets,
+  readTranslationSettings,
+} from "./content-translation-targets.js";
 import type { TranslationCellEdit } from "./content-translation-types.js";
 type TranslationBatch = { edits: TranslationCellEdit[] };
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -12,6 +15,7 @@ import { BATCH_SIZE } from "./batches.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
 import { recordSuggestionJobReleased, startSuggestionRun } from "./content-suggestion-jobs.js";
 import {
+  countOfferedSuggestions,
   discardContentSuggestion,
   listContentSuggestions,
   storeSuggestionPage,
@@ -589,4 +593,16 @@ it("counts only offered names, including surviving earlier-run text", async () =
       .where(eq(products.id, venue.bread)),
   );
   expect((await page()).run).toMatchObject({ waiting: 0 });
+});
+
+it("serves queued event-loop work before an offered count completes", async () => {
+  await storedVenue();
+  const settings = await app((tx) => readTranslationSettings(tx, context));
+  let served = false;
+  const pending = countOfferedSuggestions(suite.db, settings);
+  setImmediate(() => {
+    served = true;
+  });
+  expect(await pending).toBe(6);
+  expect(served).toBe(true);
 });

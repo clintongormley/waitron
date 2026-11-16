@@ -1754,7 +1754,7 @@ describe("contentSuggestionsAlertSource", () => {
     const source = contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] });
     expect(source.area).toBe("content");
     expect(source.permission).toBe("menu.manage");
-    expect(source.readOutsideTransaction).toBeUndefined();
+    expect(source.readOutsideTransaction).toBe(true);
   });
 
   it("raises nothing before any run", async () => {
@@ -1968,9 +1968,9 @@ it("counts the offered name in a mixed notice and drops it when none remain", as
   await seedWaiting(await seedSuggestionJob(), 3);
   await suite.db.update(products).set({ active: false }).where(eq(products.id, "p0"));
   await suite.db
-    .update(contentSuggestions)
-    .set({ expected: "{}" })
-    .where(eq(contentSuggestions.itemId, "p1"));
+    .update(products)
+    .set({ customerName: { en: "CLIENT Saved" } })
+    .where(eq(products.id, "p1"));
   expect(await readNotice()).toEqual([
     {
       key: "content.suggestions_ready",
@@ -1981,6 +1981,12 @@ it("counts the offered name in a mixed notice and drops it when none remain", as
       screen: "content-languages",
     },
   ]);
+  expect(
+    await contentSuggestionsAlertSource({ fallbackLanguage: "en", required: [] }).read({
+      tx: suite.db,
+      now: NOW,
+    }),
+  ).toEqual(await readNotice());
   await suite.db.update(products).set({ active: false }).where(eq(products.id, "p2"));
   expect(await readNotice()).toEqual([]);
 });
