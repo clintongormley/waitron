@@ -1,5 +1,6 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, TaxOfficeInvoiceDto } from "../api/client.js";
+import type { DashboardApi, MonthDownloadDto, TaxOfficeInvoiceDto } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TaxOfficeScreen } from "./tax-office-screen.js";
@@ -46,6 +47,23 @@ const rows: TaxOfficeInvoiceDto[] = [
   },
 ];
 
+const api = (
+  answer: () => Promise<unknown>,
+  view: MonthDownloadDto = { status: "none" },
+): DashboardApi =>
+  ({
+    liveData: new LiveData(),
+    listTaxOfficeInvoices: vi
+      .fn()
+      .mockImplementation(answer) as DashboardApi["listTaxOfficeInvoices"],
+    getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(view),
+  }) as Partial<DashboardApi> as DashboardApi;
+const tableOf = (el: TaxOfficeScreen) =>
+  el.shadowRoot!.querySelector("wt-data-table") as HTMLElement & {
+    loading: boolean;
+    updateComplete: Promise<boolean>;
+  };
+
 describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (theme) => {
   it.each([
     ["the list", () => Promise.resolve({ rows, next: rows[1], timeZone: "Europe/Madrid" })],
@@ -60,19 +78,39 @@ describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (t
     history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
     const { el, host } = await mountWidget<TaxOfficeScreen>(
       "dashboard-tax-office-screen",
-      {
-        api: {
-          listTaxOfficeInvoices: vi
-            .fn()
-            .mockImplementation(answer) as DashboardApi["listTaxOfficeInvoices"],
-        } as DashboardApi,
-      },
+      { api: api(answer) },
       theme,
     );
-    const table = el.shadowRoot!.querySelector("wt-data-table") as HTMLElement & {
-      loading: boolean;
-      updateComplete: Promise<boolean>;
-    };
+    const table = tableOf(el);
+    await vi.waitFor(() => expect(table.loading).toBe(false));
+    await table.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    [
+      "a ready month file",
+      {
+        status: "ready",
+        id: "b1",
+        month: "2026-11",
+        bytes: 154_000_000,
+        expiresAt: "2026-11-30T15:45:00.000Z",
+      },
+    ],
+    ["a failed month file", { status: "failed", id: "b1", month: "2026-11" }],
+  ] as const)("keeps %s accessible", async (_state, view: MonthDownloadDto) => {
+    setLocale("en-GB");
+    history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+    const { el, host } = await mountWidget<TaxOfficeScreen>(
+      "dashboard-tax-office-screen",
+      { api: api(() => Promise.resolve({ rows, next: null, timeZone: "Europe/Madrid" }), view) },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=month-file]")).not.toBeNull(),
+    );
+    const table = tableOf(el);
     await vi.waitFor(() => expect(table.loading).toBe(false));
     await table.updateComplete;
     await expectNoA11yViolations(host);
