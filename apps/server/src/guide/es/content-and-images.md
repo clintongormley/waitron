@@ -45,7 +45,6 @@ solo cuando se elige el inglés estadounidense; el inglés sin región conserva
 **chips**. Edita estos nombres en los editores de productos y cartas. **Editar traducciones** y
 **Traducir todo** incluyen los idiomas principales.
 
-
 Un idioma que Waitron mantiene activado para tu región aparece como **Obligatorio** y no tiene
 **Eliminar**. Si falta, el siguiente guardado en esta página lo vuelve a añadir. Donde la región
 pide también idiomas extranjeros, aparece un aviso mientras tengas menos de los que pide.
