@@ -1305,10 +1305,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   during render** (A370 caller audit, code reading only). Their redraw work was not measured in this
   item. Next: measure it before deciding whether to retain those lists. Left open by A370 (#1393).
 
-- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's
-  default hover, text and disabled colours, and no theme writes the danger ones**
-  [Detail](backlog/dashboard.md#a-deployment-that-overrides---wt-color-primary-or---wt-color-danger-by-hand-keeps-waitrons-default-hover-text-and-disabled-colours)
-
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).

@@ -372,6 +372,8 @@ Size M.
 
 ## Decisions and deliberate limits
 
+- **Deployment colour overrides:** set each related hover, text and disabled token explicitly so stylesheet authors choose a complete colour family. Semantic danger colours stay outside generated venue themes (watcher, 2026-11-16).
+
 - **Text roles and typed fields.** A179's 12/14/18/22px scale was accepted on 1 October 2026 as
   “yes for now, then we can revisit later”. The owner's 15 November “Both now” choice keeps those
   normal-browser role sizes, uses rem for browser text preferences, and gives shared typing
@@ -722,19 +724,6 @@ and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retai
   outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
   **Next action:** reproduce the permission-grant window through a real attestation route, then
   decide whether the refused early read must still join a person-specific turn.
-
-## A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's default hover, text and disabled colours
-
-- **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps
-  Waitron's default hover, text and disabled colours** — left open by A218 (#1082), A306 and A535.
-  Since A841 slice 2 (#1932) a custom theme works out `--wt-color-primary-text`,
-  `--wt-color-primary-hover`, `--wt-color-primary-disabled` and `--wt-color-on-primary-disabled`
-  from its own button colour (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`). Two gaps
-  stay: a deployment that sets
-  `--wt-color-primary` or `--wt-color-danger` by hand (design-system.md, "Retheming a deployment")
-  still gets Waitron's default blue or red on a hovered or disabled primary or danger `wt-button`;
-  and no theme writes `--wt-color-danger-hover`, `--wt-color-danger-disabled` or
-  `--wt-color-on-danger-disabled`.
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 
