@@ -4537,6 +4537,45 @@ describe("dashboard-app", () => {
     expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
   });
 
+  it("a manager whose live stream ends as inspection-only switches to Invoices, not to sign-in", async () => {
+    history.replaceState(null, "", "/manage");
+    const liveData = new LiveData();
+    const streams: EventTarget[] = [];
+    const signals = createSessionSignals();
+    const liveUpdates = new LiveConnection(liveData, {
+      open: () => {
+        const stream = Object.assign(new EventTarget(), { readyState: 0, close: vi.fn() });
+        streams.push(stream);
+        return stream;
+      },
+      onSessionInvalid: (code) => signals.reportError(code),
+    });
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse })
+      .mockResolvedValue({ ...inspectorMe, personId: meResponse.personId });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ liveData, getMe }),
+      liveUpdates,
+    });
+    await flush(el);
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(streams).toHaveLength(1);
+    streams[0]!.dispatchEvent(
+      new MessageEvent("session-invalid", {
+        data: JSON.stringify({ code: "authorization.inspection_only" }),
+      }),
+    );
+    await flush(el);
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(2);
+    expect(login(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
+    expect(overview(el)).toBeNull();
+    expect(location.pathname).toMatch(/^\/manage\/invoices(\/|$)/);
+  });
+
   it("a manager holding invoice.inspect beside other permissions keeps the PIN and alerts", async () => {
     history.replaceState(null, "", "/manage/profile");
     const api = stubApi({

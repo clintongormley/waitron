@@ -1125,6 +1125,13 @@ export class DashboardApp extends LitElement {
       return;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
+    // The person's roles were cut to invoice.inspect alone: the session still stands, and reading
+    // it again draws the Invoices-only layout.
+    if (code === "authorization.inspection_only") {
+      if (this.sessionPersonId !== undefined && !this.#confinedToInvoices())
+        void this.#probeSession();
+      return;
+    }
     // An ended or absent session answers `required`: while signed out, or while signing out (which
     // returns to login itself), it must not rewrite the address. Expiry and suspension can still end
     // a session the login screen holds unannounced.
