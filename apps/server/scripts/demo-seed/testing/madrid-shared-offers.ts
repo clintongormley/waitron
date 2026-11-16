@@ -1,5 +1,7 @@
 import {
-  recomputeMadridHashes,
+  assertMadridFacts,
+  assertMadridVersionsMatch,
+  assertSameMadridTables,
   stable,
   type CanonicalMadridSemantics,
 } from "./madrid-semantics.js";
@@ -74,9 +76,7 @@ export function madridWithSharedOffers(
   declared: MadridSharedOffers,
 ): { semantics: CanonicalMadridSemantics; added: Record<string, number> } {
   const result = structuredClone(original);
-  for (const name of new Set([...Object.keys(original.tables), ...Object.keys(seeded.tables)]))
-    if (!original.tables[name] || !seeded.tables[name])
-      throw new Error(`Madrid table added or removed: ${name}`);
+  assertSameMadridTables(original, seeded);
 
   const changedCells = new Map(
     declared.changed.map((cell) => [stable([cell.table, cell.row, cell.column]), cell]),
@@ -138,9 +138,7 @@ export function madridWithSharedOffers(
       ["pricingUnit", product.pricingUnit, row.pricing_unit],
       ["image", product.image, row.image],
     ];
-    for (const [field, want, inRow] of facts)
-      if (stable(inRow) !== stable(want))
-        throw new Error(`Madrid declared ${field} differs: ${product.image}`);
+    assertMadridFacts(facts, product.image);
   }
 
   const addedItems = new Set(freshKeys.menu_items ?? []);
@@ -176,9 +174,7 @@ export function madridWithSharedOffers(
           ["pricingUnit", product.pricingUnit, offer.pricingUnit],
           ["image", product.image, offer.image],
         ];
-        for (const [field, want, inOffer] of facts)
-          if (stable(inOffer) !== stable(want))
-            throw new Error(`Madrid declared ${field} differs: ${product.image} in ${versionKey}`);
+        assertMadridFacts(facts, `${product.image} in ${versionKey}`);
       }
       delete stripped.offers![offerKey];
     }
@@ -203,13 +199,6 @@ export function madridWithSharedOffers(
     if (!changedOffers.has(index))
       throw new Error(`Madrid declared offer change not published: ${change.menuItem}`);
 
-  recomputeMadridHashes(result);
-  const resultVersions = result.tables.menu_versions!.rows;
-  const seededVersions = seeded.tables.menu_versions!.rows;
-  if (
-    Object.keys(resultVersions).length !== Object.keys(seededVersions).length ||
-    Object.entries(resultVersions).some(([k, row]) => stable(row) !== stable(seededVersions[k]))
-  )
-    throw new Error("Madrid row changed or removed: menu_versions");
+  assertMadridVersionsMatch(result, seeded);
   return { semantics: result, added };
 }

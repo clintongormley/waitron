@@ -288,3 +288,27 @@ it("refuses a published document changed beyond the declaration, and an offer ch
     'Madrid declared offer change not published: @menu_items:["nowhere"]',
   );
 });
+
+it("refuses a table or an existing row the seed lost, and a declared change to no cell", () => {
+  const extraTable = semantics(true);
+  extraTable.tables.stray = table({});
+  expect(() => madridWithSharedOffers(semantics(false), extraTable, declared)).toThrow(
+    "Madrid table added or removed: stray",
+  );
+  const lostRow = semantics(true, (rows) => {
+    delete (rows.menu_items as Record<string, Row>)[item(drinksMenu, cola)];
+  });
+  expect(() => madridWithSharedOffers(semantics(false), lostRow, declared)).toThrow(
+    `Madrid row removed: menu_items ${item(drinksMenu, cola)}`,
+  );
+  const nowhere = {
+    ...declared,
+    changed: [
+      ...declared.changed,
+      { table: "departments", row: '@departments:["None"]', column: "dining", from: 1, to: 2 },
+    ],
+  };
+  expect(() => madridWithSharedOffers(semantics(false), semantics(true), nowhere)).toThrow(
+    "Madrid declared change missing",
+  );
+});

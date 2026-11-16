@@ -34,6 +34,8 @@ export interface SeedMenusResult {
   menuItemsByProduct: Map<string, string>;
   menuIds: { restaurant: string; lunch: string; deli: string; drinks: string };
   stationIds: StationIds;
+  /** The categories of the products the deli lists from other menus, which the deli makes. */
+  deliListed: { stationId: string; categoryIds: string[] };
 }
 
 type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
@@ -101,6 +103,7 @@ export async function seedMenus(
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
+  const categoryByImage = new Map<string, string>();
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select d.menu_id as id from floor_zones p
@@ -200,6 +203,7 @@ export async function seedMenus(
           );
         }
         productsByImage.set(product.image, created.id);
+        categoryByImage.set(product.image, category.id);
       }
       await addProducts(tx, section.id, productIds);
       const rows = await tx
@@ -277,5 +281,13 @@ export async function seedMenus(
     menuItemsByProduct,
     menuIds: { restaurant: casaId, lunch: diaId, deli: deliId, drinks: drinksId },
     stationIds,
+    deliListed: {
+      stationId: stationIds.deli,
+      categoryIds: [
+        ...new Set(
+          (deli.listedSection?.productImages ?? []).map((image) => categoryByImage.get(image)!),
+        ),
+      ],
+    },
   };
 }

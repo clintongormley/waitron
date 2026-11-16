@@ -136,6 +136,38 @@ export function recomputeMadridHashes(
   }
 }
 
+/** Refuses a table only one of the two captures holds. */
+export function assertSameMadridTables(
+  original: CanonicalMadridSemantics,
+  seeded: CanonicalMadridSemantics,
+): void {
+  for (const name of new Set([...Object.keys(original.tables), ...Object.keys(seeded.tables)]))
+    if (!original.tables[name] || !seeded.tables[name])
+      throw new Error(`Madrid table added or removed: ${name}`);
+}
+
+/** Each fact is `[field, declared, found]`; the first that differs is refused, naming `subject`. */
+export function assertMadridFacts(facts: [string, unknown, unknown][], subject: string): void {
+  for (const [field, want, found] of facts)
+    if (stable(found) !== stable(want))
+      throw new Error(`Madrid declared ${field} differs: ${subject}`);
+}
+
+/** Recomputes `result`'s menu hashes, then refuses any menu version that differs from `seeded`'s. */
+export function assertMadridVersionsMatch(
+  result: CanonicalMadridSemantics,
+  seeded: CanonicalMadridSemantics,
+): void {
+  recomputeMadridHashes(result);
+  const resultVersions = result.tables.menu_versions!.rows;
+  const seededVersions = seeded.tables.menu_versions!.rows;
+  if (
+    Object.keys(resultVersions).length !== Object.keys(seededVersions).length ||
+    Object.entries(resultVersions).some(([k, row]) => stable(row) !== stable(seededVersions[k]))
+  )
+    throw new Error("Madrid row changed or removed: menu_versions");
+}
+
 function digest(value: unknown): string {
   return createHash("sha256").update(stable(value)).digest("hex");
 }

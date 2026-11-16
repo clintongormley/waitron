@@ -189,7 +189,7 @@ describe("seedFloor", () => {
   it("sells the deli to take away and the restaurant eaten here, and makes the deli's drinks at the deli", async () => {
     await provisionVenue();
     const result = await withTransaction(suite.db, async (tx) => {
-      const { menuIds, productsByImage, stationIds } = await seedMenus(tx, {
+      const { menuIds, productsByImage, stationIds, deliListed } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -198,6 +198,7 @@ describe("seedFloor", () => {
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
         menuIds,
+        deliListed,
       });
       const { rows: departments } = await tx.execute<{ name: string; dining: string }>(sql`
         select name, dining from departments order by name`);

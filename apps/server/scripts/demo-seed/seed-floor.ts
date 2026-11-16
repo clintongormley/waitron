@@ -32,11 +32,13 @@ export interface SeedFloorInput {
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   dataSet: DemoDataSet;
   menuIds?: { restaurant: string; lunch: string; deli: string; drinks: string };
+  /** From `seedMenus`: the deli counter routes these categories to this station. */
+  deliListed?: { stationId: string; categoryIds: readonly string[] };
 }
 
 export async function seedFloor(
   tx: Transaction,
-  { locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
+  { locale, departmentTradingNames, dataSet, menuIds, deliListed }: SeedFloorInput,
 ): Promise<void> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
 
@@ -166,31 +168,13 @@ export async function seedFloor(
     name: plain(floor.deliCounterZone),
     displayOrder: 4,
   });
-  if (menuIds !== undefined) {
-    const [deliStation] = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.name, plain(dataSet.stations.deli)));
-    if (deliStation === undefined) throw new Error("seedFloor: no deli preparation station");
-    const deliOwnCategories = dataSet.menus.deli.categories.map((category) =>
-      plain(category.categoryName ?? category.name),
+  for (const categoryId of deliListed?.categoryIds ?? [])
+    await setRoutingCell(
+      tx,
+      { row: { kind: "category", categoryId }, zoneId: deliCounterZone.id },
+      { kind: "station", stationId: deliListed!.stationId },
     );
-    const { rows: listedCategories } = await tx.execute<{ id: string }>(sql`
-      select distinct c.id from menu_items i
-      join products p on p.id = i.product_id
-      join categories c on c.id = p.category_id
-      where i.menu_id = ${menuIds.deli}
-        and c.name not in (${sql.join(
-          deliOwnCategories.map((name) => sql`${name}`),
-          sql`, `,
-        )})
-      order by c.id`);
-    for (const category of listedCategories)
-      await setRoutingCell(
-        tx,
-        { row: { kind: "category", categoryId: category.id }, zoneId: deliCounterZone.id },
-        { kind: "station", stationId: deliStation.id },
-      );
+  if (menuIds !== undefined) {
     const restaurantId = defaultPolicy.department_id;
     const [existing] = await tx
       .select({ id: menuPeriods.id })

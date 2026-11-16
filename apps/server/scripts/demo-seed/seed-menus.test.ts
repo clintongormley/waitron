@@ -103,6 +103,26 @@ describe("seedMenus", () => {
     ]);
   });
 
+  it("refuses a listed product no earlier menu created", async () => {
+    await provisionVenue();
+    const dataSet = {
+      ...CASA_DELGADO_ES,
+      menus: {
+        ...CASA_DELGADO_ES.menus,
+        deli: {
+          ...CASA_DELGADO_ES.menus.deli,
+          listedSection: {
+            ...CASA_DELGADO_ES.menus.deli.listedSection!,
+            productImages: ["refresco-cola.png", "missing.png"],
+          },
+        },
+      },
+    };
+    await expect(
+      withTransaction(suite.db, (tx) => seedMenus(tx, { locale: LOCALE, dataSet })),
+    ).rejects.toThrow("demo-seed: listed product 'missing.png' was not created by an earlier menu");
+  });
+
   it("finds the provisioned default station by its default flag, whatever setup named it", async () => {
     await provisionVenue();
     const stations = await withTransaction(suite.db, async (tx) => {

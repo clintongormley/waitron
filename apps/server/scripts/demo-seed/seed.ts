@@ -77,7 +77,7 @@ export async function seedDemoRestaurant(
   await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const seeded = await withTransaction(db, async (tx) => {
-    const { productsByImage, menuIds, stationIds } = await seedMenus(tx, {
+    const { productsByImage, menuIds, stationIds, deliListed } = await seedMenus(tx, {
       locale,
       dataSet,
     });
@@ -91,7 +91,7 @@ export async function seedDemoRestaurant(
     await routeToDemoPrinter(tx, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
-    await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds });
+    await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds, deliListed });
     await giveKitchenDisplaysThePass(tx);
     await seedStaff(tx, { dataSet, locale });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });

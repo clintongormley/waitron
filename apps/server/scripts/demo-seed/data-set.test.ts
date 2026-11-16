@@ -98,7 +98,7 @@ describe("demo data sets", () => {
     }
   });
 
-  it("gives every country pack four bar sections with the original drink products", () => {
+  it("gives every country pack the same four bar sections and their drinks, bottled beer and Coca-Cola Zero included", () => {
     for (const pack of COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)) {
       const set = demoDataSetFor(pack.demo!);
       const sections = set.menus.restaurant.categories.filter(
