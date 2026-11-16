@@ -85,7 +85,6 @@ Left by Slice 2:
   and whether `handover.operation_conflict`'s wording fits a stepdown's refusal.
 - A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
   operator reading it cannot tell the two apart.
-- The `handover.stepping_down` refusal names no next step.
 - A streamed download leaves the gate's count when its response returns, before its body ends.
 - The close-deadline log does not name the step still running.
 - A drain stopped early reads as a successful pass to `/health`'s last-success time.

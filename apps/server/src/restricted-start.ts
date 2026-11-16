@@ -39,7 +39,8 @@ const MONEY_AND_DRAWER_WRITES = [
 /**
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
  * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
- * It refuses the till's money and drawer writes with the handover code.
+ * It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code; any other route it does
+ * not serve stays a 404 by decision (handover-refusal-words plan, step 5: no blanket answer).
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);

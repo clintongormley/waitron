@@ -804,8 +804,9 @@ function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
-/** A box handing over refuses before any route runs, so after an earlier send of the same sale or
- * refund that got no answer, that refusal leaves its outcome unknown. */
+/** A box handing over, or one that has handed over, answers this without running the sale or refund
+ * route, so after an earlier send of the same sale or refund that got no answer, that refusal leaves
+ * its outcome unknown. */
 function unknownAfterHandover(error: unknown, earlierUnanswered: boolean): boolean {
   return (
     earlierUnanswered && (error as { code?: unknown } | null)?.code === "handover.stepping_down"
@@ -21736,12 +21737,17 @@ export class TillApp extends LitElement {
   /**
    * A refusal of the approver's PIN shows in the PIN prompt; one naming a field goes under it, and
    * any other above the refund's action. The bill is read again after every refusal. A refusal
-   * after the operator has logged out changes nothing.
+   * after the operator has logged out changes nothing. With `outcomeUnknown`, the dialog says the
+   * refund may have been made instead of giving the refusal's own words.
    */
-  async #onRefundRefused(open: BillRefunding, error: unknown, unconfirmed = false): Promise<void> {
+  async #onRefundRefused(
+    open: BillRefunding,
+    error: unknown,
+    outcomeUnknown = false,
+  ): Promise<void> {
     const now = this.#billRefundingNow(open.id);
     if (now === null) return;
-    const refusal = unconfirmed ? { code: "network" } : refusalOf(error);
+    const refusal = outcomeUnknown ? { code: "network" } : refusalOf(error);
     if (APPROVER_REFUSALS.has(refusal.code)) {
       this.refundApproverError = refusal.code;
       this.billRefunding = { ...now, busy: false };
