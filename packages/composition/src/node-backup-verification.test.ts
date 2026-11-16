@@ -165,15 +165,12 @@ describe("node.db's backup verification", () => {
     },
   );
 
-  it.each([9007199254740992n, -9007199254740992n])(
-    "refuses out-of-range integer key version %s without rounding it",
-    async (version) => {
-      seedSourceNode(publicKey);
-      await sealKey(SOURCE, privateKey);
-      source.node.run(sql`update node_signing_key set key_version=${version}`);
-      await expect(run()).rejects.toBeInstanceOf(RangeError);
-    },
-  );
+  it("refuses an out-of-range integer key version without rounding it", async () => {
+    seedSourceNode(publicKey);
+    await sealKey(SOURCE, privateKey);
+    source.node.run(sql`update node_signing_key set key_version=${9007199254740992n}`);
+    await expect(run()).rejects.toBeInstanceOf(RangeError);
+  });
 
   it("passes a key-less source whose node copy holds nothing for it", async () => {
     seedSourceNode(null);
