@@ -931,6 +931,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 - **Loose ends left by service Task 16 (#981, counter handover).**
+  Till-profile defaults and staff-list scrolling.
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **Loose ends left by service Task 17 (#991, a bill left unpaid).**

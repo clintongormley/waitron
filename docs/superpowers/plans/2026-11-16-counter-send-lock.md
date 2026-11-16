@@ -2,7 +2,7 @@
 
 Authority: watcher queue, 2026-11-16 14:09, `/Users/clintongormley/waitron-campaign-f/queue.md`.
 Separate Sol-high draft, source-checked by Codex; first Claude read: `receipts/counter-send-lock-20261116/plan-review.md` in that lane.
-Claude reread completed; watcher cleared the smaller route on 2026-11-16 at14:26, including settling its corrections without a third read. No owner design approval is claimed.
+Claude reread completed; watcher cleared the smaller route on 2026-11-16 at 14:26, including settling its corrections without a third read. No owner design approval is claimed.
 
 ## Finish line, reuse and limits
 
@@ -33,9 +33,9 @@ Watcher14:26 cleared this cut. The two existing no-rail checks passed on 2026-11
    Watch the relevant cases fail, then change `#onPlaceOrder` in `apps/till/src/till-app.ts`.
    Take the scoped lock when Place's reply is lost, retain it through retries and metadata-preparation refusals,
    and release only on Place's own definite answer or clear/load; an older completion cannot unlock another basket.
-   Keep `{id, session, visit, unlock}` in a separate transient field, so clearing retry facts cannot lose the lock after a preparation refusal.
+   Keep `{id, visit, unlock}` in a separate transient field, so clearing retry facts cannot lose the lock after a preparation refusal.
    Add one failed waiting-order-open case; its temporary read lock must not leave the original uncertain basket editable.
-   One private helper re-establishes the lock for the same order/session/visit after either `#onPayWaitingOrder` or `#reloadCounterOrder` releases its temporary lock.
+   One private helper re-establishes the lock for the same order/visit after either `#onPayWaitingOrder` or `#reloadCounterOrder` releases its temporary lock.
    Add one menu-poll version-change case; treat the edit-locked counter as busy in `#onMenuState`, postponing
    reconciliation through the existing due flag so an automatic version adoption cannot invalidate the retry.
    Keep recipient replay, receipt-language and unchanged successful-retry assertions; do not duplicate store lock mechanics.
@@ -43,7 +43,7 @@ Watcher14:26 cleared this cut. The two existing no-rail checks passed on 2026-11
 2. **Independent sign-in lists.** In `apps/till/src/till-app.test.ts`, add “a held-orders read that never answers
    still installs station queue, waiting list and staff at sign-in”. Gate held, assert the other exact rows before release,
    and release in cleanup. Watch it fail, then start all three `#refreshList` calls and the existing staff read together.
-   Keep per-list messages and generations; pass `replaced` to each read. Run the remaining floor-data work before
+   Keep per-list messages and generations, which already discard late replies after logout. Run the remaining floor-data work before
    awaiting those reads, preserving the existing floor-login and newest-success/late-failure cases without duplicate tests.
 
 ## Verification, documentation and size
@@ -55,3 +55,5 @@ Delete the false edit-after-Send paragraph in both `apps/server/src/guide/{en,es
 Delete completed A1417 and Task16 list-loading entries in `docs/backlog/till.md`, and A1417's index line in `docs/backlog.md`; update the Task16 summary.
 As cleared by the watcher, also delete the obsolete collect bullet and its history comment in `#onCollectOrder`, without changing collection behavior.
 Expected production +45–80/−15–35; tests +220–340/−30–60; no new test support or generated files. Guides/backlog mainly lose text; plan about one page.
+
+Review corrections, cleared by the watcher on 2026-11-16 at 15:06 and 15:11: the basket survives a person change, so its lock belongs to its id/load generation; hold counter offer installation at sign-in too, retaining the existing due flag and unknown-Send sentence. Strengthen the failed dining-reread and Park boundary assertions, remove the redundant new list-read callback, and restore Task16’s summary. One fixes read follows.

@@ -6171,7 +6171,12 @@ export class TillApp extends LitElement {
     if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
     this.#syncDepartmentTransfers();
-    this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
+    this.errorKey =
+      offerLoadFailed === false
+        ? this.#heldPlaceEditLock() === undefined
+          ? undefined
+          : "place.unconfirmed"
+        : offerLoadFailed;
     if (!clocking) this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
@@ -6223,8 +6228,7 @@ export class TillApp extends LitElement {
         ["station", "refresh.station"],
         ["waiting", "refresh.waiting"],
       ] as const;
-      for (const [list, messageKey] of lists)
-        reads.push(this.#refreshList(list, messageKey, undefined, replaced));
+      for (const [list, messageKey] of lists) reads.push(this.#refreshList(list, messageKey));
     }
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       reads.push(
@@ -6601,6 +6605,10 @@ export class TillApp extends LitElement {
       Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
+    if (this.#heldPlaceEditLock() !== undefined) {
+      this.#counterOffersDue = true;
+      return;
+    }
     const deferGrid =
       loaded &&
       (this.#pendingCounterMenus !== undefined ||
@@ -8371,21 +8379,23 @@ export class TillApp extends LitElement {
     invoice: string | undefined;
   };
 
-  #placeEditLock?: { id: string; session: number; visit: number; unlock: () => void };
+  #placeEditLock?: { id: string; visit: number; unlock: () => void };
 
   #releasePlaceEditLock(): void {
     this.#placeEditLock?.unlock();
     this.#placeEditLock = undefined;
   }
 
-  #restorePlaceEditLock(): void {
+  #heldPlaceEditLock() {
     const held = this.#placeEditLock;
-    if (
-      held?.id === this.#store.id &&
-      held.session === this.#operatorSession &&
-      held.visit === this.#store.loadGeneration
-    )
-      held.unlock = this.#store.lockEdits();
+    return held?.id === this.#store.id && held.visit === this.#store.loadGeneration
+      ? held
+      : undefined;
+  }
+
+  #restorePlaceEditLock(): void {
+    const held = this.#heldPlaceEditLock();
+    if (held !== undefined) held.unlock = this.#store.lockEdits();
   }
 
   async #onPlaceOrder(
@@ -8508,7 +8518,6 @@ export class TillApp extends LitElement {
         if (isNetworkFailure(error))
           this.#placeEditLock = {
             id,
-            session,
             visit: basketVisit,
             unlock: this.#store.lockEdits(),
           };
