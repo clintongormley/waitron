@@ -1035,6 +1035,7 @@ it("a save refusal naming a field is shown beside that field", async () => {
   expect(startError.hidden).toBe(false);
   expect(startError.textContent).toBe(codeMessage("device_zones.invalid"));
   expect(dialog.shadowRoot!.querySelector<HTMLElement>("[data-zones-error]")!.hidden).toBe(true);
+  expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
 });
 it("the real header's Settings click closes its menu and exposes Equipment and Zones", async () => {
   const { el } = await mount(selection(["bar", "room"], "bar"));

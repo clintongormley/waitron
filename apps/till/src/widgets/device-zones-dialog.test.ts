@@ -3,7 +3,8 @@ import { DeviceZonesDialog } from "./device-zones-dialog.js";
 import { userEvent } from "vitest/browser";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -115,6 +116,78 @@ it("a write refusal keeps edits and permits retry without editing", async () => 
   await userEvent.click(save(el)!);
   expect(saved).toHaveLength(2);
   expect(saved[1]).toEqual(saved[0]);
+});
+
+const zonesError = (el: HTMLElement) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-zones-error]")!;
+const startError = (el: HTMLElement) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-start-error]")!;
+const bottom = (el: HTMLElement) => el.shadowRoot!.querySelector("wt-form-actions")!.error;
+const invalid = codeMessage("device_zones.invalid");
+
+it("a refusal naming the zones goes beside them, the bottom asks for corrections, and choosing a start leaves it", async () => {
+  const { el } = await mount();
+  el.refusal = { code: "device_zones.invalid", field: "selectedZoneIds" };
+  await el.updateComplete;
+  expect(zonesError(el).hidden).toBe(false);
+  expect(zonesError(el).textContent).toBe(invalid);
+  expect(startError(el).hidden).toBe(true);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await userEvent.click(input(el, "starting-zone", "room")!);
+  expect(zonesError(el).textContent).toBe(invalid);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await userEvent.click(input(el, "shown-zone", "bar")!);
+  expect(zonesError(el).hidden).toBe(true);
+  expect(bottom(el)).toBe("");
+});
+
+it("a refusal naming the starting zone goes beside it, and changing which zones show leaves it", async () => {
+  const { el } = await mount();
+  el.refusal = { code: "device_zones.invalid", field: "startingZoneId" };
+  await el.updateComplete;
+  expect(startError(el).hidden).toBe(false);
+  expect(startError(el).textContent).toBe(invalid);
+  expect(zonesError(el).hidden).toBe(true);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await userEvent.click(input(el, "shown-zone", "room")!);
+  expect(startError(el).textContent).toBe(invalid);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await userEvent.click(input(el, "shown-zone", "room")!);
+  await userEvent.click(input(el, "starting-zone", "room")!);
+  expect(startError(el).hidden).toBe(true);
+  expect(bottom(el)).toBe("");
+});
+
+it("hiding the starting zone clears a refusal about the starting zone", async () => {
+  const { el } = await mount();
+  el.refusal = { code: "device_zones.invalid", field: "startingZoneId" };
+  await el.updateComplete;
+  await userEvent.click(input(el, "shown-zone", "bar")!);
+  expect(startError(el).hidden).toBe(true);
+});
+
+it("a refusal naming a field the dialog does not show stays at the bottom through edits until the next save", async () => {
+  const { el, saved } = await mount();
+  el.refusal = { code: "device_zones.invalid", field: "profileId" };
+  await el.updateComplete;
+  expect(bottom(el)).toBe(invalid);
+  expect(zonesError(el).hidden).toBe(true);
+  expect(startError(el).hidden).toBe(true);
+  await userEvent.click(input(el, "starting-zone", "room")!);
+  await userEvent.click(input(el, "shown-zone", "bar")!);
+  expect(bottom(el)).toBe(invalid);
+  await userEvent.click(save(el)!);
+  expect(saved).toHaveLength(1);
+  expect(bottom(el)).toBe("");
+});
+
+it("a refusal naming no field and a field failing its own check show together, the refusal first", async () => {
+  const { el } = await mount();
+  await userEvent.click(input(el, "shown-zone", "bar")!);
+  await userEvent.click(save(el)!);
+  el.refusal = { code: "device_zones.changed" };
+  await el.updateComplete;
+  expect(bottom(el)).toBe(`${codeMessage("device_zones.changed")} ${t("form.fix_fields")}`);
 });
 
 it("a refreshed scope preserves dirty choices and refuses a newly forbidden zone", async () => {

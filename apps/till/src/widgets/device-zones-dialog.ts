@@ -4,6 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -29,6 +30,7 @@ const copy = (draft: Draft): Draft => ({
   selectedZoneIds: [...draft.selectedZoneIds],
   startingZoneId: draft.startingZoneId,
 });
+const FIELDS: ReadonlySet<string> = new Set(["selectedZoneIds", "startingZoneId"]);
 const equal = (a: Draft, b: Draft): boolean =>
   a.startingZoneId === b.startingZoneId &&
   a.selectedZoneIds.length === b.selectedZoneIds.length &&
@@ -93,8 +95,7 @@ export class DeviceZonesDialog extends LitElement {
   @property() readError = "";
   @property({ attribute: false }) refusal?: DeviceZonesRefusal;
   @state() private draft: Draft = { selectedZoneIds: [], startingZoneId: null };
-  @state() private attempted = false;
-  @state() private dismissedRefusal?: DeviceZonesRefusal;
+  readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #baseline?: Draft;
@@ -125,9 +126,10 @@ export class DeviceZonesDialog extends LitElement {
       this.#baseline = undefined;
       this.#profile = undefined;
       this.#rows = [];
-      this.attempted = false;
+      this.#feedback.reset();
       return;
     }
+    if (changed.has("refusal")) this.#feedback.newRefusal();
     const selection = this.selection;
     if (selection === null) return;
     if (!this.#baseline || (changed.has("selection") && equal(this.draft, this.#baseline))) {
@@ -135,7 +137,7 @@ export class DeviceZonesDialog extends LitElement {
       this.#baseline = copy(this.draft);
       this.#profile = selection.profileId;
       this.#rows = selection.zones;
-      this.attempted = false;
+      this.#feedback.attempted = false;
       this.#scope?.commit(this.#baseline);
     } else if (changed.has("selection")) {
       this.#rows = [
@@ -146,7 +148,7 @@ export class DeviceZonesDialog extends LitElement {
             this.draft.selectedZoneIds.includes(row.id),
         ),
       ];
-      if (this.#invalid()) this.attempted = true;
+      if (this.#invalid()) this.#feedback.attempted = true;
     }
     if (!this.#scope) {
       const { scope, coordinator } = draftScopeFor<Draft>(this, {
@@ -183,19 +185,20 @@ export class DeviceZonesDialog extends LitElement {
   }
   #edit(id: string, shown: boolean): void {
     if (this.busy || !this.open) return;
+    const hidesStart = !shown && this.draft.startingZoneId === id;
     this.draft = {
       selectedZoneIds: shown
         ? [...this.draft.selectedZoneIds, id]
         : this.draft.selectedZoneIds.filter((value) => value !== id),
-      startingZoneId: !shown && this.draft.startingZoneId === id ? null : this.draft.startingZoneId,
+      startingZoneId: hidesStart ? null : this.draft.startingZoneId,
     };
-    this.dismissedRefusal = this.refusal;
+    this.#feedback.dismiss("selectedZoneIds", ...(hidesStart ? ["startingZoneId"] : []));
     this.#scope?.changed();
   }
   #start(id: string): void {
     if (this.busy || !this.open || !this.draft.selectedZoneIds.includes(id)) return;
     this.draft = { ...this.draft, startingZoneId: id };
-    this.dismissedRefusal = this.refusal;
+    this.#feedback.dismiss("startingZoneId");
     this.#scope?.changed();
   }
   #save(): void {
@@ -207,8 +210,7 @@ export class DeviceZonesDialog extends LitElement {
       saveActionState(this.#scope).unchanged
     )
       return;
-    this.attempted = true;
-    this.dismissedRefusal = this.refusal;
+    this.#feedback.press("selectedZoneIds", "startingZoneId", "refusal");
     if (this.#invalid()) {
       void this.updateComplete.then(() =>
         this.shadowRoot!.querySelector<HTMLInputElement>(
@@ -244,22 +246,24 @@ export class DeviceZonesDialog extends LitElement {
   }
   override render() {
     const action = saveActionState(this.#scope);
-    const refusal = this.refusal === this.dismissedRefusal ? undefined : this.refusal;
-    const zonesError =
-      this.attempted && this.#badZones()
-        ? t("device_zones.choose_zones")
-        : refusal?.field === "selectedZoneIds"
-          ? (refusal.message ??
-            (refusal.code ? codeMessage(refusal.code) : t("device_zones.write_failed")))
-          : "";
-    const startError =
-      this.attempted && this.#badStart()
-        ? t("device_zones.choose_start")
-        : refusal?.field === "startingZoneId"
-          ? (refusal.message ??
-            (refusal.code ? codeMessage(refusal.code) : t("device_zones.write_failed")))
-          : "";
-    const correction = this.attempted && this.#invalid();
+    const refusal = this.refusal;
+    const refusals: Record<string, string> = refusal
+      ? {
+          [refusal.field && FIELDS.has(refusal.field) ? refusal.field : "refusal"]:
+            refusal.message ??
+            (refusal.code ? codeMessage(refusal.code) : t("device_zones.write_failed")),
+        }
+      : {};
+    const attempted = this.#feedback.attempted;
+    const errors: Record<string, string> = {
+      ...this.#feedback.remaining(refusals),
+      ...(attempted && this.#badZones() ? { selectedZoneIds: t("device_zones.choose_zones") } : {}),
+      ...(attempted && this.#badStart() ? { startingZoneId: t("device_zones.choose_start") } : {}),
+    };
+    const zonesError = errors.selectedZoneIds ?? "";
+    const startError = errors.startingZoneId ?? "";
+    const marked = new Set(Object.keys(errors).filter((key) => FIELDS.has(key)));
+    const correction = attempted && this.#invalid();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.open}
@@ -330,9 +334,7 @@ export class DeviceZonesDialog extends LitElement {
         <p data-start-error id="start-error" ?hidden=${!startError}>${startError}</p>
         ${this.readError ? html`<p role="status">${this.readError}</p>` : nothing}
         ${this.readError || this.selection?.zones.length === 0 ? html`<wt-button data-zones-retry variant="secondary" ?disabled=${this.loading || this.busy} @click=${() => this.dispatchEvent(new CustomEvent("retry-device-zones", { bubbles: true, composed: true }))}>${t("find_page.retry")}</wt-button>` : nothing}
-        <wt-form-actions
-          .error=${correction ? t("form.fix_fields") : refusal ? (refusal.message ?? (refusal.code ? codeMessage(refusal.code) : t("device_zones.write_failed"))) : ""}
-        >
+        <wt-form-actions .error=${this.#feedback.message(errors, marked, t("form.fix_fields"))}>
           <wt-button
             slot="cancel"
             data-zones-cancel

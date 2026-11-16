@@ -416,18 +416,70 @@ describe("the forms contract", () => {
     retry.resolve({ absenceId: "ab9" });
   });
 
-  // The till's client spreads the error's `params` onto what it throws, so `field` sits at the top.
-  it.each([
+  type Change = (el: TillScheduleScreen) => Promise<void>;
+  const formFields: Record<Form, string[]> = {
+    cover: ["cover-shift", "cover-colleague"],
+    "request-absence": ["abs-kind", "abs-from", "abs-to", "abs-note"],
+  };
+  const refusedFields: {
+    form: Form;
+    field: string;
+    marked: string;
+    change: Change;
+    unrelated: Change;
+  }[] = [
     {
-      form: "cover" as const,
+      form: "cover",
       field: "fromShiftId",
       marked: "cover-shift",
-      other: "cover-colleague",
+      change: async (el) => {
+        await choose(el, "cover-shift", "");
+        await choose(el, "cover-shift", "s1");
+      },
+      unrelated: (el) => choose(el, "cover-colleague", "col2"),
     },
-    { form: "request-absence" as const, field: "startsOn", marked: "abs-from", other: "abs-to" },
-  ])(
-    "a refusal naming $field goes under $marked, never disables the button, and changing that field clears it",
-    async ({ form, field, marked, other }) => {
+    {
+      form: "cover",
+      field: "toPersonId",
+      marked: "cover-colleague",
+      change: (el) => choose(el, "cover-colleague", "col2"),
+      unrelated: async (el) => {
+        await choose(el, "cover-shift", "");
+        await choose(el, "cover-shift", "s1");
+      },
+    },
+    {
+      form: "request-absence",
+      field: "kind",
+      marked: "abs-kind",
+      change: (el) => choose(el, "abs-kind", "sick_leave"),
+      unrelated: (el) => type(el, "abs-note", "dentist"),
+    },
+    {
+      form: "request-absence",
+      field: "startsOn",
+      marked: "abs-from",
+      change: (el) => type(el, "abs-from", "2026-06-02"),
+      unrelated: (el) => type(el, "abs-to", "2026-06-04"),
+    },
+    {
+      form: "request-absence",
+      field: "endsOn",
+      marked: "abs-to",
+      change: (el) => type(el, "abs-to", "2026-06-04"),
+      unrelated: (el) => type(el, "abs-from", "2026-06-02"),
+    },
+    {
+      form: "request-absence",
+      field: "note",
+      marked: "abs-note",
+      change: (el) => type(el, "abs-note", "dentist"),
+      unrelated: (el) => choose(el, "abs-kind", "sick_leave"),
+    },
+  ];
+  it.each(refusedFields)(
+    "a refusal naming $field goes under $marked, never disables the button, survives a change to another field, and changing its own field clears it",
+    async ({ form, field, marked, change, unrelated }) => {
       const api = stubApi();
       const refusal = { code: "management.request_invalid", field, status: 400 };
       api.requestSwap.mockImplementationOnce(() => Promise.reject(refusal));
@@ -445,14 +497,15 @@ describe("the forms contract", () => {
       await vi.waitFor(() =>
         expect(fieldError(el, marked)).toBe(codeMessage("management.request_invalid")),
       );
-      expect(fieldError(el, other)).toBe("");
+      for (const other of formFields[form].filter((name) => name !== marked))
+        expect(fieldError(el, other)).toBe("");
       expect(actions(el, form).error).toBe(t("form.fix_fields"));
       expect(q(el, ".notice")).toBeNull();
       expect(await state(el, submit)).toEqual(ready);
-      if (form === "cover") {
-        await choose(el, "cover-shift", "");
-        await choose(el, "cover-shift", "s1");
-      } else await type(el, "abs-from", "2026-06-02");
+      await unrelated(el);
+      expect(fieldError(el, marked)).toBe(codeMessage("management.request_invalid"));
+      expect(actions(el, form).error).toBe(t("form.fix_fields"));
+      await change(el);
       expect(fieldError(el, marked)).toBe("");
       expect(actions(el, form).error).toBe("");
     },
