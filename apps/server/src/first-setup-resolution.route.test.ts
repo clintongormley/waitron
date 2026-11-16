@@ -13,9 +13,16 @@ import { listener } from "./testing/ephemeral-listener.js";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 
-vi.mock("@hono/node-server", async () =>
-  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
-);
+vi.mock("@hono/node-server", async () => {
+  const mock = await (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock();
+  return {
+    ...mock,
+    serve: (...args: Parameters<typeof mock.serve>) => {
+      if (!listener.configured) expect(args[0].port).toBe(3000);
+      return mock.serve(...args);
+    },
+  };
+});
 function httpPort() {
   if (listener.port === undefined) throw new Error("Expected bound recovery listener");
   return listener.port;

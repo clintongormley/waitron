@@ -12,6 +12,7 @@ import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { listener } from "./testing/ephemeral-listener.js";
 
 vi.mock("@hono/node-server", async () =>
   (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
@@ -236,7 +237,9 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
       status: 200,
       body: { provisioned: true },
     });
+    const initialListener = listener.current;
     await server.close();
+    expect(initialListener?.listening).toBe(false);
     server = undefined;
     const completed = await readFile(join(stateDir, "flows/setup/record.json"), "utf8");
     expect(JSON.parse(completed).attempt.status).toBe("complete");
@@ -249,6 +252,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
       const handle = await startServerOrFirstSetupResolution(merged, env, {
         startServer: (environment, base) => startServer(environment, base, { testClock }),
       });
+      const bound = listener.current;
       try {
         const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, {
           dispatcher: agent,
@@ -263,6 +267,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
         ).toBe(200);
       } finally {
         await handle.close();
+        expect(bound?.listening).toBe(false);
       }
     };
     await restart();

@@ -8,6 +8,7 @@ import { verifySecretAsync } from "@waitron/identity";
 import type { StartedServer } from "./boot.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { listener } from "./testing/ephemeral-listener.js";
 
 vi.mock("@hono/node-server", async () =>
   (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
@@ -64,7 +65,9 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     const initial = await post("node-key", proof.body);
     expect(initial.status).toBe(200);
     const original = (await readSetupFlowRecord(stateDir))?.nodeKey;
+    const initialListener = listener.current;
     await server.close();
+    expect(initialListener?.listening).toBe(false);
     server = undefined;
     server = await startServer(env);
     const before = (await readSetupFlowRecord(stateDir))?.attempt;

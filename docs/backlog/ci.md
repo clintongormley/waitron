@@ -22,19 +22,20 @@ Vitest 4.1.11 reads it.
 
 ## What the landing-port fix (A80, PR #740) left open
 
-The remaining callers include `fiscal-readiness-first-setup.test.ts`, `start-full-disk.e2e.test.ts`,
+Within the setup/recovery slice, the remaining callers include `fiscal-readiness-first-setup.test.ts`, `start-full-disk.e2e.test.ts`,
 `start-from-spare.e2e.test.ts`, the `first-fiscal-*`, `handover-*` and `hour-*` suites,
 and configured-port boot cases and unused-peer ports. Audit their configured addresses,
 advertised origins and listener-release assertions before choosing a bind-time or retained fixture.
 Later same-port rebinds inside one process still need their own handoff audit.
+Other `freePorts` callers also need an audit of whether they require a released configured port.
 
 Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run).
 
 `bench/sqlite-failover/src/unreachable-store.ts` still releases a port intended to stay unreachable.
-Another worker can bind it later. Destination port zero is not a replacement for its HTTP clients:
-a 16 November control on macOS Node 26.13.0 observed `http.request` passing port 0 to the transport
-as 80, while port 1 remained 1. The bench needs a different endpoint that remains refused; keep its
-existing refusal probe and the configured-port, origin and listener-release assertions when auditing callers.
+Another worker can bind it later. The port-zero candidate failed a probe of Node’s `http.request`:
+a 16 November control on macOS Node 26.13.0 observed port 0 reaching the transport as 80, while
+port 1 remained 1. This did not exercise the SDK or Litestream. The bench needs an endpoint that
+remains refused; keep its existing refusal probe.
 
 A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.test.ts`
 siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests

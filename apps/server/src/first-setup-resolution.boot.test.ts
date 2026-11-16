@@ -29,9 +29,16 @@ import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { closeListener } from "./close-listener.js";
 import { listener } from "./testing/ephemeral-listener.js";
 
-vi.mock("@hono/node-server", async () =>
-  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
-);
+vi.mock("@hono/node-server", async () => {
+  const mock = await (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock();
+  return {
+    ...mock,
+    serve: (...args: Parameters<typeof mock.serve>) => {
+      expect(args[0].port).toBe(3000);
+      return mock.serve(...args);
+    },
+  };
+});
 import { escapeHtml } from "./html-page.js";
 import { OPERATOR_WORDS, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
