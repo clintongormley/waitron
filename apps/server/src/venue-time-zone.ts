@@ -1,4 +1,4 @@
-import { readVenue, withTransaction, type Database } from "@waitron/db";
+import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 
 /** The zone as the runtime names it, or UTC when the runtime does not know it. */
@@ -10,15 +10,20 @@ export function knownZone(timeZone: string): string {
   }
 }
 
-/** Onboarding derives this zone from the address; email times use the venue's. */
+/**
+ * Email times and the pairing window's answer use the venue's zone; onboarding derives it from the
+ * address.
+ */
+export async function venueTimeZoneIn(tx: Transaction): Promise<string> {
+  try {
+    return knownZone((await readVenue(tx)).timeZone);
+  } catch (error) {
+    // No venue is set up yet: times still show, in UTC.
+    if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
+    throw error;
+  }
+}
+
 export function readVenueTimeZone(db: Database): Promise<string> {
-  return withTransaction(db, async (tx) => {
-    try {
-      return knownZone((await readVenue(tx)).timeZone);
-    } catch (error) {
-      // Email formatting must remain usable when the venue has no valid stored zone.
-      if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
-      throw error;
-    }
-  });
+  return withTransaction(db, venueTimeZoneIn);
 }

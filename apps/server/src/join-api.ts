@@ -37,7 +37,7 @@ import {
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
-import { readVenueTimeZone } from "./venue-time-zone.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 import type { Logger } from "./logger.js";
 
 /** `pairingMode` must be the SAME holder `boot.ts` hands the device mount: one window per venue. */
@@ -110,9 +110,9 @@ function requireKind(value: string | undefined): JoinRequestKind {
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   // `gated` and `gatedByRowKind` discard the device requests a shut window or an ended claim
-  // strands, and drop those claims only once the transaction has committed. `authorized` does not:
-  // the window's read, take and renew routes act on no request, and the dashboard calls the read
-  // and renew ones repeatedly.
+  // strands, and drop those claims only once the transaction has committed. `authorized` and the
+  // window's read route do not: the window's read, take and renew routes act on no request, and the
+  // dashboard calls the read and renew ones repeatedly.
   const authorized = (sessionId: string, permission: Permission): Promise<void> =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
@@ -166,12 +166,18 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   app.get("/management-api/pairing-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await authorized(sessionId, "hardware.manage");
+      const timeZone = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "hardware.manage",
+        });
+        return venueTimeZoneIn(tx);
+      });
       return c.json({
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
         deviceAddress: deps.deviceAddress,
-        timeZone: await readVenueTimeZone(deps.db),
+        timeZone,
       });
     }),
   );
