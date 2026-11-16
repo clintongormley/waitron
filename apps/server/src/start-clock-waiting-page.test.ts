@@ -172,7 +172,9 @@ it("asks again once the server no longer holds the confirmation, as after a refu
     const requests: string[] = [];
     page.on("request", (request) => requests.push(new URL(request.url()).pathname));
     for (const look of [1, 2]) {
+      const reply = page.waitForResponse((response) => new URL(response.url()).pathname === "/");
       await page.clock.runFor(5_000);
+      await (await reply).finished();
       await expect.poll(() => requests.filter((path) => path === "/").length).toBe(look);
     }
     expect(await page.locator("#clock-confirmed").isVisible()).toBe(true);
