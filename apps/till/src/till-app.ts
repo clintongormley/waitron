@@ -14075,11 +14075,8 @@ export class TillApp extends LitElement {
     ]);
   }
 
-  /** A failed read leaves the list empty rather than showing another party's bills, unless it is a
-   * `background` read (a check that the bill on screen is still there, not a read after this
-   * till's own change to the bills), which keeps the last list read, or Split a table's panel is
-   * open or due to reopen, whose rows join that list. A read overtaken by a later
-   * one leaves the list alone, and only its generation, compared with {@link #partyBillsRead},
+  /** A read overtaken by a later one leaves the list alone, and only its generation,
+   * compared with {@link #partyBillsRead},
    * tells a caller so. Unless `follow` is false, a read that no longer shows the bill on screen
    * moves the screen off it ({@link #followBillsRead}); a caller choosing the bill itself passes
    * false. */
@@ -14088,6 +14085,7 @@ export class TillApp extends LitElement {
     follow = true,
     background = false,
     splitRead = false,
+    retainOnFailure = background,
   ): Promise<ReadBills> {
     const party = this.orderParty;
     if (background && this.#ownBillsChanges > 0)
@@ -14125,7 +14123,7 @@ export class TillApp extends LitElement {
     } catch {
       if (
         read === this.#partyBillsRead &&
-        !background &&
+        !retainOnFailure &&
         this.#splitPanel === undefined &&
         refusal === undefined &&
         this.#splitRefusalReading === undefined
@@ -19070,11 +19068,11 @@ export class TillApp extends LitElement {
       billId === this.activeTabId &&
       visit === this.#orderVisit;
     if (billId === undefined || !current()) return;
-    let read = await this.#loadPartyBills(undefined, true, true);
+    let read = await this.#loadPartyBills(undefined, true, false, false, true);
     let balanced = await read.balance;
     if (!current()) return;
     if (read.read !== this.#partyBillsRead) {
-      read = await this.#loadPartyBills(undefined, true, true);
+      read = await this.#loadPartyBills(undefined, true, false, false, true);
       balanced = await read.balance;
     }
     if (!current() || read.read !== this.#partyBillsRead) return;

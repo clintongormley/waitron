@@ -282,6 +282,25 @@ describe("A803 move dishes app:", () => {
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
+  it("opens Move dishes while this till's earlier move is still waiting for its reply", async () => {
+    const moving = heldMove();
+    const { el, order } = await open({ moveDishes: moving.call });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el);
+    expect(moving.call).toHaveBeenCalledOnce();
+    try {
+      const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      await userEvent.click(menu);
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
+      expect(api.moveDishes).toHaveBeenCalledOnce();
+    } finally {
+      moving.refuse({ code: "bill.line_paid", status: 409 });
+      await flush(el, 6);
+    }
+  });
+
   it("reads once more when a newer bills read overtakes the Move dishes opening", async () => {
     const { el, order } = await open({
       getPartyBills: vi.fn().mockResolvedValue(partPaid()),
