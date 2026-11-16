@@ -360,7 +360,7 @@ describe("A773 hold paper: extras off and moves", () => {
     return item!;
   };
 
-  it("reprints a Requested dish once on its existing HOLD paper with its original time", async () => {
+  it("reprints a Requested dish on its existing HOLD paper with its original time", async () => {
     const venue = await fresh();
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.grill]);

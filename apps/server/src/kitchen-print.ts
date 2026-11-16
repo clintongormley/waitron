@@ -2490,16 +2490,12 @@ async function readReprintParts(
     );
   const onHold = await readOnHoldTickets(tx, orderIds);
   const onPaper = await onHeldPaper(tx, onHold);
-  const heldItems = new Map(
-    [...onHold.filter(onPaper), ...(await readWaitingOnHoldPaper(tx, orderIds))].map((item) => [
-      item.id,
-      item,
-    ]),
+  const held = [...onHold.filter(onPaper), ...(await readWaitingOnHoldPaper(tx, orderIds))].map(
+    ({ holdPrintedAt, ...item }) => ({
+      ...item,
+      sentAt: holdPrintedAt,
+    }),
   );
-  const held = [...heldItems.values()].map(({ holdPrintedAt, ...item }) => ({
-    ...item,
-    sentAt: holdPrintedAt,
-  }));
   const byOrder = (
     rows: readonly (Omit<FiredItem, "sentAt"> & {
       workingOrderId: string;

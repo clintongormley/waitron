@@ -1012,6 +1012,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       fireGroup(tx, v.cfg, table4.partyId, groups[0]!.id, await command(table4.partyId)),
     );
 
+    expect((await inTx((tx) => printersInTrouble(tx, new Date()))).map(({ id }) => id)).toEqual([
+      v.kitchenPrinterId,
+    ]);
     expect(await problemsOf(table4.partyId)).toEqual([
       {
         workingOrderId: table4.tabId,
@@ -1028,6 +1031,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     await setJob(reprint.id, { status: "done" });
     expect(await problemsOf(table4.partyId)).toEqual([]);
     expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(false);
+    expect(await inTx((tx) => printersInTrouble(tx, new Date()))).toEqual([]);
   });
 
   it("is reprinted under REPRINT and HOLD on a party with nothing fired, and clears once that prints", async () => {

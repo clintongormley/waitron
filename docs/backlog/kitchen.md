@@ -62,8 +62,8 @@ Left open:
   Grill. Existing `kitchen_print_job_lines` links identify the original recipient while an
   original dish survives. An added-portion/removal/cancellation control found no such links for
   the remaining correction-only dish; HOLD CHANGED/CANCELLED jobs carry no kitchen links.
-  The unchanged-printer control retained Grill/pass output (27 passing cases, lane H receipts
-  `held-dish-reprint/printer-history.jsonl` and `printer-history-whole-file.log`). The watcher
+  The unchanged-printer control retained Grill/pass output; the [A1369 evidence](../superpowers/plans/2026-11-16-held-dish-reprint.md#evidence-and-scope)
+  records both reproductions. The watcher
   deferred recipient routing on 2026-11-16 at 22:45: a partial route exists, but the correction-only
   gap and whether to use a replaced printer remain open.
 
