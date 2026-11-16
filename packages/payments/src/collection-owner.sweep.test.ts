@@ -1,6 +1,6 @@
 import { liftPaymentGuard } from "./testing/lift-payment-guard.js";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,10 +13,6 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from payments`);
-});
 
 /** Reads the sweep's rows the way the Stripe and SumUp adapters do, and records every payment it
  * is asked about instead of polling a processor. */

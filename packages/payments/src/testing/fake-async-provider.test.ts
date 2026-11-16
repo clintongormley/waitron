@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
@@ -9,12 +8,6 @@ import { freshNif, seedWorkingOrder } from "../../test/seed.js";
 import { FakeAsyncProvider } from "./fake-async-provider.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  // Child before parent: a `payment_refunds` row points at its payment.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
 
 describe("FakeAsyncProvider", () => {
   it("initiate writes an initiated row and returns a url + external ref", async () => {

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,14 +16,6 @@ import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  // Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
-  // refused with `FOREIGN KEY constraint failed`.
-  await suite.db.execute(sql`delete from incidents`);
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
 
 /** Money moved, the sale never happened, and the sweep reversed it and raised an open incident. */
 describe("the orphan backstop, end to end", () => {

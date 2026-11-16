@@ -26,12 +26,6 @@ beforeEach(async () => {
 
 // Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
 // refused with `FOREIGN KEY constraint failed`.
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from incidents`);
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
-
 /** A raw `select` skips the json column's read mapping, so `incidents.params` arrives as TEXT. */
 function parseParams<T, R extends { params: string } = { params: string }>(result: {
   rows: R[];

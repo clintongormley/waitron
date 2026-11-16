@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, captureError, triggerRaised } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { PAYMENT_CHANGE_REFUSAL } from "../trigger-refusals.js";
+import { PAYMENT_CHANGE_REFUSAL, PAYMENT_DELETE_REFUSAL } from "../trigger-refusals.js";
 import { payments } from "./payments.js";
 import { seedBillPayment, seedHeldReader, seedSale, seedWorkingOrder } from "../../test/seed.js";
 
@@ -105,6 +105,18 @@ describe("a payment's fixed columns", () => {
       updatedAt: AT,
     });
   });
+});
+
+it("a payment is never deleted", async () => {
+  await suite.db.execute(
+    sql`update payments set state = 'captured', settled_at = ${AT} where id = ${paymentId}`,
+  );
+  const error = await captureError(() =>
+    suite.db.execute(sql`delete from payments where id = ${paymentId}`),
+  );
+  expect(triggerRaised(error, PAYMENT_DELETE_REFUSAL)).toBe(true);
+  const saved = await suite.db.execute(sql`select id from payments where id = ${paymentId}`);
+  expect(saved.rows).toEqual([{ id: paymentId }]);
 });
 
 const resolution = {

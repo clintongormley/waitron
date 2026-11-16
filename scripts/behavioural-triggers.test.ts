@@ -1,4 +1,7 @@
-import { PAYMENT_CHANGE_REFUSAL } from "../packages/payments/src/trigger-refusals.js";
+import {
+  PAYMENT_CHANGE_REFUSAL,
+  PAYMENT_DELETE_REFUSAL,
+} from "../packages/payments/src/trigger-refusals.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +44,7 @@ import {
  *
  * It also holds three triggers on `products` — a variant is one level deep, keeps the parent it
  * was created with, and no product's id changes — and the state guards on `bill_payments` and `bill_payment_refunds`, with a
- * trigger on each refusing every delete — those two refuse by design whatever the row, so they
+ * trigger on each refusing every delete, as on `payments` — those three refuse by design whatever the row, so they
  * have no accepting control here.
  *
  * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
@@ -96,6 +99,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  */
 const EXPECTED_TRIGGERS = [
   "payments_guard_update",
+  "payments_no_delete",
   "activity_log_refuse_update",
   "media_blobs_no_update",
   "party_allergy_guests_need_answer_insert",
@@ -1954,6 +1958,19 @@ describe("party allergy guests need an answer", () => {
       "update parties set allergy_answer='none',allergy_answered_by='person',allergy_answered_at='2026-11-13T12:00:00.000Z' where id='allergy-to'",
     );
     expect(refusalFor(connection, move)).toBeUndefined();
+  });
+});
+
+describe("payments_no_delete", () => {
+  it("refuses deleting a card payment", () => {
+    connection.exec(`insert into payments (id,working_order_id,source,provider,payment_ref,amount,state,created_at,updated_at)
+      values ('payment-no-delete','wo-open','operator_script','fake','no-delete',1000,'captured','${STAMP}','${STAMP}')`);
+    expect(refusalFor(connection, "delete from payments where id = 'payment-no-delete'")).toBe(
+      PAYMENT_DELETE_REFUSAL,
+    );
+    expect(
+      connection.prepare("select id from payments where id = 'payment-no-delete'").get(),
+    ).toEqual({ id: "payment-no-delete" });
   });
 });
 

@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,12 +10,6 @@ import { stripeReportClient } from "./stripe-report-client.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-  await suite.db.execute(sql`delete from incidents`);
-});
 
 const NOW = new Date("2026-07-25T12:00:00Z");
 const OLD = new Date("2026-07-01T12:00:00Z");

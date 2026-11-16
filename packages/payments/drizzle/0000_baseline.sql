@@ -184,3 +184,10 @@ BEGIN
       AND new.hold_decided_at IS old.hold_decided_at))
   );
 END;
+--> statement-breakpoint
+CREATE TRIGGER payments_no_delete
+BEFORE DELETE ON payments
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a payment is never deleted');
+END;

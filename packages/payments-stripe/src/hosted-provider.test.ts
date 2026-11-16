@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,12 +10,6 @@ import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
 
 async function seed(): Promise<Seeded> {
   return seedWorkingOrder(suite.db, freshNif());
