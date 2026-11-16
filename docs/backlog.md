@@ -1525,11 +1525,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
   check against the reader. Left open by A798-B slice 10.
 
-
-- **A transaction opened outside the write queue can let a body's writes after a full disk
-  commit.**
-  [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
-
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 
 - **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)

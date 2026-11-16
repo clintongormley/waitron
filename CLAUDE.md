@@ -507,8 +507,9 @@ called weaker than its name, the topic file lists what it does not see.
   ROLLBACK/FAIL variants are exceptions.** Catch full-disk refusals outside the whole `withTransaction`
   in tests. After `storage.disk_full` ends a transaction, later statements in its body must remain
   refused inside the write queue; an intervening outside transaction defeats that protection.
-  Guards: `packages/store/src/disk-full.test.ts` and
-  `write-queue.test.ts`, weaker than their names. No guard enforces
+  Guards: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, and, for an outside
+  transaction in product code, `scripts/no-bare-transaction.test.ts`, all weaker than their names
+  (the last reads text). No guard enforces
   the test catch rule.
   [Receipt](docs/developers/conventions-data.md#a-statement-this-engine-refuses-backs-out-itself-not-the-transaction-around-it--except-a-full-disk-which-sometimes-ends-the-whole-transaction).
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone (two stated exceptions in bill-request.ts and dish-not-sent-alert.ts, where payment must settle).**
