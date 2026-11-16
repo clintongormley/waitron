@@ -1,6 +1,6 @@
 # A1308 pa3: requester, refund attempts and reconciliation name
 
-**PLAN FOR APPROVAL · corrected 16 November 2026.** The watcher assigned this bounded rewrite at 08:52 in Lane E `questions.md`. The [12 November 11:38 build-order note](2026-11-08-a1308-build-order.md) records the owner's “Yes, one way”: whole/part payments use the Pay route, quick Counter saves then pays in one request, comp to zero closes/files immediately, and presented bills allow parts. No special delayed-card flow. These choices do not constitute approval of this implementation plan.
+**PLAN FOR APPROVAL · corrected 16 November 2026.** The watcher assigned this bounded rewrite at 08:52 in Lane E `questions.md`. The [12 November 11:38 build-order note](2026-11-08-a1308-build-order.md) records the owner's “Yes, one way”: whole/part payments use the Pay route, quick Counter saves then pays in one request, comp to zero closes/files immediately, and presented bills allow parts. No special delayed-card flow. These choices do not constitute approval of this implementation plan. One Claude plan read reviewed the correction; the watcher cleared it at 09:59 with the root guard owning refund update/delete checks and the explicit legacy-null limit retained.
 
 **Finish line:** every card attempt started through the Pay route records its initiating person; provider refund attempts are immutable and read provider/reference from their parent; the existing reconciliation table is called `reconciliation_runs`. Reuse the store, adapters, manual-card writer, payment guard and existing reconciliation code. Add no record or runtime abstraction.
 
@@ -22,7 +22,7 @@ Prefixes: `P=packages/payments/src`, `S=apps/server/src`, `PS=packages/payments-
 
 | Files | Behavior owned here |
 | --- | --- |
-| `P/{store,manual}.test.ts`, `P/schema/{payments-guard,payments-follow-ups}.test.ts` | First-row writers retain requester/absent null; unknown requester/authoriser refuses with the FK error; requester mutation refuses; capture retains it. Refund update/delete refuses; retain the existing successful-refund ceiling assertions. |
+| `P/{store,manual}.test.ts`, `P/schema/{payments-guard,payments-follow-ups}.test.ts` | First-row writers retain requester/absent null; unknown requester/authoriser refuses with the FK error; requester mutation refuses; capture retains it. Retain the existing successful-refund ceiling assertions. |
 | `PS/{provider,device-provider}.test.ts`, `PU/provider.test.ts` | One requester assertion per production adapter; simulator/fakes are exercised by the server boundary cases. Keep existing outcomes without repeating store's grid. |
 | `S/{bill-payments.card,bill-payments-api}.test.ts` | Reader/manual card use the authenticated starter; retry/recovery preserves them. The one-way slice owns whole/part, quick Counter and zero-comp admission. |
 | Refund/backup and reconciliation consumers | Run changed `P/{reverse,reversal.concurrency,backup-verification}.test.ts`, `P/reconciliation-schedule/*.test.ts`, renamed migrations test, `PU/{reverse,reconciler}.test.ts`; affected server refund/reconcile/pass/Payments-Off suites and provisioning's `first-setup-empty-database.test.ts`. Keep their original values and one-winner claim assertion. |
