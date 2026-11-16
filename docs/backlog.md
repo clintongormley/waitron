@@ -1599,14 +1599,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
-- **`request-receive-limits.test.ts` "continued progress cannot evade the native upload ceiling"
-  fails with `read ECONNRESET` instead of a 408, about two runs in five.** Added by #3559 on
-  2026-11-16. Seen in CI on PR #3569 ([run 43949252245, `test-server (14)`](https://github.com/clintongormley/waitron/actions/runs/43949252245/job/133587840376))
-  and locally: five runs of `pnpm exec vitest run src/request-receive-limits.test.ts` in
-  `apps/server` failed twice. Likely cause, not checked: the client is still sending the body when
-  the server closes the connection, so the client sees a reset before it reads the 408. Fix the
-  cause; do not loosen the assertion.
-
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review each remaining squash against its parent and check findings against current main before
