@@ -9,7 +9,7 @@ import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
   AppError,
   deviceOrigin,
@@ -393,7 +393,7 @@ async function resolvePayReader(
         providerRef: cardReaders.providerRef,
       })
       .from(cardReaders)
-      .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
+      .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.disabledAt)));
     if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
     if (deviceId === undefined) throw new AppError("reader.not_held", { readerId: reader.id });
     await assertReaderStartable(tx, deviceOrigin(deviceId), reader.id);

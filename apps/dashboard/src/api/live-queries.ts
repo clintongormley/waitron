@@ -118,7 +118,6 @@ export const QUERY_DEPENDENCIES = {
     // Not `sessions`, which no module declares as a live resource.
     "printer_holders",
     "printers",
-    "card_reader_holders",
     "card_readers",
     "join_requests",
     "device_made_here_stations",
@@ -138,9 +137,8 @@ export const QUERY_DEPENDENCIES = {
     "device_profiles",
     "device_card_readers",
     "device_profile_card_readers",
-    "card_reader_holders",
   ],
-  listReaderHolders: ["card_reader_holders", "payments"],
+  listReaderHolders: ["card_readers", "payments"],
   getProfileReaders: ["device_profile_card_readers", "card_readers"],
   // The route reads `venue_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
@@ -406,7 +404,6 @@ export const QUERY_DEPENDENCIES = {
     "device_approved_profiles",
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
     "printer_holders",
-    "card_reader_holders",
     "device_card_readers",
     "device_profile_printers",
     "device_profile_card_readers",

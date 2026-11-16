@@ -176,7 +176,7 @@ async function providerCredential(
       (await hasTable(query, "card_readers")) &&
       (await first(
         query,
-        "select 1 from card_readers where provider=? and active=1 and deleted_at is null limit 1",
+        "select 1 from card_readers where provider=? and disabled_at is null and deleted_at is null limit 1",
         [provider.providerId],
       )) !== undefined;
     return { present: false, status: active ? "invalid" : "passed" };

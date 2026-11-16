@@ -1253,7 +1253,7 @@ async function seedReader(t: {
       provider: t.provider ?? "stub",
       providerRef: t.providerRef,
       name: t.name,
-      active: t.active ?? true,
+      disabledAt: t.active === false ? "2026-11-01T00:00:00.000Z" : null,
     })
     .returning({ id: cardReaders.id });
   return row!.id;

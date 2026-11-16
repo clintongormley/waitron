@@ -13,7 +13,6 @@ import {
 import { deviceProfiles, devices, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
-  cardReaderHolders,
   cardReaders,
   deviceCardReaders,
   deviceProfileCardReaders,
@@ -136,9 +135,9 @@ async function cardReaderDeleteRules(
     .where(eq(deviceProfileCardReaders.readerId, id));
   const holders = await tx
     .select({ id: devices.id, name: devices.label })
-    .from(cardReaderHolders)
-    .innerJoin(devices, eq(devices.id, cardReaderHolders.deviceId))
-    .where(eq(cardReaderHolders.readerId, id));
+    .from(cardReaders)
+    .innerJoin(devices, eq(devices.id, cardReaders.heldByDeviceId))
+    .where(eq(cardReaders.id, id));
 
   const profiles = (defaultOnly: boolean): DeleteTarget[] =>
     listed
@@ -200,12 +199,7 @@ export async function readCardReaderDeleteImpact(
   return (await cardReaderDeleteRules(tx, seats, id, true)).plan.impact;
 }
 
-/**
- * Step (a): the rules, throwing the first refusal's code; when `unpairAtProvider`, also switches
- * the reader off (active false, disabled_at set if null) before the provider is called, so a pay
- * that starts afterwards does not find it (`resolvePayReader` reads active readers only,
- * `till-api.ts:316`).
- */
+// Disable before the provider call so a later payment cannot select this reader.
 export async function prepareCardReaderDelete(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
@@ -218,7 +212,6 @@ export async function prepareCardReaderDelete(
     await tx
       .update(cardReaders)
       .set({
-        active: false,
         disabledAt: sql`coalesce(${cardReaders.disabledAt}, ${now.toISOString()})`,
       })
       .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
@@ -243,7 +236,6 @@ export async function startCardReaderDelete(
   return { plan, deleted: plan.impact };
 }
 
-/** Unpair's local write: active false, disabled_at and unpaired_at = at, undeleted rows only. */
 export async function markCardReaderUnpaired(
   tx: Transaction,
   id: string,
@@ -251,7 +243,7 @@ export async function markCardReaderUnpaired(
 ): Promise<void> {
   await tx
     .update(cardReaders)
-    .set({ active: false, disabledAt: at, unpairedAt: at })
+    .set({ disabledAt: at, unpairedAt: at })
     .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
 }
 
@@ -278,11 +270,10 @@ export async function deleteCardReader(
 async function removeCardReader(tx: Transaction, id: string, now: Date): Promise<void> {
   await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.readerId, id));
   await tx.delete(deviceProfileCardReaders).where(eq(deviceProfileCardReaders.readerId, id));
-  await tx.delete(cardReaderHolders).where(eq(cardReaderHolders.readerId, id));
   await tx
     .update(cardReaders)
     .set({
-      active: false,
+      heldByDeviceId: null,
       deletedAt: now.toISOString(),
       disabledAt: sql`coalesce(${cardReaders.disabledAt}, ${now.toISOString()})`,
     })

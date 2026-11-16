@@ -53,7 +53,6 @@ import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
-  cardReaderHolders,
   cardReaders,
   insertCapturedPayment,
   payments,
@@ -5003,8 +5002,9 @@ describe("a reader payment on a device that changes profile while it is starting
         .returning({ id: cardReaders.id }),
     );
     await suite.db
-      .insert(cardReaderHolders)
-      .values({ readerId: reader!.id, deviceId: device.deviceId });
+      .update(cardReaders)
+      .set({ heldByDeviceId: device.deviceId })
+      .where(eq(cardReaders.id, reader!.id));
     const client = new FakeStripe();
     const moveTo = (profileId: string) =>
       suite.db

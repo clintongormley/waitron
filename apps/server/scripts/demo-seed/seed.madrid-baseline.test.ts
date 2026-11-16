@@ -251,6 +251,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  card_readers: ["active"],
   taxpayer: ["privacy_notice_url", "privacy_email"],
   payment_refunds: ["provider", "payment_ref"],
   node_membership: ["term"],
@@ -1999,6 +2000,21 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.zone_days;
       delete phases[phase]!.zone_day_ranges;
       phases[phase] = byName(phases[phase]!);
+
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "card_reader_holders",
+          into: "card_readers",
+          match: { from: "reader_id", into: "id" },
+          columns: { device_id: "held_by_device_id" },
+        },
+      ]);
+      const readerTable = expected[phase].tables.card_readers!;
+      const holderColumn = readerTable.columns.pop()!;
+      holderColumn.notnull = 0;
+      readerTable.columns.splice(4, 0, holderColumn);
+      readerTable.foreignKeys[0]!.on_delete = "SET NULL";
+      delete phases[phase]!.card_reader_holders;
 
       const staffMenuFold = {
         from: "menu_period_staff_menus",

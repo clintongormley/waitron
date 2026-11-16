@@ -15,7 +15,6 @@ export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("card_readers", "state", STATE),
   classify("device_card_readers", "state", STATE),
   classify("device_profile_card_readers", "state", STATE),
-  classify("card_reader_holders", "state", STATE),
 ];
 
 /** Every table in payments' set: payments' own and the reconciliation schedule's. */

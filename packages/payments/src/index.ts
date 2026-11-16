@@ -143,7 +143,6 @@ export { cardProviderById, selectCardProviders } from "./card-provider.js";
 export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
 export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
-export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
 export { runState, reconciliationRuns } from "./schema/reconciliation-runs.js";

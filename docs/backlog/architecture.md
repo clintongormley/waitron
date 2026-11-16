@@ -945,6 +945,8 @@ also qualifies the historical operation-description references in this section.
   Membership reads its term from the signed document, and an alert's handler references a person.
   The box's role, recovery key, signing key, mirror link and pinned main-box key share one local
   row; replaced-key and role-change events remain in vb9's follow-on pull request.
+  A card reader holds its device id on its own row; its enabled status comes from `disabled_at`.
+  Device choices and profile reader lists still await pa4b.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

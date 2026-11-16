@@ -1,6 +1,6 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { devices, deviceProfilePrinters, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, sessions } from "@waitron/identity";
@@ -14,7 +14,7 @@ import {
 import type { PrinterEquipment, PrinterRoleState, ProfilePrinterRole } from "@waitron/layouts";
 import {
   IN_PROGRESS_PAYMENT_STATES,
-  cardReaderHolders,
+  cardReaders,
   clearUnlistedReaderChoice,
   payments,
   readReaderEquipment,
@@ -97,9 +97,13 @@ export async function readPrinterHolders(tx: Transaction): Promise<Map<string, H
 /** Each card reader some device holds, by reader, with who holds it. */
 export async function readReaderHolders(tx: Transaction): Promise<Map<string, Holder>> {
   const held = await tx
-    .select({ itemId: cardReaderHolders.readerId, deviceId: cardReaderHolders.deviceId })
-    .from(cardReaderHolders);
-  return namedHolders(tx, held);
+    .select({ itemId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders)
+    .where(isNotNull(cardReaders.heldByDeviceId));
+  return namedHolders(
+    tx,
+    held.map((row) => ({ itemId: row.itemId, deviceId: row.deviceId! })),
+  );
 }
 
 async function namedHolders(

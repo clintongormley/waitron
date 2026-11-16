@@ -114,7 +114,7 @@ export async function collectBoxHealth(
       ? await db
           .select({ id: cardReaders.id, name: cardReaders.name })
           .from(cardReaders)
-          .where(and(eq(cardReaders.active, true), isNull(cardReaders.deletedAt)))
+          .where(and(isNull(cardReaders.disabledAt), isNull(cardReaders.deletedAt)))
           .orderBy(asc(cardReaders.name))
       : null;
     return {

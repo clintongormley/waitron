@@ -7,7 +7,6 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
-import { cardReaderHolders } from "./schema/card-reader-holders.js";
 import { cardReaders } from "./schema/card-readers.js";
 import { deviceCardReaders } from "./schema/device-card-readers.js";
 import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
@@ -52,7 +51,7 @@ async function seed() {
         provider: "sumup",
         providerRef: `${name}-${tag}`,
         name,
-        active: name !== "off",
+        disabledAt: name === "off" ? "2026-11-01T00:00:00.000Z" : null,
         unpairedAt: name === "unpaired" ? new Date().toISOString() : null,
       })),
     )
@@ -76,13 +75,19 @@ async function seed() {
 type Seeded = Awaited<ReturnType<typeof seed>>;
 
 async function hold(readerId: string, deviceId: string) {
-  await inTx((tx) => tx.insert(cardReaderHolders).values({ readerId, deviceId }));
+  await inTx((tx) =>
+    tx.update(cardReaders).set({ heldByDeviceId: deviceId }).where(eq(cardReaders.id, readerId)),
+  );
 }
 
 async function holders(...readerIds: string[]) {
-  const rows = await suite.db.select().from(cardReaderHolders);
+  const rows = await suite.db
+    .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders);
   return Object.fromEntries(
-    rows.filter((r) => readerIds.includes(r.readerId)).map((r) => [r.readerId, r.deviceId]),
+    rows
+      .filter((r) => readerIds.includes(r.readerId) && r.deviceId !== null)
+      .map((r) => [r.readerId, r.deviceId]),
   );
 }
 
@@ -369,7 +374,7 @@ describe("a device's card reader", () => {
           provider: "sumup",
           providerRef: `deleted-${randomUUID()}`,
           name: "deleted",
-          active: false,
+          disabledAt: new Date().toISOString(),
           deletedAt: new Date().toISOString(),
         })
         .returning({ id: cardReaders.id });
@@ -457,7 +462,10 @@ describe("a device's card reader", () => {
       selectDeviceReader(tx, { deviceId: s.deviceA, selection: { id: s.r1 }, via: "list" }),
     );
     await inTx((tx) =>
-      tx.update(cardReaders).set({ active: false }).where(eq(cardReaders.id, s.r1)),
+      tx
+        .update(cardReaders)
+        .set({ disabledAt: "2026-11-01T00:00:00.000Z" })
+        .where(eq(cardReaders.id, s.r1)),
     );
     await list(s, [s.r1, s.r2]);
     expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBe(s.r1);
@@ -545,7 +553,10 @@ describe("a device's card reader", () => {
       setProfileReaderList(tx, s.otherProfileId, { readerIds: [s.r1], defaultReaderId: null }),
     );
     await inTx((tx) =>
-      tx.update(cardReaders).set({ active: false }).where(eq(cardReaders.id, s.r1)),
+      tx
+        .update(cardReaders)
+        .set({ disabledAt: "2026-11-01T00:00:00.000Z" })
+        .where(eq(cardReaders.id, s.r1)),
     );
     await suite.db
       .update(devices)

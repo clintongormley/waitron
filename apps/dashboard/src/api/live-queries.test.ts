@@ -378,7 +378,6 @@ it.each([
       "working_orders",
       "printer_holders",
       "printers",
-      "card_reader_holders",
       "card_readers",
       "join_requests",
       "device_made_here_stations",
@@ -401,7 +400,6 @@ it.each([
       "device_profiles",
       "device_card_readers",
       "device_profile_card_readers",
-      "card_reader_holders",
     ],
   ],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's
@@ -432,7 +430,6 @@ it.each([
       "device_made_here_stations",
       "device_approved_profiles",
       "printer_holders",
-      "card_reader_holders",
       "device_card_readers",
       "device_profile_printers",
       "device_profile_card_readers",

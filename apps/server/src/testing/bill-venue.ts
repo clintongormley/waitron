@@ -26,7 +26,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { loginWithPin } from "@waitron/identity";
-import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
+import { cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
@@ -246,8 +246,9 @@ export async function provisionBillVenue(
       .insert(deviceCardReaders)
       .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
     await db
-      .insert(cardReaderHolders)
-      .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
+      .update(cardReaders)
+      .set({ heldByDeviceId: device.deviceId })
+      .where(eq(cardReaders.id, seeded.readerIds[index]!));
     devices.push(device);
   }
   const cashOnlyDevice = await enrolDeviceForTest(db, cfg, {

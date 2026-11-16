@@ -1,3 +1,7 @@
+> 2026-11-16, A1308 pa4a: `card_reader_holders` folds into
+> `card_readers.held_by_device_id`, and enabled status comes from `disabled_at`.
+> The inventory below records the A760 layout before that fold.
+
 > 2026-11-13, A1308 fk7: `station_printers` folds into `kitchen_stations.printer_ids`.
 > The inventory below records the A760 layout before that fold.
 

@@ -2393,7 +2393,7 @@ describe("payment slip persisted capture facts", () => {
       const cookie = await login(app, cfg, operatorId);
       const id = await ringSale(app, cookie, each.menuItemId, "card");
       await suite.db.execute(
-        sql`insert into card_readers (id, provider, provider_ref, name, active, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', 1, ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
+        sql`insert into card_readers (id, provider, provider_ref, name, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
       );
       await liftPaymentGuard(suite.db, () =>
         suite.db.execute(

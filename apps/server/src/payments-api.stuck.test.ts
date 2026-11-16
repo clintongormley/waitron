@@ -57,7 +57,6 @@ import {
   recordRefund,
   payments,
   cardReaders,
-  cardReaderHolders,
   stampAttemptingRef,
   type CardProviderContribution,
   type PaymentProvider,
@@ -1195,7 +1194,10 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       .insert(cardReaders)
       .values({ provider: "stripe", providerRef: "reader_recovery", name: "Recovery reader" })
       .returning();
-    await suite.db.insert(cardReaderHolders).values({ readerId: reader!.id, deviceId: tillDevice });
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: tillDevice })
+      .where(eq(cardReaders.id, reader!.id));
     const paid = await tillApp.request("/api/pay", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },

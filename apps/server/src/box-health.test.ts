@@ -193,7 +193,7 @@ describe("collectBoxHealth", () => {
 
   it("lists only card readers that are switched on, not deleted", async () => {
     const active = await seedReader("Counter");
-    await seedReader("Off", { active: false });
+    await seedReader("Off", { disabledAt: "2026-11-01T00:00:00.000Z" });
     await seedReader("Gone", { deletedAt: "2026-10-01T00:00:00.000Z" });
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.readers).toEqual([{ id: active, name: "Counter" }]);

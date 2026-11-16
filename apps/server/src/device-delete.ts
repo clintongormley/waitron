@@ -16,12 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { endDeviceSessions, sessions } from "@waitron/identity";
-import {
-  IN_PROGRESS_PAYMENT_STATES,
-  cardReaderHolders,
-  cardReaders,
-  payments,
-} from "@waitron/payments";
+import { IN_PROGRESS_PAYMENT_STATES, cardReaders, payments } from "@waitron/payments";
 import { named } from "./delete-impact.js";
 import { releaseDevice } from "./device-equipment.js";
 import { endReturningRequest, hasReturningRequest } from "./join-requests.js";
@@ -89,9 +84,8 @@ async function deviceDeleteRules(
     .where(eq(printerHolders.deviceId, id));
   const heldReaders = await tx
     .select({ id: cardReaders.id, name: cardReaders.name })
-    .from(cardReaderHolders)
-    .innerJoin(cardReaders, eq(cardReaders.id, cardReaderHolders.readerId))
-    .where(eq(cardReaderHolders.deviceId, id));
+    .from(cardReaders)
+    .where(eq(cardReaders.heldByDeviceId, id));
   const returning = await hasReturningRequest(tx, cfg, id);
 
   const ends: DeleteImpactItem[] = [
