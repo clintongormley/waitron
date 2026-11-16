@@ -59,32 +59,37 @@ it.each(["archive", "stream"] as const)(
     const originalRecords = await suite.db.select().from(invoiceRecords);
     expect(originalRecords.map(recordInvoiceNumber)).toEqual(["A-0CNNW/1"]);
 
-    await expect(f.run()).rejects.toMatchObject({
+    const timeServiceSynchronised = async () => false;
+    // The box restarted since the restore page, so that page's time check does not carry over;
+    // and a confirmation stands only on a boot with an id, which a machine without `/proc` lacks.
+    const readBoot = () => ({ id: "boot-1", ms: performance.now() });
+    await expect(
+      runStagedRestore({ ...f.restore, timeServiceSynchronised, readBoot }),
+    ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "second_clock_missing" },
     });
     expect(await readdir(f.venueDir)).toEqual(["venue.lock"]);
 
-    let startClockChosenMinuteMs: number | undefined;
-    // A confirmation stands only on a boot with an id, which a machine without `/proc` lacks.
-    const readBoot = () => ({ id: "boot-1", ms: performance.now() });
     const page = createStartClockWaiting({
       clock: { wall: () => Date.now(), monotonic: () => performance.now() },
       stateDir: f.stateDir,
       setBoxClock: () => {
         throw new Error("a person confirming the time never sets the box's clock");
       },
-      earliestMs: () => startClockChosenMinuteMs,
       readBoot,
-      // The person's browser runs on another device.
-      requestFromBox: () => false,
     });
     const post = async (path: string, body: Record<string, unknown>) => {
-      const res = await page.app.request(`/restore-clock/${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: f.key.secret, ...body }),
-      });
+      const res = await page.app.request(
+        `/restore-clock/${path}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key: f.key.secret, ...body }),
+        },
+        // A phone on the venue's network, not the box's own screen.
+        { incoming: { socket: { remoteAddress: "192.0.2.10", remoteFamily: "IPv4" } } },
+      );
       expect(res.status).toBe(200);
       return res.json();
     };
@@ -96,11 +101,9 @@ it.each(["archive", "stream"] as const)(
     await expect(
       runStagedRestore({
         ...f.restore,
+        timeServiceSynchronised,
         readBoot,
         startClockConfirmation: () => page.confirmation(),
-        startClockChosenMinute: (issuedAtMs) => {
-          startClockChosenMinuteMs = issuedAtMs;
-        },
       }),
     ).resolves.toBe(true);
     const restored = await f.snapshot();
