@@ -654,6 +654,7 @@ export interface KitchenNoteChangeSlip {
   party?: { name: string; locale: string };
   at: string;
   orderNoteChange: KitchenNoteChange;
+  takeAway?: boolean;
 }
 
 export function formatKitchenNoteChangeSlip(
@@ -671,6 +672,7 @@ export function formatKitchenNoteChangeSlip(
   const onlyGroup = onlyGroupOf(allItems);
 
   text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
+  if (slip.takeAway === true) text(`*** ${kitchenTicketWords(slip.locale).takeAway} ***`);
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
   const numbers = slip.orderNumbers ?? [slip.orderNumber];
@@ -746,6 +748,7 @@ export interface MovedSlip {
   items: KitchenTicketItem[];
   held: { group: number; items: KitchenTicketItem[] }[];
   locale: string;
+  takeAway?: boolean;
 }
 
 /**
@@ -776,6 +779,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting, timeZone: s
     slip.locale,
   );
   text(`*** ${words.moved} ***`);
+  if (slip.takeAway === true) text(`*** ${words.takeAway} ***`);
   text(slip.stationName);
   const numbers =
     slip.toNumber === undefined ? slip.fromNumber : `${slip.fromNumber} -> ${slip.toNumber}`;

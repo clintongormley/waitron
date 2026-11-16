@@ -1283,6 +1283,7 @@ async function printKitchenNoteChanges(
         party: partyName === null ? undefined : { name: partyName, locale: language },
         at,
         orderNoteChange: change,
+        takeAway: visible.every((id) => headers.get(id)!.takeAway),
       },
       route.printers[0]!,
       timeZone,
@@ -2000,6 +2001,21 @@ async function notifyMoved(
     tx,
     printing === null ? [] : [...new Set(told.map((move) => move.to))],
   );
+  const takenAway = new Set(
+    printing === null
+      ? []
+      : (
+          await tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(
+              and(
+                inArray(workingOrders.id, [...new Set(told.map((move) => move.to))]),
+                eq(workingOrders.dining, "takeaway"),
+              ),
+            )
+        ).map(({ id }) => id),
+  );
   for (const { before, to, after, items } of told) {
     const texts = movedTexts(before.places, after.places, printing?.language ?? cfg.locale);
     // The station screen words the counter itself, in the screen's own language.
@@ -2020,6 +2036,7 @@ async function notifyMoved(
       ...(toNumber === before.places.orderNumber ? {} : { toNumber: String(toNumber) }),
       ...(partyName === null ? {} : { partyName }),
       ...texts,
+      takeAway: takenAway.has(to),
     });
   }
 }
@@ -2086,7 +2103,7 @@ async function printMovedSlips(
   items: readonly MovedItem[],
   slip: Pick<
     MovedSlip,
-    "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText" | "kitchenNote"
+    "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText" | "kitchenNote" | "takeAway"
   >,
 ): Promise<void> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];

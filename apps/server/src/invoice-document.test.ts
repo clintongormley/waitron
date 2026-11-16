@@ -47,6 +47,7 @@ import {
 } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
@@ -1198,5 +1199,31 @@ describe("a takeaway sale's A4 invoice", () => {
     expect(texts(takeaway)).toContain("Para llevar");
     expect(eatIn.result).not.toHaveProperty("takeAway");
     expect(texts(eatIn)).not.toContain("Para llevar");
+  });
+
+  // Pins today's split, so changing it is deliberate: a replacement of a takeaway sale reads Take
+  // away on the till's receipt through the original sale's order; its A4 page reads only the
+  // replacement's own order link, which it has none of.
+  async function replacementOfTakeaway(): Promise<string> {
+    const original = await paidBill("takeaway");
+    return withTransaction(suite.db, (tx) => insertCorrective(tx, original, { replaces: true }));
+  }
+
+  it("says Take away on a takeaway sale's replacement receipt on the till", async () => {
+    const replacement = await replacementOfTakeaway();
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, replacement),
+    );
+    expect(receipt.takeAway).toBe(true);
+  });
+
+  it("does not say Take away on a takeaway sale's replacement A4 page", async () => {
+    const replacement = await replacementOfTakeaway();
+    const page = await withTransaction(suite.db, (tx) =>
+      readCustomerInvoiceDocument(venue.backend, tx, venue.cfg, replacement),
+    );
+    expect(page.result.invoiceType).toBe("R4");
+    expect(page.result).not.toHaveProperty("takeAway");
+    expect(texts(page)).not.toContain("Para llevar");
   });
 });

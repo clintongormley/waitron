@@ -2415,6 +2415,46 @@ describe("a takeaway order's kitchen paper", () => {
     ["ALLERGY REMOVED", { kind: "ALLERGY REMOVED", allergyBlock: null }],
   ];
 
+  // Fails if a MOVED slip of a takeaway order loses the takeaway line, or an eat-in one gains it.
+  it("prints TAKE AWAY under a MOVED slip's heading, and nothing on an eat-in one", () => {
+    const moved: MovedSlip = {
+      stationName: "Grill",
+      fromNumber: "28",
+      fromText: "(counter)",
+      toText: "T5",
+      at: firedAt.toISOString(),
+      items: [{ qty: 1, name: "BURG" }],
+      held: [],
+      locale: "en-GB",
+    };
+    const eatIn = printedLines(formatMovedSlip(moved, KITCHEN_80, TEST_TIME_ZONE));
+    const takeaway = printedLines(
+      formatMovedSlip({ ...moved, takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(eatIn[0]).toBe("*** MOVED ***");
+    expect(eatIn).not.toContain("*** TAKE AWAY ***");
+    expect(takeaway).toEqual([eatIn[0], "*** TAKE AWAY ***", ...eatIn.slice(1)]);
+  });
+
+  // Fails if a note-change slip of a takeaway order loses the takeaway line, or an eat-in one
+  // gains it.
+  it("prints TAKE AWAY under a note-change slip's heading, and nothing on an eat-in one", () => {
+    const slip = {
+      locale: "es-ES",
+      stations: [{ stationName: "Grill", items: [{ qty: 1, name: "Steak" }] }],
+      tableLabel: null,
+      orderNumber: "A-17",
+      at: firedAt.toISOString(),
+      orderNoteChange: { before: "Old", after: "New" },
+    };
+    const eatIn = printedLines(formatKitchenNoteChangeSlip(slip, KITCHEN_80, TEST_TIME_ZONE));
+    const takeaway = printedLines(
+      formatKitchenNoteChangeSlip({ ...slip, takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(eatIn).not.toContain("*** PARA LLEVAR ***");
+    expect(takeaway).toEqual([eatIn[0], "*** PARA LLEVAR ***", ...eatIn.slice(1)]);
+  });
+
   // Fails if any correction slip kind loses the takeaway line, or an eat-in slip gains it.
   it.each(slips)("prints TAKE AWAY on a %s slip, and nothing on an eat-in one", (_, kind) => {
     const slip = {

@@ -189,12 +189,15 @@ describe("a bill that takes a department for the first time", () => {
   });
 });
 
-describe("the ticket a move sends", () => {
-  // Fails if the ticket a takeaway counter order's move to a table sends drops the takeaway line.
-  it("says take away for a takeaway counter order moved to a seated table, and on its void slip", async () => {
-    const printerIds = await inTx(venue, async (tx) => {
+describe("the paper a move sends", () => {
+  async function kitchenPrinters(): Promise<string[]> {
+    return inTx(venue, async (tx) => {
       const ids: string[] = [];
       for (const { id } of await tx.select({ id: kitchenStations.id }).from(kitchenStations)) {
+        await tx
+          .update(kitchenStations)
+          .set({ printMovedSlips: true })
+          .where(eq(kitchenStations.id, id));
         const printer = await createPrinter(tx, {
           name: `Kitchen ${randomUUID().slice(0, 8)}`,
           transport: "cloud_poll",
@@ -205,6 +208,31 @@ describe("the ticket a move sends", () => {
       }
       return ids;
     });
+  }
+
+  /** The printed lines of each job queued on `printerIds` since the last call, each job once. */
+  async function paperSince(seen: Set<string>, printerIds: readonly string[]): Promise<string[][]> {
+    const jobs = await inTx(venue, (tx) =>
+      tx
+        .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
+        .from(printJobs),
+    );
+    const fresh = jobs.filter((job) => !seen.has(job.id));
+    for (const job of fresh) seen.add(job.id);
+    return fresh
+      .filter((job) => printerIds.includes(job.printerId))
+      .map((job) => printedLines(job.payload));
+  }
+
+  async function allJobIds(): Promise<Set<string>> {
+    const jobs = await inTx(venue, (tx) => tx.select({ id: printJobs.id }).from(printJobs));
+    return new Set(jobs.map((job) => job.id));
+  }
+
+  // Fails if the ticket a takeaway counter order's move to a table sends, or that order's void
+  // slip, drops the takeaway line.
+  it("says take away for a takeaway counter order moved to a seated table, and on its void slip", async () => {
+    const printerIds = await kitchenPrinters();
     const id = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {
       id,
@@ -214,35 +242,79 @@ describe("the ticket a move sends", () => {
       dining: "takeaway",
     });
     const seated = await seatedWith(venue, "Croquettes");
-    const before = await inTx(venue, (tx) => tx.select({ id: printJobs.id }).from(printJobs));
-    const seen = new Set(before.map((job) => job.id));
+    const seen = await allJobIds();
 
     expect((await moveTo(id, seated.tableId)).status).toBe(200);
 
     const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
-    const jobs = (
-      await inTx(venue, (tx) =>
-        tx
-          .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
-          .from(printJobs),
-      )
-    ).filter((job) => !seen.has(job.id) && printerIds.includes(job.printerId));
-    const tickets = jobs.map((job) => printedLines(job.payload));
+    const tickets = await paperSince(seen, printerIds);
     expect(tickets).toHaveLength(1);
     expect(tickets[0]![0]).toBe(`*** ${words.takeAway} ***`);
 
     await inTx(venue, (tx) => cancelLine(tx, venue.cfg, id, 1));
-    const slips = (
-      await inTx(venue, (tx) =>
-        tx
-          .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
-          .from(printJobs),
-      )
-    )
-      .filter((job) => !seen.has(job.id) && printerIds.includes(job.printerId))
-      .map((job) => printedLines(job.payload))
-      .slice(1);
+    const slips = await paperSince(seen, printerIds);
     expect(slips).toHaveLength(1);
     expect(slips[0]!.slice(0, 2)).toEqual([`*** ${words.void} ***`, `*** ${words.takeAway} ***`]);
+  });
+
+  // Fails if the MOVED slip of a takeaway bill whose dishes the kitchen has drops the takeaway
+  // line.
+  it("says take away on the MOVED slip of a sent takeaway bill moved to another table", async () => {
+    const printerIds = await kitchenPrinters();
+    await departmentsSell("takeaway");
+    const seated = await seatedWith(venue, "Croquettes");
+    expect(diningOf(seated.tabId)).toBe("takeaway");
+    const table = await inTx(venue, (tx) =>
+      createTable(tx, venue.cfg, {
+        label: `Table ${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      }),
+    );
+    const seen = await allJobIds();
+
+    expect((await moveTo(seated.tabId, table.id)).status).toBe(200);
+
+    const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
+    const slips = await paperSince(seen, printerIds);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(0, 2)).toEqual([`*** ${words.moved} ***`, `*** ${words.takeAway} ***`]);
+  });
+
+  // Fails if the note-change slip of a takeaway bill whose dishes the kitchen has drops the
+  // takeaway line.
+  it("says take away on the note-change slip of a sent takeaway bill", async () => {
+    const printerIds = await kitchenPrinters();
+    await departmentsSell("takeaway");
+    const seated = await seatedWith(venue, "Croquettes");
+    const seen = await allJobIds();
+    const note = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/parties/${seated.partyId}/kitchen-note`,
+    );
+    expect(note.status).toBe(200);
+
+    const put = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${seated.partyId}/kitchen-note`,
+      {
+        submissionId: randomUUID(),
+        expectedNoteRevision: note.json.revision,
+        expectedPartyRevision: note.json.ownerRevision,
+        note: "Train at 14:30",
+      },
+    );
+    expect(put.status).toBe(200);
+
+    const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
+    const slips = await paperSince(seen, printerIds);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(0, 2)).toEqual([
+      `*** ${words.noteChanged} ***`,
+      `*** ${words.takeAway} ***`,
+    ]);
   });
 });
