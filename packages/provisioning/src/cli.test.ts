@@ -8,7 +8,7 @@ import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 // A test file may name a regime package: `scripts/module-seams.test.ts` skips test files.
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import type { DeploymentEnvironment, VenueDatabase } from "@waitron/db";
-import { openVenueDatabase } from "@waitron/db";
+import { openVenueDatabase, refusalError } from "@waitron/db";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { runCli } from "./cli.js";
@@ -871,17 +871,12 @@ describe("runCli venue", () => {
   });
 
   it("maps a concurrent unique-violation from the apply to provisioning.venue_conflict", async () => {
-    // The `errcode` + `message` pair `isUniqueViolation` reads, copied from a real refusal on this
-    // engine.
     const h = harness({
       env: VENUE_ENV,
       applyVenue: () =>
         Promise.reject(
           Object.assign(new Error("UNIQUE constraint failed: index 'persons_tenant_email_uq'"), {
-            cause: {
-              errcode: 2067,
-              message: "UNIQUE constraint failed: index 'persons_tenant_email_uq'",
-            },
+            cause: refusalError({ uniqueIndex: "persons_tenant_email_uq" }),
           }),
         ),
     });

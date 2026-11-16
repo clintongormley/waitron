@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, refusalError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
@@ -78,16 +78,9 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
   it("reads a genuine SQLite unique violation as already-enqueued, not as an error", async () => {
     // Passes the `unfinished > 0` guard and makes the nested insert refuse, so `enqueueSuccessor`'s
     // own catch decides what happens.
-    const refusal = Object.assign(
-      // SQLite's own message for this table's key.
-      new Error(
-        "UNIQUE constraint failed: scheduled_runs.duty, scheduled_runs.period_from, " +
-          "scheduled_runs.generation",
-      ),
-      // 2067, a unique index. On `errcode`, never `code`: `node:sqlite` puts `"ERR_SQLITE_ERROR"` on
-      // `code` for every failure, so a stub forging `code` would stage no collision at all.
-      { errcode: 2067 },
-    );
+    const refusal = refusalError({
+      unique: { table: "scheduled_runs", columns: ["duty", "period_from", "generation"] },
+    });
     const fakeTx = {
       select: () => ({
         from: () => ({
@@ -110,9 +103,7 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
   });
 
   it("rethrows a refusal that is not a unique violation", async () => {
-    const other = Object.assign(new Error("NOT NULL constraint failed: scheduled_runs.duty"), {
-      errcode: 1299,
-    });
+    const other = refusalError({ notNull: { table: "scheduled_runs", column: "duty" } });
     const fakeTx = {
       select: () => ({
         from: () => ({ where: () => Promise.resolve([{ unfinished: 0, highest: 0 }]) }),

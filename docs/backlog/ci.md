@@ -252,16 +252,6 @@ never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agen
 sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
 decides whether the rule covers every agent, then the two docs follow.
 
-## P7's leftovers (#533)
-
-- `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
-  because it checks for an absence and the remaining files clear its floor of eight.
-  `module-graph-honesty`, `schema-constraints` and `packages/db/src/classification.test.ts` still
-  read a set's SQL their own way — the top of the `drizzle` folder only, and `module-graph-honesty`
-  unsorted — rather than through `migrationSqlFiles`, which walks subfolders (no set has SQL in a
-  subfolder today). `journal-monotonic` parses `_journal.json` itself rather than sharing
-  `headSnapshot`'s reader.
-
 ## Cross-app links in the split Vite dev stack
 
 The deployed server serves both
@@ -461,16 +451,15 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **Other server test files still hash fixed PINs and passwords on every test.**
   [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
 
-## Bundle: Vitest settings: what the guide says, what A490 left, the cold-cache check
+## Bundle: Vitest settings: remaining measurements and console policy
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M. Helper adoption and A902's guide receipt are complete; the remaining work is:
 
-- **A902. Say in the testing guide that Vite also prints browser console output under an AI agent.**
-  [Detail](ci.md#a902-say-in-the-testing-guide-that-vite-also-prints-browser-console-output-under-an-ai-agent).
-- **Loose ends left by SQLite slice 1 (#490 and the preparation tasks).**
-  [Detail](ci.md#loose-ends-left-by-sqlite-slice-1-490-and-the-preparation-tasks).
-- **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
-  [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
+- **Worker limits (A490):** compare each unqualified one-worker setting on a loaded runner; isolated package pairs do not recreate the reported condition.
+- **Browser console forwarding (A902) — OWNER'S CALL.** Decide whether the remaining browser packages should disable forwarding as dashboard does; keep the current policy until that decision.
+- **Dependency optimizer:** qualify the remaining Vite 8 behavior; the setup control was inconclusive and dashboard, till and UI remain unmeasured.
+  [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured).
+
 
 ## Bundle: One throwaway branch that interrupts an upload and re-runs a shard
 
@@ -1014,24 +1003,6 @@ module mocks in browser tests; #1934 did not add one, because one failure with n
 cause is thin ground for a house rule. The owner decides.
 
 
-## A902. Say in the testing guide that Vite also prints browser console output under an AI agent
-
-Its section "Vitest hides a passing test's console output under an AI agent" names only
-Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,
-`CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
-uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
-`apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
-(`grep -l browser */*/vitest.config.ts`) still forward. Measured in `apps/till` on 2026-11-14:
-`pnpm exec vitest run src/till-app.test.ts -t 'does not leave the dialog busy when a step after the
-switch throws'` printed the test's recorded rejection as a `[vite] (client) [Unhandled rejection]
-TypeError: Cannot read properties of null (reading 'approvedProfiles')` line with its stack while
-`AI_AGENT` and `CLAUDECODE` were set. With both unset, and again with every `CLAUDE*`, `AI_AGENT` and
-`CODEX*` variable unset, that line was gone but Vitest still printed a bare `PromiseRejectionEvent {
-"isTrusted": true }` under the test. The finishing review reported nothing printed with both set and
-`server: { forwardConsole: false }` added to `apps/till/vitest.config.ts`. Every run passed. Add that receipt to the guide, and
-decide with the owner whether the other packages should turn forwarding off as the dashboard did.
-
-
 ## A late move or second finger can overtake the gesture hold timer
 
 A delayed move is
@@ -1109,18 +1080,6 @@ Left open by A539.
 runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
 `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
 would cost has not been timed. Owner's call.
-
-
-## Loose ends left by SQLite slice 1 (#490 and the preparation tasks)
-
-- Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
-  which carries its own measurement, still says the pin is needed without having measured it; the
-  same one-worker-against-several coverage comparison would settle each.
-- P7's leftovers (#533).
-  [Detail](#p7s-leftovers-533)
-- A few suites still build engine-shaped refusals by hand rather than through `refusalError`
-  (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-  `packages/provisioning/src/cli.test.ts` and `packages/payments/src/reconciliation-schedule/store.concurrency.test.ts`.
 
 
 ## Task 2's review found no test that fails when `device_profile_admission_roles` is left out of `apps/server/src/testing/clear-provision-fixture.ts`

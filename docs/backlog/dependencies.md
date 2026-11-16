@@ -91,16 +91,12 @@ second vite in the tree, they could land on a different one silently.
 
 ## A dependency-optimizer receipt taken on vite 6 was not re-measured
 
-Left open by #450.
+The `optimizeDeps.include` lists in `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui`
+still need a conclusive check on Vite 8. The bounded setup comparison passed the same nine
+tests with and without its list, with no reload warning in either arm. That is inconclusive;
+keep all four lists. Dashboard, till and UI remain unmeasured.
+[Conditions and limits](../developers/testing-guide.md#the-setup-optimizer-comparison-on-vite-8-was-inconclusive).
 
-The `vitest.config.ts` of
-`apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
-`optimizeDeps.include` list; only `apps/setup`'s comment still quotes Vite's warning — "Vite
-unexpectedly reloaded a test" — as the flake it fixes. Vite 8's migration guide says Rolldown "is
-now used for dependency optimization instead of esbuild".
-
-No `include` change or controlled cold-cache comparison was made, so the fix
-remains unmeasured.
 
 ## The till's QR pin compares the code against itself, not an authority
 

@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   headSnapshot,
+  migrationJournal,
   migrationSets,
   migrationSqlFiles,
 } from "../packages/sync-enrolment/src/testing/migration-sets.js";
@@ -92,6 +93,22 @@ describe("no tenant column", () => {
       .filter((snapshot) => SQL_COLUMN.test(readFileSync(join(repoRoot, snapshot), "utf8")));
 
     expect(offenders).toEqual([]);
+  });
+
+  it("reads exactly the SQL files declared by each migration set's journal", () => {
+    for (const set of sets) {
+      const entries = migrationJournal(repoRoot, set);
+      expect(entries, `${set}: missing journal`).not.toBeNull();
+      const files = migrationSqlFiles(repoRoot, set);
+      for (const entry of entries!) {
+        expect(files, `${set}: missing ${entry.tag}.sql`).toContain(join(set, `${entry.tag}.sql`));
+      }
+      const declared = entries!.map((entry) => join(set, `${entry.tag}.sql`));
+      expect(
+        files.filter((file) => !declared.includes(file)),
+        `${set}: unjournaled SQL`,
+      ).toEqual([]);
+    }
   });
 
   it("reads a head snapshot for every migration set that declares one", () => {

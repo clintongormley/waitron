@@ -1825,7 +1825,7 @@ under another key fall outside that check.
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
 
-- **Vitest settings: what the guide says, what A490 left, the cold-cache check** (bundle of 3, size M). Holds A902. [Detail](backlog/ci.md#bundle-vitest-settings-what-the-guide-says-what-a490-left-the-cold-cache-check)
+- **Vitest settings: remaining measurements and console policy** (bundle of 3, size M). Worker pins need a loaded runner, the setup optimizer control was inconclusive, and A902’s forwarding policy remains the owner’s call. [Detail](backlog/ci.md#bundle-vitest-settings-remaining-measurements-and-console-policy)
 
 - **A late move or second finger can overtake the gesture hold timer.**
   [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
@@ -2339,10 +2339,11 @@ The privacy-specialist questions from Q54 on are open. The Cloud half is lane D'
 ## Reference
 
 **Adding a database test to a new package.** Give the suite `useVenueDb` and the migration sets it
-needs; it makes its own temporary venue directory. A worker limit is still a per-package call, and
-the reason that is left is the `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs
-`maxWorkers: 1` where a small package runs under `pnpm -r` oversubscription — the worked reasoning
-is in #558's first commit message (2026-09-24). `packages/db` keeps `maxWorkers: 4`, which CI's
+needs; it makes its own temporary venue directory. A worker limit remains a per-package choice.
+For the older payments observations and one/six-worker recheck, run
+`git show edeb8346656cd0690a0155147d4ac358723d278e` (#558).
+The other worker pins still need measurement under the reported workspace load.
+`packages/db` keeps `maxWorkers: 4`, which CI's
 `test-heavy` shards inherit because they pass no worker count of their own. Either way a new package
 that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) — anything else and
 `scripts/coverage-thresholds.test.ts` fails it in `root-guards`.

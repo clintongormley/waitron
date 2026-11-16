@@ -2041,6 +2041,37 @@ unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the o
 with either set and shown with neither; passing
 `--reporter=default` instead has not been measured.
 
+Vite has a separate browser-console forwarding path. A902's 14 November 2026 receipt used
+Vite 8.3.4 in `apps/till`:
+
+```sh
+pnpm exec vitest run src/till-app.test.ts -t 'does not leave the dialog busy when a step after the switch throws'
+```
+
+With `AI_AGENT` and `CLAUDECODE` set, the passing run printed a `[vite] (client) [Unhandled rejection]`
+TypeError about reading `approvedProfiles` from null, with its stack. With both variables unset,
+and again with every `CLAUDE*`, `AI_AGENT` and `CODEX*` variable unset, that Vite line was absent,
+but Vitest still printed a bare `PromiseRejectionEvent`. All those runs passed. The finishing
+review reported no printed rejection with both variables set and `server.forwardConsole: false`
+in the till configuration; that last result is the reviewer's report. Dashboard already disables
+forwarding. Whether the other browser packages should do so remains the owner's choice.
+
+## The setup optimizer comparison on Vite 8 was inconclusive
+
+On 16 November 2026, macOS, Node v26.13.0, Vite 8.3.8 and Vitest 4.1.12, two fresh-cache
+runs selected `apps/setup/src/main.popover.test.ts` and
+`apps/setup/src/widgets/test-helpers.a11y.test.ts`. Each passed nine tests. One retained setup's
+`optimizeDeps.include`; the other replaced only that list with `[]`. A temporary config imported
+the real setup configuration; each arm used a separate empty external `cacheDir`, unlike CI's
+normal cache location. Both ran through `scripts/run-with-deadline.mjs 180 --diagnostics`.
+
+Neither arm logged an unexpected test reload or an outdated optimized dependency. Optimizer
+metadata included `axe-core` and the popover polyfill in both; only the explicit-include arm
+listed `lit/directives/unsafe-html.js`. Metadata shows optimization, not execution of each
+entry. In particular, the startup case replaces the Popover startup function. This control
+therefore does not establish that the include list prevents a reload, or that removing it
+is sound for all setup files. Keep the includes. Dashboard, till and UI were not compared.
+
 ## A child that loads the Stripe SDK writes a line to its error output under Claude Code
 
 When `CLAUDECODE` or `CLAUDE_CODE_CHILD_SESSION` is set, stripe@23.1.0 writes a
