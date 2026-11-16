@@ -1305,6 +1305,8 @@ export const en = {
   "venue_details.sales": "Locked: the venue has recorded sales.",
   "venue_details.orders": "Locked: the venue has order history.",
   "venue_details.daily_close": "Locked: the venue has a daily close.",
+  "venue_details.business_day_history":
+    "Locked: the venue has recorded a change to its business-day start.",
   "venue_details.changed":
     "This value changed in another session. Cancel to load the latest saved values, then review your change.",
   "venue_details.invalid": "Check this value and try again.",
@@ -5663,6 +5665,8 @@ export const es: Record<StringKey, string> = {
   "venue_details.sales": "Bloqueado: el local tiene ventas registradas.",
   "venue_details.orders": "Bloqueado: el local tiene historial de pedidos.",
   "venue_details.daily_close": "Bloqueado: el local tiene un cierre diario.",
+  "venue_details.business_day_history":
+    "Bloqueado: el local tiene registrado un cambio del inicio de su día de negocio.",
   "venue_details.changed":
     "Este valor ha cambiado en otra sesión. Pulsa Cancelar para cargar los valores guardados más recientes y después revisa tu cambio.",
   "venue_details.invalid": "Revisa este valor e inténtalo de nuevo.",

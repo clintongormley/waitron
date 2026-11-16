@@ -1,8 +1,9 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type AddressChosenDetail,
@@ -60,6 +61,7 @@ const REASONS: Record<string, StringKey> = {
   sales: "venue_details.sales",
   orders: "venue_details.orders",
   daily_close: "venue_details.daily_close",
+  business_day_history: "venue_details.business_day_history",
   geography_context: "venue_details.geography_context",
 };
 const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : field);
@@ -112,8 +114,11 @@ export class VenueDetailsPanel extends LitElement {
       .locked {
         color: var(--wt-color-text-muted);
       }
-      .reason,
-      .reason > div {
+      .locked p {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+      }
+      .reason {
         display: grid;
         gap: var(--wt-space-2);
       }
@@ -154,7 +159,7 @@ export class VenueDetailsPanel extends LitElement {
   @state() private draft?: VenueDetailValues;
   @state() private submitting = false;
   @state() private errors: Partial<Record<VenueDetailField, string>> = {};
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private actionError = "";
   @state() private readError = "";
   @state() private acknowledged = "";
@@ -209,6 +214,9 @@ export class VenueDetailsPanel extends LitElement {
     this.clockPreview = undefined;
     super.disconnectedCallback();
   }
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("readOnly") && this.readOnly) this.#cancel();
+  }
   async #load(): Promise<boolean> {
     const generation = this.#generation;
     try {
@@ -253,7 +261,7 @@ export class VenueDetailsPanel extends LitElement {
     this.draft = { ...this.model.details };
     this.refusedAddress = undefined;
     this.errors = {};
-    this.attempted = false;
+    this.#feedback.reset();
     this.actionError = "";
     this.acknowledged = "";
     this.#registerDraft();
@@ -270,7 +278,7 @@ export class VenueDetailsPanel extends LitElement {
         this.draft = value;
         this.errors = {};
         this.actionError = "";
-        this.attempted = false;
+        this.#feedback.reset();
         this.acknowledged = "";
         this.#refreshPreview();
       },
@@ -302,7 +310,7 @@ export class VenueDetailsPanel extends LitElement {
     this.refusedAddress = undefined;
     this.errors = {};
     this.actionError = "";
-    this.attempted = false;
+    this.#feedback.reset();
     this.acknowledged = "";
     this.#previewSequence += 1;
     this.#clockKey = "";
@@ -477,32 +485,26 @@ export class VenueDetailsPanel extends LitElement {
     const next = venueDetailProblems(this.#patch());
     const errors = { ...this.errors };
     for (const field of Object.keys(values) as VenueDetailField[]) delete errors[field];
-    if (this.attempted) {
+    if (this.#feedback.attempted) {
       for (const key of VENUE_DETAIL_FIELDS) {
         if (next[key]) errors[key] = t(PROBLEMS[next[key]]!);
       }
     }
     this.errors = errors;
     this.#refreshPreview();
-    if (this.actionError === t("form.fix_fields") && Object.keys(errors).length === 0)
-      this.actionError = "";
-  }
-  async #focus(field: VenueDetailField): Promise<void> {
-    await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>(`[name="${nameOf(field)}"]`)?.focus();
   }
   async #save(): Promise<void> {
     if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
     if (saveActionState(this.#scope).unchanged) return;
     const patch = this.#patch();
     const problems = venueDetailProblems(patch);
-    this.attempted = true;
+    this.#feedback.press();
     if (Object.keys(problems).length > 0) {
       this.errors = Object.fromEntries(
         Object.entries(problems).map(([field, problem]) => [field, t(PROBLEMS[problem]!)]),
       );
-      this.actionError = t("form.fix_fields");
-      await this.#focus(VENUE_DETAIL_FIELDS.find((field) => problems[field] !== undefined)!);
+      this.actionError = "";
+      await this.#feedback.focus(this.renderRoot);
       return;
     }
     if (this.#needsAcknowledgement()) return;
@@ -533,15 +535,15 @@ export class VenueDetailsPanel extends LitElement {
               : code === "venue.detail_read_only"
                 ? t("venue_details.read_only")
                 : codeMessage(code);
+      this.#feedback.newRefusal();
       if (
         typeof field === "string" &&
         VENUE_DETAIL_FIELDS.includes(field as VenueDetailField) &&
         this.shadowRoot!.querySelector(`[name="${nameOf(field as VenueDetailField)}"]`)
       ) {
         this.errors = { [field]: message };
-        this.actionError = t("form.fix_fields");
         this.submitting = false;
-        await this.#focus(field as VenueDetailField);
+        await this.#feedback.focus(this.renderRoot);
       } else this.actionError = message;
       return;
     } finally {
@@ -549,16 +551,11 @@ export class VenueDetailsPanel extends LitElement {
     }
     if (this.isConnected) this.#readAfterAnswer();
   }
-  #lockedNotes(): TemplateResult | typeof nothing {
-    const keys = new Set<StringKey>();
-    for (const field of VENUE_DETAIL_FIELDS) {
-      const policy = this.model!.policy[field];
-      if (policy.decision !== "refuse") continue;
-      for (const reason of policy.reasons) if (REASONS[reason]) keys.add(REASONS[reason]!);
-    }
-    if (keys.size === 0) return nothing;
-    return html`<div data-test="locked-notes">
-      ${[...keys].map((key) => html`<p>${t(key)}</p>`)}
+  #lockReason(field: VenueDetailField): TemplateResult | typeof nothing {
+    const policy = this.model!.policy[field];
+    if (policy.decision !== "refuse") return nothing;
+    return html`<div class="locked" data-test=${`reason-${field}`}>
+      ${policy.reasons.map((reason) => (REASONS[reason] ? html`<p>${t(REASONS[reason]!)}</p>` : nothing))}
     </div>`;
   }
   #address(details: VenueDetailValues): TemplateResult[] {
@@ -580,14 +577,14 @@ export class VenueDetailsPanel extends LitElement {
     };
     const value = this.draft![field] ?? "";
     if (this.#isLockedRow(field))
-      return settingsRows([
+      return html`${settingsRows([
         {
           label: t(LABELS[field]),
           value: html`${value || t("venue_details.unset")}
             <span class="locked">· ${t("venue_details.locked")}</span>`,
           dataTest: `locked-${field}`,
         },
-      ]);
+      ])}${this.#lockReason(field)}`;
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
@@ -614,6 +611,7 @@ export class VenueDetailsPanel extends LitElement {
               @wt-change=${change}
             ></wt-input>`
       }
+      ${this.#lockReason(field)}
     </div>`;
   }
   #isLockedRow(field: VenueDetailField): boolean {
@@ -666,8 +664,13 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
+    const formError = this.#feedback.message(
+      { request: this.actionError, ...this.errors },
+      new Set(Object.keys(this.errors)),
+      t("form.fix_fields"),
+    );
     return html`${
-      this.readError && !this.actionError
+      this.readError && !formError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
             <wt-button
               class="retry"
@@ -778,10 +781,9 @@ export class VenueDetailsPanel extends LitElement {
                           : nothing
                       }
                       <div class="reason" data-test="form-foot">
-                        ${this.#lockedNotes()}
                         <p data-test="address-notice">${t("venue_details.address_notice")}</p>
                       </div>
-                      <wt-form-actions .error=${this.actionError}>
+                      <wt-form-actions .error=${formError}>
                         <wt-button
                           slot="cancel"
                           data-test="cancel"
@@ -798,7 +800,7 @@ export class VenueDetailsPanel extends LitElement {
                             saveAction.unchanged ||
                             this.submitting ||
                             this.#needsAcknowledgement() ||
-                            (this.attempted &&
+                            (this.#feedback.attempted &&
                               Object.keys(venueDetailProblems(this.#patch())).length > 0)
                           }
                           @click=${() => {

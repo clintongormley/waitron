@@ -356,14 +356,9 @@ export class StaffingMonthView extends LitElement {
     if (this.isConnected) act?.();
   }
 
-  // The box measures itself to choose where it fits, so it is shown after its own and its
-  // buttons' pending renders.
   async #placeBox(date: string): Promise<void> {
-    await this.updateComplete;
     const box = this.renderRoot.querySelector("calendar-day-box")!;
-    await Promise.all(
-      [box, ...box.children].map((node) => (node as Partial<LitElement>).updateComplete),
-    );
+    await box.updateComplete;
     if (!this.isConnected || this.boxDate !== date) return;
     if (this.#placed === date && !box.shown) return;
     box.show(this.#dayButton(date)!);

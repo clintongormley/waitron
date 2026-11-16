@@ -603,9 +603,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **Loose ends left by A755 (#1809).**
-  [Detail](backlog/service-periods.md#loose-ends-left-by-a755-1809)
-
 - **After A760: A877's one helper first** (bundle of 4, 1 important, size L, waits for another entry). [Detail](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 
 - **Loose ends left by A720.**
@@ -620,9 +617,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
-
-- **Opening the Year from a station's Week may keep `/station/<id>` in the address**, though the
-  Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
 
 - **Painting stops short of an off-quarter-hour changeover**
   [Detail](backlog/service-periods.md#painting-stops-short-of-an-off-quarter-hour-changeover)

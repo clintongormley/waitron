@@ -313,6 +313,10 @@ export class OpeningHoursScreen extends LitElement {
             ? to
             : null,
       };
+      if (this.url.read("to") !== null && this.special.to === null) {
+        this.replaceAddress(this.specialUrl(this.special));
+        return;
+      }
       if (this.baseHref === undefined) this.view = "year";
       return;
     }
@@ -888,6 +892,7 @@ export class OpeningHoursScreen extends LitElement {
         dashboard: "opening-hours",
         view: "year",
         year: year.padStart(4, "0"),
+        station: null,
         month: null,
         week: null,
         date: null,
@@ -1176,12 +1181,7 @@ export class OpeningHoursScreen extends LitElement {
     await this.shadowRoot?.querySelector<LitElement>(
       "opening-hours-month, opening-hours-year, opening-hours-week",
     )?.updateComplete;
-    const drawn = this.shadowRoot?.querySelector("calendar-day-box");
-    await Promise.all(
-      [drawn, ...(drawn?.children ?? [])].map(
-        (node) => (node as LitElement | null)?.updateComplete,
-      ),
-    );
+    await this.shadowRoot?.querySelector("calendar-day-box")?.updateComplete;
     if (!this.isConnected || this.dayBox !== open || !open) return;
     const returnTo = open.returnTo();
     const anchor = open.anchor ?? returnTo;

@@ -568,6 +568,9 @@ describe("a run picked on the Year", () => {
     const painter = await shownPainter(whole.el);
     expect(painter.lastDate).toBe("2027-01-01");
     expect(chips(painter)).toHaveLength(366);
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
+    );
     whole.el.remove();
     const longer = await mount(
       "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-03",
@@ -585,6 +588,21 @@ describe("a run picked on the Year", () => {
     expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
     expect(chips(painter)).toEqual(["2026-01-01"]);
   });
+
+  it.each(["2025-12-31", "bad-date", "2027-01-02"])(
+    "removes an ignored range end %s from the address without pushing history",
+    async (to) => {
+      const pushed = vi.spyOn(history, "pushState");
+      const { el } = await mount(
+        `/manage/opening-hours/view/special-day/date/2026-01-01/to/${to}?keep=yes#dates`,
+      );
+      const painter = await shownPainter(el);
+      expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
+      expect(pushed).not.toHaveBeenCalled();
+    },
+  );
 
   it("a run in the year 9999 read from an address opens whole", async () => {
     const { el } = await mount(
@@ -880,6 +898,23 @@ describe("Save closes the special-day editor", () => {
       )!;
     return { app, el, guard, question };
   }
+
+  it("with the app's guard, an ignored range end is replaced without adding history", async () => {
+    const { app, el, guard } = await mountGuarded(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2025-12-31?keep=yes#dates",
+    );
+    try {
+      const painter = await shownPainter(el);
+      expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
+      history.back();
+      await expect.poll(() => location.pathname).toBe("/manage/before");
+    } finally {
+      guard.dispose();
+      app.remove();
+    }
+  });
 
   it("with the app's guard, Save closes a new day picked on the Month without asking", async () => {
     const { app, el, guard, question } = await mountGuarded(

@@ -429,8 +429,26 @@ describe("calendar-day-box", () => {
       text: "Open 17:00–02:00",
     }));
     await box.updateComplete;
-    box.show(anchor);
+    await expect
+      .poll(() => popup().getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(innerHeight);
     insideViewport(popup().getBoundingClientRect());
+  });
+
+  it("keeps an open box on screen when a slotted action grows, without taking focus", async () => {
+    anchor.style.cssText = `position: fixed; right: 8px; top: ${innerHeight - 44}px;`;
+    const action = document.createElement("button");
+    action.textContent = "Edit";
+    box.append(action);
+    await box.updateComplete;
+    box.show(anchor);
+    await expect.poll(() => action.checkVisibility()).toBe(true);
+    action.focus();
+    action.style.cssText = "width: 500px; height: 400px; max-width: 100%;";
+    await expect.poll(() => popup().getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => popup().getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+    insideViewport(popup().getBoundingClientRect());
+    expect(deepActive()).toBe(action);
   });
 });
 
