@@ -15,10 +15,17 @@ export function createDeadlineDiagnostics({
   const running = new Set();
   const streams = new Map();
   const readLine = (line) => {
-    const start = /^\[file-progress\] start (.+)$/.exec(line);
-    if (start) running.add(start[1]);
-    for (const name of running) {
-      if (line.startsWith(`[file-progress] end ${name} `)) running.delete(name);
+    const progress = /^(\S+ test:(?:coverage|shard): )?\[file-progress\] (start|end) (.+)$/.exec(
+      line,
+    );
+    if (!progress) return;
+    const [, prefix = "", event, file] = progress;
+    const name = prefix + file;
+    if (event === "start") running.add(name);
+    else {
+      for (const pending of running) {
+        if (name.startsWith(`${pending} `)) running.delete(pending);
+      }
     }
   };
   return {

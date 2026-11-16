@@ -348,6 +348,43 @@ describe("test process deadline", () => {
 });
 
 describe("deadline diagnostics", () => {
+  it("tracks the pnpm-prefixed progress line emitted by the nightly light-a job", () => {
+    const lines = [];
+    const report = deadlineRunner.createDeadlineDiagnostics({
+      write: (line) => lines.push(line),
+      snapshot: () => ({ status: 0 }),
+    });
+    report.observe(
+      Buffer.from(
+        "packages/contract test:coverage: [file-progress] start src/signing/installation-proof.test.ts\n",
+      ),
+      "stdout",
+    );
+    report.report();
+    expect(lines).toContain(
+      "  packages/contract test:coverage: src/signing/installation-proof.test.ts",
+    );
+  });
+
+  it("keeps the package identity when concurrent packages run the same relative file", () => {
+    const lines = [];
+    const report = deadlineRunner.createDeadlineDiagnostics({
+      write: (line) => lines.push(line),
+      snapshot: () => ({ status: 0 }),
+    });
+    report.observe(
+      Buffer.from(
+        "packages/contract test:coverage: [file-progress] start src/index.test.ts\n" +
+          "packages/shared test:coverage: [file-progress] start src/index.test.ts\n" +
+          "packages/shared test:coverage: [file-progress] end src/index.test.ts passed 0.1s\n",
+      ),
+      "stdout",
+    );
+    report.report();
+    expect(lines).toContain("  packages/contract test:coverage: src/index.test.ts");
+    expect(lines).not.toContain("  packages/shared test:coverage: src/index.test.ts");
+  });
+
   it("keeps unfinished files across split UTF-8 lines and independent output streams", () => {
     expect(deadlineRunner.createDeadlineDiagnostics).toBeTypeOf("function");
     const lines = [];
