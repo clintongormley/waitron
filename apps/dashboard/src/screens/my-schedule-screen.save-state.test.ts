@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, MyShift, RosterEntry } from "../api/client.js";
 import "./my-schedule-screen.js";
 import type { MyScheduleScreen } from "./my-schedule-screen.js";
@@ -111,10 +112,10 @@ describe("the cover request", () => {
     expect(api.requestSwap).not.toHaveBeenCalled();
   });
 
-  it("wakes once both fields are chosen, and choosing the empty values back quiets it", async () => {
+  it("wakes once a field is chosen, before the other is, and choosing the empty values back quiets it", async () => {
     const { el } = await mountLoaded();
     await choose(el, "cover-shift", "s1");
-    expect(await state(el, "cover-submit")).toEqual(blocked);
+    expect(await state(el, "cover-submit")).toEqual(ready);
     await choose(el, "cover-colleague", "col1");
     expect(await state(el, "cover-submit")).toEqual(ready);
     await choose(el, "cover-colleague", "");
@@ -168,18 +169,18 @@ describe("the absence request", () => {
   it("one edit wakes it, and typing the original value back quiets it", async () => {
     const { el } = await mountLoaded();
     await choose(el, "abs-kind", "sick_leave");
-    expect(await state(el, "abs-submit")).toEqual(blocked);
+    expect(await state(el, "abs-submit")).toEqual(ready);
     await choose(el, "abs-kind", "holiday");
     expect(await state(el, "abs-submit")).toEqual(quiet);
     await type(el, "abs-from", "2026-06-01");
     await type(el, "abs-to", "2026-06-03");
     expect(await state(el, "abs-submit")).toEqual(ready);
     await type(el, "abs-to", "");
-    expect(await state(el, "abs-submit")).toEqual(blocked);
+    expect(await state(el, "abs-submit")).toEqual(ready);
     await type(el, "abs-from", "");
     expect(await state(el, "abs-submit")).toEqual(quiet);
     await type(el, "abs-note", "Wedding");
-    expect(await state(el, "abs-submit")).toEqual(blocked);
+    expect(await state(el, "abs-submit")).toEqual(ready);
     await type(el, "abs-note", "");
     expect(await state(el, "abs-submit")).toEqual(quiet);
   });
@@ -217,4 +218,216 @@ describe("the absence request", () => {
     await settle(el);
     expect(api.requestAbsence).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("the forms contract", () => {
+  type Form = "cover" | "request-absence";
+  const actions = (el: MyScheduleScreen, form: Form) =>
+    q<HTMLElementTagNameMap["wt-form-actions"]>(el, `.${form} wt-form-actions`)!;
+  const fieldError = (el: MyScheduleScreen, name: string) =>
+    q<HTMLElement & { error: string }>(el, `[data-test=${name}]`)!.error;
+  const focused = (el: MyScheduleScreen) => el.shadowRoot!.activeElement?.getAttribute("name");
+
+  it("marks the required fields", async () => {
+    const { el } = await mountLoaded();
+    const required = (name: string) =>
+      q<HTMLElement & { required: boolean }>(el, `[data-test=${name}]`)!.required;
+    expect(["cover-shift", "cover-colleague", "abs-from", "abs-to"].map(required)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(["abs-kind", "abs-note"].map(required)).toEqual([false, false]);
+  });
+
+  it("a cover press with no shift marks it, says so below, focuses it and sends nothing; choosing it lets the press send", async () => {
+    const { el, api } = await mountLoaded();
+    await choose(el, "cover-colleague", "col1");
+    expect(await state(el, "cover-submit")).toEqual(ready);
+    await press(el, "cover-submit");
+    await settle(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
+    expect(fieldError(el, "cover-shift")).toBe(t("myschedule.cover_shift_required"));
+    expect(fieldError(el, "cover-colleague")).toBe("");
+    expect(actions(el, "cover").error).toBe(t("form.fix_fields"));
+    expect(actions(el, "request-absence").error).toBe("");
+    expect(q(el, "[data-test=notice]")).toBeNull();
+    await vi.waitFor(() => expect(focused(el)).toBe("cover-shift"));
+    expect(q<HTMLElement & { value: string }>(el, "[data-test=cover-colleague]")!.value).toBe(
+      "col1",
+    );
+    expect(await state(el, "cover-submit")).toEqual(blocked);
+
+    await choose(el, "cover-shift", "s1");
+    expect(fieldError(el, "cover-shift")).toBe("");
+    expect(actions(el, "cover").error).toBe("");
+    expect(await state(el, "cover-submit")).toEqual(ready);
+    await press(el, "cover-submit");
+    expect(api.requestSwap).toHaveBeenCalledExactlyOnceWith({
+      fromShiftId: "s1",
+      toPersonId: "col1",
+      toShiftId: null,
+    });
+  });
+
+  it("a cover press with no colleague marks the colleague, and clearing it again after a fix marks it again", async () => {
+    const { el, api } = await mountLoaded();
+    await choose(el, "cover-shift", "s1");
+    await press(el, "cover-submit");
+    await settle(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
+    expect(fieldError(el, "cover-shift")).toBe("");
+    expect(fieldError(el, "cover-colleague")).toBe(t("myschedule.cover_colleague_required"));
+    await vi.waitFor(() => expect(focused(el)).toBe("cover-colleague"));
+    await choose(el, "cover-colleague", "col1");
+    expect(fieldError(el, "cover-colleague")).toBe("");
+    await choose(el, "cover-colleague", "");
+    expect(fieldError(el, "cover-colleague")).toBe(t("myschedule.cover_colleague_required"));
+    expect(actions(el, "cover").error).toBe(t("form.fix_fields"));
+    expect(await state(el, "cover-submit")).toEqual(blocked);
+  });
+
+  it("an absence press with no dates marks both, focuses From and sends nothing; filling them lets the press send", async () => {
+    const { el, api } = await mountLoaded();
+    await choose(el, "abs-kind", "sick_leave");
+    await press(el, "abs-submit");
+    await settle(el);
+    expect(api.requestAbsence).not.toHaveBeenCalled();
+    expect(fieldError(el, "abs-from")).toBe(t("myschedule.absence_from_required"));
+    expect(fieldError(el, "abs-to")).toBe(t("myschedule.absence_to_required"));
+    expect(actions(el, "request-absence").error).toBe(t("form.fix_fields"));
+    expect(actions(el, "cover").error).toBe("");
+    await vi.waitFor(() => expect(focused(el)).toBe("abs-from"));
+    expect(await state(el, "abs-submit")).toEqual(blocked);
+
+    await type(el, "abs-from", "2026-06-01");
+    expect(fieldError(el, "abs-from")).toBe("");
+    expect(fieldError(el, "abs-to")).toBe(t("myschedule.absence_to_required"));
+    expect(await state(el, "abs-submit")).toEqual(blocked);
+    await type(el, "abs-to", "2026-06-03");
+    expect(fieldError(el, "abs-to")).toBe("");
+    expect(actions(el, "request-absence").error).toBe("");
+    expect(await state(el, "abs-submit")).toEqual(ready);
+    await press(el, "abs-submit");
+    expect(api.requestAbsence).toHaveBeenCalledExactlyOnceWith({
+      kind: "sick_leave",
+      startsOn: "2026-06-01",
+      endsOn: "2026-06-03",
+      note: null,
+    });
+  });
+
+  it("an absence whose To is before its From is marked at To and not sent; the same day is sent", async () => {
+    const { el, api } = await mountLoaded();
+    await type(el, "abs-from", "2026-06-05");
+    await type(el, "abs-to", "2026-06-01");
+    expect(fieldError(el, "abs-to")).toBe("");
+    expect(await state(el, "abs-submit")).toEqual(ready);
+    await press(el, "abs-submit");
+    await settle(el);
+    expect(api.requestAbsence).not.toHaveBeenCalled();
+    expect(fieldError(el, "abs-from")).toBe("");
+    expect(fieldError(el, "abs-to")).toBe(t("myschedule.absence_to_before_from"));
+    expect(actions(el, "request-absence").error).toBe(t("form.fix_fields"));
+    await vi.waitFor(() => expect(focused(el)).toBe("abs-to"));
+    expect(await state(el, "abs-submit")).toEqual(blocked);
+    await type(el, "abs-to", "2026-06-05");
+    expect(fieldError(el, "abs-to")).toBe("");
+    expect(await state(el, "abs-submit")).toEqual(ready);
+    await press(el, "abs-submit");
+    expect(api.requestAbsence).toHaveBeenCalledExactlyOnceWith({
+      kind: "holiday",
+      startsOn: "2026-06-05",
+      endsOn: "2026-06-05",
+      note: null,
+    });
+  });
+
+  it("a refused cover request says why below its own form, leaves the button working, and the next press clears it", async () => {
+    const api = stubApi();
+    const retry = deferred<{ swapId: string }>();
+    api.requestSwap
+      .mockImplementationOnce(() => Promise.reject({ code: "swap.not_permitted" }))
+      .mockImplementationOnce(() => retry.promise);
+    const { el } = await mountLoaded(api);
+    await choose(el, "cover-shift", "s1");
+    await choose(el, "cover-colleague", "col1");
+    await press(el, "cover-submit");
+    await vi.waitFor(() =>
+      expect(actions(el, "cover").error).toBe(codeMessage("swap.not_permitted")),
+    );
+    expect(q(el, "[data-test=notice]")).toBeNull();
+    expect(actions(el, "request-absence").error).toBe("");
+    expect(fieldError(el, "cover-shift")).toBe("");
+    expect(fieldError(el, "cover-colleague")).toBe("");
+    expect(await state(el, "cover-submit")).toEqual(ready);
+    await press(el, "cover-submit");
+    expect(api.requestSwap).toHaveBeenCalledTimes(2);
+    expect(actions(el, "cover").error).toBe("");
+    retry.resolve({ swapId: "sw9" });
+  });
+
+  it("a refused absence request says why below its own form, leaves the button working, and the next press clears it", async () => {
+    const api = stubApi();
+    const retry = deferred<{ absenceId: string }>();
+    api.requestAbsence
+      .mockImplementationOnce(() => Promise.reject({ code: "absence.overlaps" }))
+      .mockImplementationOnce(() => retry.promise);
+    const { el } = await mountLoaded(api);
+    await type(el, "abs-from", "2026-06-01");
+    await type(el, "abs-to", "2026-06-03");
+    await press(el, "abs-submit");
+    await vi.waitFor(() =>
+      expect(actions(el, "request-absence").error).toBe(codeMessage("absence.overlaps")),
+    );
+    expect(q(el, "[data-test=notice]")).toBeNull();
+    expect(actions(el, "cover").error).toBe("");
+    expect(await state(el, "abs-submit")).toEqual(ready);
+    await press(el, "abs-submit");
+    expect(api.requestAbsence).toHaveBeenCalledTimes(2);
+    expect(actions(el, "request-absence").error).toBe("");
+    retry.resolve({ absenceId: "ab9" });
+  });
+
+  it.each([
+    {
+      form: "cover" as const,
+      field: "fromShiftId",
+      marked: "cover-shift",
+      other: "cover-colleague",
+    },
+    { form: "request-absence" as const, field: "startsOn", marked: "abs-from", other: "abs-to" },
+  ])(
+    "a refusal naming $field goes under $marked, never disables the button, and changing that field clears it",
+    async ({ form, field, marked, other }) => {
+      const api = stubApi();
+      const refusal = { code: "management.request_invalid", params: { field } };
+      api.requestSwap.mockImplementationOnce(() => Promise.reject(refusal));
+      api.requestAbsence.mockImplementationOnce(() => Promise.reject(refusal));
+      const { el } = await mountLoaded(api);
+      const submit = form === "cover" ? "cover-submit" : "abs-submit";
+      if (form === "cover") {
+        await choose(el, "cover-shift", "s1");
+        await choose(el, "cover-colleague", "col1");
+      } else {
+        await type(el, "abs-from", "2026-06-01");
+        await type(el, "abs-to", "2026-06-03");
+      }
+      await press(el, submit);
+      await vi.waitFor(() =>
+        expect(fieldError(el, marked)).toBe(codeMessage("management.request_invalid")),
+      );
+      expect(fieldError(el, other)).toBe("");
+      expect(actions(el, form).error).toBe(t("form.fix_fields"));
+      expect(q(el, "[data-test=notice]")).toBeNull();
+      expect(await state(el, submit)).toEqual(ready);
+      if (form === "cover") {
+        await choose(el, "cover-shift", "");
+        await choose(el, "cover-shift", "s1");
+      } else await type(el, "abs-from", "2026-06-02");
+      expect(fieldError(el, marked)).toBe("");
+      expect(actions(el, form).error).toBe("");
+    },
+  );
 });
