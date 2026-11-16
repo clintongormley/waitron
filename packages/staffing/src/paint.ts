@@ -1,8 +1,10 @@
 import { staffRoles } from "@waitron/db";
 import { and, asc, desc, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
-import { AppError, compareStationNames } from "@waitron/shared";
+import { AppError, compareStationNames, cutoverForBusinessDay } from "@waitron/shared";
 import {
+  addDays,
+  seasonOn,
   departments,
   readDayPlan,
   type DayPlan,
@@ -254,15 +256,43 @@ async function insertDay(
   );
 }
 
+export async function readSeasonStaffingContext(tx: Transaction, seasonId: string, month: string) {
+  const all = await readSeasons(tx);
+  const at = all.findIndex((season) => season.id === seasonId);
+  if (at < 0) throw new AppError("season.not_found", { seasonId });
+  let anchor = `${month}-01`;
+  while (seasonOn(all, anchor)!.id !== seasonId) anchor = addDays(anchor, 1);
+  const start = all[at]!.startsOn;
+  const year = Number(anchor.slice(0, 4)) - Number(start > anchor.slice(5));
+  const from = `${year}-${start}`;
+  const next = all[(at + 1) % all.length]!.startsOn;
+  const until = `${year + Number(next <= start)}-${next}`;
+  const clock = await readVenueClock(tx);
+  const weekdayCutovers = Object.fromEntries(WEEKDAYS.map((day) => [day, [] as string[]]));
+  for (let day = from; day < until; day = addDays(day, 1)) {
+    const starts = weekdayCutovers[weekdayOf(day)]!;
+    const cutover = cutoverForBusinessDay(clock, day);
+    if (!starts.includes(cutover)) starts.push(cutover);
+  }
+  return {
+    seasons: all,
+    month,
+    cutover: cutoverForBusinessDay(clock, anchor),
+    cutoverChanges: clock.cutoverChanges.filter(
+      (c) => c.effectiveBusinessDay > from && c.effectiveBusinessDay < until,
+    ),
+    weekdayCutovers,
+  };
+}
+
 export async function readSeasonStaffing(
   tx: Transaction,
   seasonId: string,
+  month: string,
 ): Promise<SeasonStaffing> {
-  const all = await readSeasons(tx);
-  if (!all.some((season) => season.id === seasonId))
-    throw new AppError("season.not_found", { seasonId });
+  const context = await readSeasonStaffingContext(tx, seasonId, month);
+  const { cutover, seasons: all } = context;
   const areas = await listStaffingAreas(tx);
-  const cutover = await currentCutover(tx);
   const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
   const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "season",
@@ -270,7 +300,7 @@ export async function readSeasonStaffing(
     cutover,
   });
   return {
-    cutover,
+    ...context,
     seasons: all.map(({ id, name, startsOn, colour }) => ({ id, name, startsOn, colour })),
     areas: areas.map(({ area, name }) => {
       const byDay = paint.get(areaKey(area));

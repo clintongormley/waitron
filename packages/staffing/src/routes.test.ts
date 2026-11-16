@@ -6,7 +6,13 @@ import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { createRequest, QueryController } from "@waitron/dashboard-kit";
 import { StaffingApi } from "./dashboard/client.js";
-import { CORE_MIGRATIONS, menus, kitchenStations, withTransaction } from "@waitron/db";
+import {
+  dayCutoverChanges,
+  CORE_MIGRATIONS,
+  menus,
+  kitchenStations,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -18,6 +24,7 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
+  seasons,
   departments,
   menuPeriods,
   openingHours,
@@ -548,7 +555,7 @@ describe("the staffing paint routes", () => {
       const p = await painted();
       const path =
         kind === "season"
-          ? `${STAFFING}/seasons/${p.seasonId}`
+          ? `${STAFFING}/seasons/${p.seasonId}?month=2026-06`
           : `${STAFFING}/special-days/${p.specialDayId}`;
       const before = await (await p.call("GET", path, p.manager)).json();
       for (const body of ["x", "", 1, true, [], ["x"], null]) {
@@ -594,11 +601,62 @@ describe("the staffing paint routes", () => {
     await answers(await p.call("GET", `${STAFFING}/areas`, p.manager), 200, all);
   });
 
+  it("checks season saves against starts throughout the shown occurrence", async () => {
+    const p = await painted();
+    await withTransaction(suite.db, async (tx) => {
+      await seedBusinessDay(tx, { dayCutover: "04:00" });
+      await tx.update(seasons).set({ startsOn: "12-01" }).where(eq(seasons.id, p.seasonId));
+      await tx.insert(seasons).values({ name: "Spring", startsOn: "03-01" });
+      await tx
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-12-01", dayCutover: "02:00:00" });
+    });
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-12`;
+    const edits = [
+      { area: p.dept, weekday: 2, blocks: [p.block({ startsAt: "03:00", endsAt: "05:00" })] },
+    ];
+    await answers(await p.call("PUT", path, p.manager, { edits }), 204);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2027-01-05", dayCutover: "04:00:00" }),
+    );
+    await answers(
+      await p.call("PUT", path, p.manager, { edits }),
+      400,
+      refusal("staffing.invalid", { field: "edits.0.blocks.0.endsAt" }),
+    );
+    edits[0]!.blocks[0]!.startsAt = "05:00";
+    edits[0]!.blocks[0]!.endsAt = "07:00";
+    await answers(await p.call("PUT", path, p.manager, { edits }), 204);
+    for (const month of ["", "?month=", "?month=2026-13"]) {
+      await answers(
+        await p.call("GET", `${STAFFING}/seasons/${p.seasonId}${month}`, p.manager),
+        400,
+        refusal("management.request_invalid", { field: "month" }),
+      );
+    }
+  });
+
+  it("still validates a weekday absent from a short season", async () => {
+    const p = await painted();
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(seasons).values({ name: "After", startsOn: "06-03" }),
+    );
+    await answers(
+      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId}?month=2026-06`, p.manager, {
+        edits: [{ area: p.dept, weekday: 5, blocks: [p.block({ headcount: 0 })] }],
+      }),
+      400,
+      refusal("staffing.invalid", { field: "edits.0.blocks.0.headcount" }),
+    );
+  });
+
   it("saves a season's week and reads it back", async () => {
     const p = await painted();
     const lunch = p.block();
     const night = p.block({ headcount: 1, startsAt: "20:00", endsAt: "02:00" });
-    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     await answers(
       await p.call("PUT", path, p.manager, {
         edits: [
@@ -610,6 +668,9 @@ describe("the staffing paint routes", () => {
     );
     await answers(await p.call("GET", path, p.supervisor), 200, {
       cutover: "06:00",
+      month: "2026-06",
+      cutoverChanges: [],
+      weekdayCutovers: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((day) => [day, ["06:00"]])),
       seasons: [{ id: p.seasonId, name: "Summer", startsOn: "06-01", colour: "grey" }],
       areas: [
         { area: p.dept, name: "Dining room", weekdays: week({ 0: [lunch] }) },
@@ -632,7 +693,7 @@ describe("the staffing paint routes", () => {
 
   it("refuses a malformed season edit as staffing.invalid naming the field", async () => {
     const p = await painted();
-    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     const ok = { area: p.dept, weekday: 1, blocks: [p.block()] };
     const invalid = async (body: unknown, field: string) =>
       answers(
@@ -679,7 +740,7 @@ describe("the staffing paint routes", () => {
   it("validates a block against the venue's own changeover", async () => {
     const p = await painted();
     await withTransaction(suite.db, (tx) => seedBusinessDay(tx, { dayCutover: "03:00:00" }));
-    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     const late = p.block({ startsAt: "05:00", endsAt: "07:00" });
     await answers(
       await p.call("PUT", path, p.manager, {
@@ -701,7 +762,7 @@ describe("the staffing paint routes", () => {
   it("answers an unknown season with 404, and a malformed season id, an unknown or inactive area or an unknown staff role the body names with 400", async () => {
     const p = await painted();
     const ghostSeason = randomUUID();
-    const unknownSeason = `${STAFFING}/seasons/${ghostSeason}`;
+    const unknownSeason = `${STAFFING}/seasons/${ghostSeason}?month=2026-06`;
     await answers(
       await p.call("GET", unknownSeason, p.manager),
       404,
@@ -713,11 +774,11 @@ describe("the staffing paint routes", () => {
       refusal("season.not_found", { seasonId: ghostSeason }),
     );
     await answers(
-      await p.call("GET", `${STAFFING}/seasons/not-a-uuid`, p.manager),
+      await p.call("GET", `${STAFFING}/seasons/not-a-uuid?month=2026-06`, p.manager),
       400,
       refusal("shared.invalid_id", { kind: "SeasonId", value: "not-a-uuid" }),
     );
-    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     const unknownStation: AreaRef = { kind: "station", id: randomUUID() };
     await answers(
       await p.call("PUT", path, p.manager, {
@@ -857,7 +918,7 @@ describe("the staffing paint routes", () => {
 
   it("keeps the later of two season edits for the same area and weekday", async () => {
     const p = await painted();
-    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const path = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     const later = p.block({ headcount: 5, startsAt: "18:00", endsAt: "23:00" });
     await answers(
       await p.call("PUT", path, p.manager, {
@@ -899,13 +960,22 @@ describe("the staffing paint routes", () => {
     const lunch = p.block();
     const shouted = { ...lunch, staffRoleId: lunch.staffRoleId.toUpperCase() };
     await answers(
-      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId.toUpperCase()}`, p.manager, {
-        edits: [{ area: upperArea(p.dept), weekday: 3, blocks: [shouted] }],
-      }),
+      await p.call(
+        "PUT",
+        `${STAFFING}/seasons/${p.seasonId.toUpperCase()}?month=2026-06`,
+        p.manager,
+        {
+          edits: [{ area: upperArea(p.dept), weekday: 3, blocks: [shouted] }],
+        },
+      ),
       204,
     );
     const season = (await (
-      await p.call("GET", `${STAFFING}/seasons/${p.seasonId.toUpperCase()}`, p.manager)
+      await p.call(
+        "GET",
+        `${STAFFING}/seasons/${p.seasonId.toUpperCase()}?month=2026-06`,
+        p.manager,
+      )
     ).json()) as { areas: { weekdays: unknown }[] };
     expect(season.areas[0]!.weekdays).toEqual(week({ 3: [lunch] }));
     const specialPath = `${STAFFING}/special-days/${p.specialDayId.toUpperCase()}`;
@@ -928,7 +998,7 @@ describe("the staffing paint routes", () => {
       const { error } = (await response.json()) as { error: { code: string } };
       expect(error.code).toBe("authorization.not_permitted");
     };
-    const season = `${STAFFING}/seasons/${p.seasonId}`;
+    const season = `${STAFFING}/seasons/${p.seasonId}?month=2026-06`;
     const special = `${STAFFING}/special-days/${p.specialDayId}`;
     for (const path of [`${STAFFING}/areas`, season, special]) {
       await answers(await p.call("GET", path, p.supervisor), 200);
@@ -951,7 +1021,7 @@ describe("the staffing month route", () => {
   it("reads a month's slot counts to a viewer", async () => {
     const p = await painted();
     await answers(
-      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId}`, p.manager, {
+      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId}?month=2026-06`, p.manager, {
         edits: [{ area: p.grill, weekday: 5, blocks: [p.block({ headcount: 4 })] }],
       }),
       204,
@@ -1263,7 +1333,11 @@ it("A724 paint routes carry exact period metadata for season and special-day gui
     startsAt: "12:00",
     endsAt: "16:00",
   };
-  const season = await p.call("GET", `${STAFFING}/seasons/${p.seasonId}`, p.supervisor);
+  const season = await p.call(
+    "GET",
+    `${STAFFING}/seasons/${p.seasonId}?month=2026-06`,
+    p.supervisor,
+  );
   expect(season.status).toBe(200);
   expect((await season.json()).guides).toEqual({
     [`department:${p.departmentId}`]: { ...week(), 5: [guide] },

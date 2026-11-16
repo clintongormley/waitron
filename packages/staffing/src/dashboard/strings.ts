@@ -200,6 +200,10 @@ const en = {
   "staffing.grid.delete": "Delete",
   "staffing.grid.people_one": "1 person",
   "staffing.grid.people_other": "{count} people",
+  "staffing.painter.crosses_start":
+    "Change this block so it does not cross the {time} business-day start.",
+  "staffing.painter.fix_blocks": "Correct the marked staffing blocks before saving.",
+  "staffing.painter.start_changes": "The business day starts at {time} from {date}.",
   "staffing.painter.heading": "Staffing",
   "staffing.painter.week": "{season}: standard week",
   "staffing.painter.special_day": "{name}: special day, {dates}",
@@ -425,6 +429,10 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.delete": "Eliminar",
   "staffing.grid.people_one": "1 persona",
   "staffing.grid.people_other": "{count} personas",
+  "staffing.painter.crosses_start":
+    "Cambia este bloque para que no cruce el inicio del día de trabajo a las {time}.",
+  "staffing.painter.fix_blocks": "Corrige los bloques de personal marcados antes de guardar.",
+  "staffing.painter.start_changes": "El día de trabajo empieza a las {time} desde el {date}.",
   "staffing.painter.heading": "Personal",
   "staffing.painter.week": "{season}: semana estándar",
   "staffing.painter.special_day": "{name}: día especial, {dates}",

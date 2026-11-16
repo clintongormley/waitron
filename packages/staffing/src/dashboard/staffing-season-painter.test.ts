@@ -124,12 +124,56 @@ it("titles the season's week and draws the first area's weekdays, Monday first, 
   expect(grid(painter).cutover).toBe("06:00");
   expect(grid(painter).target).toBe("winter/department:dep-restaurant");
   expect(request).toHaveBeenCalledWith(
-    "/management-api/staffing/seasons/winter",
+    "/management-api/staffing/seasons/winter?month=2026-12",
     "GET",
     undefined,
     {
       passive: true,
     },
+  );
+});
+
+it("marks crossing blocks before saving and clears the mark when corrected", async () => {
+  const read = seasonStaffing();
+  read.cutover = "04:00";
+  read.cutoverChanges = [{ effectiveBusinessDay: "2027-01-05", dayCutover: "02:00" }];
+  read.weekdayCutovers = { 2: ["04:00", "02:00"] };
+  read.areas[0]!.weekdays[2] = [{ ...headChef, startsAt: "01:00", endsAt: "03:00" }];
+  const { painter, request } = await mount({ read: async () => read });
+  expect(grid(painter).columnErrors.get("2")).toContain("02:00");
+  const error = grid(painter).shadowRoot!.querySelector<HTMLElement>(".column-error")!;
+  expect(error.getBoundingClientRect().height).toBeGreaterThan(1);
+  expect(getComputedStyle(error).clip).toBe("auto");
+  expect(error.getBoundingClientRect().width).toBeLessThan(200);
+  expect(byTest(painter, "cutover-changes")!.textContent).toContain("02:00");
+  expect(byTest(painter, "cutover-changes")!.textContent).toContain("5 Jan 2027");
+  await paint(painter, "3", [dinner]);
+  expect(saveButton(painter).disabled).toBe(true);
+  frame(painter).dispatchEvent(new CustomEvent("painter-save"));
+  await settle(painter);
+  expect(request.mock.calls.filter((call) => call[1] === "PUT")).toHaveLength(0);
+  await paint(painter, "2", [headChef]);
+  expect(grid(painter).columnErrors.size).toBe(0);
+  expect(saveButton(painter).disabled).toBe(false);
+});
+
+it("reloads the same season when the Calendar month changes", async () => {
+  let reads = 0;
+  const { painter, request } = await mount({
+    read: async () => ({
+      ...seasonStaffing(),
+      month: ++reads === 1 ? "2026-12" : "2027-01",
+      cutover: reads === 1 ? "04:00" : "02:00",
+    }),
+  });
+  painter.month = "2027-01";
+  await settle(painter);
+  expect(grid(painter).cutover).toBe("02:00");
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/staffing/seasons/winter?month=2027-01",
+    "GET",
+    undefined,
+    { passive: true },
   );
 });
 
@@ -220,7 +264,7 @@ it("reads the new season when the address steps to it", async () => {
   expect(frame(painter).heading).toBe("Spring: standard week");
   expect(grid(painter).days.get("2")).toEqual([]);
   expect(request).toHaveBeenCalledWith(
-    "/management-api/staffing/seasons/spring",
+    "/management-api/staffing/seasons/spring?month=2026-12",
     "GET",
     undefined,
     { passive: true },
@@ -378,12 +422,14 @@ it("Save sends only the edited area weekdays in one write, then reads the season
     ],
   ]);
   expect(request).toHaveBeenCalledWith(
-    "/management-api/staffing/seasons/winter",
+    "/management-api/staffing/seasons/winter?month=2026-12",
     "PUT",
     expect.anything(),
   );
   expect(
-    request.mock.calls.filter(([path, method]) => path.endsWith("/winter") && method === "GET"),
+    request.mock.calls.filter(
+      ([path, method]) => path.endsWith("/winter?month=2026-12") && method === "GET",
+    ),
   ).toHaveLength(2);
   expect(saveButton(painter).disabled).toBe(true);
 });
@@ -537,7 +583,9 @@ it("keeps its draft when taken off the page and put back, reading only the staff
   parent.append(painter);
   await settle(painter);
   expect(
-    request.mock.calls.filter(([path, method]) => path.endsWith("/winter") && method === "GET"),
+    request.mock.calls.filter(
+      ([path, method]) => path.endsWith("/winter?month=2026-12") && method === "GET",
+    ),
   ).toHaveLength(1);
   expect(
     request.mock.calls.filter(([path]) => path.split("?")[0]!.endsWith("/staff-roles")),

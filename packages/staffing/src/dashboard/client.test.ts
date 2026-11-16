@@ -151,16 +151,18 @@ describe("StaffingApi", () => {
     const area = { kind: "department", id: "d1" } as const;
     const blocks = [{ staffRoleId: waiter.id, headcount: 2, startsAt: "12:00", endsAt: "16:00" }];
     const STAFFING = "/management-api/staffing";
-    expect(await client.readSeason("s/1")).toEqual(season);
+    expect(await client.readSeason("s/1", "2026-12")).toEqual(season);
     expect(sent(fetchImpl)).toEqual({
-      path: `${STAFFING}/seasons/s%2F1`,
+      path: `${STAFFING}/seasons/s%2F1?month=2026-12`,
       method: "GET",
       body: undefined,
       live: "1",
     });
-    expect(await client.saveSeason("s/1", [{ area, weekday: 5, blocks }])).toBeUndefined();
+    expect(
+      await client.saveSeason("s/1", [{ area, weekday: 5, blocks }], "2026-12"),
+    ).toBeUndefined();
     expect(sent(fetchImpl, 1)).toEqual({
-      path: `${STAFFING}/seasons/s%2F1`,
+      path: `${STAFFING}/seasons/s%2F1?month=2026-12`,
       method: "PUT",
       body: { edits: [{ area, weekday: 5, blocks }] },
       live: null,
@@ -194,7 +196,7 @@ describe("StaffingApi", () => {
       }),
     } as unknown as Response);
     const client = api(fetchImpl);
-    await expect(client.saveSeason("s", [])).rejects.toEqual({
+    await expect(client.saveSeason("s", [], "2026-12")).rejects.toEqual({
       code: "staffing.invalid",
       params: { field: "edits.0.blocks.0.headcount" },
       status: 400,

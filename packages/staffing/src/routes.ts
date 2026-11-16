@@ -26,6 +26,7 @@ import { parseArea, parseBlocks, record, uuid } from "./paint-rules.js";
 import {
   listStaffingAreas,
   readSeasonStaffing,
+  readSeasonStaffingContext,
   readSpecialDayStaffing,
   saveSeasonStaffing,
   saveSpecialDayStaffing,
@@ -125,13 +126,19 @@ function editList(
 const SEASON_EDIT_KEYS = new Set(["area", "weekday", "blocks"]);
 const SPECIAL_DAY_EDIT_KEYS = new Set(["area", "dateId", "blocks"]);
 
-function seasonEdits(body: unknown, cutover: string): SeasonStaffingEdit[] {
+function seasonEdits(
+  body: unknown,
+  context: Awaited<ReturnType<typeof readSeasonStaffingContext>>,
+): SeasonStaffingEdit[] {
   return editList(body, SEASON_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
     const { weekday } = edit;
     if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
       throw invalid(`${field}.weekday`);
-    return { area, weekday, blocks: parseBlocks(edit.blocks, `${field}.blocks`, cutover) };
+    const starts = context.weekdayCutovers[weekday]!;
+    const blocks = parseBlocks(edit.blocks, `${field}.blocks`, starts[0] ?? context.cutover);
+    for (const start of starts.slice(1)) parseBlocks(edit.blocks, `${field}.blocks`, start);
+    return { area, weekday, blocks };
   });
 }
 
@@ -263,7 +270,11 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
-        return c.json(await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, id)));
+        const month = parseCalendarMonth(c.req.query("month"));
+        if (month === null) throw new AppError("management.request_invalid", { field: "month" });
+        return c.json(
+          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, id, month)),
+        );
       }),
     );
 
@@ -272,8 +283,14 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
         const body = await readRawJsonBody<unknown>(c);
+        const month = parseCalendarMonth(c.req.query("month"));
+        if (month === null) throw new AppError("management.request_invalid", { field: "month" });
         await gated(sessionId, async (tx) =>
-          saveSeasonStaffing(tx, id, seasonEdits(body, await cutoverOf(tx))),
+          saveSeasonStaffing(
+            tx,
+            id,
+            seasonEdits(body, await readSeasonStaffingContext(tx, id, month)),
+          ),
         );
         return c.body(null, 204);
       }),

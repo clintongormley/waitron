@@ -156,6 +156,8 @@ To put someone on the rota and the sign-in list of devices that take their job, 
 the person's details. If someone changes them while you edit, press **Reload** to see their latest
 roles before choosing again.
 
+In **Calendar**, choose **Staffing** and open the season from the month you want to plan. Check any line naming a change to the business-day start. Correct marked blocks before saving so they fit the starts used during that season.
+
 ## Find a device profile {#device-profiles}
 
 In **Hardware**, open **Device profiles**. Search for the profile you need, then select its row to

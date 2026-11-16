@@ -187,13 +187,20 @@ export class StaffingApi {
     );
   }
 
-  readSeason(seasonId: string): Promise<SeasonStaffing> {
-    return this.request(seasonPath(seasonId), "GET", undefined, { passive: true });
+  readSeason(seasonId: string, month: string): Promise<SeasonStaffing> {
+    return this.request(
+      `${seasonPath(seasonId)}?month=${encodeURIComponent(month)}`,
+      "GET",
+      undefined,
+      { passive: true },
+    );
   }
 
   /** Replaces only the (area, weekday) pairs `edits` names. */
-  saveSeason(seasonId: string, edits: readonly SeasonStaffingEdit[]): Promise<void> {
-    return this.request(seasonPath(seasonId), "PUT", { edits });
+  saveSeason(seasonId: string, edits: readonly SeasonStaffingEdit[], month: string): Promise<void> {
+    return this.request(`${seasonPath(seasonId)}?month=${encodeURIComponent(month)}`, "PUT", {
+      edits,
+    });
   }
 
   readSpecialDay(specialDayId: string): Promise<SpecialDayStaffing> {

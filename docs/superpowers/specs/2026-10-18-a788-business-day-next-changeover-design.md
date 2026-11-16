@@ -378,6 +378,8 @@ can have been recorded after 03:00 yet.)
   of A788; it is backlog entry A851, because it shows wrongly as soon as any venue changes
   its start.
 
+_2026-11-16: the season staffing correction follows the [dated-season plan](../plans/2026-11-16-d-a851-staffing-day-start.md); A708 retains the special-day read and save boundary._
+
 ### Till, reports and fiscal records
 
 - **Fiscal records.** `grep -rln "businessDay\|dayCutover\|cutover"` over

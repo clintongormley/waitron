@@ -167,6 +167,8 @@ Para incluir a alguien en el cuadrante y en la lista de acceso de los dispositiv
 separado de los datos de la persona. Si alguien las cambia mientras editas, pulsa **Recargar** para
 ver sus puestos actuales antes de elegir de nuevo.
 
+En **Calendario**, elige **Personal** y abre la temporada desde el mes que quieres planificar. Revisa cualquier aviso de cambio del inicio del día de trabajo. Corrige los bloques marcados antes de guardar para que encajen con los inicios de día de esa temporada.
+
 ## Buscar un perfil de dispositivo {#device-profiles}
 
 En **Hardware**, abre **Perfiles de dispositivo**. Busca el perfil que necesitas y selecciona su

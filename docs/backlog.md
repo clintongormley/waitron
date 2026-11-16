@@ -1198,7 +1198,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 
-- **Staffing reads the day start in force on each date** (bundle of 3, 1 important, size M, needs the owner). Holds A851, A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
+- **Staffing reads the day start in force on each date** (bundle of 2, size M, needs the owner). Holds A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
 
 - **Staffing month day box** (bundle of 2, size M, waits for another entry). Holds A763. [Detail](backlog/workforce.md#bundle-staffing-month-day-box)
 

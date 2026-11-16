@@ -159,7 +159,7 @@ export {
   STARTER_SEASON_NAMES,
   STARTER_ZONE_NAMES,
 } from "./starter-content.js";
-export type { Season } from "./season-rules.js";
+export { seasonOn, type Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";
 export { readCalendarMonthPlan } from "./opening-hours-calendar.js";
 
