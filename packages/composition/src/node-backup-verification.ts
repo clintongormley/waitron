@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import type { BackupQuery, BackupRow } from "@waitron/store";
 import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import { verifyBackupMembershipIdentity } from "@waitron/db";
 import { loadKeyRing, openNodeSigningKeyRow, resolveBackupKeyInputs } from "@waitron/credentials";
@@ -23,19 +23,6 @@ async function holdsAny(query: BackupVerificationContext["before"]): Promise<boo
   return false;
 }
 
-function openCopy(bytes: Uint8Array | null): DatabaseSync | null {
-  if (bytes === null) return null;
-  const database = new DatabaseSync(":memory:");
-  try {
-    database.deserialize(bytes);
-    database.prepare("select count(*) from sqlite_schema").get();
-    return database;
-  } catch {
-    database.close();
-    return null;
-  }
-}
-
 const SOURCE_ROW = {
   node_mode: "select node_id from node_mode where node_id=?",
   node_recovery_key: "select node_id from node_recovery_key where node_id=?",
@@ -43,12 +30,19 @@ const SOURCE_ROW = {
     "select ciphertext, iv, auth_tag, key_version from node_signing_key where node_id=?",
 } as const;
 
-function sourceRow(copy: DatabaseSync, table: keyof typeof SOURCE_ROW, nodeId: string) {
-  const present = copy
-    .prepare("select 1 from sqlite_schema where type='table' and name=?")
-    .get(table);
-  if (present === undefined) return undefined;
-  return copy.prepare(SOURCE_ROW[table]).get(nodeId);
+async function sourceRow(
+  copy: BackupQuery,
+  table: keyof typeof SOURCE_ROW,
+  nodeId: string,
+): Promise<BackupRow | undefined> {
+  let present = false;
+  for await (const _row of copy.rows("select 1 from sqlite_schema where type='table' and name=?", [
+    table,
+  ]))
+    present = true;
+  if (!present) return undefined;
+  for await (const row of copy.rows(SOURCE_ROW[table], [nodeId])) return row;
+  return undefined;
 }
 
 function codeOf(error: unknown): unknown {
@@ -56,18 +50,26 @@ function codeOf(error: unknown): unknown {
 }
 
 /** Opens the source's sealed key with the archive's own key ring; `null` when the copy holds none. */
-function sourcePrivateKey(
-  copy: DatabaseSync,
+async function sourcePrivateKey(
+  copy: BackupQuery,
   keyInputs: Readonly<Record<string, string>>,
   nodeId: string,
-): string | null | "invalid" {
-  const row = sourceRow(copy, "node_signing_key", nodeId);
+): Promise<string | null | "invalid"> {
+  const row = await sourceRow(copy, "node_signing_key", nodeId);
   if (row === undefined) return null;
+  if (
+    typeof row.key_version === "bigint" &&
+    (row.key_version > BigInt(Number.MAX_SAFE_INTEGER) ||
+      row.key_version < BigInt(Number.MIN_SAFE_INTEGER))
+  )
+    throw new RangeError("Node signing key version is outside the safe integer range");
+  const keyVersion =
+    typeof row.key_version === "bigint" ? Number(row.key_version) : row.key_version;
   if (
     !(row.ciphertext instanceof Uint8Array) ||
     !(row.iv instanceof Uint8Array) ||
     !(row.auth_tag instanceof Uint8Array) ||
-    typeof row.key_version !== "number"
+    typeof keyVersion !== "number"
   )
     return "invalid";
   try {
@@ -76,7 +78,7 @@ function sourcePrivateKey(
         ciphertext: row.ciphertext,
         iv: row.iv,
         authTag: row.auth_tag,
-        keyVersion: row.key_version,
+        keyVersion,
       },
       loadKeyRing(keyInputs),
       nodeId,
@@ -116,38 +118,34 @@ export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
     if (secretsEnv === null || tradingEnv === null)
       throw new BackupCheckUnavailable("secret_unavailable");
     const keyInputs = resolveBackupKeyInputs({ secretsEnv, tradingEnv, backupEnv });
-    const copy = openCopy(await context.entries.read("node.dump"));
-    try {
-      const data: BackupModuleStatus =
-        copy === null || (await holdsAny(context.before)) || (await holdsAny(context.after))
-          ? "invalid"
-          : "passed";
-      let secret: BackupModuleStatus = "invalid";
-      if (copy !== null) {
-        const nodeId = context.source.nodeId;
-        const privateKey = sourcePrivateKey(copy, keyInputs, nodeId);
-        if (privateKey !== "invalid")
-          secret = (await verifyBackupMembershipIdentity({
-            before: context.before,
-            after: context.after,
-            nodeId,
-            privateKey,
-            nodeCopyHoldsSource:
-              sourceRow(copy, "node_mode", nodeId) !== undefined ||
-              sourceRow(copy, "node_recovery_key", nodeId) !== undefined,
-          }))
-            ? "passed"
-            : "invalid";
-      }
-      return {
-        status: data === "invalid" || secret === "invalid" ? "invalid" : "passed",
-        checks: [
-          { code: "data", status: data },
-          { code: "secret", status: secret },
-        ],
-      };
-    } finally {
-      copy?.close();
+    const copy = context.nodeCopy ?? null;
+    const data: BackupModuleStatus =
+      copy === null || (await holdsAny(context.before)) || (await holdsAny(context.after))
+        ? "invalid"
+        : "passed";
+    let secret: BackupModuleStatus = "invalid";
+    if (copy !== null) {
+      const nodeId = context.source.nodeId;
+      const privateKey = await sourcePrivateKey(copy, keyInputs, nodeId);
+      if (privateKey !== "invalid")
+        secret = (await verifyBackupMembershipIdentity({
+          before: context.before,
+          after: context.after,
+          nodeId,
+          privateKey,
+          nodeCopyHoldsSource:
+            (await sourceRow(copy, "node_mode", nodeId)) !== undefined ||
+            (await sourceRow(copy, "node_recovery_key", nodeId)) !== undefined,
+        }))
+          ? "passed"
+          : "invalid";
     }
+    return {
+      status: data === "invalid" || secret === "invalid" ? "invalid" : "passed",
+      checks: [
+        { code: "data", status: data },
+        { code: "secret", status: secret },
+      ],
+    };
   },
 };

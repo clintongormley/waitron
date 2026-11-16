@@ -1,13 +1,12 @@
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { backupVerificationInventory } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { deploymentEnvironmentFor } from "@waitron/db";
 import { BackupVerificationUnsupported, type WaitronModule } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { openBackupQuery, type BackupQuery, type BackupRow, NODE_FILE } from "@waitron/store";
+import { type BackupQuery, type BackupRow } from "@waitron/store";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { BackupVerificationTarget } from "./backup-verification-protocol.js";
@@ -79,8 +78,7 @@ export async function checkBackupVerificationCompatibility(input: {
   before: BackupQuery;
   entries: readonly ArchiveEntry[];
   migrationsRoot?: string | null;
-  /** Where the node copy is opened from; the verifier may write only under its own scratch. */
-  scratchDir: string;
+  nodeCopy?: BackupQuery | null;
 }): Promise<Verdict> {
   try {
     return await reconcile(input);
@@ -185,28 +183,12 @@ async function reconcile(
   const nodeDump = entries.get("node.dump");
   if (nodeDump === undefined)
     return await reconcileModules(input, actual, inventory, entries, tables, before, null);
-  const scratch = await mkdtemp(join(input.scratchDir, "waitron-node-copy-"));
-  try {
-    const path = join(scratch, NODE_FILE);
-    await writeFile(path, nodeDump.bytes, { mode: 0o600 });
-    let opened: Awaited<ReturnType<typeof openBackupQuery>>;
-    try {
-      opened = await openBackupQuery(path);
-    } catch {
-      refuse("invalid");
-    }
-    try {
-      const nodeTables = await schemaOf(opened.query, nodeOwned, nodeJournals);
-      return await reconcileModules(input, actual, inventory, entries, tables, before, {
-        query: opened.query,
-        tables: nodeTables,
-      });
-    } finally {
-      await opened.close();
-    }
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
+  if (input.nodeCopy == null) refuse("invalid");
+  const nodeTables = await schemaOf(input.nodeCopy, nodeOwned, nodeJournals);
+  return await reconcileModules(input, actual, inventory, entries, tables, before, {
+    query: input.nodeCopy,
+    tables: nodeTables,
+  });
 }
 
 /** Each table of one copy by name; any table neither owned, a journal nor engine metadata is

@@ -239,6 +239,9 @@ export async function verifyBackupArtifact(
       { name: "node.dump", bytes: validated.nodeDump },
       ...validated.secretEntries,
     ];
+    const openedNode = await openBackupQuery(validated.nodeDump).catch(() => null);
+    if (openedNode !== null) close.push(openedNode.close);
+    const nodeCopy = openedNode?.query ?? null;
     const compatibility = await checkBackupVerificationCompatibility({
       manifest: validated.manifest,
       target,
@@ -246,7 +249,7 @@ export async function verifyBackupArtifact(
       before: before.query,
       entries: moduleEntries,
       migrationsRoot: deps.migrationsRoot,
-      scratchDir: scratch,
+      nodeCopy,
     });
     if (compatibility !== "passed")
       refuse(
@@ -318,6 +321,7 @@ export async function verifyBackupArtifact(
           } else {
             const allowed = new Set(verification.entries.map((e) => e.name));
             raw = await verification.verifyRestoredData({
+              ...(allowed.has("node.dump") ? { nodeCopy } : {}),
               before: before.query,
               after: after.query,
               entries: Object.freeze({

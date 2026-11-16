@@ -28,6 +28,8 @@ export interface BackupEntries {
 }
 
 export interface BackupVerificationContext {
+  /** Borrowed from the verifier only for owners declaring node.dump; absent and null mean unavailable. */
+  readonly nodeCopy?: BackupQuery | null;
   readonly before: BackupQuery;
   readonly after: BackupQuery;
   readonly entries: BackupEntries;
