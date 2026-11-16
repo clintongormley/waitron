@@ -80,7 +80,7 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    read-only-exemptions}.test.ts` and `S/testing/place-copy-box.ts`. Other `readOfferSettings`
    readers (`S/{adopt,spare-settings-api}.test.ts`) consume settings digests; retain those checks.
    In `D/i18n/codes.ts`, give `no_room_at_offer` EN/ES words: the spare could not confirm enough
-   room for two whole copies plus the startup reserve, this attempt ended while the source keeps
+   room for two whole copies plus space kept free so the box can start, this attempt ended while the source keeps
    selling, choose Stop, make room on the spare, then hand over again. Broaden `key_ring_mismatch`
    to missing **or different** keys; choose Stop and rejoin
    before handing over, without claiming either box's selling state. Keep `no_room_to_place` confined
