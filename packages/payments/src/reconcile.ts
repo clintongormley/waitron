@@ -133,11 +133,8 @@ export interface PaymentReconcileResult {
   /** Orphans actually reversed this sweep. */
   remediated: number;
   /**
-   * Orphans this sweep claimed and then could not reverse, with each reason. No later sweep
-   * retries a claimed orphan's reversal (its marker is permanent), and the
-   * `payment.reconcile_remediation_failed` incident can be swallowed by an earlier still-open one on
-   * the same `(source, device, code, sale_id)` key — so a failure not recorded here can be lost for
-   * good.
+   * Reversals this sweep could not complete. The aggregate incident may already be open,
+   * so callers retain these per-payment reasons alongside it.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
   remediationUnconfirmed?: string[];
@@ -269,8 +266,7 @@ const SEVERITY = {
  * writes incidents and markers, and the reversals run outside every transaction (each is a network
  * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty
  * report is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a
- * crash between the processor refunding and us recording it leaves an under-remediated orphan,
- * never a double refund.
+ * provider-specific recovery can reuse that claim after a lost reply.
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
@@ -358,13 +354,10 @@ export async function reconcilePayments(
     //   - `stateNotCaptured`: a `settled` payment has no reversal path, so claiming it would stamp a
     //     permanent marker for a reversal that must fail. Keep this gate until it has one.
     //   - `alreadyClaimed`: an earlier sweep, or a concurrent one that won the race, owns the
-    //     reversal. It precedes the drift gate because that reversal has already happened or already
-    //     failed for good, so settling the drift cannot unblock it.
+    //     reversal. Provider-specific recovery handles the claim outside this period audit.
     //   - held: a payment with a hold waits for a person to record its outcome, whatever this
     //     sweep's report says.
-    //   - `amountDrifted`: the reversal sends no amount, so the processor would refund its figure
-    //     while we record ours. Sending our amount is no fix: where the processor's charge is the
-    //     smaller, the refund is refused after the permanent marker is stamped.
+    //   - `amountDrifted`: local and provider amounts must agree before claiming the reversal.
     const remediation = new Map<string, OrphanRemediation>();
     const held = new Set<string>();
     let wroteHold = false;

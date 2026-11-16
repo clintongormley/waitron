@@ -92,7 +92,7 @@ describe("stripeReportClient: Stripe's fee never makes a payment held", () => {
     expect(result.drift).toEqual([]);
     expect(result.orphan.map((m) => m.settledAmount)).toEqual([decimal("10.00")]);
     expect(result.remediated).toBe(1);
-    expect(refunder.lastRefund?.paymentIntentId).toBe("pi_fee");
+    expect(refunder.createRefundCalls[0]?.paymentIntentId).toBe("pi_fee");
   });
 
   it("holds an orphan whose GROSS amount differs, so the case above is not passing by default", async () => {
@@ -104,6 +104,6 @@ describe("stripeReportClient: Stripe's fee never makes a payment held", () => {
     ).reconcile(PERIOD, NOW);
     expect(result.drift.map((m) => m.settledAmount)).toEqual([decimal("12.50")]);
     expect(result.remediated).toBe(0);
-    expect(refunder.lastRefund).toBeUndefined();
+    expect(refunder.createRefundCalls).toHaveLength(0);
   });
 });

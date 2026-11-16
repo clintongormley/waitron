@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertInitiated } from "@waitron/payments";
+import {
+  PAYMENTS_MIGRATIONS,
+  insertCapturedPayment,
+  insertInitiated,
+  listAbandonedRefundOutcomes,
+  markReconcileRemediated,
+} from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
@@ -186,7 +192,7 @@ describe("StripeReconciler", () => {
     expect(result.remediated).toBe(1);
     expect(result.remediationFailures).toEqual([]);
     // The stored ref was `cs_orphan`; the refund went to the PaymentIntent behind it.
-    expect(refunder.lastRefund?.paymentIntentId).toBe("pi_orphan");
+    expect(refunder.createRefundCalls[0]?.paymentIntentId).toBe("pi_orphan");
   });
 
   it("auto-reverses a terminal orphan against its stored payment intent, unresolved", async () => {
@@ -214,11 +220,175 @@ describe("StripeReconciler", () => {
     const result = await reconciler(client, refunder).reconcile(PERIOD, NOW);
     expect(result.remediated).toBe(1);
     expect(result.remediationFailures).toEqual([]);
-    expect(refunder.lastRefund?.paymentIntentId).toBe("pi_terminal_orphan");
+    expect(refunder.createRefundCalls[0]?.paymentIntentId).toBe("pi_terminal_orphan");
+  });
+
+  it("commits a stable reversal key before sending the captured amount", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "durable", externalRef: "pi_durable" });
+    const client = new FakeStripeReport();
+    const refunder = new FakeStripe();
+    const send = refunder.createRefund.bind(refunder);
+    let observed = false;
+    vi.spyOn(refunder, "createRefund").mockImplementation(async (request) => {
+      const [claim] = await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "stripe"),
+      );
+      expect(claim?.claimedAt).toBe(NOW.toISOString());
+      expect(request).toEqual({
+        paymentIntentId: "pi_durable",
+        amount: "10.00",
+        idempotencyKey: `sr_${claim!.paymentId}`,
+        metadata: { reconcile_payment_id: claim!.paymentId },
+      });
+      observed = true;
+      return send(request);
+    });
+    const result = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(result.remediated).toBe(1);
+    expect(observed).toBe(true);
+    const refunds = await suite.db.execute(
+      "select state, provider_refund_ref from payment_refunds",
+    );
+    expect(refunds.rows).toEqual([{ state: "succeeded", provider_refund_ref: expect.any(String) }]);
+  });
+
+  it("recovers a lost reply with a fresh reconciler outside the original period", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "lost", externalRef: "pi_lost" });
+    const client = new FakeStripeReport();
+    const refunder = new FakeStripe();
+    refunder.scriptNextCreateRefund({ status: "succeeded", answer: { httpStatus: null } });
+    const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(first.remediated).toBe(0);
+    expect(first.remediationUnconfirmed).toEqual(["lost"]);
+    expect(first.resweepAfter).toEqual(new Date("2026-07-25T13:00:00Z"));
+    const later = { from: new Date("2026-07-26"), to: new Date("2026-07-27") };
+    const recovered = await reconciler(client, refunder).reconcile(later, new Date("2026-07-27"));
+    expect(recovered.remediated).toBe(1);
+    expect(recovered.resweepAfter).toBeUndefined();
+    expect(refunder.createRefundCalls).toHaveLength(1);
+    const refunds = await suite.db.execute(
+      "select state, provider_refund_ref from payment_refunds",
+    );
+    expect(refunds.rows).toEqual([{ state: "succeeded", provider_refund_ref: expect.any(String) }]);
+    await reconciler(client, refunder).reconcile(later, new Date("2026-07-28"));
+    expect((await suite.db.execute("select id from payment_refunds")).rows).toHaveLength(1);
+  });
+
+  it.each(["pending", "failed", "canceled", "unknown"])(
+    "recovers a saved %s outcome without another send",
+    async (status) => {
+      const seeded = await seedWorkingOrder(suite.db, freshNif());
+      await abandonedOrphan({ ...seeded, paymentRef: "status", externalRef: "pi_status" });
+      const client = new FakeStripeReport();
+      const refunder = new FakeStripe();
+      refunder.scriptNextCreateRefund({ status });
+      const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+      if (status === "failed" || status === "canceled") {
+        expect(first.remediationFailures).toHaveLength(1);
+        expect((await suite.db.execute("select state from payment_refunds")).rows).toEqual([
+          { state: "failed" },
+        ]);
+        expect(
+          (
+            await suite.db.execute(
+              "select code from incidents where code = 'payment.reconcile_remediation_failed'",
+            )
+          ).rows,
+        ).toHaveLength(1);
+      } else {
+        expect(first.remediationUnconfirmed).toEqual(["status"]);
+        const [refund] = await refunder.listRefunds("pi_status");
+        refunder.setRefundStatus(refund!.id, "succeeded");
+      }
+      const recovered = await reconciler(client, refunder).reconcile(
+        PERIOD,
+        new Date("2026-07-25T13:00:00Z"),
+      );
+      expect(recovered.remediated).toBe(status === "failed" || status === "canceled" ? 0 : 1);
+      expect(recovered.remediationFailures).toEqual([]);
+      expect(recovered.resweepAfter).toBeUndefined();
+      expect(refunder.createRefundCalls).toHaveLength(1);
+      expect((await suite.db.execute("select id from payment_refunds")).rows).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    { now: "2026-07-25T13:00:00Z", sends: 2, remediated: 1 },
+    { now: "2026-07-26T12:00:00Z", sends: 1, remediated: 0 },
+    { now: "2026-07-25T11:59:59Z", sends: 1, remediated: 0 },
+  ])("only resends the saved key within its window ($now)", async ({ now, sends, remediated }) => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "retry", externalRef: "pi_retry" });
+    const client = new FakeStripeReport();
+    const refunder = new FakeStripe();
+    refunder.scriptNextCreateRefund({ httpStatus: 500 });
+    const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(first.remediationUnconfirmed).toEqual(["retry"]);
+    const later = await reconciler(client, refunder).reconcile(PERIOD, new Date(now));
+    expect(later.remediated).toBe(remediated);
+    expect(later.resweepAfter).toBeUndefined();
+    expect(refunder.createRefundCalls).toHaveLength(sends);
+    expect(new Set(refunder.createRefundCalls.map((r) => r.idempotencyKey)).size).toBe(1);
+    if (!remediated) expect(later.remediationUnconfirmed).toEqual(["retry"]);
+  });
+
+  it.each(["unreachable", "unmatched", "mixed"])(
+    "keeps %s evidence uncertain without sending",
+    async (evidence) => {
+      const seeded = await seedWorkingOrder(suite.db, freshNif());
+      await abandonedOrphan({ ...seeded, paymentRef: "evidence", externalRef: "pi_evidence" });
+      await withTransaction(suite.db, (tx) =>
+        markReconcileRemediated(tx, { provider: "stripe", paymentRef: "evidence", at: NOW }),
+      );
+      const [claim] = await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "stripe"),
+      );
+      const refunder = new FakeStripe();
+      if (evidence === "unreachable") refunder.listRefundsUnreachableNext();
+      else {
+        await refunder.createRefund({
+          paymentIntentId: "pi_evidence",
+          amount: decimal("1"),
+          idempotencyKey: "outside",
+          metadata: {},
+        });
+        if (evidence === "mixed")
+          await refunder.createRefund({
+            paymentIntentId: "pi_evidence",
+            amount: decimal("10"),
+            idempotencyKey: "matching",
+            metadata: { reconcile_payment_id: claim!.paymentId },
+          });
+      }
+      const sendsBefore = refunder.createRefundCalls.length;
+      const result = await reconciler(new FakeStripeReport(), refunder).reconcile(PERIOD, NOW);
+      expect(result.remediationUnconfirmed).toEqual(["evidence"]);
+      expect(result.remediated).toBe(0);
+      expect(result.resweepAfter).toBeUndefined();
+      expect(refunder.createRefundCalls).toHaveLength(sendsBefore);
+      expect((await suite.db.execute("select id from payment_refunds")).rows).toEqual([]);
+    },
+  );
+
+  it("records a documented refusal once and reports its failure", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "refused", externalRef: "pi_refused" });
+    const refunder = new FakeStripe();
+    refunder.scriptNextCreateRefund({ httpStatus: 400 });
+    const client = new FakeStripeReport();
+    const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(first.remediationFailures).toHaveLength(1);
+    const second = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(second.remediationFailures).toEqual([]);
+    expect(refunder.createRefundCalls).toHaveLength(1);
+    expect((await suite.db.execute("select state from payment_refunds")).rows).toEqual([
+      { state: "failed" },
+    ]);
   });
 
   it("fails one hosted orphan's reversal when its session was never paid, and never retries it", async () => {
-    // The marker is stamped before the attempt, so a failed reversal is never attempted again.
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
       deviceId: seeded.deviceId,
@@ -235,8 +405,7 @@ describe("StripeReconciler", () => {
     expect(result.remediationFailures).toEqual([
       { paymentRef: "ref-unpaid-orphan", reason: "payment.not_found" },
     ]);
-    expect(refunder.lastRefund).toBeUndefined(); // no money moved
-    // The marker is permanent by design: the next sweep still SEES the orphan but claims nothing.
+    expect(refunder.createRefundCalls).toHaveLength(0); // no money moved
     const again = await sweep.reconcile(PERIOD, NOW);
     expect(again.orphan).toHaveLength(1);
     expect(again.remediated).toBe(0);

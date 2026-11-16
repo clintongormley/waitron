@@ -42,9 +42,10 @@ vi.mock("./stripe-account.js", async (original) => {
         paymentIntentForSession: async () => null,
       },
       refund: {
-        refund: async () => {
+        createRefund: async () => {
           throw new Error("unexpected refund");
         },
+        listRefunds: async () => [],
       },
     }),
   };

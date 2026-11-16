@@ -1,12 +1,20 @@
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import { DEFAULT_SETTLEMENT_LAG_MS, reconcilePayments } from "@waitron/payments";
+import { AppError, decimal, jobOrigin } from "@waitron/shared";
+import {
+  DEFAULT_SETTLEMENT_LAG_MS,
+  reconcilePayments,
+  listAbandonedRefundOutcomes,
+  getPaymentByRef,
+  recordRefund,
+  recordFailedRefund,
+} from "@waitron/payments";
 import type { PaymentReconcileResult, PaymentReconciler, ReconcilePeriod } from "@waitron/payments";
 import type { StripeReportClient } from "./report-client.js";
 import { stripeSettlementReport } from "./report-source.js";
-import { reverseViaStripe } from "./reverse.js";
-import type { StripeRefunder } from "./reverse.js";
+import { lookupStripeRefund, sendStripeRefund } from "./refund.js";
+import type { StripeRefundClient } from "./refund.js";
 
 const PROVIDER = "stripe";
 
@@ -18,7 +26,7 @@ const SESSION_PREFIX = "cs_";
  * together. */
 export interface StripeReconcileAccount {
   report: StripeReportClient;
-  refund: StripeRefunder;
+  refund: StripeRefundClient;
 }
 
 export interface StripeReconcilerOptions {
@@ -37,12 +45,37 @@ export class StripeReconciler implements PaymentReconciler {
   async reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult> {
     const account = await this.opts.resolveAccount();
     const settlementLagMs = this.opts.settlementLagMs ?? DEFAULT_SETTLEMENT_LAG_MS;
-    return reconcilePayments(
+    const marked = await withTransaction(this.opts.db, (tx) =>
+      listAbandonedRefundOutcomes(tx, PROVIDER),
+    );
+    let recovered = 0;
+    const unconfirmed: string[] = [];
+    const failures: { paymentRef: string; amount: string; reason: string }[] = [];
+    for (const row of marked) {
+      if (row.outcome === "confirmed" || row.hasFailedRefund) continue;
+      try {
+        if ((await this.reverse(account, row.paymentRef, now)) === "unconfirmed")
+          unconfirmed.push(row.paymentRef);
+        else recovered++;
+      } catch (error) {
+        failures.push({
+          paymentRef: row.paymentRef,
+          amount: row.amount,
+          reason: error instanceof AppError ? error.code : String(error),
+        });
+      }
+    }
+    let retry = false;
+    const result = await reconcilePayments(
       {
         db: this.opts.db,
         provider: PROVIDER,
         report: stripeSettlementReport(account.report, settlementLagMs),
-        reverse: (paymentRef) => this.reverse(account, paymentRef),
+        reverse: async (paymentRef) => {
+          const answer = await this.reverse(account, paymentRef, now);
+          if (answer === "unconfirmed") retry = true;
+          return answer;
+        },
         incidents: recordIncidentOnce,
         heldAlerts: {
           raise: recordIncidentOnce,
@@ -54,23 +87,102 @@ export class StripeReconciler implements PaymentReconciler {
       period,
       now,
     );
+    result.remediated += recovered;
+    result.remediationFailures.push(
+      ...failures.map(({ paymentRef, reason }) => ({ paymentRef, reason })),
+    );
+    if (unconfirmed.length) (result.remediationUnconfirmed ??= []).push(...unconfirmed);
+    if (
+      failures.length &&
+      (await withTransaction(this.opts.db, (tx) =>
+        recordIncidentOnce(tx, {
+          origin: jobOrigin("payment_check"),
+          error: new AppError("payment.reconcile_remediation_failed", {
+            count: failures.length,
+            payments: failures,
+          }),
+          severity: "error",
+          detectedAt: now,
+        }),
+      ))
+    )
+      result.incidentsRaised++;
+    if (retry) result.resweepAfter = new Date(now.getTime() + 3_600_000);
+    return result;
   }
 
-  /** A throw from here is caught by `reconcilePayments` and reported as a remediation failure: an
-   * unrefunded orphan with an open incident is the safe failure, a double refund is not. */
-  private async reverse(account: StripeReconcileAccount, paymentRef: string): Promise<void> {
-    await reverseViaStripe(
-      this.opts.db,
-      account.refund,
-      PROVIDER,
-      paymentRef,
-      "refund",
-      undefined,
-      {
-        resolveProcessorRef: (externalRef) =>
-          this.processorRef(account.report, externalRef, paymentRef),
-      },
-    );
+  private async reverse(
+    account: StripeReconcileAccount,
+    paymentRef: string,
+    now: Date,
+  ): Promise<void | "unconfirmed"> {
+    const row = (
+      await withTransaction(this.opts.db, (tx) => listAbandonedRefundOutcomes(tx, PROVIDER))
+    ).find((row) => row.paymentRef === paymentRef)!;
+    const key = { provider: PROVIDER, paymentRef };
+    const finish = async (failed: boolean, providerRefundRef?: string) => {
+      // Provider calls run outside the write lock; a concurrent sweep may have recorded the result.
+      await withTransaction(this.opts.db, async (tx) => {
+        const current = (await listAbandonedRefundOutcomes(tx, PROVIDER)).find(
+          (r) => r.paymentId === row.paymentId,
+        )!;
+        const payment = await getPaymentByRef(tx, key);
+        if (payment?.state !== "captured" || current.hasFailedRefund) return;
+        if (failed) await recordFailedRefund(tx, { ...key, amount: decimal(row.amount) });
+        else
+          await recordRefund(tx, {
+            ...key,
+            amount: decimal(row.amount),
+            providerRefundRef,
+            at: now,
+          });
+      });
+    };
+    let processorRef;
+    try {
+      processorRef = await this.processorRef(account.report, row.externalRef!, paymentRef);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== "payment.not_found") return "unconfirmed";
+      await finish(true);
+      throw error;
+    }
+    const query = {
+      processorRef,
+      refundId: row.paymentId,
+      amount: decimal(row.amount),
+      sentAt: new Date(row.claimedAt!),
+      excludeRefs: [],
+    };
+    const held = await lookupStripeRefund(account.refund, query, "reconcile_payment_id", true);
+    let answer;
+    if (held.kind === "match") answer = { ...held, kind: "outcome" as const };
+    else {
+      const age = now.getTime() - Date.parse(row.claimedAt!);
+      if (held.kind !== "none" || age < 0 || age >= 86_400_000) return "unconfirmed";
+      answer = await sendStripeRefund(
+        account.refund,
+        {
+          processorRef,
+          refundId: row.paymentId,
+          amount: decimal(row.amount),
+          idempotencyKey: `sr_${row.paymentId}`,
+        },
+        "reconcile_payment_id",
+        true,
+      );
+    }
+    if (answer.kind === "outcome" && answer.outcome === "completed") {
+      await finish(false, answer.providerRefundRef);
+      return;
+    }
+    if (
+      (answer.kind === "outcome" && answer.outcome === "failed") ||
+      (answer.kind === "refused" && answer.documented)
+    ) {
+      await finish(true);
+      throw new Error("Stripe refund failed");
+    }
+    return "unconfirmed";
   }
 
   /** A session with no PaymentIntent was never paid, so there is nothing to refund: `not_found`
