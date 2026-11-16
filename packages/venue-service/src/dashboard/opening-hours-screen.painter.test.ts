@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
+import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
 import { drag, frame, grid, settle, withBar } from "../testing/season-painter-fixture.js";
-import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -63,7 +62,7 @@ class PainterApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureShellLinks(this);
+    this.releaseLinks = captureAppLinks(this);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
