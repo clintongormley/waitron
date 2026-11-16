@@ -2624,7 +2624,7 @@ or a transparent border also draws it inside `@media (forced-colors: active)`, w
 border or outline in system colours (`CanvasText`, `Canvas`, `Highlight`, `HighlightText`,
 `GrayText`). It uses `forced-color-adjust: none` only where the browser would otherwise repaint a
 colour it needs, and then also sets any focus ring on that element, which the theme would otherwise
-leave in the brand colour. Three do so today:
+leave in the brand colour. The shared controls use these marks:
 
 - the shared field box (`fieldStyles`) draws its bottom line in `CanvasText` on a `::after` laid
   over the box, so the box is the same height with the theme on or off; an invalid field's line is
@@ -2636,14 +2636,25 @@ leave in the brand colour. Three do so today:
   `HighlightText` thumb at the far end; a disabled switch, label included, is drawn in `GrayText` at
   full strength rather than faded, except that an ON switch's thumb stays `HighlightText`; and a keyboard-focused switch is ringed in
   `Highlight`;
-- `wt-tabs` underlines only the selected tab, in `Highlight`.
+- `wt-tabs` underlines only the selected tab, in `Highlight`;
+- `wt-help-switch` fills its pressed icon in `Highlight` with `HighlightText`;
+- `wt-combobox` keeps the field's `Highlight` outline while a non-search list is open,
+  and outlines the search box when focused;
+- `wt-colour-chooser` draws an inset ring over the checked tile, leaving its outer focus outline
+  separate, and preserves the actual colour of its swatches;
+- `wt-data-table` thickens a filtered heading's bottom line, outlines its focused search and puts
+  a side mark on a joined row's tree content. The mark does not position a cell, so the row's
+  activator still reaches across its other cells.
 
-The others do not yet, among them `wt-help-switch`'s pressed state, `wt-combobox`'s open-list
-line, `wt-colour-chooser`'s checked ring, `wt-data-table`, `wt-floor-map` and the floor plan's
-rings (`floor-ring.ts`); see
+Named exceptions: combobox and table hover fills gain no outline because it would imitate keyboard
+focus; the table's filter-count badge keeps its number without a new border because the thicker
+filtered-heading line already marks that state; the column being dragged gains no decoration
+because it still moves under the pointer (watcher clearance, 2026-11-16).
+
+The floor map and the floor plan's rings (`floor-ring.ts`) remain open; see
 [the backlog](../backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives).
 
-The tests for those three turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
+The sibling `*.forced-colors.test.ts` files turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
 which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks
 the theme took, and reads pixels from a real screenshot with `elementPixels`:
 `packages/ui-core/src/components/wt-input.forced-colors.test.ts`,

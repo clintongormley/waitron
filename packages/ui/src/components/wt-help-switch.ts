@@ -44,6 +44,15 @@ export class WtHelpSwitch extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
+
+      @media (forced-colors: active) {
+        button[aria-pressed="true"] .icon {
+          forced-color-adjust: none;
+          border-color: Highlight;
+          background: Highlight;
+          color: HighlightText;
+        }
+      }
     `,
   ];
 

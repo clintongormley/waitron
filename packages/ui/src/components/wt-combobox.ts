@@ -198,9 +198,20 @@ export class WtCombobox extends LitElement {
         box-shadow: var(--wt-shadow-1);
       }
 
-      /* Its own primary border is the focus marking; a ring outside it would draw a second line. */
       .search:focus-visible {
         outline: none;
+      }
+
+      @media (forced-colors: active) {
+        .field[data-open]:not([data-search], [data-invalid], [data-disabled]) {
+          outline: var(--wt-field-line-width-active) solid Highlight;
+          outline-offset: calc(-1 * var(--wt-field-line-width-active));
+        }
+
+        .search:focus-visible {
+          outline: var(--wt-field-line-width-active) solid Highlight;
+          outline-offset: var(--wt-focus-offset);
+        }
       }
 
       .search {
