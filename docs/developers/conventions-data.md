@@ -5524,8 +5524,8 @@ cover, and "never the newest" then means the newest archive the hold does not co
 covered one when it covers them all. A step that cannot be read offers nothing (logged
 `backup.clock_step_unreadable`). The backup run passes the hold it read for pruning; the free-space
 watch reads the step itself and offers nothing while the running backup duty's retention in days is
-unknown. The start on a full disk passes no hold, so it still deletes by stamp alone (backlog: "The
-start on a full disk deletes backups by stamp alone after a clock step").
+unknown. The start on a full disk computes the hold from the step and retention in days the
+[backup room note](#the-backup-room-note) carries, and holds nothing when the note carries no step.
 
 **Deleting.** Oldest first (ties by key), held archives last, one at a time. Before each, the file must still be a plain
 file and its folder's real path the one it was listed by, or it is skipped. Free space is read again
@@ -5678,17 +5678,21 @@ measurement), so the running server leaves that fact in `<state>/backup-room-not
 (`BACKUP_ROOM_NOTE_FILE`, `@waitron/provisioning`) for the start to use.
 
 **What it holds.** The node id, the installation start, `venue.db`'s device number, file number and
-birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), the backup folders on the venue folder's disk, and when it was written. Each folder
+birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), the backup folders on the venue folder's disk, when it was written, and, once the box has stepped its own clock, the latest step's
+`confirmedAt` with the running backups' retention in days (`clockStep`). Each folder
 is `{ destination, dir, configuredDir }`: `configuredDir` is the path backups are configured to
 write to, as given, and `dir` is the real path it led to when the note was written. No secret and
 no bucket.
 
-**Who writes it.** Only `BackupSupervisor.reload` (`apps/server/src/backup-supervisor.ts`). Nothing
-guards who writes it. Every reload deletes the note first (`:211`); a failure of that deletion is logged
-`backup.room_note_delete_failed`, not thrown. The note is written again only at the end of a reload
-that started the backup run (`#writeNote`, `:311`), when the installation start reads as a date,
-through a temporary file and a rename. A null or failed read, a failed write or a `stop()` landing
-meanwhile leaves no note.
+**Who writes it.** Only `BackupSupervisor` (`apps/server/src/backup-supervisor.ts`): `reload`, and
+`noteClockStep`, which boot registers as a clock-correction anchor so every step the box makes
+rewrites the note while backups run. Nothing guards who writes it. Every reload deletes the note
+first; a failure of that deletion is logged `backup.room_note_delete_failed`, not thrown. The note is
+written again only at the end of a reload that started the backup run (`#writeNote`), when the
+installation start reads as a date, through a temporary file and a rename. A null or failed
+installation-start read, a step read answering "setting" or failing, a failed write or a `stop()`
+landing meanwhile leaves no note. The supervisor's note deletions and writes run one at a time, so
+a step's rewrite cannot land after a reload deleted the note.
 
 **Who deletes it.** Every path that replaces or removes the live `venue.db`, before it does apart
 from the reset:

@@ -136,6 +136,18 @@ describe("writeBackupRoomNote", () => {
     expect(await read()).toEqual({ note: stored });
   });
 
+  it("writes the box's latest clock step with the age cap that bounds its hold, and reads it back", async () => {
+    const clockStep = {
+      confirmedAt: "2026-10-28T08:00:00.000Z",
+      stepMs: -400 * 86_400_000,
+      retainDays: 30,
+    };
+    await write({ clockStep });
+    const stored = JSON.parse(await readFile(notePath(), "utf8")) as BackupRoomNote;
+    expect(stored.clockStep).toEqual(clockStep);
+    expect(await read()).toEqual({ note: stored });
+  });
+
   it("an old note ignores the extra management key but still requires folders", async () => {
     await write();
     const stored = JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
@@ -410,6 +422,8 @@ describe("readBackupRoomNote", () => {
     writtenAt: "2026-10-29T12:00:00.000Z",
   });
 
+  const step = { confirmedAt: "2026-10-28T08:00:00.000Z", stepMs: -1, retainDays: 30 };
+
   it.each<[string, (note: Record<string, unknown>) => unknown]>([
     ["not JSON", () => "{"],
     ["not an object", () => [1]],
@@ -516,6 +530,28 @@ describe("readBackupRoomNote", () => {
         ...note,
         folders: [{ destination: "usb", dir: "/mnt//usb", configuredDir: "/media/usb" }],
       }),
+    ],
+    ["a clock step that is not an object", (note) => ({ ...note, clockStep: "today" })],
+    ["a clock step of null", (note) => ({ ...note, clockStep: null })],
+    [
+      "a clock step whose time is not toISOString's spelling",
+      (note) => ({ ...note, clockStep: { ...step, confirmedAt: "2026-10-28T08:00:00Z" } }),
+    ],
+    [
+      "a clock step whose size is not a number",
+      (note) => ({ ...note, clockStep: { ...step, stepMs: "-1" } }),
+    ],
+    [
+      "a clock step with no age cap",
+      (note) => ({ ...note, clockStep: { ...step, retainDays: undefined } }),
+    ],
+    [
+      "a clock step whose age cap is zero",
+      (note) => ({ ...note, clockStep: { ...step, retainDays: 0 } }),
+    ],
+    [
+      "a clock step whose age cap is a fraction",
+      (note) => ({ ...note, clockStep: { ...step, retainDays: 1.5 } }),
     ],
   ])("answers malformed for %s", async (_label, change) => {
     const body = change(valid());

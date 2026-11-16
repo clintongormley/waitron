@@ -65,6 +65,7 @@ async function archive(dir: string, at: Date, mib: number): Promise<string> {
 async function note(
   over: {
     folders?: { destination: string; dir: string; configuredDir: string }[];
+    clockStep?: { confirmedAt: string; stepMs: number; retainDays: number };
   } = {},
 ) {
   await writeBackupRoomNote({
@@ -74,6 +75,7 @@ async function note(
     installationStartedAt: STARTED,
 
     folders: over.folders ?? [{ destination: "usb", dir: usb, configuredDir: usb }],
+    clockStep: over.clockStep,
     now: () => NOW,
     log: () => undefined,
   });
@@ -195,6 +197,46 @@ describe("deleteOldBackupsAtStart", () => {
     });
     expect(skipped(log)).toEqual([]);
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  describe("after the box stepped its clock back 400 days a day ago", () => {
+    const HOUR = 3_600_000;
+    const STEP = 400 * 86_400_000;
+    const stepAt = new Date(NOW.getTime() - 24 * HOUR);
+    /** Two backups the clock stamped 400 days ahead before the step, and one since. */
+    async function stamped() {
+      const wrong = [
+        await archive(usb, new Date(stepAt.getTime() + STEP - 2 * HOUR), 8),
+        await archive(usb, new Date(stepAt.getTime() + STEP - HOUR), 8),
+      ];
+      const real = await archive(usb, new Date(NOW.getTime() - 6 * HOUR), 8);
+      return { wrong, real };
+    }
+
+    it("deletes the wrongly dated backups and keeps the real newest while the step is younger than the age cap", async () => {
+      await note({
+        clockStep: { confirmedAt: stepAt.toISOString(), stepMs: -STEP, retainDays: 2 },
+      });
+      const { real } = await stamped();
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      // 10 MiB free, the floor 24 MiB: two 8 MiB backups go.
+      expect(await readdir(usb)).toEqual([real]);
+    });
+
+    it("deletes by stamp alone once the step is as old as the note's age cap", async () => {
+      await note({
+        clockStep: { confirmedAt: stepAt.toISOString(), stepMs: -STEP, retainDays: 1 },
+      });
+      const { wrong } = await stamped();
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readdir(usb)).toEqual([wrong[1]]);
+    });
   });
 
   it("deletes on a box whose recovery key is only in backup.env", async () => {

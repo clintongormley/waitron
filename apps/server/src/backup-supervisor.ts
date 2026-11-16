@@ -25,7 +25,11 @@ import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
 import type { LoadFailure } from "./backup-settings-evidence.js";
 import { foldersOnDisk, type DeletableArchive } from "./backup-room.js";
-import { deleteBackupRoomNote, writeBackupRoomNote } from "./backup-room-note.js";
+import {
+  deleteBackupRoomNote,
+  writeBackupRoomNote,
+  type BackupRoomNoteClockStep,
+} from "./backup-room-note.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
   STATUS_READ_TIMEOUT_MS,
@@ -208,6 +212,7 @@ export class BackupSupervisor {
   #stopped = false;
   #sweep: SweepRecords = new Map();
   readonly #statusClients: StatusClients;
+  #noteTurns: Promise<void> = Promise.resolve();
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
@@ -226,7 +231,7 @@ export class BackupSupervisor {
     try {
       // Every reload clears it first, so a reload that throws or leaves backups off leaves none
       // unless the deletion itself fails, which is logged.
-      await this.#deleteNote();
+      await this.#inNoteTurn(() => this.#deleteNote());
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
@@ -347,28 +352,55 @@ export class BackupSupervisor {
       this.#worker.catch((err) =>
         this.#deps.log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
       );
-      await this.#writeNote(this.#backends);
+      await this.#inNoteTurn(() => this.#writeNote(backends));
     } finally {
       this.#reloading = false;
       this.#publish();
     }
   }
 
-  /** Leaves no note when the installation start is unknown or a `stop()` lands meanwhile. */
+  /** Rewrites the note with the box's latest clock step while backups run. Never throws. */
+  async noteClockStep(): Promise<void> {
+    await this.#inNoteTurn(async () => {
+      if (this.#worker === undefined || this.#stopped || this.#reloading) return;
+      await this.#writeNote(this.#backends);
+    });
+  }
+
+  /** Note deletes and writes run one at a time, so a step's rewrite cannot land after a reload
+   * deleted the note. `work` must never reject. */
+  #inNoteTurn(work: () => Promise<void>): Promise<void> {
+    this.#noteTurns = this.#noteTurns.then(work);
+    return this.#noteTurns;
+  }
+
+  /** Leaves no note when the installation start or the clock step is unknown, or a `stop()` lands
+   * meanwhile: the start must not delete by stamp alone with either unknown. */
   async #writeNote(backends: readonly StorageBackend[]): Promise<void> {
     const { nodeId, readInstallationStart } = this.#deps;
     if (readInstallationStart === undefined) return;
     let installationStartedAt: Date | null;
+    let clockStep: BackupRoomNoteClockStep | undefined;
     let folders;
     try {
       installationStartedAt = await readInstallationStart();
-      if (installationStartedAt === null) return;
+      if (installationStartedAt === null) return await this.#deleteNote();
+      const step = (await this.#deps.latestClockStep?.()) ?? null;
+      if (step === "setting") return await this.#deleteNote();
+      clockStep =
+        step === null
+          ? undefined
+          : {
+              confirmedAt: new Date(step.confirmedAt).toISOString(),
+              stepMs: step.stepMs,
+              retainDays: this.#config!.retainDays,
+            };
       ({ folders } = await foldersOnDisk(backends, this.#deps.venueDir, this.#deps.deviceOf));
     } catch (err) {
       this.#deps.log("warn", "backup.room_note_write_failed", { errno: errnoOf(err) ?? null });
-      return;
+      return await this.#deleteNote();
     }
-    if (this.#stopped) return;
+    if (this.#stopped) return await this.#deleteNote();
     // `foldersOnDisk` names each folder by the id of a backend that has a `localDir`.
     const configured = new Map(backends.map((b) => [b.id, b.localDir]));
     await writeBackupRoomNote({
@@ -376,7 +408,7 @@ export class BackupSupervisor {
       venueDir: this.#deps.venueDir,
       nodeId,
       installationStartedAt,
-
+      clockStep,
       folders: folders.map((f) => ({ ...f, configuredDir: configured.get(f.destination)! })),
       now: () => this.#now(),
       log: this.#deps.log,
