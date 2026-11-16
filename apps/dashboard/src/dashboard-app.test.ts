@@ -2477,7 +2477,13 @@ describe("dashboard-app", () => {
     ).toBeNull();
   });
 
-  it.each(["/manage/kitchen", "/manage/statuses", "/manage/receipts"])(
+  it.each([
+    "/manage/kitchen",
+    "/manage/statuses",
+    "/manage/receipts",
+    "/manage/receipt",
+    "/manage/location-settings",
+  ])(
     "treats the retired address %s as an unknown screen",
     async (path) => {
       history.replaceState(null, "", path);
