@@ -146,6 +146,7 @@ describe("OpeningHoursApi", () => {
     try {
       await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
       const tables = [
+        "opening_hours",
         "menu_periods",
         "departments",
         "seasons",
