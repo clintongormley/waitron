@@ -1035,8 +1035,8 @@ right PIN that the approval does not admit (`apps/server/src/adjustments-apply.t
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
 `till-api.receipt.test.ts` (a drawer override). The membership read
 (`management-api.membership.test.ts`), adjustment approver (`adjustments-api.test.ts`), refund
-override and manual-refund confirmer (`bill-payments-api.test.ts`) also compare the complete 401
-refusal and total key-derivation count for unknown, suspended and wrong-secret credentials.
+override and manual-refund confirmer (`bill-payments-api.test.ts`) also compare the 401
+status, full JSON body and asynchronous scrypt count for unknown, suspended and wrong-secret credentials.
 Those four route cases do not cover pending people or missing stored credentials. The waiting
 box's carry-on (`waiting-start.test.ts`) tries a wrong password and an unknown email, so it rests
 on identity's cases for a suspended or pending person. The unpaid-departure override

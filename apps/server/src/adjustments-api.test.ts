@@ -595,11 +595,26 @@ describe("approval through the route (plan D6)", () => {
     try {
       for (const [cause, approver] of Object.entries(causes)) {
         const { billId } = await billWith(venue, [{ name: "Burger" }]);
-        const body = { ...(await comp(billId)), approver };
+        const body = {
+          submissionId: randomUUID(),
+          expectedRevision: await revisionOf(billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+          lineId: null,
+          note: null,
+          ...(await comp(billId)),
+          approver,
+        };
         const { result, outside, order } = await watchingDerivations(() =>
-          post(billId, body, { cookie: venue.cookie.staff }),
+          venue.app.request(`/api/working-orders/${billId}/adjustments`, {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie: venue.cookie.staff },
+            body: JSON.stringify(body),
+          }),
         );
-        expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+        expect({ status: result.status, body: await result.json() }, cause).toEqual({
+          status: 401,
+          body: { error: { code: "pin.invalid", params: {} } },
+        });
         expect(outside + order.length, cause).toBe(1);
         expect(await recordedOn(billId), cause).toEqual([]);
       }

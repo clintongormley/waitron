@@ -5380,7 +5380,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
   const ask = { appliedAmount: "1.00", tipAmount: "0.00" };
 
   /** The till routes with a wrong-PIN limit of their own, on a clock that does not move. */
-  function refundsWithOwnLimit() {
+  function refundsWithOwnLimit({ rawBody = false }: { rawBody?: boolean } = {}) {
     const app = new Hono();
     mountTillApi(
       app,
@@ -5408,7 +5408,10 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
         }),
       });
       const json = (await res.json()) as Record<string, unknown>;
-      return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
+      return {
+        status: res.status,
+        json: rawBody ? json : ((json.error as Record<string, unknown>) ?? json),
+      };
     };
   }
 
@@ -5459,7 +5462,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
         { displayName: "Active refund manager", role: "manager", pinHash },
       ]),
     );
-    const refundOn = refundsWithOwnLimit();
+    const refundOn = refundsWithOwnLimit({ rawBody: true });
     const causes = {
       unknown: { personId: randomUUID(), pin: "5555" },
       suspended: { personId: suspended!.id, pin: "5555" },
@@ -5472,7 +5475,10 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
       const { result, outside, order } = await watchingDerivations(() =>
         refundOn(billId, paymentId, { ...ask, override }),
       );
-      expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+      expect(result, cause).toEqual({
+        status: 401,
+        json: { error: { code: "pin.invalid", params: {} } },
+      });
       expect(outside + order.length, cause).toBe(1);
       expect(await refundRows(paymentId), cause).toEqual([]);
       expect(await refundDrawerOpens(paymentId), cause).toEqual([]);
@@ -5488,7 +5494,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
         { displayName: "Active confirmer", role: "manager", pinHash },
       ]),
     );
-    const refundOn = refundsWithOwnLimit();
+    const refundOn = refundsWithOwnLimit({ rawBody: true });
     const cookie = await adminCookie();
     const causes = {
       unknown: { personId: randomUUID(), pin: "5555" },
@@ -5501,7 +5507,10 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
       const { result, outside, order } = await watchingDerivations(() =>
         refundOn(billId, paymentId, { ...ask, manualConfirmed: true, override }, cookie),
       );
-      expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+      expect(result, cause).toEqual({
+        status: 401,
+        json: { error: { code: "pin.invalid", params: {} } },
+      });
       expect(outside + order.length, cause).toBe(1);
       expect(await refundRows(paymentId), cause).toEqual([]);
       expect(await refundDrawerOpens(paymentId), cause).toEqual([]);
