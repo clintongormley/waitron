@@ -43,14 +43,12 @@ it("deletes expired rows of every kind before inserting", async () => {
   ]);
 });
 it("deletes a row more than ten minutes ahead", async () => {
-  await suite.db
-    .insert(signInChallenges)
-    .values({
-      kind: "passkey_login",
-      challenge: "from-before-clock-step",
-      createdAt: "2026-11-16T12:06:00.001Z",
-      expiresAt: "2026-11-16T12:11:00.001Z",
-    });
+  await suite.db.insert(signInChallenges).values({
+    kind: "passkey_login",
+    challenge: "from-before-clock-step",
+    createdAt: "2026-11-16T12:06:00.001Z",
+    expiresAt: "2026-11-16T12:11:00.001Z",
+  });
   const id = await run((tx) =>
     insertSignInChallenge(tx, {
       kind: "google_login",
@@ -68,16 +66,14 @@ it("deletes a row more than ten minutes ahead", async () => {
 });
 it("keeps a live row of another kind including the ten-minute boundary", async () => {
   const personId = await seedPerson(suite.db);
-  await suite.db
-    .insert(signInChallenges)
-    .values({
-      id: "kept",
-      kind: "totp_enrolment",
-      personId,
-      encryptedSecret: "sealed",
-      createdAt: now.toISOString(),
-      expiresAt: "2026-11-16T12:10:00.000Z",
-    });
+  await suite.db.insert(signInChallenges).values({
+    id: "kept",
+    kind: "totp_enrolment",
+    personId,
+    encryptedSecret: "sealed",
+    createdAt: now.toISOString(),
+    expiresAt: "2026-11-16T12:10:00.000Z",
+  });
   const id = await run((tx) =>
     insertSignInChallenge(tx, {
       kind: "passkey_login",

@@ -13,6 +13,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readPasskeys } from "./profile.js";
 import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { generateSync } from "otplib";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
@@ -243,7 +244,9 @@ describe("passkey registration", () => {
       const [credential] = await run((tx) =>
         tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
       );
-      expect(credential).toHaveProperty("name", "Google Password Manager");
+      expect(await run((tx) => readPasskeys(tx, personId))).toMatchObject([
+        { provider: "Google Password Manager" },
+      ]);
       expect(credential).toHaveProperty("aaguid", GOOGLE);
     },
   );
@@ -257,7 +260,9 @@ describe("passkey registration", () => {
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
     );
     expect(credential).toHaveProperty("aaguid", GOOGLE);
-    expect(credential).toHaveProperty("name", "Google Password Manager");
+    expect(await run((tx) => readPasskeys(tx, personId))).toMatchObject([
+      { provider: "Google Password Manager" },
+    ]);
     expect(
       suite.db.all(
         sql`select person_id, params from outgoing_mail where kind='security_change' and person_id=${personId}`,
@@ -272,14 +277,13 @@ describe("passkey registration", () => {
       mockVerify.mockResolvedValue(verified("cred-unnamed", undefined, GOOGLE));
       const begun = await begin(token);
       await finish(token, begun.challengeHandle, name);
-      const [credential] = await run((tx) =>
-        tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
-      );
-      expect(credential).toHaveProperty("name", "Google Password Manager");
+      expect(await run((tx) => readPasskeys(tx, personId))).toMatchObject([
+        { provider: "Google Password Manager" },
+      ]);
     },
   );
 
-  it("stores no name when the verified password manager is unknown", async () => {
+  it("reports no provider when the verified password manager is unknown", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     const unknown = "12345678-1234-1234-1234-123456789abc";
     mockVerify.mockResolvedValue(verified("cred-unknown-provider", undefined, unknown));
@@ -289,7 +293,7 @@ describe("passkey registration", () => {
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
     );
     expect(credential).toHaveProperty("aaguid", unknown);
-    expect(credential).toHaveProperty("name", null);
+    expect(await run((tx) => readPasskeys(tx, personId))).toMatchObject([{ provider: null }]);
   });
 
   it("requires user verification on the registration verify (requireUserVerification: true)", async () => {

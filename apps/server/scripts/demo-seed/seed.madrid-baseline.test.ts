@@ -251,6 +251,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  webauthn_credentials: ["name"],
   card_readers: ["active"],
   taxpayer: ["privacy_notice_url", "privacy_email"],
   payment_refunds: ["provider", "payment_ref"],
@@ -296,6 +297,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
 const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
+  "sign_in_challenges",
   "staff_activity",
   "returned_invoice_records",
   "outgoing_mail",
@@ -325,6 +327,9 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "webauthn_challenges",
+  "google_oidc_states",
+  "totp_enrollments",
   "workforce_chains",
   "attendance_source_state",
   "attendance_operation_facts",
@@ -1184,13 +1189,6 @@ for (const locale of ["en", "es"] as const) {
       questions.foreignKeys = questions.foreignKeys.filter(
         (key) => !(key.table === "time_entries" && key.from === "location_id"),
       );
-      expected[phase].tables.webauthn_challenges!.columns.push({
-        name: "purpose",
-        type: "TEXT",
-        notnull: 1,
-        dflt_value: null,
-        pk: 0,
-      });
       for (const [name, column, value] of [
         [
           "bill_payments",

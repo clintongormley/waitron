@@ -102,7 +102,7 @@ También puedes cambiar tu nombre, nombre visible, teléfono e idioma, y vincula
 Para confirmar una nueva dirección, introduce el código que llegue a ella. Si el correo no está configurado, usa el enlace a Correo o **Iniciar sesión como administrador** que ofrece el resultado; después vuelve a tu cuenta, introduce de nuevo la dirección en **Tus datos** y guarda. Si el código no llega en unos minutos, vuelve a introducir la nueva dirección y guarda: solo funciona el código más reciente.
 
 En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
-Sigue las instrucciones de tu gestor de contraseñas para añadirla.
+Sigue las instrucciones de tu gestor de contraseñas para añadirla. Para eliminar una passkey, elige **Eliminar** junto a ella.
 
 Si tu local tiene una dirección web para el personal desde fuera, inicia sesión allí con tu
 correo y contraseña habituales. Para usar una passkey en esa dirección, abre allí

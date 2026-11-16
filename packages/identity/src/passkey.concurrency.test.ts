@@ -11,7 +11,7 @@ import {
   CORE_MIGRATIONS,
   withTransaction,
   dashboardSessions,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -63,9 +63,15 @@ async function seedFixture(db: Database): Promise<{ personId: string; handle: st
     .insert(webauthnCredentials)
     .values({ personId, credentialId: CREDENTIAL_ID, publicKey: PUBLIC_KEY, counter: 0 });
   const [challenge] = await db
-    .insert(webauthnChallenges)
-    .values({ personId: null, challenge: "chal-concurrency", purpose: "login" })
-    .returning({ id: webauthnChallenges.id });
+    .insert(signInChallenges)
+    .values({
+      personId: null,
+      challenge: "chal-concurrency",
+      kind: "passkey_login",
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    })
+    .returning({ id: signInChallenges.id });
   return { personId, handle: challenge!.id };
 }
 

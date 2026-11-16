@@ -975,15 +975,13 @@ async function seedSignInDetails(personId: string, email: string): Promise<void>
     encryptedSecret: "enrolment",
     expiresAt: "2099-01-01T00:00:00.000Z",
   });
-  await suite.db
-    .insert(signInChallenges)
-    .values({
-      personId,
-      challenge: "challenge",
-      kind: "passkey_registration",
-      createdAt: "2026-11-16T12:00:00.000Z",
-      expiresAt: "2099-01-01T00:00:00.000Z",
-    });
+  await suite.db.insert(signInChallenges).values({
+    personId,
+    challenge: "challenge",
+    kind: "passkey_registration",
+    createdAt: "2026-11-16T12:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
 }
 
 async function signInDetailsOf(personId: string): Promise<unknown> {
@@ -994,7 +992,7 @@ async function signInDetailsOf(personId: string): Promise<unknown> {
   const counts = await suite.db.execute<Record<string, number>>(sql`select
       (select count(*) from webauthn_credentials where person_id = ${personId}) as passkeys,
       (select count(*) from recovery_codes where person_id = ${personId}) as recovery_codes,
-      (select count(*) from sign_in_challenges where kind = 'totp_enrolment' and person_id = ${personId}) as totp_enrollments,
+      (select count(*) from sign_in_challenges where kind = 'totp_enrolment' and person_id = ${personId}) as totp_setups,
       (select count(*) from sign_in_challenges where kind in ('passkey_registration','passkey_login','passkey_check') and person_id = ${personId}) as challenges`);
   return { ...columns.rows[0], ...counts.rows[0] };
 }
@@ -1009,7 +1007,7 @@ function withNoSignInDetails(status: string, emailVerifiedAt: string | null): un
     email_verified_at: emailVerifiedAt,
     passkeys: 0,
     recovery_codes: 0,
-    totp_enrollments: 0,
+    totp_setups: 0,
     challenges: 0,
   };
 }
@@ -1024,7 +1022,7 @@ function withEverySignInDetail(personId: string, status: string): unknown {
     email_verified_at: VERIFIED_AT,
     passkeys: 1,
     recovery_codes: 1,
-    totp_enrollments: 1,
+    totp_setups: 1,
     challenges: 1,
   };
 }

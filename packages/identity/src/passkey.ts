@@ -1,3 +1,4 @@
+import { insertSignInChallenge } from "./sign-in-challenges.js";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
@@ -44,8 +45,6 @@ export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const CHALLENGE_AHEAD_MS = 60 * 1000;
 
 type ChallengePurpose = "registration" | "login" | "check";
-
-import { insertSignInChallenge } from "./sign-in-challenges.js";
 
 /**
  * EdDSA (-8), ES256 (-7), RS256 (-257), given to both halves of registration so what the

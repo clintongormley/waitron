@@ -247,7 +247,11 @@ it("ordinary authorised restore still needs genuine binding", async () => {
 
 it("genuine archive checks encrypted account enrolment with the managed host key", async () => {
   const f = await suite.create();
-  expect(f.logical.totp_enrollments).toHaveLength(1);
+  expect(
+    f.logical.sign_in_challenges!.filter(
+      (row) => (JSON.parse(row) as { kind: string }).kind === "totp_enrolment",
+    ),
+  ).toHaveLength(1);
   const answer = await verifyBackupArtifact(f.request, f.deps);
   expect(answer.status).toBe("passed");
   expect(answer.modules.find((m) => m.name === "core")?.checks).toContainEqual({

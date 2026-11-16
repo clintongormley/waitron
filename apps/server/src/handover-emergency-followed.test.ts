@@ -252,9 +252,9 @@ it("a passkey take signs in against the staged copy's passkey rows, and writes n
   });
   expect(answer.body).toEqual({ state: "restarting" });
   expect(answer.setCookie).toMatch(new RegExp(`^${SWITCH_PROOF_COOKIE}=`));
-  expect(placed.venue.all(sql`select * from webauthn_challenges`)).toEqual([]);
+  expect(placed.venue.all(sql`select * from sign_in_challenges`)).toEqual([]);
   const staged = new DatabaseSync(followedVenue(), { readOnly: true });
-  expect(staged.prepare("select * from webauthn_challenges").all()).toEqual([]);
+  expect(staged.prepare("select * from sign_in_challenges").all()).toEqual([]);
   staged.close();
   await restarted(s);
 });

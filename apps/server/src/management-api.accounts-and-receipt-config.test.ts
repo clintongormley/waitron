@@ -1831,8 +1831,8 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const stateHash = createHash("sha256").update(state, "utf8").digest("hex");
     const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     await suite.db.execute(sql`
-      insert into google_oidc_states (id, person_id, mode, state_hash, nonce, verifier, expires_at)
-      values (${randomUUID()}, null, 'login', ${stateHash}, 'nonce', 'verifier', ${expiresAt})`);
+      insert into sign_in_challenges (id, person_id, kind, state_hash, nonce, verifier, created_at, expires_at)
+      values (${randomUUID()}, null, 'google_login', ${stateHash}, 'nonce', 'verifier', ${new Date().toISOString()}, ${expiresAt})`);
     const responses = [
       await app.request("/management-api/google/login", { method: "POST" }),
       await app.request("/management-api/session/me/google", {
@@ -1850,7 +1850,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     }
     expect(exchange).not.toHaveBeenCalled();
     const states = await suite.db.execute<{ state_hash: string }>(
-      sql`select state_hash from google_oidc_states`,
+      sql`select state_hash from sign_in_challenges`,
     );
     expect(states.rows).toEqual([{ state_hash: stateHash }]);
   });
@@ -1914,7 +1914,14 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       body: JSON.stringify({ totp: "000000" }),
     });
     expect(startLink.status).toBe(200);
-    await suite.db.execute(sql`update google_oidc_states set person_id = null`);
+    await suite.db.execute(sql`pragma ignore_check_constraints = on`);
+    try {
+      await suite.db.execute(
+        sql`update sign_in_challenges set person_id = null where kind = 'google_link'`,
+      );
+    } finally {
+      await suite.db.execute(sql`pragma ignore_check_constraints = off`);
+    }
     const url = new URL(
       ((await startLink.json()) as { authorizationUrl: string }).authorizationUrl,
     );
@@ -1944,7 +1951,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(await res.json()).toEqual({
       error: { code: "management_session.proof_required", params: {} },
     });
-    expect(suite.db.all(sql`select id from google_oidc_states`)).toEqual([]);
+    expect(suite.db.all(sql`select id from sign_in_challenges`)).toEqual([]);
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
@@ -1958,11 +1965,11 @@ describe("Management API — Google sign-in edges, credential checks and staff l
         headers: { cookie, ...json },
         body: JSON.stringify({}),
       });
-    await suite.db.execute(sql`alter table google_oidc_states rename to google_oidc_states_away`);
+    await suite.db.execute(sql`alter table sign_in_challenges rename to sign_in_challenges_away`);
     try {
       for (let i = 0; i < 5; i++) expect((await startLink()).status).toBe(500);
     } finally {
-      await suite.db.execute(sql`alter table google_oidc_states_away rename to google_oidc_states`);
+      await suite.db.execute(sql`alter table sign_in_challenges_away rename to sign_in_challenges`);
     }
     expect((await startLink()).status).toBe(200);
   });

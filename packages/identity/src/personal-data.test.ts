@@ -280,15 +280,13 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
 async function seedSignInsWithNoPerson(db: Database): Promise<string[]> {
   const challenge = "nobody-sign-in-challenge-secret";
   const stateHash = hash64("nobody-google-state");
-  await db
-    .insert(signInChallenges)
-    .values({
-      personId: null,
-      challenge,
-      createdAt: at(2024, 1),
-      expiresAt: at(2024, 2),
-      kind: "passkey_login",
-    });
+  await db.insert(signInChallenges).values({
+    personId: null,
+    challenge,
+    createdAt: at(2024, 1),
+    expiresAt: at(2024, 2),
+    kind: "passkey_login",
+  });
   await db.insert(signInChallenges).values({
     personId: null,
     kind: "google_login",

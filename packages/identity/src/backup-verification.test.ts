@@ -166,16 +166,14 @@ beforeEach(async () => {
       createdAt: old,
       lastUsedAt: now,
     });
-    await suite.db
-      .insert(schema.signInChallenges)
-      .values({
-        id: `${person}-passkey`,
-        personId: null,
-        challenge: "AQID",
-        createdAt: old,
-        expiresAt: end,
-        kind: "passkey_login",
-      });
+    await suite.db.insert(schema.signInChallenges).values({
+      id: `${person}-passkey`,
+      personId: null,
+      challenge: "AQID",
+      createdAt: old,
+      expiresAt: end,
+      kind: "passkey_login",
+    });
     await suite.db.insert(schema.signInChallenges).values({
       id: `${person}-google`,
       personId: null,
