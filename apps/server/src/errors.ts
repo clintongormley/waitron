@@ -268,6 +268,7 @@ declare module "@waitron/shared" {
      */
     "handover.modules_differ": Record<string, never>;
     "handover.key_ring_mismatch": Record<string, never>;
+    "handover.source_check_failed": Record<string, never>;
     /** The box handing over could not read `file`, one of its own files a handover needs. */
     "handover.settings_unreadable": { file: string };
     /** A handover's spare could not read `file`, one of its own files a handover needs. */

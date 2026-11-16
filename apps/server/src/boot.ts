@@ -4338,6 +4338,7 @@ async function bootServer(
     {
       ...peerDeps,
       stateDir: config.stateDir,
+      venueDir: config.venueDir,
       migrationsRoot: config.migrationsRoot,
       advertisedOrigin: config.managementOrigin,
       venueCanPromote: nodePreparation.hasRecoveryOperation,

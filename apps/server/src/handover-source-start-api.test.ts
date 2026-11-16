@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createServer as createHttpsServer } from "node:https";
+import { createServer as createHttpsServer, request as httpsRequest } from "node:https";
 import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
@@ -56,6 +56,7 @@ import {
   setNodeMode,
 } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mintBoxAuthority } from "./testing/box-authority.js";
@@ -178,6 +179,7 @@ function mount(
       ring: RING,
       nodeId: self,
       stateDir: mainState,
+      venueDir: dirname(mainBox.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file),
       migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
       venueCanPromote: true,
@@ -286,6 +288,16 @@ async function expectStillSelling(on: Hono = app): Promise<void> {
   expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
   const sale = await on.request("/sale", { method: "POST" });
   expect(sale.status).toBe(200);
+}
+
+async function breakSourceReference(): Promise<void> {
+  mainBox.db.run(sql`pragma foreign_keys = off`);
+  try {
+    mainBox.db.run(sql`insert into person_staff_roles(person_id, staff_role_id)
+      values (${personId}, ${OTHER_BOX})`);
+  } finally {
+    mainBox.db.run(sql`pragma foreign_keys = on`);
+  }
 }
 
 async function expectNothingRecorded(on: Hono = app): Promise<void> {
@@ -404,6 +416,123 @@ describe("a valid start", () => {
     await holdChart(chartNodes({ contactUrl: `${SPARE_URL}/` }));
 
     expect((await start()).body).toEqual({ handoverPage: `${SPARE_URL}/handover/${OP}` });
+  });
+
+  it("a broken source reference refuses before offering and keeps this box selling", async () => {
+    logged.length = 0;
+    await breakSourceReference();
+
+    expect(await start()).toEqual(refusal(409, "handover.source_check_failed"));
+
+    expect(exchanged).not.toContain(OFFER_PATH);
+    expect(logged).toContainEqual({
+      level: "warn",
+      message: "handover-source-start.check_failed",
+      detail: { reason: "negative_result" },
+    });
+    await expectNothingRecorded();
+  });
+
+  it.each([
+    ["worker failure", new Error("worker failed"), "unknown", "unfinished"],
+    [
+      "timeout",
+      new AppError("handover.copy_check_failed", { module: "core" }, { reason: "timeout" }),
+      "handover.copy_check_failed",
+      "timeout",
+    ],
+  ])(
+    "an unfinished source check (%s) refuses before offering and keeps selling",
+    async (_kind, failure, errorCode, reason) => {
+      logged.length = 0;
+      const on = mount({
+        checkSource: async () => {
+          throw failure;
+        },
+      });
+
+      expect(await start({}, on)).toEqual(refusal(409, "handover.source_check_failed"));
+
+      expect(exchanged).not.toContain(OFFER_PATH);
+      expect(logged).toContainEqual({
+        level: "warn",
+        message: "handover-source-start.check_failed",
+        detail: { errorCode, reason },
+      });
+      await expectNothingRecorded(on);
+    },
+  );
+
+  it("disconnecting during preflight ends the check without sending an offer", async () => {
+    const authority = await mintBoxAuthority();
+    let began!: () => void, finishCheck!: () => void, finished!: () => void;
+    const checking = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const done = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    let options: Parameters<NonNullable<HandoverSourceStartDeps["checkSource"]>>[1];
+    const on = mount({
+      checkSource: async (_path, supplied) => {
+        options = supplied;
+        began();
+        await new Promise<void>((resolve, reject) => {
+          finishCheck = resolve;
+          supplied?.signal?.addEventListener("abort", () => reject(supplied.signal!.reason), {
+            once: true,
+          });
+        });
+        return true;
+      },
+    });
+    const server = serve({
+      fetch: async (request, env) => {
+        try {
+          return await on.fetch(request, env);
+        } finally {
+          finished();
+        }
+      },
+      createServer: createHttpsServer,
+      serverOptions: { key: authority.keyPem, cert: authority.certPem },
+      hostname: "127.0.0.1",
+      port: 0,
+    });
+    await new Promise((resolve) => server.once("listening", resolve));
+    const request = httpsRequest(
+      `https://localhost:${(server.address() as AddressInfo).port}${ROUTE}`,
+      {
+        method: "POST",
+        ca: authority.caPem,
+        headers: { cookie, "content-type": "application/json" },
+      },
+      (response) => response.resume(),
+    );
+    request.on("error", () => {});
+    try {
+      request.end(JSON.stringify({ operationId: OP, destinationNodeId: spare }));
+      await Promise.race([
+        checking,
+        done.then(() => {
+          throw new Error("request finished before preflight");
+        }),
+      ]);
+      request.destroy();
+      await vi.waitFor(() => expect(options?.signal?.aborted).toBe(true));
+      await done;
+
+      expect(options?.limitMs).toBe(30_000);
+      expect(exchanged).not.toContain(OFFER_PATH);
+      await expectNothingRecorded(on);
+    } finally {
+      request.destroy();
+      finishCheck?.();
+      if ("closeAllConnections" in server) server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it("works over a real connection to a real spare", async () => {
@@ -1075,6 +1204,40 @@ describe("the same operation again", () => {
     expect(events()).toHaveLength(1);
     expect(events(spareBox).filter((event) => event.operationId === OP)).toHaveLength(1);
     expect(stepDownAfterOffer).toHaveBeenCalledTimes(2);
+  });
+
+  it("a prepared retry rechecks the source and abandons a broken reference before resending", async () => {
+    expect((await start()).status).toBe(200);
+    stepDownAfterOffer.mockClear();
+    exchanged = [];
+    await breakSourceReference();
+
+    expect(await start()).toEqual(refusal(409, "handover.source_check_failed"));
+
+    expect(exchanged).toEqual([]);
+    await expectAbandoned("handover.source_check_failed");
+  });
+
+  it("a prepared retry whose gate closes during preflight replays stepdown without an offer", async () => {
+    expect((await start()).status).toBe(200);
+    exchanged = [];
+    stepDownAfterOffer.mockClear();
+    const on = mount({
+      checkSource: async () => {
+        gate.close({ allowed: () => true });
+        return true;
+      },
+    });
+
+    // A replay returning while the operation remains prepared is an internal fault.
+    expect(await start({}, on)).toEqual({
+      status: 500,
+      body: { error: { code: "server.internal" } },
+    });
+
+    expect(exchanged).toEqual([]);
+    expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);
+    expect(events().map((event) => event.kind)).toEqual(["offer"]);
   });
 
   it("a `prepared` one the spare has closed since is abandoned", async () => {

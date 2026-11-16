@@ -3098,6 +3098,8 @@ name. The receipts are in the slice's ledger and review files, and the PR.
   `packages/handover/src/states.ts:35`, and no code outside tests writes `emergency_declared`); a
   person's way out is Slice 7's emergency declaration. A check for such a row on the old box before
   it stops selling would avoid the stop; not built (backlog).
+  **2026-11-16 update:** [Source preflight](2026-11-16-handover-source-check.md) now runs the full
+  check before an offer or prepared resend. The spare still checks the later copy.
 - R53, the other returned points change no code: slow-to-explain waits in rare cases, before real
   boxes can reach them (backlog).
 - R54, one fixture line in `handover-compare.test.ts`: none beyond that line.

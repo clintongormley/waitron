@@ -146,6 +146,11 @@ servidor de reserva y vuelve a traspasar el local. El servidor principal sigue v
 una clave de cifrado o es distinta, elige **Parar** y vuelve a unir el servidor de reserva antes
 de traspasar el local.
 
+Antes de detener las ventas, este servidor comprueba los datos del local. Si la comprobación rechaza
+el traspaso, elige **Parar** y sigue vendiendo aquí. Conserva este servidor y sus datos. Puedes volver
+a intentarlo más tarde. Si se rechaza de nuevo, mantén el local en este servidor. Para un cambio urgente, sigue el
+[procedimiento de emergencia](servers.md#emergency) con una copia de seguridad que funcione.
+
 Mantén los dos servidores conectados. La página de traspaso se abre en el servidor de reserva y sigue la
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige

@@ -165,6 +165,7 @@ async function joined() {
       ring: RING,
       nodeId: mainId,
       stateDir: mainState,
+      venueDir: dirname(mainBox.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file),
       migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
       venueCanPromote: true,

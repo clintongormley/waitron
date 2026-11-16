@@ -1,6 +1,9 @@
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { isDeepStrictEqual } from "node:util";
+import { join } from "node:path";
+import { VENUE_FILE } from "@waitron/store";
+import { checkCopyIntegrity } from "./handover-integrity.js";
 import { eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { nodes, readNodeMembership, withTransaction } from "@waitron/db";
@@ -65,6 +68,8 @@ import "./errors.js";
 
 export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
   stateDir: string;
+  venueDir: string;
+  checkSource?: typeof checkCopyIntegrity;
   migrationsRoot: string | null;
   advertisedOrigin: string;
   /** Whether an enabled module can prepare the spare's promotion. */
@@ -108,6 +113,7 @@ const STATUS = {
   "handover.settings_unreadable": 409,
   "handover.destination_settings_unreadable": 409,
   "handover.settings_changed": 409,
+  "handover.source_check_failed": 409,
   "handover.superseded_during_start": 409,
   "handover.restriction_conflict": 409,
   "handover.step_out_of_order": 409,
@@ -215,6 +221,26 @@ export function mountHandoverSourceStartApi(
   };
   // One request at a time, so one cannot record `abandoned` beneath another that goes on to step down.
   let running: string | null = null;
+
+  const checkSource = async (c: Context): Promise<void> => {
+    let intact = false;
+    let failure: { errorCode: string; reason: "timeout" | "unfinished" } | undefined;
+    try {
+      intact = await (deps.checkSource ?? checkCopyIntegrity)(join(deps.venueDir, VENUE_FILE), {
+        signal: c.req.raw.signal,
+        limitMs: 30_000,
+      });
+    } catch (error) {
+      failure = {
+        errorCode: codeOf(error),
+        reason: isAppError(error) && error.reason === "timeout" ? "timeout" : "unfinished",
+      };
+    }
+    if (!intact) {
+      log("warn", "handover-source-start.check_failed", failure ?? { reason: "negative_result" });
+      throw new AppError("handover.source_check_failed", {});
+    }
+  };
 
   const unreachable = (destinationNodeId: string): HandoverRefusal => ({
     code: "handover.destination_unreachable",
@@ -356,6 +382,15 @@ export function mountHandoverSourceStartApi(
         params: { destinationNodeId },
       });
     }
+    try {
+      await checkSource(c);
+    } catch (error) {
+      return abandon(operationId, refusalOf(error));
+    }
+    if (deps.gate.isClosed()) {
+      await stepDownFor(c, stored.binding as unknown as HandoverBinding);
+      throw new Error(`a stepdown replay succeeded for handover ${operationId} still at prepared`);
+    }
     const binding = await currentBinding(
       deps,
       "controlled",
@@ -434,6 +469,7 @@ export function mountHandoverSourceStartApi(
     if (!(await holdsJoinedSpare(deps, destinationNodeId))) {
       throw new AppError("handover.destination_not_joined", { destinationNodeId });
     }
+    await checkSource(c);
     const binding = await currentBinding(
       deps,
       "controlled",

@@ -1206,3 +1206,12 @@ it("offer-space and key refusals give truthful next steps in EN and ES", () => {
     expect(keys).toContain(rejoin);
   }
 });
+
+it("a source preflight refusal keeps trading and names Stop and the handover guide in both languages", () => {
+  expect(codeMessage("handover.source_check_failed", "en")).toBe(
+    "This box could not verify the venue data for handover. You can keep selling here. Choose Stop and follow the handover guide before trying again.",
+  );
+  expect(codeMessage("handover.source_check_failed", "es")).toBe(
+    "Este servidor no ha podido verificar los datos del local para el traspaso. Puedes seguir vendiendo aquí. Elige Parar y sigue la guía de traspaso antes de volver a intentarlo.",
+  );
+});
