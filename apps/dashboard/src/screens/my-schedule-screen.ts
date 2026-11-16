@@ -185,7 +185,7 @@ export class MyScheduleScreen extends LitElement {
   @state() private failed: ReadonlySet<ScheduleRead> = new Set();
   @state() private noticeCode?: string;
   @state() private busy = false;
-  #listsStarted = false;
+  @state() private rosterLoaded = false;
 
   @state() private coverShiftId = "";
   @state() private coverColleagueId = "";
@@ -290,29 +290,24 @@ export class MyScheduleScreen extends LitElement {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
-  /** The roster loads only here: an action reloads just the lists, since a swap or absence cannot
-   * change the roster. The lists start from the roster's delivery, not after the await: a failed
-   * first read leaves the roster watched, and a later refresh can still deliver it. An action that
-   * already started them this load is not repeated. */
+  /** Actions reload the lists alone: a swap or absence cannot change the roster. */
   async #load(): Promise<void> {
-    this.#listsStarted = false;
     try {
-      await this.#roster.watch("getStaffRoster", [], (value) => {
-        this.#loaded("roster");
-        this.roster = value;
-        if (
-          this.coverColleagueId !== "" &&
-          !this.#colleagues().some((person) => person.personId === this.coverColleagueId)
-        ) {
-          this.coverColleagueId = "";
-          this.#coverScope?.changed();
-        }
-        if (!this.#listsStarted) {
-          this.#loadLists().catch(() => {
-            // The failed list's own controller has already recorded it in `failed`.
-          });
-        }
-      });
+      await Promise.all([
+        this.#roster.watch("getStaffRoster", [], (value) => {
+          this.#loaded("roster");
+          this.roster = value;
+          this.rosterLoaded = true;
+          if (
+            this.coverColleagueId !== "" &&
+            !this.#colleagues().some((person) => person.personId === this.coverColleagueId)
+          ) {
+            this.coverColleagueId = "";
+            this.#coverScope?.changed();
+          }
+        }),
+        this.#loadLists(),
+      ]);
     } catch {
       // The failed read's own controller has already recorded it in `failed`.
     }
@@ -323,7 +318,6 @@ export class MyScheduleScreen extends LitElement {
   }
 
   async #loadLists(): Promise<void> {
-    this.#listsStarted = true;
     const { from, to } = this.#window();
     await Promise.all([
       this.#shifts.watch("listMyShifts", [from, to], (value) => {
@@ -495,7 +489,7 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #body(): TemplateResult {
-    if (this.shifts === undefined && this.failed.size === 0) {
+    if ((!this.rosterLoaded || this.shifts === undefined) && this.failed.size === 0) {
       return html`<p class="muted" role="status" data-test="loading">
         ${t("myschedule.loading")}
       </p>`;
@@ -515,8 +509,8 @@ export class MyScheduleScreen extends LitElement {
               >`
           : nothing
       }
-      ${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()}
-      ${this.#absencesSection()} ${this.#absenceForm()}
+      ${this.rosterLoaded ? html`${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()} ${this.#absencesSection()}` : nothing}
+      ${this.#absenceForm()}
     `;
   }
 

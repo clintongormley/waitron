@@ -1,3 +1,4 @@
+import { LiveConnection, type LiveData } from "@waitron/dashboard-kit";
 import axe from "axe-core";
 import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
@@ -646,4 +647,16 @@ export function saveDetailsEdit(el: HTMLElement): void {
 
 export function cancelDetailsEdit(el: HTMLElement): void {
   detailsEditButton(el, "cancel")!.click();
+}
+
+export function streamsOver(liveData: LiveData) {
+  const streams: { url: string; close: ReturnType<typeof vi.fn> }[] = [];
+  const liveUpdates = new LiveConnection(liveData, {
+    open: (url) => {
+      const stream = Object.assign(new EventTarget(), { readyState: 0, close: vi.fn() });
+      streams.push({ url, close: stream.close });
+      return stream;
+    },
+  });
+  return { streams, liveUpdates };
 }

@@ -175,8 +175,8 @@ export class ModifiersScreen extends LitElement {
           this.locales = value;
           setContentLanguages(value);
         }),
+        this.#loadProducts(),
       ]);
-      await this.#loadProducts();
       this.#openLinkedList();
     } catch {
       this.#loadFailed = true;

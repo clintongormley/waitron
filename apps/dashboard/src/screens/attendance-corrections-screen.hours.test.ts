@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { cleanupWidgets, streamsOver } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { attendanceEntry } from "../../test/attendance-fixtures.js";
 import {
@@ -245,7 +245,7 @@ it("a replacement session cannot receive a prior session's held Hours", async ()
   expect(m.root.textContent).not.toContain("Old pending hours");
   expect(m.root.querySelector("[data-day]")).toBeNull();
 });
-it("waits for the lookups before reading a chosen pay period, then reads the period once", async () => {
+it("reads the initial period alongside lookups but blocks choosing a period until they arrive", async () => {
   const lookups = deferred<unknown>();
   const m = await mountManagerHours({ hold: { match: "/lookups", promise: lookups.promise } });
   await expect.poll(() => m.reads.some((r) => r.path.endsWith("/lookups"))).toBe(true);
@@ -263,7 +263,41 @@ it("waits for the lookups before reading a chosen pay period, then reads the per
   expect(m.reads.filter((r) => r.path.includes("/hours?")).map((r) => r.path)).toEqual([
     "/management-api/attendance/hours?kind=pay-period",
   ]);
-  expect(hoursReadsBefore).toEqual([]);
+  expect(hoursReadsBefore).toEqual(["/management-api/attendance/hours?kind=pay-period"]);
   expect(dateDisabledBefore).toBe(true);
   expect(m.root.querySelector<HTMLInputElement>('[name="hoursPeriodDate"]')!.disabled).toBe(false);
+});
+
+it("starts one stream with Hours before lookups, hiding day actions until the viewer arrives", async () => {
+  const gate = deferred<unknown>();
+  const m = await mountManagerHours({
+    live: true,
+    hold: { match: "/lookups", promise: gate.promise },
+  });
+  const { streams, liveUpdates } = streamsOver(m.liveData!);
+  try {
+    liveUpdates.start();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"pay_period_settings"');
+    expect(m.root.querySelector("[data-detail]")).toBeNull();
+    expect(
+      m.root.querySelector("[data-open-day]")!.shadowRoot!.querySelector("button")!.disabled,
+    ).toBe(true);
+    expect(
+      m.root.querySelector('[name="attendanceDay"]')!.shadowRoot!.querySelector("input")!.disabled,
+    ).toBe(true);
+    expect(m.root.querySelector("[data-person-hours]")).toBeNull();
+    gate.resolve(m.data.lookups);
+    const view = await record(m.root);
+    expect(view.view?.personId).toBe("worker");
+    await openDay(m.root);
+    expect(m.root.querySelector("[data-day]")!.textContent).toContain("Ana Worker");
+    expect(m.reads.every((read) => read.passive === "1")).toBe(true);
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    m.el.remove();
+    liveUpdates.stop();
+  }
 });

@@ -69,8 +69,6 @@ export class ApprovalsScreen extends LitElement {
     (error) => this.#showReadError(error),
     () => {
       if (this.#readErrorShown) this.#showError(null);
-      if (!this.#queuesWatched)
-        void this.#loadQueues().catch((failure) => this.#showReadError(failure));
     },
   );
 
@@ -81,7 +79,7 @@ export class ApprovalsScreen extends LitElement {
   #readErrorShown = false;
   @state() private busy = false;
   #names = new Map<string, string>();
-  #queuesWatched = false;
+  @state() private staffLoaded = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -90,20 +88,21 @@ export class ApprovalsScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    this.#queuesWatched = false;
     try {
-      await this.#queries.watch("listStaff", [], (value) => {
-        this.#names = personNameMap(value);
-        this.requestUpdate();
-      });
-      await this.#loadQueues();
+      await Promise.all([
+        this.#queries.watch("listStaff", [], (value) => {
+          this.#names = personNameMap(value);
+          this.staffLoaded = true;
+          this.requestUpdate();
+        }),
+        this.#loadQueues(),
+      ]);
     } catch (error) {
       this.#showReadError(error);
     }
   }
 
   async #loadQueues(): Promise<void> {
-    this.#queuesWatched = true;
     await Promise.all([
       this.#queries.watch("listPendingSwaps", [], (value) => {
         this.swaps = value;
@@ -166,16 +165,18 @@ export class ApprovalsScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const swaps = this.staffLoaded ? this.swaps : [];
+    const absences = this.staffLoaded ? this.absences : [];
     return html`
       <h1>${t("approvals.title")}</h1>
       <div class="queues">
         <section class="queue" aria-labelledby="swaps-h">
           <h2 id="swaps-h">${t("approvals.swaps_title")}</h2>
           ${
-            this.swaps.length === 0
+            swaps.length === 0
               ? html`<p class="muted" data-test="no-swaps">${t("approvals.none_swaps")}</p>`
               : html`<ul>
-                  ${this.swaps.map(
+                  ${swaps.map(
                     (s) =>
                       html`<li data-test=${`swap-${s.id}`}>
                         <span
@@ -205,10 +206,10 @@ export class ApprovalsScreen extends LitElement {
         <section class="queue" aria-labelledby="absences-h">
           <h2 id="absences-h">${t("approvals.absences_title")}</h2>
           ${
-            this.absences.length === 0
+            absences.length === 0
               ? html`<p class="muted" data-test="no-absences">${t("approvals.none_absences")}</p>`
               : html`<ul>
-                  ${this.absences.map(
+                  ${absences.map(
                     (a) =>
                       html`<li data-test=${`absence-${a.id}`}>
                         <span

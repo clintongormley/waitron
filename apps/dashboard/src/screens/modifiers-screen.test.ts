@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
 import {
   chooseOption,
   expectFiltersFirst,
@@ -1438,7 +1438,7 @@ describe("after the server comes back", () => {
     expect(el.shadowRoot!.querySelector('[data-test="extra-lists"]')).not.toBeNull();
   });
 
-  it("loads the products a failed first load never asked for once the server answers again", async () => {
+  it("keeps the products available when a failed list read recovers", async () => {
     const client = Object.assign(api({ listExtraLists: vi.fn().mockRejectedValue(down) }), {
       liveData: new LiveData(),
     });
@@ -1446,7 +1446,6 @@ describe("after the server comes back", () => {
       api: client,
     });
     await vi.waitFor(() => expect(loadError(el)).not.toBeNull());
-    expect(client.listProducts).not.toHaveBeenCalled();
     vi.mocked(client.listExtraLists).mockResolvedValue([extraList]);
     client.liveData.refresh();
     await vi.waitFor(() => expect(loadError(el)).toBeNull());
@@ -2391,5 +2390,38 @@ it.each(
   } finally {
     setLocale("en-GB");
     await page.viewport(previous[0]!, previous[1]!);
+  }
+});
+
+it("starts one stream with products before the modifier lists arrive", async () => {
+  let finish!: (value: ExtraListRow[]) => void;
+  const liveData = new LiveData();
+  const { streams, liveUpdates } = streamsOver(liveData);
+  const client = api({
+    liveData,
+    listExtraLists: vi.fn(
+      () =>
+        new Promise<ExtraListRow[]>((r) => {
+          finish = r;
+        }),
+    ),
+  });
+  const { el } = await mountWidget<ModifiersScreen>("dashboard-modifiers-screen", { api: client });
+  try {
+    liveUpdates.start();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"products"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"categories"');
+    finish([extraList]);
+    await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="extra-lists"]')).not.toBeNull(),
+    );
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    el.remove();
+    liveUpdates.stop();
   }
 });

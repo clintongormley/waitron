@@ -1189,9 +1189,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   The owner, 2026-11-09: require a Cloud login for now; supporting a venue without one "shouldn't be
   forgotten". Low priority.
 
-- **A1227. Check screens that add live subscriptions after an awaited read.**
-  [Detail](backlog/dashboard.md#a1227-check-screens-that-add-live-subscriptions-after-an-awaited-read)
-
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Form implementation leftovers:** an untraced dialog focus line and eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)

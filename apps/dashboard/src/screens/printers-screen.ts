@@ -1335,6 +1335,14 @@ export class PrintersScreen extends LitElement {
 
   async #watchLists(): Promise<void> {
     this.#loadFailed = false;
+    const discovery = this.#queries
+      .watch("listDiscoveredPrinters", [], (devices) => {
+        this.#setDiscovered(devices, this.#liveReadFloor);
+        this.#liveReadFloor = ++this.#readCount;
+      })
+      .catch((error) => {
+        this.refreshErrorKey = codeOf(error);
+      });
     try {
       await Promise.all([
         this.#queries.watch("listAgents", [], (agents) => {
@@ -1376,13 +1384,9 @@ export class PrintersScreen extends LitElement {
         this.view = this.#defaultView();
         if (this.#url.read("dashboard") === "printers") this.#url.write({ view: this.view }, true);
       }
-      await this.#queries.watch("listDiscoveredPrinters", [], (devices) => {
-        this.#setDiscovered(devices, this.#liveReadFloor);
-        this.#liveReadFloor = ++this.#readCount;
-      });
+      await discovery;
     } catch (error) {
       this.#loadFailed = true;
-      this.discoveredUnread = true;
       this.refreshErrorKey = codeOf(error);
     } finally {
       this.loading = false;

@@ -8,7 +8,7 @@ import type {
   CorrectionItem,
 } from "@waitron/dashboard-modules";
 import type { LitElement } from "lit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./attendance-corrections-screen.js";
 
@@ -995,4 +995,35 @@ it("in Spanish an incompatible manager request directs review before the availab
   expect(m.root.querySelector("[data-day]")!.textContent).toContain(
     "Revisa el historial antes de rechazar la solicitud.",
   );
+});
+
+it("starts one stream with corrections despite failed lookups, hiding self-actions until recovery", async () => {
+  const m = await mount({ live: true, own: true, lookupFailure: true });
+  const { streams, liveUpdates } = streamsOver(m.liveData!);
+  try {
+    liveUpdates.start();
+    await m.el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(streams).toHaveLength(1);
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"time_entries"');
+    expect(m.root.querySelector("[data-detail]")).toBeNull();
+    expect(
+      m.root.querySelector("[data-open-day]")!.shadowRoot!.querySelector("button")!.disabled,
+    ).toBe(true);
+    expect(
+      m.root.querySelector('[name="attendanceDay"]')!.shadowRoot!.querySelector("input")!.disabled,
+    ).toBe(true);
+    m.allowReads();
+    m.liveData!.invalidate([{ type: "persons" }]);
+    await details(m.root);
+    expect(m.root.querySelector("[data-approve]")).toBeNull();
+    expect(m.root.querySelector("[data-decline]")).toBeNull();
+    expect(m.root.querySelector("[data-own-hours]")).not.toBeNull();
+    expect(m.reads.every((read) => read.passive === "1")).toBe(true);
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  } finally {
+    m.el.remove();
+    liveUpdates.stop();
+  }
 });
