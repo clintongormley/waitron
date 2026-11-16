@@ -1662,7 +1662,7 @@ Not in any track until the standalone primary is done.
 
 - **Recheck that a spare gets later charts** (bundle of 2, 1 important, size S, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 
-- **Remaining setup and failover gaps** (bundle of 7, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
+- **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 
 **The on-prem mirror.** Joining and local takeover are built and exercised on separate databases;
 this section records the remaining build and real-box qualification.

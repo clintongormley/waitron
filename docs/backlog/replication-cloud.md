@@ -675,10 +675,6 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
-- **A till's pictures do not follow a server move.** The venue logo's and the menu's picture
-  addresses are paths (`/media/…`), and the menu looks them up at `/media/presentations` with a
-  plain `fetch` (`packages/ui/src/live-media-image.ts`), so a till that moved to another server
-  still asks the page's own address for both. Left open by the till theme fetch fix (2026-11-16).
 
 ## Bundle: Everything needing a third box or a Cloud peer
 

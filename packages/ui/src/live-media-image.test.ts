@@ -1,6 +1,7 @@
 import { html, render, nothing } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { liveMediaImage, invalidateMediaImages, watchMediaImage } from "./live-media-image.js";
+import { setMediaServer } from "./media-server.js";
 import "./components/wt-data-table.js";
 import type { WtDataTable } from "./components/wt-data-table.js";
 
@@ -10,6 +11,7 @@ let referenceSequence = 0;
 let host: HTMLDivElement;
 let network: ReturnType<typeof vi.fn<typeof fetch>>;
 let visible = true;
+const SPARE = "https://spare.deli.test";
 function entry(version: string) {
   return {
     id: version,
@@ -93,6 +95,7 @@ it("bounds remembered inactive presentations while retaining all mounted picture
 });
 afterEach(() => {
   render(nothing, host);
+  setMediaServer("");
   host.remove();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -430,4 +433,37 @@ it("a watcher's stop called twice leaves another consumer of the same image subs
   await vi.waitFor(() => expect(src()).toBe("/media/still-square.webp"));
   await vi.advanceTimersByTimeAsync(15_000);
   await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(4));
+});
+it("asks a set media server and hands out its addresses", async () => {
+  setMediaServer(SPARE);
+  const heard: (string | undefined)[] = [];
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  const stop = watchMediaImage(a, "display", (address) => heard.push(address));
+  try {
+    await vi.waitFor(() => expect(src()).toBe(`${SPARE}/media/A-square.webp`));
+    await vi.waitFor(() => expect(heard).toEqual([`${SPARE}/media/A-display.webp`]));
+    expect(String(network.mock.calls[0]![0])).toBe(`${SPARE}/media/presentations?references=${a}`);
+  } finally {
+    stop();
+  }
+});
+it("a media server change re-asks the new server and redraws from it", async () => {
+  let answer!: (value: Response) => void;
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  await vi.waitFor(() => expect(src()).toBe("/media/A-square.webp"));
+  network.mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+  network.mockResolvedValueOnce(reply({ [a]: entry("spare") }));
+  setMediaServer(SPARE);
+  await vi.waitFor(() => expect(src()).toBe(`${SPARE}/media/spare-square.webp`));
+  expect(String(network.mock.calls[2]![0])).toBe(`${SPARE}/media/presentations?references=${a}`);
+  answer(reply({ [a]: entry("old") }));
+  await frame();
+  expect(src()).toBe(`${SPARE}/media/spare-square.webp`);
 });

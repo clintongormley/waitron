@@ -1,6 +1,7 @@
 import { html, render } from "lit";
 import {
   applyTokens,
+  setMediaServer,
   startWithPopover,
   startThemeChoice,
   startThemedFavicon,
@@ -26,6 +27,8 @@ const watchedFetch = watchBuild(fetch, {
   onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
 });
 const router = new ServerRouter({ origin: location.origin, fetchImpl: watchedFetch });
+setMediaServer(router.current);
+router.addEventListener("server-changed", () => setMediaServer(router.current));
 applyTokens(document.documentElement);
 // `/api/theme` reads no session or device, so its fetch skips the dev device header.
 startVenueTheme(document.documentElement, {

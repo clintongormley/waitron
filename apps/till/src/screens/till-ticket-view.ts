@@ -5,7 +5,13 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles, formatDecimalInput } from "@waitron/ui";
+import {
+  ChangeObserver,
+  baseStyles,
+  formatDecimalInput,
+  mediaAddress,
+  subscribeMediaServer,
+} from "@waitron/ui";
 import {
   addDecimal,
   compareDecimal,
@@ -679,6 +685,11 @@ export class TillTicketView extends LitElement {
   @state() protected printDocument: "receipt" | "invoice" | null = null;
   @state() private takingPrinter: EquipmentItem | null = null;
 
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeMediaServer);
+  }
+
   #documentChoice(document: "receipt" | "invoice"): void {
     this.printDocument = document;
     this.invoicePrinterOpen = true;
@@ -1215,7 +1226,9 @@ export class TillTicketView extends LitElement {
             r.receiptTrim?.logo
               ? html`<img
                   class="logo"
-                  src=${r.receiptTrim.logoUrl ?? `/media/${encodeURIComponent(r.receiptTrim.logo)}`}
+                  src=${mediaAddress(
+                    r.receiptTrim.logoUrl ?? `/media/${encodeURIComponent(r.receiptTrim.logo)}`,
+                  )}
                   alt=""
                 />`
               : nothing

@@ -2,6 +2,7 @@ import { nothing, type Part } from "lit";
 import { AsyncDirective } from "lit/async-directive.js";
 import { directive } from "lit/directive.js";
 import { MEDIA_FILENAME } from "@waitron/shared";
+import { mediaAddress, subscribeMediaServer } from "./media-server.js";
 
 type Shape = "source" | "square" | "till" | "display";
 type Presentation = Record<Shape, string> & { id: string; revision: number };
@@ -78,6 +79,7 @@ function subscribe(reference: string, listener: () => void) {
     }
   };
 }
+subscribeMediaServer(schedule);
 function presentation(value: unknown): value is Presentation {
   if (typeof value !== "object" || !value || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -108,7 +110,7 @@ async function refresh(): Promise<void> {
       (async () => {
         try {
           const query = new URLSearchParams({ references: chunk.join(",") });
-          const response = await fetch(`/media/presentations?${query}`, {
+          const response = await fetch(mediaAddress(`/media/presentations?${query}`), {
             credentials: "same-origin",
             cache: "no-store",
             signal,
@@ -159,9 +161,10 @@ export function watchMediaImage(
   listener: (address: string | undefined) => void,
 ): () => void {
   if (!MEDIA_FILENAME.test(reference)) return () => {};
-  let unsubscribe: (() => void) | undefined = subscribe(reference, () =>
-    listener(entries.get(reference)!.value?.[shape]),
-  );
+  let unsubscribe: (() => void) | undefined = subscribe(reference, () => {
+    const path = entries.get(reference)!.value?.[shape];
+    listener(path && mediaAddress(path));
+  });
   return () => {
     unsubscribe?.();
     unsubscribe = undefined;
@@ -173,7 +176,8 @@ class LiveMediaImage extends AsyncDirective {
   private shape: Shape = "square";
   private unsubscribe?: () => void;
   override render(reference: string | null | undefined, shape: Shape) {
-    return reference ? (entries.get(reference)?.value?.[shape] ?? nothing) : nothing;
+    const path = reference ? entries.get(reference)?.value?.[shape] : undefined;
+    return path ? mediaAddress(path) : nothing;
   }
   override update(_part: Part, [reference, shape]: [string | null | undefined, Shape]) {
     this.shape = shape;

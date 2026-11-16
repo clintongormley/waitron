@@ -3,7 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
+import { ChangeObserver } from "../change-observer.js";
 import { ColorSchemeController } from "../color-scheme.js";
+import { mediaAddress, subscribeMediaServer } from "../media-server.js";
 
 export type WtVenueLogoSize = "banner" | "bar" | "sign-in";
 
@@ -91,8 +93,14 @@ export class WtVenueLogo extends LitElement {
   #drawn!: string;
   #timer: ReturnType<typeof setTimeout> | undefined;
 
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeMediaServer);
+  }
+
   get #src(): string {
-    return this.#scheme.dark && this.dark ? this.dark : this.light;
+    const path = this.#scheme.dark && this.dark ? this.dark : this.light;
+    return path && mediaAddress(path);
   }
 
   // Not willUpdate: Lit runs that before the controller's hostUpdate reads the scheme.
