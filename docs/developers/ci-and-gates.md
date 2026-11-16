@@ -452,6 +452,21 @@ runs `43743762173` through `43747449175` reported recent server traffic and disp
 probe. A manual successful probe is a different proof. The [remaining qualification runs](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
 name what is still needed; no queue-time improvement is claimed.
 
+**16 November, post-#3514 observation.** Attempt-specific job records and logs for
+14 completed CI attempts and six health passes, created from 12:55 through 13:38 UTC,
+did not show planner shortfall rescue, routing's agreeing-row exception, scheduled idle
+dispatch or a controller-attributed per-job move. All four proofs remain open. The two
+executed idle checks reported server traffic. A strict standalone check in
+[43872977759/1](https://github.com/clintongormley/waitron/actions/runs/43872977759)
+still refused an in-progress list with count one and no rows.
+[43877649460/1](https://github.com/clintongormley/waitron/actions/runs/43877649460),
+source/workflow `ad3fd6f1a0c492d27f6a68197fcf0c340e7069c7`, logged a blind hosted choice
+for a different short repository list; its selected checks and aggregate passed.
+These are observations of the repaired module, not new capacity or speed qualification.
+Raw attempt records, source identities and logs are retained in Lane I's
+`receipts/ci-routing-post-3514-20261116/`. Use creation-to-start intervals only as a proxy;
+the retry's retained jobs include inconsistent timestamps, so no wait is inferred for them.
+
 The public repository still exposes the runner VM, host and reachable network to code that
 obtains admission. Labels are routing information, not isolation. Lane I owns disposable VMs
 and keeps durable credentials on its Mac controller. Follow the linked hardening guidance

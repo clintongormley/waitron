@@ -2,9 +2,11 @@
 
 **Authority:** Lane I RUNNER.md; original item start **2026-11-15 18:49** stays unchanged.
 Separate Sol/high draft, checked and corrected by the Codex driver after Claude's read.
-Execution awaits watcher clearance; no owner design approval is claimed.
+Claude reviewed the plan once; the watcher cleared this docs-only slice on 16 November
+at 14:15 in Lane I questions.md. No owner design approval is claimed.
 
 **Queue ask, verbatim** (`~/waitron-campaign-i/queue.md`):
+
 > **Ask:** docs/backlog.md "Finish qualifying CI's server routing and action setup" (bundle of 2, size M): A1424's remaining capacity and hosted-fallback qualification, and A935's action-repository download at job setup. Detail in docs/backlog/ci.md. Qualify with real runs (run, attempt, source and runner identities, as ci-and-gates.md asks), fix what the runs show, delete the entries. Today's INVENTORY-READ-GAPS fix is part of the evidence. One-page plan first.
 
 **Finish:** qualify and delete each proved sub-requirement below, then deliver one concrete
@@ -54,4 +56,4 @@ Reuse the checked first-slice evidence and `2026-11-15-ci-routing-qualification.
 at the hour and record missing proofs. Final docs about +20–40/−10–30 lines plus this page;
 source/tests 0. No pool, variable, credential, controller, image or shared-network change;
 no other-lane edits. A1027 stays blocked. Claude's simplicity findings and this partial scope
-must be settled by the watcher before execution.
+were settled by the watcher’s 14:15 clearance. The A935 experiment still needs separate clearance.
