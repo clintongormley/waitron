@@ -24,11 +24,16 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
-import { resolveZoneClosedDays } from "./day-resolver.js";
+import { resolveDepartmentDays, resolveZoneClosedDays } from "./day-resolver.js";
 import { readPlannedServiceGuides } from "./planned-service-guides.js";
-import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import {
+  readOpeningHoursModel,
+  replaceMenuWeek,
+  saveMenuPeriod,
+  stageMenuWeek,
+} from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
-import { configureZone, createDepartment } from "./operations.js";
+import { configureZone, createDepartment, listVenueReadiness } from "./operations.js";
 import {
   joinTouching,
   readDepartmentSeasonWeeks,
@@ -38,9 +43,15 @@ import {
   writeDepartmentSeasonWeeks,
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
-import { readSeasons, saveSeasons } from "./seasons.js";
+import { ensureDefaultSeasons, readSeasons, saveSeasons } from "./seasons.js";
 import type { ServiceRange } from "./service-day.js";
-import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
+import {
+  readZoneClosedTimes,
+  replaceZoneClosedWeek,
+  zoneClosureDays,
+} from "./zone-closed-times.js";
+import { deletePeriod } from "./period-delete.js";
+import { readRoutingPeriods } from "./routing-periods.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
@@ -218,6 +229,84 @@ it("a saved empty zone week and an unsaved week give the same hours, guides and 
   ]);
   expect(closed.guides.stationRanges.get(stationId)?.get("2")).toEqual([]);
 });
+
+it.each(["saved empty", "last period deleted"] as const)(
+  "a department week %s gives the same public answers as a week never saved",
+  async (state) => {
+    const v = await venue();
+    const seasonList = await scoped((tx) => ensureDefaultSeasons(tx));
+    const autumn = seasonList.find((season) => season.startsOn === "09-01")!;
+    const snapshot = () =>
+      scoped(async (tx) => {
+        const clock = await readVenueClock(tx);
+        const model = await readOpeningHoursModel(tx, AT);
+        return {
+          weeks: model.departments.find((entry) => entry.id === v.departmentId)!.seasonWeeks,
+          days: await resolveDepartmentDays(tx, v.departmentId, ["2030-10-08"], clock),
+          guides: (
+            await readPlannedServiceGuides(tx, [], {
+              kind: "season",
+              seasonId: autumn.id,
+              cutover: "06:00",
+            })
+          ).departmentRanges,
+          routing: await readRoutingPeriods(tx, "06:00"),
+          readiness: await listVenueReadiness(tx, AT),
+          closures: await zoneClosureDays(tx, [v.zoneId], AT),
+          changed: (await stageMenuWeek(tx, v.departmentId, menuWeek([]), clock, autumn.id))
+            .changed,
+        };
+      });
+    const unsaved = await snapshot();
+    expect(unsaved.days.get("2030-10-08")!.ranges).toEqual([]);
+    expect(unsaved.changed).toBe(false);
+    if (state === "saved empty") {
+      await scoped((tx) =>
+        writeDepartmentSeasonWeeks(tx, v.departmentId, [autumn.id], [[], [], [], [], [], [], []]),
+      );
+    } else {
+      const temporary = await scoped(async (tx) => {
+        const [lunch] = await tx.select().from(menuPeriods).where(eq(menuPeriods.id, v.lunch));
+        return (
+          await saveMenuPeriod(tx, v.departmentId, {
+            name: "Temporary",
+            menuId: lunch!.menuId,
+            staffMenuIds: [],
+          })
+        ).id;
+      });
+      await scoped((tx) =>
+        writeDepartmentSeasonWeeks(
+          tx,
+          v.departmentId,
+          [autumn.id],
+          [[], [], [{ periodId: temporary, startsAt: "13:00", endsAt: "16:00" }], [], [], [], []],
+        ),
+      );
+      expect((await snapshot()).days.get("2030-10-08")!.ranges).toEqual([
+        { periodId: temporary, startsAt: "13:00", endsAt: "16:00" },
+      ]);
+      await scoped((tx) => deletePeriod(tx, temporary, null, AT, 1));
+    }
+    expect(await snapshot()).toEqual(unsaved);
+    await scoped((tx) =>
+      saveSeasons(
+        tx,
+        {
+          save: [{ name: "Late autumn", startsOn: "10-15", colour: "grey" }],
+          delete: [],
+        },
+        AT,
+        1,
+      ),
+    );
+    const afterSplit = await snapshot();
+    expect(afterSplit.weeks).toHaveLength(5);
+    for (const season of afterSplit.weeks) expect(season.week).toEqual(menuWeek([]));
+    expect(afterSplit.days).toEqual(unsaved.days);
+    expect(afterSplit.readiness).toEqual(unsaved.readiness);
+  },
+);
 
 describe("replaceMenuWeek writes season weeks", () => {
   it("with no season named, gives a venue without seasons its four and paints every one, and the model's current season week holds it", async () => {
