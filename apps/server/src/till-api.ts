@@ -274,7 +274,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
-import { parseDining, switchOrderDining, zoneDining } from "./order-dining.js";
+import { parseDining, switchOrderDining } from "./order-dining.js";
 import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
@@ -1544,9 +1544,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             profileId: device.deviceProfileId,
           });
         }
-        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
+        await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
         return {
-          context: { ...context, dining: await zoneDining(tx, context.zoneId, policy.dining) },
+          context: { ...context, dining: await VENUE_SERVICE.zoneDining(tx, context.zoneId) },
           zones: (await VENUE_SERVICE.listServiceZones(tx)).filter((zone) =>
             counters.some((counter) => counter.id === zone.id),
           ),
@@ -1568,9 +1568,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const tx = deps.db;
         await checkZones(tx, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
-        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
+        await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
         return {
-          context: { ...context, dining: await zoneDining(tx, zoneId, policy.dining) },
+          context: { ...context, dining: await VENUE_SERVICE.zoneDining(tx, zoneId) },
           ...(await VENUE_SERVICE.listZoneOffers(tx, zoneId)),
         };
       });
@@ -1669,7 +1669,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           menuState.menus.map((menu) => menu.menuId),
         );
         return {
-          state: { ...menuState, defaultMenuId },
+          state: { ...menuState, defaultMenuId, dining: await VENUE_SERVICE.zoneDining(tx, zone) },
           setupRead: await readTillSetup(tx, deps, device),
         };
       });

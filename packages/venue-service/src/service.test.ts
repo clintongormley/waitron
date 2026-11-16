@@ -124,11 +124,13 @@ describe("VENUE_SERVICE", () => {
       "splitPartyAllergies",
       "stationDestinations",
       "stationStates",
+      "venueChargesTakeawayVat",
       "withdrawDepartmentTransfer",
       "withdrawPendingDepartmentTransfers",
       "writeDepartmentReceipt",
       "writeKitchenNote",
       "writePartyAllergy",
+      "zoneDining",
     ]);
   });
 

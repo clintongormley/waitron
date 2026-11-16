@@ -2576,6 +2576,82 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
     expect(vi.mocked(api.recordSale).mock.calls[0]![9]).toBe(sold);
   });
 
+  const takeawayZone = () =>
+    vi.fn().mockResolvedValue(offersSelling({ policy: "takeaway", startsAs: "takeaway" }));
+
+  it("a card payment of a takeaway draft sends takeaway", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
+      listDefaultZoneOffers: takeawayZone(),
+      pay,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "collect-card", { readerId: "reader-2" });
+    await flush(el);
+    expect(pay.mock.calls[0]![0].dining).toBe("takeaway");
+  });
+
+  it.each([
+    ["park-order", { label: "Later" }],
+    ["place-order", undefined],
+    ["counter-bill-pay", {}],
+  ] as const)("%s parks a takeaway draft as takeaway", async (event, detail) => {
+    const parkOrder = vi.fn().mockResolvedValue({ id: "wo-new", orderNumber: 1 });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      listDefaultZoneOffers: takeawayZone(),
+      parkOrder,
+      placeOrder: vi.fn().mockResolvedValue({ id: "wo-new", status: "placed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    emit(c, event, detail);
+    await flush(el);
+    expect(parkOrder.mock.calls[0]![0].dining).toBe("takeaway");
+  });
+
+  it("saving an edited retrieved takeaway order before its sale sends takeaway", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 3 });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      updateWorkingOrder,
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        revision: 2,
+        expectedEdit: null,
+        invoiceType: "F2",
+        dining: "takeaway",
+        diningChoice: "none",
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1.000" }],
+      }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+
+    await payCash(el);
+
+    expect(updateWorkingOrder.mock.calls[0]![1].dining).toBe("takeaway");
+  });
+
   it("a retrieved takeaway order in a department since set to eat in holds and sends takeaway", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(cashTill),

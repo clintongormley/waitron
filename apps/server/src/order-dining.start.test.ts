@@ -300,6 +300,25 @@ describe("the way a zone's offers say a new order starts", () => {
     });
   });
 
+  it("the menu-state poll carries the way after a department's setting is saved", async () => {
+    const poll = async () => {
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/menu-state?zoneId=${counterZoneId}`,
+      );
+      expect(answer.status).toBe(200);
+      return answer.json.dining;
+    };
+    await departmentsSell("eat_in");
+    expect(await poll()).toEqual({ policy: "eat_in", startsAs: "eat_in" });
+    await departmentsSell("takeaway");
+    expect(await poll()).toEqual({ policy: "takeaway", startsAs: "takeaway" });
+    await departmentsSell("till_choice", "takeaway");
+    expect(await poll()).toEqual({ policy: "till_choice", startsAs: "takeaway" });
+  });
+
   it("the default zone's offers say the same", async () => {
     await departmentsSell("takeaway");
     const answer = await send(venue.app, venue.cookie, "GET", "/api/default-service-zone/offers");
@@ -318,6 +337,13 @@ describe("the way a zone's offers say a new order starts", () => {
     );
     try {
       expect(await contextDining(counterZoneId)).toBeNull();
+      const poll = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/menu-state?zoneId=${counterZoneId}`,
+      );
+      expect(poll.json.dining).toBeNull();
     } finally {
       await venue.db.execute(sql`update taxpayer set country = 'ES'`);
       await venue.db.execute(

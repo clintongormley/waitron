@@ -1070,6 +1070,7 @@ describe("GET /api/menu-state", () => {
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, endedPeriodName: null }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
+      dining: { policy: "eat_in", startsAs: "eat_in" },
       liveFields: expect.any(String),
       setupRevision: expect.any(String),
     });
@@ -1094,6 +1095,7 @@ describe("GET /api/menu-state", () => {
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, endedPeriodName: null }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
+      dining: { policy: "eat_in", startsAs: "eat_in" },
       liveFields: first.liveFields,
       setupRevision: first.setupRevision,
     });

@@ -6587,6 +6587,7 @@ export class TillApp extends LitElement {
         (this.#tableOffers.loaded &&
           this.tableService?.periodOccurrenceKey !== zoneOffers.service.periodOccurrenceKey)) &&
       this.#tableMenuBusy();
+    if (zoneId !== this.#tableZoneId) this.#tableDining = null;
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(zoneOffers, loaded);
     if (deferGrid) {
@@ -6730,6 +6731,7 @@ export class TillApp extends LitElement {
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     this.#noteSetupRevision(state.setupRevision);
     if (zoneId === this.counterServiceZoneId) {
+      if (state.dining !== undefined) this.#store.setDiningStart(state.dining);
       const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
       if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)
         this.#showCounterOffers();
@@ -6754,6 +6756,7 @@ export class TillApp extends LitElement {
       else this.#followDefault();
     }
     if (zoneId === this.#tableZoneId && !this.#tableOpenUnclaimed()) {
+      if (state.dining !== undefined) this.#tableDining = state.dining;
       const unavailableMoved = this.#tableOffers.setUnavailable(state.unavailable);
       if (this.#tableGridOffers.setUnavailable(state.unavailable) || unavailableMoved) {
         this.tableProducts = this.#tableGridOffers.products();
@@ -20198,6 +20201,7 @@ export class TillApp extends LitElement {
     this.#counterMenuPending = false;
     this.#tableMenuPending = false;
     this.#tableZoneId = undefined;
+    this.#tableDining = null;
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;

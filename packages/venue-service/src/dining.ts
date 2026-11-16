@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { ServiceMode } from "@waitron/module";
-import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
+import { AppError, type Dining, type DiningPolicy, type DiningStart } from "@waitron/shared";
 import { orderHasSetLunch } from "./operations.js";
 import "./errors.js";
 
@@ -60,16 +60,14 @@ export async function findOrdersWithDiningChoice(
   return new Set(rows.map((row) => row.id));
 }
 
-/**
- * The way a new order in `zoneId` sells. A department fixed one way, or a region without takeaway
- * VAT (always eaten here), refuses a request for the other way; a till-choice department takes the
- * request, else starts a table order eaten here and a counter order as the department says.
- */
-export async function resolveOrderDining(
-  tx: Transaction,
-  zoneId: string,
-  requested: Dining | undefined,
-): Promise<Dining> {
+interface ZoneDiningRow {
+  zoneOrderStart: string | null;
+  departmentOrderStart: string | null;
+  dining: DiningPolicy;
+  startsAs: Dining;
+}
+
+async function readZoneDiningRow(tx: Transaction, zoneId: string): Promise<ZoneDiningRow> {
   const [zone] = await tx
     .select({
       zoneOrderStart: floorZones.orderStart,
@@ -81,16 +79,44 @@ export async function resolveOrderDining(
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(eq(floorZones.id, zoneId));
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  let fixed: Dining | null = zone.dining === "till_choice" ? null : zone.dining;
-  if (fixed !== "eat_in" && !(await venueChargesTakeawayVat(tx))) fixed = "eat_in";
+  return zone;
+}
+
+function startOf(zone: ZoneDiningRow, takeawayVat: boolean): DiningStart | null {
+  if (!takeawayVat) return null;
+  if (zone.dining !== "till_choice") return { policy: zone.dining, startsAs: zone.dining };
+  const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
+  return { policy: "till_choice", startsAs: atTable ? "eat_in" : zone.startsAs };
+}
+
+/**
+ * How `zoneId`'s department sells and the way a new order there starts; null where the region
+ * charges no takeaway VAT, so every order is eaten here.
+ */
+export async function zoneDining(tx: Transaction, zoneId: string): Promise<DiningStart | null> {
+  return startOf(await readZoneDiningRow(tx, zoneId), await venueChargesTakeawayVat(tx));
+}
+
+/**
+ * The way a new order in `zoneId` sells. A department fixed one way, or a region without takeaway
+ * VAT (always eaten here), refuses a request for the other way; a till-choice department takes the
+ * request, else starts a table order eaten here and a counter order as the department says.
+ */
+export async function resolveOrderDining(
+  tx: Transaction,
+  zoneId: string,
+  requested: Dining | undefined,
+): Promise<Dining> {
+  const start = startOf(await readZoneDiningRow(tx, zoneId), await venueChargesTakeawayVat(tx));
+  const fixed: Dining | null =
+    start === null ? "eat_in" : start.policy === "till_choice" ? null : start.policy;
   if (fixed !== null) {
     if (requested !== undefined && requested !== fixed) {
       throw new AppError("order.dining_fixed", { dining: fixed });
     }
     return fixed;
   }
-  const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
-  return requested ?? (atTable ? "eat_in" : zone.startsAs);
+  return requested ?? start!.startsAs;
 }
 
 /**

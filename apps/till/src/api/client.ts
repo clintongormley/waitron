@@ -478,6 +478,8 @@ export type MenuStateAnswer = MenuState & {
   defaultMenuId?: string | null;
   liveFields?: string;
   setupRevision?: string;
+  /** The zone's {@link ZoneOffers} `context.dining`, so a department's change reaches a running till. */
+  dining?: ZoneDining | null;
 };
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */

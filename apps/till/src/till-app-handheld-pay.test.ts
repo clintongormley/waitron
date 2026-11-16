@@ -436,6 +436,14 @@ describe("a presented bill on a handheld", () => {
     expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
   });
 
+  it("a takeaway presented bill is charged on the reader as takeaway (A1522)", async () => {
+    const { el } = await openPresented({
+      getPartyBills: vi.fn().mockResolvedValue([{ ...placedBill, dining: "takeaway" }]),
+    });
+    await takeOnReader(el);
+    expect(vi.mocked(api.pay).mock.calls[0]![0].dining).toBe("takeaway");
+  });
+
   it("a full invoice's presented bill asks for no guests", async () => {
     const { el } = await openPresented({
       getPartyBills: vi.fn().mockResolvedValue([{ ...placedBill, invoiceType: "F1" }]),

@@ -7,7 +7,7 @@ import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
-import { venueTakeawayVat } from "./order-dining.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { listCourses } from "./kitchen.js";
 import type { TillApiDeps } from "./till-api.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
@@ -133,7 +133,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     // So the basket refuses an order over it as it is entered, not at the pay step.
     simplifiedInvoiceLimit: deps.cfg.simplifiedInvoiceLimit,
     fullInvoices: true as const,
-    takeawayVat: await venueTakeawayVat(tx),
+    takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
   };
 }
 

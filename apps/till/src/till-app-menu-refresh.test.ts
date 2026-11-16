@@ -482,6 +482,41 @@ describe("the unavailable set", () => {
   );
 });
 
+describe("a department's way of selling on a running till (A1522)", () => {
+  it("a poll answering a changed way changes the next draft and the sale it sends", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    expect(counter(el).store.dining).toBe("eat_in");
+
+    api.menuState.mockResolvedValue({
+      ...menuState("v1"),
+      dining: { policy: "takeaway", startsAs: "takeaway" },
+    });
+    await poll(el);
+
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(counter(el).store.dining).toBe("takeaway");
+    add(el, "Lemonade");
+    await pay(el);
+    expect(api.recordSale.mock.calls[0]![9]).toBe("takeaway");
+  });
+
+  it("a poll answering a region without takeaway VAT starts the next draft eaten here", async () => {
+    const takeaway = { policy: "takeaway", startsAs: "takeaway" } as const;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue({ ...V1, context: { ...V1.context, dining: takeaway } }),
+    });
+    await toCounter(el);
+    expect(counter(el).store.dining).toBe("takeaway");
+    api.menuState.mockResolvedValue({ ...menuState("v1"), dining: null });
+    await poll(el);
+
+    expect(counter(el).store.dining).toBe("eat_in");
+  });
+});
+
 describe("a basket that spans a publish", () => {
   it("adopts v2 silently when only a line the basket does not hold changed, keeping the lines", async () => {
     const { el } = await mountApp({
