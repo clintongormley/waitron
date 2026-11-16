@@ -1974,6 +1974,22 @@ stays within the existing total attempt budget. Run the server's
 `fiscal-certificate-diagnosis-runner.test.ts`
 and `fiscal-certificate-diagnosis-process.test.ts` together.
 
+## Real-process tests need time to observe child exit
+
+Use the production cleanup allowance when a test must observe a real child's exit. Shortening it
+also shortens the time between forced termination and the exit callback; a loaded runner can
+schedule that callback after the test has already refused. Keep exact timing assertions in the
+controlled-timer suite.
+
+**16 November 2026:** with four busy worker threads inside a two-CPU Linux container, the original
+certificate process file failed three cases and passed nineteen. Its 200 ms cleanup left 25 ms
+termination steps; a separate probe measured 59.9 ms from SIGKILL to the exit callback. The process
+suite now uses production's 2,000 ms cleanup, with a 2,500 ms loader delay in the cache control and
+a 4,000 ms native-case bound (1,500 ms work + 2,000 ms cleanup + 500 ms margin). This supersedes
+the cache exception in the 12 November plan and the historical bounds below. It reproduces a
+scheduling mechanism, not the missing historical CI timeline. Keep raw marker text in failure
+output so an empty or partial record cannot hide the process timeline.
+
 ## Compile a process-lifetime fixture before starting its cleanup clock
 
 **12 November 2026:** The two naturally exiting process cases now use a 2,000 ms cleanup

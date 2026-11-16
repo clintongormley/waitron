@@ -118,27 +118,15 @@ had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 
 was this case. Earlier sightings were not searched further. The log is kept at
 `~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
 
-A fifth, first seen on PR #3121 (2026-11-14, run 43532895318, `test-server` shard 12):
-`apps/server/src/fiscal-certificate-diagnosis-process.test.ts` "applies the work deadline to a
-recorded child stuck in synchronous opening" waited for the child's record and instead got
-`fiscal.certificate_diagnosis_unavailable` from the runner's deadline
-(`fiscal-certificate-diagnosis-runner.ts:74`). The branch did not touch the diagnosis code; the case
-passed on the next run and five times locally. The logs of the 25 most recent failed CI runs hold no
-earlier failure of this case. The log is kept at
-`~/waitron-campaign/ci-logs/pr3121-run43532895318-test-server-12.log`. It failed the same way a
-second time on PR #3003 (2026-11-14, run 43585179122, `test-server` shard 1), a branch that also
-does not touch the diagnosis code: the child was sent SIGTERM about 1.65 s after it was spawned and
-the case again got `fiscal.certificate_diagnosis_unavailable`. That log is kept at
-`~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`. A sibling case in the same
-diagnosis child handling failed on PR #3342 (2026-11-15, run 43717151594, attempt 1, `test-server`
-shard 5): `apps/server/src/fiscal-certificate-diagnosis-bundle.test.ts:250` "cancels held native
-cleanup and observes the child and TLS socket gone" found the child still alive
-(`process.kill(pid, 0)` did not throw) right after the cancel answered. The branch does not touch the
-diagnosis code; the shard passed on re-run and the file passed locally (7 of 7). None of the 39
-other most recent failed `ci.yml` runs' failed-job logs name this case. The log is kept at
+The certificate-child bundle case remains unexplained: on PR #3342, run
+[43717151594](https://github.com/clintongormley/waitron/actions/runs/43717151594)
+(15 November, server shard 5), `apps/server/src/fiscal-certificate-diagnosis-bundle.test.ts:250`,
+“cancels held native cleanup and observes the child and TLS socket gone”, found the child still alive (`process.kill(pid, 0)` did not throw) just after cancellation answered. The retained log is
 `~/waitron-campaign-l/ci-logs/pr3342-run43717151594-attempt1-test-server-5.log`.
-
-The same certificate-child family recurred on [PR #3487’s run 43838316063, shard 8](https://github.com/clintongormley/waitron/actions/runs/43838316063/job/133200707780) on 16 November. This time “includes startup in the work deadline and never releases late evidence” expected `interrupted/deadline` and received `fiscal.certificate_diagnosis_unavailable`; teardown then could not parse the empty/truncated JSON marker, so no child timeline was printed. The branch changes no diagnosis source or fixture. Full log: `~/waitron-campaign-i/receipts/setup-port-handoff-20261116/ci-failed-server-8.log`. CERT-CHILD-DEADLINE owns finding and fixing its cause; a clean rerun does not close it.
+CERT-CHILD-DEADLINE retains this point: keep the next failing process/socket timeline before
+retrying. The original bundle file passed seven loaded Linux runs; that did not reproduce or
+repair this case. The process-suite cleanup experiment is recorded in the
+[testing guide](../developers/testing-guide.md#real-process-tests-need-time-to-observe-child-exit).
 
 
 15 November 2026: PR #3309's unchanged restore integrity test, “keeps the main thread's timers
@@ -316,7 +304,7 @@ before retrying and reproduce the pending operation before assigning a cause.
 | #1557: venue-service browser startup remains unexplained. | [38170156450](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899); 2026-10-11, attempt 1. | Download `venue-service-diagnostics-<shard>` and locate the first missing startup step before changing limits or concurrency. | [Detail](#venue-service-browser-startup-remains-unexplained-1557). |
 | A419 / #1474: dashboard stall remains unexplained; `catalogue-screen.test.ts` unfinished. Focused/full local and diagnostic CI passed; no repair established. The failed run was cancelled after 3m26s without output. | [37932573955](https://github.com/clintongormley/waitron/actions/runs/37932573955); job/date not recorded. Diagnostic [37936013331](https://github.com/clintongormley/waitron/actions/runs/37936013331) passed. | Per-test progress; locate the waiting operation before changing the browser harness. A441 reports file start/end and unfinished files every 60 s via `scripts/vitest-file-progress.mjs`. | Retained-log path not recorded. |
 | Frozen-bucket control in `stream-pause.e2e.test.ts`, step 6 / line 540: expected `unanswered`, got `answered` after `s3.pause()`. W30 awaits stopped state; original one-off race not reproduced locally. | [37108993254](https://github.com/clintongormley/waitron/actions/runs/37108993254/job/111163230954); PR #1101, 2026-10-03, attempt 1; re-run passed. | Keep the log and inspect child state before naming another cause. | Retained-log path not recorded. |
-| Suite loading; bookings freeze; detached frame; refund search; diagnosis child; restore timer ticks; action-menu guard. Causes and reproduction limits remain in the linked detail. | [43766044951](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897); 2026-11-15, attempt 1. Distinct timer sighting [43689826000](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327). | Retain the log before retrying; keep each incident’s timing, process/browser state and reproduction limits. | [Detail](#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying) contains every retained path; diagnosis run `43717151594` has no recorded job ID. |
+| Suite loading; bookings freeze; detached frame; refund search; diagnosis bundle child; restore timer ticks; action-menu guard. Causes and reproduction limits remain in the linked detail. | [43766044951](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897); 2026-11-15, attempt 1. Distinct timer sighting [43689826000](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327). | Retain the log before retrying; keep each incident’s timing, process/browser state and reproduction limits. | [Detail](#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying) contains every retained path; diagnosis run `43717151594` has no recorded job ID. |
 | Fiscal shard 2: first-hour PDF assertion failed before the deadline; cause unconfirmed. Passing focused runs do not diagnose it. | [43604245865](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462); 2026-11-14. Earlier [43548232659](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811). | Keep diagnostics on; retain assertion trace and unfinished-file/process report before retrying, then locate the pending operation. | `receipts/a1308-5h/ci-rebased-fiscal.log` in lane E; [timing and trace limits](#fiscal-shard-2-first-hour-pdf-failed-before-the-deadline). |
 | Dashboard heading order remains unexplained after #350: `dashboard-app.a11y.test.ts` is a different rule with no colour evidence. | Run/job/date not recorded. | Retain the exact heading-order failure log before assigning a cause. | Retained-log path not recorded. |
 | #414: shard exited 1 with every test passing. Vitest 4.1.11 / #437 closed that exit-1 path; why the reporting call went unanswered remains open. | PR #414; run/job/date not recorded. | Keep the next job log. Under 3.2.7 `onTaskUpdate` hit birpc’s 60-second default; on 4.1.11 an unanswered call instead waits for the 10-minute job cancellation. | Retained-log path not recorded; [CI guide](../developers/ci-and-gates.md), written up rather than fixed (owner, 2026-09-18). |
