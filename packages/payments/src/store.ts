@@ -728,7 +728,11 @@ export async function listReconcilable(
   });
 }
 
-export async function listAbandonedRefundOutcomes(tx: Transaction, provider: string) {
+export async function listAbandonedRefundOutcomes(
+  tx: Transaction,
+  provider: string,
+  paymentRef?: string,
+) {
   const rows = await tx
     .selectDistinct({
       paymentId: payments.id,
@@ -746,7 +750,13 @@ export async function listAbandonedRefundOutcomes(tx: Transaction, provider: str
       paymentRefunds,
       and(eq(paymentRefunds.paymentId, payments.id), eq(paymentRefunds.state, "failed")),
     )
-    .where(and(eq(payments.provider, provider), isNotNull(payments.reconcileRemediatedAt)))
+    .where(
+      and(
+        eq(payments.provider, provider),
+        isNotNull(payments.reconcileRemediatedAt),
+        paymentRef === undefined ? undefined : eq(payments.paymentRef, paymentRef),
+      ),
+    )
     .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);
   return rows.map(({ state, ...row }) => ({
     ...withDecimalAmount(row),

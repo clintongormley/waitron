@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as paymentStore from "@waitron/payments";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -253,28 +254,41 @@ describe("StripeReconciler", () => {
     expect(refunds.rows).toEqual([{ state: "succeeded", provider_refund_ref: expect.any(String) }]);
   });
 
-  it("recovers a lost reply with a fresh reconciler outside the original period", async () => {
-    const seeded = await seedWorkingOrder(suite.db, freshNif());
-    await abandonedOrphan({ ...seeded, paymentRef: "lost", externalRef: "pi_lost" });
-    const client = new FakeStripeReport();
-    const refunder = new FakeStripe();
-    refunder.scriptNextCreateRefund({ status: "succeeded", answer: { httpStatus: null } });
-    const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
-    expect(first.remediated).toBe(0);
-    expect(first.remediationUnconfirmed).toEqual(["lost"]);
-    expect(first.resweepAfter).toEqual(new Date("2026-07-25T13:00:00Z"));
-    const later = { from: new Date("2026-07-26"), to: new Date("2026-07-27") };
-    const recovered = await reconciler(client, refunder).reconcile(later, new Date("2026-07-27"));
-    expect(recovered.remediated).toBe(1);
-    expect(recovered.resweepAfter).toBeUndefined();
-    expect(refunder.createRefundCalls).toHaveLength(1);
-    const refunds = await suite.db.execute(
-      "select state, provider_refund_ref from payment_refunds",
-    );
-    expect(refunds.rows).toEqual([{ state: "succeeded", provider_refund_ref: expect.any(String) }]);
-    await reconciler(client, refunder).reconcile(later, new Date("2026-07-28"));
-    expect((await suite.db.execute("select id from payment_refunds")).rows).toHaveLength(1);
-  });
+  it.each(["reply", "record"])(
+    "recovers a lost %s with a fresh reconciler outside the original period",
+    async (lost) => {
+      const seeded = await seedWorkingOrder(suite.db, freshNif());
+      await abandonedOrphan({ ...seeded, paymentRef: "lost", externalRef: "pi_lost" });
+      const client = new FakeStripeReport();
+      const refunder = new FakeStripe();
+      if (lost === "reply")
+        refunder.scriptNextCreateRefund({ status: "succeeded", answer: { httpStatus: null } });
+      else
+        await suite.db.execute(
+          "create temporary trigger refuse_refund before insert on payment_refunds begin select raise(abort, 'test local write failure'); end",
+        );
+      const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+      if (lost === "record") await suite.db.execute("drop trigger refuse_refund");
+      expect(first.remediated).toBe(0);
+      if (lost === "reply") {
+        expect(first.remediationUnconfirmed).toEqual(["lost"]);
+        expect(first.resweepAfter).toEqual(new Date("2026-07-25T13:00:00Z"));
+      } else expect(first.remediationFailures).toEqual([{ paymentRef: "lost", reason: "unknown" }]);
+      const later = { from: new Date("2026-07-26"), to: new Date("2026-07-27") };
+      const recovered = await reconciler(client, refunder).reconcile(later, new Date("2026-07-27"));
+      expect(recovered.remediated).toBe(1);
+      expect(recovered.resweepAfter).toBeUndefined();
+      expect(refunder.createRefundCalls).toHaveLength(1);
+      const refunds = await suite.db.execute(
+        "select state, provider_refund_ref from payment_refunds",
+      );
+      expect(refunds.rows).toEqual([
+        { state: "succeeded", provider_refund_ref: expect.any(String) },
+      ]);
+      await reconciler(client, refunder).reconcile(later, new Date("2026-07-28"));
+      expect((await suite.db.execute("select id from payment_refunds")).rows).toHaveLength(1);
+    },
+  );
 
   it.each(["pending", "failed", "canceled", "unknown"])(
     "recovers a saved %s outcome without another send",
@@ -386,6 +400,63 @@ describe("StripeReconciler", () => {
     expect((await suite.db.execute("select state from payment_refunds")).rows).toEqual([
       { state: "failed" },
     ]);
+  });
+
+  it("reports a failed recovery with the shared failure reason and incident", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "recovery-failed", externalRef: "pi_failure" });
+    const client = new FakeStripeReport();
+    const refunder = new FakeStripe();
+    refunder.scriptNextCreateRefund({ status: "pending" });
+    await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    const [refund] = await refunder.listRefunds("pi_failure");
+    refunder.setRefundStatus(refund!.id, "failed");
+    const result = await reconciler(client, refunder).reconcile(PERIOD, NOW);
+    expect(result.remediationFailures).toEqual([
+      { paymentRef: "recovery-failed", reason: "unknown" },
+    ]);
+    expect(
+      (
+        await suite.db.execute(
+          "select code from incidents where code = 'payment.reconcile_remediation_failed'",
+        )
+      ).rows,
+    ).toHaveLength(1);
+    expect((await suite.db.execute("select state from payment_refunds")).rows).toEqual([
+      { state: "failed" },
+    ]);
+  });
+
+  it("keeps a refused send uncertain when its lookup discovers an unmatched refund", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({
+      ...seeded,
+      paymentRef: "refusal-evidence",
+      externalRef: "pi_refusal_evidence",
+    });
+    const refunder = new FakeStripe();
+    const create = refunder.createRefund.bind(refunder);
+    vi.spyOn(refunder, "createRefund").mockImplementationOnce(async (request) => {
+      await create({ ...request, idempotencyKey: "outside", metadata: {} });
+      return { ok: false, httpStatus: 400, attempts: 1 };
+    });
+    const result = await reconciler(new FakeStripeReport(), refunder).reconcile(PERIOD, NOW);
+    expect(result.remediationUnconfirmed).toEqual(["refusal-evidence"]);
+    expect(result.remediationFailures).toEqual([]);
+    expect((await suite.db.execute("select id from payment_refunds")).rows).toEqual([]);
+  });
+
+  it("reads marked payment history once rather than once per reversal", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await abandonedOrphan({ ...seeded, paymentRef: "history", externalRef: "pi_history" });
+    const read = vi.spyOn(paymentStore, "listAbandonedRefundOutcomes");
+    try {
+      const result = await reconciler(new FakeStripeReport()).reconcile(PERIOD, NOW);
+      expect(result.remediated).toBe(1);
+      expect(read.mock.calls.filter((args) => args.length === 2)).toHaveLength(1);
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it("fails one hosted orphan's reversal when its session was never paid, and never retries it", async () => {

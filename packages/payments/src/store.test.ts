@@ -1924,6 +1924,15 @@ describe("listAbandonedRefundOutcomes", () => {
       },
     ]);
     expect(await read("other-provider")).toEqual([]);
+    const selected = await withTransaction(suite.db, (tx) =>
+      listAbandonedRefundOutcomes(tx, "fake", "refund-unconfirmed"),
+    );
+    expect(selected.map((row) => row.paymentRef)).toEqual(["refund-unconfirmed"]);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "other-provider", "refund-unconfirmed"),
+      ),
+    ).toEqual([]);
     await withTransaction(suite.db, (tx) =>
       recordRefund(tx, { ...unconfirmed, amount: decimal("4.00"), providerRefundRef: "partial" }),
     );

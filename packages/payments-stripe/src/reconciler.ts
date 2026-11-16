@@ -54,14 +54,14 @@ export class StripeReconciler implements PaymentReconciler {
     for (const row of marked) {
       if (row.outcome === "confirmed" || row.hasFailedRefund) continue;
       try {
-        if ((await this.reverse(account, row.paymentRef, now)) === "unconfirmed")
+        if ((await this.reverse(account, row, now)) === "unconfirmed")
           unconfirmed.push(row.paymentRef);
         else recovered++;
       } catch (error) {
         failures.push({
           paymentRef: row.paymentRef,
           amount: row.amount,
-          reason: error instanceof AppError ? error.code : String(error),
+          reason: error instanceof AppError ? error.code : "unknown",
         });
       }
     }
@@ -72,7 +72,10 @@ export class StripeReconciler implements PaymentReconciler {
         provider: PROVIDER,
         report: stripeSettlementReport(account.report, settlementLagMs),
         reverse: async (paymentRef) => {
-          const answer = await this.reverse(account, paymentRef, now);
+          const [row] = await withTransaction(this.opts.db, (tx) =>
+            listAbandonedRefundOutcomes(tx, PROVIDER, paymentRef),
+          );
+          const answer = await this.reverse(account, row!, now);
           if (answer === "unconfirmed") retry = true;
           return answer;
         },
@@ -113,21 +116,17 @@ export class StripeReconciler implements PaymentReconciler {
 
   private async reverse(
     account: StripeReconcileAccount,
-    paymentRef: string,
+    row: Awaited<ReturnType<typeof listAbandonedRefundOutcomes>>[number],
     now: Date,
   ): Promise<void | "unconfirmed"> {
-    const row = (
-      await withTransaction(this.opts.db, (tx) => listAbandonedRefundOutcomes(tx, PROVIDER))
-    ).find((row) => row.paymentRef === paymentRef)!;
+    const { paymentRef } = row;
     const key = { provider: PROVIDER, paymentRef };
     const finish = async (failed: boolean, providerRefundRef?: string) => {
       // Provider calls run outside the write lock; a concurrent sweep may have recorded the result.
       await withTransaction(this.opts.db, async (tx) => {
-        const current = (await listAbandonedRefundOutcomes(tx, PROVIDER)).find(
-          (r) => r.paymentId === row.paymentId,
-        )!;
+        const [current] = await listAbandonedRefundOutcomes(tx, PROVIDER, paymentRef);
         const payment = await getPaymentByRef(tx, key);
-        if (payment?.state !== "captured" || current.hasFailedRefund) return;
+        if (payment?.state !== "captured" || current!.hasFailedRefund) return;
         if (failed) await recordFailedRefund(tx, { ...key, amount: decimal(row.amount) });
         else
           await recordRefund(tx, {
