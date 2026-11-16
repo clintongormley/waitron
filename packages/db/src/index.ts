@@ -371,6 +371,8 @@ export { handoverActivations, handoverScenario, handoverReturnBatches } from "./
 export {
   deviceProfileAdmissionRoles,
   googleOidcStates,
+  signInChallenges,
+  signInChallengeKind,
   accountActions,
   dashboardSessions,
   roles,

@@ -410,6 +410,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "a person's dashboard login; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),
+  classify("sign_in_challenges", "state", "a sign-in or enrolment ceremony in flight; minutes long"),
   classify(
     "webauthn_challenges",
     "state",

@@ -1838,6 +1838,41 @@ CREATE TABLE `roles` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `roles_built_in_key_uq` ON `roles` (`built_in_key`) WHERE "roles"."built_in_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `roles_name_folded_uq` ON `roles` (`name_folded`) WHERE "roles"."name_folded" is not null;--> statement-breakpoint
+CREATE TABLE `sign_in_challenges` (
+	`id` text PRIMARY KEY NOT NULL,
+	`kind` text NOT NULL,
+	`person_id` text,
+	`challenge` text,
+	`state_hash` text,
+	`nonce` text,
+	`verifier` text,
+	`encrypted_secret` text,
+	`created_at` text NOT NULL,
+	`expires_at` text NOT NULL,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "sign_in_challenges_kind_ck" CHECK("sign_in_challenges"."kind" in ('passkey_registration', 'passkey_login', 'passkey_check', 'google_login', 'google_link', 'totp_enrolment')),
+	CONSTRAINT "sign_in_challenges_state_hash_ck" CHECK("sign_in_challenges"."state_hash" is null or length("sign_in_challenges"."state_hash") = 64),
+	CONSTRAINT "sign_in_challenges_expiry_ck" CHECK("sign_in_challenges"."expires_at" > "sign_in_challenges"."created_at"),
+	CONSTRAINT "sign_in_challenges_shape_ck" CHECK(
+    ("sign_in_challenges"."kind" in ('passkey_registration', 'passkey_login', 'passkey_check')
+      and "sign_in_challenges"."challenge" is not null and "sign_in_challenges"."state_hash" is null and "sign_in_challenges"."nonce" is null
+      and "sign_in_challenges"."verifier" is null and "sign_in_challenges"."encrypted_secret" is null
+      and (("sign_in_challenges"."kind" = 'passkey_login' and "sign_in_challenges"."person_id" is null)
+        or ("sign_in_challenges"."kind" in ('passkey_registration', 'passkey_check') and "sign_in_challenges"."person_id" is not null)))
+    or ("sign_in_challenges"."kind" in ('google_login', 'google_link')
+      and "sign_in_challenges"."state_hash" is not null and "sign_in_challenges"."nonce" is not null and "sign_in_challenges"."verifier" is not null
+      and "sign_in_challenges"."challenge" is null and "sign_in_challenges"."encrypted_secret" is null
+      and (("sign_in_challenges"."kind" = 'google_login' and "sign_in_challenges"."person_id" is null)
+        or ("sign_in_challenges"."kind" = 'google_link' and "sign_in_challenges"."person_id" is not null)))
+    or ("sign_in_challenges"."kind" = 'totp_enrolment' and "sign_in_challenges"."encrypted_secret" is not null
+      and length("sign_in_challenges"."encrypted_secret") > 0 and "sign_in_challenges"."person_id" is not null
+      and "sign_in_challenges"."challenge" is null and "sign_in_challenges"."state_hash" is null and "sign_in_challenges"."nonce" is null and "sign_in_challenges"."verifier" is null)
+  )
+);
+--> statement-breakpoint
+CREATE INDEX `sign_in_challenges_person_idx` ON `sign_in_challenges` (`person_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `sign_in_challenges_state_hash_uq` ON `sign_in_challenges` (`state_hash`) WHERE "sign_in_challenges"."state_hash" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `sign_in_challenges_totp_person_uq` ON `sign_in_challenges` (`person_id`) WHERE "sign_in_challenges"."kind" = 'totp_enrolment';--> statement-breakpoint
 CREATE TABLE `staff_roles` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
