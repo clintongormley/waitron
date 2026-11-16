@@ -60,6 +60,7 @@ import {
   captureError,
   kitchenStations,
   printJobs,
+  products,
   printers,
   openVenueDatabase,
   readDeploymentEnvironment,
@@ -98,6 +99,8 @@ import {
   publishMenu,
   queueMenuPublication,
   readMenuStructure,
+  readContentLanguages,
+  resolveTranslationCells,
   updateProduct,
 } from "@waitron/menu";
 import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
@@ -3810,13 +3813,29 @@ describe("startServer — what a trading boot wires behind its management routes
 
   it("raises the Translate all notice for a finished run nobody has opened", async () => {
     const jobId = randomUUID();
+    let productId: string;
     await liveFixture(httpPort(), async (tx) => {
+      const product = await createProduct(tx, {
+        categoryId: null,
+        name: "STAFF Notice bread",
+        kitchenName: "KITCHEN Notice bread",
+        unitId: null,
+        unitPrice: "3.00",
+        vatClass: "reduced",
+      });
+      productId = product.id;
+      const { defaultLanguage: language } = await readContentLanguages(tx, "en");
+      const { cells } = await resolveTranslationCells(
+        tx,
+        [{ kind: "product", id: productId, language, field: "name" }],
+        { fallbackLanguage: "en", required: ["es"] },
+      );
       await tx.insert(contentSuggestionJobs).values({
         id: jobId,
         runId: randomUUID(),
         position: 1,
         state: "done",
-        sent: { "product:boot-notice": ["en"] },
+        sent: { [`product:${productId}`]: [language] },
         runTotal: 1,
         total: 1,
         done: 1,
@@ -3826,10 +3845,10 @@ describe("startServer — what a trading boot wires behind its management routes
       await tx.insert(contentSuggestions).values({
         jobId,
         kind: "product",
-        itemId: "boot-notice",
-        language: "en",
+        itemId: productId,
+        language,
         text: "CLIENT-en Bread",
-        expected: "token",
+        expected: cells[0]!.expected,
       });
     });
     try {
@@ -3854,6 +3873,7 @@ describe("startServer — what a trading boot wires behind its management routes
       await liveFixture(httpPort(), async (tx) => {
         await tx.delete(contentSuggestions);
         await tx.delete(contentSuggestionJobs);
+        await tx.delete(products).where(eq(products.id, productId));
       });
     }
   }, 60_000);

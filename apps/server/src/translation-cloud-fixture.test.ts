@@ -64,7 +64,7 @@ async function withCloud(
 ) {
   const f = await translationCloudFixture(options);
   try {
-    await f.client.refresh(); // renew: the box's first lease
+    if (!options?.cloudBeforeVersion2) await f.client.refresh();
     await run(f);
   } finally {
     await f.close();
@@ -456,12 +456,13 @@ it("a configuration body of {} is answered with the original three services", ()
     expect(services).not.toContain("content_translation");
   }));
 
-it("a Cloud before version 2 refuses the version-2 configuration, and the box renews to three services", () =>
+it("a Cloud before version 2 renews to three services and refuses the version-2 configuration", () =>
   withCloud(
     async (f) => {
       let refusal: unknown;
       // While the box's request waits, the same signed request is sent again to read the answer.
       f.delay(async () => {
+        if (f.requests.at(-1)![2] !== "configuration") return;
         f.delay(async () => {});
         refusal = await postConfiguration(f, '{"servicesVersion":2}');
       });
@@ -469,8 +470,8 @@ it("a Cloud before version 2 refuses the version-2 configuration, and the box re
       expect(refusal).toEqual(refused(401, "invalid_proof"));
       expect(f.requests.at(-2)![2]).toBe("configuration"); // the box's; the last is the re-send
       expect(f.requests.at(-2)![7]).toBe('{"servicesVersion":2}');
-      const status = await f.client.refresh();
-      expect(f.requests.at(-1)![2]).toBe("renew");
+      const status = await f.client.status();
+      expect(f.requests[0]![2]).toBe("renew");
       const services = status.installation!.services.map((s) => s.service);
       expect(services).toHaveLength(3);
       expect(services).not.toContain("content_translation");

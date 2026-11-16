@@ -228,7 +228,6 @@ it("translationService reads on and off from the saved reply without a network c
 it("a Cloud from before version 2 refuses the configuration request, and the service is off", () =>
   withFake(
     async (f) => {
-      await expect(f.client.refresh()).resolves.toMatchObject({ state: "complete" }); // renew
       await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
       await expect(f.client.translationService()).resolves.toBe("off");
     },

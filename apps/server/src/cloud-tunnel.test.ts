@@ -69,7 +69,10 @@ it.each(["ready", "provisioning"])(
         endpoint: "gateway.test.waitron.io:51820",
       });
       expect((await stat(f.peer)).mode & 0o777).toBe(0o644);
-      expect(f.requests.map((v) => [v[2], v[7]])).toEqual([["renew", "{}"]]);
+      expect(f.requests.map((v) => [v[2], v[7]])).toEqual([
+        ["renew", "{}"],
+        ["configuration", '{"servicesVersion":2}'],
+      ]);
     } finally {
       await f.close();
     }
