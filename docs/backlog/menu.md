@@ -173,17 +173,6 @@ A349's Preview, price-table and navigation suites also logged the message.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not looked for.
 
-## Language resolution follow-ons
-
-- **Language resolution follow-ons**
-  ([original design](../superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
-  the receipt's `lineName`
-  (`apps/server/src/receipt-document.ts`) tries the exact language and then takes the first stored one.
-  `resolveContentText` moves to another region of the same language (es-ES to es-MX), which the
-  design rules out. These remaining changes affect invoice preparation or receipt rendering
-  and belong to the invoice owner. Adding content translations does not translate
-  Waitron's interface.
-
 ## Product folders, menus that include menus, and prep station routing: partly built (design approved 2026-09-30)
 
 The
@@ -596,17 +585,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   (`apps/server/src/order-drafts.ts:970`) checks an extras pick against the offer's lists only, so
   an extra on a dish sold in a measure is flagged only when the draft is priced — as for a dish
   with decimals or on a scale today. Read, not run.
-
-## Bundle: One language fallback rule
-
-The invoice owner's remaining lookup work and the unrelated #379 followups.
-
-- **Language resolution follow-ons** — the receipt's `lineName` and the shared resolver's
-  sibling-region fallback still need the invoice owner's changes.
-  [Detail](menu.md#language-resolution-follow-ons)
-- **Smaller things #379 surfaced and did not take.** The price input, modifier rules and three
-  interface faults remain outside the language cleanup.
-  [Detail](menu.md#smaller-things-379-surfaced-and-did-not-take)
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 

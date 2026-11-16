@@ -1664,11 +1664,15 @@ it("resolves a filed line's unit abbreviation from a BARE content-language key",
   expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0,32 ud");
 });
 
-it("names a filed line from its first stored description when none is in the invoice locale", async () => {
+it("names a filed line from the non-blank description whose language code sorts first when none is in the names language, as the printed receipt does", async () => {
   const { el } = await mount({
-    lines: [{ descriptions: { en: "Water", ca: "Aigua" }, quantity: "1", gross: "2.00" }],
+    lines: [
+      { descriptions: { fr: "Eau", de: "Wasser" }, quantity: "1", gross: "2.00" },
+      { descriptions: { en: " ", fr: "Eau" }, quantity: "1", gross: "2.00" },
+    ],
   });
-  expect(el.shadowRoot!.querySelector(".line-name")!.textContent).toBe("Water");
+  const names = [...el.shadowRoot!.querySelectorAll(".line-name")].map((n) => n.textContent);
+  expect(names).toEqual(["Wasser", "Eau"]);
 });
 
 it("prints an empty name, not a crash, for a filed line with no descriptions at all", async () => {

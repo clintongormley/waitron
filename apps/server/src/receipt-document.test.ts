@@ -524,6 +524,21 @@ describe("the simplified receipt's own layout (A663)", () => {
     expect(rows(input)).toContainEqual(["0,300 kg  Jamón ibérico", "9,00", undefined]);
   });
 
+  it("names a line missing the receipt's language by the non-blank text whose language code sorts first", () => {
+    const named = (descriptions: Record<string, string>) => {
+      const input = structuredClone(SIMPLIFIED);
+      input.namesLocale = "en-GB";
+      input.result.lines = [{ descriptions, quantity: "1", gross: "1.50" }];
+      return rows(input);
+    };
+    expect(named({ "fr-FR": "Pain", "es-ES": "Pan" })).toContainEqual([
+      "1  Pan",
+      "1,50",
+      undefined,
+    ]);
+    expect(named({ "es-ES": " ", "fr-FR": "Pain" })).toContainEqual(["1  Pain", "1,50", undefined]);
+  });
+
   it("never draws two rules in a row, or a rule first or last, on a simplified receipt", () => {
     for (const vatBreakdown of [[], SIMPLIFIED.result.vatBreakdown.slice(0, 1)])
       for (const lines of [[], SIMPLIFIED.result.lines])

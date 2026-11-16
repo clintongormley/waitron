@@ -61,15 +61,10 @@ describe("resolveMenuText", () => {
       { text: "Hamburguesa", origin: "requested", language: "es", missingRequested: false },
     ],
     [
-      "actual regional translation",
+      "only other regions' translations",
       { "es-ES": "Hamburguesa de España", "es-MX": "Hamburguesa de México" },
       "es-AR",
-      {
-        text: "Hamburguesa de España",
-        origin: "requested",
-        language: "es-ES",
-        missingRequested: false,
-      },
+      { text: staff, origin: "staff", language: null, missingRequested: true },
     ],
     [
       "disabled request",

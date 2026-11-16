@@ -113,7 +113,7 @@ export interface ReceiptDocument {
 }
 
 function lineName(descriptions: Record<string, string>, locale: string): string {
-  return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
+  return resolveSnapshotText(descriptions, locale, locale);
 }
 
 const percentFormatters = new Map<string, Intl.NumberFormat>();

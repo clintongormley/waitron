@@ -98,7 +98,11 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
   return standalone ? capitaliseFirst(name, locale) : name;
 }
 
-/** Empty translations fall back to the configured default without manufacturing a translation. */
+/**
+ * Empty translations fall back to the configured default without manufacturing a translation.
+ * A tag with no region also takes any region of its language, since receipt snapshots are keyed
+ * by full tags (`ca` reaches `ca-ES`).
+ */
 export function resolveContentText(
   translations: Readonly<Record<string, string>>,
   requestedLanguage: string,
@@ -106,15 +110,18 @@ export function resolveContentText(
 ): string {
   for (const locale of [requestedLanguage, defaultLanguage]) {
     let language: string;
+    let bare: boolean;
     try {
       language = contentLanguageCode(locale);
+      bare = new Intl.Locale(locale).toString() === language;
     } catch {
       language = locale.split("-")[0]!;
+      bare = !locale.includes("-");
     }
     const keys = [
       locale,
       language,
-      ...Object.keys(translations)
+      ...Object.keys(bare ? translations : {})
         .filter((key) => {
           try {
             return contentLanguageCode(key) === language;

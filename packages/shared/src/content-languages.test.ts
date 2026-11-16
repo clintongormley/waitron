@@ -107,11 +107,23 @@ describe("content languages", () => {
     expect(resolveContentText({}, "constructor", "toString")).toBe("");
   });
 
-  it("chooses a deterministic regional variant after exact and bare matches", () => {
+  it("for a regional request, takes the exact tag, then the bare language, then a default in another language", () => {
     const text = { "en-US": "US", "en-AU": "AU", english: "Unrelated", fr: "French" };
-    expect(resolveContentText(text, "en-CA", "fr")).toBe("AU");
+    expect(resolveContentText(text, "en-CA", "fr")).toBe("French");
     expect(resolveContentText(text, "en-US", "fr")).toBe("US");
     expect(resolveContentText({ ...text, en: "Bare" }, "en-CA", "fr")).toBe("Bare");
+  });
+
+  it("falls back to the default rather than another region of the requested language", () => {
+    const text = { "es-MX": "MX", fr: "FR" };
+    expect(resolveContentText(text, "es-ES", "fr")).toBe("FR");
+    expect(resolveSnapshotText(text, "es-ES", "fr")).toBe("FR");
+  });
+
+  it("still takes a region of the language for a bare request or a bare default", () => {
+    expect(resolveContentText({ "en-AU": "AU", fr: "French" }, "en", "fr")).toBe("AU");
+    expect(resolveContentText({ "en-AU": "AU", fr: "French" }, "EN", "fr")).toBe("AU");
+    expect(resolveContentText({ "es-MX": "MX", fr: "FR" }, "es-ES", "es")).toBe("MX");
   });
 
   it("resolves historical full-tag maps without modifying their snapshot", () => {
