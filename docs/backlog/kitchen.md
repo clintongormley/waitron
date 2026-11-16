@@ -42,10 +42,6 @@ Left open:
 - The pass's Ready records no `order_group_events` row, so who pressed them is
   recorded nowhere readable; a new kind changes that append-only table's check, which is a
   core migration.
-- The till's ordinary table refresh (`#loadTabLines` and the other groups reads in
-  `apps/till/src/till-app.ts`) can let an older read that answers last replace newer order groups
-  and current orders; A809 (#2153) fixed this for the printing-problems notice only, with a
-  per-read number. Believed to predate A809 (`git blame` 2026-09-27); not traced further.
 
 ## Task 6 (#761, HOLD tickets in advance)
 
@@ -69,11 +65,9 @@ Left open:
 
 ## KDS corrections deferred from #191
 
-- **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
-  status — the ticket must travel with the line, not re-fire (`moveTabLines`, which dropped it, was
-  deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
-  checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
-  child-modifier row; a device-scoped collect route. Then the low-priority KDS list under
+- **KDS corrections deferred from #191** (owner, 2026-09-01): hold-on-send without courses plus a
+  venue disable setting; FP-1's empty-named child-modifier row; a device-scoped collect route. Then
+  the low-priority KDS list under
   [KDS operations](../backlog/kitchen.md#kds-operations--low-priority-a9).
 
 ## Mark a new dish as urgent
