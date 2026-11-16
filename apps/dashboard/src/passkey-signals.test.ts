@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PasskeySignals } from "./api/client.js";
-import { signalAcceptedPasskeys, signalUnknownPasskey } from "./passkey-signals.js";
+import {
+  sendAcceptedPasskeys,
+  signalAcceptedPasskeys,
+  signalUnknownPasskey,
+} from "./passkey-signals.js";
 
 const SIGNALS: PasskeySignals = {
   rpId: "waitron.local",
@@ -19,23 +23,27 @@ afterEach(() => {
 });
 
 describe("telling the password manager which passkeys Waitron still accepts", () => {
-  it("sends the accepted list and the current names, with the relying party and user handle", async () => {
-    const all = vi.fn().mockResolvedValue(undefined);
-    const details = vi.fn().mockResolvedValue(undefined);
-    stubBrowser({ signalAllAcceptedCredentials: all, signalCurrentUserDetails: details });
-    await signalAcceptedPasskeys({ passkeySignals: () => Promise.resolve(SIGNALS) });
-    expect(all).toHaveBeenCalledExactlyOnceWith({
-      rpId: "waitron.local",
-      userId: "cGVyc29uLTE",
-      allAcceptedCredentialIds: ["cred-1", "cred-2"],
-    });
-    expect(details).toHaveBeenCalledExactlyOnceWith({
-      rpId: "waitron.local",
-      userId: "cGVyc29uLTE",
-      name: "ana@example.com",
-      displayName: "Ana",
-    });
-  });
+  it.each(["fetched", "provided"])(
+    "sends the %s accepted list and current names with their relying party and user handle",
+    async (source) => {
+      const all = vi.fn().mockResolvedValue(undefined);
+      const details = vi.fn().mockResolvedValue(undefined);
+      stubBrowser({ signalAllAcceptedCredentials: all, signalCurrentUserDetails: details });
+      if (source === "provided") await sendAcceptedPasskeys(SIGNALS);
+      else await signalAcceptedPasskeys({ passkeySignals: () => Promise.resolve(SIGNALS) });
+      expect(all).toHaveBeenCalledExactlyOnceWith({
+        rpId: "waitron.local",
+        userId: "cGVyc29uLTE",
+        allAcceptedCredentialIds: ["cred-1", "cred-2"],
+      });
+      expect(details).toHaveBeenCalledExactlyOnceWith({
+        rpId: "waitron.local",
+        userId: "cGVyc29uLTE",
+        name: "ana@example.com",
+        displayName: "Ana",
+      });
+    },
+  );
 
   it("asks the server for nothing when the browser has neither method", async () => {
     stubBrowser({});

@@ -19,6 +19,13 @@ const profile: OwnProfile = {
   hasPassword: true,
   hasTotp: false,
   hasGoogle: false,
+  passkeySignals: {
+    rpId: "localhost",
+    userId: "cHJvZmlsZQ",
+    credentialIds: [],
+    name: "profile@example.test",
+    displayName: "Profile",
+  },
   passkeys: [],
 };
 async function open() {

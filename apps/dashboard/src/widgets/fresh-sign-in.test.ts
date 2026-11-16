@@ -40,6 +40,13 @@ function profile(overrides: Partial<OwnProfile> = {}): OwnProfile {
     hasPassword: true,
     hasTotp: false,
     hasGoogle: false,
+    passkeySignals: {
+      rpId: "localhost",
+      userId: "cHJvZmlsZQ",
+      credentialIds: [],
+      name: "profile@example.test",
+      displayName: "Profile",
+    },
     passkeys: [],
     ...overrides,
   };
@@ -84,6 +91,8 @@ it("associates the password field with the signed-in email for browser autofill"
   expect(username).not.toBeNull();
   expect(username!.value).toBe("alex@example.test");
   expect(username!.type).toBe("email");
+  expect(username!.name).toBe("username");
+  expect(username!.hasAttribute("data-autofill-username")).toBe(false);
   expect(username!.readOnly).toBe(true);
   expect(username!.tabIndex).toBe(-1);
   expect(username!.getAttribute("aria-hidden")).toBe("true");
@@ -95,6 +104,11 @@ it("associates the password field with the signed-in email for browser autofill"
   const box = username!.getBoundingClientRect();
   expect(box.width).toBeLessThanOrEqual(1);
   expect(box.height).toBeLessThanOrEqual(1);
+});
+
+it.each(["", null])("omits the confirmation username when its email is %s", async (email) => {
+  const { root } = await mount(profile({ email }));
+  expect(root.querySelector('input[autocomplete="username"]')).toBeNull();
 });
 
 describe("the code field", () => {

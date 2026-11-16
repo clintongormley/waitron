@@ -41,9 +41,6 @@ keys #426 dropped could be declared again — `sessions` to `persons`, and
 `tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
 change what deleting a person does.
 
-Review #559 also recorded no test reaching `management_session.required` in
-`packages/identity/src/profile.ts`'s `ownSession`; that coverage note has not been rechecked.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
@@ -100,22 +97,13 @@ Review #559 also recorded no test reaching `management_session.required` in
 
 ## Password-manager autofill in the confirmation window (C98, #934) — still open:
 
-The sign-in page keeps its three inline copies of the hidden username field
-  (`apps/dashboard/src/screens/login-screen.ts`); moving them onto the `autofillUsername` helper
-  (`apps/dashboard/src/widgets/autofill-username.ts`) needs at least a `name` parameter (the
-  sign-in page's tests pin `email`; the confirmation window's field is named `username`), the
-  `data-autofill-username` hook those tests find the field by, and a decision about an empty email,
-  for which the helper renders nothing while the sign-in copies always render. Also unknown: which
-  browser and address the owner saw the empty field in. The payments screen's manager-PIN prompt
+Unknown: which browser and address the owner saw the empty field in. The payments screen's manager-PIN prompt
   now says `autocomplete="off"` (owner, 2026-09-30, C110 #940); nobody checked in a real browser
   whether it then stops offering the dashboard password there.
 
 ## A new passkey is listed under the person's email, with their name as its display name (C99, #939) — still open:
 
-The result has not yet been seen in a password manager. The dashboard calls
-  `PublicKeyCredential.signalCurrentUserDetails`, where the browser has it, after every sign-in and
-  after a passkey is added or removed (C101), but not after the email or display name is changed on
-  the Profile screen; nobody has yet seen whether a real password manager then shows the new names.
+The result has not yet been seen in a password manager, including whether it shows new names after a Profile change.
 
 ## The passkey list says when each passkey was last used and which password manager holds it (C100, #945) — known limits:
 
@@ -138,10 +126,7 @@ Not observed in a real password manager — the tests replace the browser's meth
   throws where a method is missing. Left open from the review, both predating C101: a suspended or
   pending person's passkey is refused before the signature check and an active person's bad
   signature after it, so the two do different work — whether that can be timed from outside was not
-  measured; and an expired sign-in challenge answers its own `passkey.challenge_expired`. Not taken:
-  after a passkey is added or removed, the Profile screen makes one request more than it needs (the
-  signals read beside the profile reload); folding the signal data into the profile response would
-  remove it.
+  measured; and an expired sign-in challenge answers its own `passkey.challenge_expired`.
 
 ## Passkey name column after A760
 
@@ -224,7 +209,7 @@ cloud-recovery code.
 
 ## Bundle: One session with real phones and password managers
 
-13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+13 entries, size M. Real-device checks remain open.
 
 - **Android certificate trust needs real-device checks.** A September receipt records one phone
   accepting a matching-name, outside-CA-subtree leaf, without captured device versions. It did not

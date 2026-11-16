@@ -464,6 +464,8 @@ describe("mountMeApi — profile credentials", () => {
     const codeKey = Buffer.alloc(32, 21);
     const app = mountApp({
       accountActionCodeKey: codeKey,
+      rpId: "waitron.local",
+      origin: "https://waitron.local",
       accountMailMode: async () => "smtp",
     });
     const cookie = await cookieFor(me);
@@ -491,12 +493,25 @@ describe("mountMeApi — profile credentials", () => {
     expect(await pending.json()).toMatchObject({
       email: "old@example.com",
       pendingEmail: "new@example.com",
+      passkeySignals: {
+        rpId: "waitron.local",
+        userId: Buffer.from(me).toString("base64url"),
+        credentialIds: [],
+        name: "old@example.com",
+        displayName: "Me",
+      },
     });
     const confirmed = await send(app, "POST", "/management-api/session/me/profile/email/confirm", {
       cookie,
       body: { code: sent[0]!.match(/\b[0-9]{6}\b/)![0] },
     });
     expect(await confirmed.json()).toEqual({ email: "new@example.com" });
+    const profile = await send(app, "GET", "/management-api/session/me/profile", { cookie });
+    expect(await profile.json()).toMatchObject({
+      email: "new@example.com",
+      pendingEmail: null,
+      passkeySignals: { name: "new@example.com", displayName: "Me" },
+    });
   });
 });
 

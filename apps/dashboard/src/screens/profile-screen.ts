@@ -30,7 +30,7 @@ import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
-import { signalAcceptedPasskeys } from "../passkey-signals.js";
+import { sendAcceptedPasskeys } from "../passkey-signals.js";
 
 type Mode =
   | "view"
@@ -335,11 +335,13 @@ export class ProfileScreen extends LitElement {
     this.#edit("details");
   }
 
-  async #load(): Promise<void> {
+  async #load(): Promise<OwnProfile | undefined> {
+    let applied: OwnProfile | undefined;
     try {
-      await Promise.all([
+      await Promise.allSettled([
         this.#queries.watch("getProfile", [], (value) => {
           this.profile = value;
+          applied = value;
           this.#announceTab();
         }),
         this.#queries.watch("getGoogleConfig", [], (value) => {
@@ -368,6 +370,7 @@ export class ProfileScreen extends LitElement {
     } catch (error) {
       this.#showReadError(error);
     }
+    return applied;
   }
   #showError(message: string, fromRead = false): void {
     this.error = message;
@@ -685,11 +688,13 @@ export class ProfileScreen extends LitElement {
                 ? "sent"
                 : null;
       }
-      if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
+      const sendSignals = ["details", "email", "passkey", "remove"].includes(this.mode);
       scope?.commit(submitted);
       if (!scope?.isDirty()) this.#closeSaved();
       this.saved = true;
-      await this.#load();
+      const profile = await this.#load();
+      if (sendSignals && profile && this.isConnected && this.#operation === operation)
+        void sendAcceptedPasskeys(profile.passkeySignals);
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
       if (!active()) return;

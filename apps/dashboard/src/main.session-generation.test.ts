@@ -116,6 +116,13 @@ it("the actual entry shares one epoch with shell, API, module requests and backg
         hasPassword: true,
         hasTotp: false,
         hasGoogle: false,
+        passkeySignals: {
+          rpId: "localhost",
+          userId: "cHJvZmlsZQ",
+          credentialIds: [],
+          name: "profile@example.test",
+          displayName: "Profile",
+        },
         passkeys: [],
       });
       const moduleAction = app

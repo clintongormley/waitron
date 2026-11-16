@@ -2,7 +2,7 @@
 
 **Finish line:** one PR sends Profile’s saved names, confirmed email and accepted passkeys from its profile reload, removing the extra signals request, and shares the hidden-username helper without changing each caller’s behavior. Real password-manager results remain unverified.
 
-**Authority:** SIGNIN-PASSKEY-LEFTOVERS, Lane K queue, watcher 2026-11-16 14:50. Separate Sol-high draft checked by driver; one Claude source review completed. Watcher clearance is pending, including the rulings below. No owner design approval claimed. Source base `1eb3093eb4`.
+**Authority:** SIGNIN-PASSKEY-LEFTOVERS, Lane K queue, watcher 2026-11-16 14:50. Separate Sol-high draft checked by driver; one Claude source review completed. Watcher cleared this smaller plan on 2026-11-16 at 15:16 in Lane K questions.md, including the rulings below. No owner design approval claimed. Source base `1eb3093eb4`.
 
 **Reuse/consumers:** keep identity’s `readOwnProfile` answer unchanged; its management-api admission/registration callers discard it. Extend only the HTTP answer in `me-api.ts`. Dashboard `getProfile` also feeds fresh-sign-in and Servers; neither sends signals. Keep live dependencies/passive reads/draft ownership, `readPasskeySignals`, `managementSite`, existing browser fallback/error handling and the standalone signals endpoint for shell sign-in.
 
@@ -16,9 +16,9 @@
 
 3. **Hidden username:** add optional `"confirmation" | "login"` mode to `widgets/autofill-username.ts`, default confirmation. Login alone keeps `name="email"`, its data hook and empty rendering; confirmation keeps `name="username"` and empty/null → nothing. Replace all three login templates and duplicate styles. Shared styles also zero the clipped input’s padding/border. Before refactoring, pin existing DOM/name/autocomplete/value/readonly/tabindex/aria-hidden/hidden-bounds behavior in `login-screen.test.ts` and `widgets/fresh-sign-in.test.ts`. Remove only login’s obsolete native-field allowance row; retain every guard assertion.
 
-4. **Watcher rulings before build:** Claude recommends no Profile FormFeedback migration for a post-close signal change, and treating replacement of non-interactive hidden login inputs as outside the form-adoption rule. Driver recommends that smaller scope, pending explicit ruling. Alternative: login-only FormFeedback adoption preserving account-action/password/factor/recovery attempt/refusal/focus behavior; no Profile migration. Separately clear the tighter native-field allowance change under the lane’s changed-check rule. Add no unrelated backlog item.
+4. **Watcher rulings (2026-11-16 15:16):** no FormFeedback migration for these helper/background edits, which change no form fields or messages. Remove only login's obsolete native-field allowance row, keeping every guard assertion. Retire Task1b's stale note without another missing-person test. No reread or unrelated backlog item.
 
-5. **Coverage recheck:** planning ran `packages/identity/src/profile.test.ts`:36 passed; scoped coverage exited1 against unchanged thresholds, recording `profile.ts:78` throw0hits, branch[0,77]. The existing deleted-person case634 reaches the resolver’s earlier inner join; the shared transaction’s write lock prevents another writer deleting between reads (source inference: `management-session.ts:62`, `tenancy.ts:30`, `write-queue.ts:62`). Retain guard/test; ask the watcher to retire the stale note without a duplicate/impossible-interleaving test, explicitly resolving the queue’s conditional wording. No coverage gate claimed or repeated diagnostic needed.
+5. **Coverage recheck:** planning ran `packages/identity/src/profile.test.ts`:36 passed; scoped coverage exited1 against unchanged thresholds, recording `profile.ts:78` throw0hits, branch[0,77]. The existing deleted-person case634 reaches the resolver’s earlier inner join; the shared transaction’s write lock prevents another writer deleting between reads (source inference: `management-session.ts:62`, `tenancy.ts:30`, `write-queue.ts:62`). Retain guard/test; retire the stale note as the watcher cleared, without a duplicate test. No coverage gate claimed or repeated diagnostic needed.
 
 ## Verification and finish
 
@@ -36,4 +36,4 @@ Correct the hidden-field “two files” prose in `conventions-ui.md:226` and `d
 
 No new state, tables, protocols, polyfills, permissions/login policy or unrelated repair. After focused checks, announce readiness; authorised finish-branch gets two independent Claude run-it reads, fixes/read, normal hook and current-head CI. Then land-branch, exact-merge CI, main install and owned cleanup. No whole-package/workspace local run solely to finish.
 
-**Forecast added/deleted:** production95/70; behavioral tests170/35; fixture/guard support60/5; prose65/20 = **520 changed lines**, outside opinion at780. Conditional login-only feedback adoption adds30/25 production (575total; opinion at863). Stops seek an outside opinion, never impose a ceiling.
+**Forecast added/deleted:** production95/70; behavioral tests170/35; fixture/guard support60/5; prose65/20 = **520 changed lines**, outside opinion at780. Stops seek an outside opinion, never impose a ceiling.

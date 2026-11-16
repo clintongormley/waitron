@@ -29,6 +29,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
 import type { DashboardApi, PasskeyOptions } from "../api/client.js";
+import { autofillUsername, autofillUsernameStyles } from "../widgets/autofill-username.js";
 import { signalUnknownPasskey } from "../passkey-signals.js";
 import { preparePermissionReturn } from "../permission-continuation.js";
 import {
@@ -88,6 +89,7 @@ export class LoginScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    autofillUsernameStyles,
     formMessageStyles,
     css`
       :host {
@@ -231,16 +233,6 @@ export class LoginScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      /* Keep the username in split password forms for password managers without adding another
-         visible or keyboard-focusable control to the step. */
-      .autofill-username {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
       }
     `,
   ];
@@ -1218,17 +1210,7 @@ export class LoginScreen extends LitElement {
             ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
           </h1>
           ${this.actionValidated ? this.#renderLoginContext(false) : nothing}
-          <input
-            class="autofill-username"
-            data-autofill-username
-            name="email"
-            type="email"
-            autocomplete="username"
-            .value=${this.email}
-            tabindex="-1"
-            aria-hidden="true"
-            readonly
-          />
+          ${autofillUsername(this.email, "login")}
           ${
             !this.actionValidated
               ? html`
@@ -1456,18 +1438,7 @@ export class LoginScreen extends LitElement {
                   : this.step === "password"
                     ? html`
                         <h1>${t("login.password_heading")}</h1>
-                        ${this.#renderLoginContext()}
-                        <input
-                          class="autofill-username"
-                          data-autofill-username
-                          name="email"
-                          type="email"
-                          autocomplete="username"
-                          .value=${this.email}
-                          tabindex="-1"
-                          aria-hidden="true"
-                          readonly
-                        />
+                        ${this.#renderLoginContext()} ${autofillUsername(this.email, "login")}
                         <wt-input
                           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
                           class="field"
@@ -1515,18 +1486,7 @@ export class LoginScreen extends LitElement {
                     : this.step === "factor"
                       ? html`
                           <h1>${t("login.factor_heading")}</h1>
-                          ${this.#renderLoginContext()}
-                          <input
-                            class="autofill-username"
-                            data-autofill-username
-                            name="email"
-                            type="email"
-                            autocomplete="username"
-                            .value=${this.email}
-                            tabindex="-1"
-                            aria-hidden="true"
-                            readonly
-                          />
+                          ${this.#renderLoginContext()} ${autofillUsername(this.email, "login")}
                           <wt-input
                             class="field"
                             name="one-time-code"

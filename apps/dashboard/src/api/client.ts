@@ -429,6 +429,7 @@ export type InvitationResult = { invitationSent: boolean } & AccountEmailDeliver
 export type ProfileSaveResult = { emailVerificationSent: boolean } & AccountEmailDeliveryDetails;
 
 export interface OwnProfile {
+  passkeySignals: PasskeySignals;
   displayName: string;
   firstNames: string | null;
   lastNames: string | null;
