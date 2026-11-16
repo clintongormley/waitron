@@ -147,6 +147,14 @@ not found. The log is kept at `~/waitron-campaign-b/ci-logs/pr3494-run4386289697
 
 16 November 2026: the demo seed cola assertion recorded from [PR #3494, run 43862896971](https://github.com/clintongormley/waitron/actions/runs/43862896971/job/133284679660) recurred on [PR #3516, run 43871829602, shard 13](https://github.com/clintongormley/waitron/actions/runs/43871829602/job/133315565161). `apps/server/scripts/demo-seed/seed.test.ts:355` expected a restaurant cola sale and found none (`expected 0 to be greater than 0`); 1 failed and 1,730 passed. PR #3516 changes only a fake peer response in `waiting-start.test.ts`. Its full failed-job log is `~/waitron-campaign-k/receipts/live-setup-stamp-order/waiting-fixture-ci-server13.log`. The runner difference remains unexplained; a passing retry does not close this incident.
 
+
+16 November 2026: the same restaurant-cola assertion recurred on [PR #3556, run 43934245196,
+server shard 13](https://github.com/clintongormley/waitron/actions/runs/43934245196/job/133535117631):
+`seed.test.ts:355` found no restaurant cola sale; 1 failed and 1,644 passed. This payment-guide
+branch changes no demo-seed code. The full log is retained at
+`~/waitron-campaign-f/receipts/pay-sheet-guide-20261116/ci-server-13-failure.log`.
+This is another occurrence of the unresolved incident above, not a diagnosed cause or repair.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
