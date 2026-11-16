@@ -1644,14 +1644,23 @@ Cost: the categories
 screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
 cannot see it, so assert a computed width or colour when you add a styled cell.
-`scripts/data-table-cell-classes.test.ts` reports a class that one file both puts on cell markup
-and styles in its own `css`, and is weaker than its name. It reads each file alone: cell markup is
-the value of a `cell` property and of a `.rowControls=${…}` binding, plus the functions and methods
-of the same file those call by name. Markup passed to a helper as an argument (the till's find-bill
-screen builds its columns that way) and helpers imported from another file are not reached. It
-reads only the static text of `class="…"` and the keys of `classMap({…})`, so a class written as
-`class=${…}`, or joined to a placeholder, is invisible. It reads only the file's own `css`
-templates, never a stylesheet imported from another module.
+
+**What the guard does not see.** `scripts/data-table-cell-classes.test.ts` reports a class that one
+file both puts on cell markup and styles in its own `css`, and is weaker than its name. It reads
+each file alone, and only a file whose text contains `<wt-data-table`. Cell markup is the value of a
+`cell` property, each argument of a call to a function named `cell` (the till's find-bill screen
+builds its columns that way) and a `.rowControls=${…}` binding, plus the bodies of the functions
+those call: `this.foo()` is the method of the class the call sits in, and `foo()` the function the
+nearest enclosing scope declares. It misses a method inherited from a superclass, a function passed
+as a value (`.map(this.#row)`) rather than called, and a helper imported from another file, and it
+never looks inside an event listener (`@click=${…}`). It reads only the static text of `class="…"`
+and the keys of `classMap({…})`, so a class written as `class=${…}`, or joined to a placeholder, is
+invisible. It reads only the class selectors of the file's own `css` templates, never a stylesheet
+imported from another module or a selector built by an interpolation, and leaves out declaration
+values and the arguments of `:host()`, `:host-context()` and `::slotted()`. It can wrongly refuse a
+class that another element in the same file styles, markup a function the cell calls but stores
+elsewhere, the arguments of an unrelated function named `cell`, and an outer function whose name a
+destructured or loop variable reuses at the call.
 
 **A last column with `pinned: "end"` stays at the trailing edge of the table's box while the other
 columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
