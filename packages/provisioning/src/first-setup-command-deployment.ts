@@ -66,7 +66,7 @@ export function createFirstSetupCommandDeployment(options: {
   let publication:
     | {
         digest: string;
-        settings: ReturnType<typeof parseFirstSetupSettings>;
+        settings: Awaited<ReturnType<typeof parseFirstSetupSettings>>;
         ring: KeyRing;
       }
     | undefined;
@@ -121,7 +121,7 @@ export function createFirstSetupCommandDeployment(options: {
         throw new AppError("setup.not_ready", {});
       const selection = venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory);
       if (selection.contribution === undefined) conflict();
-      const settings = parseFirstSetupSettings(
+      const settings = await parseFirstSetupSettings(
         selection.contribution,
         state.frozen.environment,
         path ? await readFirstSetupSettings(path) : {},

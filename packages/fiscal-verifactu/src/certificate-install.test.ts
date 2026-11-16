@@ -646,3 +646,20 @@ describe("venueTimeZone", () => {
     expect(await read()).toBe("UTC");
   });
 });
+
+it("leaves a temporary local check refusal off the file and preserves the installed certificate", async () => {
+  const v = await venue();
+  const server = await serve();
+  const before = await state();
+  const node = process.execPath;
+  try {
+    process.execPath = "/nonexistent/waitron-node";
+    await expect(
+      installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW),
+    ).resolves.toEqual({ outcome: "refused", reason: "unavailable" });
+  } finally {
+    process.execPath = node;
+  }
+  expect(await state()).toEqual(before);
+  expect(server.requests()).toBe(0);
+});

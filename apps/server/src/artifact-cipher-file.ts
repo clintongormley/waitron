@@ -3,8 +3,42 @@ import { open, unlink } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
 import { ARTIFACT_HEADER_BYTES, KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
 import { FILE_CHUNK_BYTES, readExactly, writeAll } from "./artifact-file-io.js";
-import { deriveKeyAsync } from "./scrypt-kdf.js";
+import { deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
+
+export function createArchiveKeySlot() {
+  let held:
+    { identity: string; key: Promise<Buffer>; timer: ReturnType<typeof setTimeout> } | undefined;
+  const clear = () => {
+    if (held === undefined) return;
+    clearTimeout(held.timer);
+    void held.key.then(
+      (key) => key.fill(0),
+      () => {},
+    );
+    held = undefined;
+  };
+  return {
+    clear,
+    async derive(passphrase: string, salt: Buffer, params: ScryptParams): Promise<Buffer> {
+      const { N, r, p, keylen, maxmem } = params;
+      const identity = JSON.stringify([passphrase, salt.toString("hex"), N, r, p, keylen, maxmem]);
+      if (held?.identity !== identity) {
+        clear();
+        const key = deriveKeyAsync(passphrase, Buffer.from(salt), { ...params });
+        const entry = { identity, key, timer: setTimeout(clear, 5 * 60_000) };
+        entry.timer.unref();
+        held = entry;
+        void key.catch(() => {
+          if (held === entry) clear();
+        });
+      }
+      return Buffer.from(await held!.key);
+    },
+  };
+}
+export type ArchiveKeySlot = ReturnType<typeof createArchiveKeySlot>;
+const archiveKeySlot = createArchiveKeySlot();
 
 export async function encryptArtifactFile(
   plaintext: AsyncIterable<Uint8Array>,
@@ -44,6 +78,7 @@ export async function decryptArtifactFile(
   artifactPath: string,
   outPath: string,
   passphrase: string,
+  keySlot: ArchiveKeySlot = archiveKeySlot,
 ): Promise<string> {
   const input = await open(artifactPath, "r");
   try {
@@ -58,8 +93,9 @@ export async function decryptArtifactFile(
     const params = KDF_BY_VERSION[header[4]];
     if (params === undefined)
       throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
-    const key = await deriveKeyAsync(passphrase, header.subarray(5, 21), params);
+    const key = await keySlot.derive(passphrase, header.subarray(5, 21), params);
     const decipher = createDecipheriv("aes-256-gcm", key, header.subarray(21, 33));
+    key.fill(0);
     decipher.setAAD(header.subarray(0, 33));
     decipher.setAuthTag(header.subarray(33, ARTIFACT_HEADER_BYTES));
     const output = await open(outPath, "wx", 0o600);
@@ -87,6 +123,9 @@ export async function decryptArtifactFile(
     } finally {
       await output.close();
     }
+  } catch (error) {
+    keySlot.clear();
+    throw error;
   } finally {
     await input.close();
   }

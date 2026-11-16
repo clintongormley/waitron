@@ -598,3 +598,21 @@ describe("setup-cert-screen in Spanish", () => {
     );
   });
 });
+
+it("keeps a temporary certificate check refusal off the fields and allows Next again", async () => {
+  const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {
+    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw", certKind: "sello" } },
+    refusal: { field: "body", reason: "unavailable" },
+  });
+  expect(await bottomOf(el)).toBe("The box could not check this certificate. Try again.");
+  expect(pfxError(el)).toBeNull();
+  expect(q(el, "[data-test=passphrase]")!.getAttribute("error") ?? "").toBe("");
+  expect(q(el, "[data-test=next]")!.hasAttribute("disabled")).toBe(false);
+});
+it("names an oversized certificate instead of calling it unreadable", async () => {
+  const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {
+    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw", certKind: "sello" } },
+    refusal: { field: "pfxBase64", reason: "too_large" },
+  });
+  expect(pfxError(el)?.textContent?.trim()).toBe("This file is too large to be a certificate.");
+});

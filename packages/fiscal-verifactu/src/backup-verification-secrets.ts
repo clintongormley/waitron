@@ -12,7 +12,8 @@ import {
 } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { isCertKind } from "./aeat-transport.js";
-import { normaliseTaxId, openCertificateFile } from "./certificate-file.js";
+import { normaliseTaxId } from "./certificate-file.js";
+import { openCertificate } from "./certificate-open.js";
 
 const TABLES = ["fiscal_certificate_installs", "fiscal_certificate_reminders"] as const;
 
@@ -77,8 +78,9 @@ async function check(
     return "invalid";
   const pfx = Buffer.from(pfxBase64, "base64");
   if (pfx.length === 0 || pfx.toString("base64") !== pfxBase64) return "invalid";
-  const opened = openCertificateFile(pfx, passphrase);
+  const opened = await openCertificate(pfx, passphrase);
   if (!opened.ok) {
+    if (opened.reason === "unavailable") throw new BackupCheckUnavailable("secret_unavailable");
     if (opened.reason === "passphrase_wrong")
       throw new BackupCheckUnavailable("decryption_unavailable");
     return opened.reason === "old_encryption" ? "unsupported" : "invalid";

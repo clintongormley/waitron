@@ -477,7 +477,7 @@ it.each(["placement", "identity", "keyring", "settings", "decrypt", "archive"])(
         throw fault;
       });
     if (boundary === "decrypt")
-      vi.spyOn(cipherReaders, "decryptArtifact").mockImplementationOnce(() => {
+      vi.spyOn(cipherReaders, "decryptArtifactAsync").mockImplementationOnce(() => {
         throw fault;
       });
     if (boundary === "archive")

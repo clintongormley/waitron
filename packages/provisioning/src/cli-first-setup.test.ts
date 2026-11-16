@@ -1,3 +1,4 @@
+import * as certificateOpening from "@waitron/fiscal-verifactu/src/certificate-open.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +14,7 @@ import {
   readNodeMembership,
   stampDeployment,
   invoiceSeries,
+  sales,
   type VenueDatabase,
 } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
@@ -1488,4 +1490,35 @@ it("the production command records a readable certificate against the committed 
     personId: null,
     kind: "sello",
   });
+});
+
+it("stops production setup with an explicit Start again choice when its post-provision opener is unavailable", async () => {
+  const f = await productionFixture(true);
+  const real = certificateOpening.openCertificate;
+  let refused = false;
+  const opening = vi
+    .spyOn(certificateOpening, "openCertificate")
+    .mockImplementation(async (...args) => {
+      if (!refused && (await venue.db.select().from(invoiceSeries)).length > 0) {
+        refused = true;
+        return { ok: false, reason: "unavailable" };
+      }
+      return real(...args);
+    });
+  try {
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(refused).toBe(true);
+    const before = await venue.db.select().from(invoiceSeries);
+    expect(before).toHaveLength(3);
+    expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(f.output).toContain(
+      "Setup stopped after the invoice series were made. No invoice was issued. Open the box's setup page and choose Start again. It clears this unfinished setup so you can enter it again.",
+    );
+    expect(await venue.db.select().from(sales)).toEqual([]);
+    expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(f.output.at(-1)).toBe("setup.attempt_conflict {}");
+    expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+  } finally {
+    opening.mockRestore();
+  }
 });

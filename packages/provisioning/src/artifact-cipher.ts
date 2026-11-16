@@ -62,6 +62,20 @@ function frameUnderKey(plaintext: Uint8Array, salt: Buffer, key: Buffer): Buffer
 /** Decrypt a framed artifact. Throws backup.artifact_invalid (malformed frame) or
  * recovery.passphrase_invalid (wrong key / tamper — GCM auth failure, deliberately alike). */
 export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer {
+  const frame = readFrame(framed);
+  return openFrame(frame, deriveKey(passphrase, frame.salt, frame.params));
+}
+
+export async function decryptArtifactAsync(
+  framed: Uint8Array,
+  passphrase: string,
+): Promise<Buffer> {
+  const frame = readFrame(Buffer.from(framed));
+  const key = await deriveKeyAsync(passphrase, frame.salt, frame.params);
+  return openFrame(frame, key);
+}
+
+function readFrame(framed: Uint8Array) {
   const buf = Buffer.from(framed.buffer, framed.byteOffset, framed.byteLength);
   if (buf.length < ARTIFACT_HEADER_BYTES)
     throw new AppError("backup.artifact_invalid", { reason: "too_short" });
@@ -79,7 +93,11 @@ export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer 
   const tag = buf.subarray(off, (off += TAG_LEN));
   const ct = buf.subarray(off);
   const header = buf.subarray(0, AAD_LEN);
-  const decipher = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt, params), iv);
+  return { salt, iv, tag, ct, header, params };
+}
+
+function openFrame({ iv, tag, ct, header }: ReturnType<typeof readFrame>, key: Buffer): Buffer {
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAAD(header);
   decipher.setAuthTag(tag);
   try {

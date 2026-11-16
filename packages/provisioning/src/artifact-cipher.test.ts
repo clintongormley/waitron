@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   decryptArtifact,
+  decryptArtifactAsync,
   encryptArtifact,
   encryptArtifactAsync,
   encryptArtifactWithSalt,
@@ -138,4 +139,42 @@ describe("artifact cipher", () => {
       encryptArtifactWithSalt(randomBytes(8), "pw-000000000000", randomBytes(15)),
     ).toThrow(RangeError);
   });
+});
+
+it("opens off-thread before completing, preserving the frame and refusal answers", async () => {
+  const plain = Buffer.from("archive payload");
+  const framed = encryptArtifact(plain, "exact passphrase ");
+  const order: string[] = [];
+  const timer = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      order.push("timer");
+      resolve();
+    }, 0),
+  );
+  const opened = Promise.resolve(decryptArtifactAsync(framed, "exact passphrase ")).then(
+    (bytes) => {
+      order.push("opened");
+      return bytes;
+    },
+  );
+  const [bytes] = await Promise.all([opened, timer]);
+  expect(bytes).toEqual(plain);
+  expect(order).toEqual(["timer", "opened"]);
+  await expect(decryptArtifactAsync(framed, "exact passphrase")).rejects.toMatchObject({
+    code: "recovery.passphrase_invalid",
+  });
+  framed[framed.length - 1] ^= 1;
+  await expect(decryptArtifactAsync(framed, "exact passphrase ")).rejects.toMatchObject({
+    code: "recovery.passphrase_invalid",
+  });
+  for (const [frame, reason] of [
+    [Buffer.alloc(4), "too_short"],
+    [Buffer.alloc(49), "bad_magic"],
+    [Buffer.concat([Buffer.from("WBK1"), Buffer.from([99]), Buffer.alloc(44)]), "bad_version"],
+  ] as const) {
+    await expect(decryptArtifactAsync(frame, "pw")).rejects.toMatchObject({
+      code: "backup.artifact_invalid",
+      params: { reason },
+    });
+  }
 });

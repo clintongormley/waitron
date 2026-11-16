@@ -212,7 +212,7 @@ export interface FiscalContribution {
     required(environment: DeploymentEnvironment): boolean;
     /** Validate the secret locally without writes, naming the offending field on refusal.
      * Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain (CLAUDE.md §5). */
-    validate(raw: unknown): void;
+    validate(raw: unknown): void | Promise<void>;
     /** Seal the secret into the venue's vault in its own transaction, re-validating it. `nodeId`
      * is the node whose vault holds the secret. */
     seal(deps: { db: Database; ring: KeyRing; nodeId: string }, raw: unknown): Promise<void>;

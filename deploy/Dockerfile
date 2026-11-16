@@ -251,6 +251,7 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/node-entry.js \
   /src/apps/server/dist/backup-verification.js \
   /src/apps/server/dist/fiscal-certificate-diagnosis.js \
+  /src/apps/server/dist/certificate-open.js \
   /src/apps/server/dist/upgrade-checks.js \
   /src/apps/server/dist/bin-restore.js \
   /src/apps/server/dist/bin-rejoin.js \
@@ -270,6 +271,7 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/node-entry.js.NOTICES.txt \
   /src/apps/server/dist/backup-verification.js.NOTICES.txt \
   /src/apps/server/dist/fiscal-certificate-diagnosis.js.NOTICES.txt \
+  /src/apps/server/dist/certificate-open.js.NOTICES.txt \
   /src/apps/server/dist/upgrade-checks.js.NOTICES.txt \
   /src/apps/server/dist/bin-restore.js.NOTICES.txt \
   /src/apps/server/dist/bin-rejoin.js.NOTICES.txt \

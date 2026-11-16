@@ -108,6 +108,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     [
       resolve("../../scripts/bundle-node.mjs"),
       `src/backup-verification-entry.ts=${verifier}`,
+      `../../packages/fiscal-verifactu/src/certificate-open-entry.ts=${join(root, "certificate-open.js")}`,
       `${ordinarySource}=${ordinaryBundle}`,
     ],
     {
@@ -145,6 +146,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     process.execPath,
     [
       "--permission",
+      "--allow-child-process",
       `--allow-fs-read=${resolve("../..")}`,
       `--allow-fs-read=${root}`,
       `--allow-fs-write=${f.deps.scratchRoot}`,

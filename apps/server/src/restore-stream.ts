@@ -34,7 +34,7 @@ import {
   type RestoreOperationRunner,
   type ValidatedArtifact,
 } from "./restore.js";
-import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
+import { readSealedStateRow, unsealNodeStateAsync } from "./sealed-state.js";
 import { STREAM_RESTORE_PREFIX } from "./restore-staging-dirs.js";
 import { readStreamSettings } from "./stream-host.js";
 import { deriveStreamKey } from "./stream-key.js";
@@ -342,7 +342,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       checkIntegrity: deps.checkIntegrity ?? checkIntegrity,
       log: deps.log,
     });
-    const entries = unsealNodeState(sealed, kit.recoveryKey);
+    const entries = await unsealNodeStateAsync(sealed, kit.recoveryKey);
     // A sealed state with no node copy is refused when its entries are validated.
     await writeStagedNodeCopy(
       databasePath,

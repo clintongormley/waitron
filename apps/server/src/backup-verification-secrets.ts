@@ -4,7 +4,7 @@ import { posix } from "node:path";
 import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import { resolveAccountKey } from "./account-key.js";
-import { decryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifactAsync } from "./artifact-cipher.js";
 import { unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { loadRecoveryKey } from "./backup-config.js";
 import type { BackupVerificationReason } from "./backup-verification-protocol.js";
@@ -118,7 +118,7 @@ export async function verifyBackupStateSecrets(
   if (sealedState !== undefined) {
     let plaintext: Uint8Array;
     try {
-      plaintext = decryptArtifact(sealedState.sealed, sealedState.recoveryKey);
+      plaintext = await decryptArtifactAsync(sealedState.sealed, sealedState.recoveryKey);
     } catch (error) {
       if (!isAppError(error)) throw error;
       return error.code === "recovery.passphrase_invalid"

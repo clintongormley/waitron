@@ -1,7 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   baseStyles,
   leaveCoordinatorFor,
@@ -31,11 +31,13 @@ const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: Strin
 ];
 
 export interface CertificateRefusal {
-  field: "pfxBase64" | "passphrase";
+  field: "pfxBase64" | "passphrase" | "body";
   reason: string;
 }
 
 const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
+  too_large: "cert.refusal.too_large",
+  unavailable: "cert.refusal.unavailable",
   passphrase_wrong: "cert.refusal.passphrase_wrong",
   unreadable: "cert.refusal.unreadable",
   old_encryption: "cert.refusal.old_encryption",
@@ -99,7 +101,7 @@ export class SetupCertScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) refusal?: CertificateRefusal;
-  @state() private refusalCleared = false;
+  private readonly feedback = new FormFeedback(this);
 
   /** Never rendered: only its presence is shown. */
   @state() private pfxBase64 = "";
@@ -109,8 +111,6 @@ export class SetupCertScreen extends LitElement {
   @state() private passphrase = "";
   @state() private certKind: AeatCertDraft["certKind"] = "sello";
   @state() private passphraseVisible = false;
-
-  @state() private attempted = false;
 
   @state() private fileReadFailed = false;
 
@@ -168,7 +168,8 @@ export class SetupCertScreen extends LitElement {
         this.#selectedFile = form.selectedFile;
         this.#pendingFile = form.pendingFile;
         this.fileReadFailed = form.fileReadFailed;
-        this.attempted = false;
+        this.feedback.attempted = false;
+        this.requestUpdate();
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -180,7 +181,7 @@ export class SetupCertScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("refusal")) this.refusalCleared = false;
+    if (changed.has("refusal")) this.feedback.newRefusal();
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
@@ -202,7 +203,7 @@ export class SetupCertScreen extends LitElement {
 
   async #onFileChange(event: CustomEvent<{ files: File[] }>): Promise<void> {
     event.stopPropagation();
-    if (this.refusal?.field === "pfxBase64") this.refusalCleared = true;
+    if (this.refusal?.field === "pfxBase64") this.feedback.dismiss("refusal");
     const file = event.detail.files[0];
     const generation = ++this.#fileGeneration;
     this.#selectedFile = file ?? null;
@@ -236,7 +237,7 @@ export class SetupCertScreen extends LitElement {
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.passphrase = event.detail.value;
-    if (this.refusal?.field === "passphrase") this.refusalCleared = true;
+    if (this.refusal?.field === "passphrase") this.feedback.dismiss("refusal");
     this.#scope?.changed();
   }
 
@@ -246,25 +247,30 @@ export class SetupCertScreen extends LitElement {
     this.#scope?.changed();
   }
 
-  #errors(): Partial<Record<"pfx" | "passphrase", string>> {
-    const errors: Partial<Record<"pfx" | "passphrase", string>> = {};
-    if (this.attempted && this.pfxBase64 === "") {
+  #errors(): Partial<Record<"pfx" | "passphrase" | "request", string>> {
+    const errors: Partial<Record<"pfx" | "passphrase" | "request", string>> = {};
+    if (this.feedback.attempted && this.pfxBase64 === "") {
       errors.pfx = this.fileReadFailed ? t("cert.file_unreadable") : t("cert.file_required");
     }
-    if (this.attempted && this.passphrase.trim() === "")
+    if (this.feedback.attempted && this.passphrase.trim() === "")
       errors.passphrase = t("cert.passphrase_required");
-    if (this.refusal && !this.refusalCleared) {
-      const field = this.refusal.field === "passphrase" ? "passphrase" : "pfx";
+    if (this.refusal && this.feedback.remaining({ refusal: this.refusal }).refusal !== undefined) {
+      const field =
+        this.refusal.field === "body"
+          ? "request"
+          : this.refusal.field === "passphrase"
+            ? "passphrase"
+            : "pfx";
       errors[field] ??= t(REFUSAL_MESSAGES[this.refusal.reason] ?? "cert.refusal.unreadable");
     }
     return errors;
   }
 
   #next(): void {
-    this.refusalCleared = true;
-    this.attempted = true;
+    this.feedback.dismiss("refusal");
+    this.feedback.press();
     if (this.pfxBase64 === "" || this.passphrase.trim() === "") {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const submitted = this.#current();
@@ -286,7 +292,7 @@ export class SetupCertScreen extends LitElement {
 
   override render(): TemplateResult {
     const errors = this.#errors();
-    const hasFieldErrors = errors.pfx !== undefined || errors.passphrase !== undefined;
+    const fieldKeys = new Set(Object.keys(errors).filter((key) => key !== "request"));
     return html`
       <h1>${t("cert.heading")}</h1>
       <p>${t("cert.intro")}</p>
@@ -366,14 +372,14 @@ export class SetupCertScreen extends LitElement {
           >${t("cert.kind_help")}</wt-help-tooltip
         >
       </wt-combobox>
-      <wt-form-actions .error=${hasFieldErrors ? t("cert.fix_fields") : ""}>
+      <wt-form-actions .error=${this.feedback.message(errors, fieldKeys, t("cert.fix_fields"))}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("cert.back")}</wt-button
         >
         <wt-button
           variant="primary"
           data-test="next"
-          ?disabled=${this.attempted && (this.pfxBase64 === "" || this.passphrase.trim() === "")}
+          ?disabled=${this.feedback.attempted && (this.pfxBase64 === "" || this.passphrase.trim() === "")}
           @click=${() => this.#next()}
           >${t("cert.next")}</wt-button
         >

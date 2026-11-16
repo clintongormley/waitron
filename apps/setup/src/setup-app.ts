@@ -1660,6 +1660,15 @@ export class SetupApp extends LitElement {
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
+      if (
+        (error as ApiError)?.code === "setup.certificate_refused" &&
+        (error as ApiError).params?.reason === "setup_stopped"
+      ) {
+        this.firstReady = false;
+        this.firstOwnerError = say("cert.refusal.setup_stopped");
+        this.screen = "first-owner";
+        return;
+      }
       if (this.#mapCertificateError(error)) return;
       if (this.#firstSession) {
         this.firstReady = false;
@@ -2191,7 +2200,9 @@ export class SetupApp extends LitElement {
     const { code, params } = (error ?? {}) as Partial<ApiError>;
     if (
       code !== "setup.certificate_refused" ||
-      (params?.field !== "pfxBase64" && params?.field !== "passphrase")
+      (params?.field !== "pfxBase64" &&
+        params?.field !== "passphrase" &&
+        !(params?.field === "body" && params?.reason === "unavailable"))
     )
       return false;
     this.#invalidateFiscalTest();

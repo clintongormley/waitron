@@ -242,10 +242,10 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
     expect(secret.required("preproduction")).toBe(false);
   });
 
-  it("validate throws setup.request_invalid on a malformed blob and writes nothing", () => {
+  it("validate throws setup.request_invalid on a malformed blob and writes nothing", async () => {
     let error: unknown;
     try {
-      secret.validate({ ...goodCert, certKind: "bogus" });
+      await secret.validate({ ...goodCert, certKind: "bogus" });
     } catch (e) {
       error = e;
     }
