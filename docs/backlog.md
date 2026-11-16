@@ -1849,11 +1849,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the recursive-trigger check remain open.
   [Detail](backlog/architecture.md#loose-ends-left-by-a483-1544).
 
-- **Guard asynchronous work sharing one transaction.** The driver's statements are synchronous,
-  so a native in-flight flag does not catch `Promise.all`. Await helpers in turn; the adapter warns
+- **Guard asynchronous work sharing one transaction.** Await helpers in turn; the adapter warns
   that overlapping asynchronous nested transactions can release savepoints out of order
-  (`packages/store/src/node-sqlite-adapter.ts`). The enforcement gap remains open; see
-  `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction".
+  (`packages/store/src/node-sqlite-adapter.ts`). The enforcement gap remains open.
+  A per-connection runtime guard with async-context and open-parent tracking was tried on
+  `fix/f-async-tx-guard` (`9c934f305c`), then parked by the watcher, 2026-11-17 00:14; it is not shipped.
+  Run-it probes found a late child restoring a finished ancestor and refusing later writes
+  (`~/waitron-campaign-f/receipts/async-tx-guard-20261116/run-it-b.md`); after that correction,
+  catching the sibling refusal could still commit a child's late write outside the transaction,
+  and legitimate callbacks were wrongly refused (`settlement-a.md`, `settlement-b.md` in that folder).
+  The simpler proposed next step is a source-reading test flagging `Promise.all` over a
+  `Transaction` inside `withTransaction` bodies — weaker than its name: source matching would not
+  prove that aliases or indirect helper calls are sequential. Do not build it yet (watcher).
+  See `docs/developers/conventions-data.md`, "Multi-table writes share ONE transaction".
 
 - **A module this server runs with no transfer declaration, or no recorded version, is refused as
   `setup.request_invalid` field `module:<name>`** (`packages/provisioning/src/configuration-transfer.ts`),
