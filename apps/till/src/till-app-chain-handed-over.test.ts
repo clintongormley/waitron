@@ -466,3 +466,32 @@ it.each(
     }
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "keeps a whole table bill paid by hand-keyed card unconfirmed through a refused send before a box handing over refuses, in %s",
+  async (locale) => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockRejectedValueOnce(notPermitted)
+      .mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { recordSale: write });
+    await openTable(el);
+    const tap = () =>
+      emit(tableOrder(el)!, "pay-tab", { method: "card", amount: "120.00", externalRef: "op-1" });
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).not.toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(write.mock.calls[2]).toEqual(write.mock.calls[0]);
+    const shown = banner(el)?.textContent?.trim();
+    expect(shown).not.toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+    expect(shown).toBe(t("sale.unconfirmed"));
+    expect(shown).toMatch(unconfirmedWords(locale));
+  },
+);
