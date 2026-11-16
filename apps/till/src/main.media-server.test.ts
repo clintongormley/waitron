@@ -73,7 +73,9 @@ test("after the till moves to another server, menu pictures are looked up on and
   const stop = watchMediaImage(PICTURE, "till", (address) => heard.push(address));
   try {
     await vi.waitFor(() => expect(heard).toEqual([`${SPARE}/media/renditions/photo-till.webp`]));
-    expect(requested).not.toContain(`/media/presentations?references=${PICTURE}`);
+    expect(
+      requested.filter((url) => url.includes("/media/") && !url.startsWith(`${SPARE}/`)),
+    ).toEqual([]);
   } finally {
     stop();
   }

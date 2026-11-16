@@ -3,8 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
+import { ChangeObserver } from "../change-observer.js";
 import { ColorSchemeController } from "../color-scheme.js";
-import { mediaAddress, onMediaServerChange } from "../media-server.js";
+import { mediaAddress, subscribeMediaServer } from "../media-server.js";
 
 export type WtVenueLogoSize = "banner" | "bar" | "sign-in";
 
@@ -91,10 +92,15 @@ export class WtVenueLogo extends LitElement {
   readonly #scheme = new ColorSchemeController(this);
   #drawn!: string;
   #timer: ReturnType<typeof setTimeout> | undefined;
-  #stopFollowingServer: (() => void) | undefined;
+
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeMediaServer);
+  }
 
   get #src(): string {
-    return mediaAddress(this.#scheme.dark && this.dark ? this.dark : this.light);
+    const path = this.#scheme.dark && this.dark ? this.dark : this.light;
+    return path && mediaAddress(path);
   }
 
   // Not willUpdate: Lit runs that before the controller's hostUpdate reads the scheme.
@@ -113,13 +119,11 @@ export class WtVenueLogo extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#stopFollowingServer = onMediaServerChange(() => this.requestUpdate());
     if (this.broken) this.#startTimer();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#stopFollowingServer!();
     this.#stopTimer();
   }
 

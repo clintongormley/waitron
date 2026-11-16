@@ -12,7 +12,7 @@ export function mediaAddress(path: string): string {
   return path.startsWith("/media/") ? `${server}${path}` : path;
 }
 
-export function onMediaServerChange(listener: () => void): () => void {
+export function subscribeMediaServer(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }

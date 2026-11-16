@@ -2,7 +2,7 @@ import { nothing, type Part } from "lit";
 import { AsyncDirective } from "lit/async-directive.js";
 import { directive } from "lit/directive.js";
 import { MEDIA_FILENAME } from "@waitron/shared";
-import { mediaAddress, onMediaServerChange } from "./media-server.js";
+import { mediaAddress, subscribeMediaServer } from "./media-server.js";
 
 type Shape = "source" | "square" | "till" | "display";
 type Presentation = Record<Shape, string> & { id: string; revision: number };
@@ -79,7 +79,7 @@ function subscribe(reference: string, listener: () => void) {
     }
   };
 }
-onMediaServerChange(schedule);
+subscribeMediaServer(schedule);
 function presentation(value: unknown): value is Presentation {
   if (typeof value !== "object" || !value || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;

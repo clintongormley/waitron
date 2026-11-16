@@ -2080,8 +2080,14 @@ screen (`till-lock-screen`) name the logo, as its alt text, by the start read's 
 `ServerRouter` currently follows (`apps/till/src/main.ts`), so after a move the next `themeHash` it
 is handed that differs from the applied one fetches the new server's theme; pinned by
 `apps/till/src/main.theme-server.test.ts`. The logo addresses in that answer are paths
-(`/media/renditions/…`, `apps/server/src/venue-theme.ts`), so the browser still loads the logo
-image from the page's own address, as it does the menu's pictures.
+(`/media/renditions/…`, `apps/server/src/venue-theme.ts`); the till hands its `ServerRouter`'s
+current server to `setMediaServer` (`packages/ui/src/media-server.ts`) at start and on every
+`server-changed`, and `wt-venue-logo`, the menu's pictures (`liveMediaImage`, `watchMediaImage`) and
+the receipt preview's logo prefix a `/media/…` path with it, so they load from the server the till
+follows; pinned by `apps/till/src/main.media-server.test.ts` (the lookup and a picture after a
+move), `packages/ui/src/live-media-image.test.ts`, `packages/ui/src/components/wt-venue-logo.test.ts`
+and `apps/till/src/screens/till-ticket-view.presentation.test.ts`. The dashboard never sets it, so its
+paths stay on the page's own server.
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`

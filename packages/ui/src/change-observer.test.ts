@@ -37,6 +37,19 @@ it("redraws connected hosts and resumes after a disconnected interval", async ()
   expect(host.shadowRoot!.textContent).toBe("device");
 });
 
+it("redraws a host on reconnect after a change it missed while disconnected", async () => {
+  const host = probe();
+  new ui.ChangeObserver(host, ui.subscribeThemeChoice);
+  document.body.append(host);
+  await host.updateComplete;
+  expect(host.shadowRoot!.textContent).toBe("device");
+  host.remove();
+  ui.chooseTheme("dark");
+  document.body.append(host);
+  await host.updateComplete;
+  expect(host.shadowRoot!.textContent).toBe("dark");
+});
+
 it("calls the supplied handler once per change across reconnects", async () => {
   const host = probe();
   const applied: string[] = [];

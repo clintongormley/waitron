@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
+import { setMediaServer } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import type { ReceiptPresentation } from "@waitron/shared";
 import type { TillSaleResult } from "../api/client.js";
@@ -45,6 +46,7 @@ const header = (el: TillTicketView) =>
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  setMediaServer("");
 });
 
 describe("per-answer receipt presentation", () => {
@@ -66,6 +68,29 @@ describe("per-answer receipt presentation", () => {
     expect(el.result.receiptTrim.logo).toBe(rich.receiptTrim.logo);
     expect(el.shadowRoot!.textContent).toContain("Filed Legal SL");
     expect(el.shadowRoot!.textContent).toContain("2,00");
+  });
+  it.each([
+    ["the answer's logo address", `/media/renditions/v1/${"b".repeat(64)}.webp/display/1-1-1.webp`],
+    ["the stored logo", undefined],
+  ])("loads %s from the media server the till follows", async (_, logoUrl) => {
+    const path = logoUrl ?? `/media/${rich.receiptTrim.logo}`;
+    const logo = (el: TillTicketView) =>
+      el.shadowRoot!.querySelector<HTMLImageElement>("img.logo")!.getAttribute("src");
+    setMediaServer("https://spare.deli.test");
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: answer({ ...rich, receiptTrim: { ...rich.receiptTrim, logoUrl } }),
+      issuer,
+    });
+    expect(logo(el)).toBe(`https://spare.deli.test${path}`);
+    setMediaServer("https://main.deli.test");
+    await el.updateComplete;
+    expect(logo(el)).toBe(`https://main.deli.test${path}`);
+    const parent = el.parentElement!;
+    el.remove();
+    setMediaServer("https://third.deli.test");
+    parent.append(el);
+    await el.updateComplete;
+    expect(logo(el)).toBe(`https://third.deli.test${path}`);
   });
   it.each([false, true])(
     "uses department address permission %j beside filed identity",

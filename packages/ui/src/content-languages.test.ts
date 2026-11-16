@@ -1,3 +1,4 @@
+import { LitElement, html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ContentLanguageController,
@@ -6,7 +7,22 @@ import {
   subscribeContentLanguages,
 } from "./content-languages.js";
 
-afterEach(() => setContentLanguages({ defaultLanguage: "en", languages: ["en"] }));
+class ContentLanguageProbe extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+  override render() {
+    return html`<span>${currentContentLanguages().defaultLanguage}</span>`;
+  }
+}
+customElements.define("content-language-probe", ContentLanguageProbe);
+const mounted: ContentLanguageProbe[] = [];
+
+afterEach(() => {
+  for (const host of mounted.splice(0)) host.remove();
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+});
 
 describe("content language context", () => {
   // Runs first on purpose: after any other case the afterEach has already written the same
@@ -28,16 +44,31 @@ describe("content language context", () => {
     const controller = new ContentLanguageController(host);
     expect(host.addController).toHaveBeenCalledWith(controller);
     controller.hostConnected();
+    expect(host.requestUpdate).toHaveBeenCalledOnce();
     setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
-    expect(host.requestUpdate).toHaveBeenCalledOnce();
-    controller.hostDisconnected();
-    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
-    expect(host.requestUpdate).toHaveBeenCalledOnce();
-    controller.hostConnected();
-    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     expect(host.requestUpdate).toHaveBeenCalledTimes(2);
     controller.hostDisconnected();
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    expect(host.requestUpdate).toHaveBeenCalledTimes(2);
+    controller.hostConnected();
+    expect(host.requestUpdate).toHaveBeenCalledTimes(3);
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(host.requestUpdate).toHaveBeenCalledTimes(4);
+    controller.hostDisconnected();
   });
+  it("redraws a view on reconnect after a change it missed while disconnected", async () => {
+    const host = document.createElement("content-language-probe") as ContentLanguageProbe;
+    mounted.push(host);
+    document.body.append(host);
+    await host.updateComplete;
+    expect(host.shadowRoot!.textContent).toBe("en");
+    host.remove();
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+    document.body.append(host);
+    await host.updateComplete;
+    expect(host.shadowRoot!.textContent).toBe("fr");
+  });
+
   it("shares configured languages and notifies subscribed views", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeContentLanguages(listener);

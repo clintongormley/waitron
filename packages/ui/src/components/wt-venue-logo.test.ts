@@ -72,6 +72,7 @@ afterEach(async () => {
   chooseTheme("device");
   await commands.emulateColorScheme(null);
   startThemeChoice(document.documentElement);
+  setMediaServer("");
   vi.restoreAllMocks();
   cleanup();
 });
@@ -335,17 +336,31 @@ describe("wt-venue-logo", () => {
   });
 
   it("draws a media path from the set media server and follows a change", async () => {
-    try {
-      const el = await logo(`light="/media/logo.webp"`, "light");
-      expect(img(el)!.getAttribute("src")).toBe("/media/logo.webp");
-      setMediaServer("https://spare.deli.test");
-      await el.updateComplete;
-      expect(img(el)!.getAttribute("src")).toBe("https://spare.deli.test/media/logo.webp");
-      setMediaServer("https://main.deli.test");
-      await el.updateComplete;
-      expect(img(el)!.getAttribute("src")).toBe("https://main.deli.test/media/logo.webp");
-    } finally {
-      setMediaServer("");
-    }
+    const el = await logo(`light="/media/logo.webp"`, "light");
+    expect(img(el)!.getAttribute("src")).toBe("/media/logo.webp");
+    setMediaServer("https://spare.deli.test");
+    await el.updateComplete;
+    expect(img(el)!.getAttribute("src")).toBe("https://spare.deli.test/media/logo.webp");
+    setMediaServer("https://main.deli.test");
+    await el.updateComplete;
+    expect(img(el)!.getAttribute("src")).toBe("https://main.deli.test/media/logo.webp");
+  });
+
+  it("draws no image once its address attribute is taken away under a set media server", async () => {
+    setMediaServer("https://spare.deli.test");
+    const el = await logo(`light="/media/logo.webp"`, "light");
+    el.removeAttribute("light");
+    await el.updateComplete;
+    expect(img(el)).toBeNull();
+  });
+
+  it("draws the current media server after it changed while the logo was off the page", async () => {
+    const el = await logo(`light="/media/logo.webp"`, "light");
+    const parent = el.parentElement!;
+    el.remove();
+    setMediaServer("https://spare.deli.test");
+    parent.append(el);
+    await el.updateComplete;
+    expect(img(el)!.getAttribute("src")).toBe("https://spare.deli.test/media/logo.webp");
   });
 });

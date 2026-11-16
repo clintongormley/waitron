@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mediaAddress, onMediaServerChange, setMediaServer } from "./media-server.js";
+import { mediaAddress, subscribeMediaServer, setMediaServer } from "./media-server.js";
 
 afterEach(() => setMediaServer(""));
 
@@ -17,7 +17,7 @@ it("leaves an address that is not a media path as it is", () => {
 
 it("tells listeners about a real change only, until they stop listening", () => {
   const listener = vi.fn();
-  const stop = onMediaServerChange(listener);
+  const stop = subscribeMediaServer(listener);
   setMediaServer("https://spare.deli.test");
   setMediaServer("https://spare.deli.test");
   expect(listener).toHaveBeenCalledTimes(1);

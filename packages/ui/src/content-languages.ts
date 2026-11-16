@@ -11,6 +11,8 @@ export class ContentLanguageController implements ReactiveController {
   hostConnected(): void {
     this.#unsubscribe?.();
     this.#unsubscribe = subscribeContentLanguages(() => this.host.requestUpdate());
+    // A host out of the page may not have redrawn since a change it missed.
+    this.host.requestUpdate();
   }
   hostDisconnected(): void {
     this.#unsubscribe?.();

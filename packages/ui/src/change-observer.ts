@@ -6,7 +6,7 @@ export class ChangeObserver implements ReactiveController {
   #dispose?: () => void;
 
   constructor(
-    host: ReactiveControllerHost,
+    private readonly host: ReactiveControllerHost,
     private readonly subscribe: Subscribe,
     private readonly handler: () => void = () => host.requestUpdate(),
   ) {
@@ -15,6 +15,8 @@ export class ChangeObserver implements ReactiveController {
 
   hostConnected(): void {
     this.#dispose = this.subscribe(this.handler);
+    // A host out of the page may not have redrawn since a change it missed.
+    this.host.requestUpdate();
   }
 
   hostDisconnected(): void {
