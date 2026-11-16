@@ -39,7 +39,6 @@ it.each(operations)(
       .insert(webauthnCredentials)
       .values({
         personId: target!.id,
-        name: "Key",
         credentialId: "credential",
         publicKey: "public-key",
         counter: 0,

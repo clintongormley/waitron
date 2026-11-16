@@ -36,7 +36,6 @@ const PROFILE: OwnProfile = {
   passkeys: [
     {
       id: "credential",
-      name: "Laptop",
       createdAt: "2026-09-09T12:00:00Z",
       lastUsedAt: null,
       provider: null,

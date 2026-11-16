@@ -10,20 +10,22 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db
 it("deletes expired rows of every kind before inserting", async () => {
   const personId = await seedPerson(suite.db);
   await suite.db.insert(signInChallenges).values(
-    [
-      { kind: "passkey_registration", personId, challenge: "registration" },
-      { kind: "passkey_login", challenge: "login" },
-      { kind: "passkey_check", personId, challenge: "check" },
-      { kind: "google_login", stateHash: "a".repeat(64), nonce: "nonce", verifier: "verifier" },
-      {
-        kind: "google_link",
-        personId,
-        stateHash: "b".repeat(64),
-        nonce: "nonce",
-        verifier: "verifier",
-      },
-      { kind: "totp_enrolment", personId, encryptedSecret: "sealed" },
-    ].map((row) => ({
+    (
+      [
+        { kind: "passkey_registration", personId, challenge: "registration" },
+        { kind: "passkey_login", challenge: "login" },
+        { kind: "passkey_check", personId, challenge: "check" },
+        { kind: "google_login", stateHash: "a".repeat(64), nonce: "nonce", verifier: "verifier" },
+        {
+          kind: "google_link",
+          personId,
+          stateHash: "b".repeat(64),
+          nonce: "nonce",
+          verifier: "verifier",
+        },
+        { kind: "totp_enrolment", personId, encryptedSecret: "sealed" },
+      ] as const
+    ).map((row) => ({
       ...row,
       createdAt: "2026-11-16T11:55:00.000Z",
       expiresAt: now.toISOString(),
