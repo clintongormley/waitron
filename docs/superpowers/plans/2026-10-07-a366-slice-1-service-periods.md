@@ -1,5 +1,7 @@
 # Service periods, slice 1 — implementation plan (A366)
 
+> 2026-11-16: the [routing-read cleanup](2026-11-16-routing-model-reads.md) removes the Opening hours model’s unused period weekdays and routing uses. The delete-impact read retains routing uses and shares row traversal with Routes.
+
 > **2026-10-09 follow-up:** slice 2 Task 7 retires per-department timetable clearing and its
 > Follow the normal week action. The named day’s own-hours flag now governs copying and removing
 > dated schedules; see [slice 2 Task 7](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md#task-7-switching-a-named-days-own-hours).

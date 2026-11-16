@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
+  isSupportedLocale,
   AppError,
   DINING_POLICIES,
   DININGS,
@@ -673,7 +674,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         return c.json(
           await gatedAs(sessionId, async (tx, authority) => ({
-            ...(await routingModel(tx, new Date())),
+            ...(await routingModel(tx, new Date(), {
+              periods: c.req.query("periods") !== "false",
+            })),
             canMakeDefault: holds(authority, "venue.configure"),
           })),
         );
@@ -1092,7 +1095,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         return c.json(
-          await viewed(sessionId, (tx) => periodDeleteImpact(tx, periodId, new Date())),
+          await viewed(sessionId, (tx) => {
+            const language = c.req.query("language");
+            return periodDeleteImpact(
+              tx,
+              periodId,
+              new Date(),
+              isSupportedLocale(language) ? language : undefined,
+            );
+          }),
         );
       }),
     );

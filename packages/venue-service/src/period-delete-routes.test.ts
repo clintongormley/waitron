@@ -10,6 +10,7 @@ import {
   kitchenStations,
   settings as businessDaySettingsTable,
   menuPeriods,
+  categories,
   routingCellPeriods,
   routingCells,
   seasons as seasonsTable,
@@ -292,6 +293,36 @@ describe("the period-delete routes", () => {
       clockRevision: 1,
     });
   });
+
+  it.each(["en-GB", "es-ES", "invalid"])(
+    "GET delete-impact orders names with supported language %s",
+    async (language) => {
+      const r = await routed();
+      const [station] = await db.select({ id: kitchenStations.id }).from(kitchenStations);
+      for (const name of ["Nuez", "Ñoquis"]) {
+        const [category] = await db.insert(categories).values({ name }).returning();
+        const [cell] = await db
+          .insert(routingCells)
+          .values({ categoryId: category!.id, stationId: station!.id })
+          .returning();
+        await db
+          .insert(routingCellPeriods)
+          .values({ cellId: cell!.id, periodId: r.lunch, stationId: station!.id });
+      }
+      const response = await r.send(
+        "GET",
+        `/${r.lunch}/delete-impact?language=${language}`,
+        r.supervisor,
+      );
+      expect(response.status).toBe(200);
+      const { routingUses } = await response.json();
+      expect(
+        routingUses
+          .filter((use: { rowKind: string }) => use.rowKind === "category")
+          .map((use: { rowLabel: string }) => use.rowLabel),
+      ).toEqual(language === "es-ES" ? ["Nuez", "Ñoquis"] : ["Ñoquis", "Nuez"]);
+    },
+  );
 
   it("GET delete-impact carries the clock revision POST delete accepts, and a new one once the clock changes", async () => {
     const r = await routed();

@@ -3652,7 +3652,7 @@ export class DashboardApi {
   }
 
   getFolderRouting(): Promise<RoutingView> {
-    return this.#request<RoutingView>("/management-api/venue-service/routing", "GET");
+    return this.#request<RoutingView>("/management-api/venue-service/routing?periods=false", "GET");
   }
 
   getProductEditor(id: string): Promise<ProductEditorValue> {

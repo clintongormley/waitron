@@ -48,8 +48,6 @@ const lunch = (): Period => ({
   menuId: "lunch",
   staffMenuIds: ["staff"],
   floorPlanSetId: null,
-  weekdays: [1, 3],
-  routingUses: [],
 });
 
 /** One active department, Restaurant, and an inactive Deli the list does not show. */
@@ -194,7 +192,7 @@ it("creates the changed draft, returns to the list and shows its refreshed data"
     writes.push({ path, method, body });
     data.departments[0]!.periods = [
       ...data.departments[0]!.periods,
-      { ...lunch(), id: "p2", name: "Dinner", colour: "red", staffMenuIds: [], weekdays: [] },
+      { ...lunch(), id: "p2", name: "Dinner", colour: "red", staffMenuIds: [] },
     ];
     return { id: "p2" };
   }) as DashboardRequest);
@@ -784,8 +782,6 @@ function liveFixture(): OpeningHoursModel {
           menuId: "m1",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: [1],
-          routingUses: [],
         },
       ],
       seasonWeeks: [],

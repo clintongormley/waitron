@@ -1,3 +1,4 @@
+import { currentLocale } from "@waitron/dashboard-kit";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
@@ -256,7 +257,7 @@ export class OpeningHoursApi {
     options?: { passive?: boolean },
   ): Promise<PeriodDeleteImpact> {
     return this.request(
-      `${BASE}/menu-periods/${at(periodId)}/delete-impact`,
+      `${BASE}/menu-periods/${at(periodId)}/delete-impact?language=${currentLocale()}`,
       "GET",
       undefined,
       options,

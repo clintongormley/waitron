@@ -943,7 +943,7 @@ class DeletingApp extends PainterApp {
     method: string,
     body: unknown,
   ) => {
-    if (method === "GET" && path.endsWith("/menu-periods/p1/delete-impact"))
+    if (method === "GET" && path.split("?")[0]!.endsWith("/menu-periods/p1/delete-impact"))
       return {
         seasons: 1,
         specialDays: 0,
@@ -975,7 +975,7 @@ class ReplacingApp extends PainterApp {
     method: string,
     body: unknown,
   ) => {
-    if (method === "GET" && path.endsWith("/menu-periods/p1/delete-impact"))
+    if (method === "GET" && path.split("?")[0]!.endsWith("/menu-periods/p1/delete-impact"))
       return {
         seasons: 1,
         specialDays: 0,

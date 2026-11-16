@@ -38,6 +38,7 @@ import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
+  readRoutingUses,
   placeOpenPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -1292,9 +1293,13 @@ describe("the opening-hours model's seasons", () => {
     expect(
       restaurant.seasonWeeks.find((entry) => entry.seasonId === december.currentSeasonId)!.week,
     ).toEqual(dinnerFriday);
-    expect(restaurant.periods.find((period) => period.id === seasons.dinner)!.weekdays).toEqual([
-      5,
-    ]);
+    expect(
+      restaurant.seasonWeeks.flatMap(({ week }) =>
+        week
+          .filter(({ slots }) => slots.some(({ periodId }) => periodId === seasons.dinner))
+          .map(({ weekday }) => weekday),
+      ),
+    ).toEqual([5]);
     const sala = restaurant.zones.find((zone) => zone.id === v.sala)!;
     expect(sala.seasonWeeks).toEqual([
       { seasonId: id("Spring"), week: empty("ranges") },
@@ -1395,7 +1400,7 @@ describe("the opening-hours model's seasons", () => {
 });
 
 describe("a period no longer placed anywhere but a past special day", () => {
-  it("a period painted only on a past special day has no weekdays in the model and is deleted with that paint", async () => {
+  it("a period painted only on a past special day has no weekly paint and is deleted with its special-day paint", async () => {
     const v = await timed();
     const { periods } = v;
     await saveDay(v, "2025-12-25", {
@@ -1403,7 +1408,11 @@ describe("a period no longer placed anywhere but a past special day", () => {
     });
     const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
-    expect(restaurant.periods.find((period) => period.id === periods.brunch)!.weekdays).toEqual([]);
+    expect(
+      restaurant.seasonWeeks.flatMap(({ week }) =>
+        week.flatMap(({ slots }) => slots.filter(({ periodId }) => periodId === periods.brunch)),
+      ),
+    ).toEqual([]);
 
     await scoped((tx) => deletePeriod(tx, periods.brunch, null, AT, 1));
     expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.brunch))).toEqual(
@@ -1808,7 +1817,6 @@ describe("the editor's model", () => {
       (await scoped((tx) => listDepartments(tx))).map((department) => department.id),
     );
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
-    const weekdays = (...days: number[]) => days;
     expect(restaurant).toEqual({
       id: v.restaurant,
       name: "Restaurant",
@@ -1844,8 +1852,6 @@ describe("the editor's model", () => {
           colour: "lime",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: [],
-          routingUses: [],
         },
         {
           id: periods.madrugada,
@@ -1854,8 +1860,6 @@ describe("the editor's model", () => {
           colour: "yellow",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: weekdays(5),
-          routingUses: [],
         },
         {
           id: periods.mananas,
@@ -1864,8 +1868,6 @@ describe("the editor's model", () => {
           colour: "red",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: weekdays(1, 2, 3, 4, 5),
-          routingUses: [],
         },
         {
           id: periods.mediodia,
@@ -1874,8 +1876,6 @@ describe("the editor's model", () => {
           colour: "orange",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: weekdays(0, 1, 2, 3, 4, 5, 6),
-          routingUses: [],
         },
         {
           id: periods.noches,
@@ -1884,8 +1884,6 @@ describe("the editor's model", () => {
           colour: "amber",
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: weekdays(1, 2, 3, 4, 5),
-          routingUses: [],
         },
       ],
       seasonWeeks: inEverySeason(restaurantWeek(periods)),
@@ -2321,8 +2319,6 @@ describe("department service periods", () => {
           menuId: v.menus.Café,
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: [5],
-          routingUses: [],
         },
         {
           id: v.lunch,
@@ -2331,8 +2327,6 @@ describe("department service periods", () => {
           menuId: v.menus.Almuerzo,
           staffMenuIds: [v.menus.Bebidas, v.menus.Café],
           floorPlanSetId: null,
-          weekdays: [5],
-          routingUses: [],
         },
         {
           id: v.night,
@@ -2341,8 +2335,6 @@ describe("department service periods", () => {
           menuId: v.menus.Cena,
           staffMenuIds: [],
           floorPlanSetId: null,
-          weekdays: [5],
-          routingUses: [],
         },
       ],
       seasonWeeks: inEverySeason(
@@ -2730,9 +2722,8 @@ describe("the routing that names a period", () => {
     await cell({ categoryId: cocktails!.id, zoneId: v.barra });
 
     const uses = async () => {
-      const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
-      const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
-      return new Map(restaurant.periods.map((period) => [period.id, period.routingUses]));
+      const routing = await scoped((tx) => readRoutingUses(tx));
+      return new Map(Object.values(periods).map((id) => [id, routing.get(id) ?? []]));
     };
     const before = await uses();
     expect(before.get(periods.noches)).toEqual([
@@ -2819,11 +2810,8 @@ describe("the routing that names a period", () => {
         .insert(routingCellPeriods)
         .values({ cellId: cell!.id, periodId: periods.noches, stationId: cocina!.id });
     }
-    const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
-    const noches = model.departments
-      .find((department) => department.id === v.restaurant)!
-      .periods.find((period) => period.id === periods.noches)!;
-    expect(noches.routingUses).toEqual([
+    const routing = await scoped((tx) => readRoutingUses(tx, periods.noches));
+    expect(routing.get(periods.noches)).toEqual([
       { rowKind: "all", rowLabel: null, zoneName: "Sala" },
       { rowKind: "category", rowLabel: "Brunch › Cocktails", zoneName: null },
       { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: null },

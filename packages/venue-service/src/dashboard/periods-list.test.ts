@@ -28,8 +28,6 @@ const period = (id: string, name: string, overrides: Partial<Period> = {}): Peri
   menuId: "lunch",
   staffMenuIds: [],
   floorPlanSetId: null,
-  weekdays: [],
-  routingUses: [],
   ...overrides,
 });
 
@@ -342,7 +340,7 @@ const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>
 it("a period row opens its page; a department row opens nothing; the pinned actions column holds an Edit/Delete menu per period", async () => {
   const read = answering();
   const el = await mount((async (path: string, ...rest: unknown[]) =>
-    path.endsWith("/delete-impact")
+    path.split("?")[0]!.endsWith("/delete-impact")
       ? new Promise(() => {})
       : (read as (...args: unknown[]) => unknown)(path, ...rest)) as DashboardRequest);
   const grid = await loaded(el);

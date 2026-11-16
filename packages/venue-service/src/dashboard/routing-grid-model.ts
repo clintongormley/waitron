@@ -1,13 +1,12 @@
 import { currentLocale } from "@waitron/dashboard-kit";
 import { createLabelComparator, foldForSearch, textSearch } from "@waitron/shared";
 import {
+  visibleRoutingRows as routingRows,
   cellKey,
   rowKey,
   selectionRulesFromModel,
   selectRoutingCell,
   targetKey,
-  type GridCategory,
-  type GridProduct,
   type GridRow,
   type RouteTarget,
   type RoutingModel,
@@ -19,130 +18,8 @@ import {
 import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import { format } from "./hours-view.js";
 
-function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
-  const list = lists.get(key);
-  if (list === undefined) lists.set(key, [value]);
-  else list.push(value);
-}
-
-function hasNoCategoryCell(model: RoutingModel): boolean {
-  return model.cells.some((cell) => cell.row.kind === "no_category");
-}
-
-/**
- * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
- * are all expanded, every category or product holding a cell together with every ancestor of it,
- * then the No category row — while a product has no category or the row holds a cell — and the
- * products with no category under it. A shown category that is not in `expanded` lists only the
- * children that hold a cell or have a descendant that does; one in `expanded` lists all of them.
- * Siblings are sorted by name with the shared label comparison, equal names keeping the model's
- * order. A category that is its own parent is sorted with the roots. Categories on or below a
- * longer parent cycle follow the roots, and the cycle members placed at the top level are not
- * sorted by name; a category's subcategories come before its products.
- */
 export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<string>): GridRow[] {
-  const known = new Map(model.categories.map((category) => [category.id, category]));
-  const childCategories = new Map<string, GridCategory[]>();
-  const productsIn = new Map<string, GridProduct[]>();
-  const uncategorised: GridProduct[] = [];
-  const roots: GridCategory[] = [];
-  for (const category of model.categories) {
-    const parent = category.parentId;
-    if (parent === null || parent === category.id || !known.has(parent)) {
-      roots.push(category);
-    } else {
-      append(childCategories, parent, category);
-    }
-  }
-  for (const product of model.products) {
-    if (product.categoryId === null || !known.has(product.categoryId)) {
-      uncategorised.push(product);
-    } else {
-      append(productsIn, product.categoryId, product);
-    }
-  }
-  const compare = createLabelComparator(currentLocale());
-  const byName = (a: { name: string }, b: { name: string }): number => compare(a.name, b.name);
-  roots.sort(byName);
-  uncategorised.sort(byName);
-  for (const list of childCategories.values()) list.sort(byName);
-  for (const list of productsIn.values()) list.sort(byName);
-  const categoriesWithCells = new Set<string>();
-  const productsWithCells = new Set<string>();
-  for (const { row } of model.cells) {
-    if (row.kind === "category") categoriesWithCells.add(row.categoryId);
-    if (row.kind === "product") productsWithCells.add(row.productId);
-  }
-
-  const entries: GridRow[] = [{ row: { kind: "all" }, name: "", path: [], depth: 0 }];
-  const placed = new Set<string>();
-
-  // Returns whether the subtree holds a cell, which shows the category even under a closed
-  // parent. A category that turns out hidden takes back the rows its subtree wrote.
-  function place(category: GridCategory, path: string[], parentOpen: boolean): boolean {
-    placed.add(category.id);
-    const mark = entries.length;
-    const depth = path.length + 1;
-    const open = expanded.has(category.id);
-    const childPath = [...path, category.name];
-    entries.push({
-      row: { kind: "category", categoryId: category.id },
-      name: category.name,
-      path,
-      depth,
-    });
-    let forced = categoriesWithCells.has(category.id);
-    for (const child of childCategories.get(category.id) ?? []) {
-      if (placed.has(child.id)) continue;
-      if (place(child, childPath, open)) forced = true;
-    }
-    for (const product of productsIn.get(category.id) ?? []) {
-      const own = productsWithCells.has(product.id);
-      if (own) forced = true;
-      if (open || own) {
-        entries.push({
-          row: { kind: "product", productId: product.id },
-          name: product.name,
-          path: childPath,
-          depth: depth + 1,
-        });
-      }
-    }
-    if (!parentOpen && !forced) entries.length = mark;
-    return forced;
-  }
-
-  for (const root of roots) place(root, [], true);
-  // What is left sits on or below a parent cycle, every ancestor unplaced and listed. Walking up
-  // reaches a cycle member, placed as a root so the rest of its cycle and subtree fall under it.
-  for (const category of model.categories) {
-    if (placed.has(category.id)) continue;
-    const seen = new Set<string>();
-    let member = category;
-    while (!seen.has(member.id)) {
-      seen.add(member.id);
-      member = known.get(member.parentId!)!;
-    }
-    place(member, [], true);
-  }
-
-  if (uncategorised.length > 0 || hasNoCategoryCell(model)) {
-    entries.push({
-      row: { kind: "no_category" },
-      name: "",
-      path: [],
-      depth: 0,
-    });
-    for (const product of uncategorised) {
-      entries.push({
-        row: { kind: "product", productId: product.id },
-        name: product.name,
-        path: [],
-        depth: 1,
-      });
-    }
-  }
-  return entries;
+  return routingRows(model, expanded, createLabelComparator(currentLocale()));
 }
 
 export function expandCategory(expanded: ReadonlySet<string>, id: string): ReadonlySet<string> {
@@ -216,7 +93,7 @@ export function rowInModel(model: RoutingModel, row: RoutingRow): boolean {
     case "no_category": {
       const known = new Set(model.categories.map((category) => category.id));
       return (
-        hasNoCategoryCell(model) ||
+        model.cells.some((cell) => cell.row.kind === "no_category") ||
         model.products.some(
           (product) => product.categoryId === null || !known.has(product.categoryId),
         )

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { currentLocale, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -90,7 +90,7 @@ describe("OpeningHoursApi", () => {
     await api.deletePeriod("p/1", null, 4);
     expect(request.mock.calls).toEqual([
       [`${base}/menu-periods/painted-in?periodId=p%2F1`, "GET"],
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
+      [`${base}/menu-periods/p%2F1/delete-impact?language=en-GB`, "GET", undefined, undefined],
       [
         `${base}/menu-periods/p%2F1/delete`,
         "POST",
@@ -104,6 +104,26 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "sends the active %s locale for the delete warning",
+    async (locale) => {
+      const previous = currentLocale();
+      const request = vi.fn(async () => ({}));
+      try {
+        setLocale(locale);
+        await new OpeningHoursApi(request as DashboardRequest).readPeriodDeleteImpact("p1");
+        expect(request).toHaveBeenCalledWith(
+          `${base}/menu-periods/p1/delete-impact?language=${locale}`,
+          "GET",
+          undefined,
+          undefined,
+        );
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
   it("reads a delete's impact passively only when asked to, passing the options straight through", async () => {
     const request = vi.fn(async () => ({}));
     const api = new OpeningHoursApi(request as DashboardRequest);
@@ -111,9 +131,19 @@ describe("OpeningHoursApi", () => {
     await api.readPeriodDeleteImpact("p/1", { passive: false });
     await api.readPeriodDeleteImpact("p/1");
     expect(request.mock.calls).toStrictEqual([
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: true }],
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: false }],
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
+      [
+        `${base}/menu-periods/p%2F1/delete-impact?language=en-GB`,
+        "GET",
+        undefined,
+        { passive: true },
+      ],
+      [
+        `${base}/menu-periods/p%2F1/delete-impact?language=en-GB`,
+        "GET",
+        undefined,
+        { passive: false },
+      ],
+      [`${base}/menu-periods/p%2F1/delete-impact?language=en-GB`, "GET", undefined, undefined],
     ]);
   });
 
@@ -382,7 +412,7 @@ describe("OpeningHoursApi", () => {
   });
 
   it.each(["routing_cell_periods", "routing_cells", "categories", "products", "floor_zones"])(
-    "re-reads opening hours when %s changes, so a period's routing uses stay current",
+    "re-reads opening hours when %s changes, applying the latest model",
     async (type) => {
       const live = new LiveData();
       const named: OpeningHoursModel = {
@@ -402,8 +432,6 @@ describe("OpeningHoursApi", () => {
                 menuId: "lunch",
                 staffMenuIds: [],
                 floorPlanSetId: null,
-                weekdays: [],
-                routingUses: [{ rowKind: "category", rowLabel: "Cocktails", zoneName: null }],
               },
             ],
           },

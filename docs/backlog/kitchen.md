@@ -94,17 +94,6 @@ of stations is read only when the screen opens, so after that read fails the out
 stays, counting, until the screen is opened again; long outages are counted in minutes, never
 hours.
 
-## Routing reads do work only one screen uses
-
-- Left open by A366 slice 4 Part A's review:
-  every read of the routing model works out each period's products (`readRoutingPeriods`,
-  `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
-  menu's folder read pays for it too; and the Opening hours model reads every period's routing
-  uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
-  or category change, though since A506-11 nothing reads the model's copy: the period delete dialog
-  reads its own through `GET …/menu-periods/:periodId/delete-impact`. Work each out only where it is
-  used.
-
 ## A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
@@ -175,23 +164,6 @@ in A1308's orders and sales slice, which rebuilds the table anyway.
   yet released. Reprinting its bill prints only the bill's other dishes: `readReprintParts`
   (`apps/server/src/kitchen-print.ts`) reads held work through `readOnHoldTickets` only. Decide
   whether a reprint lists it, and how it is marked.
-
-## Bundle: Routing model reads
-
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
-  dashboard**, while `readOpeningHoursModel` still works both out on every read. See also "Routing
-  reads do work only one screen uses" — left open by A506-11, #1694.
-- **The server accepts a routing period line naming the cell's own plain station**; it routes
-  nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
-  open by A366 slice 4 Part A.
-- **The period delete warning orders its rows on the server** (`routingRowPlaces`,
-  `packages/venue-service/src/menu-timetable.ts`) **with a copy of the Routes tab's row order**
-  (`visibleRoutingRows`); a change to one can leave the other behind. Move the order into
-  `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
-- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review.
-  [Detail](kitchen.md#routing-reads-do-work-only-one-screen-uses)
 
 ## Bundle: Supervisor station read
 

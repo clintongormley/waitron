@@ -30,8 +30,6 @@ const lunch = (): Period => ({
   menuId: "lunch",
   staffMenuIds: [],
   floorPlanSetId: null,
-  weekdays: [],
-  routingUses: [],
 });
 const dinner = (): Period => ({ ...lunch(), id: "p2", name: "Dinner", colour: "red" });
 
@@ -65,7 +63,7 @@ function impactOf(overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
 
 const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
 const isImpactRead = (path: string, method: string) =>
-  method === "GET" && path.endsWith("/delete-impact");
+  method === "GET" && path.split("?")[0]!.endsWith("/delete-impact");
 
 /** Answers the list's reads from `data`, each impact read from `impact`, and every write with `write`. */
 function fake(options: {
@@ -190,7 +188,9 @@ it("asks before deleting, reads the impact, sends the delete with no replacement
   const dialog = await removePeriod(el);
   expect(heading(dialog)).toBe("Delete Lunch?");
   await impactShown(dialog);
-  expect(impactReads).toEqual(["/management-api/venue-service/menu-periods/p1/delete-impact"]);
+  expect(impactReads).toEqual([
+    "/management-api/venue-service/menu-periods/p1/delete-impact?language=en",
+  ]);
   expect(writes).toEqual([]);
   expect(body(dialog)).not.toContain("routing");
   confirm(dialog).click();

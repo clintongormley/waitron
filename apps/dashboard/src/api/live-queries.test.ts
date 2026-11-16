@@ -521,9 +521,9 @@ it("reads the categories' routing again when a special day or one of its dates c
     expect(query.dependencies).toContainEqual({ type });
 });
 
-it("reads the categories' routing again when a period, its department or the products its menus reach change", () => {
+it("reads the categories' routing again when a period or its department changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  for (const type of ["menu_periods", "departments", "sections", "section_members", "menus"])
+  for (const type of ["menu_periods", "departments"])
     expect(query.dependencies).toContainEqual({ type });
 });
 

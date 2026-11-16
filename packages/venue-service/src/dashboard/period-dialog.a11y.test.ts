@@ -41,8 +41,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         menuId: "lunch",
         staffMenuIds: ["deli"],
         floorPlanSetId: null,
-        weekdays: [1],
-        routingUses: [],
       };
     }
     if (state.startsWith("painted-in") || state === "not-painted") {
