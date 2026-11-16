@@ -20,7 +20,7 @@ import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { TillApi, FloorZone, ZoneOffers } from "./api/client.js";
+import { TillApi, type FloorZone, type ZoneOffers } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -146,6 +146,14 @@ const zoneOffers = (id: string): ZoneOffers => ({
     },
   ],
 });
+
+/** A zones save refused by the server's envelope, thrown by the real client as a till would see it. */
+const refusedSave = (status: number, code: string, params: Record<string, unknown>) =>
+  vi.fn((input: Parameters<TillApi["setDeviceZones"]>[0]) =>
+    new TillApi("", () =>
+      Promise.resolve(Response.json({ error: { code, params } }, { status })),
+    ).setDeviceZones(input),
+  );
 
 async function mount(
   chosen: DeviceZoneSelection,
@@ -984,9 +992,7 @@ it("empty-scope Settings reaches zones without a selling screen", async () => {
 });
 it("retrying a failed settings read preserves edits and an action refusal", async () => {
   const { el, api } = await mount(selection(["bar", "room"], "bar"), {
-    setDeviceZones: vi
-      .fn()
-      .mockRejectedValue({ code: "device_zones.changed", params: { field: "selectedZoneIds" } }),
+    setDeviceZones: refusedSave(409, "device_zones.changed", {}),
   });
   const dialog = await openZones(el);
   await userEvent.click(
@@ -1011,6 +1017,24 @@ it("retrying a failed settings read preserves edits and an action refusal", asyn
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-zones-save]")!
       .disabled,
   ).toBe(false);
+});
+it("a save refusal naming a field is shown beside that field", async () => {
+  const { el } = await mount(selection(["bar", "room"], "bar"), {
+    setDeviceZones: refusedSave(400, "device_zones.invalid", { field: "startingZoneId" }),
+  });
+  const dialog = await openZones(el);
+  await userEvent.click(
+    dialog.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="starting-zone"][value="room"]',
+    )!,
+  );
+  await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-zones-save]")!);
+  await vi.waitFor(() => expect(dialog.busy).toBe(false));
+  expect(dialog.refusal).toEqual({ code: "device_zones.invalid", field: "startingZoneId" });
+  const startError = dialog.shadowRoot!.querySelector<HTMLElement>("[data-start-error]")!;
+  expect(startError.hidden).toBe(false);
+  expect(startError.textContent).toBe(codeMessage("device_zones.invalid"));
+  expect(dialog.shadowRoot!.querySelector<HTMLElement>("[data-zones-error]")!.hidden).toBe(true);
 });
 it("the real header's Settings click closes its menu and exposes Equipment and Zones", async () => {
   const { el } = await mount(selection(["bar", "room"], "bar"));

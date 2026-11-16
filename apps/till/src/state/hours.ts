@@ -12,22 +12,12 @@ function sameSelection(a: HoursSelection, b: HoursSelection): boolean {
   return a.kind === b.kind && a.date === b.date;
 }
 function failure(error: unknown): NonNullable<HoursSnapshot["readError"]> {
-  if (
-    error !== null &&
-    typeof error === "object" &&
-    "code" in error &&
-    typeof error.code === "string"
-  ) {
-    const params =
-      "params" in error &&
-      error.params !== null &&
-      typeof error.params === "object" &&
-      !Array.isArray(error.params)
-        ? (error.params as Record<string, unknown>)
-        : undefined;
-    return params === undefined ? { code: error.code } : { code: error.code, params };
-  }
-  return { code: "attendance.read_failed" };
+  if (error === null || typeof error !== "object") return { code: "attendance.read_failed" };
+  // The client spreads the refusal's params onto what it throws, beside `code` and `status`.
+  const { code, ...params } = error as Record<string, unknown>;
+  delete params.status;
+  if (typeof code !== "string") return { code: "attendance.read_failed" };
+  return Object.keys(params).length === 0 ? { code } : { code, params };
 }
 export class HoursController {
   #snapshot = empty();
