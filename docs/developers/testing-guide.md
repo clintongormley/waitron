@@ -2092,8 +2092,9 @@ review reported no printed rejection with both variables set and `server.forward
 in the till configuration; that last result is the reviewer's report. Dashboard already disables
 forwarding.
 
-On 16 November 2026 the owner’s “Turn it off everywhere” decision was applied to all thirteen
-browser-package Vitest configs. Set `server: { forwardConsole: false }` at the Vite level.
+On 16 November 2026 the owner asked “Turn it off everywhere”. All thirteen browser-package
+Vitest configs now disable forwarding; twelve changed here, and dashboard already did.
+When you add a browser package, set `server: { forwardConsole: false }` at the Vite level.
 For an inline browser project without `extends: true`, put it beside that project’s `test`
 block, so its browser server receives the setting. A one-off check of actual browser servers
 under `AI_AGENT` and `CLAUDECODE` resolved all twenty configured browser variants, including fallback and touch
