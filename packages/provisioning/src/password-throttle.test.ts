@@ -261,6 +261,41 @@ describe("password login backoff under a flood of made-up addresses", () => {
     expect(() => throttle.begin(newcomer!)("error")).not.toThrow();
   });
 
+  it("keeps overflow live from its latest contribution", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other] = neighbours();
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "a");
+    fail(throttle, other!, 1);
+    forgetAll(throttle, "b");
+
+    now = 14 * 60_000;
+    fail(throttle, other!, 3);
+    forgetAll(throttle, "c");
+    now = 16 * 60_000;
+    fail(throttle, other!, 1);
+    expect(() => throttle.begin(other!)).toThrowError(refusal(4));
+  });
+
+  it("caps overflow counts before byte storage can wrap them to zero", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other] = neighbours();
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "a");
+    now = 2000;
+    for (let i = 0; i < 256; i++) {
+      throttle.begin(REAL)("error");
+      throttle.begin(other!)("invalid");
+      now += 60_000;
+    }
+    forgetAll(throttle, "b");
+
+    fail(throttle, other!, 1);
+    expect(() => throttle.begin(other!)).toThrowError(refusal(60));
+  });
+
   it("skips a lapsed fold when the clock steps backward after its idle sweep", () => {
     let now = 0;
     let stepBack = false;

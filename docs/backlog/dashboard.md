@@ -338,12 +338,15 @@ Size M.
 
 ## Decisions and deliberate limits
 
-- **Password-throttle saturation:** a crowded fallback counter keeps one named address and a shared
-  count for other addresses. During an address spray, a new address can inherit a wait of up to a
-  minute. A successful sign-in keeps a zero-count entry in the bounded cache; after eviction it can
-  inherit the shared count again. Success never clears another address’s shared protection. The
-  watcher cleared this availability trade-off on 2026-11-16 at 09:40, within the owner’s request to
-  fix count loss in both arrival orders.
+- **Password-throttle saturation:** during an address spray, a person whose address is not cached
+  can inherit other addresses’ failed-password count and lose their three free typos. Each wrong
+  password then opens a wait of up to a minute; a correct password still gets in once the current
+  wait ends. Shared history expires after 15 minutes without a contribution, but someone who has
+  inherited it keeps their own count until they sign in or stop trying for 15 minutes. Repeated
+  typos can therefore renew the waits after the spray stops. Success keeps a zero-count entry in
+  the bounded cache and never clears shared protection; after eviction it can inherit shared
+  history again. The watcher cleared the shared-count design and success relief on 2026-11-16 at
+  09:40; the completed run-it reviews identified this longer availability effect.
 
 - **Deployment colour overrides:** set each related hover, text and disabled token explicitly so stylesheet authors choose a complete colour family. Semantic danger colours stay outside generated venue themes (watcher, 2026-11-16).
 
