@@ -423,6 +423,7 @@ export {
   billNumberAllocations,
   departmentDayRanges,
   departmentDays,
+  openingHours,
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,

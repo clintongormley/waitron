@@ -32,6 +32,7 @@ export const VENUE_SERVICE_TABLES = [
   "special_day_dates",
   "department_days",
   "department_day_ranges",
+  "opening_hours",
   "zone_days",
   "zone_day_ranges",
 ] as const;

@@ -13,3 +13,4 @@ export * from "./service-steps.js";
 export * from "./bill-identities.js";
 
 export * from "./department-courses.js";
+export * from "./opening-hours.js";
