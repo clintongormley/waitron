@@ -385,7 +385,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Should `packages/fiscal-verifactu` have a mutation floor?**
   [Detail](backlog/fiscal.md#should-packagesfiscal-verifactu-have-a-mutation-floor).
 
-- **Should a cancelled or replaced invoice's copy say so?** Left open by A1411 (the tax office's Invoices page and month download). A question for the adviser on 19 Nov beside T4. [Plan](superpowers/plans/2026-11-16-a1411-tax-office-invoices.md).
+- **Should a cancelled or replaced invoice's copy say so?** Left open by A1411 (the tax office's Invoices page and month download). A question for the adviser on 19 Nov beside T4. If the adviser answers no on T4, remote access is needed on top. [Plan](superpowers/plans/2026-11-16-a1411-tax-office-invoices.md).
 
 ### The setup wizard, onboarding and the demo venue
 

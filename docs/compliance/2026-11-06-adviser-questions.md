@@ -429,6 +429,7 @@ reading the code. The proposal is one read-only page for the tax office and one 
 box (A1411). Cloud can then show the same page, so a venue without Cloud gets the same capability.
 2026-11-16: the page is built (A1411 PR 1); the ticket-width copy (PR 1b) and the period export remain.
 2026-11-16: the ticket-width copy is built too (A1411 PR 1b); the period export remains.
+2026-11-16: the period export is built too (A1411 PR 2): a month's invoices as one ZIP of copies and a CSV.
 
 ## How a wrong clock is known, and what a late filing is
 
