@@ -191,6 +191,17 @@ it("renames database snapshot table keys while preserving device impact keys", (
   );
 });
 
+it("keeps prose and shorthand property keys while renaming the imported table value", () => {
+  const root = fixture({
+    "apps/server/src/a.ts":
+      'import { sessions } from "@waitron/db"; export const schema = { sessions }; "Pick up from sessions you missed"; "Sign out of all table sessions"; "select id from sessions";',
+  });
+  run({ root, write: true });
+  expect(read(root, "apps/server/src/a.ts")).toBe(
+    'import { tillSessions } from "@waitron/db"; export const schema = { sessions: tillSessions }; "Pick up from sessions you missed"; "Sign out of all table sessions"; "select id from till_sessions";',
+  );
+});
+
 it("the CLI previews by default and writes only with --write", async () => {
   const root = fixture({ "packages/db/src/classification.ts": '["sessions"]' });
   const argv = process.argv;

@@ -832,8 +832,6 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 });
 
 describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)", () => {
-  /** Count the `sessions` rows for a person — the differential proof that a throttled attempt
-   *  never reached `loginWithPin` (a login would have inserted a row). */
   async function sessionCount(personId: string): Promise<number> {
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from till_sessions where person_id = ${personId}`,
@@ -1237,6 +1235,18 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await ok.json()).toEqual(await sessionOnSeededDevice(rows[0]!.id));
   });
 
+  it("REJECTS the stored token hash from a database copy as a cookie", async () => {
+    const token = await openSession(suite.db);
+    const { rows } = await suite.db.execute<{ token_hash: string }>(
+      sql`select token_hash from till_sessions where token_hash = ${hashSessionToken(token)}`,
+    );
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.token_hash}` },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
   it("REJECTS (401 session.required) when no cookie is present", async () => {
     const res = await guardApp(suite.db).request("/whoami");
     expect(res.status).toBe(401);
@@ -1254,8 +1264,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 session.required) a NON-UUID cookie", async () => {
-    // A forged, non-UUID cookie is a CLIENT fault and answers 401. Weaker than its name: it does not
-    // pin the `isUuid` screen in `requireSession`, since the hashed value matches no row either way.
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -2333,9 +2341,6 @@ describe("zone-offer menu routes", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // Through the real route: a non-UUID cookie is refused by the guard as 401 before any menu
-    // read. Weaker than its name: it does not pin `requireSession`'s `isUuid` screen, since the hashed
-    // value matches no row either way.
     const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });

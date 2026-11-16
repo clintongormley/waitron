@@ -363,10 +363,6 @@ it.each([
       "kitchen_stations",
     ],
   ],
-  // `deviceDeleteRules` (apps/server/src/device-delete.ts): the device, its pending payments and
-  // their orders, the printers and readers it holds, its join request, and the printers,
-  // stations, profiles, reader and kitchen screens it names. Not `sessions`, which no module
-  // declares as a live resource.
   [
     "getDeviceDeleteImpact",
     ["d1"],

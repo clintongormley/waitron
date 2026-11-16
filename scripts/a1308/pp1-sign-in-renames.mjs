@@ -123,6 +123,9 @@ function rewrite(path, text) {
             (path === "packages/db/src/schema/identity/index.ts" &&
               declaration.moduleSpecifier.text === "./sessions.js")
           : sessionSymbols.size > 0;
+      } else if (ts.isShorthandPropertyAssignment(parent)) {
+        if (sessionSymbols.has(checker.getShorthandAssignmentValueSymbol(parent)))
+          edits.push([node.getStart(source), node.end, "sessions: tillSessions"]);
       } else if (
         !(ts.isPropertyAssignment(parent) && parent.name === node) &&
         !ts.isShorthandPropertyAssignment(parent)
@@ -138,10 +141,20 @@ function rewrite(path, text) {
       ts.isTemplateTail(node)
     ) {
       const raw = text.slice(node.getStart(source), node.end);
-      let next = raw.replace(
-        /\b(from|join|into|update|exists|table)(\s+"?)sessions\b/gi,
-        "$1$2till_sessions",
-      );
+      const template = ts.isTemplateExpression(parent) ? parent : node;
+      const sqlText =
+        ts.isTaggedTemplateExpression(template.parent) &&
+        template.parent.tag.getText(source) === "sql";
+      const statement =
+        ts.isStringLiteral(node) &&
+        /^\s*(select|insert|update|delete|create|alter|drop|from|join)\b/i.test(node.text);
+      let next =
+        sqlText || statement
+          ? raw.replace(
+              /\b(from|join|into|update|exists|table)(\s+"?)sessions\b/gi,
+              "$1$2till_sessions",
+            )
+          : raw;
       if (
         (literals.has(path) || (snapshot && ts.isArrayLiteralExpression(parent))) &&
         node.text === "sessions"
