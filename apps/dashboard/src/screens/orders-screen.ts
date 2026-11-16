@@ -112,6 +112,9 @@ export class OrdersScreen extends LitElement {
   @state() private reprintMode: "receipt" | "choose" = "receipt";
   @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
+  /** The Table field's text while its 400 ms wait runs. An address this screen writes first carries
+   * it, because the address change that write reports cancels the wait. */
+  #tableEdit?: string;
   #sort?: Pick<OrdersPageQuery, "sortKey" | "sortDirection">;
   #rangeReleased = false;
   #shownQuery?: Omit<OrdersPageQuery, "q" | "page"> & { search: string };
@@ -158,6 +161,8 @@ export class OrdersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
+      clearTimeout(this.#textTimer);
+      this.#tableEdit = undefined;
       this.filter = readOrdersFilter((key) => this.#url.read(key));
       this.#watch();
     },
@@ -202,9 +207,15 @@ export class OrdersScreen extends LitElement {
   }
 
   #apply(next: OrdersFilter, replace = false): void {
-    const filter = next.from && next.to ? next : { ...next, from: undefined, to: undefined };
+    clearTimeout(this.#textTimer);
+    const table = this.#tableEdit?.trim();
+    this.#tableEdit = undefined;
+    const edited =
+      table === undefined ? next : { ...next, table: table === "" ? undefined : table };
+    const filter =
+      edited.from && edited.to ? edited : { ...edited, from: undefined, to: undefined };
     this.filter = filter;
-    this.#url.write(writeOrdersFilter(filter), replace);
+    this.#url.write(writeOrdersFilter(filter), replace && table === undefined);
     this.#watch();
   }
 
@@ -215,20 +226,15 @@ export class OrdersScreen extends LitElement {
   }
 
   #text(field: "table" | "q", value: string, immediate = false): void {
-    const kept = field === "q" ? value : value.trim();
-    const apply = () =>
-      this.#apply(
-        { ...this.filter, [field]: value.trim() === "" ? undefined : kept },
-        field === "q",
-      );
     if (field === "q") {
-      apply();
+      this.#apply({ ...this.filter, q: value.trim() === "" ? undefined : value }, true);
       if (immediate) void this.#pages.reload();
-    } else {
-      clearTimeout(this.#textTimer);
-      if (immediate) apply();
-      else this.#textTimer = setTimeout(apply, 400);
+      return;
     }
+    clearTimeout(this.#textTimer);
+    this.#tableEdit = value;
+    if (immediate) this.#apply(this.filter);
+    else this.#textTimer = setTimeout(() => this.#apply(this.filter), 400);
   }
 
   #tableQuery(event: CustomEvent<Pick<OrdersPageQuery, "sortKey" | "sortDirection">>): void {
