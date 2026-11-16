@@ -10347,7 +10347,7 @@ it("expires a dirty repair session without retaining its draft or leave question
 describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => {
   it.each([
     ["en-GB", "Sign in as a manager", "signs you out"],
-    ["es-ES", "Iniciar sesión como responsable", "cerrará tu sesión"],
+    ["es-ES", "Iniciar sesión como responsable", "cierra tu sesión"],
   ])(
     "offers staff a manager sign-in from zone repair in %s and opens login after signing them out",
     async (locale, label, explanation) => {
