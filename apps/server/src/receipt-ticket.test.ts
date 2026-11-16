@@ -934,7 +934,7 @@ describe("the QR comes first on an invoice that carries one", () => {
   });
 });
 
-/** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
+/** A line's goods name as the receipt resolves it for an `es-ES` invoice. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return resolveSnapshotText(line.descriptions, "es-ES", "es-ES");
 }

@@ -360,9 +360,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
-  /** The language the receipt looks the goods' names up by (`sales.invoice_locales[0]`). The text
-   * is the venue's default content language's when the line was written, or another stored
-   * language's where it had none. Absent reads as `locale`. */
+  /** The language the receipt looks the goods' names up by (`sales.invoice_locales[0]`). Absent
+   * reads as `locale`. */
   namesLocale?: string;
   orderLabel: string | null;
   orderNumber: number;

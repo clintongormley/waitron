@@ -18,8 +18,8 @@ as the design's "any available entry" step allows.
 **On today's sales nothing printed changes** (fresh plan read, 2026-11-16, traced): line names are
 frozen in the default language under every receipt key (`defaultLanguageDescriptions`,
 `packages/menu/src/default-language-text.ts`, called at `apps/server/src/working-order.ts:1033`),
-unit names likewise (`prepareUnitSnapshot`), and receipts look both up by `namesLocale`, a key every
-line is stored under, whose bare step reaches a unit's content-code key. The visible
+unit names likewise (`prepareUnitSnapshot`), and a line holds one text under every key and a unit
+one entry, so whichever step the receipt's lookup by `namesLocale` reaches, it finds that one text. The visible
 change is on dashboard and till screens (whose interface language is `en-GB` or `es-ES`) reading a
 name stored only under another region's code, which the API accepts. `toInvoiceLineDescriptions` is
 called only by the demo seed.
@@ -45,14 +45,14 @@ called only by the demo seed.
    the receipt language changed after the order was saved, and every key holds the same default-
    language text, so no print changes; the change only decides what such a line prints (the shared order, then the
    non-blank text whose language code sorts first, never a blank one). The till's own `lineName`
-   (`apps/till/src/screens/till-ticket-view.ts:69`) is on-screen, not a document: one line in the PR
-   thread, not changed here. As built: review found the till screen and the print then name a line
-   differently, so the till's `lineName` reads through `resolveSnapshotText` too, and its test
-   "names a filed line from its first stored description…" changed with it.
+   (`apps/till/src/screens/till-ticket-view.ts`) reads through `resolveSnapshotText` too, so the
+   screen and the print agree (added after review), and its test "names a filed line from its first
+   stored description…" changed with it.
 
 ## Changed test checks (owner rule 2026-10-05: noted, not controversial)
 
-Both pin the jump this item removes; each case is renamed for what it now proves.
+The first two pin the jump this item removes and are renamed for what they now prove; the last two
+pinned the old first-entry fallback.
 
 - `packages/shared/src/content-languages.test.ts` "chooses a deterministic regional variant after
   exact and bare matches": `resolveContentText({ "en-US": "US", "en-AU": "AU", english: "Unrelated",
@@ -68,8 +68,9 @@ Both pin the jump this item removes; each case is renamed for what it now proves
   language code sorts first, as the printed receipt does.
 - As built, a fourth, found by finish-branch: `apps/server/src/receipt-ticket.test.ts` "prints F1
   reductions before VAT, at their rate, …" held `{ "es-ES": "Plato", en: "Dish" }` and expected
-  "Plato" in every language through the old first-entry fallback; its fixture now holds the same
-  text under both keys, as real lines do.
+  "Plato" in every language: es-ES by its exact key, the other four (en-GB included, rather than
+  `en`'s "Dish") through the old first-entry fallback; its fixture now holds the same text under
+  both keys, as real lines do.
 
 ## Task 1 (one implementer, test-first)
 

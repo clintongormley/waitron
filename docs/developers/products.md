@@ -139,8 +139,8 @@ come from the published menu, the order's way of selling picks one, and the rate
   change and collected after keeps the keys its lines were stored under (the case "accepts a change
   while an order is placed, and the order can still be collected" in
   `apps/server/src/venue-settings-api.orders-open.test.ts`), and prints through that fallback
-  (the fallback's print is checked in `apps/server/src/receipt-document.test.ts`; the orders-open
-  case checks what is filed, not a print).
+  (the receipt test in `apps/server/src/receipt-document.test.ts` checks the sorted-first step and
+  that a blank is skipped; the orders-open case checks what is filed, not a print).
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's
