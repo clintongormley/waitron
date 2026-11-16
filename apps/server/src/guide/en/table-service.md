@@ -792,7 +792,7 @@ To collect a bill, open **Pay** at the Counter or on the table's bill. On a tabl
 any unsent items first. The top of the window shows **Total**, **Paid so far**, **Card payment in progress**
 and **Still to pay**. Start with what is still to pay, rather than the bill's original total.
 
-**Choose what this guest pays.** **Whole bill** starts selected and pays everything still due.
+**Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
@@ -830,8 +830,9 @@ separate action after payment.
 **Another phone is taking payment.** **Card payment in progress** is money already reserved for
 that card, so it is taken off **Still to pay**. On a €70 bill with a €30 card out, another phone
 can take the remaining €40. It cannot pay the reserved €30 again towards the bill. If no balance
-is left outside that card, wait for its result. When another card is already in progress, the
-window asks whether to **Take another**; check with the other member of staff before doing so.
+is left outside that card, wait for its result. With tips enabled, entering more than €40 in
+**An amount** charges the extra as a tip on this card; check that charge with the guest. If the
+window asks whether to **Take another**, check with the other member of staff before doing so.
 A phone that had an older amount open may be asked to confirm revised figures. Check both the
 amount paid off the bill and any tip before confirming.
 

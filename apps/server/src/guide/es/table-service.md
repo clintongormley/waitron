@@ -850,7 +850,7 @@ primero los artículos sin enviar. Arriba se muestran **Total**, **Pagado hasta 
 **Pago con tarjeta en curso** y **Queda por pagar**. Parte de lo que queda por pagar, no del
 total original de la cuenta.
 
-**Elige qué paga este comensal.** **Toda la cuenta** aparece seleccionada y cobra todo lo que
+**Elige qué paga este comensal.** Elige **Toda la cuenta** para cobrar todo lo que
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
@@ -890,9 +890,10 @@ aparte, después del cobro.
 **Otro teléfono está cobrando.** **Pago con tarjeta en curso** es dinero reservado para esa
 tarjeta, por lo que se resta de **Queda por pagar**. En una cuenta de 70 € con un cobro de 30 €
 en curso, otro teléfono puede cobrar los 40 € restantes. No puede volver a descontar de la cuenta
-los 30 € reservados. Si no queda saldo aparte de esa tarjeta, espera su resultado. Si ya hay un
-cobro con tarjeta en curso, la ventana pregunta si quieres **Cobrar otro**; compruébalo con la
-otra persona antes de hacerlo. Un teléfono que tenía abierto un importe anterior puede pedirte
+los 30 € reservados. Si no queda saldo aparte de esa tarjeta, espera su resultado. Con propinas
+activadas, introducir más de 40 € en **Una cantidad** cobra el exceso como propina en esa tarjeta;
+confirma ese cargo con el cliente. Si la ventana pregunta si quieres **Cobrar otro**, compruébalo
+con la otra persona antes de hacerlo. Un teléfono que tenía abierto un importe anterior puede pedirte
 confirmar los importes actualizados. Comprueba tanto lo que se descuenta de la cuenta como la
 propina antes de confirmar.
 
