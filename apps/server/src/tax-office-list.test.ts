@@ -12,6 +12,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import {
   seedSale,
@@ -27,6 +28,7 @@ import {
   type TaxOfficeFilter,
   type TaxOfficeInvoice,
 } from "./tax-office-list.js";
+import type { TradingContext } from "./trading-context.js";
 
 const at = (day: string, time = "12:00:00") => `2026-11-${day}T${time}.000Z`;
 const ids: Record<string, SaleId> = {};
@@ -170,7 +172,12 @@ function sessionHolding(permissions: string[]): Promise<string> {
 beforeAll(async () => {
   db = suite.db;
   app = new Hono();
-  mountTaxOfficeApi(app, { db, cfg: { nodeId } }, () => {});
+  // The list route reads neither the fiscal seat nor the trading context.
+  mountTaxOfficeApi(
+    app,
+    { db, cfg: { nodeId }, backend: {} as FiscalBackend, tradingContext: {} as TradingContext },
+    () => {},
+  );
   inspector = await sessionHolding(["invoice.inspect"]);
   reporter = await sessionHolding(["report.view", "report.export"]);
 });

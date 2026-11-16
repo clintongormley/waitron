@@ -2,6 +2,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { resolveVenueClock } from "@waitron/reporting";
 import {
@@ -12,7 +13,9 @@ import {
   requireRange,
 } from "@waitron/server-kit";
 import { AppError, isUuid, stringToBasisPoints, stringToCents } from "@waitron/shared";
+import { renderInvoicePdf } from "./invoice-pdf.js";
 import type { Logger } from "./logger.js";
+import { readSaleForDownload } from "./orders-invoice-pdf.js";
 import { optionalSearch } from "./orders-list.js";
 import {
   listTaxOfficeInvoices,
@@ -21,10 +24,13 @@ import {
   type TaxOfficeCursor,
   type TaxOfficeFilter,
 } from "./tax-office-list.js";
+import type { TradingContext } from "./trading-context.js";
 
 export interface TaxOfficeApiDeps {
   db: Database;
   cfg: { nodeId: string };
+  backend: FiscalBackend;
+  tradingContext: TradingContext;
 }
 
 /** Client faults only; anything else reaches `run` as a server fault. */
@@ -34,6 +40,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
+  "invoice_delivery.not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "report.failed");
@@ -118,6 +125,25 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       });
       c.header("Cache-Control", "no-store");
       return c.json(result);
+    }),
+  );
+  app.get("/management-api/tax-office/invoices/:saleId/pdf", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const saleId = c.req.param("saleId").toLowerCase();
+      const { document, fileName } = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "invoice.inspect",
+        });
+        return readSaleForDownload(tx, deps, saleId, authorizedBy);
+      });
+      const bytes = await renderInvoicePdf(document);
+      return c.body(new Uint8Array(bytes), 200, {
+        "content-type": "application/pdf",
+        "content-disposition": `attachment; filename="${fileName}"`,
+        "cache-control": "no-store",
+      });
     }),
   );
 }
