@@ -490,31 +490,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
   do, `packages/dashboard-kit/src/request.ts`).
 
-## A884. Deleting an options or extras list leaves it on the published menus until they are republished
-
-Found while checking the Modifiers guide for A582 slice 3. Deleting a list does not republish the
-menus: the delete route calls only the list's own remove (`mountListSurface`,
-`apps/server/src/menu-api.ts`; `deleteOptionList`, `packages/menu/src/options.ts`, has no
-publish), and the till's offers come from the published menu document, where a deleted list's
-options count as unavailable (`labelAvailable`, `packages/menu/src/menu-document.ts`). Measured
-with temporary cases in `apps/server/src/working-order.test.ts`, `order-groups.test.ts` and
-`tabs.test.ts`, since reverted:
-
-- With an options list deleted and the menus not republished, the till cannot add a dish that
-  carries it (`options.label_required`), and saving a change to a parked order that keeps such a
-  dish on it is refused the same way. On a table's order, a new round (`submitGroups`) and a
-  quantity change to one line (`updateOrderLine`) still succeed, and another such dish with the
-  old answer is refused. A save of the whole order that kept such a dish, already sent to the
-  kitchen, and added a line was refused `options.label_required`.
-- With an options list and an extras list both deleted and the menus republished, raising the
-  quantity of a table's dish that still carries an extra from the deleted list is refused
-  `extras.invalid`, though a note on it succeeds.
-
-The Modifiers guide tells the reader to republish straight after deleting an options list. Two ways out: the delete
-republishes the menus that carry the list, or the published menu drops a deleted list. Done when a
-test deletes each kind of list and the till can still add the dish and change an open order holding
-it, before and after a republish.
-
 ## A dish in a measure unit is still rung up one unit per tap
 
 Left open by A821f. A 250 ml line is 1 ml per tap with ±1 steps, the split control turns it into

@@ -148,8 +148,8 @@ export type LiveOfferedModifier =
   (Omit<OfferedExtrasList, "items"> & { items: LiveExtraItem[] }) | LiveOptionsList;
 
 /**
- * A published offer with the live fields put back from the current rows. Every variant, extras item
- * and option label the document holds is present, each marked with whether it can be sold now.
+ * A published offer with live fields from current rows. Deleted lists and missing products are
+ * omitted; surviving variants, extras items and option labels carry current availability.
  */
 export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, PublishedOrdering {
   available: boolean;

@@ -10,6 +10,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extraListItems,
+  extraLists,
+  optionLists,
   optionLabels,
   products,
   sectionMembers,
@@ -68,7 +70,8 @@ import { readMenuStructure, type MenuStructureNode } from "./menu-structure.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit, reassignProductsToUnit } from "./units.js";
-import { createExtraList } from "./extras.js";
+import { deleteOptionList } from "./options.js";
+import { createExtraList, deleteExtraList } from "./extras.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
@@ -2525,4 +2528,69 @@ it("a published offer's pricingUnit follows its unit for the offer and its varia
   const each = (await build(f.dinner)).offers[offerId]!;
   expect(each).toMatchObject({ pricingUnit: "each" });
   expect(each.variants.find((variant) => variant.id === f.large)!.pricingUnit).toBe("each");
+});
+
+describe("A884 deleted lists", () => {
+  it("omits deleted lists from full and selected offers, moves both digests and retains guest membership", async () => {
+    const f = await menusFixture(fx.db);
+    const document = await build(f.lunch);
+    const original = structuredClone(document);
+    const hash = menuDocumentHash(document);
+    const id = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+    const soupId = await app((tx) => offerOf(tx, f.lunch, f.soup));
+    const selectedSoup = new Set([soupId]);
+    const soupDigest = (await app((tx) => applyLiveFields(tx, [document], selectedSoup)))
+      .liveFields;
+    let before = (await app((tx) => readLiveState(tx, [document]))).liveFields;
+    await app((tx) => updateProduct(tx, f.extraLemon, { available: false }));
+    for (const kind of ["options", "extras"] as const) {
+      await app((tx) =>
+        kind === "options" ? deleteOptionList(tx, f.iceList) : deleteExtraList(tx, f.extrasList),
+      );
+      const full = await app((tx) => applyLiveFields(tx, [document]));
+      const state = await app((tx) => readLiveState(tx, [document]));
+      const selected = await app((tx) => applyLiveFields(tx, [document], new Set([id])));
+      const dish = full.offers.get(f.lunch)!.find((offer) => offer.id === id)!;
+      expect(dish.offeredModifiers.map((entry) => entry.kind)).toEqual(
+        kind === "options" ? ["extras"] : [],
+      );
+      expect(selected.offers.get(f.lunch)).toEqual([dish]);
+      expect(state.liveFields).toBe(full.liveFields);
+      expect(state.liveFields).not.toBe(before);
+      expect(state.unavailable.optionLabels).toEqual([]);
+      expect(state.unavailable.products).toEqual(kind === "options" ? [f.extraLemon] : []);
+      expect((await app((tx) => applyLiveFields(tx, [document], selectedSoup))).liveFields).toBe(
+        soupDigest,
+      );
+      before = state.liveFields;
+    }
+    expect(document).toEqual(original);
+    expect(menuDocumentHash(document)).toBe(hash);
+    const guest = await app((tx) => hydrateDeclarationDocument(tx, document));
+    expect(guest.offers[id]!.offeredModifiers.map((entry) => entry.kind)).toEqual([
+      "extras",
+      "options",
+    ]);
+  });
+
+  it("retains inactive and detached published lists, but makes a deleted label unavailable", async () => {
+    const f = await menusFixture(fx.db);
+    const document = await build(f.lunch);
+    await app(async (tx) => {
+      await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, f.iceList));
+      await tx.update(extraLists).set({ active: false }).where(eq(extraLists.id, f.extrasList));
+      await writeProductModifiers(tx, f.lemonade, []);
+      await tx.delete(optionLabels).where(eq(optionLabels.id, WITH_ICE));
+    });
+    const full = await app((tx) => applyLiveFields(tx, [document]));
+    const dish = full.offers.get(f.lunch)!.find((offer) => offer.productId === f.lemonade)!;
+    expect(dish.offeredModifiers.map((entry) => entry.kind)).toEqual(["extras", "options"]);
+    const options = dish.offeredModifiers[1]!;
+    expect(
+      options.kind === "options" && options.labels.map((label) => [label.id, label.available]),
+    ).toEqual([
+      [NO_ICE, true],
+      [WITH_ICE, false],
+    ]);
+  });
 });

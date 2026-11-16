@@ -353,7 +353,9 @@ Six things it is worth knowing about that payload:
   each options list; each label is served marked with whether it is Available now**
   (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
   still offered until the menu is published again, and a label deleted since is served marked
-  unavailable). A published default is served while it is available; otherwise, including a
+  unavailable). A deleted list is omitted immediately from till offers and order validation;
+  `hydrateDeclarationDocument` retains published membership for guest menus until republishing.
+  A published default is served while it is available; otherwise, including a
   published version with no default, the first label in the published version's order that is
   available now is served, and no default only when none is (`effectiveDefaultLabelId`,
   `packages/menu/src/option-default.ts`, which `applyLiveFields` applies on every read). The

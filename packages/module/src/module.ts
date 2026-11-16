@@ -382,8 +382,8 @@ export interface ZoneOffers {
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
-  /** Digest of the course and reporting category of the menus' dishes, variants and extras;
-   *  moves when either changes, which no menu version records. A read limited by `menuItemIds`
+  /** Digest of current declarations, course, reporting category and deleted modifier lists.
+   *  A read limited by `menuItemIds`
    *  digests only those offers' rows and is not comparable with `ZoneMenuState.liveFields`. */
   readonly liveFields: string;
 }
@@ -392,7 +392,7 @@ export interface ZoneOffers {
 export interface ZoneUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
   readonly products: readonly string[];
-  /** Every option label that is unavailable, or deleted since the version was published. */
+  /** Unavailable or deleted labels in lists that still exist. */
   readonly optionLabels: readonly string[];
 }
 
@@ -426,8 +426,7 @@ export interface ZoneMenuState {
     readonly endedPeriodName: string | null;
   }[];
   readonly unavailable: ZoneUnavailable;
-  /** Digest of the course and reporting category of the menus' dishes, variants and extras;
-   *  moves when either changes, which no menu version records. */
+  /** Digest of current declarations, course, reporting category and deleted modifier lists. */
   readonly liveFields: string;
 }
 

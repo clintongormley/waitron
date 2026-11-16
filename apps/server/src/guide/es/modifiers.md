@@ -113,13 +113,10 @@ esos productos antes de que confirmes. No se puede deshacer.
 
 **Un pedido abierto no impide eliminarla, y nadie te pide que lo termines o lo anules.** Eliminarla
 no cambia por sí sola nada de un pedido abierto: una selección de extras es su propia línea del
-pedido, y una respuesta de opciones se guarda como el texto que se eligió. Cada carta publicada
-conserva la lista hasta que vuelves a publicar esa carta. Para una lista de opciones esto importa,
-porque sus opciones ya no existen: hasta que publiques, la caja no puede añadir un plato que llevaba
-la lista, y se rechaza guardar cambios en un pedido aparcado que contiene ese plato. Vuelve a
-publicar tus cartas justo después de eliminar una lista de opciones. A partir de entonces, el
-siguiente cambio que se guarde en un pedido aparcado de caja quita cualquier extra elegido de una
-lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista de opciones eliminada.
+pedido, y una respuesta de opciones se guarda como el texto que se eligió. El siguiente guardado de
+un pedido aparcado de caja descarta las respuestas de las listas de opciones eliminadas.
+
+Para quitar también una lista eliminada de la carta para clientes, vuelve a publicar esa carta.
 
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la estación recibe el cambio. Una fila de platos iguales
