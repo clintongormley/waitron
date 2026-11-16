@@ -136,16 +136,7 @@ async function configurationArtifact() {
   return encodeConfigurationBundle(bundle, "synthetic import passphrase");
 }
 
-interface OwnedLiveSetupRow {
-  newTaxpayer: boolean;
-  change: "none" | "replacement" | "missing";
-  launch: "direct" | "supervised";
-  readinessAfterImport?: boolean;
-  claimFrom?: "preview";
-  staffLanguage?: "en" | "es";
-  provisionAfterMs?: number;
-}
-it.each<OwnedLiveSetupRow>([
+it.each([
   { newTaxpayer: false, change: "none", launch: "direct", staffLanguage: "en" },
   { newTaxpayer: false, change: "none", launch: "supervised", staffLanguage: "es" },
   { newTaxpayer: true, change: "none", launch: "direct" },
@@ -154,422 +145,425 @@ it.each<OwnedLiveSetupRow>([
   { newTaxpayer: false, change: "missing", launch: "direct" },
   { newTaxpayer: false, change: "none", launch: "direct", readinessAfterImport: true },
   { newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" },
+  { newTaxpayer: true, change: "none", launch: "direct", provisionAfterMs: 31_000 },
 ])(
-  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom",
-  ownedLiveSetup,
-);
-it("direct owned Live setup activates when Provision comes 31 seconds after the series step", () =>
-  ownedLiveSetup({
-    newTaxpayer: true,
-    change: "none",
-    launch: "direct",
-    provisionAfterMs: 31_000,
-  }));
-async function ownedLiveSetup({
-  newTaxpayer,
-  change,
-  launch,
-  readinessAfterImport,
-  claimFrom,
-  staffLanguage,
-  provisionAfterMs,
-}: OwnedLiveSetupRow) {
-  const artifact = await configurationArtifact();
-  const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
-  dirs.push(root);
-  const stateDir = join(root, "state"),
-    venueDir = join(root, "venue"),
-    migrations = join(root, "migrations");
-  await copyMigrationsRoot(migrations);
-  await mkdir(stateDir);
-  const [port] = await freePorts(1);
-  const env = {
-    WAITRON_ENV: "production",
-    WAITRON_STATE_DIR: stateDir,
-    WAITRON_VENUE_DIR: venueDir,
-    WAITRON_MIGRATIONS_DIR: migrations,
-    WAITRON_HTTP_HOST: "127.0.0.1",
-    WAITRON_HTTP_PORT: String(port),
-    WAITRON_HTTP_LANDING_PORT: "0",
-    WAITRON_MANAGEMENT_RP_ID: "localhost",
-    WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
-  };
-  let server: StartedServer | undefined, agent: Agent | undefined;
-  const seams = { testClock: time.clock, restart: () => {} };
-  try {
-    if (launch === "direct") server = await startServer(env, {}, seams);
-    else
-      await runEntry({
-        args: [],
-        baseEnv: env,
-        stateDir,
-        venueDir,
-        migrationsRoot: migrations,
-        loadBoxEnv,
-        readRecoveryState,
-        writeRecoveryState,
-        startServer: async (merged, base) => (server = await startServer(merged, base, seams)),
-        serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
-        serveRecovery: async () => {
-          throw new Error("unexpected recovery mode");
-        },
-        installShutdownHandlers: () => {},
-        scheduleStayedUp: () => {},
-        log: () => {},
-      });
-    expect(server).toBeDefined();
-    agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-    const url = `https://127.0.0.1:${port}`;
-    let capability = "",
-      state: { attemptId: string; revision: number; ownerGeneration: number };
-    const headers = () =>
-      capability
-        ? {
-            "X-Waitron-Setup-Owner": capability,
-            "X-Waitron-Setup-Attempt": state.attemptId,
-            "X-Waitron-Setup-Revision": String(state.revision),
-            "X-Waitron-Setup-Generation": String(state.ownerGeneration),
-          }
-        : {};
-    const post = async (path: string, body: unknown) => {
-      const response = await fetch(url + path, {
-        dispatcher: agent,
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...headers() },
-        body: JSON.stringify(body),
-      } as RequestInit);
-      return { status: response.status, body: await response.json() };
+  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom, provision after $provisionAfterMs ms",
+  async ({
+    newTaxpayer,
+    change,
+    launch,
+    readinessAfterImport,
+    claimFrom,
+    staffLanguage,
+    provisionAfterMs,
+  }) => {
+    const artifact = await configurationArtifact();
+    const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
+    dirs.push(root);
+    const stateDir = join(root, "state"),
+      venueDir = join(root, "venue"),
+      migrations = join(root, "migrations");
+    await copyMigrationsRoot(migrations);
+    await mkdir(stateDir);
+    const [port] = await freePorts(1);
+    const env = {
+      WAITRON_ENV: "production",
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_MIGRATIONS_DIR: migrations,
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_MANAGEMENT_RP_ID: "localhost",
+      WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     };
-    if (launch === "direct" && !newTaxpayer && change === "none") {
-      const absent = await post("/setup-api/first-setup/claim", {
-        venue: request,
-        configurationImport: true,
-      });
-      expect(absent).toMatchObject({
-        status: 400,
-        body: {
-          error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
-        },
-      });
-      await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-    }
-    const staged = await fetch(url + "/setup-api/configuration", {
-      dispatcher: agent,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "x-waitron-export-passphrase": "synthetic import passphrase",
-      },
-      body: new Uint8Array(artifact).buffer,
-    } as RequestInit);
-    const stagedBody = await staged.json();
-    expect(
-      decodeConfigurationBundle(artifact, "synthetic import passphrase").tables.products,
-    ).toHaveLength(1);
-    expect({ status: staged.status, body: stagedBody }).toMatchObject({
-      status: 200,
-      body: { modules: expect.arrayContaining(["core"]) },
-    });
-    let venue: typeof request = {
-      ...request,
-      ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
-    };
-    if (claimFrom === "preview") {
-      const preview = stagedBody.venue;
-      expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
-      venue = { ...preview, admin: request.admin };
-    }
-    if (launch === "direct" && !newTaxpayer && change === "none") {
-      for (const [candidate, newTaxpayer, field] of [
-        [request, true, "taxId"],
-        [{ ...request, taxId: "B12345674" }, false, "configurationImport"],
-      ] as const) {
-        const refused = await post("/setup-api/first-setup/claim", {
-          venue: candidate,
-          configurationImport: true,
-          newTaxpayer,
+    let server: StartedServer | undefined, agent: Agent | undefined;
+    const seams = { testClock: time.clock, restart: () => {} };
+    try {
+      if (launch === "direct") server = await startServer(env, {}, seams);
+      else
+        await runEntry({
+          args: [],
+          baseEnv: env,
+          stateDir,
+          venueDir,
+          migrationsRoot: migrations,
+          loadBoxEnv,
+          readRecoveryState,
+          writeRecoveryState,
+          startServer: async (merged, base) => (server = await startServer(merged, base, seams)),
+          serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
+          serveRecovery: async () => {
+            throw new Error("unexpected recovery mode");
+          },
+          installShutdownHandlers: () => {},
+          scheduleStayedUp: () => {},
+          log: () => {},
         });
-        expect(refused).toMatchObject({
+      expect(server).toBeDefined();
+      agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+      const url = `https://127.0.0.1:${port}`;
+      let capability = "",
+        state: { attemptId: string; revision: number; ownerGeneration: number };
+      const headers = () =>
+        capability
+          ? {
+              "X-Waitron-Setup-Owner": capability,
+              "X-Waitron-Setup-Attempt": state.attemptId,
+              "X-Waitron-Setup-Revision": String(state.revision),
+              "X-Waitron-Setup-Generation": String(state.ownerGeneration),
+            }
+          : {};
+      const post = async (path: string, body: unknown) => {
+        const response = await fetch(url + path, {
+          dispatcher: agent,
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers() },
+          body: JSON.stringify(body),
+        } as RequestInit);
+        return { status: response.status, body: await response.json() };
+      };
+      if (launch === "direct" && !newTaxpayer && change === "none") {
+        const absent = await post("/setup-api/first-setup/claim", {
+          venue: request,
+          configurationImport: true,
+        });
+        expect(absent).toMatchObject({
           status: 400,
-          body: { error: { code: "setup.request_invalid", params: { field } } },
+          body: {
+            error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
+          },
         });
         await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
           code: "ENOENT",
         });
       }
-    }
-    const claim = await post("/setup-api/first-setup/claim", {
-      venue: { ...venue, ...(staffLanguage === undefined ? {} : { staffLanguage }) },
-      configurationImport: true,
-      newTaxpayer,
-    });
-    expect(claim).toMatchObject({
-      status: 200,
-      body: { state: { venue: { taxId: venue.taxId } } },
-    });
-    state = claim.body.state;
-    capability = claim.body.capability;
-    const live = {
-      mode: "live",
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
-      email: {
-        server: "smtp.example.test",
-        port: 465,
-        encryption: "tls",
-        user: "test",
-        password: "test",
-        from: "owner@example.test",
-      },
-    };
-    if (!readinessAfterImport) {
-      const readiness = await post("/setup-api/fiscal-test", live);
-      expect(readiness).toEqual({
-        status: 200,
-        body: { status: "accepted", testedAt: expect.any(String) },
-      });
-    }
-    const reconfirm = async (purpose: string) => {
-      const response = await post("/setup-api/first-setup/reconfirm", {
-        password: PASSWORD,
-        purpose,
-      });
-      expect(response.status).toBe(200);
-      return response.body;
-    };
-    const candidates = await selectPastWaits(time.clock, async () => {
-      const challenge = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: { action: "clock-challenge" },
-      });
-      expect(challenge.status).toBe(200);
-      const comparison = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: {
-          action: "compare-clocks",
-          browser: {
-            challengeId: challenge.body.preparation.id,
-            instantMs: time.clock.wall(),
-          },
+      const staged = await fetch(url + "/setup-api/configuration", {
+        dispatcher: agent,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "x-waitron-export-passphrase": "synthetic import passphrase",
         },
-      });
-      expect(comparison.status).toBe(200);
-      const answer = await post("/setup-api/first-setup/candidates", {
-        module: MODULE,
-        proposal: { comparisonId: comparison.body.preparation.id },
-        ...(await reconfirm("block-use")),
-      });
-      return { ...answer, preparation: answer.body.preparation };
-    });
-    expect(candidates.status).toBe(200);
-    expect(candidates.preparation).toBeUndefined();
-    state = candidates.body.state;
-    const exported = await fetch(url + "/setup-api/first-setup/request", {
-      dispatcher: agent,
-      headers: headers(),
-    } as RequestInit);
-    expect(exported.status).toBe(200);
-    const prepared = (await exported.json()).modules[0].request;
-    expect(prepared).toMatchObject({
-      kind: "waitron-hour-setup",
-      status: "selected",
-      identity: "0CNNY",
-    });
-    const imported = await post("/setup-api/first-setup/input", {
-      module: MODULE,
-      input: prepared.input,
-    });
-    expect(imported.status).toBe(200);
-    state = imported.body.state;
-    const keyStage = await post("/setup-api/first-setup/node-key", await reconfirm("block-use"));
-    expect(keyStage.status).toBe(200);
-    const statement = {
-      kind: "waitron-recovery-document",
-      version: 1,
-      scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
-      taxpayerName: venue.legalName,
-      venueName: venue.name,
-      createdAt: new Date().toISOString(),
-      nodeKey: { nodeId: keyStage.body.stage.nodeId, name: keyStage.body.stage.name },
-    };
-    const delivery = {
-      module: MODULE,
-      stageId: keyStage.body.stage.stageId,
-      inputDigest: firstFiscalPublicDigest(prepared.input),
-      bindingDigest: firstFiscalPublicDigest(statement),
-      documentDigest: firstFiscalPublicDigest({ syntheticPdf: true, statement }),
-    };
-    expect(
-      (await post("/setup-api/first-setup/recovery-document", { ...delivery, statement })).status,
-    ).toBe(200);
-    expect(
-      (
-        await post("/setup-api/first-setup/recovery-document-kept", {
-          ...delivery,
-          kept: true,
-          ...(await reconfirm("activation")),
-        })
-      ).status,
-    ).toBe(200);
-    if (readinessAfterImport) {
-      expect(await post("/setup-api/fiscal-test", live)).toEqual({
+        body: new Uint8Array(artifact).buffer,
+      } as RequestInit);
+      const stagedBody = await staged.json();
+      expect(
+        decodeConfigurationBundle(artifact, "synthetic import passphrase").tables.products,
+      ).toHaveLength(1);
+      expect({ status: staged.status, body: stagedBody }).toMatchObject({
         status: 200,
-        body: { status: "accepted", testedAt: expect.any(String) },
+        body: { modules: expect.arrayContaining(["core"]) },
       });
-    }
-    if (change === "replacement") {
-      const replacement = decodeConfigurationBundle(artifact, "synthetic import passphrase");
-      replacement.createdAt = "2026-10-16T12:00:00.000Z";
-      await mkdir(dirname(join(stateDir, "flows/setup/import/artifact")), { recursive: true });
-      await writeFile(
-        join(stateDir, "flows/setup/import/artifact"),
-        encodeConfigurationBundle(replacement, "synthetic import passphrase"),
-      );
-    } else if (change === "missing") {
-      await rm(join(stateDir, "flows/setup/import/marker.json"));
-    }
-    if (change === "none" && launch === "direct" && !newTaxpayer) {
-      const { email: _email, ...beforeEmail } = live;
-      void _email;
-      expect(await post("/setup-api/provision", beforeEmail)).toMatchObject({
-        status: 400,
-        body: { error: { code: "setup.email_required", params: { field: "email" } } },
+      let venue: typeof request = {
+        ...request,
+        ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
+      };
+      if (claimFrom === "preview") {
+        const preview = stagedBody.venue;
+        expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
+        venue = { ...preview, admin: request.admin };
+      }
+      if (launch === "direct" && !newTaxpayer && change === "none") {
+        for (const [candidate, newTaxpayer, field] of [
+          [request, true, "taxId"],
+          [{ ...request, taxId: "B12345674" }, false, "configurationImport"],
+        ] as const) {
+          const refused = await post("/setup-api/first-setup/claim", {
+            venue: candidate,
+            configurationImport: true,
+            newTaxpayer,
+          });
+          expect(refused).toMatchObject({
+            status: 400,
+            body: { error: { code: "setup.request_invalid", params: { field } } },
+          });
+          await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        }
+      }
+      const claim = await post("/setup-api/first-setup/claim", {
+        venue: { ...venue, ...(staffLanguage === undefined ? {} : { staffLanguage }) },
+        configurationImport: true,
+        newTaxpayer,
       });
-    }
-    if (provisionAfterMs !== undefined) time.clock.advance(provisionAfterMs);
-    const activated = await post("/setup-api/provision", live);
-    if (change !== "none") {
-      expect(activated).toMatchObject({
-        status: change === "replacement" ? 409 : 400,
-        body: {
-          error: {
-            code: change === "replacement" ? "setup.attempt_conflict" : "setup.request_invalid",
-          },
+      expect(claim).toMatchObject({
+        status: 200,
+        body: { state: { venue: { taxId: venue.taxId } } },
+      });
+      state = claim.body.state;
+      capability = claim.body.capability;
+      const live = {
+        mode: "live",
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+        email: {
+          server: "smtp.example.test",
+          port: 465,
+          encryption: "tls",
+          user: "test",
+          password: "test",
+          from: "owner@example.test",
         },
+      };
+      if (!readinessAfterImport) {
+        const readiness = await post("/setup-api/fiscal-test", live);
+        expect(readiness).toEqual({
+          status: 200,
+          body: { status: "accepted", testedAt: expect.any(String) },
+        });
+      }
+      const reconfirm = async (purpose: string) => {
+        const response = await post("/setup-api/first-setup/reconfirm", {
+          password: PASSWORD,
+          purpose,
+        });
+        expect(response.status).toBe(200);
+        return response.body;
+      };
+      const candidates = await selectPastWaits(time.clock, async () => {
+        const challenge = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: { action: "clock-challenge" },
+        });
+        expect(challenge.status).toBe(200);
+        const comparison = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: {
+            action: "compare-clocks",
+            browser: {
+              challengeId: challenge.body.preparation.id,
+              instantMs: time.clock.wall(),
+            },
+          },
+        });
+        expect(comparison.status).toBe(200);
+        const answer = await post("/setup-api/first-setup/candidates", {
+          module: MODULE,
+          proposal: { comparisonId: comparison.body.preparation.id },
+          ...(await reconfirm("block-use")),
+        });
+        return { ...answer, preparation: answer.body.preparation };
       });
-      const disk = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-      expect(disk.attempt.status).toBe("consumption-intent");
-      expect(disk.attempt.consumptionIntent).toBe(true);
-      expect(await readFile(join(stateDir, "flows/setup/import/artifact"))).not.toHaveLength(0);
+      expect(candidates.status).toBe(200);
+      expect(candidates.preparation).toBeUndefined();
+      state = candidates.body.state;
+      const exported = await fetch(url + "/setup-api/first-setup/request", {
+        dispatcher: agent,
+        headers: headers(),
+      } as RequestInit);
+      expect(exported.status).toBe(200);
+      const prepared = (await exported.json()).modules[0].request;
+      expect(prepared).toMatchObject({
+        kind: "waitron-hour-setup",
+        status: "selected",
+        identity: "0CNNY",
+      });
+      const imported = await post("/setup-api/first-setup/input", {
+        module: MODULE,
+        input: prepared.input,
+      });
+      expect(imported.status).toBe(200);
+      state = imported.body.state;
+      const keyStage = await post("/setup-api/first-setup/node-key", await reconfirm("block-use"));
+      expect(keyStage.status).toBe(200);
+      const statement = {
+        kind: "waitron-recovery-document",
+        version: 1,
+        scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
+        taxpayerName: venue.legalName,
+        venueName: venue.name,
+        createdAt: new Date().toISOString(),
+        nodeKey: { nodeId: keyStage.body.stage.nodeId, name: keyStage.body.stage.name },
+      };
+      const delivery = {
+        module: MODULE,
+        stageId: keyStage.body.stage.stageId,
+        inputDigest: firstFiscalPublicDigest(prepared.input),
+        bindingDigest: firstFiscalPublicDigest(statement),
+        documentDigest: firstFiscalPublicDigest({ syntheticPdf: true, statement }),
+      };
+      expect(
+        (await post("/setup-api/first-setup/recovery-document", { ...delivery, statement })).status,
+      ).toBe(200);
+      expect(
+        (
+          await post("/setup-api/first-setup/recovery-document-kept", {
+            ...delivery,
+            kept: true,
+            ...(await reconfirm("activation")),
+          })
+        ).status,
+      ).toBe(200);
+      if (readinessAfterImport) {
+        expect(await post("/setup-api/fiscal-test", live)).toEqual({
+          status: 200,
+          body: { status: "accepted", testedAt: expect.any(String) },
+        });
+      }
+      if (change === "replacement") {
+        const replacement = decodeConfigurationBundle(artifact, "synthetic import passphrase");
+        replacement.createdAt = "2026-10-16T12:00:00.000Z";
+        await mkdir(dirname(join(stateDir, "flows/setup/import/artifact")), { recursive: true });
+        await writeFile(
+          join(stateDir, "flows/setup/import/artifact"),
+          encodeConfigurationBundle(replacement, "synthetic import passphrase"),
+        );
+      } else if (change === "missing") {
+        await rm(join(stateDir, "flows/setup/import/marker.json"));
+      }
+      if (change === "none" && launch === "direct" && !newTaxpayer) {
+        const { email: _email, ...beforeEmail } = live;
+        void _email;
+        expect(await post("/setup-api/provision", beforeEmail)).toMatchObject({
+          status: 400,
+          body: { error: { code: "setup.email_required", params: { field: "email" } } },
+        });
+      }
+      time.clock.advance(provisionAfterMs ?? 0);
+      const activated = await post("/setup-api/provision", live);
+      if (change !== "none") {
+        expect(activated).toMatchObject({
+          status: change === "replacement" ? 409 : 400,
+          body: {
+            error: {
+              code: change === "replacement" ? "setup.attempt_conflict" : "setup.request_invalid",
+            },
+          },
+        });
+        const disk = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+        expect(disk.attempt.status).toBe("consumption-intent");
+        expect(disk.attempt.consumptionIntent).toBe(true);
+        expect(await readFile(join(stateDir, "flows/setup/import/artifact"))).not.toHaveLength(0);
+        await server!.close();
+        server = undefined;
+        const untouched = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
+        try {
+          expect(untouched.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
+          expect(untouched.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(
+            0,
+          );
+        } finally {
+          untouched.close();
+        }
+        return;
+      }
+      expect(activated).toMatchObject({ status: 200, body: { provisioned: true } });
       await server!.close();
       server = undefined;
-      const untouched = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
+      const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
       try {
-        expect(untouched.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
-        expect(untouched.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(0);
+        const mail = db
+          .prepare("select doc, updated_by as actor from settings where module = 'mail'")
+          .get();
+        expect(mail).toEqual({ doc: JSON.stringify({ from: "owner@example.test" }), actor: null });
+        expect(db.prepare("select name from products").all()).toEqual([
+          { name: "Prepared gazpacho" },
+        ]);
+        expect(db.prepare("select tax_id as taxId from taxpayer").all()).toEqual([
+          { taxId: venue.taxId },
+        ]);
+        expect(
+          db
+            .prepare(
+              "select json_extract(doc, '$.privacyNoticeUrl') as privacyNoticeUrl, json_extract(doc, '$.privacyEmail') as privacyEmail from settings where module = 'venue'",
+            )
+            .all(),
+        ).toEqual([
+          { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
+        ]);
+        expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
+        expect(db.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
       } finally {
-        untouched.close();
+        db.close();
       }
-      return;
-    }
-    expect(activated).toMatchObject({ status: 200, body: { provisioned: true } });
-    await server!.close();
-    server = undefined;
-    const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
-    try {
-      const mail = db
-        .prepare("select doc, updated_by as actor from settings where module = 'mail'")
-        .get();
-      expect(mail).toEqual({ doc: JSON.stringify({ from: "owner@example.test" }), actor: null });
-      expect(db.prepare("select name from products").all()).toEqual([
-        { name: "Prepared gazpacho" },
-      ]);
-      expect(db.prepare("select tax_id as taxId from taxpayer").all()).toEqual([
-        { taxId: venue.taxId },
-      ]);
-      expect(
-        db
-          .prepare(
-            "select json_extract(doc, '$.privacyNoticeUrl') as privacyNoticeUrl, json_extract(doc, '$.privacyEmail') as privacyEmail from settings where module = 'venue'",
-          )
-          .all(),
-      ).toEqual([
-        { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
-      ]);
-      expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
-      expect(db.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
-    } finally {
-      db.close();
-    }
-    const readinessDirs = (await readdir(stateDir)).filter((name) =>
-      name.startsWith("fiscal-readiness-db-"),
-    );
-    expect(readinessDirs).toHaveLength(1);
-    const isolated = new DatabaseSync(join(stateDir, readinessDirs[0]!, "venue.db"), {
-      readOnly: true,
-    });
-    try {
-      expect(isolated.prepare("select environment from deployment").all()).toEqual([
-        { environment: "preproduction" },
-      ]);
-      expect(isolated.prepare("select id from nodes").all()).not.toContainEqual({
-        id: claim.body.state.nodeId,
-      });
-      expect(
-        isolated
-          .prepare(
-            "select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')",
-          )
-          .all(),
-      ).not.toContainEqual({ id: claim.body.state.administratorId });
-      expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
-        { environment: "preproduction" },
-      ]);
-      expect(isolated.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(1);
-      expect(
-        isolated
-          .prepare("select count(*) as n from products where name = 'Prepared gazpacho'")
-          .get()?.n,
-      ).toBe(0);
-    } finally {
-      isolated.close();
-    }
-    const persisted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-    expect(persisted.attempt.status).toBe("complete");
-    expect(persisted.attempt.frozen.configurationImport).toEqual({
-      digest: expect.stringMatching(/^[a-f0-9]{64}$/),
-      newTaxpayer,
-    });
-    await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    const merged = await loadBoxEnv(env, stateDir);
-    server = await startServer(merged, env, seams);
-    const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
-    expect(health.status).toBe(200);
-    const undeclared = async (directory: string) =>
-      (await readdir(directory)).filter(
-        (name) =>
-          !STATE_LAYOUT.some((entry) =>
-            entry.kind === "prefix" ? name.startsWith(entry.name) : name === entry.name,
-          ),
+      const readinessDirs = (await readdir(stateDir)).filter((name) =>
+        name.startsWith("fiscal-readiness-db-"),
       );
-    expect(await undeclared(stateDir)).toEqual([]);
-    if (launch === "direct" && !newTaxpayer && change === "none") {
-      const copy = await mkdtemp(join(tmpdir(), "setup-layout-control-"));
+      expect(readinessDirs).toHaveLength(1);
+      const isolated = new DatabaseSync(join(stateDir, readinessDirs[0]!, "venue.db"), {
+        readOnly: true,
+      });
       try {
-        await cp(stateDir, copy, { recursive: true });
-        await writeFile(join(copy, "stray.json"), "{}");
-        expect(await undeclared(copy)).toEqual(["stray.json"]);
+        expect(isolated.prepare("select environment from deployment").all()).toEqual([
+          { environment: "preproduction" },
+        ]);
+        expect(isolated.prepare("select id from nodes").all()).not.toContainEqual({
+          id: claim.body.state.nodeId,
+        });
+        expect(
+          isolated
+            .prepare(
+              "select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')",
+            )
+            .all(),
+        ).not.toContainEqual({ id: claim.body.state.administratorId });
+        expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
+          { environment: "preproduction" },
+        ]);
+        expect(isolated.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(
+          1,
+        );
+        expect(
+          isolated
+            .prepare("select count(*) as n from products where name = 'Prepared gazpacho'")
+            .get()?.n,
+        ).toBe(0);
       } finally {
-        await rm(copy, { recursive: true, force: true });
+        isolated.close();
       }
+      const persisted = JSON.parse(
+        await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+      );
+      expect(persisted.attempt.status).toBe("complete");
+      expect(persisted.attempt.frozen.configurationImport).toEqual({
+        digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        newTaxpayer,
+      });
+      await expect(
+        readFile(join(stateDir, "flows/setup/import/marker.json")),
+      ).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      const merged = await loadBoxEnv(env, stateDir);
+      server = await startServer(merged, env, seams);
+      const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
+      expect(health.status).toBe(200);
+      const undeclared = async (directory: string) =>
+        (await readdir(directory)).filter(
+          (name) =>
+            !STATE_LAYOUT.some((entry) =>
+              entry.kind === "prefix" ? name.startsWith(entry.name) : name === entry.name,
+            ),
+        );
+      expect(await undeclared(stateDir)).toEqual([]);
+      if (launch === "direct" && !newTaxpayer && change === "none") {
+        const copy = await mkdtemp(join(tmpdir(), "setup-layout-control-"));
+        try {
+          await cp(stateDir, copy, { recursive: true });
+          await writeFile(join(copy, "stray.json"), "{}");
+          expect(await undeclared(copy)).toEqual(["stray.json"]);
+        } finally {
+          await rm(copy, { recursive: true, force: true });
+        }
+      }
+      const setup = await fetch(url + "/setup-api/first-setup/status", {
+        dispatcher: agent,
+      } as RequestInit);
+      expect(setup.status).toBe(404);
+      await server.close();
+      server = undefined;
+      const restarted = JSON.parse(
+        await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+      );
+      expect(restarted.attempt.frozen).toEqual(persisted.attempt.frozen);
+      expect(restarted.attempt.result).toEqual(persisted.attempt.result);
+    } finally {
+      await server?.close();
+      await agent?.close();
     }
-    const setup = await fetch(url + "/setup-api/first-setup/status", {
-      dispatcher: agent,
-    } as RequestInit);
-    expect(setup.status).toBe(404);
-    await server.close();
-    server = undefined;
-    const restarted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-    expect(restarted.attempt.frozen).toEqual(persisted.attempt.frozen);
-    expect(restarted.attempt.result).toEqual(persisted.attempt.result);
-  } finally {
-    await server?.close();
-    await agent?.close();
-  }
-}
+  },
+);
 
 it("keeps English working names through fresh Live publication with Spanish receipts", async () => {
   const root = await mkdtemp(join(tmpdir(), "first-live-language-"));
