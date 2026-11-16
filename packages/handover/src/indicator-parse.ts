@@ -1,4 +1,4 @@
-import { MODULE_PREPARED_ITEM } from "./manifest.js";
+import { MODULE_PREPARED_ITEM, isRingKeys } from "./manifest.js";
 import {
   isOperationBinding,
   isOperationBindingField,
@@ -98,7 +98,7 @@ function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {
     raw,
     field,
     ["item", "where", "class", "treatment"],
-    ["sha256", "ringVersions", "revisions"],
+    ["sha256", "ringKeys", "revisions"],
   );
   text(row.item, `${field}.item`);
   if (!WHERE.includes(row.where as string)) refuse(`${field}.where`);
@@ -106,14 +106,7 @@ function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {
   text(row.treatment, `${field}.treatment`);
   const named = `nodeLocal.${row.item as string}`;
   if (row.sha256 !== undefined && row.sha256 !== null) digest(row.sha256, `${named}.sha256`);
-  if (row.ringVersions !== undefined) {
-    const versions = listAt(row.ringVersions, `${named}.ringVersions`);
-    // An empty list would pass "every version listed is in M2's ring" with nothing checked.
-    if (versions.length === 0) refuse(`${named}.ringVersions`);
-    versions.forEach((version, index) => {
-      atLeast(version, 1, `${named}.ringVersions.${index}`);
-    });
-  }
+  if (row.ringKeys !== undefined && !isRingKeys(row.ringKeys)) refuse(`${named}.ringKeys`);
   if (row.revisions !== undefined) {
     listAt(row.revisions, `${named}.revisions`).forEach((entry, index) => {
       revision(entry, `${named}.revisions.${index}`);
@@ -126,7 +119,7 @@ function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {
 const REQUIRED_STATE_FIELDS: readonly (readonly [string, string])[] = [
   ["backup.env", "sha256"],
   ["settings:modules", "sha256"],
-  ["secrets.env", "ringVersions"],
+  ["secrets.env", "ringKeys"],
   [MODULE_PREPARED_ITEM, "revisions"],
 ];
 

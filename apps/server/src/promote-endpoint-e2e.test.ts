@@ -665,6 +665,7 @@ describe("a real offer beside a real promotion on a real start", () => {
             db[venue],
           ),
           imageMigrations: imageMigrationsDigest(null),
+          copyBytes: 1024,
         } as unknown as CanonicalValue,
         { nodeId: MIRROR_ORIGIN_NODE_ID, privateKey: seed.origin.privateKey },
       ),

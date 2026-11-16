@@ -25,9 +25,15 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  nodeSigningPublicKey,
+  sealNodeSigningKeyTx,
+  type KeyRing,
+} from "@waitron/credentials";
 import {
   bindingFingerprint,
+  sha256Hex,
   signEnvelope,
   verifyEnvelope,
   type HandoverBinding,
@@ -54,7 +60,7 @@ import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mintBoxAuthority } from "./testing/box-authority.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
-import { imageMigrationsDigest } from "./handover-manifest.js";
+import { imageMigrationsDigest, readOfferCopyBytes } from "./handover-manifest.js";
 import { promotionTurn } from "./handover-promotion-turn.js";
 import {
   mountHandoverSourceStartApi,
@@ -230,7 +236,7 @@ beforeEach(async () => {
   mountHandoverStatusApi(spareApp, spareDeps, () => undefined);
   mountHandoverDestinationApi(
     spareApp,
-    { ...spareDeps, stateDir: spareState, migrationsRoot: null },
+    { ...spareDeps, stateDir: spareState, venueDir: spareState, migrationsRoot: null },
     () => undefined,
   );
   app = mount();
@@ -1353,6 +1359,7 @@ describe("the settings the offer carries", () => {
           ring: RING,
           nodeId: spare,
           stateDir: spareState,
+          venueDir: spareState,
           migrationsRoot: root,
         },
         () => undefined,
@@ -1380,6 +1387,48 @@ describe("the settings the offer carries", () => {
       app = mount({ ring: rotated });
       await expectRefusedByTheSpare("handover.key_ring_mismatch");
     });
+
+    it.each(["no room", "different key at the same version"])(
+      "%s leaves the source selling and the destination unrecorded",
+      async (failure) => {
+        const ring =
+          failure === "no room"
+            ? RING
+            : loadKeyRing({
+                WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 8).toString("base64"),
+                WAITRON_CREDENTIALS_KEY_VERSION: "1",
+              });
+        await withNodeTransaction(spareBox.node, (tx) =>
+          sealNodeSigningKeyTx(tx, ring, spare, spareKey),
+        );
+        spareApp = new Hono();
+        const deps = { db: spareBox.db, node: spareBox.node, ring, nodeId: spare };
+        mountPeerStatusApi(spareApp, deps, () => undefined);
+        const refusalLogs: unknown[] = [];
+        mountHandoverDestinationApi(
+          spareApp,
+          {
+            ...deps,
+            stateDir: spareState,
+            venueDir: spareState,
+            migrationsRoot: null,
+            statfs: async () => ({ bavail: failure === "no room" ? 0 : 1e12, frsize: 1 }),
+          },
+          (_level, _event, detail) => refusalLogs.push(detail),
+        );
+        await expectRefusedByTheSpare(
+          failure === "no room" ? "handover.no_room_at_offer" : "handover.key_ring_mismatch",
+        );
+        expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
+        expect(gate.isClosed()).toBe(false);
+        expect(stepDownAfterOffer).not.toHaveBeenCalled();
+        for (const key of [RING.current.key, ring.current.key]) {
+          for (const encoding of ["hex", "base64"] as const) {
+            expect(JSON.stringify([logged, refusalLogs])).not.toContain(key.toString(encoding));
+          }
+        }
+      },
+    );
 
     it("a second try with the same id answers the same refusal, sending nothing", async () => {
       await write(mainState, "backup.env", BACKUP);
@@ -1435,7 +1484,7 @@ describe("the settings the offer carries", () => {
       expect(settings).toEqual({
         backupSettings: expect.stringMatching(/^[0-9a-f]{64}$/),
         moduleSettings: expect.stringMatching(/^[0-9a-f]{64}$/),
-        ringVersions: [1],
+        ringKeys: [{ version: 1, sha256: sha256Hex(Buffer.alloc(32, 7)) }],
       });
       expect(envelope).not.toContain("hourly");
       expect(envelope).not.toContain("bookings");
@@ -1636,6 +1685,27 @@ describe("the settings the offer carries", () => {
         }),
       });
       await expectRefusedUnsent("handover.settings_changed");
+    });
+
+    it("source growth retries the original signed offer", async () => {
+      await startedThenForgotten();
+      const original = events()[0]!.envelope!;
+      const { copyBytes } = (JSON.parse(original) as { body: { copyBytes: number } }).body;
+      expect(copyBytes).toBeGreaterThan(0);
+      await mainBox.db.run(sql`create table offer_growth_probe (payload blob)`);
+      try {
+        await mainBox.db.run(sql`insert into offer_growth_probe values (zeroblob(1000000))`);
+        let sent = "";
+        exchange = offerAnswers((path, init) => {
+          sent = String(init.body);
+          return toSpare(path, init);
+        });
+        expect((await start()).status).toBe(200);
+        expect(sent).toBe(original);
+        expect(readOfferCopyBytes(mainBox.db)).toBeGreaterThan(copyBytes);
+      } finally {
+        await mainBox.db.run(sql`drop table offer_growth_probe`);
+      }
     });
 
     it("control: the same settings in another spelling send the same offer again", async () => {

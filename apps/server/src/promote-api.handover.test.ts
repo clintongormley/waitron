@@ -201,6 +201,7 @@ beforeEach(async () => {
       ring: RING,
       nodeId: self,
       stateDir: stateRoot,
+      venueDir: stateRoot,
       migrationsRoot: null,
     },
     () => undefined,
@@ -272,8 +273,13 @@ function offer(
     {
       binding: { ...binding, ...overrides },
       authorisedBy: AUTHORISER,
-      settings: { backupSettings: null, moduleSettings: null, ringVersions: [1] },
+      settings: {
+        backupSettings: null,
+        moduleSettings: null,
+        ringKeys: [{ version: 1, sha256: sha256Hex(RING.current.key) }],
+      },
       imageMigrations: imageMigrationsDigest(null),
+      copyBytes: 1024,
     } as unknown as CanonicalValue,
     SOURCE,
   );

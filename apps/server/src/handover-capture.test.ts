@@ -507,7 +507,7 @@ describe("capturing a stepped-down box's final copy", () => {
       const self = await steppedDown();
       const envelope = await captureFinalCopy(deps(self, { ring }), OP);
       const row = parseIndicator(envelope.body).nodeLocal.find((r) => r.item === "secrets.env");
-      expect(row?.ringVersions).toEqual(want);
+      expect(row?.ringKeys?.map((key) => key.version)).toEqual(want);
     },
   );
 

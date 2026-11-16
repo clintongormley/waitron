@@ -44,6 +44,7 @@ import {
   imageMigrationsDigest,
   isManifestStateFile,
   readOfferSettings,
+  readOfferCopyBytes,
   type OfferSettings,
 } from "./handover-manifest.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
@@ -102,6 +103,7 @@ const STATUS = {
   "handover.backup_settings_differ": 409,
   "handover.modules_differ": 409,
   "handover.key_ring_mismatch": 409,
+  "handover.no_room_at_offer": 409,
   "handover.settings_unreadable": 409,
   "handover.destination_settings_unreadable": 409,
   "handover.settings_changed": 409,
@@ -132,6 +134,7 @@ const OFFER_REFUSALS: Readonly<
   "handover.backup_settings_differ": null,
   "handover.modules_differ": null,
   "handover.key_ring_mismatch": null,
+  "handover.no_room_at_offer": null,
   "handover.destination_settings_unreadable": { name: "file", isValid: isManifestStateFile },
 };
 
@@ -448,6 +451,7 @@ export function mountHandoverSourceStartApi(
       authorisedBy: personId,
       settings: settings as unknown as CanonicalValue,
       imageMigrations: imageMigrationsDigest(deps.migrationsRoot),
+      copyBytes: readOfferCopyBytes(deps.db),
     });
     if (deps.gate.isClosed()) {
       // A stepped-down box records nothing and offers nothing. With no operation of its own open,

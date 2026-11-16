@@ -310,6 +310,7 @@ declare module "@waitron/shared" {
      * The spare has too little room to place the copy it accepted. It asks the old box to give up
      * filing once there is room.
      */
+    "handover.no_room_at_offer": Record<string, never>;
     "handover.no_room_to_place": Record<string, never>;
     /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
     "handover.summary_mismatch": { module: string };

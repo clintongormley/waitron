@@ -51,7 +51,11 @@ const PERSON = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNodeKeyPair() };
 const BYSTANDER = { nodeId: "22222222-2222-4222-8222-222222222222", ...generateNodeKeyPair() };
 const STRANGER = { nodeId: "33333333-3333-4333-8333-333333333333", ...generateNodeKeyPair() };
-const SETTINGS = { backupSettings: null, moduleSettings: null, ringVersions: [1] };
+const SETTINGS = {
+  backupSettings: null,
+  moduleSettings: null,
+  ringKeys: [{ version: 1, sha256: sha256Hex(Buffer.alloc(32, 7)) }],
+};
 const IMAGE = imageMigrationsDigest(null);
 
 const suite = useVenueDb({
@@ -121,7 +125,15 @@ beforeEach(async () => {
   app = new Hono();
   mountHandoverDestinationApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir, migrationsRoot: null },
+    {
+      db: suite.db,
+      node: suite.node,
+      ring: RING,
+      nodeId: self,
+      stateDir,
+      venueDir: stateDir,
+      migrationsRoot: null,
+    },
     () => undefined,
   );
 });
@@ -140,6 +152,7 @@ function envelopeOf(
     authorisedBy: PERSON,
     settings: SETTINGS,
     imageMigrations: IMAGE,
+    copyBytes: 1024,
   };
   return signEnvelope(kind, body as unknown as CanonicalValue, signer);
 }
@@ -188,6 +201,91 @@ async function signedStatusOf(answer: { status: number; body: unknown }) {
   if (!verdict.valid) throw new Error(`the answer did not verify: ${verdict.reason}`);
   return verdict.body;
 }
+
+describe("offer copy space", () => {
+  it.each([
+    ["one byte below two copies plus floor", 268437503, 268437504, 409],
+    ["exact boundary", 268437504, 268437504, 200],
+    ["venue folder is lower", 268437504, 268437503, 409],
+    ["neither folder reports space", null, null, 409],
+  ])("%s", async (_name, stateFree, venueFree, status) => {
+    const log = vi.fn();
+    app = new Hono();
+    mountHandoverDestinationApi(
+      app,
+      {
+        db: suite.db,
+        node: suite.node,
+        ring: RING,
+        nodeId: self,
+        stateDir,
+        venueDir: join(stateDir, "venue"),
+        migrationsRoot: null,
+        statfs: async (path) => {
+          const free = path === stateDir ? stateFree : venueFree;
+          if (free === null) throw new Error("unavailable");
+          return { bavail: free, frsize: 1 };
+        },
+      },
+      log,
+    );
+    const answer = await post(envelopeOf());
+    expect(answer.status).toBe(status);
+    if (status === 409) {
+      expect(answer).toEqual(refusal(409, "handover.no_room_at_offer"));
+      await expectNothingRecorded();
+      expect(log).toHaveBeenCalledWith("warn", "handover.offer_space_refused", {
+        operationId: OP,
+        neededBytes: 268437504,
+        availableBytes: stateFree === null ? null : Math.min(stateFree, venueFree!),
+      });
+    } else {
+      expect((await readHandoverOperation(suite.node, self, OP))?.state).toBe("prepared");
+    }
+  });
+
+  it.each([undefined, null, "1024", 0, -1, 1.5, Number.MAX_SAFE_INTEGER])(
+    "refuses malformed copy size %s before recording",
+    async (copyBytes) => {
+      const envelope = envelopeOf();
+      const body = JSON.parse(
+        JSON.stringify({ ...(envelope.body as object), copyBytes }),
+      ) as Record<string, unknown>;
+      expect(
+        await post(signEnvelope("stepdown", body as unknown as CanonicalValue, SOURCE)),
+      ).toEqual(
+        refusal(400, "handover.request_invalid", {
+          field: copyBytes === undefined ? "body" : "copyBytes",
+        }),
+      );
+      await expectNothingRecorded();
+    },
+  );
+
+  it("a stored offer replays after room disappears", async () => {
+    let available = 268437504;
+    app = new Hono();
+    mountHandoverDestinationApi(
+      app,
+      {
+        db: suite.db,
+        node: suite.node,
+        ring: RING,
+        nodeId: self,
+        stateDir,
+        venueDir: stateDir,
+        migrationsRoot: null,
+        statfs: async () => ({ bavail: available, frsize: 1 }),
+      },
+      () => undefined,
+    );
+    const first = await post(envelopeOf());
+    expect(first.status).toBe(200);
+    available = 0;
+    expect(await post(envelopeOf())).toEqual(first);
+    expect(events()).toHaveLength(1);
+  });
+});
 
 describe("POST /api/node/handover/offer", () => {
   describe("a valid offer", () => {
@@ -279,6 +377,7 @@ describe("POST /api/node/handover/offer", () => {
           ring: RING,
           nodeId: self,
           stateDir,
+          venueDir: stateDir,
           migrationsRoot: null,
         },
         () => undefined,
@@ -392,12 +491,24 @@ describe("POST /api/node/handover/offer", () => {
       ["an extra key", { binding: "later", authorisedBy: PERSON, extra: 1 }, "body"],
       [
         "a person that is not an id",
-        { binding: "later", authorisedBy: "someone", settings: SETTINGS, imageMigrations: IMAGE },
+        {
+          binding: "later",
+          authorisedBy: "someone",
+          settings: SETTINGS,
+          imageMigrations: IMAGE,
+          copyBytes: 1024,
+        },
         "authorisedBy",
       ],
       [
         "a person that is not text",
-        { binding: "later", authorisedBy: 7, settings: SETTINGS, imageMigrations: IMAGE },
+        {
+          binding: "later",
+          authorisedBy: 7,
+          settings: SETTINGS,
+          imageMigrations: IMAGE,
+          copyBytes: 1024,
+        },
         "authorisedBy",
       ],
     ])("refuses a body holding %s", async (_name, shape, field) => {
@@ -418,6 +529,7 @@ describe("POST /api/node/handover/offer", () => {
           authorisedBy: PERSON,
           settings: SETTINGS,
           imageMigrations: IMAGE,
+          copyBytes: 1024,
         } as CanonicalValue,
         SOURCE,
       );
@@ -555,6 +667,7 @@ describe("POST /api/node/handover/offer", () => {
           authorisedBy: PERSON,
           settings: SETTINGS,
           imageMigrations,
+          copyBytes: 1024,
         } as unknown as CanonicalValue,
         SOURCE,
       );
@@ -568,6 +681,7 @@ describe("POST /api/node/handover/offer", () => {
           ring: RING,
           nodeId: self,
           stateDir,
+          venueDir: stateDir,
           migrationsRoot: root,
         },
         () => undefined,
@@ -645,6 +759,7 @@ describe("POST /api/node/handover/offer", () => {
           authorisedBy: PERSON,
           settings,
           imageMigrations: IMAGE,
+          copyBytes: 1024,
         } as unknown as CanonicalValue,
         SOURCE,
       );
@@ -670,11 +785,38 @@ describe("POST /api/node/handover/offer", () => {
         { ...SETTINGS, moduleSettings: 7 },
         "settings.moduleSettings",
       ],
-      ["a ring that is not a list", { ...SETTINGS, ringVersions: 1 }, "settings.ringVersions"],
-      ["a ring with no versions", { ...SETTINGS, ringVersions: [] }, "settings.ringVersions"],
-      ["a ring version of nought", { ...SETTINGS, ringVersions: [0] }, "settings.ringVersions"],
-      ["a fractional ring version", { ...SETTINGS, ringVersions: [1.5] }, "settings.ringVersions"],
-      ["a ring version as text", { ...SETTINGS, ringVersions: ["1"] }, "settings.ringVersions"],
+      [
+        "duplicate versions",
+        { ...SETTINGS, ringKeys: [...SETTINGS.ringKeys, ...SETTINGS.ringKeys] },
+        "settings.ringKeys",
+      ],
+      [
+        "a capital hash",
+        { ...SETTINGS, ringKeys: [{ version: 1, sha256: "A".repeat(64) }] },
+        "settings.ringKeys",
+      ],
+      [
+        "a short hash",
+        { ...SETTINGS, ringKeys: [{ version: 1, sha256: "a".repeat(63) }] },
+        "settings.ringKeys",
+      ],
+      ["a ring that is not a list", { ...SETTINGS, ringKeys: 1 }, "settings.ringKeys"],
+      ["a ring with no versions", { ...SETTINGS, ringKeys: [] }, "settings.ringKeys"],
+      [
+        "a ring version of nought",
+        { ...SETTINGS, ringKeys: [{ version: 0, sha256: "a".repeat(64) }] },
+        "settings.ringKeys",
+      ],
+      [
+        "a fractional ring version",
+        { ...SETTINGS, ringKeys: [{ version: 1.5, sha256: "a".repeat(64) }] },
+        "settings.ringKeys",
+      ],
+      [
+        "a ring version as text",
+        { ...SETTINGS, ringKeys: [{ version: "1", sha256: "a".repeat(64) }] },
+        "settings.ringKeys",
+      ],
     ])("refuses settings that are %s, recording nothing", async (_name, settings, field) => {
       expect(await post(offerWith(settings))).toEqual(
         refusal(400, "handover.request_invalid", { field }),
@@ -690,6 +832,8 @@ describe("POST /api/node/handover/offer", () => {
           authorisedBy: PERSON,
           settings: SETTINGS,
           extra: 1,
+          copyBytes: 1024,
+          imageMigrations: IMAGE,
         } as unknown as CanonicalValue,
         SOURCE,
       );
@@ -702,7 +846,16 @@ describe("POST /api/node/handover/offer", () => {
     it.each([
       ["backup settings", { backupSettings: DIGEST }, "handover.backup_settings_differ"],
       ["module settings", { moduleSettings: DIGEST }, "handover.modules_differ"],
-      ["a ring version this box lacks", { ringVersions: [1, 2] }, "handover.key_ring_mismatch"],
+      [
+        "different key bytes at the same version",
+        { ringKeys: [{ version: 1, sha256: "a".repeat(64) }] },
+        "handover.key_ring_mismatch",
+      ],
+      [
+        "a ring version this box lacks",
+        { ringKeys: [...SETTINGS.ringKeys, { version: 2, sha256: "a".repeat(64) }] },
+        "handover.key_ring_mismatch",
+      ],
     ])("a difference in %s refuses and records nothing", async (_name, change, code) => {
       expect(await post(offerWith({ ...SETTINGS, ...change }))).toEqual(refusal(409, code));
       await expectNothingRecorded();
@@ -718,7 +871,15 @@ describe("POST /api/node/handover/offer", () => {
       const rotated = new Hono();
       mountHandoverDestinationApi(
         rotated,
-        { db: suite.db, node: suite.node, ring, nodeId: self, stateDir, migrationsRoot: null },
+        {
+          db: suite.db,
+          node: suite.node,
+          ring,
+          nodeId: self,
+          stateDir,
+          venueDir: stateDir,
+          migrationsRoot: null,
+        },
         () => undefined,
       );
       const response = await rotated.request("/api/node/handover/offer", {

@@ -291,7 +291,11 @@ it("hands over from built Servers through a real copy, placement restart and clo
     };
     mountPeerStatusApi(destination, spareDeps, log);
     mountHandoverStatusApi(destination, spareDeps, log);
-    mountHandoverDestinationApi(destination, { ...spareDeps, migrationsRoot: null }, log);
+    mountHandoverDestinationApi(
+      destination,
+      { ...spareDeps, venueDir: spareDeps.stateDir, migrationsRoot: null },
+      log,
+    );
     mountHandoverPage(destination, { ...spareDeps, root: join(root!, "setup") }, log);
     const gate = createHandoverGate();
     source.use("*", gate.middleware);

@@ -1,8 +1,11 @@
 import type { Database } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import { stat } from "node:fs/promises";
 import type { KeyRing } from "@waitron/credentials";
 import {
   isSha256Hex,
+  isRingKeys,
+  type RingKeyFingerprint,
   NODE_LOCAL_MANIFEST,
   MODULE_PREPARED_ITEM,
   refuseRequest,
@@ -20,11 +23,6 @@ import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.
 import { readModuleConfig } from "./module-config.js";
 import "./errors.js";
 
-/**
- * `secrets.env` carries its key versions, not a digest: the receiving box must hold every version
- * the sender lists, which a digest of the file cannot answer. The two settings files are digested
- * as values, so two boxes that hold the same settings in another order or spacing read alike.
- */
 export async function buildNodeLocalManifest(
   stateDir: string,
   ring: KeyRing,
@@ -47,7 +45,7 @@ async function manifestItem(
     case BACKUP_ENV_FILE:
       return { ...row, sha256: backupSettingsDigestOf(await readBackupSettings(stateDir)) };
     case SECRETS_ENV_FILE:
-      return { ...row, ringVersions: ringVersions(ring) };
+      return { ...row, ringKeys: ringKeys(ring) };
     case MODULE_PREPARED_ITEM: {
       // The file holds parsed JSON, so each value is one a signed body can carry.
       const revisions = await readModulePreparationRevisions({ stateDir });
@@ -58,11 +56,19 @@ async function manifestItem(
   }
 }
 
+// Repacking and later sales can change the final size; acceptance checks the actual copy.
+export function readOfferCopyBytes(db: Database): number {
+  const [row] = db.all<{ bytes: number }>(sql`
+    select page_count * page_size as bytes from pragma_page_count(), pragma_page_size()
+  `);
+  return row.bytes;
+}
+
 /** What a handover offer says of the box making it, for the box receiving it to compare. */
 export interface OfferSettings {
   readonly backupSettings: string | null;
   readonly moduleSettings: string | null;
-  readonly ringVersions: readonly number[];
+  readonly ringKeys: readonly RingKeyFingerprint[];
 }
 
 /**
@@ -105,7 +111,7 @@ export async function readOfferSettings(
       moduleSettings = item.sha256 ?? null;
     }
   }
-  return { backupSettings, moduleSettings, ringVersions: ringVersions(ring) };
+  return { backupSettings, moduleSettings, ringKeys: ringKeys(ring) };
 }
 
 /** State decisions include folders and templates; the refusal also accepts the modules settings item. */
@@ -136,21 +142,14 @@ function digestAt(value: unknown, field: string): string | null {
 export function parseOfferSettings(raw: unknown): OfferSettings {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuseRequest("settings");
   const fields = raw as Record<string, unknown>;
-  if (Object.keys(fields).sort().join() !== "backupSettings,moduleSettings,ringVersions") {
+  if (Object.keys(fields).sort().join() !== "backupSettings,moduleSettings,ringKeys") {
     refuseRequest("settings");
   }
-  const { ringVersions: versions } = fields;
-  if (
-    !Array.isArray(versions) ||
-    versions.length === 0 ||
-    !versions.every((version) => Number.isSafeInteger(version) && (version as number) >= 1)
-  ) {
-    refuseRequest("settings.ringVersions");
-  }
+  if (!isRingKeys(fields.ringKeys)) refuseRequest("settings.ringKeys");
   return {
     backupSettings: digestAt(fields.backupSettings, "settings.backupSettings"),
     moduleSettings: digestAt(fields.moduleSettings, "settings.moduleSettings"),
-    ringVersions: versions as number[],
+    ringKeys: fields.ringKeys,
   };
 }
 
@@ -164,16 +163,23 @@ export function offerSettingsDifference(
 > | null {
   if (offered.backupSettings !== own.backupSettings) return "handover.backup_settings_differ";
   if (offered.moduleSettings !== own.moduleSettings) return "handover.modules_differ";
-  if (offered.ringVersions.some((version) => !own.ringVersions.includes(version))) {
+  if (
+    offered.ringKeys.some(
+      (key) =>
+        !own.ringKeys.some((held) => held.version === key.version && held.sha256 === key.sha256),
+    )
+  ) {
     return "handover.key_ring_mismatch";
   }
   return null;
 }
 
-function ringVersions(ring: KeyRing): number[] {
-  const versions = [ring.current.version];
-  if (ring.previous !== undefined) versions.push(ring.previous.version);
-  return versions.sort((a, b) => a - b);
+function ringKeys(ring: KeyRing): RingKeyFingerprint[] {
+  const keys = [ring.current];
+  if (ring.previous !== undefined) keys.push(ring.previous);
+  return keys
+    .map(({ version, key }) => ({ version, sha256: sha256Hex(key) }))
+    .sort((a, b) => a.version - b.version);
 }
 
 /**

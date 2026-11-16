@@ -44,7 +44,10 @@ function valid(): FinalStateIndicator {
         where: "state",
         class: "transferred",
         treatment: "x",
-        ringVersions: [2, 3],
+        ringKeys: [
+          { version: 2, sha256: "a".repeat(64) },
+          { version: 3, sha256: "b".repeat(64) },
+        ],
       },
       {
         item: "module-records/<module>.json#prepared",
@@ -202,24 +205,49 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
   ],
   [
     "a ring listing that is no list",
-    "nodeLocal.secrets.env.ringVersions",
-    (b) => (rowNamed(b, "secrets.env").ringVersions = 3),
+    "nodeLocal.secrets.env.ringKeys",
+    (b) => (rowNamed(b, "secrets.env").ringKeys = 3),
   ],
   [
     "a ring listing with no versions, which would leave a later ring check nothing to check",
-    "nodeLocal.secrets.env.ringVersions",
-    (b) => (rowNamed(b, "secrets.env").ringVersions = []),
+    "nodeLocal.secrets.env.ringKeys",
+    (b) => (rowNamed(b, "secrets.env").ringKeys = []),
   ],
   [
     "a ring version of zero",
-    "nodeLocal.secrets.env.ringVersions.0",
-    (b) => (rowNamed(b, "secrets.env").ringVersions = [0]),
+    "nodeLocal.secrets.env.ringKeys",
+    (b) => (rowNamed(b, "secrets.env").ringKeys = [{ version: 0, sha256: "a".repeat(64) }]),
   ],
   [
     "a ring version that is text",
-    "nodeLocal.secrets.env.ringVersions.1",
-    (b) => (rowNamed(b, "secrets.env").ringVersions = [1, "2"]),
+    "nodeLocal.secrets.env.ringKeys",
+    (b) =>
+      (rowNamed(b, "secrets.env").ringKeys = [
+        { version: 1, sha256: "a".repeat(64) },
+        { version: "2", sha256: "b".repeat(64) },
+      ]),
   ],
+
+  ...[
+    [
+      "a duplicate version",
+      [
+        { version: 2, sha256: "a".repeat(64) },
+        { version: 2, sha256: "b".repeat(64) },
+      ],
+    ],
+    ["a capital fingerprint", [{ version: 2, sha256: "A".repeat(64) }]],
+    ["a short fingerprint", [{ version: 2, sha256: "a".repeat(63) }]],
+  ].map(
+    ([name, keys]) =>
+      [
+        name as string,
+        "nodeLocal.secrets.env.ringKeys",
+        (b: Mutable) => {
+          rowNamed(b, "secrets.env").ringKeys = keys;
+        },
+      ] as [string, string, (body: Mutable) => void],
+  ),
 
   [
     "no row for backup.env",
@@ -238,8 +266,8 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
   ],
   [
     "no ring listing",
-    "nodeLocal.secrets.env.ringVersions",
-    (b) => delete rowNamed(b, "secrets.env").ringVersions,
+    "nodeLocal.secrets.env.ringKeys",
+    (b) => delete rowNamed(b, "secrets.env").ringKeys,
   ],
   [
     "no retained selections",

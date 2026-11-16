@@ -16,6 +16,10 @@ AEAT's answers.
 supersedes the fiscal-only return wording in this historical plan. The emergency page follows
 that decision and its [bounded Slice 8 plan](2026-11-12-a1018-8-emergency-page.md).
 
+**2026-11-16:** the [offer checks](2026-11-16-check-at-offer.md) supersede this plan's
+version-only key comparison. Offers now carry key fingerprints and a logical copy-size estimate;
+the destination checks room before recording and checks the actual copy size again at acceptance.
+
 **Architecture:** One new generic package, `@waitron/handover`, owns the signed message formats,
 digests and the order of steps. Each box keeps its handover progress in its own `node.db` (the
 per-box database file that the venue copy never overwrites). The server gains routes on both

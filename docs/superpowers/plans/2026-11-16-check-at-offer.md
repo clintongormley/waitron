@@ -2,7 +2,9 @@
 
 **Authority:** queued ask “Check everything at the offer, while the old box still sells”
 (`docs/backlog/replication-cloud.md:565–570,592–602`; runner dispatch). No owner plan approval.
-**Reviewed by Claude (initial and corrections reads); watcher clearance pending.** Behavior is untested.
+**Reviewed by Claude (initial and corrections reads); cleared by the watcher, 2026-11-16 09:50.**
+Watcher correction, 10:33: `copyBytes` estimates logical size; repacking and later sales can change
+the final size. Keep the WAL proof and actual-size acceptance check; no archive upper-bound claim.
 One PR; no table, migration, fiscal-invariant, rotation, or recovery-workflow changes.
 Paths: `S` = `apps/server/src`, `H` = `packages/handover/src`, `D` = `apps/dashboard/src`.
 **Deployment limit:** use the same build on both boxes. Old offer shapes refuse before recording;
@@ -57,8 +59,8 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    and both route status maps and the source's `OFFER_REFUSALS` whitelist. Preserve replay's
    early stored answer and source retry's original signed envelope, including its original size.
    **Tests:** `S/handover-manifest.test.ts`: “WAL-only growth is included in the offer copy budget”
-   (disable auto-checkpoint, commit growth, assert main-file size < budget and an unchanged-data
-   `archiveTo` copy size ≤ budget). `S/handover-destination-api.test.ts`: “one byte below two
+   (disable auto-checkpoint, commit growth, assert the main-file size stays unchanged and below
+   the logical-size estimate). `S/handover-destination-api.test.ts`: “one byte below two
    copies plus floor refuses without recording”, exact-boundary pass, `venueDir` being lower,
    neither reporting space, malformed sizes, old-shape offer refusal before recording, and replay
    after room disappears; assert the refusal log carries both amounts. The lower-folder case checks wiring. In
@@ -66,7 +68,7 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    key leaves the source selling and the destination unrecorded”; assert no stepdown/restriction,
    source abandonment, exact 409 code and logs excluding key bytes. Add “source growth retries the original signed offer”.
    Retain/run `S/handover-compare.test.ts`'s “one byte short nothing is posted; a pass goes on to
-   post once room appears”; give its copy a size larger than the offered budget to check growth.
+   post once room appears”; give its copy a size larger than the offered estimate to check growth.
 
 3. **Finish the contract and words, then focused verification.** Update affected fixtures/wiring
    in `S/{boot.handover-destination,boot.restricted,handover-capture,handover-place-copy,handover-relinquish,

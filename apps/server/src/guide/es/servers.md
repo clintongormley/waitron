@@ -141,6 +141,11 @@ de recuperación, debes confirmar con el código actual del autenticador. Necesi
 contraseña y tener a mano esa contraseña y el código actual del autenticador, si está configurado,
 para acceder en el servidor de reserva. Una llave de acceso no completa ese paso.
 
+Si el servidor de reserva rechaza la oferta por falta de sitio, elige **Parar**, haz sitio en el
+servidor de reserva y vuelve a traspasar el local. El servidor principal sigue vendiendo. Si falta
+una clave de cifrado o es distinta, elige **Parar** y vuelve a unir el servidor de reserva antes
+de traspasar el local.
+
 Mantén los dos servidores conectados. La página de traspaso se abre en el servidor de reserva y sigue la
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige

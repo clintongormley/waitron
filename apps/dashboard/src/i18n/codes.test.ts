@@ -1166,3 +1166,33 @@ it.each([
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);
 });
+
+it("offer-space and key refusals give truthful next steps in EN and ES", () => {
+  for (const [locale, copy, reserve, stopped, key, rejoin] of [
+    [
+      "en",
+      "two whole copies",
+      "startup reserve",
+      "keeps selling",
+      "different",
+      "join the spare again",
+    ],
+    [
+      "es",
+      "dos copias enteras",
+      "reserva de arranque",
+      "sigue vendiendo",
+      "distinta",
+      "vuelve a unirlo",
+    ],
+  ] as const) {
+    const room = codeMessage("handover.no_room_at_offer", locale);
+    expect(room).toContain(copy);
+    expect(room).toContain(reserve);
+    expect(room).toContain(stopped);
+    expect(room).toContain(locale === "en" ? "Stop" : "Parar");
+    const keys = codeMessage("handover.key_ring_mismatch", locale);
+    expect(keys).toContain(key);
+    expect(keys).toContain(rejoin);
+  }
+});

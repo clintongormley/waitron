@@ -42,7 +42,7 @@ function facts(): FinalStateFacts {
         class: "transferred",
         treatment: "kept",
         sha256: "f".repeat(64),
-        ringVersions: [10, 2, 9],
+        ringKeys: [10, 2, 9].map((version) => ({ version, sha256: "a".repeat(64) })),
       },
       { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
       {
@@ -73,9 +73,14 @@ function reversed(input: FinalStateFacts): FinalStateFacts {
       schema: [...input.snapshot.schema].reverse(),
       modules: [...input.snapshot.modules].reverse(),
     },
-    nodeLocal: [...input.nodeLocal]
-      .reverse()
-      .map((row) => (row.ringVersions === undefined ? row : { ...row, ringVersions: [9, 10, 2] })),
+    nodeLocal: [...input.nodeLocal].reverse().map((row) =>
+      row.ringKeys === undefined
+        ? row
+        : {
+            ...row,
+            ringKeys: [9, 10, 2].map((version) => ({ version, sha256: "a".repeat(64) })),
+          },
+    ),
     modulesSummary: summary,
   };
 }
@@ -168,7 +173,9 @@ describe("assembleIndicator", () => {
       "node.db/node_signing_key",
       "state/venue-keys.json",
     ]);
-    expect(indicator.nodeLocal[2].ringVersions).toEqual([2, 9, 10]);
+    expect(indicator.nodeLocal[2].ringKeys).toEqual(
+      [2, 9, 10].map((version) => ({ version, sha256: "a".repeat(64) })),
+    );
   });
 
   it("gives byte-identical bodies for the same facts given in a different order", () => {
@@ -213,7 +220,7 @@ describe("assembleIndicator", () => {
           class: "transferred",
           treatment: "kept",
           sha256: "f".repeat(64),
-          ringVersions: [2, 9, 10],
+          ringKeys: [2, 9, 10].map((version) => ({ version, sha256: "a".repeat(64) })),
         },
       ],
       modulesSummary: input.modulesSummary,
@@ -232,7 +239,7 @@ describe("assembleIndicator", () => {
           class: "destination-owned",
           treatment: "own",
           sha256: undefined,
-          ringVersions: undefined,
+          ringKeys: undefined,
         },
       ],
     };
