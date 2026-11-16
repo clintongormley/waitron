@@ -159,6 +159,14 @@ describe("media backup evidence", () => {
     for (const suite of [original, restored]) await corrupt(suite, statement);
     expect((await run()).status).toBe("invalid");
   });
+  it("refuses numeric blob data instead of failing while hashing it", async () => {
+    for (const suite of [original, restored])
+      await corrupt(suite, "update media_blobs set bytes=42");
+    await expect(run()).resolves.toEqual({
+      status: "invalid",
+      checks: [{ code: "data", status: "invalid" }],
+    });
+  });
   it("checks the sniffed format of a blob without a photo reference", async () => {
     const data = await sampleImage({ width: 12, height: 7, format: "png" });
     const key = createHash("sha256").update(data).digest("hex");
@@ -333,6 +341,20 @@ it("accepts a restored department logo with its photo and original bytes", async
       receiptLogoImageId: id,
     });
   expect(await run()).toEqual(passed);
+});
+
+it("refuses a department logo reference stored as a blob", async () => {
+  for (const suite of [original, restored]) {
+    await suite.db
+      .insert(departments)
+      .values({ id: "receipt-department", name: "Dining", tradingName: "Dining" });
+    await corrupt(suite, "update media_images set id=cast(id as blob)");
+    await corrupt(
+      suite,
+      "update departments set receipt_logo_image_id=(select id from media_images)",
+    );
+  }
+  expect((await run()).status).toBe("invalid");
 });
 
 it("refuses a copy with a department logo id naming no image", async () => {
