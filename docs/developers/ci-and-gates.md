@@ -1829,7 +1829,7 @@ On 16 November 2026, the controller's normal overflow cancellations in runs `438
 
 In [owned hosted run 43924100221](https://github.com/clintongormley/waitron/actions/runs/43924100221), source `beeba1b9b1593f6dd049400d997b7f07289d56a5`, cancellation was requested while planner `133498861965` was queued. Lint `133498887874` and root-guards `133498888273` were labelled **cancelled**, with no runner and no steps. They were not labelled skipped. The unchanged aggregate `133498888458` received a hosted runner and failed its two checks of needed-job results; the workflow finished cancelled. One dispatch was used.
 
-Locally, removing the two guards made both cancellation cases fail; restoring them passed those cases and the retained failed-classification control. All 751 workflow cases passed. These local expression checks and the hosted no-execution records establish different parts of the behaviour; the hosted record does not measure a time saving.
+Locally, both new cancellation cases failed on the original conditions; adding the guards passed those cases and the retained failed-classification control. All 751 workflow cases passed. These local expression checks and the hosted no-execution records establish different parts of the behaviour; the hosted record does not measure a time saving.
 
 | Source, checked 16 November 2026 | Source words | Use here |
 | --- | --- | --- |
