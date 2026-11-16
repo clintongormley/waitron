@@ -3110,15 +3110,6 @@ A1250's colour question.
   floor join that needs seats asks for them before its first request and sends once.
   The request log is in #1699.
 
-## A730. The floor's Rename window may keep comparing against the name it opened with
-
-- **A730 — The floor's Rename window may keep comparing against the name it opened with after the
-  name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**
-  `apps/till/src/widgets/today-name-dialog.ts` takes its baseline from `value` when it opens, and
-  after a send through `commit()`, and has no `savedValue` to follow, unlike the order screen's Name window since A717. **Next action:** probe it
-  in real Chromium; if Save compares against the old name, follow the stored name as
-  `party-name-dialog.ts` does.
-
 ## Loose ends left by A718
 
 - **`wt-floor-plan-preview` has no product user.** It remains in `packages/ui/demo/main.ts`, with

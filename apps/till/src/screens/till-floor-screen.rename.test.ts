@@ -150,6 +150,12 @@ const footError = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
 const saveButton = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
   opened.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-rename-save]")!;
 
+async function pressSave(opened: HTMLElementTagNameMap["till-today-name-dialog"]): Promise<void> {
+  const save = saveButton(opened);
+  await save.updateComplete;
+  await userEvent.click(page.elementLocator(save.shadowRoot!.querySelector("button")!));
+}
+
 const shown = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) => ({
   heading: opened.shadowRoot!.querySelector("wt-dialog")!.heading,
   value: fieldOf(opened).value,
@@ -351,7 +357,7 @@ describe("till-floor-screen: Rename", () => {
     await typeName(opened, "García party");
     expect(footError(opened)).toBe("");
 
-    await userEvent.click(page.elementLocator(inner));
+    await pressSave(opened);
     await settle(el);
 
     expect(api.nameToday).toHaveBeenLastCalledWith("bar", "García party", 7);
@@ -498,6 +504,55 @@ describe("till-floor-screen: Rename", () => {
     expect(windowOf(el)).toBe(opened);
     expect(fieldOf(opened).shadowRoot!.querySelector("input")!.value).toBe("Window");
     expect(opened.value).toBe("Window");
+  });
+
+  it("follows a name another till saves into an untouched field, and sends the opening name typed back", async () => {
+    const api = stubApi();
+    const el = await mount([table("bar", "Bar", 40, { name: "Jones" })], api);
+    const opened = await pressRename(el, "bar");
+
+    el.tables = [table("bar", "Bar", 40, { name: "Smith" })];
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(fieldOf(opened).value).toBe("Smith");
+    expect(saveButton(opened).disabled).toBe(true);
+    await typeName(opened, "Jones");
+    await pressSave(opened);
+    await settle(el);
+
+    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("bar", "Jones", 7);
+  });
+
+  it("sends back to the normal name when the waiter clears a group name another till saved", async () => {
+    const api = stubApi();
+    const el = await mount(group(), api);
+    const opened = await pressRename(el, "c3");
+
+    const named = { joinName: "Smith" };
+    el.tables = group({ bar: named, c3: named, c4: named, c5: named });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(fieldOf(opened).value).toBe("Smith");
+    await typeName(opened, "");
+    await pressSave(opened);
+    await settle(el);
+
+    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c3", null, 7);
+  });
+
+  it("leaves Save off when the waiter had typed the name another till then saved", async () => {
+    const el = await mount([table("bar", "Bar", 40, { name: "Jones" })], stubApi());
+    const opened = await pressRename(el, "bar");
+    await typeName(opened, "Smith");
+
+    el.tables = [table("bar", "Bar", 40, { name: "Smith" })];
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(fieldOf(opened).value).toBe("Smith");
+    expect(saveButton(opened).disabled).toBe(true);
   });
 
   it("keeps the window open with a too-long refusal under the field", async () => {

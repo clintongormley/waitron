@@ -3237,7 +3237,7 @@ and the staffing grid's block editor in the A761 entry):
   covers it fails (the unit form's is in `product-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value and, in the till's party name, bill name and Guests
-  windows and the guest counts of Split a table's panel, each value stored on another till while they are open — in a field the disconnect does
+  windows, the floor's Rename window and the guest counts of Split a table's panel, each value stored on another till while they are open — in a field the disconnect does
   not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
   reopened form starts changed. A form that follows a stored value also notes a change to it that
   arrives while the form is out, because the update that sees it runs while the form is detached,
@@ -3438,7 +3438,7 @@ and nothing guards it across screens:
   floor's seats dialog, opened by Change seats, or with a suggested total by a merge (A747; Join can accept that total unchanged) (`apps/till/src/widgets/today-seats-dialog.ts`);
   the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Rename window
   (`apps/till/src/widgets/today-name-dialog.ts`).
-  The party name dialog, the Name this bill window and the Guests window compare against the stored value, not the opened one, and follow a value stored on another till while they are open
+  The party name dialog, the Name this bill window, the Guests window and the floor's Rename window compare against the stored value, not the opened one, and follow a value stored on another till while they are open
   (`#followStored`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in

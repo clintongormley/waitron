@@ -14,6 +14,7 @@ import type {
 class TodayNameLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   value = "García birthday";
+  savedValue = "García birthday";
   busy = false;
   refusal: TodayNameRefusal | null = null;
   closes = 0;
@@ -23,6 +24,7 @@ class TodayNameLeaveApp extends LitElement {
         heading="Rename García birthday"
         normalName="Counter 4"
         .value=${this.value}
+        .savedValue=${this.savedValue}
         .busy=${this.busy}
         .refusal=${this.refusal}
         @today-name-cancel=${() => this.closes++}
@@ -67,6 +69,23 @@ function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+async function store(app: TodayNameLeaveApp, form: TillTodayNameDialog, name: string) {
+  app.savedValue = name;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+}
+async function storeWhileDetached(app: TodayNameLeaveApp, form: TillTodayNameDialog, name: string) {
+  form.remove();
+  await store(app, form, name);
+  expect(form.savedValue).toBe(name);
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+}
+function saveState(form: TillTodayNameDialog) {
+  const button = form.shadowRoot!.querySelector<HTMLElement>("[data-rename-save]")!;
+  return { variant: button.getAttribute("variant"), disabled: button.hasAttribute("disabled") };
 }
 for (const action of ["Escape"]) {
   it(`${action} keeps the typed name, then discards without renaming`, async () => {
@@ -202,5 +221,48 @@ it("a parent rerender does not reset the typed name or a pending warning", async
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
   expect(input.value).toBe("Window");
+  expect(unload()).toBe(true);
+});
+it("a stored name changed elsewhere moves an untouched window with it, which then closes without a warning", async () => {
+  const { app, form } = await mount();
+  await store(app, form, "Terrace");
+  expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Terrace");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a name typed before the stored one changes elsewhere stays unsaved against the new stored name, as does the opening name", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Window");
+  await store(app, form, "Terrace");
+  expect(input.value).toBe("Window");
+  expect(unload()).toBe(true);
+  await fill(form, "Terrace");
+  expect(unload()).toBe(false);
+  await fill(form, "García birthday");
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+});
+it("a name stored elsewhere while an untouched window is taken out moves the window with it once it is put back", async () => {
+  const { app, form } = await mount();
+  await storeWhileDetached(app, form, "Terrace");
+  expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Terrace");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a typed name stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Window");
+  await storeWhileDetached(app, form, "Window");
+  expect(input.value).toBe("Window");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  await fill(form, "García birthday");
   expect(unload()).toBe(true);
 });
