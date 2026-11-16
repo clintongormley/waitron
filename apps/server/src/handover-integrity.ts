@@ -45,6 +45,36 @@ export function copyCheckRunning(path: string): boolean {
  */
 const STOP_WAIT_MS = 5000;
 
+// Provisional budget for the same SQLite checks across copy paths, unmeasured for venue size.
+const INTEGRITY_LIMIT_MS = 30 * 60_000;
+
+export async function checkCopyIntegrity(
+  path: string,
+  options: Parameters<typeof isCopyIntact>[1] & { limitMs?: number } = {},
+): Promise<boolean> {
+  const { limitMs = INTEGRITY_LIMIT_MS, signal, ...workerOptions } = options;
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () =>
+      deadline.abort(
+        new AppError("handover.copy_check_failed", { module: "core" }, { reason: "timeout" }),
+      ),
+    limitMs,
+  );
+  timer.unref();
+  try {
+    return await isCopyIntact(path, {
+      ...workerOptions,
+      signal: signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]),
+    });
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Whether `pragma integrity_check` and `pragma foreign_key_check` both pass on `path`, on a thread
  * of its own: on a venue-sized file they take long enough that the box would answer nothing

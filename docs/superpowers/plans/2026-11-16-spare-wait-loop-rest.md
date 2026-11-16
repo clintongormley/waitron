@@ -1,6 +1,6 @@
 # The spare’s remaining waits
 
-**Authority/status:** Lane J queue, SPARE-WAIT-LOOP-REST, 16 November 2026. Separate Sol/high draft, source-checked by the Codex driver; Claude initial/corrections reads completed, final small corrections applied, watcher clearance pending. No owner design approval claimed. Paths below are relative to `apps/server/src/`. Source readings are not test results.
+**Authority/status:** Lane J queue, SPARE-WAIT-LOOP-REST, 16 November 2026. Separate Sol/high draft, source-checked by the Codex driver; Claude initial/corrections reads completed, final small corrections applied, cleared by the watcher on 16 November at11:25, including existing HTTP request-abort forwarding. No owner design approval claimed. Paths below are relative to `apps/server/src/`. Source readings are not test results.
 
 **Finish:** bound restore/emergency SQLite integrity waits, retry closed folders independently of live operations, and state the full-disk and accepted-copy limits precisely. One PR, reusing the worker, duty lifecycle and placement harness. readRestoredCopy remains in restore-stream.ts. The deadline covers the SQLite worker only; module checks, summary/timestamp reads and backup download remain outside it.
 

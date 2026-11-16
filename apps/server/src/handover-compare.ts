@@ -25,7 +25,7 @@ import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { offeredAuthoriser } from "./handover-acceptance.js";
 import { errnoOf } from "./errno.js";
 import { digestFileIfPresent } from "./handover-capture.js";
-import { isCopyIntact } from "./handover-integrity.js";
+import { checkCopyIntegrity } from "./handover-integrity.js";
 import {
   offerSettingsDifference,
   readOfferSettings,
@@ -65,9 +65,6 @@ export interface CompareOptions {
   signal?: AbortSignal;
   integrityLimitMs?: number;
 }
-
-// Provisional controlled-handover limit, unmeasured for venue size (watcher, 2026-11-15).
-const INTEGRITY_LIMIT_MS = 30 * 60_000;
 
 const refuse = (reason: ErrorCode, detail: CanonicalValue = {}): Refusal => ({
   ok: false,
@@ -153,20 +150,18 @@ async function compareFile(
   } else {
     if (!(await holdsDescribedBytes(copyPath, body, signal)))
       return refuse("handover.copy_mismatch");
-    const deadline = new AbortController();
-    const timer = setTimeout(() => deadline.abort(), integrityLimitMs ?? INTEGRITY_LIMIT_MS);
-    timer.unref();
-    const checking =
-      signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]);
     try {
-      if (!(await isCopyIntact(copyPath, { signal: checking })))
+      if (!(await checkCopyIntegrity(copyPath, { signal, limitMs: integrityLimitMs })))
         return refuse("handover.copy_damaged");
     } catch (error) {
       signal?.throwIfAborted();
-      if (deadline.signal.aborted) return refuse("handover.copy_check_failed");
+      if (
+        isAppError(error) &&
+        error.code === "handover.copy_check_failed" &&
+        error.reason === "timeout"
+      )
+        return refuse("handover.copy_check_failed");
       throw error;
-    } finally {
-      clearTimeout(timer);
     }
     found.bytesAndIntegrity = true;
   }
