@@ -16,6 +16,18 @@ import { stagedHourCrash } from "./testing/staged-hour-crash.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 0,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let root: string | undefined;
 let fixture: Awaited<ReturnType<typeof stagedHourCrash>> | undefined;
