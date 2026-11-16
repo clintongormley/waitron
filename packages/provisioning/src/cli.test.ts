@@ -374,7 +374,7 @@ describe("runCli venue", () => {
     fakeModule("fiscal-verifactu", { fiscal: FISCAL_SLOT }),
   ];
 
-  it("refuses a venue whose series code the tax agency would reject, before opening a connection", async () => {
+  it("refuses a series code the tax agency would reject with setup.request_invalid, never opening the venue", async () => {
     const h = harness({ env: VENUE_ENV, modules: verifactuModules });
     // A space is not in `NumSerieFactura`'s character set.
     const args = VENUE_ARGS.map((arg) => (arg === "A" ? "Serie A" : arg));
@@ -624,7 +624,7 @@ describe("runCli venue", () => {
     expect(h.openVenue).not.toHaveBeenCalled();
   });
 
-  it("refuses a territory that does not belong to the country, before connecting", async () => {
+  it("refuses a territory of another country with provisioning.territory_country_mismatch, never opening the venue", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "PT" : arg));
     const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
@@ -753,7 +753,7 @@ describe("runCli venue", () => {
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses a country that is not two ASCII letters, before connecting", async () => {
+  it("refuses a country that is not two ASCII letters with provisioning.invalid_country, never opening the venue", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "ESP" : arg));
     const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
@@ -814,7 +814,7 @@ describe("runCli venue", () => {
     expect(venueDoc?.kind === "create-venue" && venueDoc.invoiceLocales).toEqual(["es-ES"]);
   });
 
-  it("refuses a venue directory nothing supplied, rather than opening the working directory", async () => {
+  it("refuses with provisioning.venue_dir_missing, never opening the venue, when nothing supplies the venue directory", async () => {
     // `bin.ts`'s `ask` returns `""` for an exhausted stdin or a Ctrl+D.
     for (const args of [
       // Neither flag nor variable, and the prompt answers nothing.

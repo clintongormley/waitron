@@ -629,7 +629,7 @@ function assertCountry(value: string): string {
   return value.toUpperCase();
 }
 
-/** Exported so `bin.ts`, which coverage excludes, prints the same line rather than its own copy. */
+/** Exported so `bin.ts` prints the same line rather than its own copy. */
 export function formatAppError(error: AppError): string {
   return `${error.code} ${JSON.stringify(error.params)}`;
 }

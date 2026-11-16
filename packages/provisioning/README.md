@@ -244,10 +244,10 @@ WAITRON_VENUE_DIR=/var/lib/waitron/venue \
 
 If nothing supplies the venue directory — no flag, no variable, and a prompt that answers nothing,
 which is what an exhausted stdin or a Ctrl+D gives — the run stops with
-`provisioning.venue_dir_missing`. It does not fall back to a default, and specifically not to the
-empty string: every path the store builds is `join(directory, ...)`, so an empty one is the RELATIVE
-`venue.db` and would mint a taxpayer, a node and its invoice series into whatever directory the
-process was started from.
+`provisioning.venue_dir_missing`. It does not fall back to a default.
+
+Answers cannot be piped in: lines that arrive together are all taken by the first prompt, and every
+later prompt answers nothing. Pass flags and variables instead.
 
 **Nothing this tool prints carries a secret.** The plan summary names the venue directory and the
 environment stamped on it, both operator-supplied configuration, and the admin's PIN and password
@@ -259,7 +259,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 
 | Code                                 | What happened                                                                                                   | What to do                                                                                                                                                                                                                           |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt. Refused rather than defaulted — see "Secrets" above for where an empty one would have written.                                                                                |
+| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt.                                                                                                                                                                               |
 | `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                            | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                                                       |
 | `provisioning.database_unmigrated`   | Nothing has migrated the venue directory — its venue file holds no `deployment` table                           | Boot the box against that directory first: boot migrates it. Then stop the server, because while it runs it holds the folder and `venue` is refused. This is also what a mistyped path gives, because a virgin directory opens fine. |
 | `provisioning.database_in_use`       | Another process, usually the running server, holds the venue folder                                             | Stop that process (on a box, `docker compose stop app`), then re-run. The refusal comes before either database file is opened.                                                                                                       |

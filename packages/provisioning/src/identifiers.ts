@@ -5,8 +5,6 @@ export function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-export { quoteLiteral } from "@waitron/shared";
-
 /**
  * A generated secret, never operator-supplied — base64url's alphabet is `[A-Za-z0-9_-]`, which
  * contains no quote and nothing a URL would re-encode.

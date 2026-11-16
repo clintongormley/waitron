@@ -21,9 +21,6 @@ export default defineConfig({
         "drizzle/**",
         // Test-only plumbing shared by this package's suites.
         "src/testing/**",
-        // The process entry point: its shim (the direct-invocation guard and the real stdio) is
-        // unreachable without spawning a process. `bin.test.ts` still drives `runBin`.
-        "src/bin.ts",
         // A re-export barrel, on which v8 reports phantom uncovered branches. Its surface is
         // asserted by index.test.ts.
         "src/index.ts",
