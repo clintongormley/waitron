@@ -337,7 +337,7 @@ describe("StripeReconciler", () => {
     await abandonedOrphan({ ...seeded, paymentRef: "retry", externalRef: "pi_retry" });
     const client = new FakeStripeReport();
     const refunder = new FakeStripe();
-    refunder.scriptNextCreateRefund({ httpStatus: 500 });
+    refunder.scriptNextCreateRefund({ httpStatus: null });
     const first = await reconciler(client, refunder).reconcile(PERIOD, NOW);
     expect(first.remediationUnconfirmed).toEqual(["retry"]);
     const later = await reconciler(client, refunder).reconcile(PERIOD, new Date(now));
@@ -453,7 +453,7 @@ describe("StripeReconciler", () => {
     try {
       const result = await reconciler(new FakeStripeReport()).reconcile(PERIOD, NOW);
       expect(result.remediated).toBe(1);
-      expect(read.mock.calls.filter((args) => args.length === 2)).toHaveLength(1);
+      expect(read.mock.calls.filter((args) => args[2] === undefined)).toHaveLength(1);
     } finally {
       read.mockRestore();
     }
