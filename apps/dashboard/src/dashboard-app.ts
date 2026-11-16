@@ -793,12 +793,20 @@ export class DashboardApp extends LitElement {
         position: relative;
       }
 
-      .alert-toast {
+      /* The shell's pop-ups share one stack below the banner row, over the page, so neither covers
+         the other and neither pushes the page down. */
+      .toast-stack {
         position: absolute;
         inset-block-start: calc(100% + var(--wt-space-2));
         inset-inline-end: var(--wt-space-3);
         z-index: 40;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
         max-width: calc(100% - 2 * var(--wt-space-3));
+      }
+      .toast-stack > wt-toast[open] ~ wt-toast[open] {
+        margin-block-start: var(--wt-space-2);
       }
 
       /* The veil behind the open drawer: it covers the content row below the banner and closes the
@@ -872,8 +880,9 @@ export class DashboardApp extends LitElement {
         .body {
           padding-inline: var(--wt-space-2);
         }
-        .alert-toast {
+        .toast-stack {
           inset-inline: var(--wt-space-2);
+          align-items: stretch;
           max-width: none;
         }
         .sidebar {
@@ -1235,9 +1244,14 @@ export class DashboardApp extends LitElement {
   constructor() {
     super();
     this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
-    // The screen's request counts as seen, so a file built within one poll still gets its notice.
+    // The screen's answer counts as seen: it can arrive before this sign-in's first read, which
+    // would otherwise be taken as old news, and it can be the only sight of a build a restart ends.
     this.addEventListener("tax-office-month-requested", (event) => {
-      this.#taxOfficeSeen = (event as CustomEvent<MonthDownloadDto>).detail;
+      const view = (event as CustomEvent<MonthDownloadDto>).detail;
+      const seen = this.#taxOfficeSeen;
+      // A read that already saw this build is newer than the answer that started it.
+      if (seen !== null && "id" in seen && "id" in view && seen.id === view.id) return;
+      this.#taxOfficeSeen = view;
     });
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
@@ -1500,12 +1514,24 @@ export class DashboardApp extends LitElement {
     const generation = this.sessionGeneration;
     try {
       await saveTaxOfficeFile(this.api, month, this.startDownload);
-      if (generation === this.sessionGeneration) this.taxOfficeToast = null;
+      if (generation === this.sessionGeneration) this.#replaceTaxOfficeToast(null);
     } catch (error) {
       if (generation !== this.sessionGeneration) return;
       const params = (error as { params?: Parameters<typeof codeMessage>[2] }).params;
-      this.taxOfficeToast = { kind: "refused", code: codeOf(error), params };
+      this.#replaceTaxOfficeToast({ kind: "refused", code: codeOf(error), params });
     }
+  }
+
+  /** Save the file goes with either answer and the close button with the toast, so focus held in
+   * the toast returns to where it was rather than dropping to the page. */
+  #replaceTaxOfficeToast(next: DashboardApp["taxOfficeToast"]): void {
+    const hadFocus =
+      this.renderRoot
+        .querySelector<WtToast>("[data-test=tax-office-toast]")
+        ?.matches(":focus-within") === true;
+    this.taxOfficeToast = next;
+    const previous = this.#focusBeforeToast;
+    if (hadFocus && previous?.isConnected) previous.focus();
   }
 
   #taxOfficeMessage(): string {
@@ -1679,7 +1705,8 @@ export class DashboardApp extends LitElement {
   }
 
   #onShellFocusIn(event: FocusEvent): void {
-    if ((event.target as Element).matches("[data-test=alert-toast]")) return;
+    if ((event.target as Element).closest("[data-test=alert-toast], [data-test=tax-office-toast]"))
+      return;
     const deepest = event.composedPath()[0];
     if (deepest instanceof HTMLElement) this.#focusBeforeToast = deepest;
   }
@@ -2241,40 +2268,42 @@ export class DashboardApp extends LitElement {
               }}
             ></wt-banner>`
       }
-      <wt-toast
-        class="alert-toast"
-        data-test="alert-toast"
-        slot=${slot ?? nothing}
-        .open=${this.alertToast !== null}
-        .message=${
-          this.alertToast === null
-            ? ""
-            : this.alertToast.alerts.length === 1
-              ? wholeTimesText(
-                  alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params),
-                )
-              : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
-        }
-        tone=${this.alertToast?.tone ?? "info"}
-        close-label=${t("action.close")}
-        @wt-activate=${(e: Event) => this.#onToastActivate(e)}
-        @wt-close=${(e: Event) => this.#onToastClose(e)}
-      ></wt-toast>
-      ${this.#taxOfficeToastView(slot)}`;
+      <div class="toast-stack" slot=${slot ?? nothing}>
+        <wt-toast
+          data-test="alert-toast"
+          .open=${this.alertToast !== null}
+          .message=${
+            this.alertToast === null
+              ? ""
+              : this.alertToast.alerts.length === 1
+                ? wholeTimesText(
+                    alertMessage(
+                      this.alertToast.alerts[0]!.code,
+                      this.alertToast.alerts[0]!.params,
+                    ),
+                  )
+                : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
+          }
+          tone=${this.alertToast?.tone ?? "info"}
+          close-label=${t("action.close")}
+          @wt-activate=${(e: Event) => this.#onToastActivate(e)}
+          @wt-close=${(e: Event) => this.#onToastClose(e)}
+        ></wt-toast>
+        ${this.#taxOfficeToastView()}
+      </div>`;
   }
 
-  #taxOfficeToastView(slot?: string): TemplateResult {
+  #taxOfficeToastView(): TemplateResult {
     const notice = this.taxOfficeToast;
     return html`<wt-toast
       data-test="tax-office-toast"
-      slot=${slot ?? nothing}
       .open=${notice !== null}
       .message=${this.#taxOfficeMessage()}
       .duration=${0}
       tone=${notice === null || notice.kind === "ready" ? "info" : "error"}
       close-label=${t("action.close")}
       @wt-close=${(event: Event) => {
-        if (event.target === event.currentTarget) this.taxOfficeToast = null;
+        if (event.target === event.currentTarget) this.#replaceTaxOfficeToast(null);
       }}
       >${
         notice?.kind === "ready"

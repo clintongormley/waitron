@@ -507,7 +507,6 @@ export const QUERY_DEPENDENCIES = {
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 
 export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
-  "getTaxOfficeMonthDownload",
   "getMenuSettings",
   "listMenus",
   "getMenuStructure",
@@ -573,6 +572,7 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getDepartmentReceipt",
   "getReceiptPaperWidths",
   "pairingMode",
+  "getTaxOfficeMonthDownload",
 ]);
 
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;

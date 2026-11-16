@@ -20,8 +20,8 @@ export function monthName(month: string): string {
   }).format(new Date(`${month}-01T00:00:00Z`));
 }
 
-/** Hours and minutes in the browser's own time, which is the venue's: the box and the dashboard are
- * both there. */
+/** Hours and minutes in the browser's own time zone. The shell reads no venue time zone, so this is
+ * the venue's time only when the browser is set to the venue's zone. */
 export function clockTime(iso: string): string {
   return new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" }).format(
     new Date(iso),

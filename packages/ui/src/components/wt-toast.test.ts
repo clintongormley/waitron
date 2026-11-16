@@ -362,6 +362,22 @@ test("an open toast draws its action between the message and the close button", 
   expect(box.right).toBeLessThanOrEqual(close.left);
 });
 
+test("keeps its action on one line beside a long message in a narrow toast", async () => {
+  const el = await mount(
+    `<wt-toast open style="width: 240px" message="${"A long notice. ".repeat(12)}" close-label="Close"><button slot="action">Save the file</button></wt-toast>`,
+  );
+  const unwrapped = document.createElement("button");
+  unwrapped.style.cssText = "position: absolute; white-space: nowrap";
+  unwrapped.textContent = "Save the file";
+  document.body.append(unwrapped);
+  try {
+    const action = el.querySelector("button")!.getBoundingClientRect();
+    expect(action.width).toBeGreaterThanOrEqual(unwrapped.getBoundingClientRect().width - 0.5);
+  } finally {
+    unwrapped.remove();
+  }
+});
+
 test("a closed toast draws no action", async () => {
   const el = await mount(withAction(""));
   const box = el.querySelector("button")!.getBoundingClientRect();

@@ -52,7 +52,9 @@ export class WtToast extends LitElement {
         padding: 0 var(--wt-space-2);
         text-align: start;
       }
+      /* The message wraps; the action keeps its one line. */
       ::slotted([slot="action"]) {
+        flex: none;
         align-self: center;
       }
     `,

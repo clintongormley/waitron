@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -60,10 +61,12 @@ function shellApi(
   permissions = ["invoice.inspect"],
   foreground: Mock = vi.fn().mockResolvedValue(none),
   locale = "en-GB",
+  overrides: Record<string, unknown> = {},
 ): { api: DashboardApi; liveData: LiveData; foreground: Mock } {
   const liveData = new LiveData();
   const common = {
     getMe: vi.fn().mockResolvedValue(me(permissions, locale)),
+    logout: vi.fn().mockResolvedValue(undefined),
     forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -88,6 +91,7 @@ function shellApi(
     getStaffRoster: vi.fn().mockResolvedValue([]),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
+    ...overrides,
   };
   const api = {
     ...common,
@@ -116,6 +120,42 @@ const saveButton = (el: DashboardApp) =>
   toast(el).querySelector<HTMLElement>("[data-test=tax-office-save]");
 const changed = (liveData: LiveData) =>
   liveData.invalidate([{ type: "tax_office_download", id: "x" }]);
+const closeButton = (el: DashboardApp) =>
+  toast(el).shadowRoot!.querySelector<HTMLButtonElement>("button.close")!;
+const requested = (el: DashboardApp, view: MonthDownloadDto) =>
+  el.shadowRoot!.querySelector(".shell")!.dispatchEvent(
+    new CustomEvent("tax-office-month-requested", {
+      detail: view,
+      bubbles: true,
+      composed: true,
+    }),
+  );
+const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
+const signIn = (el: DashboardApp) =>
+  login(el)!.dispatchEvent(
+    new CustomEvent("logged-in", {
+      detail: { loginMethod: "password", rememberEmail: false },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+
+/** Mounts the shell, then turns the person's file from building to ready so the notice opens. */
+async function openReadyNotice(background: Mock, overrides: Record<string, unknown> = {}) {
+  const { api, liveData } = shellApi(
+    background,
+    ["invoice.inspect"],
+    vi.fn().mockResolvedValue(ready()),
+    "en-GB",
+    overrides,
+  );
+  const mounted = await mount(api);
+  await expect.poll(() => background.mock.calls.length).toBe(1);
+  changed(liveData);
+  await expect.poll(() => toast(mounted.el).open).toBe(true);
+  await toast(mounted.el).updateComplete;
+  return { ...mounted, api, liveData };
+}
 
 const initialUrl = location.href;
 beforeEach(() => {
@@ -306,6 +346,76 @@ describe("the shell's notice for the tax office's month file", () => {
     expect(foreground).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["open", false],
+    ["closed", true],
+  ])(
+    "shows the next sign-in nothing of the last one's file, with its notice %s at sign-out",
+    async (_case, closeFirst) => {
+      const background = vi
+        .fn()
+        .mockResolvedValueOnce(building("b1"))
+        .mockResolvedValueOnce(ready("b1"))
+        .mockResolvedValue(ready("b9"));
+      const { el } = await openReadyNotice(background);
+      if (closeFirst) {
+        closeButton(el).click();
+        await expect.poll(() => toast(el).open).toBe(false);
+      }
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+      await expect.poll(() => login(el)).not.toBeNull();
+      signIn(el);
+      await expect.poll(() => background.mock.calls.length).toBe(3);
+      await flush(el);
+      expect(login(el)).toBeNull();
+      expect(toast(el).open).toBe(false);
+    },
+  );
+
+  it("shows a file's notice once when the screen's request answer arrives after a read saw it ready", async () => {
+    const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+    const { el, liveData } = await openReadyNotice(background);
+    closeButton(el).click();
+    await expect.poll(() => toast(el).open).toBe(false);
+    requested(el, building());
+    changed(liveData);
+    await expect.poll(() => background.mock.calls.length).toBe(3);
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("returns keyboard focus to where it was when the notice is closed from the keyboard", async () => {
+    const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+    const { el } = await openReadyNotice(background);
+    const accountMenu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]")!;
+    accountMenu.focus();
+    closeButton(el).focus();
+    closeButton(el).click();
+    await expect.poll(() => toast(el).open).toBe(false);
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(accountMenu);
+  });
+
+  it.each([
+    ["the download starts", ready()],
+    ["the file is gone", none],
+  ])(
+    "returns keyboard focus to where it was when Save the file is pressed and %s",
+    async (_case, current) => {
+      const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+      const { el } = await openReadyNotice(background, {});
+      (el.api.getTaxOfficeMonthDownload as Mock).mockResolvedValue(current);
+      const accountMenu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]")!;
+      accountMenu.focus();
+      const press = saveButton(el)!.shadowRoot!.querySelector("button")!;
+      press.focus();
+      press.click();
+      await expect.poll(() => saveButton(el)).toBeNull();
+      await flush(el);
+      expect(el.shadowRoot!.activeElement).toBe(accountMenu);
+    },
+  );
+
   it("never reads the file's state for a session without invoice.inspect", async () => {
     const background = vi.fn().mockResolvedValue(ready());
     const { api, foreground } = shellApi(background, []);
@@ -315,4 +425,72 @@ describe("the shell's notice for the tax office's month file", () => {
     expect(background).not.toHaveBeenCalled();
     expect(foreground).not.toHaveBeenCalled();
   });
+});
+
+describe("where the shell draws the notice", () => {
+  const alert = {
+    key: "incident:1",
+    kind: "event",
+    code: "payment.refund_unresolved",
+    params: { amount: "12.50", paymentRef: "pi_1" },
+    severity: "warning",
+    since: "2026-09-14T12:00:00.000Z",
+    area: "payments",
+  };
+  const alertToast = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<WtToast>("[data-test=alert-toast]")!;
+  const boxOf = (notice: WtToast) =>
+    notice.shadowRoot!.querySelector(".toast")!.getBoundingClientRect();
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  afterEach(async () => {
+    await page.viewport(viewport.width, viewport.height);
+  });
+
+  it.each([1280, 390])(
+    "stacks the notice under the alerts pop-up at %i px, over the page rather than pushing it down",
+    async (width) => {
+      await page.viewport(width, 844);
+      history.replaceState(null, "", "/manage/invoices");
+      const listAlerts = vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [] })
+        .mockResolvedValue({ visible: true, alerts: [alert] });
+      const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+      const { api, liveData } = shellApi(
+        background,
+        ["venue.view", "invoice.inspect"],
+        undefined,
+        "en-GB",
+        { listAlerts },
+      );
+      const { el } = await mount(api);
+      await expect.poll(() => background.mock.calls.length).toBe(1);
+      await expect.poll(() => listAlerts.mock.calls.length).toBe(1);
+      await flush(el);
+      const layout = el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+      const layoutTop = layout.getBoundingClientRect().top;
+      liveData.invalidate([{ type: "incidents", id: "new" }]);
+      changed(liveData);
+      await expect.poll(() => alertToast(el).open && toast(el).open).toBe(true);
+      await alertToast(el).updateComplete;
+      await toast(el).updateComplete;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(layout.getBoundingClientRect().top).toBe(layoutTop);
+      const first = boxOf(alertToast(el));
+      const second = boxOf(toast(el));
+      expect(second.top).toBeGreaterThanOrEqual(first.bottom);
+      for (const [notice, box] of [
+        [alertToast(el), first],
+        [toast(el), second],
+      ] as const) {
+        const hit = el.shadowRoot!.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        );
+        expect(hit?.closest("wt-toast")).toBe(notice);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      }
+    },
+  );
 });
