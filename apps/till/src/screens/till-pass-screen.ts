@@ -211,6 +211,8 @@ export class TillPassScreen extends LitElement {
   /** The refresh sentence, with the table a Ready refusal names; Fire's names none. */
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
+  /** Only a read numbered above this set out after the refusal, so only its board shows the change. */
+  #tableChangedAfter = 0;
   readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
   /** Unset until a read of the board shown answers; the window offers no choice until then. */
   #display?: DevicePassBoard["display"];
@@ -323,8 +325,11 @@ export class TillPassScreen extends LitElement {
       this.#adoptBoard(result);
       if (request > this.#failedRequest) this.stale = false;
       this.#lastGoodAt = new Date();
-      this.tableChanged = this.#tableChangedNext;
-      this.#tableChangedNext = null;
+      if (this.#tableChangedNext === null) this.tableChanged = null;
+      else if (request > this.#tableChangedAfter) {
+        this.tableChanged = this.#tableChangedNext;
+        this.#tableChangedNext = null;
+      }
     } catch (error) {
       if (
         probe &&
@@ -369,6 +374,11 @@ export class TillPassScreen extends LitElement {
     await this.#reload();
     if (refusal !== undefined && this.leverError === refusal)
       await this.#reveal("[data-lever-error]");
+  }
+
+  #queueTableChanged(line: { table?: string }): void {
+    this.#tableChangedNext = line;
+    this.#tableChangedAfter = this.#request;
   }
 
   #adoptBoard(read: DevicePassBoard): void {
@@ -425,7 +435,7 @@ export class TillPassScreen extends LitElement {
         else if (this.#isCurrent(boardId)) {
           rechoose = code === "device.unauthorized" && this.#followsChoice();
           if (code === "ticket.pass_context_changed" || code === "party.not_open" || rechoose)
-            this.#tableChangedNext = {};
+            this.#queueTableChanged({});
           else this.#leverRefused(card, error);
         }
       }
@@ -458,9 +468,9 @@ export class TillPassScreen extends LitElement {
       if (this.#isCurrent(boardId)) {
         if ((error as { code?: string } | null)?.code === "party.out_of_date") {
           const first = card.orders[0];
-          this.#tableChangedNext = {
+          this.#queueTableChanged({
             table: (first && passOrderPlace(first)) ?? `#${first?.orderNumber ?? ""}`,
-          };
+          });
         } else this.#leverRefused(card, error);
       }
     }

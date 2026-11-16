@@ -245,6 +245,67 @@ describe("A773 pass screen: Fire", () => {
       }));
   }
 
+  const readyBoard = passBoard({
+    inProgress: [
+      passCard({
+        key: "group:g-1",
+        target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+        kind: "next_course",
+        party: { id: "p-1", revision: 7 },
+        group: { displayNumber: 1, position: 1 },
+      }),
+    ],
+  });
+  for (const [refusal, initial, press] of [
+    ["a Fire refused ticket.pass_context_changed", toFireBoard(), '[data-pass-fire="group:g-1"]'],
+    ["a group Ready refused party.out_of_date", readyBoard, '[data-group-ready="g-1"]'],
+  ] as const)
+    it(`shows the refreshed line after ${refusal} only once the read it started answers, though a read that set out before it answers first`, () =>
+      withFakeTimers(async () => {
+        const earlier = deferred<DevicePassBoard>();
+        const own = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(earlier.promise)
+            .mockReturnValueOnce(own.promise),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+          bumpDeviceGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(initial) });
+        await refresh(el);
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(press)!.click();
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+
+        earlier.resolve(deviceBoard(initial));
+        await flush(el);
+        expect(tableChanged(el)).toBeNull();
+        own.resolve(deviceBoard(initial));
+        await flush(el);
+        expect(tableChanged(el)).not.toBeNull();
+      }));
+
+  it("shows the refreshed line when a read that set out after the refusal's own read answers first", () =>
+    withFakeTimers(async () => {
+      const own = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        getDevicePassBoard: vi
+          .fn()
+          .mockReturnValueOnce(own.promise)
+          .mockResolvedValueOnce(deviceBoard()),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+      });
+      const el = await mountDisplay(api);
+      await pressFire(el);
+      await refresh(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+      expect(tableChanged(el)).not.toBeNull();
+      own.resolve(deviceBoard());
+      await flush(el);
+      expect(tableChanged(el)).not.toBeNull();
+    }));
+
   it("clears the refreshed sentence with the next Fire press, before its answer", async () => {
     const answer = deferred<PassReleaseResult>();
     const api = fakeApi({
