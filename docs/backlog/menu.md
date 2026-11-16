@@ -444,17 +444,6 @@ names; folding them into the one helper was not part of W77a.
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-## Left open by #1188's review, none started (the pricing unit dialog, W66)
-
-Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
-this value…", and on the price field after a price message "this value" reads as the price — a
-unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
-announce that it opens a dialog (`aria-haspopup`), while the heading's button does — needs an option on
-the shared `wt-price-input`; (3) `EACH_CHOICE` is still exported from `variant-table.ts` though only
-the product editor uses it; (4) the test title "…when the table's heading dropdown is hidden" still
-says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
-saving (same on `main` before W66, not checked further).
-
 ## From #541's review, neither blocking
 
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
@@ -699,16 +688,6 @@ categories (#340, [API and integration guide](../developers/product-categories.m
   measured. A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the
   URL. The earlier 500-product failure has not been remeasured.
 - Deleting a category with its contents says its products come off every menu, with no count.
-
-## A category's naming square does not announce the inherited colour's source
-
-While you add or
-rename a category, its square says only "Choose the colour" even when its dashed border marks an
-inherited colour. The at-rest row names the source. Decide how the naming square should announce
-that source, including a category whose new name has not been saved, and check the English and
-Spanish accessible names. Found in A820's run-it review; the label and inherited fill are checked
-together in `apps/dashboard/src/widgets/product-list.test.ts` ("puts a colour square showing the
-box's colour").
 
 ## Loose ends left by A663 Part 2d (#1779)
 

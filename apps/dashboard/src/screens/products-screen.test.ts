@@ -2504,7 +2504,7 @@ describe("menu-screen", () => {
       await done(el);
       expect(editor(el).currentValue.courseId).toBeNull();
       expect(editor(el).currentValue.name).toBe("Unsaved croquettes");
-      expect(await shownCourse(el)).toBe(t("product.no_course"));
+      expect(await shownCourse(el)).toBe(t("modifiers.none_specified"));
     });
 
     it("keeps the product's course when the window neither added a course nor removed it", async () => {

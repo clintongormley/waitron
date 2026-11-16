@@ -51,7 +51,7 @@ import {
 import "./image-upload.js";
 import "./product-appearance.js";
 import "./variant-form.js";
-import { EACH_CHOICE } from "./variant-table.js";
+import "./variant-table.js";
 import { categoryPathField, categoryPathText } from "./classification-fields.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
 import {
@@ -93,6 +93,11 @@ import { guideHref, type GuideLink } from "../help-guide.js";
 import { allergenLabel, vatClassName } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
+
+/** The unit dropdown's value for Each, which a product stores as no unit: the shared dropdown
+ * draws an empty value as the grey prompt for nothing chosen. Translated back to `null` before it
+ * leaves. */
+export const EACH_CHOICE = "__each__";
 
 /** The two combobox rows that open a nested form instead of attaching a list that exists. Neither
  * can be mistaken for an attachment, whose value always carries a colon. */
@@ -845,7 +850,9 @@ export class ProductEditor extends LitElement {
       return;
     }
     if (kind === "courses") {
-      this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]")?.focus();
+      void this.focusOnceEnabled(() =>
+        this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]"),
+      );
       return;
     }
     if (kind === "extras" || kind === "options") {
@@ -1150,7 +1157,7 @@ export class ProductEditor extends LitElement {
 
   private renderCourse() {
     const noneLabel = this.blankChoice(
-      t("product.no_course"),
+      t("modifiers.none_specified"),
       this.courses,
       this.inherited?.courseId,
     );
@@ -1168,6 +1175,7 @@ export class ProductEditor extends LitElement {
         ...this.courses.map((choice) => ({ value: choice.id, label: choice.name })),
         { value: EDIT_COURSES, label: t("editor.edit_courses"), action: true, primary: true },
       ]}
+      ?disabled=${this.suspended}
       .value=${this.draft.courseId ?? ""}
       error=${this.error("product-course")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1310,6 +1318,7 @@ export class ProductEditor extends LitElement {
             label=${`${t("editor.description")} (${locale})`}
             placeholder=${descriptionHint(locale)}
             .value=${languageText(this.draft.description ?? {}, locale)}
+            .disabled=${this.busy}
             error=${this.error(`description-${locale}`)}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
@@ -1443,6 +1452,7 @@ export class ProductEditor extends LitElement {
       noResultsLabel=${t("categories.combobox_no_results")}
       placeholder=${empty}
       .options=${[{ value: "", label: empty }, ...taxes]}
+      ?disabled=${this.suspended}
       .value=${this.draft.takeawayVatClass ?? ""}
       error=${this.error("takeaway-tax")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1467,6 +1477,7 @@ export class ProductEditor extends LitElement {
         noResultsLabel=${t("categories.combobox_no_results")}
         placeholder=${inheritedTax ?? t("editor.choose")}
         .options=${inheritedTax === null ? taxes : [{ value: "", label: inheritedTax }, ...taxes]}
+        ?disabled=${this.suspended}
         .value=${this.draft.vatClass ?? ""}
         error=${this.error("tax")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1593,6 +1604,7 @@ export class ProductEditor extends LitElement {
         label=${label}
         unit=${unitLabel ? fill("editor.per_unit", { unit: unitLabel }) : t("editor.unit_each")}
         ?fixed-unit=${parent !== null}
+        unit-haspopup="dialog"
         locale=${currentLocale()}
         placeholder=${parent?.unitPrice ?? ""}
         ?required=${parent === null}

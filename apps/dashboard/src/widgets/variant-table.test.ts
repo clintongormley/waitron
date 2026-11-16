@@ -188,7 +188,7 @@ it("keeps the unit button in the price heading a tap target on both axes", async
   });
 });
 
-it("leaves a --wt-space-2 gap between Price with its middot and the unit link", async () => {
+it("leaves a --wt-space-2 gap between Price with its middot and the unit button", async () => {
   await atDesktopWidth(async () => {
     const el = await mountTable({ unitLabel: "kg" });
     const button = unitButton(el);

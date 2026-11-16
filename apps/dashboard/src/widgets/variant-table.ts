@@ -16,11 +16,6 @@ interface VariantRow {
   variant: ProductEditorVariant;
 }
 
-/** The product editor's unit dropdown's value for Each, which a product stores as no unit: the
- * shared dropdown draws an empty value as the grey prompt for nothing chosen. Translated back to
- * `null` before it leaves. */
-export const EACH_CHOICE = "__each__";
-
 /**
  * A plain `<table>`, deliberately NOT `wt-data-table`: the rows are a draft being edited in place,
  * not an administrative collection to sort and search.

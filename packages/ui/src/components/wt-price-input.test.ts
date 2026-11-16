@@ -22,6 +22,17 @@ test("shows the pricing unit on the trailing button", async () => {
   expect(button.textContent?.trim()).toBe("kg");
 });
 
+test("unit-haspopup tells assistive technology what the unit button opens; without it the button claims nothing", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" unit-haspopup="dialog"></wt-price-input>',
+  );
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  expect(button().getAttribute("aria-haspopup")).toBe("dialog");
+  el.removeAttribute("unit-haspopup");
+  await (el as WtPriceInput).updateComplete;
+  expect(button().hasAttribute("aria-haspopup")).toBe(false);
+});
+
 test("the unit button paints its border and text from tokens", async () => {
   const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");

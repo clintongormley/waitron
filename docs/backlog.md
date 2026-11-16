@@ -588,15 +588,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   live price came from.
   [Detail](backlog/menu.md#a1373--the-preview-credits-a-products-own-price-change-seen-through-an-include-to-the-included-menu)
 
-- **The course dropdown says "— none —" where the folded Kitchen line says "Course: None
-  specified"** (`product.no_course`, `modifiers.none_specified`,
-  `apps/dashboard/src/i18n/strings.ts`) — left open by A211 (#1096).
-
-- **Left open by #1188's review, none started** — the pricing unit dialog (W66, #1188).
-  [Detail](backlog/menu.md#left-open-by-1188s-review-none-started-the-pricing-unit-dialog-w66)
-
-- **A category's naming square does not announce the inherited colour's source.**
-  [Detail](backlog/menu.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
+- **One kind of unit refusal on the price field reads "The server rejected this value…"**, which
+  after a price message reads as the price; a unit-specific sentence needs the owner's wording
+  (left open by #1188's review, W66).
 
 - **From #541's review, neither blocking:** the product list shows a variant's blank price as its
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
