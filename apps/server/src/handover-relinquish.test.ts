@@ -55,9 +55,16 @@ import { acceptFinalCopy, acceptedCopyPath } from "./handover-acceptance.js";
 import { captureFinalCopy, finalCopyPath, type CaptureDeps } from "./handover-capture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
-import { advanceHandover, beginHandoverFromOffer, HANDOVER_EVENT } from "./handover-store.js";
+import {
+  advanceHandover,
+  beginHandover,
+  beginHandoverFromOffer,
+  HANDOVER_EVENT,
+} from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { recordSupersededAtStart } from "./start-peer-check.js";
+import { RESTRICTED_PAGE_WORDS } from "./i18n/restricted-page.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -1012,5 +1019,101 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     );
     expect(refused.status).toBe(409);
     expect(await errorCode(refused)).toBe("handover.indicator_mismatch");
+  }, 180_000);
+
+  it("no later state of the controlled old box lifts its restriction: every start refuses sales and the row is untouched", async () => {
+    const boxes = await prepared();
+    const store = { node: mainBox.node, nodeId: boxes.mainId };
+    beforeServerStarts();
+    const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
+    expect(restrictionBefore).not.toBeNull();
+
+    for (const state of [
+      "source_stepped_down",
+      "filing_relinquished",
+      "return_pending",
+      "return_complete",
+    ] as const) {
+      await advanceHandover(store, OP, state, {});
+      main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+        timings: { minTickMs: 200, maxTickMs: 600_000 },
+      });
+      const port = httpPort();
+      await refusesSales(port);
+      const page = await fetch(`http://127.0.0.1:${port}/`, {
+        headers: { "accept-language": "en-GB" },
+      });
+      expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+      expect({
+        state: (await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state,
+        restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
+      }).toEqual({ state, restriction: restrictionBefore });
+      await main.close();
+      main = undefined;
+    }
+  }, 180_000);
+
+  it("an old box whose handover was replaced stays restricted after a restart, its row untouched", async () => {
+    const boxes = await prepared();
+    beforeServerStarts();
+    const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
+    expect(restrictionBefore).not.toBeNull();
+
+    await advanceHandover({ node: mainBox.node, nodeId: boxes.mainId }, OP, "replaced", {});
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
+
+    const port = httpPort();
+    await refusesSales(port);
+    const page = await fetch(`http://127.0.0.1:${port}/`, {
+      headers: { "accept-language": "en-GB" },
+    });
+    expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+    expect({
+      state: (await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state,
+      restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
+    }).toEqual({ state: "replaced", restriction: restrictionBefore });
+  }, 180_000);
+
+  it("no state of a superseded old box in an emergency lifts its restriction: every start refuses sales and the row is untouched", async () => {
+    const boxes = await prepared();
+    const store = { node: mainBox.node, nodeId: boxes.mainId };
+    const controlled = (await readHandoverOperation(mainBox.node, boxes.mainId, OP))!;
+    // An emergency source has no controlled operation and its restriction names none.
+    mainBox.node.run(sql`delete from node_handover_operations`);
+    mainBox.node.run(sql`delete from node_handover_restriction`);
+    await beginHandover(
+      store,
+      {
+        ...(controlled.binding as unknown as HandoverBinding),
+        operationId: OTHER_OP,
+        scenario: "emergency",
+      },
+      "source",
+    );
+    await recordSupersededAtStart(store, boxes.spareId, 3);
+    beforeServerStarts();
+    const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
+    expect(restrictionBefore).toMatchObject({ kind: "superseded", operationId: null });
+
+    for (const state of ["source_superseded", "return_pending", "return_complete"] as const) {
+      await advanceHandover(store, OTHER_OP, state, {});
+      main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+        timings: { minTickMs: 200, maxTickMs: 600_000 },
+      });
+      const port = httpPort();
+      await refusesSales(port);
+      const page = await fetch(`http://127.0.0.1:${port}/`, {
+        headers: { "accept-language": "en-GB" },
+      });
+      expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+      expect({
+        state: (await readHandoverOperation(mainBox.node, boxes.mainId, OTHER_OP))?.state,
+        restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
+      }).toEqual({ state, restriction: restrictionBefore });
+      await main.close();
+      main = undefined;
+    }
   }, 180_000);
 });
