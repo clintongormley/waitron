@@ -15,9 +15,9 @@ async function holdsAny(query: BackupVerificationContext["before"]): Promise<boo
   for (const table of tables) {
     for await (const row of query.rows(
       "select name from sqlite_schema where type='table' and name=?",
-      ["box"],
+      [table],
     )) {
-      if (row.name === "box") return true;
+      if (row.name === table) return true;
     }
   }
   return false;

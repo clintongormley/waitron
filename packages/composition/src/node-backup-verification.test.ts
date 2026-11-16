@@ -172,7 +172,7 @@ describe("node.db's backup verification", () => {
       await sealKey(SOURCE, privateKey);
       source.node.run(sql`pragma ignore_check_constraints=on`);
       try {
-        source.node.run(sql`update node_signing_key set key_version=${version}`);
+        source.node.run(sql`update box set signing_key_version=${version}`);
       } finally {
         source.node.run(sql`pragma ignore_check_constraints=off`);
       }
