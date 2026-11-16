@@ -978,13 +978,31 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   filed_figures_changed: FIGURES_UNCHECKED,
 };
 
+/** `order.dining_fixed` by the way the order is sold. */
+const DINING_FIXED: Record<string, { en: string; es: string }> = {
+  eat_in: {
+    en: "This order is sold to eat here, and its department does not let the till switch it to take away",
+    es: "Este pedido se vende para tomar aquí y su departamento no deja que la caja lo cambie a para llevar",
+  },
+  takeaway: {
+    en: "This order is sold to take away, and its department does not let the till switch it to eat here",
+    es: "Este pedido se vende para llevar y su departamento no deja que la caja lo cambie a para tomar aquí",
+  },
+};
+
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown },
+  params?: { reason?: unknown; dining?: unknown },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  if (
+    code === "order.dining_fixed" &&
+    typeof params?.dining === "string" &&
+    Object.hasOwn(DINING_FIXED, params.dining)
+  )
+    return pickLocale(DINING_FIXED[params.dining]!, locale);
   if (code === "deferred_close.ineligible") {
     const reason = typeof params?.reason === "string" ? params.reason : "";
     if (Object.hasOwn(DEFERRED_INELIGIBLE, reason))

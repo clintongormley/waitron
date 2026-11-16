@@ -1046,3 +1046,22 @@ it.each([
   expect(codeMessage(code, "en")).toBe(en);
   expect(codeMessage(code, "es")).toBe(es);
 });
+
+it.each([
+  [
+    "eat_in",
+    "This order is sold to eat here, and its department does not let the till switch it to take away",
+    "Este pedido se vende para tomar aquí y su departamento no deja que la caja lo cambie a para llevar",
+  ],
+  [
+    "takeaway",
+    "This order is sold to take away, and its department does not let the till switch it to eat here",
+    "Este pedido se vende para llevar y su departamento no deja que la caja lo cambie a para tomar aquí",
+  ],
+])(
+  "names the way an order.dining_fixed order is sold (%s), in English and Spanish (A1522)",
+  (dining, en, es) => {
+    expect(codeMessage("order.dining_fixed", "en", { dining })).toBe(en);
+    expect(codeMessage("order.dining_fixed", "es", { dining })).toBe(es);
+  },
+);

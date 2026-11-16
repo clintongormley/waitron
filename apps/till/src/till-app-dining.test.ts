@@ -177,6 +177,49 @@ describe("the counter's way of selling (A1522)", () => {
     );
   });
 
+  it("a switch refused as out of date reloads the order and says it was changed elsewhere", async () => {
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue(savedOrder("open"));
+    const { el, counter } = await counterApp({
+      retrieveWorkingOrder,
+      switchDining: vi.fn().mockRejectedValue({
+        code: "working_order.out_of_date",
+        workingOrderId: "wo-1",
+        revision: 3,
+      }),
+    });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    await chooseWay(el, counter(), "Take away");
+    await flush(el);
+
+    expect(banner(el)?.textContent?.trim()).toBe(t("held.changed_elsewhere"));
+    expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(segmented(counter())!.value).toBe("eat_in");
+  });
+
+  it("a switch refused as fixed names the way, and the order read again drops the switch", async () => {
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce(savedOrder("open"))
+      .mockResolvedValue({ ...savedOrder("open", 2), diningChoice: "none" });
+    const { el, counter } = await counterApp({
+      retrieveWorkingOrder,
+      switchDining: vi.fn().mockRejectedValue({ code: "order.dining_fixed", dining: "eat_in" }),
+    });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    await chooseWay(el, counter(), "Take away");
+    await flush(el);
+
+    expect(banner(el)?.textContent).toContain(
+      codeMessage("order.dining_fixed", undefined, { dining: "eat_in" }),
+    );
+    expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(segmented(counter())).toBeNull();
+  });
+
   it("a set lunch refused on a takeaway sale offers Switch to eat here, which keeps the set lunch", async () => {
     const recordSale = vi
       .fn()
@@ -242,7 +285,7 @@ describe("the counter's way of selling (A1522)", () => {
     expect(switchToEatIn(el)).toBeNull();
   });
 
-  it.each(["order.dining_fixed", "order.dining_locked", "order.set_lunch_takeaway"])(
+  it.each(["order.dining_fixed", "order.set_lunch_takeaway"])(
     "a sale refused %s says so in its own words",
     async (code) => {
       const { el, counter } = await counterApp({
@@ -253,7 +296,7 @@ describe("the counter's way of selling (A1522)", () => {
 
       await payCash(el, counter());
 
-      expect(banner(el)?.textContent).toContain(codeMessage(code));
+      expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
       expect(banner(el)?.textContent).not.toContain(codeMessage("server.internal"));
     },
   );
@@ -392,7 +435,7 @@ describe("a table bill's way of selling (A1522)", () => {
     await chooseWay(el, tableOrder(el), "Take away");
     await flush(el);
 
-    expect(banner(el)?.textContent).toContain(codeMessage(code));
+    expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
     expect(switchToEatIn(el)).toBeNull();
     expect(segmented(tableOrder(el))!.value).toBe("eat_in");
   });

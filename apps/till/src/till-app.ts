@@ -755,7 +755,7 @@ const TABLE_REFUSALS = new Set([
  * again, so the screen shows the way it now has. */
 const STORED_WAY_CHANGED: ReadonlySet<string> = new Set([
   "order.dining_locked",
-  "working_order.out_of_date",
+  "order.dining_fixed",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
@@ -877,9 +877,14 @@ function tableWriteError(error: unknown): CounterError {
     : withDishes(code, error);
 }
 
-/** A `station.no_default` refusal keeps the dishes it names, for the sentence that names them. */
-function withDishes(code: string, error: unknown): { code: string; dishes?: string } {
-  const dishes = (error as { dishes?: unknown } | undefined)?.dishes;
+/** A `station.no_default` refusal keeps the dishes it names, and an `order.dining_fixed` one the
+ * way it names, for the sentence that names them. */
+function withDishes(
+  code: string,
+  error: unknown,
+): { code: string; dishes?: string; dining?: string } {
+  const { dishes, dining } = (error ?? {}) as { dishes?: unknown; dining?: unknown };
+  if (code === "order.dining_fixed" && typeof dining === "string") return { code, dining };
   return code === "station.no_default" && typeof dishes === "string" && dishes !== ""
     ? { code, dishes }
     : { code };
@@ -1628,6 +1633,8 @@ type CounterError =
       dishes?: string;
       /** The refusal's `reason`, for a code worded by it. */
       reason?: string;
+      /** The way an `order.dining_fixed` refusal names. */
+      dining?: string;
     }
   | { billPayments: string }
   | { replacedGroups: string }
@@ -1751,7 +1758,7 @@ function errorText(
     }
     const message =
       error.dishes === undefined
-        ? codeMessage(error.code, undefined, { reason: error.reason })
+        ? codeMessage(error.code, undefined, { reason: error.reason, dining: error.dining })
         : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
     if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
@@ -9352,9 +9359,12 @@ export class TillApp extends LitElement {
       if (current()) store.adoptSwitchedDining(dining, revision);
     } catch (error) {
       if (!current()) return;
-      this.errorKey = counterError(error, "dining.switch_failed");
-      if (STORED_WAY_CHANGED.has((error as { code?: string } | undefined)?.code ?? ""))
-        await this.#reloadCounterOrder(id, session);
+      const code = (error as { code?: string } | undefined)?.code ?? "";
+      if (code === "working_order.out_of_date") await this.#reloadChangedOrder(id);
+      else {
+        this.errorKey = counterError(error, "dining.switch_failed");
+        if (STORED_WAY_CHANGED.has(code)) await this.#reloadCounterOrder(id, session);
+      }
       this.#redrawDining();
     } finally {
       this.#diningSwitching = false;
@@ -9372,11 +9382,17 @@ export class TillApp extends LitElement {
     }
     const bill = this.partyBills.find((each) => each.workingOrderId === billId);
     const party = this.orderParty;
-    if (bill === undefined || party === null || this.#diningSwitching) return;
+    if (bill === undefined || party === null || this.#diningSwitching) {
+      this.#redrawDining();
+      return;
+    }
     const visit = this.#orderVisit;
     const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
     const expectedEdit = this.#billChoiceEdit(billId);
-    if (expectedEdit === null) return;
+    if (expectedEdit === null) {
+      this.#redrawDining();
+      return;
+    }
     this.errorKey = undefined;
     this.#diningSwitching = true;
     try {
