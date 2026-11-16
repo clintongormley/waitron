@@ -11,9 +11,8 @@ import { VENUE_SERVICE } from "./modules.js";
 import { captureOrderEdit, type OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
-/** `dining` from a request body, or undefined when it is absent; an explicit null is refused. */
-export function parseDining(value: unknown): Dining | undefined {
-  if (value === undefined) return undefined;
+/** `dining` from a request body; absent, null or unknown, `management.request_invalid` names it. */
+export function requireDining(value: unknown): Dining {
   if (typeof value !== "string" || !(DININGS as readonly string[]).includes(value)) {
     throw new AppError("management.request_invalid", { field: "dining" });
   }
