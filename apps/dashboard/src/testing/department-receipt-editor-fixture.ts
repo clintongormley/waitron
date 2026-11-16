@@ -65,6 +65,9 @@ export function receiptApi(model = receiptModel) {
     previewReceiptDraft: vi.fn<DepartmentReceiptClient["previewReceiptDraft"]>(async () =>
       preview(),
     ),
+    getReceiptPaperWidths: vi.fn<DepartmentReceiptClient["getReceiptPaperWidths"]>(async () => ({
+      paperWidths: preview().paperWidths,
+    })),
     imageLibraryRequest: async <T>() => ({ images: [], total: 0 }) as T,
   };
 }

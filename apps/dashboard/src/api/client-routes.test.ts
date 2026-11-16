@@ -426,6 +426,22 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
+  it("reads the receipt preview's paper widths without a body, passively from the background client", async () => {
+    const answer = { paperWidths: ["58mm", "80mm"] };
+    const fetchImpl = vi.fn(async () => jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.getReceiptPaperWidths()).resolves.toEqual(answer);
+    await api.background.getReceiptPaperWidths();
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/receipt-preview/paper-widths", "GET", undefined],
+      ["/management-api/receipt-preview/paper-widths", "GET", undefined],
+    ]);
+    const headers = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).map(([, init]) =>
+      new Headers(init.headers).get("x-waitron-live"),
+    );
+    expect(headers).toEqual([null, "1"]);
+  });
+
   it("asks for a preview at a chosen paper width", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),

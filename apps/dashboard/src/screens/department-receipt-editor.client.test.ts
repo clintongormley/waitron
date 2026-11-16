@@ -27,6 +27,8 @@ async function mount() {
     async (path, init) => {
       if (path === "/management-api/receipt-preview")
         return new Response(JSON.stringify(preview()));
+      if (path === "/management-api/receipt-preview/paper-widths")
+        return new Response(JSON.stringify({ paperWidths: preview().paperWidths }));
       if (init.method === "PUT") return new Response(null, { status: 204 });
       return new Response(JSON.stringify(model));
     },

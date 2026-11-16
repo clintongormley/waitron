@@ -300,16 +300,8 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 ## One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still open
 
-- No test pins what the two removed addresses, `/manage/receipt` and `/manage/location-settings`,
-  open now; a reading of the router says the overview page, which nobody has run — #993 added
-  that test for `/manage/sections`.
 - The paper-width dropdown names widths only, not printers, so two printers of one width at
   different resolutions cannot be told apart (owner's call).
-- Re-check whether printer and device changes refresh the offered widths while the page stays
-  open. The 2026-10-01 probe found no refresh after `printers` or `tills` invalidation, with
-  `tenant_receipts` as its positive control. That receipt describes the earlier page: A238
-  retired `tills`, W111 added location-address refreshes, and A366 slice 7 replaces the editor
-  and its preview triggers. The printer/device case has not been re-probed on that branch.
 
 ## Left open by #1261's review, not acted on (2026-10-05)
 

@@ -3969,6 +3969,10 @@ export class DashboardApi {
     );
   }
 
+  getReceiptPaperWidths(): Promise<Pick<ReceiptPreview, "paperWidths">> {
+    return this.#request("/management-api/receipt-preview/paper-widths", "GET");
+  }
+
   // ── Floor-plan zone + table configuration ──────────────────────────────────────────────────────
 
   listZones(): Promise<FloorZone[]> {

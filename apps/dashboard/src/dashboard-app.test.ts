@@ -262,6 +262,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     }),
     getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),
+    getReceiptPaperWidths: vi.fn(() => new Promise(() => undefined)),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
     listPendingSwaps: vi.fn().mockResolvedValue([]),
     listPendingAbsences: vi.fn().mockResolvedValue([]),
@@ -2484,18 +2485,21 @@ describe("dashboard-app", () => {
     ).toBeNull();
   });
 
-  it.each(["/manage/kitchen", "/manage/statuses", "/manage/receipts"])(
-    "treats the retired address %s as an unknown screen",
-    async (path) => {
-      history.replaceState(null, "", path);
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-      });
-      await flush(el);
-      expect(overview(el)).not.toBeNull();
-      expect(location.pathname).toBe("/manage/overview");
-    },
-  );
+  it.each([
+    "/manage/kitchen",
+    "/manage/statuses",
+    "/manage/receipts",
+    "/manage/receipt",
+    "/manage/location-settings",
+  ])("treats the retired address %s as an unknown screen", async (path) => {
+    history.replaceState(null, "", path);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
+  });
 
   it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
     history.replaceState(null, "", "/manage/adjustment-reasons");

@@ -23,6 +23,7 @@ export interface DepartmentReceiptClient {
     },
     options?: { passive?: boolean },
   ): Promise<ReceiptPreview>;
+  getReceiptPaperWidths(): Promise<Pick<ReceiptPreview, "paperWidths">>;
 }
 
 export function createDepartmentReceiptClient(
@@ -44,6 +45,8 @@ export function createDepartmentReceiptClient(
         "POST",
         options.passive === true ? { ...input, passive: true } : input,
       ),
+    getReceiptPaperWidths: () =>
+      request("/management-api/receipt-preview/paper-widths", "GET", undefined, { passive }),
   });
   const active = make(false);
   const background = make(true);

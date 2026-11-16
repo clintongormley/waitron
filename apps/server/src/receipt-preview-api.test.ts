@@ -5,7 +5,14 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import { devices, printers, readTaxpayer, withTransaction, type Database } from "@waitron/db";
+import {
+  devices,
+  printerHolders,
+  printers,
+  readTaxpayer,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -16,6 +23,7 @@ import {
 } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { withPassiveManagementRead } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
 import { departments } from "@waitron/venue-service";
@@ -1208,5 +1216,117 @@ describe("a deleted receipt printer in the receipt preview", () => {
         expect(await widths()).toEqual([["80mm"], "80mm"]);
       },
     );
+  });
+});
+
+describe("GET /management-api/receipt-preview/paper-widths", () => {
+  async function ask({ cookie = venue.managerCookie, passive = false } = {}): Promise<Response> {
+    const app = new Hono();
+    app.use("/management-api/*", (c, next) =>
+      c.req.method === "GET" && c.req.header("x-waitron-live") === "1"
+        ? withPassiveManagementRead(next)
+        : next(),
+    );
+    mountReceiptPreviewApi(app, { db: suite.db, cfg: venue.cfg }, () => {});
+    return app.request("/management-api/receipt-preview/paper-widths", {
+      headers: { cookie, ...(passive ? { "x-waitron-live": "1" } : {}) },
+    });
+  }
+  /** The widths the route answers, beside the widths the preview offers at the same moment. */
+  async function bothWidths(): Promise<[unknown, unknown]> {
+    const response = await ask();
+    expect(response.status).toBe(200);
+    const drawn = await preview({ receipt: {} });
+    expect(drawn.status).toBe(200);
+    return [
+      await response.json(),
+      { paperWidths: ((await drawn.json()) as ReceiptPreviewResponse).paperWidths },
+    ];
+  }
+
+  it("answers no width when the venue has no receipt printer, as the preview does", async () => {
+    expect(await bothWidths()).toEqual([{ paperWidths: [] }, { paperWidths: [] }]);
+  });
+
+  it("answers the widths the preview offers, leaving out inactive devices and printers", async () => {
+    await withPrinters(
+      [
+        { device: "Bar", paperWidth: "80mm", resolution: "203dpi" },
+        { device: "Till 1", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Till 2", paperWidth: "80mm", resolution: "203dpi", deviceActive: false },
+        { device: "Till 3", paperWidth: "80mm", resolution: "203dpi", active: false },
+      ],
+      async () => {
+        const widths = { paperWidths: ["58mm", "80mm"] };
+        expect(await bothWidths()).toEqual([widths, widths]);
+        await suite.db.update(devices).set({ active: false }).where(eq(devices.label, "Till 1"));
+        const narrowed = { paperWidths: ["80mm"] };
+        expect(await bothWidths()).toEqual([narrowed, narrowed]);
+      },
+    );
+  });
+
+  it("counts a portable receipt printer only for the device holding it, as the preview does", async () => {
+    await withPrinters(
+      [
+        { device: "Bar", paperWidth: "80mm", resolution: "203dpi" },
+        { device: "Till 1", paperWidth: "58mm", resolution: "180dpi" },
+      ],
+      async () => {
+        const [portable] = await suite.db
+          .select({ id: printers.id })
+          .from(printers)
+          .where(eq(printers.name, "Printer Till 1"));
+        const byLabel = new Map(
+          (await suite.db.select({ id: devices.id, label: devices.label }).from(devices)).map(
+            (row) => [row.label, row.id],
+          ),
+        );
+        await suite.db
+          .update(printers)
+          .set({ portable: true })
+          .where(eq(printers.id, portable!.id));
+        try {
+          await suite.db
+            .insert(printerHolders)
+            .values({ printerId: portable!.id, deviceId: byLabel.get("Bar")! });
+          const elsewhere = { paperWidths: ["80mm"] };
+          expect(await bothWidths()).toEqual([elsewhere, elsewhere]);
+          await suite.db
+            .update(printerHolders)
+            .set({ deviceId: byLabel.get("Till 1")! })
+            .where(eq(printerHolders.printerId, portable!.id));
+          const held = { paperWidths: ["58mm", "80mm"] };
+          expect(await bothWidths()).toEqual([held, held]);
+        } finally {
+          await suite.db.delete(printerHolders).where(eq(printerHolders.printerId, portable!.id));
+        }
+      },
+    );
+  });
+
+  it("requires a management session, and a manager's configuration permission", async () => {
+    expect((await ask({ cookie: "" })).status).toBe(401);
+    const refused = await ask({ cookie: venue.staffCookie });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    });
+  });
+
+  it("leaves the session's last-seen time alone when read passively, and moves it otherwise", async () => {
+    const lastSeenAt = new Date(Date.now() - 300_000).toISOString();
+    await suite.db.execute(sql`update management_sessions set last_seen_at = ${lastSeenAt}`);
+    const seen = async () =>
+      (
+        await suite.db.execute<{ seen: string }>(
+          sql`select last_seen_at as seen from management_sessions order by id`,
+        )
+      ).rows;
+    const before = await seen();
+    expect((await ask({ passive: true })).status).toBe(200);
+    expect(await seen()).toEqual(before);
+    expect((await ask()).status).toBe(200);
+    expect(await seen()).not.toEqual(before);
   });
 });

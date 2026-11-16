@@ -134,6 +134,7 @@ export async function mountReceiptApp(
         zones: [],
       },
       "/management-api/receipt-preview": preview(),
+      "/management-api/receipt-preview/paper-widths": { paperWidths: preview().paperWidths },
       "/management-api/receipt": { receipt: {}, venueAddress: [] },
       "/management-api/receipt-settings": { settings: {} },
       "/management-api/venue-details": venueDetailsFixture(),

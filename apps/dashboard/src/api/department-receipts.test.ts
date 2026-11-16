@@ -62,6 +62,18 @@ it("marks automatic preview in the body and keeps the caller's draft unchanged",
   });
   expect(draft).not.toHaveProperty("passive");
 });
+it("reads the offered paper widths, passively from the background client", async () => {
+  const { client, fetchImpl, activity } = fixture({ paperWidths: ["80mm"] });
+  expect(await client.getReceiptPaperWidths()).toEqual({ paperWidths: ["80mm"] });
+  await client.background!.getReceiptPaperWidths();
+  expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+    ["/box/management-api/receipt-preview/paper-widths", "GET"],
+    ["/box/management-api/receipt-preview/paper-widths", "GET"],
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(activity).toHaveBeenCalledTimes(1);
+});
 it("keeps subsequent reads passive while background writes remain active", async () => {
   const { client, fetchImpl, activity } = fixture();
   await client.getDepartmentReceipt("dept");
