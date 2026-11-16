@@ -509,7 +509,8 @@ export class MyScheduleScreen extends LitElement {
               >`
           : nothing
       }
-      ${this.rosterLoaded ? html`${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()} ${this.#absencesSection()} ${this.#absenceForm()}` : nothing}
+      ${this.rosterLoaded ? html`${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()} ${this.#absencesSection()}` : nothing}
+      ${this.#absenceForm()}
     `;
   }
 

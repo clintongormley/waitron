@@ -219,7 +219,7 @@ describe("approvals-screen — recovery after the server answers again", () => {
     expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull();
   });
 
-  it("loads both queues once the staff read that failed on opening succeeds", async () => {
+  it("shows both queues once the staff read that failed on opening succeeds", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
@@ -243,7 +243,7 @@ describe("approvals-screen — recovery after the server answers again", () => {
     expect(errorText(el)).toBeUndefined();
   });
 
-  it("reads the queues again when reattached while the staff read fails, once it succeeds", async () => {
+  it("refreshes reattached queues while the staff read recovers", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const { el, host } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });

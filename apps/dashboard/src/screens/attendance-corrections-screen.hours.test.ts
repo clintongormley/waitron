@@ -287,6 +287,7 @@ it("starts one stream with Hours before lookups, hiding day actions until the vi
     expect(
       m.root.querySelector('[name="attendanceDay"]')!.shadowRoot!.querySelector("input")!.disabled,
     ).toBe(true);
+    expect(m.root.querySelector("[data-person-hours]")).toBeNull();
     gate.resolve(m.data.lookups);
     const view = await record(m.root);
     expect(view.view?.personId).toBe("worker");

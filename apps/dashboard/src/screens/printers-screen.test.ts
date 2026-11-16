@@ -6600,7 +6600,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(text(el, "[data-test=printer-row-p1]")).toBe("Kitchen 2");
   });
 
-  it("reads the discovered printers once the server answers again after a failed first load", async () => {
+  it("keeps discovery watched while a failed printer-list read recovers", async () => {
     const api = Object.assign(
       stubApi({
         listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
@@ -14221,16 +14221,24 @@ it("starts one stream with discovery before the printer lists arrive", async () 
   }
 });
 
-it("chooses the printer view even when the independent discovery read is refused", async () => {
+it("chooses its default view after discovery fails and recovers without reloading printer lists", async () => {
   history.replaceState(null, "", "/manage/printers");
+  const liveData = new LiveData();
   const api = stubApi({
+    liveData,
     listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await vi.waitFor(() => expect(q(el, '[data-test="printers-table"]')).not.toBeNull());
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/queue"));
   await vi.waitFor(() =>
     expect(text(el, "[data-test=printer-refresh-error]")).toContain(
       codeMessage("connection.failed"),
     ),
   );
+  vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([]);
+  liveData.invalidate([{ type: "printer_discovery" }]);
+  await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
+  await flush(el);
+  expect(api.listPrinters).toHaveBeenCalledOnce();
+  expect(location.pathname).toBe("/manage/printers/view/queue");
 });

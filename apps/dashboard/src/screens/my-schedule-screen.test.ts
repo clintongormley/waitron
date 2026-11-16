@@ -794,7 +794,7 @@ describe("my-schedule-screen — each list's own load failure", () => {
     expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
   });
 
-  it("reads the lists once the roster arrives on a later refresh after its first read failed", async () => {
+  it("shows the lists once the roster arrives on a later refresh after its first read failed", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
@@ -862,6 +862,7 @@ it("starts one stream with all lists before the roster, without showing unnamed 
     expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"absences"');
     expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"roster_versions"');
     expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=loading]")).not.toBeNull();
     finish(roster);
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Colleague"));
     expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull();
@@ -871,4 +872,24 @@ it("starts one stream with all lists before the roster, without showing unnamed 
     el.remove();
     liveUpdates.stop();
   }
+});
+
+it("keeps the independent absence form usable when the colleague roster fails", async () => {
+  const api = stubApi({ getStaffRoster: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
+  const { el } = await mount(api);
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=abs-kind]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).toBeNull();
+  setInput(el, "abs-from", "2026-07-01");
+  setInput(el, "abs-to", "2026-07-05");
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]")!.click();
+  await flush(el);
+  expect(api.requestAbsence).toHaveBeenCalledExactlyOnceWith({
+    kind: "holiday",
+    startsOn: "2026-07-01",
+    endsOn: "2026-07-05",
+    note: null,
+  });
 });

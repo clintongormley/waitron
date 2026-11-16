@@ -1341,7 +1341,6 @@ export class PrintersScreen extends LitElement {
         this.#liveReadFloor = ++this.#readCount;
       })
       .catch((error) => {
-        this.discoveredUnread = true;
         this.refreshErrorKey = codeOf(error);
       });
     try {
