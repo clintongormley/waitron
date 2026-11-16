@@ -31,12 +31,13 @@ let v: PartyVenue, worker: string;
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
-  v = await setupPartyVenue(suite.db);
   await seedPersons(suite.db, {
     id: OPERATOR,
     displayName: "Original author",
     pinHash: "scrypt$00$00",
   });
+  v = await setupPartyVenue(suite.db);
+
   const [person] = await seedPersons(suite.db, {
     displayName: "Actual editor",
     pinHash: "scrypt$00$00",

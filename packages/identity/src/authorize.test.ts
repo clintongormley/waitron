@@ -143,7 +143,7 @@ describe("authorize", () => {
     const managerId = await seedPerson(suite.db, "manager");
     const sessionId = await openSession(suite.db, deviceId, managerId);
     const error = await captureError(() =>
-      run((tx) => tx.execute(sql`delete from persons where id = ${managerId}`)),
+      run(async (tx) => tx.execute(sql`delete from persons where id = ${managerId}`)),
     );
     expect(restrictRefused(error)).toBe(true);
     expect(await run((tx) => authorize(tx, { sessionId, permission: "sale.void" }))).toEqual({

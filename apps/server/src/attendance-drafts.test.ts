@@ -22,12 +22,13 @@ let v: PartyVenue, partyId: string, tabId: string, other: string;
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00.987Z"));
-  v = await setupPartyVenue(suite.db);
   await seedPersons(suite.db, {
     id: OPERATOR,
     displayName: "Draft author",
     pinHash: "scrypt$00$00",
   });
+  v = await setupPartyVenue(suite.db);
+
   ({ partyId, tabId } = await seat(v, await v.table("Attendance")));
   const [row] = await seedPersons(suite.db, {
     displayName: "Actual taker",
