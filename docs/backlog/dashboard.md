@@ -276,25 +276,6 @@ cloud-recovery code.
 - **Check field focus on a real iPhone and finish the remaining typography-role audit.**
   [Detail](dashboard.md#text-size-after-a179-988)
 
-## Bundle: Slow key derivation off the main thread
-
-4 entries, size M. Remaining work after asynchronous export and credential creation (2026-11-14).
-
-- **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
-  own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
-  Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
-- **A refused early dashboard payment authorization may become allowed before the PIN transaction —
-  UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
-  credential when its read refuses; `pinGated` then opens the transaction without a turn.
-  [Detail](dashboard.md#a-refused-early-dashboard-payment-authorization-may-become-allowed-before-the-pin-transaction--unverified-a530-review)
-- **Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).**
-  Every synchronous `deriveKey` caller still blocks the event loop while it derives.
-  [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-5-569-waitronstream)
-- **A restore from a backup file derives the archive's key at least three times**, each an N=2^17
-  scrypt: at least once at each of preview, staging and the next start. Deriving it once would save CPU on the box;
-  it is a behaviour change on the restore path and needs its own tests. Left open by A938.
-  [Detail](box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)
-
 ## Repeated Escape checks for menu, modifier and media writes
 
 The menu/modifier delete flows and media save/delete flows still need a real Escape twice while
@@ -714,14 +695,18 @@ the new names answer supersedes that allowance only.
 and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 **2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
 
-## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
+## A refused early dashboard payment authorization becomes allowed before the PIN transaction
 
-`managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
-  credential when its read refuses; `pinGated` then opens the transaction without a turn. If the
-  permission changes to allowed between those reads, a text PIN may derive under the write lock
-  outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
-  **Next action:** reproduce the permission-grant window through a real attestation route, then
-  decide whether the refused early read must still join a person-specific turn.
+`managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no credential when its early read
+refuses; `pinGated` then opens the transaction without a turn. Reproduced on 2026-11-16 through both
+real attestation routes: the denied control returns 403 with zero PIN derivations; granting the
+manager role at the write-lock request instead returns the missing-payment/refund 404 and derives
+once. The source's fallback verifies inside `gated`; the combined lock-watcher mock was unsuitable,
+so the run measured the response and derivation count, not lock ownership.
+
+Lane K's cleared key-derivation plan permits a separate conditional payment PR. Preserve the early
+refusal, final authorization, PIN turns and throttle. The existing branch's reproduction patch and
+red log are in the lane receipts; this point remains open until that fix lands.
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 

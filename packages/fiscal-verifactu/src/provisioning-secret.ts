@@ -2,7 +2,7 @@ import { putCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
-import { openCertificateFile } from "./certificate-file.js";
+import { openCertificate } from "./certificate-open.js";
 import { installsOf } from "./certificate-record.js";
 import "./errors.js";
 
@@ -70,13 +70,13 @@ export function parseAeatCert(raw: unknown): AeatCert {
   return parsed;
 }
 
-export function validateSetupAeatCert(raw: unknown): void {
+export async function validateSetupAeatCert(raw: unknown): Promise<void> {
   const cert = parseAeatCert(raw);
   const pfx = Buffer.from(cert.pfxBase64, "base64");
   const refuse = (reason: string, field = "pfxBase64"): never => {
     throw new AppError("setup.certificate_refused", { field, reason });
   };
-  const opened = openCertificateFile(pfx, cert.passphrase);
+  const opened = await openCertificate(pfx, cert.passphrase);
   if (!opened.ok) {
     return refuse(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "pfxBase64");
   }
@@ -96,7 +96,7 @@ export async function sealAeatSecret(
   raw: unknown,
 ): Promise<void> {
   const cert = parseAeatCert(raw);
-  const opened = openCertificateFile(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
+  const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
 
   await withTransaction(deps.db, async (tx) => {
     await putCredential(tx, deps.ring, {

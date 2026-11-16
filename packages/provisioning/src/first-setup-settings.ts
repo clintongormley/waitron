@@ -5,7 +5,7 @@ import { AppError } from "@waitron/shared";
 import { parseEmailSettings } from "./email-settings.js";
 import "./errors.js";
 
-export function parseFirstSetupSettings(
+export async function parseFirstSetupSettings(
   contribution: FiscalContribution,
   environment: DeploymentEnvironment,
   body: Record<string, unknown>,
@@ -17,7 +17,7 @@ export function parseFirstSetupSettings(
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    secret!.validate(body.aeatCert);
+    await secret!.validate(body.aeatCert);
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (

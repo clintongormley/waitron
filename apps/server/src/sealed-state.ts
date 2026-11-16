@@ -16,7 +16,7 @@ import {
   collectStateParts,
   snapshotNodeDatabase,
 } from "./archive-entries.js";
-import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
+import { decryptArtifact, decryptArtifactAsync, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import { startFailureCode } from "./boot-failure.js";
@@ -48,6 +48,13 @@ export async function sealNodeState(
  * `backup.artifact_invalid` for bytes that are not a sealed frame. */
 export function unsealNodeState(sealed: Uint8Array, recoveryKey: string): ArchiveEntry[] {
   return unpackArchive(decryptArtifact(sealed, recoveryKey));
+}
+
+export async function unsealNodeStateAsync(
+  sealed: Uint8Array,
+  recoveryKey: string,
+): Promise<ArchiveEntry[]> {
+  return unpackArchive(await decryptArtifactAsync(sealed, recoveryKey));
 }
 
 export async function writeSealedStateRow(

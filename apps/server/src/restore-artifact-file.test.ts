@@ -1,3 +1,7 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
+import * as kdf from "./scrypt-kdf.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -349,3 +353,46 @@ it("accepts the unchanged Cloud writer's raw artifact through staged upload vali
   }
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
+
+it("derives once for preview and staging and once after a fresh-process restart", async () => {
+  const f = await fixture();
+  const input = await artifact(f);
+  const derive = vi.spyOn(kdf, "deriveKeyAsync");
+  try {
+    for (const _step of ["preview", "staging"]) {
+      const copy = await validateArtifactFile(f);
+      await copy.discard();
+    }
+    await stageRestoreRequest(f.stateDir, {
+      artifact: input,
+      recoveryKey: f.recoveryKey,
+      environment: "preproduction",
+    });
+    expect(derive).toHaveBeenCalledTimes(1);
+    const script = `
+      import crypto from "node:crypto";
+      import { syncBuiltinESMExports } from "node:module";
+      const scrypt = crypto.scrypt;
+      let count = 0;
+      crypto.scrypt = (...args) => { if (args[0] === "key") count++; return scrypt(...args); };
+      syncBuiltinESMExports();
+      const {runStagedRestore} = await import(${JSON.stringify(resolve("src/restore-request.ts"))});
+      const {openVenueDatabase,taxpayer} = await import("@waitron/db");
+      await runStagedRestore({...${JSON.stringify({ stateDir: f.stateDir, venueDir: f.venueDir, migrationsRoot: null })},log:()=>{}});
+      const store = await openVenueDatabase(${JSON.stringify(f.venueDir)});
+      try {console.log(JSON.stringify({count,legalName:(await store.venue.select().from(taxpayer))[0].legalName}));}
+      finally {await store.close();}
+    `;
+    const child = await promisify(execFile)(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "--eval", script],
+      { timeout: 90_000, maxBuffer: 1_000_000 },
+    );
+    expect(JSON.parse(child.stdout.trim())).toEqual({ count: 1, legalName: "File roundtrip" });
+    expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toContain(
+      "WAITRON_CREDENTIALS_KEY=",
+    );
+  } finally {
+    derive.mockRestore();
+  }
+}, 100_000);

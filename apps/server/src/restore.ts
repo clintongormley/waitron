@@ -72,7 +72,7 @@ import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
 import { type ArchiveEntry } from "./backup-archive.js";
-import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { decryptArtifactFile, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
@@ -1047,9 +1047,13 @@ async function openVenue(
   return { db: store.venue, node: store.node, close: () => store.close() };
 }
 
-export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & { readonly artifactPath: string };
+export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & {
+  readonly artifactPath: string;
+  readonly archiveKey?: ArchiveKeySlot;
+};
 export type ValidationFileDeps = Omit<ValidationDeps, "artifact"> & {
   readonly artifactPath: string;
+  readonly archiveKey?: ArchiveKeySlot;
 };
 export async function validateArtifactFile(
   deps: ValidationFileDeps,
@@ -1062,7 +1066,12 @@ export async function validateArtifactFile(
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
     scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
     const plaintext = join(scratch, "plaintext");
-    const sourceId = await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
+    const sourceId = await decryptArtifactFile(
+      deps.artifactPath,
+      plaintext,
+      deps.recoveryKey,
+      deps.archiveKey,
+    );
     const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"));
     const inputs = await unpackArchiveFile(archive, scratch);
     await rm(archive);

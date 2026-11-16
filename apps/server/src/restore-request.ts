@@ -1,3 +1,4 @@
+import { createArchiveKeySlot, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { errnoOf } from "./errno.js";
 import { listAdminHolders } from "@waitron/identity";
 import {
@@ -456,11 +457,13 @@ export async function runStagedRestore(
   // can take this folder (`emptyScratch`), and this run makes them before placement's own hold.
   // Refused here, nothing is cleared, so the request stays staged.
   const hold = await lockRestoreTarget(deps.venueDir);
+  const archiveKey = createArchiveKeySlot();
   try {
     if ((await inspectFirstSetupMarker(deps.venueDir, deps.stateDir)) !== null)
       await assertVenueFirstSetupAllowed(deps.venueDir, deps.stateDir);
-    return await runHeld(deps, flow, snapshot, restore, restoreStream);
+    return await runHeld(deps, flow, snapshot, restore, restoreStream, archiveKey);
   } finally {
+    archiveKey.clear();
     hold.release();
   }
 }
@@ -471,6 +474,7 @@ async function runHeld(
   snapshot: Awaited<ReturnType<typeof readSnapshotRecoveryBinding>>,
   restore: Restore,
   restoreStream: RestoreStream,
+  archiveKey: ArchiveKeySlot,
 ): Promise<boolean> {
   let record = flow;
   const saveRecord = async (next: RestoreFlowRecord) => {
@@ -571,6 +575,7 @@ async function runHeld(
           })()
         : await validateArtifactFile({
             ...validation,
+            archiveKey,
             artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
             recoveryKey: await readFile(attachmentPath(deps.stateDir, KEY), "utf8"),
           });
@@ -619,6 +624,7 @@ async function runHeld(
         ...common,
         artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
         recoveryKey,
+        archiveKey,
         ...(marker.managedCloud
           ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
           : {}),

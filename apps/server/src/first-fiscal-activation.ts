@@ -39,7 +39,7 @@ export async function checkedFirstFiscalCommit(
 ) {
   return checkedFirstSetupCommit(host, deps, state);
 }
-export function firstFiscalPayload(
+export async function firstFiscalPayload(
   host: FirstFiscalHost,
   state: FirstSetupState,
   body: Record<string, unknown>,
@@ -73,7 +73,7 @@ export function firstFiscalPayload(
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    secret!.validate(body.aeatCert);
+    await secret!.validate(body.aeatCert);
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (
@@ -119,7 +119,7 @@ export async function activateFirstFiscal(
   )
     throw new AppError("setup.not_ready", {});
   host.assertSelection(state);
-  const payload = firstFiscalPayload(host, state, body),
+  const payload = await firstFiscalPayload(host, state, body),
     req = firstFiscalProvisionRequest(state);
   if (state.frozen.environment === "production" && payload.email === undefined)
     throw new AppError("setup.email_required", { field: "email" });
@@ -173,7 +173,7 @@ export async function publishCheckedFirstFiscal(
   publication: {
     owner: FirstSetupOwnerAttempt;
     body: Record<string, unknown>;
-    payload: ReturnType<typeof firstFiscalPayload>;
+    payload: Awaited<ReturnType<typeof firstFiscalPayload>>;
   },
   hold: FirstSetupHold,
 ): Promise<VenueResult> {

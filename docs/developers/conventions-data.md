@@ -6795,3 +6795,33 @@ format 38 is refused as outdated. The raster cache stays with the department unt
 > 2026-11-15: the watcher retained the department raster cache after the [write-lock timing](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15); the separate removal mentioned above is retired.
 
 > 2026-11-15, A1308 vb6: the operation description mentioned in the vb5 receipt-storage note above now lives in `departments.operation_description`, outside `receipt_text`; configuration format 41 carries it.
+
+## Archive keys and certificate opening
+
+Runtime artifact decryption uses `decryptArtifactAsync`; synchronous cipher and configuration
+helpers remain for fixtures. Configuration staging snapshots ciphertext before its first wait.
+`configuration-import.test.ts` changes the caller's buffer during derivation and checks both the
+saved bytes and the decoded bundle.
+
+File archive decryption retains one exact passphrase/salt/cost key for at most five minutes in a
+process, clearing it on replacement or refusal. The staged restart owns a separate slot shared by
+entry validation and placement, then clears it in `finally`. It still stores the passphrase in the
+private restore attachment; no derived key crosses a restart. The watcher accepted two derivations
+across an uninterrupted setup and restart on 2026-11-16 at 01:01, rather than the earlier once-total
+proposal. Expiry or a different archive/password can require another derivation. Every open still
+authenticates the ciphertext and computes its source digest. `artifact-cipher-file.test.ts` checks
+reuse, refusal, exact parameters and erasure. The fresh-process case in
+`restore-artifact-file.test.ts` counts one setup derivation and one in the child, then reads the
+restored taxpayer and credentials file.
+
+Certificate admission uses a dedicated child with a two-second deadline and the shared byte cap,
+returning only the existing certificate details or refusal. Passwords travel on stdin, outside
+arguments and logs; the parent waits for child closure after a forced stop. The ordinary and
+hostile-MAC-cost cases in `certificate-open.test.ts` exercise the source entry;
+`fiscal-certificate-diagnosis-bundle.test.ts` opens through the built host and sibling child.
+This bounds admission only. Accepted PFX material still reaches the existing parent mTLS path
+in `certificate-install.ts` and `aeat-transport.ts`; diagnosis and filing transport are unchanged.
+
+The source loader must resolve from the owning module, independently of the command's working
+directory: provisioning's CLI has no direct `tsx` dependency. Its settings and CLI tests exercise
+that caller; passing only the fiscal package's source test would miss it.

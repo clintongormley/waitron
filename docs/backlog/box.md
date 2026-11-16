@@ -232,13 +232,6 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
   `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
   title is code, so a pruning PR cannot rename it).
 
-## Every synchronous `deriveKey` caller still blocks the event loop while it derives
-
-- Remaining synchronous request paths include everything reaching `decryptArtifact`
-  (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
-  `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
-  (`apps/server/src/sealed-state.ts`).
-
 ## A pointer write from a process that has since died, landing after the restart, can still make the box refuse itself
 
 - A pointer write from a process that has since died, landing after the restart, can still make the
@@ -397,8 +390,6 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
 - Amazon S3 is the only real provider's bucket the package has run against (the 2026-10-14
   rehearsal, [receipts](../receipts/a538/README.md), A538-10); the unit tests drive the real S3
   client over a scripted network, and the loop test drives it against versitygw.
-- Every synchronous `deriveKey` caller still blocks the event loop while it derives.
-  [Detail](../backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives)
 
 ## Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
 
@@ -1806,24 +1797,6 @@ below records the gap that prompted the design, not a new runtime measurement.
   test could reach; and `cli.test.ts` test titles still say "before connecting" and "before
   opening a connection", and one title ("rather than opening the working directory") rests on the
   false reason in the empty-venue-directory section above.
-
-## A restore from a backup file derives the archive's key at least three times
-
-Each step below derives the archive's key at least once, with scrypt at N=2^17 (`KDF_BY_VERSION`,
-`packages/provisioning/src/artifact-cipher.ts:14`):
-
-- the preview, `previewRecoveryArchive` (`apps/server/src/recovery-backup-preview.ts:99`), through
-  `validateArtifact` (line 100), which decrypts the archive (`apps/server/src/restore.ts:168`);
-- the staging, `validateArtifact` again from `apps/server/src/boot.ts:1111`;
-- the next start's `runStagedRestore` (`apps/server/src/node-entry.ts:389`), whose
-  `validateArtifactFile` (`apps/server/src/restore-request.ts:419`) derives it in
-  `apps/server/src/artifact-cipher-file.ts:61`. That step runs in a later process.
-
-Deriving it once per restore would save CPU on the box, but the key would have to be carried between
-the preview and staging handlers (`apps/server/src/boot.ts:1073` and `:1109`) and across a restart. It is a behaviour change on the restore path and needs its
-own tests. A938 cached only the tests' derivations (`apps/server/src/testing/derived-key-cache.ts`).
-Left open by A938.
-[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
 
 ## A transaction opened outside the write queue can let a body's writes after a full disk commit
 

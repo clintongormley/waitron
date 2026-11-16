@@ -250,7 +250,7 @@ export function mountSetupFirstFiscalApi(
           if (path.endsWith("fiscal-test")) {
             const state = await host.owner.authorize(owner);
             host.assertSelection(state);
-            const payload = firstFiscalPayload(host, state, body);
+            const payload = await firstFiscalPayload(host, state, body);
             if (deps.runFiscalTest === undefined) throw new AppError("setup.not_ready", {});
             return c.json(
               await deps.runFiscalTest({

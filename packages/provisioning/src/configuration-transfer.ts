@@ -47,7 +47,12 @@ import {
   type ConfigurationTransferTable,
   type WaitronModule,
 } from "@waitron/module";
-import { decryptArtifact, encryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
+import {
+  decryptArtifact,
+  decryptArtifactAsync,
+  encryptArtifact,
+  encryptArtifactAsync,
+} from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
@@ -649,7 +654,18 @@ export function decodeConfigurationBundle(
   artifact: Uint8Array,
   passphrase: string,
 ): ConfigurationBundle {
-  const entries = unpackArchive(decryptArtifact(artifact, passphrase));
+  return decodeConfigurationPlaintext(decryptArtifact(artifact, passphrase));
+}
+
+export async function decodeConfigurationBundleAsync(
+  artifact: Uint8Array,
+  passphrase: string,
+): Promise<ConfigurationBundle> {
+  return decodeConfigurationPlaintext(await decryptArtifactAsync(artifact, passphrase));
+}
+
+function decodeConfigurationPlaintext(plaintext: Uint8Array): ConfigurationBundle {
+  const entries = unpackArchive(plaintext);
   if (entries.length !== 1 || entries[0]?.name !== ENTRY)
     throw new AppError("setup.request_invalid", { field: "artifact" });
   let value: unknown;

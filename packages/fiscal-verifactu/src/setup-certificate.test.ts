@@ -30,18 +30,18 @@ describe("setup certificate local validation", () => {
     ["key without certificate", KEY_ONLY_CANDIDATE, "pfxBase64", "unreadable"],
     ["expired at its exact end", body(expired.pfx), "pfxBase64", "expired"],
     ["not yet valid", body(future.pfx), "pfxBase64", "not_yet_valid"],
-  ])("refuses %s with only the field and reason", (_label, certificate, field, reason) => {
-    expect(() => secret.validate({ ...certificate, certKind: "sello" })).toThrowError(
+  ])("refuses %s with only the field and reason", async (_label, certificate, field, reason) => {
+    await expect(secret.validate({ ...certificate, certKind: "sello" })).rejects.toThrowError(
       expect.objectContaining({ code: "setup.certificate_refused", params: { field, reason } }),
     );
   });
 
-  it("accepts an opening certificate at its start and before its end with either kind", () => {
+  it("accepts an opening certificate at its start and before its end with either kind", async () => {
     const starting = authority.issue({ notBefore: new Date("2026-10-16T12:00:00Z") });
     for (const certKind of ["sello", "representante"]) {
-      expect(() => secret.validate({ ...body(starting.pfx), certKind })).not.toThrow();
+      await expect(secret.validate({ ...body(starting.pfx), certKind })).resolves.toBeUndefined();
       vi.setSystemTime("2026-10-16T11:59:59.999Z");
-      expect(() => secret.validate({ ...body(expired.pfx), certKind })).not.toThrow();
+      await expect(secret.validate({ ...body(expired.pfx), certKind })).resolves.toBeUndefined();
       vi.setSystemTime("2026-10-16T12:00:00Z");
     }
   });

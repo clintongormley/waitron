@@ -93,10 +93,23 @@ describe("shipped certificate diagnosis entry", () => {
         "../../scripts/bundle-node.mjs",
         `src/fiscal-certificate-diagnosis-entry.ts=${entry.pathname}`,
         `src/fiscal-certificate-diagnosis-runner.ts=${join(root!, "host.js")}`,
+        `../../packages/fiscal-verifactu/src/certificate-open-entry.ts=${join(root!, "certificate-open.js")}`,
+        `../../packages/fiscal-verifactu/src/certificate-open.ts=${join(root!, "open-host.js")}`,
       ],
       { cwd: resolve("."), timeout: 180_000, maxBuffer: 2_000_000 },
     );
   }, 190_000);
+
+  it("opens a certificate through the built host and sibling child, with shipped notices", async () => {
+    const host = await import(pathToFileURL(join(root!, "open-host.js")).href);
+    expect(await host.openCertificate(first.pfx, first.passphrase)).toMatchObject({
+      ok: true,
+      details: { fingerprint: first.fingerprint },
+    });
+    expect(await readFile(join(root!, "certificate-open.js.NOTICES.txt"), "utf8")).toContain(
+      "Bundled npm package notices",
+    );
+  });
 
   it.each(["sello", "representante"] as const)(
     "inspects selected %s bytes with the composed real module and no source loader",

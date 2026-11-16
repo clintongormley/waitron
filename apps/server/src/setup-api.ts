@@ -555,7 +555,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
   };
 }
 
-function parseProvisionPayload(
+async function parseProvisionPayload(
   parsed: unknown,
   hostEnvironment: DeploymentEnvironment,
   devMode: boolean,
@@ -629,7 +629,7 @@ function parseProvisionPayload(
     throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
   }
   if (!secretExpected && present) invalidRequest("aeatCert");
-  if (secretExpected) secret!.validate(body.aeatCert);
+  if (secretExpected) await secret!.validate(body.aeatCert);
   return {
     mode,
     request: {
@@ -819,7 +819,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       try {
         if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
         const parsed = await readRawJsonBody<unknown>(c);
-        const payload = parseProvisionPayload(
+        const payload = await parseProvisionPayload(
           parsed,
           deps.environment,
           deps.devMode === true,
@@ -880,7 +880,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       // An unparseable or `null` body is refused as field "body"; any other read failure is
       // rethrown, not masked as a client fault.
       const parsed: unknown = await readRawJsonBody<unknown>(c);
-      const payload = parseProvisionPayload(
+      const payload = await parseProvisionPayload(
         parsed,
         deps.environment,
         deps.devMode === true,

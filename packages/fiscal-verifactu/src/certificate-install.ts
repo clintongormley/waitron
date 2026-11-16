@@ -1,3 +1,4 @@
+import { openCertificate } from "./certificate-open.js";
 import { credentialRevision, putCredential, type KeyRing } from "@waitron/credentials";
 import {
   readVenue,
@@ -13,11 +14,7 @@ import { aeatEndpointFor, isCertKind, mtlsFetch, type CertKind } from "./aeat-tr
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
-import {
-  normaliseTaxId,
-  openCertificateFile,
-  type CertificateDetails,
-} from "./certificate-file.js";
+import { normaliseTaxId, type CertificateDetails } from "./certificate-file.js";
 import { latestInstall, recordInstall } from "./certificate-record.js";
 import { isBase64 } from "./provisioning-secret.js";
 import "./errors.js";
@@ -128,14 +125,14 @@ function expiredBy(
   return refused("expired", "file", { date: localDate(details.validUntil, timeZone) });
 }
 
-function checkLocally(
+async function checkLocally(
   body: InstallBody,
   read: { taxId: string; timeZone: string; installedFingerprint: string | null },
   now: Date,
-): Local {
+): Promise<Local> {
   const pfx = Buffer.from(body.pfxBase64, "base64");
   if (pfx.length > CERTIFICATE_MAX_BYTES) return refused("too_large", "file");
-  const opened = openCertificateFile(pfx, body.passphrase);
+  const opened = await openCertificate(pfx, body.passphrase);
   if (!opened.ok) {
     return refused(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "file");
   }
@@ -190,7 +187,7 @@ export async function installCertificate(
     return { taxpayer, timeZone, installedFingerprint: latest?.fingerprint ?? null };
   });
 
-  const local = checkLocally(
+  const local = await checkLocally(
     body,
     {
       taxId: read.taxpayer.taxId,

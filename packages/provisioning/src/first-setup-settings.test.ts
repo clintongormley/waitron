@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "@waitron/composition";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { parseFirstSetupSettings } from "./first-setup-settings.js";
@@ -21,9 +22,9 @@ const email = {
 };
 
 describe("first setup publication settings", () => {
-  it("validates production settings without losing the certificate or SMTP authentication", () => {
+  it("validates production settings without losing the certificate or SMTP authentication", async () => {
     expect(
-      parseFirstSetupSettings(contribution, "production", { aeatCert: certificate, email }),
+      await parseFirstSetupSettings(contribution, "production", { aeatCert: certificate, email }),
     ).toMatchObject({
       required: true,
       aeatCert: certificate,
@@ -41,28 +42,28 @@ describe("first setup publication settings", () => {
     [{ aeatCert: certificate, email: { ...email, password: "" } }, "email.settings_invalid"],
     [{ aeatCert: certificate, email: null }, "setup.request_invalid"],
     [{ aeatCert: certificate, email: { ...email, extra: true } }, "setup.request_invalid"],
-  ])("refuses invalid production settings %# before publication", (settings, code) => {
-    expect(() => parseFirstSetupSettings(contribution, "production", settings)).toThrowError(
-      expect.objectContaining({ code }),
-    );
+  ])("refuses invalid production settings %# before publication", async (settings, code) => {
+    await expect(
+      parseFirstSetupSettings(contribution, "production", settings),
+    ).rejects.toThrowError(expect.objectContaining({ code }));
   });
 
-  it("keeps certificate-free preproduction settings independent from production", () => {
-    expect(parseFirstSetupSettings(contribution, "preproduction", {})).toMatchObject({
+  it("keeps certificate-free preproduction settings independent from production", async () => {
+    expect(await parseFirstSetupSettings(contribution, "preproduction", {})).toMatchObject({
       required: false,
       email: undefined,
     });
-    expect(() =>
+    await expect(
       parseFirstSetupSettings(contribution, "preproduction", { aeatCert: certificate }),
-    ).toThrowError(expect.objectContaining({ code: "setup.request_invalid" }));
+    ).rejects.toThrowError(expect.objectContaining({ code: "setup.request_invalid" }));
   });
 });
 
 it.each([
   { aeatCert: certificate, email, extra: true },
   { aeatCert: certificate, email: { ...email, password: "x".repeat(65537) } },
-])("rejects settings outside the publication envelope %#", (settings) => {
-  expect(() => parseFirstSetupSettings(contribution, "production", settings)).toThrowError(
+])("rejects settings outside the publication envelope %#", async (settings) => {
+  await expect(parseFirstSetupSettings(contribution, "production", settings)).rejects.toThrowError(
     expect.objectContaining({ code: "setup.request_invalid" }),
   );
 });
@@ -91,4 +92,20 @@ it.each([
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("waits for a refused asynchronous secret check before returning publication settings", async () => {
+  const refusal = Promise.reject(
+    new AppError("setup.certificate_refused", { field: "pfxBase64", reason: "unreadable" }),
+  );
+  void refusal.catch(async () => {});
+  const asynchronous = {
+    ...contribution,
+    provisioningSecret: { ...contribution.provisioningSecret!, validate: () => refusal },
+  };
+  await expect(
+    Promise.resolve().then(() =>
+      parseFirstSetupSettings(asynchronous, "production", { aeatCert: certificate, email }),
+    ),
+  ).rejects.toMatchObject({ code: "setup.certificate_refused" });
 });

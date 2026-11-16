@@ -161,3 +161,33 @@ it("disarms an import whose publication failed at folder sync", async () => {
   ).rejects.toMatchObject({ code: "EIO" });
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
+
+it("yields before validating a configuration import", async () => {
+  const root = await directory();
+  const artifact = encodeConfigurationBundle(configurationBundle(), passphrase);
+  const order: string[] = [];
+  const timer = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      order.push("timer");
+      resolve();
+    }, 0),
+  );
+  await Promise.all([
+    stageConfigurationImport(root, ring, artifact, passphrase, async () => {
+      order.push("validated");
+    }),
+    timer,
+  ]);
+  expect(order).toEqual(["timer", "validated"]);
+});
+
+it("stages the ciphertext it authenticated even if the caller changes its buffer during derivation", async () => {
+  const root = await directory();
+  const artifact = encodeConfigurationBundle(configurationBundle(), passphrase);
+  const original = Buffer.from(artifact);
+  const staging = stageConfigurationImport(root, ring, artifact, passphrase, async () => {});
+  artifact.fill(0);
+  await staging;
+  expect(await readFile(join(root, "flows/setup/import/artifact"))).toEqual(original);
+  expect((await readStagedConfigurationImport(root, ring))!.bundle).toEqual(configurationBundle());
+});

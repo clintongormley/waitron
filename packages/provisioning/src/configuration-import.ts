@@ -8,7 +8,10 @@ import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
-import { decodeConfigurationBundle, type ConfigurationBundle } from "./configuration-transfer.js";
+import {
+  decodeConfigurationBundleAsync,
+  type ConfigurationBundle,
+} from "./configuration-transfer.js";
 
 const ARTIFACT = CONFIGURATION_IMPORT_ARTIFACT;
 const KEY = CONFIGURATION_IMPORT_KEY;
@@ -77,7 +80,8 @@ export async function stageConfigurationImport(
   passphrase: string,
   validate: (bundle: ConfigurationBundle) => Promise<void>,
 ): Promise<ConfigurationPreview> {
-  const bundle = decodeConfigurationBundle(artifact, passphrase);
+  const snapshot = Buffer.from(artifact);
+  const bundle = await decodeConfigurationBundleAsync(snapshot, passphrase);
   await validate(bundle);
   const counts = Object.fromEntries(
     Object.entries(bundle.tables)
@@ -87,7 +91,7 @@ export async function stageConfigurationImport(
   await mkdirDurable(dirname(join(stateDir, MARKER)), 0o700);
   await rm(join(stateDir, MARKER), { force: true });
   try {
-    await writeFileDurable(join(stateDir, ARTIFACT), artifact, 0o600);
+    await writeFileDurable(join(stateDir, ARTIFACT), snapshot, 0o600);
     await writeFileDurable(join(stateDir, KEY), wrapPassphrase(ring, passphrase), 0o600);
     await writeFileDurable(join(stateDir, MARKER), JSON.stringify({ version: 1 }), 0o600);
   } catch (error) {
@@ -116,7 +120,7 @@ export async function readStagedConfigurationImport(
   ]);
   const unwrapped = unwrapPassphrase(ring, passphrase);
   return {
-    bundle: decodeConfigurationBundle(artifact, unwrapped),
+    bundle: await decodeConfigurationBundleAsync(artifact, unwrapped),
     artifact,
     passphrase: unwrapped,
   };

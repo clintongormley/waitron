@@ -2,9 +2,14 @@ import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as kdf from "./scrypt-kdf.js";
 import * as fileIo from "./artifact-file-io.js";
-import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
-import { decryptArtifactFile, encryptArtifactFile } from "./artifact-cipher-file.js";
+import { decryptArtifact, encryptArtifact, KDF_BY_VERSION } from "./artifact-cipher.js";
+import {
+  decryptArtifactFile,
+  encryptArtifactFile,
+  createArchiveKeySlot,
+} from "./artifact-cipher-file.js";
 import { createHash } from "node:crypto";
 const dirs: string[] = [];
 async function scratch() {
@@ -219,4 +224,62 @@ describe("file artifact cipher", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readdir(dir)).toEqual(["artifact", "out"]);
   });
+});
+
+it("reuses only an authenticated archive key across contiguous opens", async () => {
+  const dir = await scratch();
+  const artifact = encryptArtifact(Buffer.from("private archive"), " spaced key ");
+  const path = join(dir, "archive");
+  await writeFile(path, artifact);
+  const derive = vi.spyOn(kdf, "deriveKeyAsync");
+  for (const name of ["preview", "stage"]) {
+    await decryptArtifactFile(path, join(dir, name), " spaced key ");
+    expect(await readFile(join(dir, name), "utf8")).toBe("private archive");
+  }
+  expect(derive).toHaveBeenCalledTimes(1);
+  await expect(decryptArtifactFile(path, join(dir, "wrong"), "spaced key")).rejects.toMatchObject({
+    code: "recovery.passphrase_invalid",
+  });
+  artifact[artifact.length - 1] ^= 1;
+  await writeFile(path, artifact);
+  await expect(
+    decryptArtifactFile(path, join(dir, "tampered"), " spaced key "),
+  ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
+  artifact[artifact.length - 1] ^= 1;
+  await writeFile(path, artifact);
+  await decryptArtifactFile(path, join(dir, "retry"), " spaced key ");
+  expect(derive).toHaveBeenCalledTimes(4);
+});
+
+it("erases a retained key on replacement and expiry and matches every derivation input", async () => {
+  const slot = createArchiveKeySlot();
+  const derive = vi.spyOn(kdf, "deriveKeyAsync");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const salt = Buffer.alloc(16, 12);
+    const params = { ...KDF_BY_VERSION[1]! };
+    const first = await slot.derive("pass", salt, params);
+    const retained = await derive.mock.results[0]!.value;
+    expect(await slot.derive("pass", Buffer.from(salt), { ...params })).toEqual(first);
+    expect(derive).toHaveBeenCalledTimes(1);
+    for (const changed of [
+      { ...params, N: 2 ** 16 },
+      { ...params, r: 4 },
+      { ...params, p: 2 },
+      { ...params, keylen: 16 },
+      { ...params, maxmem: 300 * 1024 * 1024 },
+    ]) {
+      await slot.derive("pass", salt, changed);
+    }
+    expect(derive).toHaveBeenCalledTimes(6);
+    expect(retained).toEqual(Buffer.alloc(32));
+    const last = await derive.mock.results[5]!.value;
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(last).toEqual(Buffer.alloc(32));
+    await slot.derive("pass", salt, { ...params, maxmem: 300 * 1024 * 1024 });
+    expect(derive).toHaveBeenCalledTimes(7);
+  } finally {
+    slot.clear();
+    vi.useRealTimers();
+  }
 });
