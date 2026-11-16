@@ -120,21 +120,40 @@ describe("install", () => {
     expect(urls).toHaveLength(1);
     expect(existsSync(join(root, ".bin"))).toBe(false);
     expect(readdirSync(tmp)).toEqual([]);
-    expect(calls.map(([file]) => file)).toEqual([join(root, ".bin", "litestream")]);
+    expect(calls).toEqual([]);
   });
 
-  it("leaves a binary already reporting the pinned version alone, and downloads nothing", async () => {
+  it("verifies the archive even when the installed binary reports the pinned version", async () => {
     const root = tempDir();
     mkdirSync(join(root, ".bin"));
     writeFileSync(join(root, ".bin", "litestream"), fakeBinary(VERSION), { mode: 0o755 });
     const { fetch, urls } = fakeFetch(Buffer.alloc(0));
-    const result = await install({ root, ...PLATFORM, fetch, tmp: tempDir() });
-    expect(result).toEqual({
-      target: join(root, ".bin", "litestream"),
-      version: VERSION,
-      downloaded: false,
-    });
-    expect(urls).toEqual([]);
+    await expect(install({ root, ...PLATFORM, fetch, tmp: tempDir() })).rejects.toThrow(
+      `has SHA-256 ${sha256(Buffer.alloc(0))}, not the pinned`,
+    );
+    expect(urls).toEqual([assetFor("linux", "x64").url]);
+    expect(readFileSync(join(root, ".bin", "litestream"), "utf8")).toBe(fakeBinary(VERSION));
+  });
+
+  it("explains that setup still needs a download when an installed binary is present", async () => {
+    const root = tempDir();
+    mkdirSync(join(root, ".bin"));
+    writeFileSync(join(root, ".bin", "litestream"), fakeBinary(VERSION), { mode: 0o755 });
+    await expect(
+      install({
+        root,
+        ...PLATFORM,
+        fetch: async () => {
+          throw new Error("network is offline");
+        },
+        sleep: async () => {},
+        log: () => {},
+        tmp: tempDir(),
+      }),
+    ).rejects.toThrow(
+      "Each setup run downloads and verifies Litestream, even when it is installed",
+    );
+    expect(readFileSync(join(root, ".bin", "litestream"), "utf8")).toBe(fakeBinary(VERSION));
   });
 
   it("replaces a binary reporting another version", async () => {
