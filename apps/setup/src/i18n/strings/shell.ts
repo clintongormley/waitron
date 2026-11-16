@@ -29,7 +29,8 @@ export const shellEn = {
     "This server holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
   "shell.reset.first_setup_held":
     "This server holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
-  "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
+  "shell.first_setup.attempt_invalid":
+    "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything.",
   "shell.first_setup.start_again_incomplete": "Deletion interrupted. Reload the page to continue.",
   "shell.first_setup.disk_full":
     "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
@@ -256,7 +257,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.reset.first_setup_held":
     "Este servidor tiene una primera configuración sin terminar, así que no restablece nada mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
   "shell.first_setup.attempt_invalid":
-    "No se puede leer la configuración guardada. Contacta con soporte.",
+    "Waitron no puede leer o guardar parte de lo que conserva sobre esta configuración, así que este paso no puede seguir. Recarga la página, o pulsa Reconectar donde aparezca, para intentarlo de nuevo. Si el mensaje vuelve a aparecer, pega la dirección de esta página en una pestaña nueva: una pestaña nueva no usa la copia de la configuración que guarda esta pestaña. Donde se ofrezcan, Empezar de nuevo y Recuperar desde una copia preguntan antes de borrar nada.",
   "shell.first_setup.start_again_incomplete":
     "Borrado interrumpido. Recarga la página para continuar.",
   "shell.first_setup.disk_full":

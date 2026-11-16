@@ -1502,6 +1502,56 @@ it("the repair page's words for a setup this page cannot carry on and an unsure 
   );
 });
 
+const ATTEMPT_INVALID_EN =
+  "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything.";
+it("the words for a setup Waitron cannot read or save send nobody elsewhere, in English and Spanish", () => {
+  expect(shellEn["shell.first_setup.attempt_invalid"]).toBe(ATTEMPT_INVALID_EN);
+  expect(shellEs["shell.first_setup.attempt_invalid"]).toBe(
+    "Waitron no puede leer o guardar parte de lo que conserva sobre esta configuración, así que este paso no puede seguir. Recarga la página, o pulsa Reconectar donde aparezca, para intentarlo de nuevo. Si el mensaje vuelve a aparecer, pega la dirección de esta página en una pestaña nueva: una pestaña nueva no usa la copia de la configuración que guarda esta pestaña. Donde se ofrezcan, Empezar de nuevo y Recuperar desde una copia preguntan antes de borrar nada.",
+  );
+});
+
+const shownErrors = (app: SetupApp) => formErrors(app).filter(Boolean);
+it("a tab whose own copy of the setup is damaged shows the same words after a reload, and a new tab reaches Start again", async () => {
+  const damaged = "{";
+  sessionStorage.setItem(FIRST_SETUP_SESSION_KEY, damaged);
+  // A reload keeps the tab's own storage, so the second load reads the same damaged copy.
+  for (const load of ["first load", "reload"]) {
+    const { app, requests } = await mount();
+    await expect.poll(() => shownErrors(app), { message: load }).toEqual([ATTEMPT_INVALID_EN]);
+    expect(q(app, "start-again")).toBeNull();
+    expect(q(app, "recover-backup")).toBeNull();
+    expect(q<WtButton>(app, "reconnect-first").disabled).toBe(false);
+    // Reconnect meets the same damaged copy.
+    await click(app, "reconnect-first");
+    await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+    expect(shownErrors(app)).toEqual([ATTEMPT_INVALID_EN]);
+    expect(q(app, "start-again")).toBeNull();
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe(damaged);
+    expect(requests.some((r) => r.path.includes("/resolution"))).toBe(false);
+    cleanupWidgets();
+  }
+  // A new tab starts with no copy of its own: the box's setup is the same.
+  sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+  const { app } = await mount();
+  await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(false);
+  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
+  expect(shownErrors(app)).toEqual([]);
+});
+
+it("a Start again summary the page cannot read shows the words beside Start again and Recover from backup", async () => {
+  const { app } = await mount({
+    intercept(path) {
+      if (path.endsWith("/start-again/summary")) return Response.json({ reached: "unknown" });
+    },
+  });
+  await click(app, "start-again");
+  await expect.poll(() => shownErrors(app)).toEqual([ATTEMPT_INVALID_EN]);
+  expect(q(app, "confirm-start-again")).toBeNull();
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
+});
+
 const stopRequests = <R extends { path: string }>(requests: R[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/stop"));
 function saveLostClaim() {
