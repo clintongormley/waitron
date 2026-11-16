@@ -60,6 +60,22 @@ async function securityNotices(personId: string) {
 }
 
 describe("your profile", () => {
+  it("restarts authenticator setup with only the second pending setup", async () => {
+    const f = await fixture();
+    const first = await withTransaction(suite.db, (tx) =>
+      beginOwnTotpEnrollment(tx, { ...f, keyRing: TOTP_KEY_RING }),
+    );
+    const second = await withTransaction(suite.db, (tx) =>
+      beginOwnTotpEnrollment(tx, { ...f, keyRing: TOTP_KEY_RING }),
+    );
+    expect(second.enrollmentId).not.toBe(first.enrollmentId);
+    expect(
+      suite.db.all(
+        sql`select id from sign_in_challenges where person_id=${f.personId} and kind='totp_enrolment'`,
+      ),
+    ).toEqual([{ id: second.enrollmentId }]);
+  });
+
   it("rolls a password change and its notice back together", async () => {
     const f = await fixture();
     const before = suite.db.get(sql`select password_hash from persons where id=${f.personId}`);

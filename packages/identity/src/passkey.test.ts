@@ -401,6 +401,7 @@ describe("passkey registration", () => {
     freezeDate();
     const first = await openManagementSession(suite.db, "admin");
     const second = await openManagementSession(suite.db, "admin");
+    expect(first.personId).not.toBe(second.personId);
     const begun = await begin(first.token);
     vi.setSystemTime(new Date("2026-10-31T12:06:00.000Z"));
     await begin(second.token);

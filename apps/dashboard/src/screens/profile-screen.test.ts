@@ -497,15 +497,11 @@ describe("your profile", () => {
       }
     });
 
-    it("names the password manager that holds a passkey, and none it does not know", async () => {
+    it("names the password manager once when known, and none it does not know", async () => {
       const [first, second] = await rows([used, neverUsed]);
       expect(first).toContain("Google Password Manager");
       expect(second).not.toContain("Google Password Manager");
-    });
-
-    it("names the password manager once per passkey", async () => {
-      const [row] = await rows([used]);
-      expect(row!.split("Google Password Manager")).toHaveLength(2);
+      expect(first!.split("Google Password Manager")).toHaveLength(2);
     });
   });
 

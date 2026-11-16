@@ -972,14 +972,10 @@ export class ProfileScreen extends LitElement {
                     "{time}",
                     inLocale(key.lastUsedAt, DAY_AND_TIME),
                   );
-            const provider =
-              key.provider === null || key.provider === name ? nothing : `${key.provider} · `;
             return html`<div class="action-row passkey-item">
               <div class="text">
                 <span class="passkey-text">${name} · ${created}</span>
-                <span class="field-meta"
-                  >${provider}<span class="passkey-use">${lastUsed}</span></span
-                >
+                <span class="field-meta"><span class="passkey-use">${lastUsed}</span></span>
               </div>
               <wt-button
                 data-test="remove-passkey"

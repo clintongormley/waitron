@@ -1,3 +1,4 @@
+import { hashSessionToken } from "./session-token.js";
 import { readPersonAuthority } from "./authority.js";
 import { ensureBuiltInRoles, setPersonAccessRoles } from "./roles.js";
 import { builtInRoleForTest } from "../test/person-rows.js";
@@ -982,6 +983,15 @@ async function seedSignInDetails(personId: string, email: string): Promise<void>
     createdAt: "2026-11-16T12:00:00.000Z",
     expiresAt: "2099-01-01T00:00:00.000Z",
   });
+  await suite.db.insert(signInChallenges).values({
+    kind: "google_link",
+    personId,
+    stateHash: hashSessionToken(personId),
+    nonce: "nonce",
+    verifier: "verifier",
+    createdAt: "2026-11-16T12:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
 }
 
 async function signInDetailsOf(personId: string): Promise<unknown> {
@@ -993,7 +1003,8 @@ async function signInDetailsOf(personId: string): Promise<unknown> {
       (select count(*) from webauthn_credentials where person_id = ${personId}) as passkeys,
       (select count(*) from recovery_codes where person_id = ${personId}) as recovery_codes,
       (select count(*) from sign_in_challenges where kind = 'totp_enrolment' and person_id = ${personId}) as totp_setups,
-      (select count(*) from sign_in_challenges where kind in ('passkey_registration','passkey_login','passkey_check') and person_id = ${personId}) as challenges`);
+      (select count(*) from sign_in_challenges where kind in ('passkey_registration','passkey_login','passkey_check') and person_id = ${personId}) as challenges,
+      (select count(*) from sign_in_challenges where kind='google_link' and person_id=${personId}) as pending_google_links`);
   return { ...columns.rows[0], ...counts.rows[0] };
 }
 
@@ -1009,6 +1020,7 @@ function withNoSignInDetails(status: string, emailVerifiedAt: string | null): un
     recovery_codes: 0,
     totp_setups: 0,
     challenges: 0,
+    pending_google_links: 1,
   };
 }
 
@@ -1024,6 +1036,7 @@ function withEverySignInDetail(personId: string, status: string): unknown {
     recovery_codes: 1,
     totp_setups: 1,
     challenges: 1,
+    pending_google_links: 1,
   };
 }
 

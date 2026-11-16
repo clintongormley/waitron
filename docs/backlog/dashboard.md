@@ -116,7 +116,9 @@ Not observed in a real password manager — the tests replace the browser's meth
   throws where a method is missing. Left open from the review, both predating C101: a suspended or
   pending person's passkey is refused before the signature check and an active person's bad
   signature after it, so the two do different work — whether that can be timed from outside was not
-  measured; and an expired sign-in challenge answers its own `passkey.challenge_expired`.
+  measured; and an expired sign-in challenge still present in the database answers its own
+  `passkey.challenge_expired`. Since A1308 pp2, another ceremony insert sweeps expired rows;
+  a swept challenge answers `passkey.verification_failed`.
 
 ## Shared database-backed table paging, search and sorting
 
