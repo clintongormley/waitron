@@ -2093,7 +2093,7 @@ in the till configuration; that last result is the reviewer's report. Dashboard 
 forwarding.
 
 On 16 November 2026 the owner asked “Turn it off everywhere”. All thirteen browser-package
-Vitest configs now disable forwarding; twelve changed here, and dashboard already did.
+Vitest configs now disable forwarding; twelve were changed that day, and dashboard already did.
 When you add a browser package, set `server: { forwardConsole: false }` at the Vite level.
 For an inline browser project without `extends: true`, put it beside that project’s `test`
 block, so its browser server receives the setting. A one-off check of actual browser servers
