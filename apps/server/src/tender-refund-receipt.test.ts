@@ -20,6 +20,15 @@ const acknowledgment: TenderRefundAcknowledgment = {
   method: "card",
   last4: "5838",
 };
+it("names the returned tip on the Spanish refund slip", () => {
+  const text = decodeTicket(
+    formatTenderRefundAcknowledgment(acknowledgment, "es-ES", {
+      paperWidth: "80mm",
+      resolution: "180dpi",
+    }),
+  );
+  expect(text).toMatch(/Propina devuelta\s+0,56/);
+});
 it.each([
   ["es-ES", "es-ES", "es-ES"],
   ["ca-ES", "ca-ES", "ca-ES"],

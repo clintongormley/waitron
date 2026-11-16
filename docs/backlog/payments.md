@@ -271,17 +271,6 @@ browser and provider transport; a mocked fetch does not measure this. Left open 
 (W18c #1145 and W48 #1162).
 
 
-## A875. Check two writes the bill payments design says a pending card refund refuses
-
-The
-design's §8 test 17 lists "a move" among the writes refused `bill.refund_in_progress`, and §5.2
-lists "transfer". Read, not run (A847's review, #1860): neither moving guests nor moving a bill
-appears to check for a pending refund, and the test covering test 17 makes no move. Move dishes… refuses `bill.refund_in_progress` on either bill
-(`apps/server/src/move-dishes.test.ts`). The owner's R7-1 ruling (2026-11-12, under Decisions below) settles the
-question: moving a bill or its guests changes nothing the bill charges, so it goes through. Next: one route case each during a
-pending refund, then reword §8 test 17's "a move" and §5.2's "transfer" to name only moves of
-dishes between bills.
-
 ## A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets
 
 NOT APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
@@ -302,13 +291,6 @@ A bill read that lists a held payment frees the bill, except when that payment
 settled it: the locked confirmation stays, and its Comprobar de nuevo replays the payment and
 shows the ticket (`apps/till/src/till-app-bill-payments.test.ts`, "keeps the locked
 confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket").
-
-## Tip display gaps
-
-(found by A793's design, read): the Spanish refund slip says "Propina" where the English says
-"Tip returned"
-(`packages/country-es/src/receipt-labels.ts:64` and `:127`, printed by
-`apps/server/src/tender-refund-receipt.ts:110`).
 
 ## Loose ends left by A633
 

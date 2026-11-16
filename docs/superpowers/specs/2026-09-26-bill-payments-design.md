@@ -492,6 +492,10 @@ checks are the ones below.
   _(2026-10-18: joining and unjoining tables are not refused while a card refund is pending either;
   owner ruling 2026-10-17, campaign item A847. Test:
   `apps/server/src/table-actions.refund-pending.test.ts`.)_
+  _(2026-11-16, A875: "transfer" here means moving dishes between bills. Whole bills and guests
+  may move while a card refund is pending, under the lane's application of R7-1. The route cases in
+  `apps/server/src/table-actions.refund-pending.test.ts` check moves to a free table in the same
+  zone, with the bill's charges unchanged and its refund still pending.)_
 
 **Both orders of every race are tested as sequential calls** (the engine takes one write
 transaction at a time, plan Global Constraints): cash then a card's P1 on the same last €40.00 (the
@@ -940,6 +944,8 @@ its code.
     locally: the provider's refund method is NOT called again (the stub counts one refund call in
     total), `payment_refunds` gets one row carrying the provider's refund id, and the lock is
     released.
+    _(2026-11-16, A875: "a move" here means moving dishes between bills. Moving a whole bill or its
+    guests is allowed as clarified in §5.2.)_
 18. **A retry with a new id** while the refund is pending → `bill.refund_in_progress`, and the
     provider is not called.
 19. **Each outcome, through each resolver.** For each lookup answer — Stripe `succeeded`, `failed`,
