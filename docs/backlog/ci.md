@@ -134,6 +134,8 @@ diagnosis code; the shard passed on re-run and the file passed locally (7 of 7).
 other most recent failed `ci.yml` runs' failed-job logs name this case. The log is kept at
 `~/waitron-campaign-l/ci-logs/pr3342-run43717151594-attempt1-test-server-5.log`.
 
+The same certificate-child family recurred on [PR #3487’s run 43838316063, shard 8](https://github.com/clintongormley/waitron/actions/runs/43838316063/job/133200707780) on 16 November. This time “includes startup in the work deadline and never releases late evidence” expected `interrupted/deadline` and received `fiscal.certificate_diagnosis_unavailable`; teardown then could not parse the empty/truncated JSON marker, so no child timeline was printed. The branch changes no diagnosis source or fixture. Full log: `~/waitron-campaign-i/receipts/setup-port-handoff-20261116/ci-failed-server-8.log`. CERT-CHILD-DEADLINE owns finding and fixing its cause; a clean rerun does not close it.
+
 
 15 November 2026: PR #3309's unchanged restore integrity test, “keeps the main thread's timers
 turning while it checks a copy that takes the main thread over one timer period”, failed at
