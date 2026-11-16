@@ -1,4 +1,8 @@
-import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  seedActivityActor,
+  seedDeviceProfiles,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -21,6 +25,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
+import { closeStationForToday } from "@waitron/venue-service";
+import { withStationDishes } from "./station-closing.js";
 import {
   stationPrintersDown,
   passScreensDark,
@@ -247,17 +253,18 @@ describe("station output status", () => {
   });
 
   describe("paper delivery", () => {
-    async function paperFixture() {
+    async function paperFixture(useBar = false) {
       const f = await setup();
-      const printerId = await f.printer(f.grill, "Kitchen printer");
+      const station = useBar ? f.bar : f.grill;
+      const printerId = await f.printer(station, "Kitchen printer");
       const firedAt = "2026-10-02T17:50:00.000Z";
-      const orderId = await waitingItem(f.venue, f.grill, firedAt);
+      const orderId = await waitingItem(f.venue, station, firedAt);
       const [line] = await suite.db
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
       const screenId = await stationScreenDevice({
-        stationId: f.grill,
+        stationId: station,
         deviceProfileId: await profile(suite.db, "kds"),
         label: "Dark kitchen",
         tokenHash: "hash",
@@ -265,7 +272,7 @@ describe("station output status", () => {
       });
       const paper = async (
         values: Partial<typeof printJobs.$inferInsert> = {},
-        stationId = f.grill,
+        stationId = station,
       ) => {
         const id = await job(printerId, { status: "done", createdAt: firedAt, ...values });
         await suite.db.insert(kitchenPrintJobs).values({
@@ -350,6 +357,30 @@ describe("station output status", () => {
         .update(printJobs)
         .set({ status: "done" })
         .where(eq(printJobs.id, failed[0]!.id));
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("keeps completed paper valid when a station closes with its dishes left in place", async () => {
+      const f = await paperFixture(true);
+      await f.paper();
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-02T17:55:00.000Z") });
+      try {
+        await withTransaction(suite.db, (tx) =>
+          withStationDishes(
+            tx,
+            f.venue.cfg,
+            f.bar,
+            undefined,
+            "leave",
+            async (time) => {
+              await closeStationForToday(tx, f.bar, f.grill, time, await seedActivityActor(tx));
+            },
+            { deviceId: f.screenId, personId: null },
+          ),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
       expect(await darkScreenAlertKeys(f)).toEqual([]);
     });
 

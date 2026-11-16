@@ -10,6 +10,7 @@ import {
   printers,
   stationPrinterPairs,
   ticketItems,
+  ticketItemMoves,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -133,7 +134,11 @@ export function waitingDishesQuery(
               join ${printJobs} on ${printJobs.id} = ${kitchenPrintJobLines.printJobId}
               where ${kitchenPrintJobLines.workingOrderLineId} = ${ticketItems.workingOrderLineId}
               and ${kitchenPrintJobs.stationId} = ${ticketItems.stationId}
-              and ${printJobs.createdAt} >= max(${ticketItems.firedAt}, coalesce(${ticketItems.stationChosenAt}, ${ticketItems.firedAt}))
+              and ${printJobs.createdAt} >= max(${ticketItems.firedAt}, coalesce(
+                (select max(${ticketItemMoves.movedAt}) from ${ticketItemMoves}
+                  where ${ticketItemMoves.workingOrderLineId} = ${ticketItems.workingOrderLineId}
+                  and ${ticketItemMoves.toStationId} = ${ticketItems.stationId}),
+                ${ticketItems.firedAt}))
               and ${printedOrResent(printJobs)})`
           : undefined,
       ),
