@@ -1005,6 +1005,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     it("answers an unknown email's attempts exactly as a known one's, its two spellings sharing one limit", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
+      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
       try {
         const { designated } = await setupVenue();
         const answers = async (emails: string[]) => {
@@ -1026,6 +1027,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         ]);
         expect(unknown).toEqual(known);
       } finally {
+        clock.mockRestore();
         vi.useRealTimers();
       }
     });

@@ -4332,6 +4332,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   it("accepts the correct login once the advertised wait has passed, after 1000 invented emails", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-flood-"));
     vi.useFakeTimers({ toFake: ["Date"] });
+    let steady = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => steady);
     try {
       const { app, stageReset } = await halfAdopted(dir);
       for (let n = 0; n < 1000; n += 1) {
@@ -4347,12 +4349,14 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         }
       ).error.params;
       vi.setSystemTime(Date.now() + retryAfterSeconds * 1000);
+      steady += retryAfterSeconds * 1000;
 
       const accepted = await postReset(app, resetBody());
       expect(accepted.status).toBe(202);
       expect(stageReset).toHaveBeenCalledOnce();
       await tick();
     } finally {
+      clock.mockRestore();
       vi.useRealTimers();
       rmSync(dir, { recursive: true, force: true });
     }

@@ -3,6 +3,100 @@
 The open entries are listed in [the backlog](../backlog.md), under "The box: backups, upgrades and recovery". This file holds
 their full text.
 
+## One steady-clock helper instead of hand-written clock-step-back guards
+
+**Ask (owner, 2026-11-01, answering #2331):** Many timers, throttles and watches across the packages
+and apps each guard by hand against the wall clock stepping back. Move them onto one shared helper
+that measures elapsed time on a steady clock. Start by listing every site
+(`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
+applies today; behaviour is kept site by site. Raised by #2331's review.
+
+**Still open:** apply the shared elapsed-time source to the remaining sites below, after deciding
+which rules measure an elapsed wait and which compare persisted dates, ordering or calendar time.
+The sign-in/account limiter families are outside this open inventory; the persisted PIN helper
+exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
+
+### Inventory scope
+
+Source inspection on 2026-11-16 at `99a2f741c6694f5b8914bcdf47fd863e341c12d1`, not runtime
+verification. Reproduce the source search with
+`git grep -n -i -E 'went backwards|step(s|ped)? back|backward' -- apps packages scripts ':!*.test.*' ':!*.spec.*'`.
+Multiple guards in one file share a row. The original first slice accounted for
+`pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`;
+their open rows have been removed. The tables account for the remaining matched files and exclusions.
+This search does not discover every timer: split-line wording and guards with other words can be missed.
+
+Already-steady readers such as `apps/server/src/live-operation-rate-limit.ts` and
+`packages/provisioning/src/first-setup-owner.ts` call `performance.now()` directly and are outside
+this search. This slice leaves them unchanged.
+
+The unrestricted root search, with the same test exclusions, also matches documentation,
+`CLAUDE.md`, `.github/workflows/ci.yml`, `deploy/README.md` and `deploy/waitron.sh`. These describe
+history, policy, version ordering or backward compatibility, not additional elapsed-time guards.
+
+### Other code sites: retain for later scope decisions
+
+These files from the source snapshot remain open. A persisted date, ordering invariant or calendar
+rule is not made process-relative by replacing its clock read. Later slices must choose their
+scope and preserve the rules shown here before proposing any conversion.
+
+| Source and function/site | Rule read in the current code |
+| --- | --- |
+| `apps/print-agent/src/linux-devices.ts:91,132–156` (`sharedListing`, `recheckDue`, `pairedFor`) | Count forgets to order invalidation against running listings. Recheck after at least 30 seconds or when the last listing is more than 30 seconds ahead. Reuse paired devices only at age 0 through under 10 seconds, with unchanged forget count and a matching device; any future start prevents reuse. |
+| `apps/print-agent/src/server-ca.ts:82–87` (`refresh`) | Fetch at most once per hour with a pinned CA, every 10 seconds before the first CA; a previous fetch more than the applicable interval ahead makes another fetch due. |
+| `apps/server/src/alert-sources.ts:534–545` (`undeliveredInvoice`) | A queued A4 delivery whose persisted next attempt exceeds the ten-minute retry bound is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
+| `apps/server/src/backup-schedule.ts:68–75` (`longestFireAheadMs`) | Bound an interval fire by its interval; a calendar fire by the longest allowed weekday gap plus 25 hours. Supplies the sweep's backward-step bound, not an elapsed-clock read itself. |
+| `apps/server/src/backup-status.ts:80–101` (`freshness`) | Judge the newest own archive no more than `staleAfterMs` ahead. If none qualifies, report stale; otherwise stale only when its age exceeds that threshold. Archive mtimes are storage evidence, not process timestamps. |
+| `apps/server/src/backup-sweep.ts:484–513` (`runBackupSweep`) | Hold a computed fire fixed while sleeping; recompute only when now precedes computation AND the fire exceeds `longestFireAheadMs`. This avoids resetting a valid calendar fire on every wake. |
+| `apps/server/src/bill-refunds.ts:534–546` (refund recovery) | Resend only after lookup says none, outside the background loop, with provider support and age at least zero and strictly below its resend window. A persisted first send ahead of now prevents resending. |
+| `apps/server/src/cloud-snapshot-worker.ts:131–140` (`isDue`, `pendingExpired`) | A saved next deadline is due at/before now or more than 49 hours ahead. Abandon an unpublished capture at age at least one day or more than one day ahead. |
+| `apps/server/src/content-suggestion-runner.ts:163–170` (`step`) | Close a stored job as expired at age at least 24 hours or more than 24 hours ahead; otherwise it can continue to occupy the active run. |
+| `apps/server/src/discovery-listing.ts:1–12` (`withinTtl`, `isListed`) | Keep a report only within its TTL on either side, endpoints included. TTL is 45 seconds during an open discovery window, otherwise 15 seconds. Input is explicitly epoch milliseconds. |
+| `apps/server/src/invoice-delivery.ts:181–207` (`latestNextAttempt`, `deliveryDue`, `claimLapsed`) | Persisted retries at/before now or more than ten minutes ahead are due. A claim at least 60 seconds old or more than 60 seconds ahead has lapsed. |
+| `apps/server/src/join-requests.ts:33–58` (`lapsedAt`, `sweepLapsed`) | Delete pending requests strictly older than 15 minutes or strictly more than 15 minutes ahead; endpoints survive. These are persisted request dates. |
+| `apps/server/src/order-drafts.ts:1397–1426` (`takenOverFrom`) | Find latest takeover by append-only event `rowid`, not `created_at`; a backward clock must not reorder ownership history. Ordering, not a timer. |
+| `apps/server/src/page-test-pages.ts:10–14,60–74` (`settle`) | Product office-printer test pages, not test harness code. Waiting pages fail after five minutes, claims become unknown after a 60-second lease, completed outcomes disappear after ten minutes. Each also expires when its stamp is more than its own limit ahead. |
+| `apps/server/src/pairing-mode.ts:10,56–71` (`prune`) | Drop a hold at/before its end or when its end is more than its duration ahead (default three minutes). Empty holds clear open-since state; changes rearm the timer and notify. Also exposes absolute ISO times to consumers. |
+| `apps/server/src/print-api.ts:535,552–558` (`openDiscoveryUntil`) | Treat a discovery end more than its three-minute window ahead as closed (zero); feeds freshness and Pair/Forget availability. The same file constructs an enrol limiter but this discovery rule is outside the slice. |
+| `apps/server/src/printer-bluetooth-commands.ts:41–47,80–108` (`ended`, pruning) | Expire pending commands at their 120-second deadline or beyond that far ahead, results at 60 seconds similarly; a global sweep runs when its 60-second deadline ends or lies too far ahead. Remember expired forget commands separately. |
+| `apps/server/src/printer-probes.ts:12–29` (`current`) | Drop a probe at/before its deadline or when it ends more than 30 seconds ahead; return remaining milliseconds for survivors. |
+| `packages/fiscal-verifactu/src/certificate-record.ts:39–66` (`recordInstall`, `installsOf`) | Persist installation time as the greater of writer time and previous installation plus one millisecond. Keeps latest-install order across steps and node changes; not a wait. |
+| `packages/fiscal-verifactu/src/clock-corrected-incident.ts:27–43` (`recordCorrected`) | Before recording the next clock alert, mark each earlier open alert handled no earlier than its own detection, using the maximum of its date and the new detection. Persisted incident chronology. |
+| `packages/fiscal-verifactu/src/drain.ts:87–99,460–468` (`retryDue`, `claimStale`, `readGate`) | Retry at/before now or beyond the one-hour maximum backoff. Abandon a claim strictly over five minutes old or strictly more than five minutes ahead. A flow-control gate beyond its declared AEAT wait is reset and stored as one full wait from now, not sent immediately. |
+| `packages/fiscal/src/clock.ts:84–103,162–174` (trusted clock) | Reload compares wall time with saved anchor: negative delta reports a jump and carries zero elapsed time; otherwise carries wall delta. Subsequent negative monotonic delta clamps to zero. A newly trusted time may move backwards. Already uses injected steady time; retain date/confidence semantics. |
+| `packages/identity/src/account-action.ts:34–44,160–175,200–208,289–296,363–370` (`latestLiveExpiry`, action readers/sweep) | Reject/delete an unused action whose expiry exceeds now plus its purpose TTL (invitation 24 hours, reset/email change 30 minutes), as well as the normal expiry checks. Tokens/codes live in the database; this is distinct from request spacing. |
+| `packages/identity/src/google-oidc.ts:13–17,51–66,100–110` (`latestLiveExpiry`, state issue/consume) | Sweep states expiring before now or more than ten minutes ahead; consumption requires a future expiry no later than that bound. Persisted one-use state. |
+| `packages/identity/src/management-session.ts:11,73–75` (session validation) | Refuse `management_session.expired` when absolute distance from persisted last-seen time exceeds 30 minutes; equality is allowed. |
+| `packages/identity/src/passkey.ts:45–46,112–115` (challenge consumption) | Refuse `passkey.challenge_expired` when age exceeds five minutes or stamp is more than one minute ahead. Persisted challenge, not this slice; #3528 is separate work. |
+| `packages/identity/src/profile.ts:159,194–206` (TOTP enrollment completion) | Require a persisted enrollment expiry after now but no later than ten minutes ahead, plus the person/id match; missing/refused enrollment leads to `totp.invalid`. |
+| `packages/payments/src/reconciliation-schedule/derive.ts:104–166` (`derive`, `claimLapsed`, `retryDue`) | Reclaim a running ledger row strictly outside ±lease; retry at/before now or beyond `longestWaitMs`. Both feed the due-work list; stored dates remain shared inputs. |
+| `packages/payments/src/reconciliation-schedule/duty.ts:36–42` (`PeriodDuty` bounds) | Declares parked retry and maximum re-sweep intervals used to judge a stored successor due time. Contract prose tied to `run.ts`/`derive.ts`, not another clock reader. |
+| `packages/payments/src/reconciliation-schedule/run.ts:174–184,235–240` (`runOne`, `longestWait`) | Clamp a successful duty's requested re-sweep to the maximum of last backoff, parked retry and declared re-sweep. Without that clamp, the reader would treat it as a backward-step retry at every tick. |
+| `packages/print-agent/src/agent.ts:40,523–531` (`resendPageReports`) | Abandon an unsent page report only when absolute distance from its last alive stamp exceeds 120 seconds; otherwise resend. Host supplies the clock. |
+| `packages/printing/src/runtime.ts:50–76,99–102,111–122` (`dueNow`, drawer expiry, invoice selection) | A document claim strictly older than its 60-second lease or strictly more than 60 seconds ahead is reclaimable. Stale drawer jobs are ended rather than replayed. Receipt invoice selection also accepts the caller's upper retry bound for queued persisted deliveries. |
+| `packages/store/src/venue-holder.ts:37,79–87` (`isVenueHolderFresh`) | Heartbeat is fresh only strictly within ±30 seconds; either endpoint is stale. Heartbeat is a cross-process file rewritten by the holder, not process-local state. |
+| `packages/venue-service/src/hours-occurrences.ts:28–44` (`localTimeOccurrences`) | Return every UTC occurrence of a local minute: zero in a spring-forward gap, two in a backward zone-offset change. Calendar calculation, not a duration guard. |
+| `packages/workforce/src/chain.ts:109–118` (record writer) | Clamp recorded time to the stored chain high-water mark, then truncate to whole seconds for both storage and hash. Historical chain ordering, not elapsed time. |
+| `scripts/box/installer-network.mjs:99–106` (`nextNetworkStep`) | Refuse `installer_network.event_invalid` with `time-backwards` when event `atMs` precedes current state `atMs`. Pure state-transition input ordering; keep its event contract. |
+| `scripts/box/installer-policy.mjs:73,458–464` (`nextInstallerStep`) | Refuse `installer.event_invalid` with `time-backwards` for the same decreasing event-time input. Not an in-memory sign-in limiter. |
+
+### Related descriptions and excluded matches
+
+| File(s) from the source search | Classification and rule/meaning |
+| --- | --- |
+| `apps/dashboard/src/api/client.ts:2225–2227` | Backup-evidence interface description: latest load failure is ordered by recording order, not wall dates. Server implementation is `apps/server/src/backup-settings-evidence.ts`; no duration guard here. |
+| `apps/dashboard/src/i18n/alert-messages.ts:289–291`; `packages/fiscal/src/errors.ts:10–12` | Wording/type declaration for the trusted clock's backward-jump report; associated with `packages/fiscal/src/clock.ts`, not two extra guards. |
+| `apps/server/src/guide/en/box-status.md:256–260` | Staff guidance for management sessions ending on steps larger than the 30-minute idle bound; describes the persisted session rule above. |
+| `apps/dashboard/src/i18n/strings.ts:458,4849`; `screens/dashboard-sales-screen.ts:59,291–296,330,497`; `screens/orders-screen.ts:48,191–203` | Three false positives: reversed From/To ranges and wording. No system-clock step. Paths beginning `screens/` here are under `apps/dashboard/src/`. |
+| `apps/dashboard/src/widgets/content-translations-window.ts:120–157` | False positive: native text-selection direction preserved across updates. |
+| `apps/till/src/till-app.ts:3087`; `apps/till/src/widgets/till-shell.ts:107` | Two false positives: menu navigation/layout stepping back, not time. |
+| `packages/adjustments/src/dashboard/adjustment-report-screen.ts:207,352–363,1081–1089`; `packages/adjustments/src/dashboard/strings.ts:107,273` | Two false positives: reversed report dates and their message/layout. |
+| `packages/ui/src/components/wt-data-table.ts:966–976,2902–2905` | False positive: Shift+Tab focus direction. |
+| `scripts/published-image-env.sh:31–45` | False positive: do not publish a version/tag backwards after misreading registry failure as absent image. |
+| `apps/server/src/testing/hour-test-clock.ts:11–42` | Test support: reject negative/non-finite advancement and move wall and monotonic fakes together. Not product timing despite surviving the filename exclusions. |
+| `packages/venue-service/src/testing/clock-change.ts:3–12` | Test support: locate real zone-offset transitions; backward repeats local minutes. |
+| `scripts/host-clock-measure.sh:141–154,440–460` | Host measurement support: exercise backward setting and inspect timesyncd's saved clock file. No product guard; do not run during this slice. |
+
 ## The box the customer buys probably doubles as a till, so the image ships a screen and a browser
 
 (owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
@@ -1272,6 +1366,16 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+### Steady clocks and persisted sign-in failure times (2026-11-16)
+
+The first sign-in/account slice uses a shared `steadyNow` for process-local elapsed waits.
+`pinThrottleIdle`, `pinThrottleUnlockAt` and `pinThrottleRetryAfterSeconds` retain their wall-clock
+meaning: `handover-emergency-api.ts` uses them with failure timestamps stored in `node.db` across
+restarts. Do not convert those persisted values to process-relative time.
+`first-setup-owner.ts` keeps its existing single steady-clock injection for node-key reissue
+throttling and its five-minute grants. [Plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
+
 
 - **Only the bucket copy's Test and Save on the Backups screen delete their test file the way the
   daily clean-up does, several files in one request** (campaign watcher, 2026-11-16 12:51, lane B

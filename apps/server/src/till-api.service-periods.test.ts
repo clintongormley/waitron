@@ -7,7 +7,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   invoiceSeries,
   parties,
@@ -1742,6 +1742,8 @@ describe("a dish whose period ended earlier today", () => {
     });
 
     it("throttles wrong manager PINs for a late send on the same device", async () => {
+      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+      onTestFinished(() => clock.mockRestore());
       const { v, manager } = await managerVenue("14:05");
       for (let i = 0; i < 4; i++) {
         const held = await parkWith(v, v.toast.midday, {
@@ -1792,6 +1794,8 @@ describe("a dish whose period ended earlier today", () => {
     });
 
     it("counts a wrong manager PIN sent when nothing is late, while still parking the order", async () => {
+      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+      onTestFinished(() => clock.mockRestore());
       const { v, manager } = await managerVenue("19:00");
       for (let i = 0; i < 4; i++) {
         const held = await parkWith(v, v.toast.midday, {

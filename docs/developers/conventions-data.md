@@ -5104,6 +5104,12 @@ find `nowIso()` cutoffs, comparisons made in SQL, or `Date.now` handed on as a v
 those shapes may still be missing. Short in-memory timers (backoffs, request durations) are left
 out.
 
+**2026-11-16 update:** the historical rows below for PIN/password throttles, device-join limits,
+account-action limits and reset/invitation cooldown describe their earlier wall-clock guards.
+Those in-memory families now measure elapsed time on a steady clock: wall-clock steps no longer
+change their waits or windows. The persisted PIN helpers keep their wall-clock meaning.
+See the [steady-clock plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
+
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
 | Dashboard sessions (`packages/identity/src/management-session.ts:79`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |

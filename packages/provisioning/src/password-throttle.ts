@@ -1,11 +1,11 @@
 import "./errors.js";
 import { createHmac, randomBytes } from "node:crypto";
 import {
-  pinThrottleIdle,
+  PIN_THROTTLE_IDLE_MS,
   pinThrottleRetryAfterSeconds,
   pinThrottleUnlockAt,
 } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 
 type Outcome = "success" | "invalid" | "error";
 export interface PasswordThrottle {
@@ -58,14 +58,12 @@ export function passwordThrottleBucket(secret: Uint8Array, email: string): numbe
   return placeOf(secret, email).bucket;
 }
 
-/** The PIN delay policy per key, with one attempt in flight per key. */
+/** The PIN delay policy per key, with one attempt in flight per key; `now` never decreases. */
 export function createPasswordThrottle(
-  now: () => number = Date.now,
+  now: () => number = steadyNow,
   secret: Uint8Array = randomBytes(32),
 ): PasswordThrottle & PasswordThrottleProbe & { tracked(): number } {
-  // Finished attempts, oldest `lastAt` first: a finish re-inserts its entry at the end. Only a
-  // backward clock step breaks that order, so the sweep passes over an entry stamped ahead of the
-  // clock rather than stopping at it, and each read checks its own entry.
+  // Finished attempts, oldest `lastAt` first: a finish re-inserts its entry at the end.
   const entries = new Map<string, Entry>();
   // Never forgotten or folded, so trimming `entries` never has to walk past one.
   const inFlight = new Map<string, Entry>();
@@ -73,11 +71,11 @@ export function createPasswordThrottle(
   let buckets: Buckets | undefined;
 
   function bucketLive(table: Counters, bucket: number, t: number): boolean {
-    return !pinThrottleIdle(table.lastAt[bucket]!, t);
+    return t - table.lastAt[bucket]! < PIN_THROTTLE_IDLE_MS;
   }
 
   function fold(entry: Entry, t: number): void {
-    if (pinThrottleIdle(entry.lastAt, t)) return;
+    if (t - entry.lastAt >= PIN_THROTTLE_IDLE_MS) return;
     buckets ??= {
       fails: new Uint8Array(BUCKETS),
       unlockAt: new Float64Array(BUCKETS),
@@ -122,8 +120,8 @@ export function createPasswordThrottle(
 
   function sweepIdle(t: number): void {
     for (const [key, entry] of entries) {
-      if (pinThrottleIdle(entry.lastAt, t)) entries.delete(key);
-      else if (entry.lastAt <= t) break;
+      if (t - entry.lastAt >= PIN_THROTTLE_IDLE_MS) entries.delete(key);
+      else break;
     }
   }
 
@@ -137,7 +135,7 @@ export function createPasswordThrottle(
   }
 
   function liveEntry(entry: Entry | undefined, t: number): Entry | undefined {
-    return entry !== undefined && !pinThrottleIdle(entry.lastAt, t) ? entry : undefined;
+    return entry !== undefined && t - entry.lastAt < PIN_THROTTLE_IDLE_MS ? entry : undefined;
   }
 
   function fresh(bucket: number, fingerprint: number, t: number): Entry {

@@ -403,6 +403,8 @@ describe("the spare's handover duty in a full start", () => {
         return { WAITRON_TLS_CERT_FILE: cert, WAITRON_TLS_KEY_FILE: key };
       },
     );
+    const steadyClock = vi.spyOn(performance, "now").mockReturnValue(performance.now());
+    onTestFinished(() => steadyClock.mockRestore());
     const body = JSON.stringify({
       signIn: { email: "unknown-owner@example.test", password: "wrong password" },
       moduleOperation: {
