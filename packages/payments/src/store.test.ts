@@ -1,3 +1,5 @@
+import { liftPaymentGuard } from "./testing/lift-payment-guard.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -58,6 +60,12 @@ import type { Seeded } from "../test/seed.js";
 import { seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 
 beforeEach(async () => {
   // Child before parent: `payment_refunds` points at `payments`.
@@ -1067,7 +1075,7 @@ describe("listReconcilable", () => {
     const [hold] = await suite.db.transaction((tx) => listOpenHolds(tx));
     await suite.db.transaction((tx) =>
       recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "kept",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
@@ -1101,7 +1109,7 @@ describe("listReconcilable", () => {
     const [hold] = await suite.db.transaction((tx) => listOpenHolds(tx));
     await suite.db.transaction((tx) =>
       recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "kept",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
@@ -1719,12 +1727,16 @@ describe("audit candidates", () => {
         }),
       );
     }
-    await suite.db.execute(sql`update payments set created_at = '2026-07-01T00:00:00.000Z'`);
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(sql`update payments set created_at = '2026-07-01T00:00:00.000Z'`),
+    );
     await suite.db.execute(
       sql`update payments set state = 'attempting', external_ref = 'client' where payment_ref = 'pending'`,
     );
-    await suite.db.execute(
-      sql`update payments set created_at = '2026-07-02T00:00:00.000Z' where payment_ref = 'end'`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set created_at = '2026-07-02T00:00:00.000Z' where payment_ref = 'end'`,
+      ),
     );
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -1842,10 +1854,12 @@ describe("refund audit facts", () => {
       },
     ]);
     await suite.db.update(paymentRefunds).set({ createdAt: "2026-07-22T12:00:00.000Z" });
-    await suite.db
-      .update(payments)
-      .set({ provider: "manual", externalProvider: "connected_account" })
-      .where(eq(payments.paymentRef, "refund-parent"));
+    await liftPaymentGuard(suite.db, () =>
+      suite.db
+        .update(payments)
+        .set({ provider: "manual", externalProvider: "connected_account" })
+        .where(eq(payments.paymentRef, "refund-parent")),
+    );
     const late = await withTransaction(suite.db, (tx) =>
       listRefundAuditRows(tx, "fake", period, [], ["refund-parent"]),
     );
@@ -2011,7 +2025,9 @@ it.each([
         fingerprint: "claim-bill",
         kind: "contribution",
       });
-      await tx.execute(sql`update payments set bill_payment_id = 'claim-bill'`);
+      await liftPaymentGuard(tx, () =>
+        tx.execute(sql`update payments set bill_payment_id = 'claim-bill'`),
+      );
     }
     const params = {
       provider: "sumup",

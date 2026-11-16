@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import * as holds from "./holds.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -13,6 +15,8 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const MANAGER = "22222222-2222-4222-8222-222222222222";
 const NO_HOLD = "99999999-9999-4999-8999-999999999999";
 const SETTLED = new Date("2026-10-17T20:30:00.000Z");
+
+beforeEach(() => seedPerson(suite.db, { id: MANAGER, displayName: "Manager" }));
 
 let refCounter = 0;
 
@@ -36,7 +40,7 @@ async function aCapturedPayment(amount = "12.10") {
 
 async function holdRows(paymentId: string) {
   const { rows } = await suite.db.execute(
-    sql`select provider_amount, found_at from payment_holds where payment_id = ${paymentId}`,
+    sql`select hold_provider_amount as provider_amount, held_at as found_at from payments where id = ${paymentId} and held_at is not null`,
   );
   return rows;
 }
@@ -147,7 +151,6 @@ describe("listOpenHolds", () => {
     const open = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
     expect(open).toEqual([
       {
-        holdId: expect.any(String),
         paymentId: earlier.paymentId,
         paymentRef: earlier.paymentRef,
         provider: "stripe",
@@ -155,10 +158,9 @@ describe("listOpenHolds", () => {
         providerAmount: "11.95",
         settledAt: SETTLED.toISOString(),
         workingOrderId: earlier.workingOrderId,
-        foundAt: "2026-10-18T01:00:00.000Z",
+        heldAt: "2026-10-18T01:00:00.000Z",
       },
       {
-        holdId: expect.any(String),
         paymentId: later.paymentId,
         paymentRef: later.paymentRef,
         provider: "stripe",
@@ -166,13 +168,13 @@ describe("listOpenHolds", () => {
         providerAmount: "19.50",
         settledAt: SETTLED.toISOString(),
         workingOrderId: later.workingOrderId,
-        foundAt: "2026-10-19T01:00:00.000Z",
+        heldAt: "2026-10-19T01:00:00.000Z",
       },
     ]);
 
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
-        holdId: open[0]!.holdId,
+        paymentId: open[0]!.paymentId,
         outcome: "kept",
         note: null,
         personId: MANAGER,
@@ -194,14 +196,14 @@ describe("recordHoldOutcome", () => {
         foundAt: new Date("2026-10-18T01:00:00.000Z"),
       }),
     );
-    return (await withTransaction(suite.db, (tx) => listOpenHolds(tx)))[0]!.holdId;
+    return (await withTransaction(suite.db, (tx) => listOpenHolds(tx)))[0]!.paymentId;
   }
 
   it("stores the outcome, the note, the manager and the moment", async () => {
-    const holdId = await aHold();
+    const paymentId = await aHold();
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
-        holdId,
+        paymentId,
         outcome: "refunded_at_provider",
         note: "Refunded 0.15 in Stripe",
         personId: MANAGER,
@@ -209,8 +211,8 @@ describe("recordHoldOutcome", () => {
       }),
     );
     const { rows } = await suite.db.execute(
-      sql`select outcome, note, person_id, recorded_at from payment_hold_outcomes
-          where hold_id = ${holdId}`,
+      sql`select hold_outcome as outcome, hold_note as note, hold_decided_by as person_id, hold_decided_at as recorded_at from payments
+          where id = ${paymentId}`,
     );
     expect(rows).toEqual([
       {
@@ -226,7 +228,7 @@ describe("recordHoldOutcome", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, (tx) =>
         recordHoldOutcome(tx, {
-          holdId: NO_HOLD,
+          paymentId: NO_HOLD,
           outcome: "kept",
           note: null,
           personId: MANAGER,
@@ -236,13 +238,13 @@ describe("recordHoldOutcome", () => {
     );
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.hold_not_found");
-    expect((error as AppError).params).toEqual({ holdId: NO_HOLD });
+    expect((error as AppError).params).toEqual({ paymentId: NO_HOLD });
   });
 
   it("refuses a second outcome with payment.hold_already_recorded and keeps the first", async () => {
-    const holdId = await aHold();
+    const paymentId = await aHold();
     const first = {
-      holdId,
+      paymentId,
       outcome: "kept" as const,
       note: null,
       personId: MANAGER,
@@ -259,10 +261,34 @@ describe("recordHoldOutcome", () => {
       ),
     );
     expect((error as AppError).code).toBe("payment.hold_already_recorded");
-    expect((error as AppError).params).toEqual({ holdId });
+    expect((error as AppError).params).toEqual({ paymentId });
     const { rows } = await suite.db.execute(
-      sql`select outcome, note from payment_hold_outcomes where hold_id = ${holdId}`,
+      sql`select hold_outcome as outcome, hold_note as note from payments where id = ${paymentId}`,
     );
     expect(rows).toEqual([{ outcome: "kept", note: null }]);
   });
+});
+
+it("refuses an outcome for a payment that was never held", async () => {
+  const { paymentId } = await aCapturedPayment();
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      recordHoldOutcome(tx, {
+        paymentId,
+        outcome: "kept",
+        note: null,
+        personId: MANAGER,
+        at: SETTLED,
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "payment.hold_not_found", params: { paymentId } });
+});
+
+it("the held list reads by index", async () => {
+  const rows = await withTransaction(suite.db, (tx) =>
+    tx.execute<{ detail: string }>(sql`explain query plan ${holds.openHoldsQuery(tx).getSQL()}`),
+  );
+  const details = rows.rows.map((row) => row.detail).join("\n");
+  expect(details).toContain("USING INDEX payments_open_hold_idx");
+  expect(details).not.toContain("SCAN payments");
 });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { paymentHolds, paymentRefunds, payments } from "./schema/index.js";
+import { paymentRefunds, payments } from "./schema/index.js";
 
 /**
  * Every money column this package owns must be an `integer` — a count of whole cents, the shape
@@ -62,7 +62,7 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
     for (const tableName of Object.keys(OWNED_TABLES)) {
       expect(latestSnapshotColumnType(tableName, "amount")).toBe("integer");
     }
-    expect(latestSnapshotColumnType("payment_holds", "provider_amount")).toBe("integer");
+    expect(latestSnapshotColumnType("payments", "hold_provider_amount")).toBe("integer");
   });
 
   it("has teeth: the snapshot read finds a column that is there and nothing that is not", () => {
@@ -83,9 +83,9 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
     expect(offendingSql.toLowerCase()).toMatch(/double precision/);
   });
 
-  it("payment_holds.provider_amount is integer in the Drizzle schema", () => {
-    const providerAmount = Object.values(getTableColumns(paymentHolds)).find(
-      (c) => c.name === "provider_amount",
+  it("payments.hold_provider_amount is integer in the Drizzle schema", () => {
+    const providerAmount = Object.values(getTableColumns(payments)).find(
+      (c) => c.name === "hold_provider_amount",
     );
     expect(providerAmount).toBeDefined(); // positive control
     expect(providerAmount?.columnType).toBe("SQLiteInteger");

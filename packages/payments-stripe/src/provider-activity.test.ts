@@ -1,7 +1,8 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
@@ -11,6 +12,16 @@ import { StripeTerminalProvider } from "./provider.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(suite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+  await seedPerson(otherSuite.db, {
+    id: "22222222-2222-4222-8222-222222222222",
+    displayName: "Manager",
+  });
+});
 const otherSuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const now = new Date("2026-10-17T00:00:00Z");
 const manager = { personId: "22222222-2222-4222-8222-222222222222" };
@@ -50,8 +61,7 @@ async function stored(order: string) {
 
 async function audits(ref: string) {
   const { rows } = await suite.db.execute(sql`
-    select r.person_id, r.outcome from payment_resolutions r
-    join payments p on p.id = r.payment_id where p.payment_ref = ${ref}`);
+    select p.resolved_by as person_id, p.resolution_outcome as outcome from payments p where p.resolution_outcome is not null and p.payment_ref = ${ref}`);
   return rows;
 }
 

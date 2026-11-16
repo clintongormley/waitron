@@ -457,6 +457,12 @@ for (const locale of ["en", "es"] as const) {
       "before" | "provisioned" | "seeded",
       CanonicalMadridSemantics
     >;
+    expect(historicalSeeded.tables.payments!.rows).toEqual({});
+    historicalSeeded.tables.payments = structuredClone(expected.seeded.tables.payments!);
+    for (const name of ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]) {
+      expect(expected.seeded.tables[name]!.rows).toEqual({});
+      historicalSeeded.tables[name] = structuredClone(expected.seeded.tables[name]!);
+    }
     const publicationTemplate = expected.seeded.tables.menu_publications!;
     const rows = Object.values(historicalSeeded.tables.menu_releases!.rows).map((row) => ({
       menu_id: row.menu_id,
@@ -1995,6 +2001,56 @@ for (const locale of ["en", "es"] as const) {
       if (phase !== "seeded")
         expected[phase] = madridWithFoldedTables(expected[phase], [staffMenuFold]);
       delete phases[phase]!.menu_period_staff_menus;
+
+      for (const table of ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]) {
+        expect(expected[phase].tables[table]!.rows).toEqual({});
+        delete phases[phase]![table];
+      }
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "payment_hold_outcomes",
+          into: "payment_holds",
+          match: { from: "hold_id", into: "id" },
+          columns: {
+            outcome: "outcome",
+            note: "note",
+            person_id: "person_id",
+            recorded_at: "recorded_at",
+          },
+        },
+        {
+          from: "payment_resolutions",
+          into: "payments",
+          match: { from: "payment_id", into: "id" },
+          columns: {
+            outcome: "resolution_outcome",
+            cancelled_at_provider: "resolution_cancelled_at_provider",
+            provider_status: "resolution_provider_status",
+            person_id: "resolved_by",
+            resolved_at: "resolved_at",
+          },
+        },
+        {
+          from: "payment_holds",
+          into: "payments",
+          match: { from: "payment_id", into: "id" },
+          columns: {
+            provider_amount: "hold_provider_amount",
+            found_at: "held_at",
+            outcome: "hold_outcome",
+            note: "hold_note",
+            person_id: "hold_decided_by",
+            recorded_at: "hold_decided_at",
+          },
+        },
+      ]);
+      const paymentTable = expected[phase].tables.payments!;
+      for (const column of paymentTable.columns.slice(-11)) column.notnull = 0;
+      paymentTable.foreignKeys = [
+        personKey("hold_decided_by", 0),
+        personKey("resolved_by", 1),
+        ...paymentTable.foreignKeys.map((key) => ({ ...key, id: key.id + 2 })),
+      ];
 
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
       phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;

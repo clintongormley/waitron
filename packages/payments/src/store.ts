@@ -15,7 +15,6 @@ import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
-import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, CollectionOwners, PaymentState } from "./provider.js";
 
@@ -401,10 +400,15 @@ const BILL_PAYMENT_COLUMNS = {
   ...PAYMENT_WITH_KEY_COLUMNS,
   externalProvider: payments.externalProvider,
   externalMachine: payments.externalMachine,
+  resolutionOutcome: payments.resolutionOutcome,
+  resolvedBy: payments.resolvedBy,
 };
 type BillPaymentProviderRow = PaymentRow &
   Key &
-  Pick<typeof payments.$inferSelect, "externalProvider" | "externalMachine">;
+  Pick<
+    typeof payments.$inferSelect,
+    "externalProvider" | "externalMachine" | "resolutionOutcome" | "resolvedBy"
+  >;
 
 /** The provider's row for one bill payment, in whatever state it is; at most one exists
  * (`payments_bill_payment_key`). */
@@ -691,13 +695,11 @@ export async function listReconcilable(
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
-        held: sql<boolean>`${paymentHolds.id} is not null`.mapWith(Boolean),
-        holdResolved: sql<boolean>`${paymentHoldOutcomes.id} is not null`.mapWith(Boolean),
+        held: sql<boolean>`${payments.heldAt} is not null`.mapWith(Boolean),
+        holdResolved: sql<boolean>`${payments.holdOutcome} is not null`.mapWith(Boolean),
       })
       .from(payments)
-      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-      .leftJoin(paymentHolds, eq(paymentHolds.paymentId, payments.id))
-      .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id));
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
 
   const capturedOrSettled = (
     await auditable().where(
@@ -979,7 +981,7 @@ export async function claimAbandonedCapture(
         isNull(payments.reconcileRemediatedAt),
         sql`exists (select 1 from ${workingOrders} where ${workingOrders.id} = ${payments.workingOrderId} and ${workingOrders.status} = 'abandoned')`,
         sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
-        sql`not exists (select 1 from ${paymentHolds} where ${paymentHolds.paymentId} = ${payments.id})`,
+        isNull(payments.heldAt),
       ),
     )
     .returning({
@@ -1018,13 +1020,7 @@ export async function markReconcileRemediated(
   const [row] = await tx
     .update(payments)
     .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: nowIso() })
-    .where(
-      and(
-        keyWhere(params),
-        isNull(payments.reconcileRemediatedAt),
-        sql`not exists (select 1 from ${paymentHolds} where ${paymentHolds.paymentId} = ${payments.id})`,
-      ),
-    )
+    .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt), isNull(payments.heldAt)))
     .returning({ id: payments.id });
   return row !== undefined;
 }

@@ -1,26 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
-  FOREIGN_KEY_VIOLATION,
-  UNIQUE_VIOLATION,
   captureError,
   checkFailed,
   isRefusal,
-  refusalOn,
   triggerRaised,
   withTransaction,
 } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { PAYMENT_CHANGE_REFUSAL } from "./trigger-refusals.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
-import {
-  countProviderCancelledResolutions,
-  recordAttemptResolution,
-  recordResolution,
-} from "./resolutions.js";
+import { countProviderCancelledResolutions, recordAttemptResolution } from "./resolutions.js";
 import { getPaymentByRef, insertAttempting } from "./store.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
@@ -28,6 +23,8 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 
 const MANAGER = "22222222-2222-4222-8222-222222222222";
 const RESOLVED_AT = new Date("2026-09-26T12:00:00Z");
+
+beforeEach(() => seedPerson(suite.db, { id: MANAGER, displayName: "Manager" }));
 
 let refCounter = 0;
 
@@ -41,6 +38,7 @@ async function stuckPayment(
   deviceId: string;
   nodeId: NodeId;
   paymentRef: string;
+  provider: string;
 }> {
   const { workingOrderId, deviceId, nodeId } = on ?? (await seedWorkingOrder(suite.db, freshNif()));
   const paymentRef = `stuck-${++refCounter}`;
@@ -54,18 +52,16 @@ async function stuckPayment(
       amount: decimal("12.10"),
     });
     const row = await getPaymentByRef(tx, { provider, paymentRef });
-    return { paymentId: row!.id, workingOrderId, deviceId, nodeId, paymentRef };
+    return { paymentId: row!.id, workingOrderId, deviceId, nodeId, paymentRef, provider };
   });
 }
 
 function record(
-  p: { paymentId: string; workingOrderId: string },
-  over: Partial<Parameters<typeof recordResolution>[1]> = {},
+  p: { provider: string; paymentRef: string },
+  over: Partial<Parameters<typeof recordAttemptResolution>[2]> = {},
 ) {
   return withTransaction(suite.db, (tx) =>
-    recordResolution(tx, {
-      paymentId: p.paymentId,
-      workingOrderId: p.workingOrderId,
+    recordAttemptResolution(tx, p, {
       personId: MANAGER,
       outcome: "failed",
       cancelledAtProvider: true,
@@ -85,15 +81,17 @@ function countFor(workingOrderId: string, provider?: string): Promise<number> {
   );
 }
 
-describe("recordResolution", () => {
+describe("payment resolution facts", () => {
   it("records an automatic resolution without inventing a manager", async () => {
     const automatic = await stuckPayment();
     const manual = await stuckPayment();
-    const { id: automaticId } = await record(automatic, { personId: null });
-    const { id: manualId } = await record(manual, { cancelledAtProvider: false });
+    await record(automatic, { personId: null });
+    const automaticId = automatic.paymentId;
+    await record(manual, { cancelledAtProvider: false });
+    const manualId = manual.paymentId;
     const { rows } = await suite.db.execute(sql`
-      select person_id, outcome, cancelled_at_provider, provider_status, resolved_at
-      from payment_resolutions where id in (${automaticId}, ${manualId})
+      select resolved_by as person_id, resolution_outcome as outcome, resolution_cancelled_at_provider as cancelled_at_provider, resolution_provider_status as provider_status, resolved_at
+      from payments where id in (${automaticId}, ${manualId})
       order by case when id = ${automaticId} then 0 else 1 end`);
     expect(rows).toEqual([
       {
@@ -115,13 +113,14 @@ describe("recordResolution", () => {
     expect(await countFor(manual.workingOrderId, "stripe")).toBe(0);
   });
 
-  it("writes one audit row carrying what the manager's resolution decided", async () => {
+  it("stores what the manager's resolution decided on the payment", async () => {
     const p = await stuckPayment();
-    const { id } = await record(p);
+    await record(p);
+    const id = p.paymentId;
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select payment_id, working_order_id, person_id, outcome, cancelled_at_provider,
-                 provider_status, resolved_at
-            from payment_resolutions where id = ${id}`,
+      sql`select id as payment_id, working_order_id, resolved_by as person_id, resolution_outcome as outcome, resolution_cancelled_at_provider as cancelled_at_provider,
+                 resolution_provider_status as provider_status, resolved_at
+            from payments where id = ${id}`,
     );
     expect(rows).toEqual([
       {
@@ -138,23 +137,16 @@ describe("recordResolution", () => {
 
   it("stores a resolution with no provider status as null", async () => {
     const p = await stuckPayment();
-    const { id } = await record(p, {
+    const id = p.paymentId;
+    await record(p, {
       outcome: "captured",
       cancelledAtProvider: false,
       providerStatus: null,
     });
     const { rows } = await suite.db.execute<{ provider_status: string | null }>(
-      sql`select provider_status from payment_resolutions where id = ${id}`,
+      sql`select resolution_provider_status as provider_status from payments where id = ${id}`,
     );
     expect(rows).toEqual([{ provider_status: null }]);
-  });
-
-  it("refuses a payment id that names no payment", async () => {
-    const p = await stuckPayment();
-    const error = await captureError(() =>
-      record({ ...p, paymentId: "99999999-9999-4999-8999-999999999999" }),
-    );
-    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("refuses a second resolution of the same payment", async () => {
@@ -163,10 +155,7 @@ describe("recordResolution", () => {
     const error = await captureError(() =>
       record(p, { outcome: "captured", cancelledAtProvider: false }),
     );
-    // SQLite names the columns that collided, not the index.
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "payment_resolutions", columns: ["payment_id"] }),
-    ).toBe(true);
+    expect(triggerRaised(error, PAYMENT_CHANGE_REFUSAL)).toBe(true);
   });
 
   it("refuses an outcome that changed nothing: only captured and failed are recorded", async () => {
@@ -174,7 +163,7 @@ describe("recordResolution", () => {
     const error = await captureError(() =>
       record(p, { outcome: "unknown" as "failed", cancelledAtProvider: false }),
     );
-    expect(checkFailed(error, "payment_resolutions_outcome_ck")).toBe(true);
+    expect(checkFailed(error, "payments_resolution_outcome_ck")).toBe(true);
   });
 
   it("refuses a captured resolution that claims the provider cancelled the payment", async () => {
@@ -183,27 +172,14 @@ describe("recordResolution", () => {
       record(p, { outcome: "captured", cancelledAtProvider: true }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(checkFailed(error, "payment_resolutions_cancelled_ck")).toBe(true);
-  });
-
-  it("is append-only: an update and a delete are both refused", async () => {
-    const p = await stuckPayment();
-    const { id } = await record(p);
-    const update = await captureError(() =>
-      suite.db.execute(sql`update payment_resolutions set outcome = 'captured' where id = ${id}`),
-    );
-    expect(triggerRaised(update, "payment_resolutions is append-only")).toBe(true);
-    const remove = await captureError(() =>
-      suite.db.execute(sql`delete from payment_resolutions where id = ${id}`),
-    );
-    expect(triggerRaised(remove, "payment_resolutions is append-only")).toBe(true);
+    expect(checkFailed(error, "payments_resolution_cancelled_ck")).toBe(true);
   });
 });
 
 describe("recordAttemptResolution", () => {
   it("records the resolution against the payment the key names and that payment's order", async () => {
     const p = await stuckPayment("stripe");
-    const { id } = await withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       recordAttemptResolution(
         tx,
         { provider: "stripe", paymentRef: p.paymentRef },
@@ -217,7 +193,7 @@ describe("recordAttemptResolution", () => {
       ),
     );
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select payment_id, working_order_id from payment_resolutions where id = ${id}`,
+      sql`select id as payment_id, working_order_id from payments where id = ${p.paymentId}`,
     );
     expect(rows).toEqual([{ payment_id: p.paymentId, working_order_id: p.workingOrderId }]);
   });

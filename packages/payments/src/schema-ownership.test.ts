@@ -12,11 +12,8 @@ const OWNED = [
   "payment_refunds",
   "card_readers",
   "device_card_readers",
-  "payment_resolutions",
   "device_profile_card_readers",
   "card_reader_holders",
-  "payment_holds",
-  "payment_hold_outcomes",
   "scheduled_runs",
 ];
 

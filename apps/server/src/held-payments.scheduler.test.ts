@@ -175,7 +175,7 @@ describe("held card payments on the real scheduler", () => {
         const personId = randomUUID();
         await tx.insert(persons).values({ id: personId, displayName: "Manager " + personId });
         await recordHoldOutcome(tx, {
-          holdId: hold.holdId,
+          paymentId: hold.paymentId,
           outcome: "kept",
           note: null,
           personId,

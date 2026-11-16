@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -89,7 +90,9 @@ describe("SimulatorPaymentProvider", () => {
     expect(
       await withTransaction(suite.db, (tx) => findPaymentByRef(tx, "simulator", result.paymentRef)),
     ).toMatchObject({ state: "attempting" });
-    const manager = { id: "00000000-0000-4000-8000-000000000123" };
+    const manager = {
+      id: await seedPerson(suite.db, { id: "00000000-0000-4000-8000-000000000123" }),
+    };
     const now = new Date("2026-11-10T10:00:00Z");
     await expect(
       restarted.resolveAbandonedAttempt(result.paymentRef, now, { personId: manager!.id }),
@@ -98,8 +101,11 @@ describe("SimulatorPaymentProvider", () => {
       await withTransaction(suite.db, (tx) => findPaymentByRef(tx, "simulator", result.paymentRef)),
     ).toMatchObject({ state: "failed" });
     expect(
-      (await suite.db.execute(sql`select person_id, outcome, resolved_at from payment_resolutions`))
-        .rows,
+      (
+        await suite.db.execute(
+          sql`select resolved_by as person_id, resolution_outcome as outcome, resolved_at from payments where resolution_outcome is not null`,
+        )
+      ).rows,
     ).toEqual([{ person_id: manager!.id, outcome: "failed", resolved_at: now.toISOString() }]);
     await expect(
       restarted.resolveAbandonedAttempt(result.paymentRef, now, { personId: manager!.id }),

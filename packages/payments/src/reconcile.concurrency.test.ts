@@ -145,7 +145,7 @@ describe("concurrent reconcile sweeps", () => {
 
     expect(reversed).toEqual([]);
     const { rows } = await suite.db.execute<{ provider_amount: number }>(
-      sql`select provider_amount from payment_holds`,
+      sql`select hold_provider_amount as provider_amount from payments where held_at is not null`,
     );
     expect(rows).toEqual([{ provider_amount: 1250 }]);
   });
@@ -228,8 +228,8 @@ describe("a sweep overtaken between its read and its writes", () => {
     await sweepX;
 
     const holds = await suite.db.execute(sql`
-      select h.id from payment_holds h join payments p on p.id = h.payment_id
-      where p.payment_ref = ${ref}`);
+      select p.id from payments p
+      where p.held_at is not null and p.payment_ref = ${ref}`);
     const claim = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = ${ref}`,
     );
@@ -322,7 +322,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(persons).values({ id: personId, displayName: "Manager" });
       await recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "kept",
         note: null,
         personId,

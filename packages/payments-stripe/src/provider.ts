@@ -454,8 +454,6 @@ export class StripeTerminalProvider implements PaymentProvider {
     });
   }
 
-  /** The row's new state and its `payment_resolutions` record commit together: the record is what
-   * moves the order's idempotency key past a PaymentIntent the resolution left cancelled. */
   private async resolveRow(
     { key, now, personId }: Settle,
     resolved:

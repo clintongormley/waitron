@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { systemClock } from "./till-backend.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -203,9 +204,10 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(held.resweepAfter).toEqual(new Date("2026-07-26T04:00:00Z"));
 
     const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
+    await seedPerson(suite.db, { id: "22222222-2222-4222-8222-222222222222" });
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
-        holdId: hold!.holdId,
+        paymentId: hold!.paymentId,
         outcome: "refunded_at_provider",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
@@ -248,12 +250,13 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       NOW,
     );
     const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
+    await seedPerson(suite.db, { id: "22222222-2222-4222-8222-222222222222" });
 
     const racing = {
       async fetch() {
         await withTransaction(suite.db, (tx) =>
           recordHoldOutcome(tx, {
-            holdId: hold!.holdId,
+            paymentId: hold!.paymentId,
             outcome: "kept",
             note: null,
             personId: "22222222-2222-4222-8222-222222222222",

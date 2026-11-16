@@ -7,6 +7,24 @@
 > reader-preservation check and measurement remains in scope. This is watcher clearance, not a
 > new owner approval of this plan.
 
+> **Measurement 5 fallback cleared by the watcher, 16 November 2026 05:51:** confirmed
+> captures can differ from their requested amount (existing `capture-mismatch.test.ts`); omit
+> `amount` from fixed columns, and explain the capture reason at
+> the trigger. Guard and helper controls use `provider` instead of `amount`. Existing capture
+> assertions stay unchanged. The watcher corrected its requested-amount instruction at 05:55:
+> `requested_amount` is set once (null → original amount), then held fixed, because both capture
+> and fail first record it in `resolveAttempting`; no writer changes.
+
+> **Current-consumer corrections cleared by the watcher, 16 November 2026:** the 06:05
+> clearance retires only tests of append-only triggers on the removed tables and ports newer
+> clock, provider, backup and inventory consumers; generic boot protections remain. At 06:15,
+> completion and one review-fixes pass were cleared up to a hard stop of 1,750 counted lines.
+> At 06:17, `bill_payment_id` became set-once: short-capture recovery first links an existing
+> payment to its contribution (`till-sale.ts`, introduced by `de3a1d847e`, 9 November).
+> Existing short-capture, money and invoice assertions remain unchanged. The recovery read
+> names its planned partial index and writes its fixed captured predicate literally; the
+> box-image SQLite probe reproduced the wider index choice without the hint.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.

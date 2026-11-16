@@ -25,7 +25,7 @@ import {
   recordHold,
   recordHoldOutcome,
   recordRefund,
-  recordResolution,
+  recordAttemptResolution,
   recordVoid,
   stampAttemptingRef,
 } from "./index.js";
@@ -39,7 +39,6 @@ import type {
   InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
-  NewPaymentResolution,
   OpenHold,
   OrphanRemediation,
   PaymentMismatch,
@@ -144,11 +143,9 @@ describe("package public surface (./index.js)", () => {
 
 describe("the stuck-payment resolution surface", () => {
   it("re-exports the resolution audit helpers from the package root", () => {
-    expect(typeof recordResolution).toBe("function");
+    expect(typeof recordAttemptResolution).toBe("function");
     expect(typeof countProviderCancelledResolutions).toBe("function");
-    const resolution: NewPaymentResolution = {
-      paymentId: "p",
-      workingOrderId: "w",
+    const resolution: Parameters<typeof recordAttemptResolution>[2] = {
       personId: "m",
       outcome: "failed",
       cancelledAtProvider: true,
@@ -180,7 +177,6 @@ describe("the reconcile surface", () => {
     expect(typeof recordHoldOutcome).toBe("function");
     const outcome: HoldOutcome = "refunded_at_provider";
     const hold: OpenHold = {
-      holdId: "h",
       paymentId: "p",
       paymentRef: "ref-h",
       provider: "fake",
@@ -188,7 +184,7 @@ describe("the reconcile surface", () => {
       providerAmount: decimal("11.95"),
       settledAt: null,
       workingOrderId: "w",
-      foundAt: "2026-10-18T01:00:00.000Z",
+      heldAt: "2026-10-18T01:00:00.000Z",
     };
     expect(outcome).toBe("refunded_at_provider");
     expect(hold.providerAmount).toBe("11.95");

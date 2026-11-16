@@ -43,8 +43,8 @@ declare module "@waitron/shared" {
     /** The payment↔sale link is write-once: a second association is refused rather than
      * re-pointing the payment at a different sale. */
     "payment.already_associated": { paymentRef: string; saleId: string | null };
-    "payment.hold_not_found": { holdId: string };
-    "payment.hold_already_recorded": { holdId: string };
+    "payment.hold_not_found": { paymentId: string };
+    "payment.hold_already_recorded": { paymentId: string };
     /** An INCIDENT, never thrown. The sale already chained and is immutable, so this is an
      * uncollected-receivable notice, not a fiscal reversal. */
     /** An INCIDENT, never thrown: the processor's outcome is neither a capture nor a certain

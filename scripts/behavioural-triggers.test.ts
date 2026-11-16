@@ -1,3 +1,4 @@
+import { PAYMENT_CHANGE_REFUSAL } from "../packages/payments/src/trigger-refusals.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,6 +67,7 @@ import {
  * `products.image` and `sections.image`, for `menu_version_images.filename`, keeping a photo a live
  * menu version or a queued edition names, and for the photo an include's folder names in
  * `section_members.folder_image`.
+ * The payments guard holds fixed and set-once facts on the payment row.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [
@@ -93,6 +95,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "payments_guard_update",
   "activity_log_refuse_update",
   "media_blobs_no_update",
   "party_allergy_guests_need_answer_insert",
@@ -1951,5 +1954,29 @@ describe("party allergy guests need an answer", () => {
       "update parties set allergy_answer='none',allergy_answered_by='person',allergy_answered_at='2026-11-13T12:00:00.000Z' where id='allergy-to'",
     );
     expect(refusalFor(connection, move)).toBeUndefined();
+  });
+});
+
+describe("payments_guard_update", () => {
+  it("refuses a payment's provider changing", () => {
+    connection.exec(`insert into payments (id,working_order_id,source,provider,payment_ref,amount,state,created_at,updated_at)
+      values ('payment-fixed','wo-open','operator_script','fake','fixed',1000,'attempting','${STAMP}','${STAMP}')`);
+    expect(
+      refusalFor(connection, "update payments set provider = 'other' where id = 'payment-fixed'"),
+    ).toBe(PAYMENT_CHANGE_REFUSAL);
+  });
+  it("still captures a payment with its confirmed amount", () => {
+    connection.exec(`insert into payments (id,working_order_id,source,provider,payment_ref,amount,state,created_at,updated_at)
+      values ('payment-capture','wo-open','operator_script','fake','capture',1000,'attempting','${STAMP}','${STAMP}')`);
+    connection.exec(
+      "update payments set state = 'captured', requested_amount = amount, amount = 1100 where id = 'payment-capture'",
+    );
+    expect(
+      connection
+        .prepare(
+          "select state, amount, requested_amount from payments where id = 'payment-capture'",
+        )
+        .get(),
+    ).toEqual({ state: "captured", amount: 1100, requested_amount: 1000 });
   });
 });

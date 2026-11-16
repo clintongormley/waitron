@@ -1,3 +1,4 @@
+import { liftPaymentGuard } from "./testing/lift-payment-guard.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -52,8 +53,8 @@ async function attempting(seeded: Seeded, paymentRef: string, owner: NodeId | nu
     }),
   );
   if (owner === null) {
-    await suite.db.execute(
-      sql`update payments set node_id = null where payment_ref = ${paymentRef}`,
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(sql`update payments set node_id = null where payment_ref = ${paymentRef}`),
     );
   }
 }

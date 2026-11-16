@@ -238,18 +238,9 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
       const tables = suite.db.all<{
         name: string;
       }>(sql`select name from sqlite_master where name in
-        ('payments', 'payment_resolutions', 'payment_holds', 'payment_hold_outcomes', 'a646_probe', '__drizzle_migrations_payments') order by name`);
+        ('payments', 'a646_probe', '__drizzle_migrations_payments') order by name`);
       expect(tables.map((row) => row.name)).toEqual(
-        installed
-          ? [
-              "__drizzle_migrations_payments",
-              "a646_probe",
-              "payment_hold_outcomes",
-              "payment_holds",
-              "payment_resolutions",
-              "payments",
-            ]
-          : [],
+        installed ? ["__drizzle_migrations_payments", "a646_probe", "payments"] : [],
       );
     } finally {
       if (server !== undefined) await server.close();

@@ -270,7 +270,7 @@ function moneyState() {
     adjustments: rowCount("adjustments"),
     departures: rowCount("unpaid_departures"),
     deferredClosures: rowCount("deferred_closures"),
-    holdOutcomes: rowCount("payment_hold_outcomes"),
+    holdOutcomes: rowCount("payments", sql`hold_outcome is not null`),
     settledRefunds:
       rowCount("bill_payment_refunds", sql`state <> 'pending'`) +
       rowCount("tender_refunds", sql`state <> 'pending'`),
@@ -875,7 +875,7 @@ const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
       }),
     );
     const [hold] = venue.db.all<{ id: string }>(
-      sql`select id from payment_holds where payment_id = ${payment!.id}`,
+      sql`select id from payments where id = ${payment!.id} and held_at is not null`,
     );
     const body = { outcome: "kept", note: "Kept", pin: "1234" };
     return {

@@ -32,7 +32,7 @@ const PANELS: CardProviderPanel[] = [
 
 const HELD: HeldPaymentRow[] = [
   {
-    holdId: "h-1",
+    paymentId: "h-1",
     paymentRef: "pi_57",
     provider: "stripe-terminal",
     orderNumber: 57,
@@ -41,7 +41,7 @@ const HELD: HeldPaymentRow[] = [
     providerAmount: "12.50",
   },
   {
-    holdId: "h-2",
+    paymentId: "h-2",
     paymentRef: "pi_63",
     provider: "stripe-terminal",
     orderNumber: 63,
@@ -89,8 +89,8 @@ function q(el: PaymentsScreen, selector: string): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>(selector);
 }
 
-const lines = (el: PaymentsScreen, holdId: string): string[] =>
-  [...el.shadowRoot!.querySelectorAll(`[data-test=held-payment-${holdId}] p`)].map((p) =>
+const lines = (el: PaymentsScreen, paymentId: string): string[] =>
+  [...el.shadowRoot!.querySelectorAll(`[data-test=held-payment-${paymentId}] p`)].map((p) =>
     p.textContent!.replace(/\s+/g, " ").trim(),
   );
 
@@ -212,10 +212,10 @@ describe("held card payments on the Payments screen", () => {
     const api = stubApi({ listHeldPayments });
     const el = await mount(api);
     expect(q(el, "[data-test=held-payment-h-1]")).not.toBeNull();
-    api.liveData!.invalidate([{ type: "payment_hold_outcomes" }]);
+    api.liveData!.invalidate([{ type: "payments" }]);
     await vi.waitFor(() => expect(q(el, "[data-test=held-payment-h-1]")).toBeNull());
     expect(q(el, "[data-test=held-payment-h-2]")).not.toBeNull();
-    api.liveData!.invalidate([{ type: "payment_hold_outcomes" }]);
+    api.liveData!.invalidate([{ type: "payments" }]);
     await vi.waitFor(() => expect(q(el, "[data-test=bill-recovery]")).toBeNull());
     expect(listHeldPayments).toHaveBeenCalledTimes(3);
   });
@@ -254,7 +254,7 @@ describe("held card payments on the Payments screen", () => {
       const el = await mount(api);
       q(el, "[data-test=refresh-bill-recovery]")!.click();
       await vi.waitFor(() => expect(typeof release).toBe("function"));
-      api.liveData!.invalidate([{ type: "payment_hold_outcomes" }]);
+      api.liveData!.invalidate([{ type: "payments" }]);
       await vi.waitFor(() => expect(q(el, "[data-test=held-payment-h-1]")).toBeNull());
       release();
       await flush(el);
@@ -279,8 +279,8 @@ describe("the Record what was done dialog", () => {
   function change(el: PaymentsScreen, name: string, value: string) {
     field(el, name).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   }
-  async function open(el: PaymentsScreen, holdId = "h-1") {
-    q(el, `[data-test=record-held-${holdId}]`)!.click();
+  async function open(el: PaymentsScreen, paymentId = "h-1") {
+    q(el, `[data-test=record-held-${paymentId}]`)!.click();
     await flush(el);
   }
   async function bottom(el: PaymentsScreen): Promise<string> {

@@ -62,8 +62,6 @@ import {
   listAbandonedRefundOutcomes,
   IN_PROGRESS_PAYMENT_STATES,
   paymentHoldOutcome,
-  paymentHoldOutcomes,
-  paymentHolds,
   recordRefund,
   payments,
   recordHoldOutcome,
@@ -2067,28 +2065,26 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
-            holdId: paymentHolds.id,
+            paymentId: payments.id,
             paymentRef: payments.paymentRef,
             provider: payments.provider,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
             settledAt: payments.settledAt,
             amount: payments.amount,
-            providerAmount: paymentHolds.providerAmount,
+            providerAmount: payments.holdProviderAmount,
           })
-          .from(paymentHolds)
-          .innerJoin(payments, eq(payments.id, paymentHolds.paymentId))
+          .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id))
-          .where(isNull(paymentHoldOutcomes.id))
-          .orderBy(paymentHolds.foundAt, sql`${paymentHolds}.rowid`),
+          .where(and(isNotNull(payments.heldAt), isNull(payments.holdOutcome)))
+          .orderBy(payments.heldAt, payments.id),
       );
       return c.json(
         rows.map(({ label, ...row }) => ({
           ...row,
           ...(label === null ? {} : { label }),
           amount: centsToDecimal(row.amount),
-          providerAmount: centsToDecimal(row.providerAmount),
+          providerAmount: centsToDecimal(row.providerAmount!),
         })),
       );
     }),
@@ -2097,14 +2093,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.post("/management-api/payments/held/:id/outcome", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "PaymentHoldId");
+      const id = requireUuidParam(c.req.param("id"), "PaymentId");
       const { outcome, note, pin } = parseHoldOutcome(
         await readJsonBody<Record<string, unknown>>(c),
       );
       await pinGated(sessionId, pin, async (tx, personId) => {
         await refuseUntilRecordable(tx);
         const at = deps.clock.now().instant;
-        await recordHoldOutcome(tx, { holdId: id, outcome, note, personId, at });
+        await recordHoldOutcome(tx, { paymentId: id, outcome, note, personId, at });
         await refreshHeldAlert(tx, heldAlerts, { now: at, by: personId });
       });
       return c.json({ outcome });

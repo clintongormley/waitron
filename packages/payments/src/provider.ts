@@ -251,7 +251,7 @@ export interface PaymentProvider {
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
    * guarantees that. A `captured` or `failed` outcome
-   * records `audit`'s person in `payment_resolutions` in the same transaction that changes the row:
+   * records `audit`'s person on the payment in the same transaction that changes the row:
    * the order's next card payment reads that record to know the processor's payment is cancelled.
    * Throws `payment.not_found` when the row is missing or no longer `attempting`. Absent on an
    * adapter that never leaves such a row for a person to resolve. */

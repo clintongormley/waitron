@@ -114,28 +114,10 @@ describe("contained upgrade data checks", () => {
       const { config, env } = await copiedConfig();
       if (paymentsOff) {
         await seedModuleSettings(config.venueDir, { "fiscal-none": false, payments: false });
-        const file = new DatabaseSync(join(config.venueDir, "venue.db"));
-        try {
-          file.exec("drop trigger payment_holds_append_only_update");
-        } finally {
-          file.close();
-        }
       }
       const report = await checkUpgradeData(config, env);
       expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
       expect(await checkUpgradeData(config, env)).toEqual(report);
-      const file = new DatabaseSync(join(config.venueDir, "venue.db"));
-      try {
-        expect(
-          file
-            .prepare(
-              "select name from sqlite_master where name = 'payment_holds_append_only_update'",
-            )
-            .all(),
-        ).toEqual([{ name: "payment_holds_append_only_update" }]);
-      } finally {
-        file.close();
-      }
     },
   );
 
@@ -214,12 +196,6 @@ describe("contained upgrade data checks", () => {
       name: "a menu with missing structure",
       sql: "update sections set role = 'section', internal_name = coalesce(internal_name, 'Lost root') where role in ('menu_root', 'home_layout')",
       code: "menu.not_found",
-    },
-    {
-      paymentsOff: true,
-      name: "changed optional-module protection while Payments Off",
-      sql: "drop trigger payment_holds_append_only_update; create trigger payment_holds_append_only_update before update on payment_holds begin select 1; end",
-      code: "append_only.triggers_changed",
     },
   ])("refuses $name and releases the venue folder", async ({ sql, code, paymentsOff }) => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");

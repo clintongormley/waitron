@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -155,6 +156,7 @@ describe("fake reader writes behind an unrelated rollback", () => {
     else if (action === "crash-attempting") provider.crashNextCollect("attempting");
     const now = new Date("2026-10-14T12:00:00Z");
     const manager = "00000000-0000-4000-8000-000000000001";
+    await seedPerson(suite.db, { id: manager });
     await behindRollback(() => {
       if (action.startsWith("resolve-"))
         return provider.resolveAbandonedAttempt(paymentRef!, now, { personId: manager });
@@ -183,7 +185,7 @@ describe("fake reader writes behind an unrelated rollback", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select person_id, outcome, cancelled_at_provider from payment_resolutions`,
+          sql`select resolved_by as person_id, resolution_outcome as outcome, resolution_cancelled_at_provider as cancelled_at_provider from payments where resolution_outcome is not null`,
         )
       ).rows,
     ).toEqual(

@@ -1,3 +1,4 @@
+import { liftPaymentGuard } from "./testing/lift-payment-guard.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
@@ -34,9 +35,6 @@ const passed = {
 const tables = [
   "payments",
   "payment_refunds",
-  "payment_resolutions",
-  "payment_holds",
-  "payment_hold_outcomes",
   "card_readers",
   "device_card_readers",
   "device_profile_card_readers",
@@ -73,19 +71,13 @@ beforeEach(() => {
       sql`insert into card_readers (id,provider,provider_ref,name,active,created_at) values ('reader','stripe','terminal_synthetic','Retained reader',0,'2026-10-20T08:00:00.000Z'),('other-reader','stripe','other','Other reader',0,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into payments (id,working_order_id,source,sale_id,node_id,reader_id,provider,payment_ref,amount,state,created_at,updated_at) values ('payment','order','operator_script','sale','source','reader','stripe','ref',1000,'captured','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
+      sql`insert into persons (id, display_name, created_at) values ('manager', 'Manager', '2026-10-20T08:00:00.000Z')`,
+    );
+    db.run(
+      sql`insert into payments (id,working_order_id,source,sale_id,node_id,reader_id,provider,payment_ref,amount,state,created_at,updated_at,resolution_outcome,resolution_cancelled_at_provider,resolution_provider_status,resolved_by,resolved_at,hold_provider_amount,held_at,hold_outcome,hold_note,hold_decided_by,hold_decided_at) values ('payment','order','operator_script','sale','source','reader','stripe','ref',1000,'captured','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z','captured',0,'succeeded','manager','2026-10-20T08:00:00.000Z',999,'2026-10-20T08:00:00.000Z','kept','Retained note','manager','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into payment_refunds (id,payment_id,provider,payment_ref,amount,state,created_at) values ('refund','payment','stripe','ref',100,'succeeded','2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
-      sql`insert into payment_resolutions (id,payment_id,working_order_id,outcome,cancelled_at_provider,provider_status,resolved_at) values ('resolution','payment','order','captured',0,'succeeded','2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
-      sql`insert into payment_holds (id,payment_id,provider_amount,found_at) values ('hold','payment',999,'2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
-      sql`insert into payment_hold_outcomes (id,hold_id,outcome,note,person_id,recorded_at) values ('outcome','hold','kept','Retained note','manager','2026-10-20T08:00:00.000Z')`,
     );
     db.run(sql`insert into device_card_readers (device_id,reader_id) values ('device','reader')`);
     db.run(
@@ -237,7 +229,7 @@ it("declares every classified table, its immutable evidence, private inputs and 
   expect(owner.data).toEqual({
     kind: "custom",
     tables,
-    immutableTables: ["payment_resolutions", "payment_holds", "payment_hold_outcomes"],
+    immutableTables: [],
     checks: ["data", "immutable", "secret"],
   });
   expect(owner.secrets).toEqual(["vault:payments.stripe", "vault:payments.sumup"]);
@@ -255,10 +247,8 @@ it("declares every classified table, its immutable evidence, private inputs and 
 });
 it.each([
   ["payments", "amount=1001"],
+  ["payments", "hold_note='Changed note'"],
   ["payment_refunds", "amount=101"],
-  ["payment_resolutions", "provider_status='changed'"],
-  ["payment_holds", "provider_amount=1001"],
-  ["payment_hold_outcomes", "note='Changed note'"],
   ["card_readers", "name='Changed reader'"],
   ["device_card_readers", "reader_id='other-reader'"],
   ["device_profile_card_readers", "position=1"],
@@ -279,10 +269,8 @@ it.each(["sale_id", "reader_id", "node_id", "working_order_id"])(
 );
 it.each([
   ["payment_refunds", "payment_id"],
-  ["payment_resolutions", "payment_id"],
-  ["payment_resolutions", "working_order_id"],
-  ["payment_holds", "payment_id"],
-  ["payment_hold_outcomes", "hold_id"],
+  ["payments", "resolved_by"],
+  ["payments", "hold_decided_by"],
   ["device_card_readers", "device_id"],
   ["device_card_readers", "reader_id"],
   ["device_profile_card_readers", "device_profile_id"],
@@ -322,7 +310,7 @@ it("allows a deleted reader to remain as payment history after disconnect", asyn
 });
 it.each(["attempting", "initiated"])("keeps in-flight %s work as data", async (state) => {
   for (const db of [original.db, restored.db])
-    db.run(sql`update payments set state=${state},sale_id=null`);
+    await liftPaymentGuard(db, () => db.run(sql`update payments set state=${state},sale_id=null`));
   expect(await run()).toEqual(passed);
   expect(restored.db.all(sql`select state,sale_id from payments`)).toEqual([
     { state, sale_id: null },
@@ -406,9 +394,6 @@ it.each([0, null])(
         "card_reader_holders",
         "device_profile_card_readers",
         "device_card_readers",
-        "payment_hold_outcomes",
-        "payment_holds",
-        "payment_resolutions",
         "payment_refunds",
         "payments",
         "card_readers",
@@ -426,12 +411,12 @@ it("refuses a positive source schema with missing payment tables", async () => {
 });
 it("refuses a missing restored payment table", async () => {
   const definition = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type='table' and name='payment_hold_outcomes'`,
+    sql`select sql from sqlite_schema where type='table' and name='card_reader_holders'`,
   )[0]!.sql;
   const triggers = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'payment_hold_outcomes'`,
+    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'card_reader_holders'`,
   );
-  restored.db.run(sql`drop table payment_hold_outcomes`);
+  restored.db.run(sql`drop table card_reader_holders`);
   try {
     expect(await run()).toMatchObject({ status: "invalid" });
   } finally {

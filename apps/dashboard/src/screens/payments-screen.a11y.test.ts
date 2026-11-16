@@ -585,7 +585,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
           api: stubApi({
             listHeldPayments: vi.fn().mockResolvedValue([
               {
-                holdId: "h-1",
+                paymentId: "h-1",
                 paymentRef: "pi_1",
                 provider: "acme",
                 orderNumber: 57,
@@ -614,7 +614,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         api: stubApi({
           listHeldPayments: vi.fn().mockResolvedValue([
             {
-              holdId: "h-1",
+              paymentId: "h-1",
               paymentRef: "pi_1",
               provider: "acme",
               orderNumber: 57,
