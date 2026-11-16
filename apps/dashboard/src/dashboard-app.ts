@@ -1430,6 +1430,11 @@ export class DashboardApp extends LitElement {
   }
 
   #watchDiskStop(): void {
+    if (this.#confinedToInvoices()) {
+      this.#diskStopQueries.release("getDiskStop");
+      this.diskStop = null;
+      return;
+    }
     void this.#diskStopQueries
       .watch(
         "getDiskStop",
@@ -1444,6 +1449,12 @@ export class DashboardApp extends LitElement {
 
   #startLiveUpdates(): void {
     if (this.tradingAdmission.state !== "ready") return;
+    // The server refuses this session the stream, which names the venue's changes.
+    if (this.#confinedToInvoices()) {
+      this.liveUpdates?.stop();
+      this.#liveAccountEpoch = undefined;
+      return;
+    }
     // The screen is drawn only once this read answers; a stream started sooner lacks its watches.
     if (!this.contentLanguagesReady && this.contentLanguageError === null) return;
     if (this.#liveAccountEpoch === this.sessionGeneration) return;
@@ -1471,7 +1482,7 @@ export class DashboardApp extends LitElement {
   }
 
   #watchAlerts(): void {
-    if (this.#ownPagesOnly()) {
+    if (this.#ownPagesOnly() || this.#confinedToInvoices()) {
       this.#clearAlerts();
       return;
     }
@@ -2408,7 +2419,7 @@ export class DashboardApp extends LitElement {
     return this.#sessionPermissions.includes(item.requiresPermission ?? "venue.view");
   }
 
-  /** A session holding `invoice.inspect` alone: its navigation shows no Orders and no venue screen. */
+  /** A session holding `invoice.inspect` alone: it opens only Invoices and its own account. */
   #confinedToInvoices(): boolean {
     return (
       this.#sessionPermissions.length === 1 && this.#sessionPermissions[0] === "invoice.inspect"
@@ -2449,8 +2460,8 @@ export class DashboardApp extends LitElement {
   }
 
   #permittedScreen(requested: string | null): ScreenId {
-    if (requested === "my-schedule" || (requested === "orders" && !this.#confinedToInvoices()))
-      return requested;
+    if (this.#confinedToInvoices()) return "invoices";
+    if (requested === "my-schedule" || requested === "orders") return requested;
     const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
@@ -3134,6 +3145,7 @@ export class DashboardApp extends LitElement {
             ? html`<dashboard-profile-screen
                 .api=${this.api}
                 .canAdminister=${this.#sessionPermissions.includes("person.admin")}
+                .tillPin=${!this.#confinedToInvoices()}
                 @admin-sign-in=${() => void this.#onLogout()}
                 @profile-updated=${() => void this.#probeSession()}
                 @profile-tab-change=${(

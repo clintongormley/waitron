@@ -191,7 +191,7 @@ export { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 // Side-effect only: keeps errors.ts's augmentation reachable from the public barrel
 // (scripts/errors-reachable.test.ts).
 import "./errors.js";
-export { withPassiveManagementRead } from "./management-session.js";
+export { withInspectorAdmitted, withPassiveManagementRead } from "./management-session.js";
 export { IDENTITY_CHANGE_SOURCES } from "./classification.js";
 export { IDENTITY_BACKUP_VERIFICATION } from "./backup-verification.js";
 

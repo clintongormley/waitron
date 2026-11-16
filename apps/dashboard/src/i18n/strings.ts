@@ -26,7 +26,7 @@ export const en = {
   "permission.fiscal.view.help":
     "Read tax-certificate details and see fiscal alerts. Installing or replacing a certificate needs Manage the system.",
   "permission.invoice.inspect.help":
-    "Find, open, download and print every invoice the venue has issued, for the tax office.",
+    "Find, open, download and print every invoice the venue has issued, for the tax office. Held alone, it shows only Invoices and the person's own account settings.",
   "permission.fiscal.remedy.help":
     "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in. Also accept returned fiscal records during a server handover.",
   "permission.personal_data.export.help":
@@ -4408,7 +4408,7 @@ export const es: Record<StringKey, string> = {
   "permission.fiscal.view.help":
     "Consulta los datos del certificado fiscal y las alertas fiscales. Para instalar o sustituir un certificado necesitas Gestionar el sistema.",
   "permission.invoice.inspect.help":
-    "Busca, abre, descarga e imprime cualquier factura emitida por el local, para Hacienda.",
+    "Busca, abre, descarga e imprime cualquier factura emitida por el local, para Hacienda. Si es el único permiso, solo muestra Facturas y la configuración de la propia cuenta.",
   "permission.fiscal.remedy.help":
     "Autoriza las acciones de corrección que ofrece Remisión a la AEAT. Para abrir esa página también necesitas Exportar informes, y las correcciones protegidas te piden confirmar tu acceso. También acepta registros fiscales devueltos durante un traspaso entre servidores.",
   "permission.personal_data.export.help":

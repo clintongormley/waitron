@@ -1,4 +1,5 @@
 import "./errors.js";
+import { admitsInspector } from "./inspector-admission.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { readTaxpayer, readVenue, type Database, type Transaction } from "@waitron/db";
@@ -112,7 +113,7 @@ export function mountPersonalDataExportApi(
   deps: PersonalDataExportDeps,
   log: Logger,
 ): void {
-  app.get("/management-api/me/personal-data/export", (c) =>
+  app.get("/management-api/me/personal-data/export", admitsInspector, (c) =>
     withPersonalDataErrors(c, log, () => {
       const token = requireManagementSession(c);
       const hasQuery = new URL(c.req.url).search !== "";

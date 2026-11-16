@@ -26,7 +26,9 @@ invoice stays in the list, marked with the day it was cancelled. If the list end
 An inspector can have their own sign-in when the box's email is set up
 ([Email](email.md#set-up)), because their first password arrives by email.
 
-- In **Access roles**, create a role that holds only **See invoices for the tax office**.
+- In **Access roles**, create a role that holds only **See invoices for the tax office**. With
+  only that role, the inspector sees **Invoices** and their own **Account settings**, and
+  nothing else.
 - In **Users**, add the inspector with their email and that role. Waitron emails them an
   invitation; see [Account access](staff.md#account-access).
 - They sign in at the venue or, with [remote access](servers.md#remote-access) on, through

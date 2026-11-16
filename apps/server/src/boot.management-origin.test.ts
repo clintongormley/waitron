@@ -25,6 +25,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { MONEY_AND_DRAWER_WRITES } from "./restricted-start.js";
+import { sessionHolding } from "./testing/session-holding.js";
 
 const served = vi.hoisted(() => ({
   listeners: [] as {
@@ -452,4 +453,238 @@ it("protects a real Ready write while accepting own and membership-listed pages"
       );
     },
   );
+});
+
+/** The routes a session holding `invoice.inspect` alone may use: its own account, and the tax
+ * office's invoices. The sweep below is weaker than its name: a route that refuses its empty body
+ * or missing query before reading the session answers the inspector as it answers a cookie naming
+ * no session, so the sweep cannot see what it does with valid input. */
+const INSPECTOR_ROUTES = [
+  "GET /management-api/session/me",
+  "DELETE /management-api/session",
+  "PUT /management-api/session/me/locale",
+  "POST /management-api/session/me/passkey-offer",
+  "GET /management-api/session/me/profile",
+  "PUT /management-api/session/me/profile",
+  "POST /management-api/session/me/profile/email/confirm",
+  "PUT /management-api/session/me/password",
+  "DELETE /management-api/session/me/passkeys/:id",
+  "POST /management-api/session/me/totp/begin",
+  "POST /management-api/session/me/totp/finish",
+  "POST /management-api/session/me/recovery-codes",
+  "DELETE /management-api/session/me/totp",
+  "POST /management-api/session/me/google",
+  "DELETE /management-api/session/me/google",
+  "POST /management-api/session/me/fresh-sign-in",
+  "POST /management-api/session/me/fresh-sign-in/passkey-options",
+  "POST /management-api/passkey/register/options",
+  "POST /management-api/passkey/register/verify",
+  "GET /management-api/passkey/signals",
+  "GET /management-api/me/personal-data/export",
+  "GET /management-api/tax-office/invoices",
+  "POST /management-api/tax-office/invoices/:saleId/pdf",
+];
+
+/** Refuses every caller without `system.manage` with its params stripped, by design. */
+const PARAMS_STRIPPED = ["POST /management-api/fiscal-certificate/diagnose"];
+
+const INSPECTOR_REFUSAL = {
+  status: 403,
+  code: "authorization.not_permitted",
+  params: { permission: "invoice.inspect" },
+};
+
+describe("a session holding invoice.inspect alone, in the running server", () => {
+  /** Status and error of every route the app registers for `methods`, sent with `cookie`. */
+  async function sweep(app: Hono, cookie: string, methods: readonly string[]) {
+    const id = randomUUID();
+    const signOut = "DELETE /management-api/session";
+    const routes = [
+      ...new Set(
+        app.routes
+          .filter((route) => methods.includes(route.method))
+          .map((route) => `${route.method} ${route.path}`),
+      ),
+    ].sort((a, b) => Number(a === signOut) - Number(b === signOut));
+    const answers = new Map<string, { status: number; code?: unknown; params?: unknown }>();
+    for (const route of routes) {
+      const [method, path] = route.split(" ") as [string, string];
+      const concrete = path
+        .split("/")
+        .map((segment) => (segment.startsWith(":") ? id : segment === "*" ? "x" : segment))
+        .join("/");
+      const response = await fetch(url(`${concrete}?from=2026-11-01&to=2026-11-30`), {
+        method,
+        headers: {
+          cookie,
+          ...(method === "GET" ? {} : { "content-type": "application/json" }),
+        },
+        ...(method === "GET" ? {} : { body: "{}" }),
+      });
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        const body = (await response.json()) as { error?: { code?: unknown; params?: unknown } };
+        answers.set(route, {
+          status: response.status,
+          code: body.error?.code,
+          params: body.error?.params,
+        });
+      } else {
+        await response.body?.cancel();
+        answers.set(route, { status: response.status });
+      }
+    }
+    return answers;
+  }
+
+  const refusesInspector = (answer: { status: number; code?: unknown; params?: unknown }) =>
+    JSON.stringify(answer) === JSON.stringify(INSPECTOR_REFUSAL);
+
+  it("is refused by every route except its own account's and the tax office's", async () => {
+    let inspector = "";
+    await withServer(
+      {},
+      async ({ app }) => {
+        const all = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+        const asInspector = await sweep(app, inspector, all);
+        const ended = await sweep(app, `waitron_management_session=${randomUUID()}`, all);
+        expect([...asInspector.keys()]).toEqual(expect.arrayContaining(INSPECTOR_ROUTES));
+        const leaks: string[] = [];
+        for (const [route, answer] of asInspector) {
+          if (INSPECTOR_ROUTES.includes(route)) {
+            if (refusesInspector(answer) || answer.code === "management_session.required")
+              leaks.push(`${route}: refuses its own route, ${JSON.stringify(answer)}`);
+            continue;
+          }
+          const stranger = ended.get(route)!;
+          // A route answering a cookie that names no session as it answers the inspector's gives the
+          // inspector nothing: it is public, or it refuses the request before reading the session.
+          const sameAsStranger = stranger.status === answer.status && stranger.code === answer.code;
+          const stripped =
+            PARAMS_STRIPPED.includes(route) &&
+            JSON.stringify(answer) === JSON.stringify({ ...INSPECTOR_REFUSAL, params: {} });
+          if (!refusesInspector(answer) && !stripped && !sameAsStranger)
+            leaks.push(`${route}: ${JSON.stringify(answer)}`);
+        }
+        expect(leaks).toEqual([]);
+      },
+      async () => {
+        inspector = (await sessionHolding(suite.db, ["invoice.inspect"])).cookie;
+      },
+    );
+  });
+
+  it("is refused the staff roster through the staff entrance, and an absence with a valid body", async () => {
+    let inspector = "";
+    const [port] = await freePorts(1);
+    await withServer(
+      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: String(port) },
+      async ({ venue }) => {
+        const remote = served.listeners[0]!;
+        const roster = (cookie: string) =>
+          remote.fetch(
+            new Request("https://staff.example.test/management-api/staff-roster", {
+              headers: { cookie },
+            }),
+          );
+        expect(await answerOf(await roster(inspector))).toEqual({
+          status: 403,
+          body: { error: { code: INSPECTOR_REFUSAL.code, params: INSPECTOR_REFUSAL.params } },
+        });
+        expect((await roster(venue.managerCookie)).status).toBe(200);
+        const absence = await fetch(url("/management-api/me/schedule/absences"), {
+          method: "POST",
+          headers: { cookie: inspector, "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "holiday",
+            startsOn: "2026-11-20",
+            endsOn: "2026-11-21",
+            note: null,
+          }),
+        });
+        expect(await answerOf(absence)).toEqual({
+          status: 403,
+          body: { error: { code: INSPECTOR_REFUSAL.code, params: INSPECTOR_REFUSAL.params } },
+        });
+        expect(suite.db.all<{ n: number }>(sql`select count(*) as n from absences`)[0]!.n).toBe(0);
+      },
+      async () => {
+        inspector = (await sessionHolding(suite.db, ["invoice.inspect"])).cookie;
+      },
+    );
+  });
+
+  it("serves its own account and the tax office's list", async () => {
+    let inspector = "";
+    await withServer(
+      {},
+      async () => {
+        const answers: Record<string, number> = {};
+        for (const path of [
+          "/management-api/session/me",
+          "/management-api/session/me/profile",
+          "/management-api/passkey/signals",
+          "/management-api/me/personal-data/export",
+          "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30",
+        ]) {
+          const response = await fetch(url(path), { headers: { cookie: inspector } });
+          await response.body?.cancel();
+          answers[path] = response.status;
+        }
+        const locale = await fetch(url("/management-api/session/me/locale"), {
+          method: "PUT",
+          headers: { cookie: inspector, "content-type": "application/json" },
+          body: JSON.stringify({ locale: "es-ES" }),
+        });
+        answers["PUT locale"] = locale.status;
+        const signOut = await fetch(url("/management-api/session"), {
+          method: "DELETE",
+          headers: { cookie: inspector },
+        });
+        answers["DELETE session"] = signOut.status;
+        const after = await fetch(url("/management-api/session/me"), {
+          headers: { cookie: inspector },
+        });
+        await after.body?.cancel();
+        answers["after signing out"] = after.status;
+        expect(answers).toEqual({
+          "/management-api/session/me": 200,
+          "/management-api/session/me/profile": 200,
+          "/management-api/passkey/signals": 200,
+          "/management-api/me/personal-data/export": 200,
+          "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30": 200,
+          "PUT locale": 204,
+          "DELETE session": 204,
+          "after signing out": 401,
+        });
+      },
+      async () => {
+        inspector = (await sessionHolding(suite.db, ["invoice.inspect"])).cookie;
+      },
+    );
+  });
+
+  it("leaves a manager and a session with no permission reading as before", async () => {
+    let nobody = "";
+    await withServer(
+      {},
+      async ({ app, venue }) => {
+        const manager = await sweep(app, venue.managerCookie, ["GET"]);
+        expect([...manager].filter(([, answer]) => refusesInspector(answer))).toEqual([]);
+        const empty = await sweep(app, nobody, ["GET"]);
+        // Only the tax office's list names invoice.inspect: a session without it is refused there.
+        expect(
+          [...empty].filter(([, answer]) => refusesInspector(answer)).map(([route]) => route),
+        ).toEqual(["GET /management-api/tax-office/invoices"]);
+        for (const route of [
+          "GET /management-api/orders",
+          "GET /management-api/me/schedule/shifts",
+          "GET /management-api/session/me/profile",
+        ])
+          expect(empty.get(route)?.status, route).toBe(200);
+      },
+      async () => {
+        nobody = (await sessionHolding(suite.db, [])).cookie;
+      },
+    );
+  });
 });

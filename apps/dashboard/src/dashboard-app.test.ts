@@ -4461,23 +4461,31 @@ describe("dashboard-app", () => {
     ).toEqual(["nav-my-schedule", "nav-orders"]);
   });
 
-  it.each(["/manage", "/manage/orders"])(
+  const inspectorMe = {
+    personId: "inspector",
+    roleIds: ["tax-inspector"],
+    locale: null,
+    venueLocale: "es-ES",
+    sessionDefault: "es-ES",
+    permissions: ["invoice.inspect"],
+    modules: [],
+  };
+
+  it.each([
+    "/manage",
+    "/manage/orders",
+    "/manage/my-schedule",
+    "/manage/alerts",
+    "/manage/staff",
+    "/manage/sales",
+  ])(
     "a session holding only invoice.inspect lands on Invoices, and sees no other venue screen, from %s",
     async (path) => {
       history.replaceState(null, "", path);
-      const api = stubApi({
-        getMe: vi.fn().mockResolvedValue({
-          personId: "inspector",
-          roleIds: ["tax-inspector"],
-          locale: null,
-          venueLocale: "es-ES",
-          sessionDefault: "es-ES",
-          permissions: ["invoice.inspect"],
-          modules: [],
-        }),
-      });
+      const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
+      expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=nav-orders]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=nav-my-schedule]")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).toBeNull();
@@ -4492,6 +4500,47 @@ describe("dashboard-app", () => {
       ).toEqual(["nav-invoices"]);
     },
   );
+
+  it("a session holding only invoice.inspect reads no alerts, no disk stop and no live updates", async () => {
+    history.replaceState(null, "", "/manage");
+    const liveUpdates = { start: vi.fn(), stop: vi.fn() };
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
+    expect(api.listAlerts).not.toHaveBeenCalled();
+    expect(api.getDiskStop).not.toHaveBeenCalled();
+    expect(liveUpdates.start).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-bell]")).toBeNull();
+  });
+
+  it("a session holding only invoice.inspect opens its account settings over Invoices, without a PIN", async () => {
+    history.replaceState(null, "", "/manage/profile");
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    const profile = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen");
+    expect(profile).not.toBeNull();
+    expect(profile!.tillPin).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
+  });
+
+  it("a manager holding invoice.inspect beside other permissions keeps the PIN and alerts", async () => {
+    history.replaceState(null, "", "/manage/profile");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: [...meResponse.permissions, "invoice.inspect"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const profile = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen");
+    expect(profile!.tillPin).toBe(true);
+    expect(api.listAlerts).toHaveBeenCalled();
+    expect(api.getDiskStop).toHaveBeenCalled();
+  });
 
   it("does not show the nav on the login screen", async () => {
     const api = stubApi({

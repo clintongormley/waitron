@@ -192,6 +192,7 @@ export async function authorizeManager(
 ): Promise<{ authorizedBy: string; authority: PersonAuthority }> {
   const { personId, authority } = await resolveManagementSession(tx, args.managementSessionId, {
     touch: args.touch,
+    admitInspector: args.permission === "invoice.inspect",
   });
   if (!holds(authority, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });

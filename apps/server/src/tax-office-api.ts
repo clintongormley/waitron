@@ -130,6 +130,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const saleId = c.req.param("saleId").toLowerCase();
+      if (!isUuid(saleId)) throw new AppError("invoice_delivery.not_found", {});
       const { document, fileName } = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,

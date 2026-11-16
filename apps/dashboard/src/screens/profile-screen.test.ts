@@ -620,6 +620,15 @@ describe("your profile", () => {
     await click(el, "save");
     expect(api.changePin).toHaveBeenCalledWith({ pin: "4321" });
   });
+  it("offers no PIN change where tillPin is off, keeping the password and passkeys", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("[data-test=change-pin]")).not.toBeNull();
+    el.tillPin = false;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=change-pin]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=change-password]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=add-passkey]")).not.toBeNull();
+  });
   it("adds a passkey for this session and confirms removal with current credentials", async () => {
     const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();

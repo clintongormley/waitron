@@ -1,5 +1,5 @@
 import "./errors.js";
-import { readPersonAuthority } from "./authority.js";
+import { inspectsInvoicesOnly, readPersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
 import { nowIso, managementSessions, persons } from "@waitron/db";
@@ -15,6 +15,13 @@ const passiveRead = new AsyncLocalStorage<boolean>();
 /** An automatic HTTP read verifies the session without counting as human activity. */
 export function withPassiveManagementRead<T>(read: () => T): T {
   return passiveRead.run(true, read);
+}
+
+const inspectorAdmitted = new AsyncLocalStorage<boolean>();
+
+/** Runs a route a session holding `invoice.inspect` alone may use; every other route refuses it. */
+export function withInspectorAdmitted<T>(route: () => T): T {
+  return inspectorAdmitted.run(true, route);
 }
 
 export interface ManagementSession {
@@ -66,12 +73,21 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
   return row;
 }
 
+/** Refuses a session holding `invoice.inspect` alone unless `admitInspector` or
+ * `withInspectorAdmitted` admits it, so a route that does not opt in is closed to it. */
 export async function resolveManagementSession(
   tx: Transaction,
   token: string,
-  options: { touch?: boolean } = {},
+  options: { touch?: boolean; admitInspector?: boolean } = {},
 ) {
   const row = await readManagementSession(tx, token);
+  const authority = await readPersonAuthority(tx, row.personId);
+  if (
+    inspectsInvoicesOnly(authority) &&
+    options.admitInspector !== true &&
+    inspectorAdmitted.getStore() !== true
+  )
+    throw new AppError("authorization.not_permitted", { permission: "invoice.inspect" });
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
     await tx
@@ -82,7 +98,7 @@ export async function resolveManagementSession(
   return {
     sessionRowId: row.sessionRowId,
     personId: row.personId,
-    authority: await readPersonAuthority(tx, row.personId),
+    authority,
     email: row.email,
     displayName: row.displayName,
     locale: row.locale,

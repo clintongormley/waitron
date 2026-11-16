@@ -150,23 +150,13 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       : { today: { from: today, to: today, ...clock } };
   };
 
-  /** A session holding `invoice.inspect` alone is confined to the tax office's invoices (A1411 D8). */
-  const ordersSession = async (tx: Transaction, sessionId: string) => {
-    const session = await resolveManagementSession(tx, sessionId);
-    const { permissions } = session.authority;
-    if (permissions.size === 1 && permissions.has("invoice.inspect"))
-      // The session holds this permission and nothing else; holding only it is the refusal's reason.
-      throw new AppError("authorization.not_permitted", { permission: "invoice.inspect" });
-    return session;
-  };
-
   /** The session's person; without `report.view`, only once their Orders list shows the order. */
   const visibleOrderPerson = async (
     tx: Transaction,
     sessionId: string,
     id: string,
   ): Promise<string> => {
-    const { personId, authority } = await ordersSession(tx, sessionId);
+    const { personId, authority } = await resolveManagementSession(tx, sessionId);
     if (!holds(authority, "report.view")) {
       const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
       const { rows } = await listOrders(tx, {
@@ -217,7 +207,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
     ) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      const { authority } = await ordersSession(tx, sessionId);
+      const { authority } = await resolveManagementSession(tx, sessionId);
       const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
       return fn(tx, orderScope(authority, clock), clock);
     });

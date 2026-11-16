@@ -120,6 +120,10 @@ write.
   and no other permission is refused every `/management-api/orders*` route with
   `authorization.not_permitted`, and its nav hides Orders and the own-schedule landing; it lands on
   Invoices. Tested route by route (Task 1).
+  Widened 2026-11-16 after review: every management route now refuses such a session unless it
+  opts in (`resolveManagementSession` in `packages/identity/src/management-session.ts`); its own
+  account's routes and the tax office's are the ones that do, pinned by the sweep in
+  `apps/server/src/boot.management-origin.test.ts`.
 - **Q1 (owner). How does an inspector sign in?** Answered 2026-11-16 08:57 (owner, relayed in lane L's
   questions.md, "## WATCHER 2026-11-16 08:57"): "We just create a user with the relevant permissions, send
   the email, just like any other user" — the default below stands. Default: at the venue a manager opens Invoices on

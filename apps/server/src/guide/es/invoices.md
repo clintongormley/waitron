@@ -25,7 +25,8 @@ anulada sigue en la lista, marcada con el día en que se anuló. Si la lista ter
 Un inspector puede tener su propio acceso cuando el correo del servidor está configurado
 ([Correo](email.md#set-up)), porque su primera contraseña le llega por correo.
 
-- En **Roles de acceso**, crea un rol que tenga solo **Ver facturas para Hacienda**.
+- En **Roles de acceso**, crea un rol que tenga solo **Ver facturas para Hacienda**. Con solo
+  ese rol, el inspector ve **Facturas** y su propia **Configuración de la cuenta**, y nada más.
 - En **Usuarios**, añade al inspector con su correo y ese rol. Waitron le envía una invitación
   por correo; consulta [Acceso a la cuenta](staff.md#account-access).
 - Puede entrar en el local o, con el [acceso remoto](servers.md#remote-access) activado, a través

@@ -422,6 +422,18 @@ describe("tax office invoice PDF", () => {
     expect(await rowCounts()).toEqual(before);
   });
 
+  it("refuses an id that is not a sale's shape before reading the session, writing nothing", async () => {
+    const before = await rowCounts();
+    // A cookie naming no session: refused 401 only if the id check came after the session read.
+    const ended = `waitron_management_session=${randomUUID()}`;
+    for (const cookie of [managerDashboard, ended])
+      expect(await saleDownload(cookie, "not-a-uuid")).toMatchObject({
+        status: 404,
+        code: "invoice_delivery.not_found",
+      });
+    expect(await rowCounts()).toEqual(before);
+  });
+
   it("gives a session holding only invoice.inspect the PDF, recording that person", async () => {
     const saleId = await kinds.F2!();
     const inspector = await sessionHolding(venue.db, ["invoice.inspect"]);
