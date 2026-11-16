@@ -406,22 +406,13 @@ Open:
   PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
   the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
   wholly off-screen (fixed by lane C's W27, below).
-- A staff list longer than the screen still makes the page scroll to reach the language button
-  (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
-  Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
+- Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
   a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
   `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
   no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
-  space changes the screen's layout, so it is its own change. Likewise the till's
-  `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
-  above the bottom edge, the room the old bottom-right language button (later the footer)
-  took; decide whether it should drop to the bottom edge. While a handheld's Ready bar shows,
-  `.app:has(till-floor-screen[ready-bar]) .submitted-toast` lifts the toast by the page's
-  padding as well, which clears the bar only because the bar is no taller than that offset (the
-  "fits one line" cases in `apps/till/src/screens/till-floor-screen.ready-bar.test.ts`).
-  Dropping the toast to the bottom edge must still lift it above the bar while the bar shows. On the dashboard, the account menu (which
-  since A582's slice 2b also holds the signed-in language choices) is a native popover in the
-  top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
+  space changes the screen's layout, so it is its own change.
+- On the dashboard, the account menu (which since A582's slice 2b also holds the signed-in
+  language choices) is a native popover in the top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
   `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
   and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
   holds it, restarting it in full afterwards, only while the pointer or keyboard focus is on the pop-up, or while a window it is not
@@ -1137,6 +1128,14 @@ Measured
 covers the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like
 the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
 where the toast goes.
+
+Dropping the till's bottom toasts to one gap above the window's foot was tried on 2026-11-17
+(#3588) and not kept: it moves the overlap rather than ending it. Measured then in Chromium (the
+probe was not kept): on a 390×844 phone handheld the toast, at 778–832 px down the window, covered
+Pay (784–828 px), which it had cleared before; on a till at 1024×768 it covered the bottom 34 px
+of the 62 px Fire and Send all buttons. The toasts' present lift, a tap target and two gaps
+(`.submitted-toast` in `apps/till/src/till-app.ts`), was room for a language button that A187
+moved to the top bar, so it does not bind the owner's choice of where the toast goes.
 
 
 ## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).
