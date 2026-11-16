@@ -1850,7 +1850,7 @@ async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string
     )
     .where(
       and(
-        inArray(workingOrderLines.workingOrderId, [...orderIds]),
+        inIds(workingOrderLines.workingOrderId, orderIds),
         isNotNull(ticketItems.requestedAt),
         isNull(ticketItems.firedAt),
       ),
