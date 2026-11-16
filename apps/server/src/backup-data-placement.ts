@@ -34,6 +34,7 @@ export async function placeBackupDatabase(
     venueDir: input.venueDir,
     stateDir: input.stateDir,
     log: input.log,
+    durable: false,
   });
   await applyMigrations(
     input.venueDir,

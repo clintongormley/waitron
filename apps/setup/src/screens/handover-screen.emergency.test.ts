@@ -85,6 +85,7 @@ async function mount(
     changeBeforeDeclare?: boolean;
     backup?: boolean;
     backupRefusal?: string;
+    backupRefusalReason?: string;
     backupNeedsKeyCode?: string;
     theme?: "light" | "dark";
     /** The spare still holds its joining copy; takes answer these in turn, the last repeating. */
@@ -201,7 +202,7 @@ async function mount(
           options.backupRefusal ?? options.backupNeedsKeyCode ?? "handover.backup_key_missing";
         return new Response(
           JSON.stringify({
-            error: { code },
+            error: { code, params: { reason: options.backupRefusalReason } },
           }),
           { status: code === "recovery.passphrase_invalid" ? 422 : 409 },
         );
@@ -593,16 +594,21 @@ it.each(
 );
 
 it.each([
-  ["handover.copy_predates_destination", "handover.emergency.backup_too_old", "en-GB"],
-  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "en-GB"],
-  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "es-ES"],
+  ["handover.copy_predates_destination", "handover.emergency.backup_too_old", "en-GB", undefined],
+  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "en-GB", undefined],
+  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "es-ES", undefined],
+  ["restore.manifest_invalid", "shell.restore.manifest_invalid", "en-GB", "invalid"],
+  ["restore.manifest_invalid", "shell.restore.manifest_invalid", "es-ES", "invalid"],
+  ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "en-GB", "unsupported"],
+  ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "es-ES", "unsupported"],
 ] as const)(
   "keeps the archive choice after admission is refused: %s (%s, %s)",
-  async (code, key, locale) => {
+  async (code, key, locale, reason) => {
     setLocale(locale);
     const { el, posts } = await mount({
       backup: true,
       backupRefusal: code,
+      backupRefusalReason: reason,
     });
     await authenticate(el);
     const input = q(el, 'wt-file-input[name="handover-backup"]');

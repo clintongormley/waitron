@@ -269,7 +269,13 @@ export async function clearRestoreSecretFiles(stateDir: string, log: Logger): Pr
     }
     for (const rel of new Set(targets)) {
       const parent = dirname(rel);
-      if (parent !== "." && !(await info(parent))?.isDirectory()) continue;
+      if (parent !== ".") {
+        const folder = await info(parent);
+        if (!folder?.isDirectory()) {
+          if (folder) log("warn", "restore.secrets.working_kept", { file: rel });
+          continue;
+        }
+      }
       const live = await info(rel);
       for (const suffix of [
         stagedPath(""),

@@ -1855,7 +1855,7 @@ describe("restore steps — failures part-way", () => {
 
     await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
     expect((await stat(join(venueFile(), "held"))).isDirectory()).toBe(true);
-    expect(logged).toEqual([]);
+    expect(logged).toEqual(["restore.db.staged"]);
   });
 
   it("restoreDatabase keeps the OLD database when Litestream's folder cannot be removed", async () => {

@@ -614,6 +614,8 @@ export async function restoreDatabase(args: {
   /** The venue's own state folder, whose backup room note vouches for the `venue.db` replaced. */
   stateDir: string;
   log: Logger;
+  /** Only disposable backup verification may skip flushing. */
+  durable?: boolean;
   /** Tests inject failures here; production passes nothing. */
   fs?: PlacementFs;
 }): Promise<string> {
@@ -677,10 +679,10 @@ export async function restoreDatabase(args: {
       await (fs.copyFile ?? copyFile)(args.databasePath, incoming);
       await (fs.chmod ?? chmod)(incoming, VENUE_FILE_MODE);
     }
-    await reachDisk(incoming);
+    if (args.durable !== false) await reachDisk(incoming);
     if (args.nodeDump !== undefined) {
       await writeFile(nodeIncoming, args.nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
-      await reachDisk(nodeIncoming);
+      if (args.durable !== false) await reachDisk(nodeIncoming);
     }
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
@@ -733,13 +735,15 @@ export async function restoreDatabase(args: {
   }
   // Publication has completed: refusing here would restore the old identity beside the new pair.
   // Keep the matching identity; durability is unconfirmed when the folder flush fails.
-  try {
-    await syncFolderHolding(target);
-  } catch (error) {
-    args.log("error", "restore.db.folder_sync_failed", {
-      folder: args.venueDir,
-      errno: errnoOf(error),
-    });
+  if (args.durable !== false) {
+    try {
+      await syncFolderHolding(target);
+    } catch (error) {
+      args.log("error", "restore.db.folder_sync_failed", {
+        folder: args.venueDir,
+        errno: errnoOf(error),
+      });
+    }
   }
   try {
     await fs.rm(aside, { recursive: true, force: true });

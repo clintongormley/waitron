@@ -79,3 +79,15 @@ it("keeps working files whose live target is missing and never follows discovere
   expect(await readFile(join(root, "outside/sample.json.incoming"), "utf8")).toBe("external key");
   expect(log).toHaveBeenCalledWith("warn", "restore.secrets.working_kept", expect.any(Object));
 });
+
+it("keeps a linked TLS folder and logs that its keys were not swept", async () => {
+  const { root, put } = await seed();
+  await rm(join(root, "tls"), { recursive: true });
+  await put("external-tls/ca.key", "live key");
+  await put("external-tls/ca.key.restore-previous", "old key");
+  await symlink(join(root, "external-tls"), join(root, "tls"));
+  const log = vi.fn();
+  await clearRestoreSecretFiles(root, log);
+  expect(await readFile(join(root, "tls/ca.key.restore-previous"), "utf8")).toBe("old key");
+  expect(log).toHaveBeenCalledWith("warn", "restore.secrets.working_kept", { file: "tls/ca.key" });
+});
