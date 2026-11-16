@@ -1,12 +1,12 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, isUuid } from "@waitron/shared";
-import { deviceProfiles, devices, nowIso } from "@waitron/db";
+import { AppError, diskFullIn, isUuid } from "@waitron/shared";
+import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
-import { signInWithToken, staleBefore } from "@waitron/identity";
+import { signInWithToken, sightingDue, staleBefore } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 
@@ -160,9 +160,9 @@ export interface DeviceProof {
 /**
  * Reads and authenticates the request's device, returning its {@link DeviceProof} or `null` at
  * EVERY miss — a missing or malformed cookie, an unknown or revoked device, or a token that does
- * not match. The id selects the row and the token validates it. Only a cookie read that matches
- * writes (the `last_seen_at` sighting), and only when a sighting is due and the read is not
- * passive; that sequence is {@link signInWithToken}'s.
+ * not match. The id selects the row and the token validates it. A read that matches writes the
+ * `last_seen_at` sighting only when one is due and the read is not passive; that sequence is
+ * {@link signInWithToken}'s, which {@link readDevDevice} repeats for the dev header.
  */
 async function readDeviceProof(
   deps: { db: Database; devMode?: boolean },
@@ -175,12 +175,8 @@ async function readDeviceProof(
     const override = c.req.header(DEV_DEVICE_HEADER);
     if (override !== undefined) {
       if (!isUuid(override)) return null;
-      const [row] = await deps.db
-        .select(deviceBindingColumns)
-        .from(devices)
-        .innerJoin(deviceProfiles, deviceProfileJoin)
-        .where(and(eq(devices.id, override), eq(devices.active, true)));
-      return row === undefined ? null : { device: toDeviceBinding(override, row), tokenHash: null };
+      const device = await readDevDevice(deps.db, override, options);
+      return device === null ? null : { device, tokenHash: null };
     }
   }
 
@@ -208,15 +204,53 @@ async function readDeviceProof(
     passive: options.passive,
   });
   if (row === null) return null;
-  if (options.passive !== true) {
-    let sightings = liveSightings.get(deps.db);
-    if (sightings === undefined) {
-      sightings = new Map();
-      liveSightings.set(deps.db, sightings);
-    }
-    sightings.set(deviceId, nowIso());
-  }
+  if (options.passive !== true) noteLiveSighting(deps.db, deviceId);
   return { device: toDeviceBinding(deviceId, row), tokenHash: row.tokenHash };
+}
+
+function noteLiveSighting(db: Database, deviceId: string): void {
+  let sightings = liveSightings.get(db);
+  if (sightings === undefined) {
+    sightings = new Map();
+    liveSightings.set(db, sightings);
+  }
+  sightings.set(deviceId, nowIso());
+}
+
+/** {@link signInWithToken}'s sequence for the dev header, which carries no token to check. */
+async function readDevDevice(
+  db: Database,
+  deviceId: string,
+  options: { passive?: boolean },
+): Promise<DeviceBinding | null> {
+  const readRow = async (on: Database | Transaction) => {
+    const [found] = await on
+      .select({ lastSeenAt: devices.lastSeenAt, ...deviceBindingColumns })
+      .from(devices)
+      .innerJoin(deviceProfiles, deviceProfileJoin)
+      .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
+    return found;
+  };
+  let row = await readRow(db);
+  if (row === undefined) return null;
+  if (options.passive === true) return toDeviceBinding(deviceId, row);
+
+  const seenAt = nowIso();
+  if (sightingDue(row.lastSeenAt, seenAt)) {
+    try {
+      row = await withTransaction(db, async (tx) => {
+        const current = await readRow(tx);
+        if (current !== undefined) await recordSighting(tx, deviceId, seenAt);
+        return current;
+      });
+    } catch (error) {
+      if (!diskFullIn(error)) throw error;
+      row = await readRow(db);
+    }
+    if (row === undefined) return null;
+  }
+  noteLiveSighting(db, deviceId);
+  return toDeviceBinding(deviceId, row);
 }
 
 /**

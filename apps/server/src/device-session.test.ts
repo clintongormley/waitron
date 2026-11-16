@@ -32,6 +32,7 @@ import {
   cookieDomainFor,
   deviceBindingColumns,
   deviceProfileJoin,
+  lastDeviceSighting,
   readDeviceCookie,
   requireDevice,
   requireDeviceProof,
@@ -179,6 +180,24 @@ async function lastSeenAt(deviceId: string): Promise<string | null> {
     sql`select last_seen_at from devices where id = ${deviceId}`,
   );
   return rows[0]!.last_seen_at;
+}
+
+function setLastSeen(deviceId: string, at: Date) {
+  return suite.db.execute(
+    sql`update devices set last_seen_at = ${at.toISOString()} where id = ${deviceId}`,
+  );
+}
+
+/** The venue database, except that every write turn runs `before` and then rejects with `error`. */
+function stampRefused(error: Error, before: () => Promise<void> = async () => {}): Database {
+  return Object.create(suite.db, {
+    withWriteLock: {
+      value: async () => {
+        await before();
+        throw error;
+      },
+    },
+  }) as Database;
 }
 
 type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: string };
@@ -533,18 +552,6 @@ describe("requireDevice (venue database)", () => {
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
   });
 
-  /** The venue database, except that every write turn runs `before` and then rejects with `error`. */
-  function stampRefused(error: Error, before: () => Promise<void> = async () => {}): Database {
-    return Object.create(suite.db, {
-      withWriteLock: {
-        value: async () => {
-          await before();
-          throw error;
-        },
-      },
-    }) as Database;
-  }
-
   it("a stamp refused for a full disk still authenticates, and saves nothing", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     const db = stampRefused(new AppError("storage.disk_full", {}));
@@ -851,6 +858,8 @@ describe("dev-override header (venue database)", () => {
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceAId); // NOT deviceBId
+    expect(await lastSeenAt(deviceBId)).toBeNull();
+    expect(lastDeviceSighting(suite.db, deviceBId, null)).toBeNull();
   });
 
   it("is honoured when devMode is true — header wins over cookie, no token needed", async () => {
@@ -873,6 +882,84 @@ describe("dev-override header (venue database)", () => {
       );
       expect(binding).toBeNull();
     }
+  });
+
+  it("records the chosen device's sighting, as the cookie does", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    expect(await lastSeenAt(deviceBId)).toBeNull();
+    const binding = await readWithHeaders(
+      { db: suite.db, devMode: true },
+      { [DEV_DEVICE_HEADER]: deviceBId },
+    );
+    expect(binding?.deviceId).toBe(deviceBId);
+    expect(Date.parse((await lastSeenAt(deviceBId))!)).toBeGreaterThan(Date.now() - 10_000);
+    const live = lastDeviceSighting(suite.db, deviceBId, null);
+    expect(Date.parse(live!)).toBeGreaterThan(Date.now() - 10_000);
+  });
+
+  it("writes the chosen device's sighting at most once a minute", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const read = () =>
+      readWithHeaders({ db: suite.db, devMode: true }, { [DEV_DEVICE_HEADER]: deviceBId });
+    const recent = new Date(Date.now() - 30_000);
+    await setLastSeen(deviceBId, recent);
+    expect((await read())?.deviceId).toBe(deviceBId);
+    expect(await lastSeenAt(deviceBId)).toBe(recent.toISOString());
+
+    await setLastSeen(deviceBId, new Date(Date.now() - 90_000));
+    expect((await read())?.deviceId).toBe(deviceBId);
+    expect(Date.parse((await lastSeenAt(deviceBId))!)).toBeGreaterThan(Date.now() - 10_000);
+  });
+
+  it("a passive read of the chosen device records nothing", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const app = new Hono();
+    app.get("/probe", async (c) =>
+      c.json(await requireDeviceProof({ db: suite.db, devMode: true }, c, { passive: true })),
+    );
+    const res = await app.request("/probe", { headers: { [DEV_DEVICE_HEADER]: deviceBId } });
+    expect(((await res.json()) as DeviceProof).device.deviceId).toBe(deviceBId);
+    expect(await lastSeenAt(deviceBId)).toBeNull();
+    expect(lastDeviceSighting(suite.db, deviceBId, null)).toBeNull();
+  });
+
+  /** {@link probe} for the dev header naming `deviceId`, with dev mode on. */
+  async function probeDev(deviceId: string, db: Database): Promise<ProbeResult> {
+    const app = new Hono();
+    let thrown: unknown;
+    app.get("/probe", async (c) => c.json(await requireDevice({ db, devMode: true }, c)));
+    app.onError((err, c) => {
+      thrown = err;
+      return c.body(null, 500);
+    });
+    const res = await app.request("/probe", { headers: { [DEV_DEVICE_HEADER]: deviceId } });
+    if (res.status === 200) return { ok: true, binding: (await res.json()) as DeviceBinding };
+    return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
+  }
+
+  it("a stamp refused for a full disk still authenticates the chosen device, and saves nothing", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const db = stampRefused(new AppError("storage.disk_full", {}));
+    expect(await probeDev(deviceBId, db)).toMatchObject({
+      ok: true,
+      binding: { deviceId: deviceBId },
+    });
+    expect(await lastSeenAt(deviceBId)).toBeNull();
+    expect(lastDeviceSighting(db, deviceBId, null)).not.toBeNull();
+  });
+
+  it("…but a chosen device revoked meanwhile is refused", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const db = stampRefused(new AppError("storage.disk_full", {}), () => revoke(deviceBId));
+    expect(await probeDev(deviceBId, db)).toEqual({ ok: false, code: "device.unauthorized" });
+    expect(lastDeviceSighting(db, deviceBId, null)).toBeNull();
+  });
+
+  it("any other failure of the chosen device's stamp still fails the request", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const db = stampRefused(new Error("boom"));
+    expect(await probeDev(deviceBId, db)).toEqual({ ok: false, code: "Error: boom" });
+    expect(await lastSeenAt(deviceBId)).toBeNull();
   });
 
   it("with no override header, devMode reads the cookie unchanged", async () => {
@@ -911,11 +998,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
 });
 
 describe("reading the device beside the write lock", () => {
-  const setLastSeen = (deviceId: string, at: Date) =>
-    suite.db.execute(
-      sql`update devices set last_seen_at = ${at.toISOString()} where id = ${deviceId}`,
-    );
-
   /**
    * Holds the venue's write lock open until the returned `release` is called. `during` runs inside
    * the held transaction first, so what it writes commits only on release.
@@ -1055,8 +1137,52 @@ describe("reading the device beside the write lock", () => {
     expect(Date.parse((await lastSeenAt(deviceId))!)).toBeGreaterThan(Date.now() - 10_000);
   });
 
-  it("resolves a dev-override device while another caller holds the write lock", async () => {
+  it("refuses a dev-override device revoked while it waits for the lock to record a sighting", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const stale = new Date(Date.now() - 90_000);
+    await setLastSeen(deviceBId, stale);
+    const lock = holdWriteLock(() =>
+      suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceBId)),
+    );
+    const watch = watchLockRequest();
+    let read: Promise<DeviceBinding | null> | undefined;
+    try {
+      read = readWithHeaders({ db: suite.db, devMode: true }, { [DEV_DEVICE_HEADER]: deviceBId });
+      expect(await Promise.race([watch.requested.then(() => "queued"), read])).toBe("queued");
+    } finally {
+      watch.restore();
+      lock.release();
+      await lock.done;
+    }
+    expect(await read).toBeNull();
+    expect(await lastSeenAt(deviceBId)).toBe(stale.toISOString());
+    expect(lastDeviceSighting(suite.db, deviceBId, null)).toBeNull();
+  });
+
+  it("returns the profile a dev-override device was moved to while it waits for the lock", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const movedTo = await seedDeviceProfile("New screen", "kds", []);
+    await setLastSeen(deviceBId, new Date(Date.now() - 90_000));
+    const lock = holdWriteLock(() =>
+      suite.db.update(devices).set({ deviceProfileId: movedTo }).where(eq(devices.id, deviceBId)),
+    );
+    const watch = watchLockRequest();
+    let read: Promise<DeviceBinding | null> | undefined;
+    try {
+      read = readWithHeaders({ db: suite.db, devMode: true }, { [DEV_DEVICE_HEADER]: deviceBId });
+      expect(await Promise.race([watch.requested.then(() => "queued"), read])).toBe("queued");
+    } finally {
+      watch.restore();
+      lock.release();
+      await lock.done;
+    }
+    expect((await read)?.deviceProfileId).toBe(movedTo);
+    expect(Date.parse((await lastSeenAt(deviceBId))!)).toBeGreaterThan(Date.now() - 10_000);
+  });
+
+  it("resolves a dev-override device while another caller holds the write lock, when no sighting is due", async () => {
     const { deviceACookie, deviceBId } = await enrolDevDevices();
+    await setLastSeen(deviceBId, new Date());
     const lock = holdWriteLock();
     const read = readWithHeaders(
       { db: suite.db, devMode: true },

@@ -82,10 +82,8 @@ Left open:
 
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
-  the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
-  opened through the dev stack's device chooser never records a check-in: the override returns
-  before the cookie path updates `lastSeenAt` (`readDeviceProof` in `apps/server/src/device-session.ts`).
-  Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
+  the dark-screen alert for up to an hour while those dishes remain waiting. Improve how the alert
+  distinguishes a kitchen using paper.
 
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
 
@@ -96,14 +94,6 @@ is paid, or after a server switch, shows the ordinary unnamed message. The kitch
 of stations is read only when the screen opens, so after that read fails the out-of-date banner
 stays, counting, until the screen is opened again; long outages are counted in minutes, never
 hours.
-
-## A1066. Four server test files mark a HOLD ticket printed without recording a station
-
-`party-allergy.restart`, `party-allergy.submit`, `party-arriving-dishes` and `kitchen-print` write a
-group's HOLD stamp straight to the row, without recording any station in
-`order_group_hold_stations`. They pass in CI; nobody has checked whether what they assert still
-depends on HOLD paper reaching a station. `line-service-projections.test.ts` failed for this reason
-and now records its stations. Left open by A756 PR 6's review.
 
 ## Routing reads do work only one screen uses
 
@@ -177,10 +167,8 @@ in A1308's orders and sales slice, which rebuilds the table anyway.
 
 ## Bundle: Held paper followups
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A1066. Four server test files mark a HOLD ticket printed without recording a station.**
-  [Detail](kitchen.md#a1066-four-server-test-files-mark-a-hold-ticket-printed-without-recording-a-station)
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](kitchen.md#task-6-761-hold-tickets-in-advance)
 - **A1369. A reprint of a bill's kitchen tickets leaves out a dish waiting for the pass whose HOLD ticket printed (seen in A1327's review, #2502; predates it).**

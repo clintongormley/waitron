@@ -26,6 +26,7 @@ import {
 import { addExtras } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { fireLines, splitLinesWithinOrder } from "./working-order.js";
+import { recordHeldPaper } from "./order-groups.js";
 import "./errors.js";
 
 // ticket_items.sent_order_number: the number of the order a dish the kitchen had seen left.
@@ -201,12 +202,23 @@ async function editNote(billId: string, name: string, note: string, cfg = v.cfg)
   );
 }
 
-/** Marks the bill's held groups as printed on a HOLD ticket. */
-function holdTicketPrinted(billId: string) {
+/** Marks the bill's held groups as printed on a HOLD ticket at each station holding their dishes. */
+async function holdTicketPrinted(billId: string) {
   v.db.run(sql`
     update order_groups set hold_printed_at = '2026-10-14T12:00:00.000Z'
     where id in (select group_id from working_order_lines where working_order_id = ${billId})
       and state = 'held'`);
+  await inTx(v, async (tx) => {
+    const held = tx.all<{ groupId: string; stationId: string }>(sql`
+      select distinct l.group_id as groupId, t.station_id as stationId
+      from working_order_lines l
+      join ticket_items t on t.working_order_line_id = l.id
+      join order_groups g on g.id = l.group_id
+      where l.working_order_id = ${billId} and g.state = 'held'`);
+    for (const { groupId, stationId } of held) {
+      await recordHeldPaper(tx, groupId, new Set([stationId]));
+    }
+  });
 }
 
 describe("the order number a moved dish was sent under", () => {
@@ -323,7 +335,7 @@ describe("the order number a moved dish was sent under", () => {
       v.cfg,
       "grouped",
     );
-    holdTicketPrinted(b28);
+    await holdTicketPrinted(b28);
     const n28 = await numberOf(b28);
 
     await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Tarta"), quantity: "1" }]);

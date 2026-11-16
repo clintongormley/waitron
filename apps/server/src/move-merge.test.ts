@@ -94,7 +94,7 @@ import { finishTable } from "./testing/party-close-fixture.js";
 import { numbersOf as billNumbersOf } from "./testing/bill-identities.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup, recordHeldPaper } from "./order-groups.js";
 import { insertPartyBill } from "./parties.js";
 import {
   enqueueCorrectionSlips,
@@ -3103,6 +3103,7 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
         { partyId: source.partyId, state: "held", position: 3, submittedBy: OPERATOR },
       ])
       .returning();
+    await recordHeldPaper(tx, printed!.id, new Set([originalTicket!.stationId]));
     await insertInChunks(
       tx,
       workingOrderLines,

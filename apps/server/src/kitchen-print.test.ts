@@ -60,7 +60,7 @@ import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/ve
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { fireGroup, reorderHeldGroups } from "./order-groups.js";
+import { fireGroup, recordHeldPaper, reorderHeldGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueAllergyCorrectionSlips,
@@ -398,6 +398,7 @@ describe("show the rest of the order", () => {
       };
       await held("Steak", grill.id, 5);
       await held("Dessert", pastry.id, 6);
+      await recordHeldPaper(tx, group!.id, new Set([grill.id, pastry.id]));
       const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
       const reprinted = (await printJobsFor(tx)).filter((job) => !beforeReprint.has(job.id));
