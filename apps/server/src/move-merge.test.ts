@@ -3236,9 +3236,6 @@ describe("a moved dish keeps its kitchen state and is not sent again (owner, 202
     return burger.id;
   }
 
-  /** Each print job's first line and its last dish line. */
-  const headAndDish = (slip: string[]) => [slip[0], slip.at(-2)];
-
   it("Merge bills: the merged-in Burger stays ready on the Grill screen and only a MOVED slip prints", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
@@ -3248,14 +3245,21 @@ describe("a moved dish keeps its kitchen state and is not sent again (owner, 202
     const burger = await readyBurger(v, second);
     const before = await onGrill(v, burger);
     expect(before).toEqual([expect.objectContaining({ orderId: second, state: "ready" })]);
+    const numbers = await numbersOf([tabId, second]);
     const printed = (await printedBy(grill)).length;
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) => mergeBills(tx, v.cfg, tabId, second, command));
 
     expect(await onGrill(v, burger)).toEqual(before.map((entry) => ({ ...entry, orderId: tabId })));
-    expect((await slipsSince(grill, printed)).map(headAndDish)).toEqual([
-      ["*** MOVIDO ***", "1 x BURG"],
+    expect(await slipsSince(grill, printed)).toEqual([
+      movedSlip(
+        "Grill",
+        `Pedido ${numbers.get(second)} -> ${numbers.get(tabId)}`,
+        "Mesa 301",
+        "Mesa 301",
+        ["1 x BURG"],
+      ),
     ]);
   });
 
@@ -3277,8 +3281,15 @@ describe("a moved dish keeps its kitchen state and is not sent again (owner, 202
     expect(await onGrill(v, burger)).toEqual(
       before.map((entry) => ({ ...entry, orderId: billId })),
     );
-    expect((await slipsSince(grill, printed)).map(headAndDish)).toEqual([
-      ["*** MOVIDO ***", "1 x BURG"],
+    const numbers = await numbersOf([tabId, billId]);
+    expect(await slipsSince(grill, printed)).toEqual([
+      movedSlip(
+        "Grill",
+        `Pedido ${numbers.get(tabId)} -> ${numbers.get(billId)}`,
+        "Mesa 302",
+        "Mesa 302",
+        ["1 x BURG"],
+      ),
     ]);
   });
 
@@ -3294,14 +3305,17 @@ describe("a moved dish keeps its kitchen state and is not sent again (owner, 202
     const burger = await readyBurger(v, leaving);
     const before = await onGrill(v, burger);
     expect(before).toEqual([expect.objectContaining({ orderId: leaving, state: "ready" })]);
+    const numbers = await numbersOf([leaving]);
     const printed = (await printedBy(grill)).length;
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, table304, leaving, command));
 
     expect(await onGrill(v, burger)).toEqual(before);
-    expect((await slipsSince(grill, printed)).map(headAndDish)).toEqual([
-      ["*** MOVIDO ***", "1 x BURG"],
+    expect(await slipsSince(grill, printed)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(leaving)}`, "Mesa 303, 304", "Mesa 304", [
+        "1 x BURG",
+      ]),
     ]);
   });
 });
