@@ -896,7 +896,10 @@ export class BackupScreen extends LitElement {
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary) return;
-    if (!afterTurnOff) {
+    // Until `updated()` replaces it, a scope from before backups went off holds the old form's
+    // baseline, so it reads as changed, and the person has no Turn on draft to keep.
+    const freshForm = afterTurnOff || this.#archiveMode !== this.#archiveValue().mode;
+    if (!freshForm) {
       if (this.#archiveScope?.isDirty()) return;
       const current = this.#archiveValue();
       if (
@@ -904,7 +907,7 @@ export class BackupScreen extends LitElement {
       )
         return;
     }
-    this.#prefillAndCommit(s, !afterTurnOff);
+    this.#prefillAndCommit(s, !freshForm);
   }
 
   /** An automatic refill keeps a switched-off folder's text when the refilled folder is off too:
