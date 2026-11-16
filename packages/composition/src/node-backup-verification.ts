@@ -36,10 +36,11 @@ async function sourceRow(
   nodeId: string,
 ): Promise<BackupRow | undefined> {
   let present = false;
-  for await (const _row of copy.rows("select 1 from sqlite_schema where type='table' and name=?", [
-    table,
-  ]))
-    present = true;
+  for await (const row of copy.rows(
+    "select name from sqlite_schema where type='table' and name=?",
+    [table],
+  ))
+    present = row.name === table;
   if (!present) return undefined;
   for await (const row of copy.rows(SOURCE_ROW[table], [nodeId])) return row;
   return undefined;
