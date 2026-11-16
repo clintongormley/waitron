@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  day,
-  enumCheck,
-  enumType,
-  flag,
-  id,
-  label,
-  newId,
-  table,
-  timeOfDay,
-} from "../columns.js";
+import { count, day, flag, id, label, newId, table, timeOfDay } from "../columns.js";
 import type { CalendarColour } from "@waitron/shared";
 import { menuPeriods } from "./menus.js";
 import { departments } from "./service.js";
@@ -142,4 +131,3 @@ export const departmentDayRanges = table(
     index("department_day_ranges_day_idx").on(t.dayId, t.startsAt),
   ],
 );
-

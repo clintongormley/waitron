@@ -271,6 +271,16 @@ export async function canonicalMadridSemantics(
       case "department_day_ranges":
         key = parts("day_id", "starts_at", "ends_at");
         break;
+      case "opening_hours":
+        key = parts(
+          "department_id",
+          "zone_id",
+          "season_id",
+          "special_day_date_id",
+          "weekday",
+          "starts_at",
+        );
+        break;
       case "zone_days":
         key = parts("zone_id", "season_id", "weekday", "special_day_date_id");
         break;

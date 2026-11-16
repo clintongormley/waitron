@@ -489,7 +489,7 @@ describe("special-day staffing", () => {
           "seasons",
           "staffing_days",
           "department_days",
-          "zone_days",
+          "opening_hours",
           "menu_periods",
           "products",
           "routing_cells",
@@ -501,7 +501,7 @@ describe("special-day staffing", () => {
       seasons: 1,
       staffing_days: 1,
       department_days: 2,
-      zone_days: 2,
+      opening_hours: 2,
       menu_periods: 1,
       products: 2,
       routing_cells: 1,
@@ -850,8 +850,21 @@ it("A724 guides a station by the edited special day, including zone openings", a
   const v = await guideVenue();
   await inTx(async (tx) => {
     await tx.insert(openingHours).values([
-      { zoneId: v.zoneId, seasonId: v.seasonId, weekday: 5, kind: "closed", startsAt: "12:00:00", endsAt: "15:00:00" },
-      { zoneId: v.zoneId, specialDayDateId: v.aug14, kind: "open", startsAt: "13:00:00", endsAt: "14:00:00" },
+      {
+        zoneId: v.zoneId,
+        seasonId: v.seasonId,
+        weekday: 5,
+        kind: "closed",
+        startsAt: "12:00:00",
+        endsAt: "15:00:00",
+      },
+      {
+        zoneId: v.zoneId,
+        specialDayDateId: v.aug14,
+        kind: "open",
+        startsAt: "13:00:00",
+        endsAt: "14:00:00",
+      },
     ]);
     const [other] = await tx
       .insert(specialDays)

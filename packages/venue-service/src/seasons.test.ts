@@ -546,7 +546,9 @@ describe("saveSeasons", () => {
     expect(
       await db.select().from(departmentDays).where(eq(departmentDays.seasonId, christmas.id)),
     ).toEqual([]);
-    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, christmas.id))).toEqual([]);
+    expect(
+      await db.select().from(openingHours).where(eq(openingHours.seasonId, christmas.id)),
+    ).toEqual([]);
   });
 
   it("gives the first season's days to the last one when the first is deleted, and removes its weeks", async () => {
@@ -559,7 +561,9 @@ describe("saveSeasons", () => {
     expect(
       await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.autumn)),
     ).toEqual([]);
-    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual([]);
+    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
+      [],
+    );
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
 

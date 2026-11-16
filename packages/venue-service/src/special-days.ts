@@ -273,14 +273,16 @@ async function occurrencesOf(
       tx
         .select({
           dateId: openingHours.specialDayDateId,
-          ownerId: openingHours.zoneId,
+          ownerId: sql<string>`${openingHours.zoneId}`,
           periodId: sql<string | null>`null`,
           kind: sql<ZonePaint["kind"]>`${openingHours.kind}`,
           startsAt: openingHours.startsAt,
           endsAt: openingHours.endsAt,
         })
         .from(openingHours)
-        .where(and(isNotNull(openingHours.zoneId), inArray(openingHours.specialDayDateId, [...dateIds]))),
+        .where(
+          and(isNotNull(openingHours.zoneId), inArray(openingHours.specialDayDateId, [...dateIds])),
+        ),
     );
   const departmentPaint = new Map<string, Map<string, PaintRange[]>>();
   const zonePaint = new Map<string, Map<string, ZonePaint[]>>();
@@ -802,7 +804,7 @@ export async function readSpecialDay(tx: Transaction, id: string): Promise<Speci
   const zonePaint = await tx
     .select({
       dateId: openingHours.specialDayDateId,
-      zoneId: openingHours.zoneId,
+      zoneId: sql<string>`${openingHours.zoneId}`,
       kind: sql<ZonePaint["kind"]>`${openingHours.kind}`,
       startsAt: openingHours.startsAt,
       endsAt: openingHours.endsAt,
@@ -981,7 +983,10 @@ export async function saveSpecialDay(
     await tx
       .delete(openingHours)
       .where(
-        and(eq(openingHours.zoneId, entry.ownerId), eq(openingHours.specialDayDateId, specialDayDateId)),
+        and(
+          eq(openingHours.zoneId, entry.ownerId),
+          eq(openingHours.specialDayDateId, specialDayDateId),
+        ),
       );
     if (entry.ranges.length === 0) continue;
     await tx.insert(openingHours).values(

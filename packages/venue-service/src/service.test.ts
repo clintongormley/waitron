@@ -165,8 +165,7 @@ describe("VENUE_SERVICE", () => {
     expect(names).toContain("menu_periods");
     expect(names).toContain("department_days");
     expect(names).toContain("department_day_ranges");
-    expect(names).toContain("zone_days");
-    expect(names).toContain("zone_day_ranges");
+    expect(names).toContain("opening_hours");
     expect(names).not.toContain("station_hours");
     expect(names).not.toContain("department_hours");
     expect(names).not.toContain("station_fallbacks");

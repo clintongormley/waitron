@@ -259,3 +259,13 @@ at the same time; whichever lands second uses the other's names (stop point 3).
 - [ ] **Step 3: Run** Finish-line items 2–5 — PASS (Task 1's case included).
 - [ ] **Step 4:** Docs; `pnpm protection-list list --out <B>`; `compare`; paste and mark.
 - [ ] **Step 5: Commit** `git commit -s -m "opening hours: a zone's closed and open times live in opening_hours"`.
+
+
+## Implementation corrections, 16 November 2026
+
+The delete preview retains the current no-hours behaviour: `service-delete-settings.ts`
+reads no calendar rows for its impact. The November 8 plan's proposed season-only impact
+read no longer exists. The watcher cleared preserving this on 15 November at 23:03.
+Watcher clearance in Lane H questions.md at 03:31 permits only storage-shape assertion ports:
+one DELETE/one INSERT for flattened zone writes and several same-day ranges instead of a
+unique day container. The 03:41 clearance sets a hard stop of 1,300 counted handwritten lines.

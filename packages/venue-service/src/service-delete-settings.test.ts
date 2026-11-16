@@ -408,10 +408,16 @@ it("delete takes the department's season days and their ranges before its period
         endsAt: "16:00:00",
       })),
     );
-    await tx.insert(openingHours).values([f.gone, f.elsewhere].map((zoneId) => ({
-      zoneId, seasonId: winter!.id, weekday: 2, kind: "closed" as const,
-      startsAt: "17:00:00", endsAt: "19:00:00",
-    })));
+    await tx.insert(openingHours).values(
+      [f.gone, f.elsewhere].map((zoneId) => ({
+        zoneId,
+        seasonId: winter!.id,
+        weekday: 2,
+        kind: "closed" as const,
+        startsAt: "17:00:00",
+        endsAt: "19:00:00",
+      })),
+    );
 
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
 

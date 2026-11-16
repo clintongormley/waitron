@@ -1108,8 +1108,12 @@ describe("season weeks in a configuration bundle", () => {
       opening_hours: [
         {
           id: "z-fri-1",
-          department_id: null, period_id: null, zone_id: "terrace",
-          season_id: "s-winter", weekday: 5, special_day_date_id: null,
+          department_id: null,
+          period_id: null,
+          zone_id: "terrace",
+          season_id: "s-winter",
+          weekday: 5,
+          special_day_date_id: null,
           kind: "closed",
           starts_at: "23:00:00",
           ends_at: "02:00:00",
@@ -1418,7 +1422,18 @@ describe("special days in a configuration bundle", () => {
         range("dd-15", null, "12:00:00", "16:00:00"),
       ],
       opening_hours: [
-        { id: "zr-15", department_id: null, period_id: null, zone_id: "terrace", season_id: null, weekday: null, special_day_date_id: "fiesta-15", kind: "open", starts_at: "12:00:00", ends_at: "14:00:00" },
+        {
+          id: "zr-15",
+          department_id: null,
+          period_id: null,
+          zone_id: "terrace",
+          season_id: null,
+          weekday: null,
+          special_day_date_id: "fiesta-15",
+          kind: "open",
+          starts_at: "12:00:00",
+          ends_at: "14:00:00",
+        },
       ],
     };
   }
@@ -1550,7 +1565,12 @@ describe("special days in a configuration bundle", () => {
       refusal("department_days.special_day_date_id"),
     );
     const zones = specialTables();
-    zones.opening_hours!.push({ ...zones.opening_hours![0]!, id: "zr-again", starts_at: "15:00:00", ends_at: "16:00:00" });
+    zones.opening_hours!.push({
+      ...zones.opening_hours![0]!,
+      id: "zr-again",
+      starts_at: "15:00:00",
+      ends_at: "16:00:00",
+    });
     expect(() => validate(zones, clock)).not.toThrow();
   });
 
@@ -1570,7 +1590,12 @@ describe("special days in a configuration bundle", () => {
     const zoneOverlap = specialTables();
     zoneOverlap.opening_hours!.push({
       id: "zr-again",
-      department_id: null, period_id: null, zone_id: "terrace", season_id: null, weekday: null, special_day_date_id: "fiesta-15",
+      department_id: null,
+      period_id: null,
+      zone_id: "terrace",
+      season_id: null,
+      weekday: null,
+      special_day_date_id: "fiesta-15",
       kind: "closed",
       starts_at: "13:00:00",
       ends_at: "15:00:00",
@@ -1592,7 +1617,18 @@ describe("special days in a configuration bundle", () => {
     ).toThrowError(refusal("department_day_ranges"));
     const zone = painted("2026-03-28", 0, "22:00:00", "03:00:00");
     zone.opening_hours = [
-      { id: "zr", department_id: null, period_id: null, zone_id: "terrace", season_id: null, weekday: null, special_day_date_id: "fiesta-15", kind: "closed", starts_at: "02:15:00", ends_at: "03:00:00" },
+      {
+        id: "zr",
+        department_id: null,
+        period_id: null,
+        zone_id: "terrace",
+        season_id: null,
+        weekday: null,
+        special_day_date_id: "fiesta-15",
+        kind: "closed",
+        starts_at: "02:15:00",
+        ends_at: "03:00:00",
+      },
     ];
     zone.special_day_dates![0]!.id = "fiesta-15";
     expect(() => validate(zone, clock)).toThrowError(refusal("opening_hours"));
@@ -1601,7 +1637,18 @@ describe("special days in a configuration bundle", () => {
   it("accepts special-date closure tails independently of department paint", () => {
     const tables = painted("2026-11-20", 0, "20:00:00", "23:00:00");
     tables.opening_hours = [
-      { id: "zr", department_id: null, period_id: null, zone_id: "terrace", season_id: null, weekday: null, special_day_date_id: "fiesta-15", kind: "closed", starts_at: "18:00:00", ends_at: "05:00:00" },
+      {
+        id: "zr",
+        department_id: null,
+        period_id: null,
+        zone_id: "terrace",
+        season_id: null,
+        weekday: null,
+        special_day_date_id: "fiesta-15",
+        kind: "closed",
+        starts_at: "18:00:00",
+        ends_at: "05:00:00",
+      },
     ];
     expect(() => validate(tables, clock)).not.toThrow();
     tables.department_day_ranges = [range("dd-15", null, "18:00:00", "05:00:00")];

@@ -139,12 +139,16 @@ export async function writeZoneSeasonWeeks(
     .delete(openingHours)
     .where(and(eq(openingHours.zoneId, zoneId), inArray(openingHours.seasonId, [...seasonIds])));
   const ranges = seasonIds.flatMap((seasonId) =>
-    WEEKDAYS.flatMap((weekday) => week[weekday]!.map((range) => ({
-      zoneId, seasonId, weekday,
-      kind: "closed" as const,
-      startsAt: storedTime(range.startsAt),
-      endsAt: storedTime(range.endsAt),
-    }))),
+    WEEKDAYS.flatMap((weekday) =>
+      week[weekday]!.map((range) => ({
+        zoneId,
+        seasonId,
+        weekday,
+        kind: "closed" as const,
+        startsAt: storedTime(range.startsAt),
+        endsAt: storedTime(range.endsAt),
+      })),
+    ),
   );
   if (ranges.length > 0) await tx.insert(openingHours).values(ranges);
 }

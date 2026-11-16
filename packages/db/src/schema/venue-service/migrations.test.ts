@@ -806,9 +806,13 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const zoneDayId = randomUUID();
     await db.execute(sql`insert into opening_hours (id, zone_id, season_id, weekday, kind, starts_at, ends_at)
       values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6, 'closed', '15:00:00', '17:00:00')`);
-    expect((await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows).toHaveLength(1);
+    expect(
+      (await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows,
+    ).toHaveLength(1);
     await db.execute(sql`delete from seasons where id = ${seasonId}`);
-    expect((await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows).toEqual([]);
+    expect(
+      (await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows,
+    ).toEqual([]);
     expect(
       (await db.execute(sql`select id from department_days where id = ${weekDayId}`)).rows,
     ).toEqual([]);

@@ -168,7 +168,8 @@ async function fixture(
       if (ranges.length && specialDayId) {
         await tx.insert(openingHours).values(
           ranges.map((r) => ({
-            zoneId, specialDayDateId,
+            zoneId,
+            specialDayDateId,
             kind: "closed" as const,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
@@ -177,7 +178,10 @@ async function fixture(
       } else if (ranges.length) {
         await tx.insert(openingHours).values(
           ranges.map((r) => ({
-            zoneId, seasonId, weekday: 3, kind: "closed" as const,
+            zoneId,
+            seasonId,
+            weekday: 3,
+            kind: "closed" as const,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
           })),
@@ -2063,7 +2067,15 @@ describe("clock compatibility reads special-day paint", () => {
         .select({ id: specialDayDates.id })
         .from(specialDayDates)
         .where(eq(specialDayDates.specialDayId, specialDayId));
-      await tx.insert(openingHours).values({ zoneId: v.zoneId!, specialDayDateId: date!.id, kind: "closed", startsAt: "22:00:00", endsAt: "04:30:00" });
+      await tx
+        .insert(openingHours)
+        .values({
+          zoneId: v.zoneId!,
+          specialDayDateId: date!.id,
+          kind: "closed",
+          startsAt: "22:00:00",
+          endsAt: "04:30:00",
+        });
     });
     expect((await conflicts("03:00")).conflicts).toEqual([
       {

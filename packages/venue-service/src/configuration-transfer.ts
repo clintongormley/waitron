@@ -172,7 +172,12 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
 }
 
 const rangeDayKey = (row: Row, owner: string) =>
-  JSON.stringify([row[owner], row.season_id ?? null, row.weekday ?? null, row.special_day_date_id ?? null]);
+  JSON.stringify([
+    row[owner],
+    row.season_id ?? null,
+    row.weekday ?? null,
+    row.special_day_date_id ?? null,
+  ]);
 
 type DayRows = Map<unknown, { ownerId: unknown; seasonId: unknown; weekday: number }>;
 
@@ -212,7 +217,11 @@ function dayRows(
     const key = JSON.stringify([row[owner], row.season_id, weekday]);
     if (!ranges && held.has(key)) refuse(`${table}.weekday`);
     held.add(key);
-    seasonDays.set(ranges ? rangeDayKey(row, owner) : row.id, { ownerId: row[owner], seasonId: row.season_id, weekday });
+    seasonDays.set(ranges ? rangeDayKey(row, owner) : row.id, {
+      ownerId: row[owner],
+      seasonId: row.season_id,
+      weekday,
+    });
   }
   return { seasonDays, specialDays };
 }

@@ -401,7 +401,13 @@ describe("zones closed at an instant", () => {
     const one = await reads([v.terrace]);
     const three = await reads([v.bar, v.terrace, v.disabled]);
     for (const texts of [one, three]) {
-      for (const table of ["settings", "seasons", "special_day_dates", "opening_hours", "floor_zones"])
+      for (const table of [
+        "settings",
+        "seasons",
+        "special_day_dates",
+        "opening_hours",
+        "floor_zones",
+      ])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
       expect(texts).toHaveLength(6);
     }

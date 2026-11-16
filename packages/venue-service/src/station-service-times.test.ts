@@ -634,7 +634,7 @@ it("reads the seasons and each season week once over a 42-day range", async () =
     try {
       await stationServiceTimes(db, f.station, "2030-11-01", "2030-12-12");
       const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-      for (const table of ["seasons", "department_days", "zone_days"])
+      for (const table of ["seasons", "department_days", "opening_hours"])
         expect(
           texts.filter((text) => text.includes(`from "${table}"`)),
           table,
@@ -754,7 +754,7 @@ it("A724: season forecasting batches stations and never reads calendar dates", a
         cutover: "06:00",
       });
       const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-      for (const table of ["department_days", "zone_days", "menu_periods", "routing_cells"])
+      for (const table of ["department_days", "opening_hours", "menu_periods", "routing_cells"])
         expect(
           texts.filter((text) => text.includes(`from "${table}"`)),
           table,

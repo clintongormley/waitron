@@ -1820,6 +1820,77 @@ for (const locale of ["en", "es"] as const) {
               for (const field of ["addAllergens", "suitableFor"]) delete item[field];
         },
       });
+      const tables = expected[phase].tables;
+      const rows = Object.values(tables.zone_day_ranges!.rows).map((range) => {
+        const day = tables.zone_days!.rows[String(range.day_id)]!;
+        const row = {
+          department_id: null,
+          zone_id: day.zone_id,
+          season_id: day.season_id,
+          weekday: day.weekday,
+          special_day_date_id: day.special_day_date_id,
+          period_id: null,
+          kind: range.kind,
+          starts_at: range.starts_at,
+          ends_at: range.ends_at,
+        };
+        const id = `@opening_hours:${stable([
+          null,
+          row.zone_id,
+          row.season_id,
+          row.special_day_date_id,
+          row.weekday,
+          row.starts_at,
+        ])}`;
+        return [id, { id, ...row }] as const;
+      });
+      const columns = [
+        "id",
+        "department_id",
+        "zone_id",
+        "season_id",
+        "weekday",
+        "special_day_date_id",
+        "kind",
+        "period_id",
+        "starts_at",
+        "ends_at",
+      ];
+      tables.opening_hours = {
+        columns: columns.map((name) => ({
+          name,
+          type: name === "weekday" ? "INTEGER" : "TEXT",
+          notnull: ["id", "kind", "starts_at", "ends_at"].includes(name) ? 1 : 0,
+          dflt_value: null,
+          pk: name === "id" ? 1 : 0,
+        })),
+        foreignKeys: [
+          [0, 0, "menu_periods", "period_id", "id", "NO ACTION"],
+          [0, 1, "menu_periods", "department_id", "department_id", "NO ACTION"],
+          [1, 0, "special_day_dates", "special_day_date_id", "id", "CASCADE"],
+          [2, 0, "seasons", "season_id", "id", "CASCADE"],
+          [3, 0, "floor_zones", "zone_id", "id", "CASCADE"],
+          [4, 0, "departments", "department_id", "id", "CASCADE"],
+        ].map(([id, seq, table, from, to, on_delete]) => ({
+          id: Number(id),
+          seq: Number(seq),
+          table: String(table),
+          from: String(from),
+          to: String(to),
+          on_delete: String(on_delete),
+          on_update: "NO ACTION",
+          match: "NONE",
+        })),
+        rows: Object.fromEntries(rows.sort(([a], [b]) => a.localeCompare(b))),
+      };
+      delete tables.zone_days;
+      delete tables.zone_day_ranges;
+      expected[phase].tables = byName(tables);
+      phases[phase]!.opening_hours = phases[phase]!.zone_day_ranges!;
+      delete phases[phase]!.zone_days;
+      delete phases[phase]!.zone_day_ranges;
+      phases[phase] = byName(phases[phase]!);
+
       const staffMenuFold = {
         from: "menu_period_staff_menus",
         into: "menu_periods",
@@ -1832,20 +1903,17 @@ for (const locale of ["en", "es"] as const) {
         expected.seeded = periods.semantics;
         for (const [name, count] of Object.entries(periods.added)) phases.seeded![name]! += count;
         const terrace = `@floor_zones:${stable([locale === "en" ? "Terrace" : "Terraza"])}`;
-        const closureRows = expected.seeded.tables.zone_day_ranges!.rows;
+        const closureRows = expected.seeded.tables.opening_hours!.rows;
         for (const [oldId, row] of Object.entries(closureRows)) {
-          const day = expected.seeded.tables.zone_days!.rows[String(row.day_id)];
-          if (day?.zone_id !== terrace) continue;
+          if (row.zone_id !== terrace) continue;
           expect({ kind: row.kind, startsAt: row.starts_at, endsAt: row.ends_at }).toEqual({
             kind: "closed",
             startsAt: "23:00:00",
             endsAt: "00:00:00",
           });
-          const id = `@zone_day_ranges:${stable([row.day_id, "closed", "23:00:00", "05:00:00"])}`;
-          delete closureRows[oldId];
-          closureRows[id] = { ...row, id, ends_at: "05:00:00" };
+          closureRows[oldId] = { ...row, ends_at: "05:00:00" };
         }
-        expected.seeded.tables.zone_day_ranges!.rows = Object.fromEntries(
+        expected.seeded.tables.opening_hours!.rows = Object.fromEntries(
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const { semantics, added } = madridWithAddedRows(

@@ -509,7 +509,9 @@ async function specialDay(
   }
   for (const [zoneId, ranges] of Object.entries(options.zonePaint ?? {})) {
     if (ranges.length > 0)
-      await db.insert(openingHours).values(ranges.map((range) => ({ ...range, zoneId, specialDayDateId: dated!.id })));
+      await db
+        .insert(openingHours)
+        .values(ranges.map((range) => ({ ...range, zoneId, specialDayDateId: dated!.id })));
   }
   return day!.id;
 }

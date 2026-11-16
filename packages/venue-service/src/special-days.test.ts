@@ -900,9 +900,9 @@ describe("deleteSpecialDay", () => {
     expect(
       await db.select().from(departmentDays).where(inArray(departmentDays.specialDayDateId, ids)),
     ).toEqual([]);
-    expect(await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids))).toEqual(
-      [],
-    );
+    expect(
+      await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids)),
+    ).toEqual([]);
   });
 
   it("refuses a stale revision and an unknown id, deleting nothing", async () => {
