@@ -387,3 +387,27 @@ describe("complete translation gap predicates", () => {
     });
   });
 });
+
+it("reports missing main names while regional blanks inherit and translation tools list only mains", async () => {
+  await seedTaxpayer(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const f = await fixture(tx, null);
+    await tx
+      .update(products)
+      .set({ customerName: { "en-US": "fries" } })
+      .where(eq(products.id, f.product.id));
+    const config = { defaultLanguage: "en", languages: ["en", "en-US", "es"] };
+    await writeContentLanguages(tx, config);
+    const counts = await listTranslationGapCounts(tx, config);
+    expect.soft(counts.find((row) => row.language === "en-US")!.count).toBe(0);
+    expect(
+      (await listContentTranslationGaps(tx, "en")).some(
+        (row) => row.kind === "product" && row.id === f.product.id,
+      ),
+    ).toBe(true);
+    expect((await listTranslationTargets(tx, "en", {}, context)).config.languages).toEqual([
+      "en",
+      "es",
+    ]);
+  });
+});

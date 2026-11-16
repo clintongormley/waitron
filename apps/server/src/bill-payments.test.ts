@@ -220,7 +220,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       const product = await createProduct(tx, {
         categoryId: dishes.id,
         name: item.name,
-        customerName: { [LOCALE]: item.customer },
+        customerName: { es: item.customer },
         kitchenName: item.kitchen,
         pricingUnit: "each",
         unitPrice: item.price,

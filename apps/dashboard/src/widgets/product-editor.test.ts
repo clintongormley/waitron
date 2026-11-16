@@ -3469,7 +3469,7 @@ it("summarises each collapsed section from its filled-in values", async () => {
   ]);
 });
 
-it("reads customer-facing names and descriptions stored under regional codes, and saves an edited one under its plain code", async () => {
+it("keeps stored regional names and descriptions separate when editing main-language text", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: {
@@ -3482,16 +3482,16 @@ it("reads customer-facing names and descriptions stored under regional codes, an
     taxChoices: reduced,
   });
   expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: "EN: House coffee · ES: Café de la casa", lines: 1 },
+    { label: t("editor.name"), value: t("modifiers.none_specified"), lines: 1 },
     {
       label: t("editor.description"),
-      value: `EN: Freshly roasted · ES: ${t("modifiers.none_specified")}`,
+      value: t("modifiers.none_specified"),
       lines: 2,
     },
   ]);
   await openSection(el, "descriptors");
-  expect(control<HTMLInputElement>(el, "customer-name-en").value).toBe("House coffee");
-  expect(control<HTMLTextAreaElement>(el, "description-en").value).toBe("Freshly roasted");
+  expect(control<HTMLInputElement>(el, "customer-name-en").value).toBe("");
+  expect(control<HTMLTextAreaElement>(el, "description-en").value).toBe("");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await input(el, "description-en", "Dark roast");
@@ -3499,7 +3499,7 @@ it("reads customer-facing names and descriptions stored under regional codes, an
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
     ...product,
     customerName: { "en-GB": "House coffee", "es-ES": "Café de la casa" },
-    description: { en: "Dark roast" },
+    description: { "en-GB": "Freshly roasted", en: "Dark roast" },
   });
 });
 
@@ -6982,4 +6982,33 @@ it("updates the extras notice as units change, including Each and a missing choi
   } finally {
     setLocale(before);
   }
+});
+
+it("submits only entered regional product names and clearing a version restores inheritance", async () => {
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "en-US", "es"] });
+  const el = await mountPricing(
+    { ...saved, name: "chips", customerName: { en: "chips" } },
+    { locales: ["en", "en-US", "es"] },
+  );
+  await openSection(el, "descriptors");
+  const us = control<HTMLInputElement>(el, "customer-name-en-US");
+  expect([us.value, us.placeholder]).toEqual(["", "chips"]);
+  await input(el, "customer-name-en-US", "fries");
+  const submitted = vi.fn();
+  el.addEventListener("wt-submit", submitted);
+  save(el);
+  expect(submitted.mock.calls[0]![0].detail.value.customerName).toEqual({
+    en: "chips",
+    "en-US": "fries",
+  });
+  const edited = await mountPricing(
+    { ...saved, name: "chips", customerName: { en: "chips", "en-US": "fries" } },
+    { locales: ["en", "en-US", "es"] },
+  );
+  await openSection(edited, "descriptors");
+  await input(edited, "customer-name-en-US", "");
+  const cleared = vi.fn();
+  edited.addEventListener("wt-submit", cleared);
+  save(edited);
+  expect(cleared.mock.calls[0]![0].detail.value.customerName).toEqual({ en: "chips" });
 });

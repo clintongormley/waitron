@@ -475,7 +475,7 @@ async function seedVariantOffer(
   const product = await createProduct(tx, {
     categoryId: null,
     name: "Coffee",
-    customerName: { [LOCALE]: "Freshly ground coffee" },
+    customerName: { [CONTENT_LANGUAGE]: "Freshly ground coffee" },
     kitchenName: "COF",
     pricingUnit: "each",
     unitPrice: "1.50",
@@ -639,7 +639,7 @@ describe("parkOrder", () => {
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Coffee",
-        customerName: { [LOCALE]: "Freshly ground coffee" },
+        customerName: { [CONTENT_LANGUAGE]: "Freshly ground coffee" },
         kitchenName: "COF",
         pricingUnit: "each",
         unitPrice: "1.50",
@@ -1907,8 +1907,8 @@ describe("getHeldOrder", () => {
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into units (id, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit)
-        values (${randomUUID()}, 'Staff unit', 'su', ${JSON.stringify({ [LOCALE]: "kg" })},
-          ${JSON.stringify({ [LOCALE]: "kg" })}, 3, 'kg')
+        values (${randomUUID()}, 'Staff unit', 'su', ${JSON.stringify({ [CONTENT_LANGUAGE]: "kg" })},
+          ${JSON.stringify({ [CONTENT_LANGUAGE]: "kg" })}, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;
       const product = await createProduct(tx, {
@@ -1934,7 +1934,7 @@ describe("getHeldOrder", () => {
       lines: [{ menuItemId, quantity: "0.375" }],
     });
     await db.execute(sql`
-      update units set name = ${JSON.stringify({ [LOCALE]: "kilogram" })}
+      update units set name = ${JSON.stringify({ [CONTENT_LANGUAGE]: "kilogram" })}
       where id = ${unitId}`);
 
     const order = await getHeldOrder({ db }, id);
@@ -2040,7 +2040,7 @@ describe("getHeldOrder", () => {
     // Give the product a customer name that DIFFERS from its staff name before parking, so the two
     // frozen halves below cannot be confused for one another.
     await db.execute(sql`
-      update products set customer_name = ${JSON.stringify({ [LOCALE]: "House espresso" })}
+      update products set customer_name = ${JSON.stringify({ [CONTENT_LANGUAGE]: "House espresso" })}
       where id = ${coffeeId}`);
     await withTransaction(db, republishMenus);
     await parkOrder({ db }, cfg, {
@@ -2051,7 +2051,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products
       set name = 'Renamed espresso',
-          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed house espresso" })},
+          customer_name = ${JSON.stringify({ [CONTENT_LANGUAGE]: "Renamed house espresso" })},
           vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: {} })}
       where id = ${coffeeId}`);
@@ -9319,7 +9319,7 @@ describe("editing a saved order prices only what the edit adds", () => {
         createProduct(tx, {
           categoryId,
           name: `${name} staff`,
-          customerName: { [LOCALE]: `${name} customer` },
+          customerName: { [CONTENT_LANGUAGE]: `${name} customer` },
           kitchenName: `${name} kitchen`,
           pricingUnit: "each",
           unitPrice,
@@ -9619,7 +9619,7 @@ async function seedWine(tx: Transaction, menuId: string) {
   const parent = await createProduct(tx, {
     categoryId: wineCategory.id,
     name: "Wine by the glass",
-    customerName: { [LOCALE]: "House wine" },
+    customerName: { [CONTENT_LANGUAGE]: "House wine" },
     kitchenName: "WINE",
     pricingUnit: "each",
     unitPrice: "4.00",
@@ -10249,13 +10249,13 @@ describe("a variant is sold as the product it is", () => {
     { staffName: "\t", customerName: null, frozen: "", printed: "\t" },
     {
       staffName: "125 ml",
-      customerName: { [LOCALE]: "Copa pequeña", "en-GB": "Small glass" },
+      customerName: { [CONTENT_LANGUAGE]: "Copa pequeña", "en-GB": "Small glass" },
       frozen: "Copa pequeña",
       printed: "Copa pequeña",
     },
     {
       staffName: "125 ml",
-      customerName: { [LOCALE]: "  ", "fr-FR": "FR small verre" },
+      customerName: { [CONTENT_LANGUAGE]: "  ", "fr-FR": "FR small verre" },
       frozen: "125 ml",
       printed: "125 ml",
     },
@@ -10284,7 +10284,7 @@ describe("a variant is sold as the product it is", () => {
         );
         await tx
           .update(products)
-          .set({ name: "Renamed", customerName: { [LOCALE]: "New customer name" } })
+          .set({ name: "Renamed", customerName: { [CONTENT_LANGUAGE]: "New customer name" } })
           .where(eq(products.id, wine.wine125));
         const [stored] = await tx
           .select({ variantDescriptions: workingOrderLines.variantDescriptions })

@@ -15,7 +15,6 @@ describe("optional translation maps", () => {
     { es: null },
     { es: 1 },
     { not_a_language: "x" },
-    { "es-ES": "Hola" },
     { ES: "Hola" },
   ])("refuses malformed maps or noncanonical keys: %j", (value) => {
     expect(() => validateOptionalTranslations(value)).toThrowError(
@@ -76,4 +75,25 @@ describe("full-field replacement", () => {
       );
     }
   });
+});
+
+it("saves and clears sparse enabled regional names independently of their main", () => {
+  const config = { defaultLanguage: "en", languages: ["en", "en-US"] };
+  expect(mergeOptionalTranslations(null, { "en-US": " fries " }, config)).toEqual({
+    "en-US": "fries",
+  });
+  expect(
+    mergeOptionalTranslations(
+      { en: "chips", "en-US": "fries" },
+      { en: "chips", "en-US": " " },
+      config,
+    ),
+  ).toEqual({ en: "chips" });
+  expect(
+    mergeOptionalTranslations(
+      { "en-US": "fries" },
+      { en: "chips" },
+      { ...config, languages: ["en"] },
+    ),
+  ).toEqual({ en: "chips", "en-US": "fries" });
 });

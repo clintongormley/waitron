@@ -87,7 +87,7 @@ useVenueDb({
           await createProduct(tx, {
             categoryId: null,
             name,
-            customerName: { [venue.cfg.locale]: `${name} (customer)` },
+            customerName: { es: `${name} (customer)` },
             kitchenName: name.toUpperCase(),
             pricingUnit: "each",
             unitPrice: price,

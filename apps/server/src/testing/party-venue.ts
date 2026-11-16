@@ -157,7 +157,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
       await createProduct(tx, {
         categoryId: category.id,
         name: product.name,
-        customerName: { [LOCALE]: product.customer },
+        customerName: { es: product.customer },
         kitchenName: product.kitchen,
         pricingUnit: "each",
         unitPrice: product.price,

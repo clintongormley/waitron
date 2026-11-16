@@ -372,7 +372,7 @@ export async function provisionAdjustmentVenue(
       const product = await createProduct(tx, {
         categoryId: category.id,
         name: item.name,
-        customerName: { [LOCALE]: item.customer },
+        customerName: { es: item.customer },
         kitchenName: item.kitchen,
         pricingUnit: item.unit,
         unitPrice: item.price,

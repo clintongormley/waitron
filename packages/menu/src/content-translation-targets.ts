@@ -2,6 +2,7 @@ import type { Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
+  mainContentLanguages,
   type ContentLanguages,
   TRANSLATION_GAP_KINDS as KINDS,
 } from "@waitron/shared";
@@ -99,8 +100,9 @@ export async function readTranslationSettings(
   tx: Transaction,
   context: TranslationContext,
 ): Promise<TranslationSettings> {
+  const config = await readContentLanguages(tx, context.fallbackLanguage);
   return {
-    config: await readContentLanguages(tx, context.fallbackLanguage),
+    config: { ...config, languages: mainContentLanguages(config.languages) },
     required: [...new Set(context.required.map(contentLanguageCode))].sort(),
   };
 }

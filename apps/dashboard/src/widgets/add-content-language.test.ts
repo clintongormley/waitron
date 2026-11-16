@@ -464,3 +464,22 @@ it("keeps the native language dialog open through repeated Escape after its focu
   await reported;
   expect(closed).toHaveBeenCalledOnce();
 });
+
+it("adds a regional version beside its enabled main using the shared picker", async () => {
+  setLocale("en-GB");
+  const save = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountWidget<AddContentLanguageDialog>("dashboard-add-content-language", {
+    open: true,
+    config: CONFIG,
+    baseLanguage: "en",
+    save,
+  });
+  expect(field(el).options).toContainEqual({ value: "en-US", label: "English (United States)" });
+  await choose(el, "en-US");
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      defaultLanguage: "es",
+      languages: ["es", "en", "en-US"],
+    }),
+  );
+});

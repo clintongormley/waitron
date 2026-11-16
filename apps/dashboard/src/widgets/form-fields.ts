@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { currentContentLanguages, type SummaryField } from "@waitron/ui";
-import { contentLanguageCode, formatMoney, resolveContentText } from "@waitron/shared";
+import { contentLanguageCode, contentLanguageTag, formatMoney } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -36,7 +36,7 @@ export const priceText = (value: string) =>
   isProductPrice(value) ? formatMoney(value, currentLocale()) : value;
 
 export const languageText = (value: Readonly<Record<string, string>>, locale: string) =>
-  resolveContentText(value, locale, locale);
+  value[locale] ?? "";
 
 export function withLanguageText(
   value: Readonly<Record<string, string>>,
@@ -46,7 +46,7 @@ export function withLanguageText(
   const others = Object.entries(value).filter(([key]) => {
     if (key === locale) return false;
     try {
-      return contentLanguageCode(key) !== locale;
+      return contentLanguageTag(key) !== locale;
     } catch {
       return !key.startsWith(`${locale}-`);
     }
@@ -177,13 +177,14 @@ export function nameFields(
   });
 }
 
-/** The default language's text in `value`, as the hint of a blank field in any OTHER language; ""
- * in the default language itself, which has nothing to fall back to. */
+/** A regional field inherits its main language before the venue default. */
 export function defaultLanguageHint(
   value: Record<string, string>,
   locale: string,
   defaultLanguage: string | undefined,
 ): string {
+  const main = contentLanguageCode(locale);
+  if (main !== locale && languageText(value, main).trim()) return languageText(value, main).trim();
   if (defaultLanguage === undefined || locale === defaultLanguage) return "";
   return languageText(value, defaultLanguage).trim();
 }
@@ -192,7 +193,7 @@ export function defaultLanguageHint(
  * Unlike {@link nameFields} no language is required: a customer-facing name left blank falls back to
  * the staff name rather than being a missing value. `placeholder` is what it falls back TO, shown
  * rather than stored. Given `defaultLanguage`, every other language falls back to the default
- * language's text first, as `resolveContentText` (`packages/shared/src/content-languages.ts`) does.
+ * language's text first; regional fields try their main language before that default.
  * A `placeholder` given per language is each field's whole fallback, and `defaultLanguage` adds
  * nothing to it. A language `locked` answers a hint for is drawn disabled, with that hint as its
  * description, and again under it as a `.locked-note` paragraph, hidden from a screen reader, which

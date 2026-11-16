@@ -55,16 +55,16 @@ describe("customerPresentationText", () => {
     ).toEqual({ product: { fr: "FR coffee", en: "Coffee" }, variant: null });
   });
 
-  test("resolves locale matching without copying parent fallback into a variant", () => {
+  test("resolves an enabled region without copying parent fallback into a variant", () => {
     expect(
       customerPresentationText(
         { ...full, customerName: { "es-ES": "ES coffee" }, variantCustomerName: { en: " " } },
         "en",
-        ["es", "en"],
+        ["es", "es-ES", "en"],
       ),
     ).toEqual({
-      product: { "es-ES": "ES coffee", es: "ES coffee", en: "Coffee" },
-      variant: { en: "Large", es: "Large" },
+      product: { "es-ES": "ES coffee", es: "Coffee", en: "Coffee" },
+      variant: { en: "Large", es: "Large", "es-ES": "Large" },
     });
   });
 

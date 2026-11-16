@@ -78,8 +78,9 @@ abierta:
 - Un **nombre para el cliente**, en **Descriptores**, con un campo por cada idioma de contenido. Es lo
   que lee el comensal: el ticket y la factura. Un ticket y una factura muestran el nombre para el cliente
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
-  dejas todos los idiomas en blanco. En cuanto rellenas un idioma, rellena también el predeterminado,
-  o el producto no se guardará.
+  dejas ese nombre predeterminado en blanco. Un campo regional como **Inglés (Estados Unidos)**
+  es opcional: déjalo vacío para usar el inglés, o escribe solo las palabras que cambian en la carta
+  para clientes. Los nombres regionales no sustituyen al nombre predeterminado en el ticket.
 - Un **nombre de estación de preparación**, en **Estación de preparación**. Es lo que imprime la comanda de estación y lo que muestran las
   pantallas de estación. Es útil cuando la etiqueta corta que necesita un cocinero no es el nombre con el
   que vendes. Déjalo en blanco y la estación verá el nombre del personal.

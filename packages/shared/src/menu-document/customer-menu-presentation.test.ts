@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FrozenOffer } from "./menu-document-types.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
 
-const config = { defaultLanguage: "en", languages: ["en", "es"] };
+const config = { defaultLanguage: "en", languages: ["en", "es", "es-MX"] };
 const staff = "Counter burger";
 
 describe("resolveMenuText", () => {
@@ -136,15 +136,15 @@ describe("resolveMenuText", () => {
       missingRequested: false,
     });
   });
-  it("does not relabel a regional default or mutate the supplied translation map", () => {
+  it("keeps a regional-only name out of the bare default without mutating the map", () => {
     const translations = { "en-GB": "House burger", es: " " };
     const before = structuredClone(translations);
     expect(
       resolveMenuText(translations, staff, { kind: "customer", language: "es" }, config),
     ).toEqual({
-      text: "House burger",
-      origin: "default",
-      language: "en-GB",
+      text: staff,
+      origin: "staff",
+      language: null,
       missingRequested: true,
     });
     expect(translations).toEqual(before);

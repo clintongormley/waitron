@@ -85,7 +85,7 @@ already *sold* — see below.
 ## Filling missing customer names together
 
 When several items lack the same language, open Edit translations from Content languages.
-Missing in starts with that language, and the same editor lets you edit other enabled languages
+Missing in starts with that main language, and the same editor lets you edit other enabled main languages
 beside it. You enter customer-facing text without changing staff or prep station names. With English
 as the default, you can save Spanish “Limonada para clientes” and leave English blank. Each
 missing language remains reported until you enter its own text; a fallback hint does not fill it.
@@ -310,8 +310,8 @@ that frozen staff name. Neither path needs today's menu to read the answer later
 ## Unit names on future orders
 
 Give a unit its own staff name and abbreviation. Translated names and abbreviations can both
-be empty. `unitPresentation` resolves each field from the requested enabled language, then the
-default, then its staff value. The two fields resolve independently.
+be empty. `unitPresentation` resolves each field from an exactly requested enabled regional
+version, its main language, the default, then its staff value. The two fields resolve independently.
 
 A newly priced line uses the published unit facts: its receipt map holds the default abbreviation
 or staff abbreviation under the default key, while its line context holds the full unit name.
@@ -324,8 +324,9 @@ comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundar
 ## The translation gap report
 
 When you leave a translation blank, it remains a gap even if a staff name makes the item
-readable. The report includes every enabled language, including the default. A product with
-staff name “STAFF Product” and no customer-facing text appears once under each enabled language.
+readable. The report checks every enabled main language, including the default. Regional versions have
+no gaps: blank fields inherit their main language. A product with staff name “STAFF Product”
+and no customer-facing text appears once under each enabled main language.
 Null, empty, whitespace-only and disabled-language-only maps all leave those languages missing.
 Changing the default remains independent of completeness.
 
@@ -355,8 +356,8 @@ in one database read. Both use the same gap query and count an item at most once
 `listContentTranslationGaps` retains its menu-specific identifiers and a variant's product id
 for its internal callers, with the same discovery rules.
 
-When you choose Edit translations, you open the same editor from every language row. Missing in
-starts with that row's language. You can compare and edit the enabled languages independently;
+When you choose Edit translations, you open the same editor from every main-language row. Missing in
+starts with that row's language. You can compare and edit the enabled main languages independently;
 leaving the default blank does not require a second name. Staff fallback appears as a placeholder,
 so it does not fill a translation or remove its gap.
 
@@ -378,13 +379,13 @@ bound. A direct API caller must account for surrounding spaces in the raw Save l
 An uncertain write retains the exact batch for Retry these changes. Review latest restores the
 submitted fields for explicit per-field decisions before a different request can be prepared.
 
-Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled
+Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled main
 language in which an item has no customer-facing text, the default language included. Its
 results are suggestions: they fill empty fields as drafts and reach no diner until someone saves
 them. Units receive suggestions for their names; abbreviations remain manual. Use fix rechecks
 the saved cell before staging a language-name correction; staff-name corrections link to the
 ordinary editor. All names makes corrections visible on otherwise complete rows. Before starting
-a run, the box refuses more than 20 enabled content languages. After a run stops, the first
+a run, the box refuses more than 20 enabled main content languages. After a run stops, the first
 suggestion page and the ready notice count names the editor can offer, including applicable text
 from earlier runs. The raw run reader counts stored text rows; continuation pages omit the run
 summary and the browser retains the first page's summary. A Discard waits up to 30 seconds before
@@ -395,7 +396,7 @@ happened on the server.
 
 When you copy a Prepare configuration into a fresh Live venue, the imported content-language
 setting must keep the languages required by the bundle's country and province enabled. You can
-still choose another enabled language as the default. The menu checks the saved setting
+still choose another enabled main language as the default. The menu checks the saved setting
 before staging replaces an earlier artifact. Before the import replaces database rows, it also
 checks the destination venue's country and province, which may differ from the bundle's.
 Malformed saved language lists and defaults are refused as `content.languages_invalid`;

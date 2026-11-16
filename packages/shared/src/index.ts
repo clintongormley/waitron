@@ -127,6 +127,10 @@ export {
 export type { SupportedLocale } from "./locales.js";
 export {
   contentLanguageCode,
+  contentLanguageTag,
+  contentLanguageDisplayName,
+  isRegionalContentLanguage,
+  mainContentLanguages,
   contentLanguageChoices,
   languageDisplayName,
   resolveContentText,

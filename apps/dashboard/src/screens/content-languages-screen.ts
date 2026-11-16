@@ -2,6 +2,10 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   languageDisplayName,
+  contentLanguageCode,
+  contentLanguageDisplayName,
+  mainContentLanguages,
+  isRegionalContentLanguage,
   resolveContentText,
   type ContentLanguageRules,
   type ContentLanguages,
@@ -101,6 +105,7 @@ export class ContentLanguagesScreen extends LitElement {
   @state() private rules: ContentLanguageRules | null = null;
   @state() private loadFailed = false;
   @state() private adding = false;
+  @state() private regionalBase = "";
   @state() private translating = false;
   @state() private translationLanguage = "";
   @state() private busy = false;
@@ -224,10 +229,30 @@ export class ContentLanguagesScreen extends LitElement {
     }
   }
 
+  #remove(code: string, config: ContentLanguages): void {
+    const versions = config.languages.filter(
+      (language) => isRegionalContentLanguage(language) && contentLanguageCode(language) === code,
+    );
+    if (versions.length) {
+      this.saveError = fill("content_languages.remove_versions", {
+        languages: versions
+          .map((language) => contentLanguageDisplayName(language, currentLocale()))
+          .join(", "),
+      });
+      return;
+    }
+    void this.#save(
+      config.defaultLanguage,
+      config.languages.filter((language) => language !== code),
+    );
+  }
+
   #renderNotice(config: ContentLanguages, rules: ContentLanguageRules) {
     const notice = rules.foreignLanguageNotice;
     if (!notice) return nothing;
-    const foreign = config.languages.filter((code) => !rules.official.includes(code)).length;
+    const foreign = mainContentLanguages(config.languages).filter(
+      (code) => !rules.official.includes(code),
+    ).length;
     if (foreign >= notice.minimumForeign) return nothing;
     const text = resolveContentText(notice.text, currentLocale(), "en");
     return text
@@ -237,7 +262,7 @@ export class ContentLanguagesScreen extends LitElement {
 
   #renderConfig(config: ContentLanguages, rules: ContentLanguageRules) {
     const locale = currentLocale();
-    const name = (code: string) => languageDisplayName(code, locale);
+    const name = (code: string) => contentLanguageDisplayName(code, locale);
     const collator = new Intl.Collator(locale);
     const others = config.languages
       .filter((code) => code !== config.defaultLanguage)
@@ -274,6 +299,7 @@ export class ContentLanguagesScreen extends LitElement {
             class="card-action accent-primary"
             ?disabled=${this.busy}
             @click=${() => {
+              this.regionalBase = "";
               this.adding = true;
             }}
             >${t("content_languages.add")}</wt-button
@@ -283,6 +309,7 @@ export class ContentLanguagesScreen extends LitElement {
       <dashboard-add-content-language
         .open=${this.adding}
         .config=${config}
+        .baseLanguage=${this.regionalBase}
         .official=${rules.official}
         .save=${this.#saveAdded}
         @languages-closed=${() => {
@@ -299,7 +326,7 @@ export class ContentLanguagesScreen extends LitElement {
     config: ContentLanguages,
     rules: ContentLanguageRules,
   ): DataTableColumn<string>[] {
-    const name = (code: string) => languageDisplayName(code, currentLocale());
+    const name = (code: string) => contentLanguageDisplayName(code, currentLocale());
     return [
       {
         key: "language",
@@ -314,6 +341,10 @@ export class ContentLanguagesScreen extends LitElement {
         key: "completeness",
         label: t("content_languages.completeness"),
         cell: (code) => {
+          if (isRegionalContentLanguage(code))
+            return fill("content_languages.inherits", {
+              language: languageDisplayName(code, currentLocale()),
+            });
           if (this.gapsFailed) return t("content_gaps.load_error");
           const report = this.gaps?.find((entry) => entry.language === code);
           return !report
@@ -334,13 +365,17 @@ export class ContentLanguagesScreen extends LitElement {
               code === config.defaultLanguage
                 ? nothing
                 : html`
-                    <wt-button
-                      data-test=${`set-default-${code}`}
-                      ?disabled=${this.busy}
-                      aria-label=${`${t("content_languages.set_default")}: ${name(code)}`}
-                      @click=${() => void this.#save(code, config.languages)}
-                      >${t("content_languages.set_default")}</wt-button
-                    >
+                    ${
+                      isRegionalContentLanguage(code)
+                        ? nothing
+                        : html`<wt-button
+                            data-test=${`set-default-${code}`}
+                            ?disabled=${this.busy}
+                            aria-label=${`${t("content_languages.set_default")}: ${name(code)}`}
+                            @click=${() => void this.#save(code, config.languages)}
+                            >${t("content_languages.set_default")}</wt-button
+                          >`
+                    }
                     ${
                       rules.required.includes(code)
                         ? nothing
@@ -349,26 +384,40 @@ export class ContentLanguagesScreen extends LitElement {
                               data-test=${`remove-${code}`}
                               ?disabled=${this.busy}
                               aria-label=${`${t("content_languages.remove")}: ${name(code)}`}
-                              @click=${() =>
-                                void this.#save(
-                                  config.defaultLanguage,
-                                  config.languages.filter((language) => language !== code),
-                                )}
+                              @click=${() => this.#remove(code, config)}
                               >${t("content_languages.remove")}</wt-button
                             >
                           `
                     }
                   `
             }
-            <wt-button
-              data-test=${`edit-translations-${code}`}
-              ?disabled=${this.busy}
-              @click=${() => {
-                this.translationLanguage = code;
-                this.translating = true;
-              }}
-              >${t("content_languages.edit_translations")}</wt-button
-            >
+            ${
+              !code.includes("-")
+                ? html`<wt-button
+                    data-test=${`add-version-${code}`}
+                    aria-label=${`${t("content_languages.add_version")}: ${name(code)}`}
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      this.regionalBase = code;
+                      this.adding = true;
+                    }}
+                    >${t("content_languages.add_version")}</wt-button
+                  >`
+                : nothing
+            }
+            ${
+              isRegionalContentLanguage(code)
+                ? nothing
+                : html`<wt-button
+                    data-test=${`edit-translations-${code}`}
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      this.translationLanguage = code;
+                      this.translating = true;
+                    }}
+                    >${t("content_languages.edit_translations")}</wt-button
+                  >`
+            }
           </wt-row-actions>
         `,
       },

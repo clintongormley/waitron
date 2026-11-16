@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor, type LeaveReason } from "@waitron/ui";
 import { QueryController } from "@waitron/dashboard-kit";
-import { languageDisplayName } from "@waitron/shared";
+import { contentLanguageDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -191,7 +191,7 @@ export class GuestMenuPreview extends LitElement {
                   name="guest-language"
                   label=${t("menus.guest_language")}
                   .value=${this.#language ?? this.answer.language}
-                  .options=${this.answer.languages.map((value) => ({ value, label: languageDisplayName(value, currentLocale()) }))}
+                  .options=${this.answer.languages.map((value) => ({ value, label: contentLanguageDisplayName(value, currentLocale()) }))}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     void this.#load(event.detail.value);

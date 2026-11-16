@@ -2,8 +2,9 @@ import type { Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
+  contentLanguageTag,
   FALLBACK_LOCALE,
-  resolveContentText,
+  resolveEnabledContentText,
   type ContentLanguages,
   TRANSLATION_GAP_KINDS,
 } from "@waitron/shared";
@@ -43,7 +44,7 @@ export function contentTranslationGap(
       if (typeof value !== "string") throw new AppError("content.translation_invalid", {});
     }
   const index = maps.findIndex(
-    (map) => resolveContentText(map, config.defaultLanguage, config.defaultLanguage) === "",
+    (map) => resolveEnabledContentText(map, config.defaultLanguage, config) === "",
   );
   return index === -1 ? null : { index, language: config.defaultLanguage };
 }
@@ -107,13 +108,15 @@ export function contentTranslationGapsIn(
   return candidates
     .filter(
       (row) =>
-        resolveContentText(JSON.parse(row.translations) as Record<string, string>, code, code) ===
-          "" ||
+        resolveEnabledContentText(JSON.parse(row.translations) as Record<string, string>, code, {
+          defaultLanguage: code,
+          languages: [code],
+        }) === "" ||
         (row.kind === "unit" &&
-          resolveContentText(
+          resolveEnabledContentText(
             JSON.parse(row.abbreviations ?? "{}") as Record<string, string>,
             code,
-            code,
+            { defaultLanguage: code, languages: [code] },
           ) === ""),
     )
     .map(({ kind, id, product_id }) =>
@@ -161,9 +164,11 @@ export function checkedContentLanguages(
   requiredLanguages: readonly string[] = [],
 ): ContentLanguages {
   const defaultLanguage = contentLanguageCode(config.defaultLanguage);
-  const languages = config.languages.map(contentLanguageCode);
+  const languages = config.languages.map(contentLanguageTag);
   if (
+    contentLanguageTag(config.defaultLanguage) !== defaultLanguage ||
     !languages.includes(defaultLanguage) ||
+    languages.some((language) => !languages.includes(contentLanguageCode(language))) ||
     languages.length > 200 ||
     new Set(languages).size !== languages.length
   ) {

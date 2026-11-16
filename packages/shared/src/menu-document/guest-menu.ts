@@ -1,4 +1,8 @@
-import { contentLanguageCode, type ContentLanguages } from "../content-languages.js";
+import {
+  contentLanguageCode,
+  contentLanguageTag,
+  type ContentLanguages,
+} from "../content-languages.js";
 import { ALLERGEN_CODES, type ProductAllergens } from "./allergens.js";
 import { DIETARY_LABELS, type DietaryLabel } from "./dietary-declarations.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
@@ -50,10 +54,11 @@ export function publicGuestMenu(
 ): PublicGuestMenu {
   let language: string;
   try {
-    language = contentLanguageCode(requested);
+    language = contentLanguageTag(requested);
   } catch {
     language = config.defaultLanguage;
   }
+  if (!config.languages.includes(language)) language = contentLanguageCode(language);
   if (!config.languages.includes(language)) language = config.defaultLanguage;
   const text = (map: Record<string, string> | null, staff: string | null) =>
     resolveMenuText(map, staff, { kind: "customer", language }, config).text;

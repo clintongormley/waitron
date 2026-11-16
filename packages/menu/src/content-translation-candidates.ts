@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
-import { TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
+import { mainContentLanguages, TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
 import type { TranslationRef } from "./content-translation-types.js";
 
 export type NamedRow = {
@@ -51,7 +51,7 @@ export const ABSENT = sql`kind <> 'included_menu' and kind <> 'unit'
 export function translationGapsQuery(config: ContentLanguages): SQL {
   return sql`with candidates as materialized (${namedRows()}), gaps as (
     select candidates.*, language.value as language from candidates
-      cross join json_each(${JSON.stringify(config.languages)}) as language
+      cross join json_each(${JSON.stringify(mainContentLanguages(config.languages))}) as language
     where ${LIVE_CANDIDATE} and ${blankIn(sql`'$."' || language.value || '"'`)})`;
 }
 export function namedRows(

@@ -166,7 +166,7 @@ it("keeps separately priced extras and option names with their own declarations"
             productId: "extra",
             presentation: {
               name: "Staff bread",
-              customerName: { es: "Bread ES" },
+              customerName: { es: "Bread ES", en: "chips", "en-US": "fries" },
               kitchenName: "KITCHEN BREAD",
               variantName: "Staff size",
               variantCustomerName: null,
@@ -225,4 +225,29 @@ it("keeps separately priced extras and option names with their own declarations"
     },
     { kind: "options", name: "Cooking", labels: ["Rare"] },
   ]);
+  const regional = publicGuestMenu(
+    document(dish),
+    { defaultLanguage: "en", languages: ["en", "es", "en-US"] },
+    "en-US",
+  ).members[0]!;
+  if (regional.kind !== "product" || regional.modifiers[0]!.kind !== "extras")
+    throw new Error("Expected extras");
+  expect(regional.modifiers[0].items[0]!.name).toBe("fries (Staff size)");
+});
+
+it("keeps the enabled regional guest page and inherits every unchanged dish name", () => {
+  const doc = document({
+    ...offer,
+    name: "Staff potatoes",
+    customerName: { en: "chips", "en-US": "fries" },
+  });
+  const languages = { defaultLanguage: "en", languages: ["en", "en-US", "es"] };
+  expect(publicGuestMenu(doc, languages, "en-US")).toMatchObject({
+    language: "en-US",
+    members: [{ name: "fries" }],
+  });
+  for (const language of ["en", "en-GB", "es", "en-CA"]) {
+    expect(publicGuestMenu(doc, languages, language).members[0]!.name).toBe("chips");
+  }
+  expect(publicGuestMenu(document(), languages, "en-US").members[0]!.name).toBe("Soup");
 });

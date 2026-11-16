@@ -20,7 +20,11 @@ import {
   codeOf,
   subscribeLocale,
 } from "@waitron/dashboard-kit";
-import { languageDisplayName, resolveEnabledContentText } from "@waitron/shared";
+import {
+  mainContentLanguages,
+  languageDisplayName,
+  resolveEnabledContentText,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -857,7 +861,7 @@ export class ImageLibrary extends LitElement {
     const config = currentContentLanguages();
     return [
       config.defaultLanguage,
-      ...config.languages.filter((code) => code !== config.defaultLanguage),
+      ...mainContentLanguages(config.languages).filter((code) => code !== config.defaultLanguage),
     ];
   }
   /** The fields the editor shows, each with what the form's own check finds once Save was pressed. */
