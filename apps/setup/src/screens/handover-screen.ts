@@ -492,6 +492,7 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "password.invalid" || code === "totp.required")
       return t("handover.emergency.sign_in_failed");
     if (code === "password.throttled") return t("handover.emergency.throttled");
+    if (code === "node.operation_page_required") return t("handover.emergency.connection");
     if (code === "authorization.not_permitted") return t("handover.emergency.permission");
     if (code === "handover.source_still_answering") return t("handover.emergency.source_answered");
     if (code === "handover.controlled_unresolved") return t("handover.emergency.controlled");

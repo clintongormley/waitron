@@ -1,6 +1,6 @@
 import { OPERATOR_WORDS, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { START_AGAIN_PAGE_WORDS, type StartAgainPageWords } from "./i18n/start-again-page.js";
-import { TLSSocket } from "node:tls";
+import { isSecure } from "./encrypted-connection.js";
 import type { Context, Hono } from "hono";
 import {
   chooseStartAgainLeftovers,
@@ -177,11 +177,6 @@ class Refusal {
 
 function invalid(field: string): never {
   throw new AppError("setup.request_invalid", { field });
-}
-
-export function isSecure(c: Context): boolean {
-  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  return socket instanceof TLSSocket && socket.encrypted;
 }
 
 export async function formBody(c: Context): Promise<string> {

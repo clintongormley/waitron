@@ -727,7 +727,7 @@ function refusedHttp(code: string, reason?: string) {
       new Response(
         JSON.stringify({ error: { code, params: reason === undefined ? {} : { reason } } }),
         {
-          status: code === "authorization.not_permitted" ? 403 : 409,
+          status: code === "node.operation_page_required" ? 403 : 409,
           headers: { "content-type": "application/json" },
         },
       ),
@@ -735,7 +735,7 @@ function refusedHttp(code: string, reason?: string) {
 }
 
 it.each([
-  { code: "authorization.not_permitted", words: "HTTPS recovery address directly" },
+  { code: "node.operation_page_required", words: "HTTPS recovery address directly" },
   { code: "node.read_only", words: "cannot write invoices" },
   {
     code: "sif.allocation_invalid",

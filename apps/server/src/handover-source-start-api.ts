@@ -85,6 +85,7 @@ const STATUS = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
+  "node.operation_page_required": 403,
   "handover.request_invalid": 400,
   "handover.peer_unknown": 403,
   "handover.not_a_spare": 409,

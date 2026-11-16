@@ -64,6 +64,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.throttled": 429,
   "promotion.break_glass_invalid": 401,
   "authorization.not_permitted": 403,
+  "node.operation_page_required": 403,
   "promotion.from_box_only": 403,
   "promotion.fence_not_attested": 400,
   "promotion.node_fenced": 409,

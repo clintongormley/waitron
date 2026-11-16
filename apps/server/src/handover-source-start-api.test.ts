@@ -478,9 +478,7 @@ describe("a valid start", () => {
 });
 
 describe("the connection", () => {
-  const NOT_PERMITTED = refusal(403, "authorization.not_permitted", {
-    permission: "node.manage",
-  });
+  const PAGE_REQUIRED = refusal(403, "node.operation_page_required");
   const send = async (
     headers: Record<string, string>,
     env: unknown,
@@ -498,7 +496,7 @@ describe("the connection", () => {
   };
 
   it("refuses plain HTTP and records nothing", async () => {
-    expect(await send({ cookie }, undefined)).toEqual(NOT_PERMITTED);
+    expect(await send({ cookie }, undefined)).toEqual(PAGE_REQUIRED);
     await expectNothingRecorded();
     expect(exchanged).toEqual([]);
   });
@@ -510,7 +508,7 @@ describe("the connection", () => {
         incoming: { socket },
       },
     );
-    expect(answer).toEqual(NOT_PERMITTED);
+    expect(answer).toEqual(PAGE_REQUIRED);
     await expectNothingRecorded();
     expect(exchanged).toEqual([]);
   });
@@ -522,17 +520,17 @@ describe("the connection", () => {
         incoming: { socket },
       },
     );
-    expect(answer).toEqual(NOT_PERMITTED);
+    expect(answer).toEqual(PAGE_REQUIRED);
     await expectNothingRecorded();
   });
 
   it("refuses plain HTTP before reading a session", async () => {
-    expect(await send({}, undefined)).toEqual(NOT_PERMITTED);
+    expect(await send({}, undefined)).toEqual(PAGE_REQUIRED);
   });
 
   it("refuses plain HTTP before checking fresh sign-in", async () => {
     const answer = await send({ cookie }, undefined);
-    expect(answer).toEqual(NOT_PERMITTED);
+    expect(answer).toEqual(PAGE_REQUIRED);
   });
 
   it("accepts a request from this box's own origin", async () => {

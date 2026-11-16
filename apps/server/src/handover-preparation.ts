@@ -40,6 +40,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.throttled": 429,
   ...SWITCH_SIGN_IN_STATUS,
   "authorization.not_permitted": 403,
+  "node.operation_page_required": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
   "handover.step_out_of_order": 409,

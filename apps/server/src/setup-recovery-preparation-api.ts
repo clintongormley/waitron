@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { TLSSocket } from "node:tls";
+import { isSecure } from "./encrypted-connection.js";
 import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
@@ -117,9 +117,7 @@ async function readMultipart(c: Context, limit: number): Promise<FormData> {
 }
 
 function assertOwnerTransport(c: Context): void {
-  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  if (!(socket instanceof TLSSocket) || !socket.encrypted || !sentFromThisOrigin(c))
-    throw new AppError("setup.owner_required", {});
+  if (!isSecure(c) || !sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
 }
 export async function readUpload(
   c: Context,

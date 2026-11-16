@@ -371,3 +371,28 @@ it("the handover prompt refuses recovery codes before sending and continues with
   expect(confirmations).toEqual([{ method: "password", password: "secret", totp: "123456" }]);
   expect(starts).toEqual([starts[0], starts[0]]);
 });
+
+it.each([
+  ["en-GB", "Open the box's HTTPS address"],
+  ["es-ES", "Abre la dirección HTTPS del servidor"],
+])("explains the handover connection refusal in %s", async (locale, words) => {
+  const { el, start, status } = await mount();
+  setLocale(locale);
+  const real = new DashboardApi(
+    "",
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: "node.operation_page_required", params: {} },
+        }),
+        { status: 403, headers: { "content-type": "application/json" } },
+      ),
+  );
+  start.mockImplementation((input) => real.startHandover(input));
+  status.mockRejectedValue({ code: "handover.operation_unknown", status: 404 });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=handover-dialog]").shadowRoot!.textContent).toContain(words),
+  );
+});

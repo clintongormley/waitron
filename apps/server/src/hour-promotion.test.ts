@@ -598,7 +598,9 @@ it("serves clock, selection and authenticated promotion through the management r
       body: JSON.stringify({ ...body, moduleOperation: { binding, input: selected.input } }),
     });
     expect(plain.status).toBe(403);
-    expect(await plain.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await plain.json()).toEqual({
+      error: { code: "node.operation_page_required", params: {} },
+    });
     expect((await rows()).allocations).toHaveLength(1);
     expect(
       await send("", { ...body, moduleOperation: { binding, input: selected.input } }),

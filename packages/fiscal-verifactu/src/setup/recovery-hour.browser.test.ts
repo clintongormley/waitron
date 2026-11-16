@@ -1855,6 +1855,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
 
 it.each([
   [{ code: "password.throttled", params: {} }, "Wait before trying your password again"],
+  [{ code: "node.operation_page_required", params: {} }, "Open the box's HTTPS address"],
   [
     { code: "authorization.not_permitted", params: {} },
     "Use an administrator account allowed to hand over",
@@ -1943,8 +1944,8 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
     "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
   );
   expect(text(el)).not.toMatch(/equipo/i);
-  expect(el.refusalMessage({ code: "authorization.not_permitted", params: {} })).toContain(
-    "la dirección HTTPS de este servidor",
+  expect(el.refusalMessage({ code: "node.operation_page_required", params: {} })).toContain(
+    "Abre la dirección HTTPS del servidor",
   );
 });
 

@@ -738,6 +738,7 @@ it.each([
   ],
   ["handover.copy_mismatch", "handover.emergency.copy_failed", null, ["preview"]],
   ["password.throttled", "handover.emergency.throttled", null, ["preview"]],
+  ["node.operation_page_required", "handover.emergency.connection", null, ["preview"]],
   ["authorization.not_permitted", "handover.emergency.permission", null, ["preview", "followed"]],
   ["node.read_only", "handover.emergency.changed", null, ["preview"]],
   ["handover.source_no_longer_main", "handover.emergency.changed", null, ["preview"]],
@@ -1962,4 +1963,17 @@ it("a passkey take the held copy refused, then sent to the held copy, keeps the 
   expect(actions(el)).toContain(t("handover.emergency.followed_not_admitted"));
   expect(actions(el)).toContain(t("handover.emergency.held_passkey_refused"));
   expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
+});
+
+it.each([
+  ["en-GB", "Open the box's HTTPS address"],
+  ["es-ES", "Abre la dirección HTTPS del servidor"],
+] as const)("shows HTTPS advice without taking a newer copy in %s", async (locale, words) => {
+  setLocale(locale);
+  const { el, posts } = await mount({ refusal: "node.operation_page_required" });
+  await edit(el, "handover-email", signIn.email);
+  await edit(el, "handover-password", signIn.password);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(words));
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
 });

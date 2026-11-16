@@ -532,6 +532,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },
+  "node.operation_page_required": {
+    en: "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
+    es: "Esta operación necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
+  },
   "authorization.not_permitted": {
     en: "You don't have permission to do that",
     es: "No tienes permiso para hacer eso",
