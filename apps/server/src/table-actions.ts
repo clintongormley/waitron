@@ -283,7 +283,6 @@ export async function combineParties(
       .insert(partyTables)
       .values(tables.map((tableId, i) => ({ partyId: into, tableId, joinedAt: joinedAt(i) })));
   }
-  await carryDoneWithBill(tx, from, into, await memberTables(tx, into));
   await tx
     .update(parties)
     .set({

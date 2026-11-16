@@ -1763,8 +1763,12 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Service steps after a bill moves
 
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
+2 entries, size S. A1333's text is unchanged from the index it came from (backlog review,
+2026-11-06).
 
+- **A step done before a bill moves onto a seated table, or before two parties combine, is asked
+  again at the receiving table** (decision 2026-11-16: asking twice rather than hiding the receiving
+  party's own step).
 - **A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice
   4b).** A table that sent its own order keeps those order times after every bill has left, so the
   step stays.
