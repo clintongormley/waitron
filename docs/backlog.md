@@ -1426,10 +1426,8 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.
   [Detail](backlog/box.md#the-amazon-s3-delete-and-archive-rehearsals-open-edges-a538-9)
 
-- **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
-  an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
-  neither captured nor excluded — the curated list went stale on `modules.json` already.
-  The same B2 bundle holds the remaining restore carry-forwards, including placement durability.
+- **Backup and restore carry-forwards (B2):** working-file cleanup, boot qualification and
+  database placement durability remain open.
   [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **Guide replacement address settings after a cold restore.** Replace manual configuration of

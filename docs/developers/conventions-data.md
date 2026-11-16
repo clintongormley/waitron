@@ -5619,6 +5619,19 @@ and found no hidden definition on candidate `bf13077098`. Cloud connection, reco
 in `cloud/snapshots/`; legacy setup names remain with the code that reads or refuses them until their slices.
 The separate reset case compares the shell command's retained names with the layout's kept entries.
 
+Each layout entry also declares its backup disposition: a required or optional file, named TLS
+recovery files, a database snapshot, module evidence, or an exclusion with its reason. The required
+and optional archive path lists come from that table; `RECOVERY_FILES` and
+`OPTIONAL_BACKUP_STATE` in the server re-export them. Database snapshots and module evidence keep
+their existing collectors. Cloud identity, operation progress, scratch files and logs stay out;
+TLS capture names the CA certificate/key and server PEM individually.
+
+The completeness case in `packages/store/src/state-layout.test.ts` is weaker than a filesystem
+inventory: it checks declared entries and non-empty reasons, not undeclared runtime files or the
+correctness of each reason. Removing a disposition makes that case fail. It adds no runtime
+unknown-file refusal. The watcher cleared this smaller table/guard scope on 2026-11-16 at 05:37,
+replacing the earlier recursive-capture proposal; no owner design approval is claimed.
+
 ## Start again's records and the set-aside folder
 
 Start again's choice records and set-aside files, under `<state>/records/`, survive a plain

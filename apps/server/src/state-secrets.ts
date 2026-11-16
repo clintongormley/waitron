@@ -1,3 +1,4 @@
+import { REQUIRED_BACKUP_STATE as RECOVERY_FILES } from "@waitron/store";
 import { isFirstSetupHostPath } from "@waitron/provisioning";
 import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { chmod, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
@@ -13,13 +14,7 @@ import "./errors.js";
  * after a restore. Not the database. Cloud installation keys are excluded: a replacement pairs with
  * its own key.
  */
-export const RECOVERY_FILES = [
-  "secrets.env",
-  "trading.env",
-  "tls/ca.crt",
-  "tls/ca.key",
-  "tls/server.pem",
-] as const;
+export { RECOVERY_FILES };
 
 /** A missing file is `recovery.state_incomplete`: a backup archive without the vault key is worthless. */
 export async function collectStateSecrets(
