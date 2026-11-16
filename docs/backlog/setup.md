@@ -24,16 +24,6 @@ What constrains the next change to the wizard:
   of the department's dialog. When the department has none, the installed fiscal contribution's
   default fills it (`apps/server/src/sale-operation-description.ts`).
 
-## The configuration preview names what it will copy by database table
-
-**Left open by C42 (#837):**
-
-- _The configuration preview names what it will copy by database table_ (`products`,
-  `menu_item_variant_overrides`, `print_agents`…) in both languages
-  (`apps/setup/src/screens/configuration-preview-screen.ts`). The names come from each module's
-  `configuration-transfer.ts` list; about fifty can arrive. Give them operator words, grouped, or
-  keep the table names.
-
 ## The certificate export help has never been followed on a real machine
 
 **Still open after #334:**

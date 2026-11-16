@@ -238,9 +238,12 @@ it.each([
         body: new Uint8Array(artifact).buffer,
       } as RequestInit);
       const stagedBody = await staged.json();
+      expect(
+        decodeConfigurationBundle(artifact, "synthetic import passphrase").tables.products,
+      ).toHaveLength(1);
       expect({ status: staged.status, body: stagedBody }).toMatchObject({
         status: 200,
-        body: { counts: { products: 1 } },
+        body: { modules: expect.arrayContaining(["core"]) },
       });
       let venue: typeof request = {
         ...request,

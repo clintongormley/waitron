@@ -83,9 +83,9 @@ const modules = [
     configurationTransfer: { kind: "tables", tables: [{ name: "products" }] },
   } satisfies WaitronModule,
 ];
-const validate = (candidate: ConfigurationBundle): Promise<void> => {
+const validate = (candidate: ConfigurationBundle) => {
   validateConfigurationBundle(candidate, modules, { core: 1 });
-  return Promise.resolve();
+  return Promise.resolve(modules);
 };
 
 describe("staged configuration import", () => {
@@ -319,6 +319,7 @@ describe("staged configuration import", () => {
         stageConfiguration: (artifact, passphrase) =>
           stageConfigurationImport(stateDir, ring, artifact, passphrase, async (decoded) => {
             validateConfigurationBundle(decoded, [serviceModule], { "venue-service": 1 });
+            return [serviceModule];
           }),
       },
       () => {},
@@ -405,8 +406,8 @@ describe("staged configuration import", () => {
       stageConfigurationImport(stateDir, ring, artifact, "a strong passphrase", validate),
     ).resolves.toEqual({
       venue: bundle.venue,
-      counts: { products: 1 },
-      reconnect: ["printers"],
+      modules: ["core"],
+      reconnectModules: [],
     });
     await expect(readStagedConfigurationImport(stateDir, ring)).resolves.toEqual(
       expect.objectContaining({ bundle, passphrase: "a strong passphrase" }),
@@ -488,9 +489,9 @@ describe("staged configuration import", () => {
       modules: versions,
       tables: { ...tables, ...bundle.tables, kitchen_stations: [] },
     };
-    const validateWithVenueService = (candidate: ConfigurationBundle): Promise<void> => {
+    const validateWithVenueService = (candidate: ConfigurationBundle) => {
       validateConfigurationBundle(candidate, withVenueService, versions);
-      return Promise.resolve();
+      return Promise.resolve(withVenueService);
     };
     const control = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(control);
@@ -502,7 +503,7 @@ describe("staged configuration import", () => {
         "a strong passphrase",
         validateWithVenueService,
       ),
-    ).resolves.toMatchObject({ counts: { products: 1 } });
+    ).resolves.toMatchObject({ modules: ["core"] });
     await expect(
       stageConfigurationImport(
         stateDir,
@@ -712,7 +713,7 @@ describe("routing cells in a staged import", () => {
       "a strong passphrase",
       (bundle) => {
         validateConfigurationBundle(bundle, ALL_MODULES, versions);
-        return Promise.resolve();
+        return Promise.resolve(ALL_MODULES);
       },
     );
     return { stateDir, result };
@@ -726,8 +727,11 @@ describe("routing cells in a staged import", () => {
     "refuses a deleted hierarchy bundle at staging and import: %s.%s",
     async (table, field, value) => {
       const { bundle, versions } = await exported();
+      expect(bundle.tables.routing_cells).toHaveLength(2);
       const control = await staged(bundle, versions);
-      await expect(control.result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+      await expect(control.result).resolves.toMatchObject({
+        modules: expect.arrayContaining(["venue-service"]),
+      });
       expect(bundle.tables[table]!.length).toBeGreaterThan(0);
       const candidate = {
         ...bundle,
@@ -759,7 +763,9 @@ describe("routing cells in a staged import", () => {
     const { bundle, versions, variant } = await exported();
     expect(bundle.tables.routing_cells).toHaveLength(2);
     const control = await staged(bundle, versions);
-    await expect(control.result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+    await expect(control.result).resolves.toMatchObject({
+      modules: expect.arrayContaining(["venue-service"]),
+    });
 
     const refused: ConfigurationBundle = {
       ...bundle,
@@ -936,8 +942,11 @@ describe("routing cells in a staged import", () => {
     const core = ALL_MODULES.find((module) => module.name === "core")!;
     expect(versions.core).toBe(expectedSchemaVersion(core.migrations!, null));
     expect(bundle.modules.core).toBe(versions.core);
+    expect(bundle.tables.routing_cells).toHaveLength(2);
     const { stateDir, result } = await staged(bundle, versions);
-    await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+    await expect(result).resolves.toMatchObject({
+      modules: expect.arrayContaining(["venue-service"]),
+    });
     expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
       "artifact",
       "key",

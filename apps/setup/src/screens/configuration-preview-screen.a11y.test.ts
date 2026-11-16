@@ -26,8 +26,8 @@ const preview: ConfigurationPreview = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
-  counts: { products: 4 },
-  reconnect: ["printers"],
+  modules: ["core"],
+  reconnectModules: ["core"],
 };
 
 describe.each(["light", "dark"] as const)(

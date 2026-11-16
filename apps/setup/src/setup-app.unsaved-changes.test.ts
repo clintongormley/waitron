@@ -738,8 +738,8 @@ const importedConfiguration: ConfigurationPreview = {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   },
-  counts: { products: 4 },
-  reconnect: ["printers"],
+  modules: ["core"],
+  reconnectModules: ["core"],
 };
 function importConfiguration(el: SetupApp, api: SetupApi) {
   const stage = vi.fn().mockResolvedValue(importedConfiguration);

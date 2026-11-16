@@ -7,6 +7,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
+import type { WaitronModule } from "@waitron/module";
 import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
 import {
   decodeConfigurationBundleAsync,
@@ -67,10 +68,45 @@ function unwrapPassphrase(ring: KeyRing, raw: string): string {
   }
 }
 
+/** Named by module, never table, so a renamed table leaves the setup page's words alone. */
 export interface ConfigurationPreview {
   venue: ConfigurationBundle["venue"];
-  counts: Record<string, number>;
-  reconnect: string[];
+  modules: string[];
+  reconnectModules: string[];
+}
+
+type TransferringModule = Pick<WaitronModule, "name" | "configurationTransfer">;
+
+function previewOf(
+  bundle: ConfigurationBundle,
+  validated: readonly TransferringModule[],
+): ConfigurationPreview {
+  const owners = new Map<string, string>();
+  for (const module of validated) {
+    const transfer = module.configurationTransfer;
+    if (transfer?.kind === "tables")
+      for (const table of transfer.tables) owners.set(table.name, module.name);
+  }
+  const ownerOf = (table: string): string => {
+    const owner = owners.get(table);
+    if (owner === undefined) throw new Error(`no module declares table ${table}`);
+    return owner;
+  };
+  const withRows = new Set<string>();
+  for (const [table, rows] of Object.entries(bundle.tables))
+    if (rows.length > 0) withRows.add(ownerOf(table));
+  const reconnecting = new Set(
+    bundle.reconnect
+      .filter((table) => Object.hasOwn(bundle.tables, table) && bundle.tables[table]!.length > 0)
+      .map(ownerOf),
+  );
+  const inValidatedOrder = (names: Set<string>) =>
+    [...new Set(validated.map((module) => module.name))].filter((name) => names.has(name));
+  return {
+    venue: bundle.venue,
+    modules: inValidatedOrder(withRows),
+    reconnectModules: inValidatedOrder(reconnecting),
+  };
 }
 
 export async function stageConfigurationImport(
@@ -78,16 +114,12 @@ export async function stageConfigurationImport(
   ring: KeyRing,
   artifact: Uint8Array,
   passphrase: string,
-  validate: (bundle: ConfigurationBundle) => Promise<void>,
+  /** Refuses a bundle the box cannot import, else answers the modules it was checked against. */
+  validate: (bundle: ConfigurationBundle) => Promise<readonly TransferringModule[]>,
 ): Promise<ConfigurationPreview> {
   const snapshot = Buffer.from(artifact);
   const bundle = await decodeConfigurationBundleAsync(snapshot, passphrase);
-  await validate(bundle);
-  const counts = Object.fromEntries(
-    Object.entries(bundle.tables)
-      .filter(([, rows]) => rows.length > 0)
-      .map(([name, rows]) => [name, rows.length]),
-  );
+  const preview = previewOf(bundle, await validate(bundle));
   await mkdirDurable(dirname(join(stateDir, MARKER)), 0o700);
   await rm(join(stateDir, MARKER), { force: true });
   try {
@@ -98,7 +130,7 @@ export async function stageConfigurationImport(
     await clearStagedConfigurationImport(stateDir);
     throw error;
   }
-  return { venue: bundle.venue, counts, reconnect: bundle.reconnect };
+  return preview;
 }
 
 export async function readStagedConfigurationImport(

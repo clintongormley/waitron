@@ -232,9 +232,11 @@ it.each([
         },
         body: new Uint8Array(artifact).buffer,
       });
+      const exported = decodeConfigurationBundle(artifact, "import passphrase");
+      expect(exported.tables.products).toHaveLength(1);
       expect({ status: staged.status, body: await staged.json() }).toMatchObject({
         status: 200,
-        body: { counts: { products: 1 } },
+        body: { modules: expect.arrayContaining(["core"]) },
       });
       const target = {
         ...request,

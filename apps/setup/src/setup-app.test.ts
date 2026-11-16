@@ -735,8 +735,8 @@ describe("setup-app", () => {
         seriesCode: "F",
         rectificativeSeriesCode: "R",
       },
-      counts: { products: 4 },
-      reconnect: ["printers"],
+      modules: ["core"],
+      reconnectModules: ["core"],
     };
     const stageConfiguration = vi.fn().mockResolvedValue(preview);
     const el = await mountSetupApp(stubApi({ stageConfiguration }));
@@ -800,7 +800,9 @@ describe("setup-app", () => {
       api: Partial<Record<keyof SetupApi, unknown>> = {},
       venue: ConfigurationPreview["venue"] = exported,
     ) {
-      const stageConfiguration = vi.fn().mockResolvedValue({ venue, counts: {}, reconnect: [] });
+      const stageConfiguration = vi
+        .fn()
+        .mockResolvedValue({ venue, modules: [], reconnectModules: [] });
       const el = await mountSetupApp(stubApi({ stageConfiguration, ...api }));
       patch(el, { mode: "live" });
       configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
@@ -902,11 +904,11 @@ describe("setup-app", () => {
       const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
       const stageConfiguration = vi
         .fn()
-        .mockResolvedValueOnce({ venue: exported, counts: {}, reconnect: [] })
+        .mockResolvedValueOnce({ venue: exported, modules: [], reconnectModules: [] })
         .mockResolvedValueOnce({
           venue: { ...exported, ...emptyAddress },
-          counts: {},
-          reconnect: [],
+          modules: [],
+          reconnectModules: [],
         });
       const el = await staged({ stageConfiguration });
       expect(readDraft(el).venue).toMatchObject({ addressLine1: "Calle 1", city: "Madrid" });
@@ -5713,8 +5715,8 @@ describe("an answer that arrives after the element is detached", () => {
   const configFile = new File(["encrypted"], "prepared.waitron-config");
   const preview = {
     venue: { legalName: "Prepared SL", name: "Prepared" },
-    counts: {},
-    reconnect: [],
+    modules: [],
+    reconnectModules: [],
   };
 
   it.each([

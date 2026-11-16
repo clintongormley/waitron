@@ -1735,6 +1735,7 @@ async function bootServer(
               modules,
               await schemaVersionsByModule(store, modules),
             );
+            return modules;
           }),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
         runFiscalTest: async ({ request, contribution, secret }) => {

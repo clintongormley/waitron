@@ -27,13 +27,26 @@ async function directory() {
   roots.push(root);
   return root;
 }
+const modules = [
+  {
+    name: "core",
+    configurationTransfer: {
+      kind: "tables",
+      tables: [{ name: "printers", reconnect: true }, { name: "products" }],
+    },
+  },
+  { name: "menu", configurationTransfer: { kind: "tables", tables: [{ name: "units" }] } },
+  { name: "media", configurationTransfer: { kind: "tables", tables: [{ name: "images" }] } },
+  { name: "bookings", configurationTransfer: { kind: "none" } },
+] as const;
+const validated = async () => modules;
 async function staged() {
   const root = await directory();
   const bundle = configurationBundle();
   bundle.tables = { printers: [{ id: "printer" }], empty: [] };
   bundle.reconnect = ["printers"];
   const artifact = encodeConfigurationBundle(bundle, passphrase);
-  const preview = await stageConfigurationImport(root, ring, artifact, passphrase, async () => {});
+  const preview = await stageConfigurationImport(root, ring, artifact, passphrase, validated);
   return { root, bundle, artifact, preview };
 }
 
@@ -41,8 +54,8 @@ it("keeps the exact artifact and decrypts its passphrase after restart and key r
   const { root, artifact, bundle, preview } = await staged();
   expect(preview).toEqual({
     venue: bundle.venue,
-    counts: { printers: 1 },
-    reconnect: ["printers"],
+    modules: ["core"],
+    reconnectModules: ["core"],
   });
   const rotated: KeyRing = {
     current: { version: 2, key: Buffer.alloc(32, 92) },
@@ -62,6 +75,55 @@ it("keeps the exact artifact and decrypts its passphrase after restart and key r
       code: "ENOENT",
     });
   await clearStagedConfigurationImport(root);
+});
+
+it("names the modules with entries in the validated list's order and leaves out the rest", async () => {
+  const root = await directory();
+  const bundle = configurationBundle();
+  bundle.tables = {
+    units: [{ id: "unit" }],
+    images: [],
+    printers: [],
+    products: [{ id: "one" }, { id: "two" }],
+  };
+  bundle.reconnect = ["printers", "missing", "constructor"];
+  const artifact = encodeConfigurationBundle(bundle, passphrase);
+  await expect(
+    stageConfigurationImport(root, ring, artifact, passphrase, validated),
+  ).resolves.toEqual({ venue: bundle.venue, modules: ["core", "menu"], reconnectModules: [] });
+});
+
+it("names a module called constructor or __proto__ like any other", async () => {
+  const root = await directory();
+  const bundle = configurationBundle();
+  bundle.tables = { kept: [{ id: "one" }], plugged: [{ id: "two" }, { id: "three" }] };
+  bundle.reconnect = ["plugged"];
+  const artifact = encodeConfigurationBundle(bundle, passphrase);
+  const awkward = [
+    { name: "constructor", configurationTransfer: { kind: "tables", tables: [{ name: "kept" }] } },
+    {
+      name: "__proto__",
+      configurationTransfer: { kind: "tables", tables: [{ name: "plugged", reconnect: true }] },
+    },
+  ] as const;
+  await expect(
+    stageConfigurationImport(root, ring, artifact, passphrase, async () => awkward),
+  ).resolves.toEqual({
+    venue: bundle.venue,
+    modules: ["constructor", "__proto__"],
+    reconnectModules: ["__proto__"],
+  });
+});
+
+it("refuses to preview a table no validated module declares", async () => {
+  const root = await directory();
+  const bundle = configurationBundle();
+  bundle.tables = { undeclared: [{ id: "row" }] };
+  const artifact = encodeConfigurationBundle(bundle, passphrase);
+  await expect(
+    stageConfigurationImport(root, ring, artifact, passphrase, validated),
+  ).rejects.toThrow("undeclared");
+  expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
 
 it("preserves a usable staged import when replacement validation refuses", async () => {
@@ -139,7 +201,7 @@ it("refuses an excluded bundle zone before staging and preserves the earlier art
   replacement.venue.timeZone = "Europe/Madrid";
   const encoded = encodeConfigurationBundle(replacement, passphrase);
   await expect(
-    stageConfigurationImport(root, ring, encoded, passphrase, async () => {}),
+    stageConfigurationImport(root, ring, encoded, passphrase, async () => []),
   ).rejects.toMatchObject({ code: "venue.time_zone_invalid", params: { reason: "country" } });
   expect((await readStagedConfigurationImport(root, ring))!.artifact).toEqual(artifact);
 });
@@ -157,7 +219,7 @@ it("disarms an import whose publication failed at folder sync", async () => {
     return actual.open(...args);
   });
   await expect(
-    stageConfigurationImport(root, ring, artifact, passphrase, async () => {}),
+    stageConfigurationImport(root, ring, artifact, passphrase, async () => []),
   ).rejects.toMatchObject({ code: "EIO" });
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
@@ -175,6 +237,7 @@ it("yields before validating a configuration import", async () => {
   await Promise.all([
     stageConfigurationImport(root, ring, artifact, passphrase, async () => {
       order.push("validated");
+      return [];
     }),
     timer,
   ]);
@@ -185,7 +248,7 @@ it("stages the ciphertext it authenticated even if the caller changes its buffer
   const root = await directory();
   const artifact = encodeConfigurationBundle(configurationBundle(), passphrase);
   const original = Buffer.from(artifact);
-  const staging = stageConfigurationImport(root, ring, artifact, passphrase, async () => {});
+  const staging = stageConfigurationImport(root, ring, artifact, passphrase, async () => []);
   artifact.fill(0);
   await staging;
   expect(await readFile(join(root, "flows/setup/import/artifact"))).toEqual(original);

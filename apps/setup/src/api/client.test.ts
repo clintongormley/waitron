@@ -481,7 +481,7 @@ describe("SetupApi", () => {
   });
 
   it("stages a preparation export as binary with its passphrase", async () => {
-    const preview = { venue: {}, counts: { products: 2 }, reconnect: ["printers"] };
+    const preview = { venue: {}, modules: ["core"], reconnectModules: ["core"] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(preview));
     const api = new SetupApi("", fetchImpl);
     const artifact = new Blob([Uint8Array.from([4, 5])]);

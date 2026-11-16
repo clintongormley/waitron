@@ -6,8 +6,14 @@ import "@waitron/ui/src/components/wt-choice-row.js";
 import type { ConfigurationPreview } from "../api/client.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchTaxpayerChosen } from "../events.js";
+import type { StringKey } from "../i18n/strings.js";
 import { format, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { PREVIEW_MODULE_LABELS, PREVIEW_RECONNECT_LABELS } from "./configuration-preview-labels.js";
+
+function label<Labels extends Record<string, StringKey>>(labels: Labels, module: string): string {
+  return Object.hasOwn(labels, module) ? t(labels[module as keyof Labels]!) : module;
+}
 
 @customElement("setup-configuration-preview-screen")
 export class SetupConfigurationPreviewScreen extends LitElement {
@@ -17,14 +23,6 @@ export class SetupConfigurationPreviewScreen extends LitElement {
     css`
       :host {
         display: block;
-      }
-      dl {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--wt-space-2) var(--wt-space-4);
-      }
-      dd {
-        margin: 0;
       }
       .choices {
         margin-top: var(--wt-space-3);
@@ -44,19 +42,17 @@ export class SetupConfigurationPreviewScreen extends LitElement {
     return html`
       <h1>${t("config_preview.heading")}</h1>
       <h2>${t("config_preview.copy_heading")}</h2>
-      <dl>
-        ${Object.entries(this.preview.counts).map(
-          ([name, count]) =>
-            html`<dt>${name}</dt>
-              <dd>${count}</dd>`,
-        )}
-      </dl>
+      <ul>
+        ${this.preview.modules.map((module) => html`<li>${label(PREVIEW_MODULE_LABELS, module)}</li>`)}
+      </ul>
       <h2>${t("config_preview.reconnect_heading")}</h2>
-      <p>
+      <p data-test="reconnect">
         ${
-          this.preview.reconnect.length === 0
+          this.preview.reconnectModules.length === 0
             ? t("config_preview.no_reconnect")
-            : this.preview.reconnect.join(", ")
+            : this.preview.reconnectModules
+                .map((module) => label(PREVIEW_RECONNECT_LABELS, module))
+                .join(", ")
         }
       </p>
       <h2 data-test="choice-heading">${t("config_preview.choice_heading")}</h2>

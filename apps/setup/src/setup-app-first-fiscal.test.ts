@@ -917,8 +917,8 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       dayCutover: "05:00:00",
       somethingNew: "not a setup field",
     },
-    counts: { products: 4 },
-    reconnect: [],
+    modules: ["core"],
+    reconnectModules: [],
   };
   const { app, api, requests } = await mount();
   api.stageConfiguration = () => Promise.resolve(preview);

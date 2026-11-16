@@ -132,7 +132,7 @@ it.each([
     ring,
     encodeConfigurationBundle(configurationBundle(), passphrase),
     passphrase,
-    async () => {},
+    async () => [],
   );
   await updateSetupFlowSection(folders.stateDir, "publicEvidence", () => ({
     version: 1,

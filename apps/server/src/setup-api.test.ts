@@ -1716,8 +1716,8 @@ describe("POST /setup-api/configuration", () => {
   it("stages and previews a bounded preparation export", async () => {
     const preview = {
       venue: { taxId: "B12345678" },
-      counts: { products: 2 },
-      reconnect: ["printers"],
+      modules: ["core"],
+      reconnectModules: ["core"],
     } as never;
     const stageConfiguration = vi.fn(async () => preview);
     const app = new Hono();
@@ -1794,7 +1794,7 @@ describe("POST /setup-api/configuration", () => {
   it("blocks provisioning while a configuration archive is being staged", async () => {
     let release!: () => void;
     const held = new Promise<ConfigurationPreview>((resolve) => {
-      release = () => resolve({ venue: {} as never, counts: {}, reconnect: [] });
+      release = () => resolve({ venue: {} as never, modules: [], reconnectModules: [] });
     });
     const app = new Hono();
     const { deps, provision } = makeDeps({ stageConfiguration: vi.fn(() => held) });
@@ -3786,8 +3786,8 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     ])("refuses %s without staging", async (_label, headers, body) => {
       const stageConfiguration = vi.fn(async () => ({
         venue: {} as never,
-        counts: {},
-        reconnect: [],
+        modules: [],
+        reconnectModules: [],
       }));
       const app = new Hono();
       mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
