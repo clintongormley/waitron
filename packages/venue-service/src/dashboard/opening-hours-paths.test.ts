@@ -1,7 +1,6 @@
 import { decodePathSegment } from "@waitron/ui";
 import {
   calendarViewPath,
-  nativeLinkClick,
   seasonPainterPath,
   specialDayPainterPath,
 } from "./opening-hours-paths.js";
@@ -56,16 +55,4 @@ describe("opening hours paths", () => {
       "~",
     ]);
   });
-});
-
-it.each([
-  { init: {}, native: false },
-  { init: { ctrlKey: true }, native: true },
-  { init: { metaKey: true }, native: true },
-  { init: { shiftKey: true }, native: true },
-  { init: { altKey: true }, native: true },
-  { init: { button: 1 }, native: true },
-  { init: { button: 2 }, native: true },
-])("keeps native link navigation for $init: $native", ({ init, native }) => {
-  expect(nativeLinkClick(new MouseEvent("click", init))).toBe(native);
 });

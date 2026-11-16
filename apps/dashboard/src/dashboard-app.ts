@@ -1221,7 +1221,7 @@ export class DashboardApp extends LitElement {
     this.narrow = this.#breakpoint.matches;
     this.sidebarFolded = readStoredFold() ?? window.matchMedia(FOLDED_BY_DEFAULT).matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
-    this.#releaseAppLinks = captureAppLinks(this);
+    this.#releaseAppLinks = captureAppLinks(this, dashboardPath.basePath);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);

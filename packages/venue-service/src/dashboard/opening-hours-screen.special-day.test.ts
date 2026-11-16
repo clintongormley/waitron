@@ -344,7 +344,7 @@ class GuardedApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this);
+    this.releaseLinks = captureAppLinks(this, "/manage");
   }
   override disconnectedCallback() {
     super.disconnectedCallback();

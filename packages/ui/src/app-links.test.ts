@@ -27,7 +27,7 @@ function fixture(attributes: Record<string, string> = { href: "/manage/x?y=1" })
     event.preventDefault();
   });
   host.addEventListener("click", (event) => bubbled.push(event.defaultPrevented));
-  const release = captureAppLinks(host, (url) => opened.push(url.pathname + url.search));
+  const release = captureAppLinks(host, "/manage", (url) => opened.push(url.pathname + url.search));
   cleanups.push(() => {
     release();
     host.remove();
@@ -79,7 +79,7 @@ it("captures a link inside a shadow root through the composed path", () => {
   host.append(inside);
   document.body.append(host);
   const opened: string[] = [];
-  const release = captureAppLinks(host, (url) => opened.push(url.pathname));
+  const release = captureAppLinks(host, "/manage", (url) => opened.push(url.pathname));
   cleanups.push(() => {
     release();
     host.remove();
@@ -157,6 +157,8 @@ it.each<[string, Record<string, string>]>([
   ["a path outside /manage", { href: "/elsewhere" }],
   ["a path that only starts with the word manage", { href: "/manager" }],
 ])("leaves an anchor with %s to its own handling", (_name, attributes) => {
+  // A fragment resolves against this page, so the page sits under /manage.
+  history.replaceState(null, "", "/manage/start");
   const { anchor, opened, inner, bubbled } = fixture(attributes);
   click(anchor);
   expect(opened).toEqual([]);
@@ -176,7 +178,7 @@ it("writes through the window's navigation guard by default", () => {
   anchor.href = "/manage/next?q=1";
   host.append(anchor);
   document.body.append(host);
-  const release = captureAppLinks(host);
+  const release = captureAppLinks(host, "/manage");
   cleanups.push(() => {
     release();
     host.remove();

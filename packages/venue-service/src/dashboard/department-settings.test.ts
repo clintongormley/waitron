@@ -1057,7 +1057,7 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   const shell: string[] = [];
   const zones: unknown[] = [];
   el.addEventListener("zone-change", (e) => zones.push((e as CustomEvent).detail));
-  captureAppLinks(hosts[0]!, (url) => shell.push(url.pathname + url.search));
+  captureAppLinks(hosts[0]!, "/manage", (url) => shell.push(url.pathname + url.search));
   const zone = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-zone=z1]")!;
   zone.click();
   expect(zones).toEqual([{ zoneId: "z1" }]);
