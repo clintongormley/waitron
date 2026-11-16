@@ -21,6 +21,7 @@ import "./errors.js";
 
 export const CERTIFICATE_REFUSAL_REASONS = [
   "too_large",
+  "unavailable",
   "unreadable",
   "old_encryption",
   "no_private_key",
@@ -134,6 +135,8 @@ async function checkLocally(
   if (pfx.length > CERTIFICATE_MAX_BYTES) return refused("too_large", "file");
   const opened = await openCertificate(pfx, body.passphrase);
   if (!opened.ok) {
+    if (opened.reason === "unavailable")
+      return { ok: false, answer: { outcome: "refused", reason: "unavailable" } };
     return refused(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "file");
   }
   const { details } = opened;

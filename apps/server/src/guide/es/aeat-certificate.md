@@ -17,6 +17,8 @@ cifrado moderno. Las instrucciones de exportación están en la pantalla del cer
 Si se rechaza el certificado al terminar una configuración interrumpida, corrígelo primero. Después
 se te pedirá que confirmes de nuevo que eres quien inició la configuración antes de continuar.
 
+Si la caja no pudo comprobar el certificado, pulsa **Siguiente** de nuevo en la configuración o **Guardar** en el diálogo de sustitución. Mantén el mismo archivo y contraseña salvo que un campo te pida corregirlos.
+
 ## Repite una comprobación en Ajustes del local {#dashboard-check}
 
 Instalar un certificado sustituto pide la [confirmación de identidad compartida](staff.md#account-access).

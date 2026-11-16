@@ -43,7 +43,7 @@ describe("bounded certificate opening", () => {
       return result;
     });
     await timer;
-    expect(await opening).toEqual({ ok: false, reason: "unreadable" });
+    expect(await opening).toEqual({ ok: false, reason: "unavailable" });
     expect(order).toEqual(["timer", "opened"]);
     expect(await openCertificate(candidate.pfx, candidate.passphrase)).toMatchObject({ ok: true });
   }, 15_000);
@@ -101,3 +101,16 @@ it("keeps a UTF-8 passphrase when stdin splits inside its character", async () =
     await rm(root, { recursive: true, force: true });
   }
 }, 15_000);
+
+it("distinguishes a child that cannot run from an unreadable certificate", async () => {
+  const node = process.execPath;
+  try {
+    process.execPath = "/nonexistent/waitron-node";
+    expect(await openCertificate(candidate.pfx, candidate.passphrase)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  } finally {
+    process.execPath = node;
+  }
+});

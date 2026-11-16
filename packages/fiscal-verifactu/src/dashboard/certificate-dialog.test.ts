@@ -306,6 +306,12 @@ describe("dashboard-aeat-certificate-dialog", () => {
   type Case = [string, InstallAnswerView, "file" | "passphrase" | "bottom", string];
   const cases: Case[] = [
     [
+      "local check unavailable",
+      { outcome: "refused", reason: "unavailable" },
+      "bottom",
+      "The box could not check this certificate. Try again, or Cancel to stop.",
+    ],
+    [
       "E2 wrong passphrase",
       { outcome: "refused", reason: "passphrase_wrong", field: "passphrase" },
       "passphrase",

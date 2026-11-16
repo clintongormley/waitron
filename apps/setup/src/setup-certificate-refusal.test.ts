@@ -248,3 +248,46 @@ it.each([false, true])(
     );
   },
 );
+
+it("returns an unavailable fiscal check to the certificate form for retry without a bad field", async () => {
+  const fixture = wizardApi({
+    offering: false,
+    intercept(path) {
+      if (path.endsWith("/fiscal-test"))
+        return Response.json(
+          {
+            error: {
+              code: "setup.certificate_refused",
+              params: { field: "body", reason: "unavailable" },
+            },
+          },
+          { status: 422 },
+        );
+    },
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  applyTokens(host);
+  mounted.push(host);
+  const app = new SetupApp();
+  app.api = fixture.api;
+  host.append(app);
+  await screen(app, "mode");
+  emit(app, "setup-patch", {
+    patch: {
+      mode: "live",
+      venue,
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+    },
+  });
+  emit(app, "setup-goto", { screen: "fiscal-test" });
+  const readiness = await screen(app, "fiscal-test");
+  await userEvent.click(readiness.shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!);
+  const form = await screen(app, "cert");
+  const actions = form.shadowRoot!.querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >("wt-form-actions")!;
+  await actions.updateComplete;
+  expect(actions.error).toBe("The box could not check this certificate. Try again.");
+  expect(pfxError(form.shadowRoot!)).toBeNull();
+});

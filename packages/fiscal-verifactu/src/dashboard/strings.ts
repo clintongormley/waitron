@@ -124,6 +124,8 @@ const en = {
   "aeat_certificate.dialog.save": "Save",
   "aeat_certificate.dialog.busy": "Checking with AEAT…",
   "aeat_certificate.refused.too_large": "This file is too large to be a certificate.",
+  "aeat_certificate.refused.unavailable":
+    "The box could not check this certificate. Try again, or Cancel to stop.",
   "aeat_certificate.refused.unreadable":
     "Waitron cannot read this file. Choose the .pfx or .p12 file.",
   "aeat_certificate.refused.old_encryption":
@@ -509,6 +511,8 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.dialog.save": "Guardar",
   "aeat_certificate.dialog.busy": "Comprobando con la AEAT…",
   "aeat_certificate.refused.too_large": "Este archivo es demasiado grande para ser un certificado.",
+  "aeat_certificate.refused.unavailable":
+    "La caja no pudo comprobar este certificado. Inténtalo de nuevo o pulsa Cancelar para detenerte.",
   "aeat_certificate.refused.unreadable":
     "Waitron no puede leer este archivo. Elige el archivo .pfx o .p12.",
   "aeat_certificate.refused.old_encryption":

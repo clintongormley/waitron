@@ -4,11 +4,12 @@ import type { OpenResult } from "./certificate-file.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 
 const unreadable: OpenResult = { ok: false, reason: "unreadable" };
+const unavailable = { ok: false, reason: "unavailable" } as const;
 
 export async function openCertificate(
   pfx: Buffer,
   passphrase: string,
-): Promise<OpenResult | { ok: false; reason: "too_large" }> {
+): Promise<OpenResult | { ok: false; reason: "too_large" | "unavailable" }> {
   if (pfx.length > CERTIFICATE_MAX_BYTES) return { ok: false, reason: "too_large" };
   const input = JSON.stringify({ pfx: pfx.toString("base64"), passphrase });
   if (Buffer.byteLength(input) > 256 * 1024) return unreadable;
@@ -44,7 +45,7 @@ export async function openCertificate(
     });
     child.on("close", (code) => {
       clearTimeout(deadline);
-      if (refused || code !== 0) return resolve(unreadable);
+      if (refused || code !== 0) return resolve(unavailable);
       try {
         const result = JSON.parse(output) as OpenResult;
         if (result.ok) {
@@ -53,7 +54,7 @@ export async function openCertificate(
         }
         resolve(result);
       } catch {
-        resolve(unreadable);
+        resolve(unavailable);
       }
     });
     child.stdin.end(input);

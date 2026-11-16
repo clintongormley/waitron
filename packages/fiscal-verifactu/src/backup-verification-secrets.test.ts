@@ -500,3 +500,14 @@ it("cannot bind material when the captured taxpayer is absent", async () => {
   both((db) => db.exec("delete from taxpayer"));
   expect(await verify()).toEqual(result("invalid"));
 });
+
+it("leaves a genuine backup check unavailable when the child cannot start", async () => {
+  await capture();
+  const node = process.execPath;
+  try {
+    process.execPath = "/nonexistent/waitron-node";
+    await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("secret_unavailable"));
+  } finally {
+    process.execPath = node;
+  }
+});

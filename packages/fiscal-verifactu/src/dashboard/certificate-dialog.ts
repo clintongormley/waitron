@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -55,6 +55,7 @@ const same = (a: Draft, b: Draft) =>
   a.file === b.file && a.passphrase === b.passphrase && a.certKind === b.certKind;
 
 const REFUSAL_KEYS: Record<string, AeatCertificateKey> = {
+  unavailable: "aeat_certificate.refused.unavailable",
   too_large: "aeat_certificate.refused.too_large",
   unreadable: "aeat_certificate.refused.unreadable",
   old_encryption: "aeat_certificate.refused.old_encryption",
@@ -128,7 +129,7 @@ export class AeatCertificateDialog extends LitElement {
   #sourceGeneration = 0;
   #unsubscribeAccount?: () => void;
   @state() private draft: Draft = { file: null, passphrase: "", certKind: "sello" };
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private busy = false;
   @state() private visible = false;
   @state() private refusal?: Refusal;
@@ -161,7 +162,7 @@ export class AeatCertificateDialog extends LitElement {
       this.draft = { file: null, passphrase: "", certKind: this.kind };
       this.visible = false;
       this.refusal = undefined;
-      this.attempted = false;
+      this.feedback.reset();
       this.#scope?.commit({ ...this.draft });
       this.requestUpdate();
     });
@@ -189,7 +190,7 @@ export class AeatCertificateDialog extends LitElement {
   }
 
   #fieldError(field: Field): string {
-    const own = this.attempted ? this.#check(field) : "";
+    const own = this.feedback.attempted ? this.#check(field) : "";
     return own || (this.refusal?.field === field ? this.refusal.message : "");
   }
 
@@ -198,12 +199,11 @@ export class AeatCertificateDialog extends LitElement {
   }
 
   #bottom(): string {
-    const messages: string[] = [];
-    if (this.refusal && this.refusal.field === undefined) messages.push(this.refusal.message);
-    if (this.#fieldError("file") || this.#fieldError("passphrase")) {
-      messages.push(t("aeat_certificate.dialog.fix_fields"));
-    }
-    return messages.join(" ");
+    return this.feedback.message(
+      { request: this.refusal?.field === undefined ? this.refusal?.message : undefined },
+      new Set((["file", "passphrase"] as const).filter((field) => this.#fieldError(field) !== "")),
+      t("aeat_certificate.dialog.fix_fields"),
+    );
   }
 
   #change(next: Partial<Draft>, field?: Field): void {
@@ -225,10 +225,10 @@ export class AeatCertificateDialog extends LitElement {
       saveActionState(this.#scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = undefined;
     if (this.#failsOwnChecks) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = this.#sourceGeneration;
@@ -413,7 +413,7 @@ export class AeatCertificateDialog extends LitElement {
             action.unchanged ||
             this.busy ||
             this.diagnosing ||
-            (this.attempted && this.#failsOwnChecks)
+            (this.feedback.attempted && this.#failsOwnChecks)
           }
           @click=${() => void this.#save()}
           >${t(

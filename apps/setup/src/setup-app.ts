@@ -2191,7 +2191,9 @@ export class SetupApp extends LitElement {
     const { code, params } = (error ?? {}) as Partial<ApiError>;
     if (
       code !== "setup.certificate_refused" ||
-      (params?.field !== "pfxBase64" && params?.field !== "passphrase")
+      (params?.field !== "pfxBase64" &&
+        params?.field !== "passphrase" &&
+        !(params?.field === "body" && params?.reason === "unavailable"))
     )
       return false;
     this.#invalidateFiscalTest();

@@ -17,6 +17,8 @@ private key and modern encryption. The export instructions are on the certificat
 If a certificate is refused while finishing an interrupted setup, correct it first. Setup then
 asks you to confirm ownership again before you continue.
 
+If the box could not check the certificate, try **Next** again in setup or **Save** again in the replacement dialog. Keep the same file and passphrase unless a field asks you to correct them.
+
 ## Retry a check in Venue settings {#dashboard-check}
 
 Installing a replacement certificate asks for the [shared sign-in confirmation](staff.md#account-access).

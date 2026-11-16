@@ -78,7 +78,14 @@ export async function validateSetupAeatCert(raw: unknown): Promise<void> {
   };
   const opened = await openCertificate(pfx, cert.passphrase);
   if (!opened.ok) {
-    return refuse(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "pfxBase64");
+    return refuse(
+      opened.reason,
+      opened.reason === "unavailable"
+        ? "body"
+        : opened.reason === "passphrase_wrong"
+          ? "passphrase"
+          : "pfxBase64",
+    );
   }
   const now = Date.now();
   if (now >= opened.details.validUntil.getTime()) refuse("expired");
@@ -97,6 +104,8 @@ export async function sealAeatSecret(
 ): Promise<void> {
   const cert = parseAeatCert(raw);
   const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
+  if (!opened.ok && opened.reason === "unavailable")
+    throw new AppError("setup.certificate_refused", { field: "body", reason: "unavailable" });
 
   await withTransaction(deps.db, async (tx) => {
     await putCredential(tx, deps.ring, {

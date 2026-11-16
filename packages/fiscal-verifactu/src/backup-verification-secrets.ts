@@ -80,6 +80,7 @@ async function check(
   if (pfx.length === 0 || pfx.toString("base64") !== pfxBase64) return "invalid";
   const opened = await openCertificate(pfx, passphrase);
   if (!opened.ok) {
+    if (opened.reason === "unavailable") throw new BackupCheckUnavailable("secret_unavailable");
     if (opened.reason === "passphrase_wrong")
       throw new BackupCheckUnavailable("decryption_unavailable");
     return opened.reason === "old_encryption" ? "unsupported" : "invalid";

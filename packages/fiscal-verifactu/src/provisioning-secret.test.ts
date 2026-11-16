@@ -159,3 +159,22 @@ describe("validateAeatCert — full cert-value validation", () => {
     );
   });
 });
+
+it("does not seal credentials when its opener is unavailable", async () => {
+  const ring = testRing();
+  const node = process.execPath;
+  try {
+    process.execPath = "/nonexistent/waitron-node";
+    await expect(
+      sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, aeatCert()),
+    ).rejects.toMatchObject({
+      code: "setup.certificate_refused",
+      params: { field: "body", reason: "unavailable" },
+    });
+  } finally {
+    process.execPath = node;
+  }
+  await expect(
+    withTransaction(suite.db, (tx) => getCredential(tx, ring, { purpose: "fiscal.aeat" })),
+  ).rejects.toMatchObject({ code: "credentials.missing" });
+});
