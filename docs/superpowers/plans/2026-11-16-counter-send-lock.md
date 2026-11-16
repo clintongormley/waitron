@@ -1,55 +1,57 @@
 # Counter Send lock implementation plan
 
-Authority: watcher queue, 2026-11-16 14:09, `/Users/clintongormley/waitron-campaign-f/queue.md`; Lane F `RUNNER.md` requires this separate Sol-high draft.
-This records the queued request, not owner design approval. Implement inline only after Claude review and watcher clearance.
+Authority: watcher queue, 2026-11-16 14:09, `/Users/clintongormley/waitron-campaign-f/queue.md`.
+Separate Sol-high draft, source-checked by Codex; first Claude read: `receipts/counter-send-lock-20261116/plan-review.md` in that lane.
+No owner design approval is claimed. Build inline only after the corrected plan's sole Claude reread and watcher clearance.
 
-## Finish line and scope
+## Finish line, reuse and limits
 
-After a lost Send reply, staff can retry the same basket but cannot change its dishes while the answer is unknown.
-Park cannot silently discard an attempted edit. At sign-in, a hanging held-orders read leaves the kitchen queue,
-waiting list and roster free to appear. Collecting an order already shown in the queue refreshes its card to offer Collect.
+Staff can retry a lost Send without changes to the basket breaking that retry; Park cannot silently drop an attempted edit.
+A hanging held-orders read at sign-in leaves the station queue, waiting list and staff free to load.
+Reuse `#unconfirmedPlace`, its order/session/visit/server checks and `WorkingOrderStore.lockEdits()` in
+`apps/till/src/till-app.ts` and `apps/till/src/state/working-order.ts`; clear/load already end locks.
+Reuse per-list failures and generations in `#refreshList`, and the existing helpers in the two app test files below.
+No generic controller, stored record, new wording, store semantic change, widget, server/API or fiscal/payment change.
+Invoice/receipt metadata remains editable; its existing refusal/replay assertions stay, with the remaining recipient issue in the PR thread.
 
-Reuse `#unconfirmedPlace` and its order/session/visit/server checks in `apps/till/src/till-app.ts:8363`,
-`WorkingOrderStore.lockEdits()` in `apps/till/src/state/working-order.ts:395`, and `#refreshList` at `till-app.ts:6283`.
-The store already ends locks on clear/load and protects a later lock from an earlier unlock; keep its meaning unchanged.
-Reuse `placeCounter`, `retrieved`, `emit` and `flush` in `apps/till/src/till-app-counter-adjustments.test.ts`, and login/queue/retry helpers in `apps/till/src/till-app.test.ts`.
-Leave out generic controllers, new records, new application wording, server/API changes and fiscal or payment changes.
-Leave invoice/receipt metadata editable. No store or widget change is expected. Deliver one PR and remove completed backlog entries.
+**Collect proposal for the watcher:** drop the queued extra refresh and delete its obsolete backlog bullet, rather than refresh
+unused data. `screens/till-counter-screen.ts` receives `stationQueue` but never renders a station queue;
+its existing test asserts that absence, and `till-app.test.ts` explicitly retains queue data without drawing a prep rail.
+Run those existing checks before the deletion. Do not add a new rail or a mock card to manufacture the requested reproduction.
+The watcher must settle this narrower route before build; no runtime absence claim is made from source alone.
 
-## Three test-first steps
+## Test-first build
 
-1. **Keep the unknown Send basket unchanged.** In `apps/till/src/till-app-counter-adjustments.test.ts`, first add
-   “keeps a lost-Send basket unchanged when a dish is added”, “keeps a lost-Send basket unchanged when a sent dish is raised”,
-   and “Park after a lost Send clears only the unchanged basket”. Attempt the edits, assert unchanged lines and quantities,
-   no update carrying those edits, and a retry reaching collect; Park may harmlessly clear this unchanged basket.
-   Watch these fail before changing `#onPlaceOrder` in `apps/till/src/till-app.ts`; retain a scoped unlock with the pending
-   attempt before calling Place. Keep it through repeated network failures; release on a definite answer or clear/load.
-   Trace edit gates and menu reconciliation; keep Send usable and prevent old completions unlocking a newer basket.
-   Exercise definite refusal, clear and reload in this app suite, reusing the existing cases where available.
-   Replace “does not replay an uncertain placement after the basket changes”: the attempted change now does nothing,
-   no update is sent, Place is called twice, collect appears and `place.error` does not.
-   Revise “saves an edited basket to a replacement server before placing there”: the attempted edit stays blocked;
-   keep assertions that the old server is not replayed and the replacement receives a fresh preparation and placement.
-   Preserve recipient replay, receipt-language and definite-refusal checks; add lock release assertions to existing cases.
+1. **Lost Send lock.** Modify `apps/till/src/till-app-counter-adjustments.test.ts` before production code.
+   Rewrite “does not replay an uncertain placement after the basket changes” as the added-dish failing case:
+   attempted add leaves exact lines unchanged, sends no update, and the retry reaches collect without `place.error`.
+   Add one raised-sent-dish case and one Park case: attempted quantity change is refused; Park sends no update
+   and clears only the unchanged basket. Keep pre-first-Send edited-save assertions intact.
+   Rename the replacement-server case: attempted edits stay blocked, no update goes out, the replacement's
+   dead-end preparation and Place run, and the original API is called only for its first Place.
+   Add lock-release assertions to existing definite-refusal/retry cases; cover clear/reload with existing store cases.
+   Watch the relevant cases fail, then change `#onPlaceOrder` in `apps/till/src/till-app.ts`.
+   Take the scoped lock when Place's reply is lost, retain it through retries and metadata-preparation refusals,
+   and release only on Place's own definite answer or clear/load; an older completion cannot unlock another basket.
+   Keep pending lock ownership when invoice preparation fails, even when the next Send must prepare a fresh attempt.
+   Add one failed waiting-order-open case; its temporary read lock must not leave the original uncertain basket editable.
+   After that read releases its lock, re-establish the pending Send lock only for the same order/session/visit.
+   Add one menu-poll version-change case; treat the edit-locked counter as busy in `#onMenuState`, postponing
+   reconciliation through the existing due flag so an automatic version adoption cannot invalidate the retry.
+   Keep recipient replay, receipt-language and unchanged successful-retry assertions; do not duplicate store lock mechanics.
 
-2. **Start the sign-in reads together.** In `apps/till/src/till-app.test.ts`, first add “a held-orders read that never
-   answers still shows the station queue, waiting list and roster at sign-in”. Hold that request with a promise gate;
-   assert the other rows and staff are installed before releasing it, then release it for cleanup. Watch it fail.
-   In `apps/till/src/till-app.ts:6218`, start all three existing `#refreshList` calls together and start the existing
-   staff read before awaiting them. Keep each list's failure wording, session checks and newest-result checks unchanged.
-   This app suite owns coordination: retain the “on a %s, a failed read of the held orders…” cases and existing
-   older-refresh success/failure cases, without duplicating their assertions.
-
-3. **Refresh a collected order already on the queue.** In `apps/till/src/till-app.test.ts`, first add “collect straight
-   after Place refreshes its queue card to offer Collect”: show the placed unpaid card, collect, return to the queue,
-   and assert the refreshed settled card has its Collect button. Watch the missing refresh fail, then broaden
-   `#onCollectOrder` in `apps/till/src/till-app.ts:8539` to refresh for `fromWaitingList` or an id in `this.stationQueue`.
-   Keep “a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure does not bring the notice back”
-   unchanged, including its empty queue and three-call assertion. Keep waiting-list collect coverage; add no widget test.
+2. **Independent sign-in lists.** In `apps/till/src/till-app.test.ts`, add “a held-orders read that never answers
+   still installs station queue, waiting list and staff at sign-in”. Gate held, assert the other exact rows before release,
+   and release in cleanup. Watch it fail, then start all three `#refreshList` calls and the existing staff read together.
+   Keep per-list messages and generations; pass `replaced` to each read. Run the remaining floor-data work before
+   awaiting those reads, preserving the existing floor-login and newest-success/late-failure cases without duplicate tests.
 
 ## Verification, documentation and size
 
-For each step, run its named cases with `pnpm --filter @waitron/till exec vitest run <test-file> -t '<case>'` before and after the fix.
-Then run the two changed test files. Store lock mechanics remain owned by `apps/till/src/state/working-order.test.ts`'s existing `WorkingOrderStore.lockEdits` cases; run those without duplicating them. Use the pre-push hook and current-head scoped CI for the remaining checks.
-In `apps/server/src/guide/en/kitchen-service.md` and `apps/server/src/guide/es/kitchen-service.md`, replace obsolete edit-after-Send advice in `counter-send-retry` with one short locked-basket retry instruction. Delete A1417 and the two completed Task 16 bullets from `docs/backlog/till.md`, remove A1417's index entry and update Task 16's stale summary in `docs/backlog.md` to the remaining issue.
-Expected production changes: add 50–90 lines, remove 15–35. Tests: add 330–490, remove 30–60, reusing fixtures. About 400–700 changed code/test lines overall, with a much smaller source diff; documentation adds only the short guide instruction and removes completed entries.
+Run each named case red then green with `pnpm --filter @waitron/till exec vitest run <file> -t '<case>'`, then both changed files.
+Run the existing store lock cases and Counter no-rail checks. Keep the prepay-zone late-failure retry test unchanged.
+Inspect the existing lost-Send visual cases in English/Spanish, light/dark, phone/desktop; use the normal push hook and current-head scoped CI.
+Delete the false edit-after-Send paragraph in both `apps/server/src/guide/{en,es}/kitchen-service.md`; its preceding unchanged-basket instruction stays.
+Delete completed A1417 and Task16 list-loading entries in `docs/backlog/till.md`, and A1417's index line in `docs/backlog.md`; update the Task16 summary.
+Subject to watcher clearance, also delete the obsolete collect bullet and its history comment in `#onCollectOrder`, without changing collection behavior.
+Expected production +45–80/−15–35; tests +220–340/−30–60; no new test support or generated files. Guides/backlog mainly lose text; plan about one page.
