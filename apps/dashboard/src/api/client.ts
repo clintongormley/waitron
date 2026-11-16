@@ -1016,6 +1016,8 @@ export interface PairingModeState {
   open: boolean;
   openUntil: string | null;
   deviceAddress: string;
+  /** The venue's time zone, or UTC when the venue has none the server's runtime knows. */
+  timeZone: string;
 }
 
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────

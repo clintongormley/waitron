@@ -37,6 +37,7 @@ import {
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
+import { readVenueTimeZone } from "./venue-time-zone.js";
 import type { Logger } from "./logger.js";
 
 /** `pairingMode` must be the SAME holder `boot.ts` hands the device mount: one window per venue. */
@@ -170,6 +171,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
         deviceAddress: deps.deviceAddress,
+        timeZone: await readVenueTimeZone(deps.db),
       });
     }),
   );

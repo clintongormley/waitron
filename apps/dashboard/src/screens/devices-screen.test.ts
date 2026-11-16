@@ -224,7 +224,12 @@ const pending: JoinRequestRow[] = [
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
-const SHUT = { open: false, openUntil: null, deviceAddress: "https://waitron.local" };
+const SHUT = {
+  open: false,
+  openUntil: null,
+  deviceAddress: "https://waitron.local",
+  timeZone: "UTC",
+};
 const TAKEN_UNTIL = "2026-09-08T10:05:00.000Z";
 
 const printers: Printer[] = [
@@ -706,9 +711,12 @@ describe("the device table", () => {
       batteryReportedAt: minutes === null ? null : minutesAgo(minutes),
     });
 
-    async function mountBattery(rows: DeviceRow[]): Promise<DevicesScreen> {
+    async function mountBattery(
+      rows: DeviceRow[],
+      overrides: Partial<DashboardApi> = {},
+    ): Promise<DevicesScreen> {
       const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-        api: stubApi({ listDevices: vi.fn().mockResolvedValue(rows) }),
+        api: stubApi({ listDevices: vi.fn().mockResolvedValue(rows), ...overrides }),
         now: () => NOW,
       });
       await flush(el);
@@ -785,6 +793,24 @@ describe("the device table", () => {
           expect(tip.matches(":popover-open")).toBe(true);
           cleanupWidgets();
         }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("gives a greyed report's exact time in the venue's time zone, not the browser's", async () => {
+      const before = currentLocale();
+      try {
+        setLocale("en-GB");
+        const el = await mountBattery([reported("old", 82, false, 11)], {
+          pairingMode: vi.fn().mockResolvedValue({ ...SHUT, timeZone: "Pacific/Auckland" }),
+        });
+        const time = cell(el, "old").querySelector("wt-relative-time")!;
+        await time.updateComplete;
+        const button = time.shadowRoot!.querySelector("button")!;
+        const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+        // In UTC the same instant reads "5 October 2026 at 11:49".
+        expect(tip.textContent!.trim()).toBe("6 October 2026 at 00:49");
       } finally {
         setLocale(before);
       }
