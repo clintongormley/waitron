@@ -15,11 +15,17 @@ import { enqueueAttendanceDay } from "./attendance-state.js";
 import type { AttendanceDay, AttendanceFact } from "./attendance-types.js";
 import "./errors.js";
 
-export async function markAttendanceEntry(tx: Transaction, entryId: string): Promise<void> {
+export async function markAttendanceEntry(
+  tx: Transaction,
+  entry: Pick<
+    typeof timeEntries.$inferSelect,
+    "id" | "eventAt" | "correctsEntryId" | "respondsToEntryId"
+  >,
+): Promise<void> {
   const clock = await readVenueClock(tx);
-  const pending = [entryId],
-    visited = new Set<string>(),
-    days = new Set<string>();
+  const pending = [entry.correctsEntryId, entry.respondsToEntryId].filter((id) => id !== null),
+    visited = new Set([entry.id]),
+    days = new Set([businessDayAt(clock, new Date(entry.eventAt))]);
   while (pending.length) {
     const id = pending.pop()!;
     if (visited.has(id)) continue;

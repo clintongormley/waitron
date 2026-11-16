@@ -118,6 +118,8 @@ describe("the till's clock across a backward step of the box's clock", () => {
     expect((await request("in")).status).toBe(200);
     expect((await act("out", "2026-01-06T03:35:00Z")).status).toBe(200);
     expect((await act("in", "2026-01-06T03:40:00Z")).status).toBe(200);
+    // Clock writes already mark their days; isolate the state read's reconciliation below.
+    await suite.db.delete(attendanceDayWork);
     expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
 
     instant = new Date("2026-01-06T04:10:00Z");

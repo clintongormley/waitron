@@ -180,7 +180,12 @@ async function attemptAppend(
     })
     .where(eq(workforceChains.nodeId, key.nodeId));
 
-  await markAttendanceEntry(tx, inserted.id);
+  await markAttendanceEntry(tx, {
+    id: inserted.id,
+    eventAt,
+    correctsEntryId: entry.correctsEntryId ?? null,
+    respondsToEntryId: entry.extension?.respondsToEntryId ?? null,
+  });
   return { id: inserted.id, sequenceNo, entryHash };
 }
 

@@ -23,6 +23,7 @@ import { timeEntries } from "./schema/time-entries.js";
 import { workforceChains } from "./schema/workforce-chains.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { payPeriodSettings } from "./schema/pay-period-settings.js";
+import { attendanceDayWork } from "./schema/attendance.js";
 
 const migrations = [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS];
 const original = useVenueDb({ migrations });
@@ -156,6 +157,9 @@ beforeEach(async () => {
     .insert(workforceChains)
     .values(await original.db.select().from(workforceChains));
   await restored.db.insert(payPeriodSettings).values({ id: 1, frequency: "monthly" });
+  await restored.db
+    .insert(attendanceDayWork)
+    .values(await original.db.select().from(attendanceDayWork));
 });
 
 async function corrupt(db: Database, statement: string) {
@@ -307,6 +311,8 @@ describe("complete captured workforce backup evidence", () => {
       .update(workforceChains)
       .set(head)
       .where(sql`node_id=${retired}`);
+    const [work] = await original.db.select().from(attendanceDayWork);
+    await restored.db.update(attendanceDayWork).set(work!).where(sql`id=${work!.id}`);
     expect(await run()).toEqual(passed);
   });
   it.each([
@@ -507,7 +513,7 @@ describe("complete captured workforce backup evidence", () => {
     for (const db of [original.db, restored.db])
       await corrupt(
         db,
-        "delete from workforce_chains; delete from time_entries; delete from pay_period_closures; delete from pay_period_settings",
+        "delete from workforce_chains; delete from time_entries; delete from pay_period_closures; delete from pay_period_settings; delete from attendance_day_work",
       );
     expect(await run(absent.db)).toEqual(passed);
     await restored.db.insert(payPeriodSettings).values({ frequency: "monthly" });

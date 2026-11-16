@@ -208,19 +208,23 @@ describe("the unfinished-correction alert", () => {
       outcome: "completed",
       providerStatus: "succeeded",
     });
-    const refusal = new Error("attendance unavailable");
-    const failing = {
-      ...v.deps,
-      attendance: async () => {
-        throw refusal;
-      },
-    };
+    v.db.run(sql`create trigger fail_recovered_refund before update of state on tender_refunds
+      when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
 
     at(61);
-    await expect(recoverTenderRefunds(failing)).rejects.toMatchObject({
-      message: "Settled-tender refund recovery failed",
-      errors: [refusal],
-    });
+    try {
+      await expect(recoverTenderRefunds(v.deps)).rejects.toMatchObject({
+        message: "Settled-tender refund recovery failed",
+        errors: [
+          expect.objectContaining({
+            code: "ERR_SQLITE_ERROR",
+            message: "refund storage unavailable",
+          }),
+        ],
+      });
+    } finally {
+      v.db.run(sql`drop trigger fail_recovered_refund`);
+    }
     expect(await alertsFor(saleId)).toHaveLength(1);
   });
 
