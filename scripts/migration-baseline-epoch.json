@@ -4,8 +4,8 @@
     {
       "name": "core",
       "tag": "0000_baseline",
-      "when": 1794850375248,
-      "sha256": "9f03e02cc56c498d2a3fa186ec08b10dcc5e7037145f5a706ec1408fb6a63f0a"
+      "when": 1794859535214,
+      "sha256": "2f2f2954174fd3e44de227242f28ff287a203d08b540f19c4fcaf950ca9dbe4c"
     },
     {
       "name": "node",

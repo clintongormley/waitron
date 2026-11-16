@@ -17,10 +17,8 @@ const OWNED = [
   "dashboard_sessions",
   "account_actions",
   "recovery_codes",
-  "totp_enrollments",
-  "google_oidc_states",
   "webauthn_credentials",
-  "webauthn_challenges",
+  "sign_in_challenges",
   "device_profile_admission_roles",
 ];
 

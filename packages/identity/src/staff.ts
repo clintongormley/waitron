@@ -14,10 +14,9 @@ import {
   dashboardSessions,
   accountActions,
   tillSessions,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
   recoveryCodes,
-  totpEnrollments,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -205,8 +204,19 @@ const NO_SIGN_IN_SECRETS = {
 export async function deleteSignInRows(tx: Transaction, personId: string): Promise<void> {
   await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, personId));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, personId));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, personId));
-  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, personId));
+  await tx
+    .delete(signInChallenges)
+    .where(
+      and(
+        eq(signInChallenges.personId, personId),
+        inArray(signInChallenges.kind, [
+          "passkey_registration",
+          "passkey_login",
+          "passkey_check",
+          "totp_enrolment",
+        ]),
+      ),
+    );
 }
 
 export async function updatePersonDetails(

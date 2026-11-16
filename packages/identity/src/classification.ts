@@ -12,10 +12,8 @@ export const IDENTITY_TABLES = [
   "recovery_codes",
   "till_sessions",
   "dashboard_sessions",
-  "webauthn_challenges",
-  "totp_enrollments",
+  "sign_in_challenges",
   "device_profile_admission_roles",
-  "google_oidc_states",
 ] as const;
 
 export const IDENTITY_CHANGE_SOURCES: readonly ChangeSource[] = [

@@ -35,7 +35,7 @@ describe("Google OpenID Connect state", () => {
     expect(url.searchParams.get("nonce")).toBeTruthy();
     expect(url.searchParams.get("state")).toBe(begun.state);
     const rows = await suite.db.execute<{ state_hash: string }>(
-      sql`select state_hash from google_oidc_states`,
+      sql`select state_hash from sign_in_challenges`,
     );
     expect(rows.rows.at(-1)!.state_hash).toHaveLength(64);
     expect(rows.rows.at(-1)!.state_hash).not.toBe(begun.state);
@@ -169,7 +169,7 @@ describe("Google OpenID Connect state stored before a backward clock step", () =
     const ceiling = later(10 * 60 * 1000).toISOString();
     const ahead = () =>
       suite.db.execute<{ n: number }>(
-        sql`select count(*) as n from google_oidc_states where expires_at > ${ceiling}`,
+        sql`select count(*) as n from sign_in_challenges where expires_at > ${ceiling}`,
       );
     expect((await ahead()).rows[0]!.n).toBeGreaterThan(0);
     await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));

@@ -31,12 +31,6 @@ folding ASCII-only, and the column is still nullable, so nothing at the compiler
 forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
 fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
 
-## Task 1b (#554, session cookies stored only as hashes)
-
-**Task 1b** (#554, session cookies stored only as hashes). The remaining person keys #426 dropped
-could be declared again: `totp_enrollments` and `google_oidc_states` to `persons`. Pp2 merges these
-into `sign_in_challenges` with its person key.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
@@ -122,13 +116,10 @@ Not observed in a real password manager — the tests replace the browser's meth
   throws where a method is missing. Left open from the review, both predating C101: a suspended or
   pending person's passkey is refused before the signature check and an active person's bad
   signature after it, so the two do different work — whether that can be timed from outside was not
-  measured; and an expired sign-in challenge answers its own `passkey.challenge_expired`.
-
-## Passkey name column after A760
-
-A403 removes the typed passkey name. Under the A1308 schema hold, the stored name column remains;
-new registrations fill it with the detected password manager's name, or null for an unknown manager.
-After A760, decide whether to remove the redundant column and read the provider directly.
+  measured. A passkey sign-in challenge more than five minutes old answers
+  `passkey.challenge_expired` while its row remains; a missing or swept challenge answers
+  `passkey.verification_failed`. A1308 pp2 extends that sweep from later sign-in starts to
+  any ceremony insert.
 
 ## Shared database-backed table paging, search and sorting
 

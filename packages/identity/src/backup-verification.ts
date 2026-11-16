@@ -214,9 +214,6 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
         case "person_staff_roles":
           if (!staffRoles.has(String(row.staff_role_id))) data = merge(data, "invalid");
           break;
-        case "totp_enrollments":
-          secret = merge(secret, totp(row.encrypted_secret, ring));
-          break;
         case "webauthn_credentials":
           data = merge(data, passkey(row));
           break;
@@ -231,21 +228,33 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
           if (!digest(row.token_hash) || (row.code_hash !== null && !digest(row.code_hash)))
             data = merge(data, "invalid");
           break;
-        case "webauthn_challenges":
-          if (
-            base64url(row.challenge) === null ||
-            (row.purpose === "login" ? row.person_id !== null : row.person_id === null)
-          )
-            data = merge(data, "invalid");
-          break;
-        case "google_oidc_states":
-          if (
-            !digest(row.state_hash) ||
-            base64url(row.nonce)?.length !== 32 ||
-            base64url(row.verifier)?.length !== 48 ||
-            (row.mode === "link" ? row.person_id === null : row.person_id !== null)
-          )
-            data = merge(data, "invalid");
+        case "sign_in_challenges":
+          switch (row.kind) {
+            case "passkey_registration":
+            case "passkey_login":
+            case "passkey_check":
+              if (
+                base64url(row.challenge) === null ||
+                (row.kind === "passkey_login" ? row.person_id !== null : row.person_id === null)
+              )
+                data = merge(data, "invalid");
+              break;
+            case "google_login":
+            case "google_link":
+              if (
+                !digest(row.state_hash) ||
+                base64url(row.nonce)?.length !== 32 ||
+                base64url(row.verifier)?.length !== 48 ||
+                (row.kind === "google_link" ? row.person_id === null : row.person_id !== null)
+              )
+                data = merge(data, "invalid");
+              break;
+            case "totp_enrolment":
+              secret = merge(secret, totp(row.encrypted_secret, ring));
+              break;
+            default:
+              data = merge(data, "invalid");
+          }
           break;
       }
     }

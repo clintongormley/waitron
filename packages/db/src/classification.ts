@@ -411,24 +411,14 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "a person's dashboard login; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),
   classify(
-    "webauthn_challenges",
+    "sign_in_challenges",
     "state",
-    "a short-lived passkey ceremony; a challenge signs nobody in without the authenticator; copied to a standby, never drained back",
-  ),
-  classify(
-    "totp_enrollments",
-    "state",
-    "a short-lived authenticator setup; its secret is stored encrypted; copied to a standby, never drained back",
+    "a sign-in or enrolment ceremony in flight; minutes long",
   ),
   classify(
     "device_profile_admission_roles",
     "state",
     "the roles a device profile admits; copied to a standby, never drained back",
-  ),
-  classify(
-    "google_oidc_states",
-    "state",
-    "a short-lived Google sign-in ceremony; its state is stored only as a hash; copied to a standby, never drained back",
   ),
 
   // credentials: a stored secret is sealed under the box's key ring, so a box holding a different

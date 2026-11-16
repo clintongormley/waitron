@@ -85,17 +85,23 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
   });
 });
 
-/**
- * `person_id` is nullable (a discoverable-login ceremony has no known person yet) and has no key to
- * `persons`, so nothing refuses a row naming a missing person.
- */
-describe("webauthn_challenges constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares its primary key, its purpose check, and no foreign keys or indexes", () => {
-    const config = getTableConfig(api.webauthnChallenges);
-
+describe("sign_in_challenges constraint declarations", () => {
+  it("declares its primary key, person cascade, four checks and three indexes", () => {
+    const config = getTableConfig(api.signInChallenges);
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-    expect(config.checks.map((c) => c.name)).toEqual(["webauthn_challenges_purpose_ck"]);
-    expect(config.foreignKeys).toEqual([]);
-    expect(config.indexes).toEqual([]);
+    expect(config.checks.map((c) => c.name).sort()).toEqual([
+      "sign_in_challenges_expiry_ck",
+      "sign_in_challenges_kind_ck",
+      "sign_in_challenges_shape_ck",
+      "sign_in_challenges_state_hash_ck",
+    ]);
+    expect(config.foreignKeys.map((fk) => [fk.getName(), fk.onDelete])).toEqual([
+      ["sign_in_challenges_person_fk", "cascade"],
+    ]);
+    expect(config.indexes.map((i) => i.config.name).sort()).toEqual([
+      "sign_in_challenges_person_idx",
+      "sign_in_challenges_state_hash_uq",
+      "sign_in_challenges_totp_person_uq",
+    ]);
   });
 });

@@ -42,7 +42,7 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     ],
   },
   webauthn_credentials: {
-    in: ["name", "aaguid", "created_at", "last_used_at"],
+    in: ["aaguid", "created_at", "last_used_at"],
     out: ["id", "person_id", "credential_id", "public_key", "counter", "transports"],
   },
   recovery_codes: {
@@ -69,17 +69,18 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     ],
     out: ["id", "person_id", "token_hash", "code_hash"],
   },
-  totp_enrollments: {
+  sign_in_challenges: {
     in: ["created_at", "expires_at"],
-    out: ["id", "person_id", "encrypted_secret"],
-  },
-  webauthn_challenges: {
-    in: ["created_at"],
-    out: ["id", "person_id", "challenge", "purpose"],
-  },
-  google_oidc_states: {
-    in: ["expires_at"],
-    out: ["id", "person_id", "mode", "state_hash", "nonce", "verifier"],
+    out: [
+      "id",
+      "person_id",
+      "kind",
+      "challenge",
+      "state_hash",
+      "nonce",
+      "verifier",
+      "encrypted_secret",
+    ],
   },
 };
 

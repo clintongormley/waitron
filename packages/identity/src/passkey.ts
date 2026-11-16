@@ -1,3 +1,4 @@
+import { insertSignInChallenge } from "./sign-in-challenges.js";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
@@ -17,15 +18,13 @@ import {
   isUniqueViolation,
   nowIso,
   persons,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
-  type challengePurpose,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { TotpKeyRing } from "./mfa.js";
 import { requireEnrolledCode } from "./profile.js";
-import { passkeyProviderName } from "./passkey-providers.js";
 import {
   resolveManagementSession,
   startManagementSession,
@@ -45,7 +44,7 @@ import {
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const CHALLENGE_AHEAD_MS = 60 * 1000;
 
-type ChallengePurpose = (typeof challengePurpose.enumValues)[number];
+type ChallengePurpose = "registration" | "login" | "check";
 
 /**
  * EdDSA (-8), ES256 (-7), RS256 (-257), given to both halves of registration so what the
@@ -94,19 +93,19 @@ async function consumeChallenge(
   expected: { purpose: ChallengePurpose; personId?: string },
 ): Promise<string> {
   const [challenge] = await tx
-    .delete(webauthnChallenges)
+    .delete(signInChallenges)
     .where(
       and(
-        eq(webauthnChallenges.id, challengeHandle),
-        eq(webauthnChallenges.purpose, expected.purpose),
+        eq(signInChallenges.id, challengeHandle),
+        eq(signInChallenges.kind, `passkey_${expected.purpose}`),
         expected.personId === undefined
           ? undefined
-          : eq(webauthnChallenges.personId, expected.personId),
+          : eq(signInChallenges.personId, expected.personId),
       ),
     )
     .returning({
-      challenge: webauthnChallenges.challenge,
-      createdAt: webauthnChallenges.createdAt,
+      challenge: signInChallenges.challenge,
+      createdAt: signInChallenges.createdAt,
     });
   if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
   const age = Date.now() - Date.parse(challenge.createdAt);
@@ -114,7 +113,7 @@ async function consumeChallenge(
   if (age > CHALLENGE_TTL_MS || age < -CHALLENGE_AHEAD_MS) {
     throw new AppError("passkey.challenge_expired", {});
   }
-  return challenge.challenge;
+  return challenge.challenge!;
 }
 
 /** WebAuthn's `user.name` is what a password manager lists the passkey under; the dashboard signs
@@ -179,11 +178,13 @@ export async function beginPasskeyRegistration(
     // What the authenticator is offered; `finishPasskeyRegistration` accepts the same list.
     supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS,
   });
-  const [row] = await tx
-    .insert(webauthnChallenges)
-    .values({ personId, challenge: options.challenge, purpose: "registration" })
-    .returning({ id: webauthnChallenges.id });
-  return { challengeHandle: row!.id, options };
+  const challengeHandle = await insertSignInChallenge(tx, {
+    kind: "passkey_registration",
+    personId: personId,
+    challenge: options.challenge,
+    lifetimeMs: CHALLENGE_TTL_MS,
+  });
+  return { challengeHandle, options };
 }
 
 export async function finishPasskeyRegistration(
@@ -225,7 +226,6 @@ export async function finishPasskeyRegistration(
     await tx.insert(webauthnCredentials).values({
       personId,
       credentialId: cred.id,
-      name: passkeyProviderName(aaguid),
       aaguid,
       publicKey: b64url(cred.publicKey),
       counter: cred.counter,
@@ -249,24 +249,18 @@ export async function beginPasskeyAuthentication(
   tx: Transaction,
   input: { rpId: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
-  await tx
-    .delete(webauthnChallenges)
-    .where(
-      and(
-        eq(webauthnChallenges.purpose, "login"),
-        lt(webauthnChallenges.createdAt, new Date(Date.now() - CHALLENGE_TTL_MS).toISOString()),
-      ),
-    );
   // The library default 'preferred' would let a device assert without UV and then fail verify.
   const options = await generateAuthenticationOptions({
     rpID: input.rpId,
     userVerification: "required",
   });
-  const [row] = await tx
-    .insert(webauthnChallenges)
-    .values({ challenge: options.challenge, purpose: "login" })
-    .returning({ id: webauthnChallenges.id });
-  return { challengeHandle: row!.id, options };
+  const challengeHandle = await insertSignInChallenge(tx, {
+    kind: "passkey_login",
+    personId: null,
+    challenge: options.challenge,
+    lifetimeMs: CHALLENGE_TTL_MS,
+  });
+  return { challengeHandle, options };
 }
 
 interface AssertionInput {
@@ -390,11 +384,13 @@ export async function beginOwnPasskeyCheck(
       transports: parseTransports(c.transports),
     })),
   });
-  const [row] = await tx
-    .insert(webauthnChallenges)
-    .values({ personId, challenge: options.challenge, purpose: "check" })
-    .returning({ id: webauthnChallenges.id });
-  return { challengeHandle: row!.id, options };
+  const challengeHandle = await insertSignInChallenge(tx, {
+    kind: "passkey_check",
+    personId: personId,
+    challenge: options.challenge,
+    lifetimeMs: CHALLENGE_TTL_MS,
+  });
+  return { challengeHandle, options };
 }
 
 /**

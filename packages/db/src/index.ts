@@ -370,7 +370,8 @@ export { mediaBlobs, mediaImages } from "./schema/index.js";
 export { handoverActivations, handoverScenario, handoverReturnBatches } from "./schema/index.js";
 export {
   deviceProfileAdmissionRoles,
-  googleOidcStates,
+  signInChallenges,
+  signInChallengeKind,
   accountActions,
   dashboardSessions,
   roles,
@@ -380,12 +381,9 @@ export {
   personStatus,
   recoveryCodes,
   tillSessions,
-  totpEnrollments,
-  webauthnChallenges,
   webauthnCredentials,
 } from "./schema/index.js";
 export { liveDisplayNameKey, loginEmailKey, pendingEmailKey } from "./schema/identity/persons.js";
-export { challengePurpose } from "./schema/identity/webauthn.js";
 export {
   contentSuggestionJobs,
   contentSuggestions,

@@ -1,7 +1,6 @@
 import "./errors.js";
 import {
   devices,
-  googleOidcStates,
   accountActions,
   dashboardSessions,
   persons,
@@ -9,8 +8,7 @@ import {
   personRoles,
   recoveryCodes,
   tillSessions,
-  totpEnrollments,
-  webauthnChallenges,
+  signInChallenges,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
@@ -113,27 +111,29 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .orderBy(asc(accountActions.createdAt), asc(accountActions.id));
 
     const twoFactorSetups = await tx
-      .select({ startedAt: totpEnrollments.createdAt, expiresAt: totpEnrollments.expiresAt })
-      .from(totpEnrollments)
-      .where(eq(totpEnrollments.personId, personId))
-      .orderBy(asc(totpEnrollments.createdAt), asc(totpEnrollments.id));
+      .select({ startedAt: signInChallenges.createdAt, expiresAt: signInChallenges.expiresAt })
+      .from(signInChallenges)
+      .where(
+        and(eq(signInChallenges.personId, personId), eq(signInChallenges.kind, "totp_enrolment")),
+      )
+      .orderBy(asc(signInChallenges.createdAt), asc(signInChallenges.id));
 
     const passkeySetups = await tx
-      .select({ startedAt: webauthnChallenges.createdAt })
-      .from(webauthnChallenges)
+      .select({ startedAt: signInChallenges.createdAt })
+      .from(signInChallenges)
       .where(
         and(
-          eq(webauthnChallenges.personId, personId),
-          eq(webauthnChallenges.purpose, "registration"),
+          eq(signInChallenges.personId, personId),
+          eq(signInChallenges.kind, "passkey_registration"),
         ),
       )
-      .orderBy(asc(webauthnChallenges.createdAt), asc(webauthnChallenges.id));
+      .orderBy(asc(signInChallenges.createdAt), asc(signInChallenges.id));
 
     const googleLinkSetups = await tx
-      .select({ expiresAt: googleOidcStates.expiresAt })
-      .from(googleOidcStates)
-      .where(and(eq(googleOidcStates.personId, personId), eq(googleOidcStates.mode, "link")))
-      .orderBy(asc(googleOidcStates.expiresAt), asc(googleOidcStates.id));
+      .select({ expiresAt: signInChallenges.expiresAt })
+      .from(signInChallenges)
+      .where(and(eq(signInChallenges.personId, personId), eq(signInChallenges.kind, "google_link")))
+      .orderBy(asc(signInChallenges.expiresAt), asc(signInChallenges.id));
 
     return async () => [
       jsonFile("profile.json", {
@@ -142,8 +142,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       }),
       jsonFile("sign-in.json", {
         ...person.signIn,
-        passkeys: passkeys.map(({ name, provider, createdAt, lastUsedAt }) => ({
-          name,
+        passkeys: passkeys.map(({ provider, createdAt, lastUsedAt }) => ({
           provider,
           createdAt,
           lastUsedAt,

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { nowIso, openVenueDatabase, webauthnChallenges, type Database } from "@waitron/db";
+import { nowIso, openVenueDatabase, signInChallenges, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { verifyPassword, webauthnCredentials } from "@waitron/identity";
@@ -198,14 +198,26 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
       pinHash: fixturePinHash("5678"),
       role: "staff",
     });
-    await suite.db.insert(webauthnChallenges).values([
-      { personId: adminId, challenge: "target", purpose: "registration" },
-      { personId: bystander!.id, challenge: "bystander", purpose: "registration" },
+    await suite.db.insert(signInChallenges).values([
+      {
+        personId: adminId,
+        challenge: "target",
+        kind: "passkey_registration",
+        createdAt: "2026-11-16T12:00:00.000Z",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
+      {
+        personId: bystander!.id,
+        challenge: "bystander",
+        kind: "passkey_registration",
+        createdAt: "2026-11-16T12:00:00.000Z",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
     ]);
     const pinBefore = suite.db.all(sql`select pin_hash from persons where id=${adminId}`);
     expect((await run(baseEnv())).code).toBe(0);
     expect(suite.db.all(sql`select pin_hash from persons where id=${adminId}`)).toEqual(pinBefore);
-    expect(suite.db.all(sql`select person_id, challenge from webauthn_challenges`)).toEqual([
+    expect(suite.db.all(sql`select person_id, challenge from sign_in_challenges`)).toEqual([
       { person_id: bystander!.id, challenge: "bystander" },
     ]);
 

@@ -192,13 +192,11 @@ async function login(app: Hono, email: string, password = PASSWORD, fresh = true
   return cookie;
 }
 
-function readCredentials(): Promise<
-  { credential_id: string; person_id: string; name: string | null }[]
-> {
+function readCredentials(): Promise<{ credential_id: string; person_id: string }[]> {
   return withTransaction(suite.db, (tx) =>
     Promise.resolve(
-      tx.all<{ credential_id: string; person_id: string; name: string | null }>(
-        sql`select credential_id, person_id, name from webauthn_credentials`,
+      tx.all<{ credential_id: string; person_id: string }>(
+        sql`select credential_id, person_id from webauthn_credentials`,
       ),
     ),
   );
@@ -282,7 +280,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(creds[0]).toMatchObject({
       credential_id: "cred-abc",
       person_id: managerId,
-      name: null,
     });
   });
 
@@ -497,14 +494,14 @@ describe("the profile's passkey list", () => {
     const res = await app.request("/management-api/session/me/profile", { headers: { cookie } });
     expect(res.status).toBe(200);
     const { passkeys } = (await res.json()) as {
-      passkeys: { name: string | null; lastUsedAt: string | null; provider: string | null }[];
+      passkeys: { lastUsedAt: string | null; provider: string | null }[];
     };
-    const byName = new Map(passkeys.map((p) => [p.name, p]));
-    expect(byName.get("Google Password Manager")).toMatchObject({
+    const byProvider = new Map(passkeys.map((p) => [p.provider, p]));
+    expect(byProvider.get("Google Password Manager")).toMatchObject({
       provider: "Google Password Manager",
     });
-    expect(byName.get("Google Password Manager")!.lastUsedAt! >= before).toBe(true);
-    expect(byName.get(null)).toMatchObject({ provider: null, lastUsedAt: null });
+    expect(byProvider.get("Google Password Manager")!.lastUsedAt! >= before).toBe(true);
+    expect(byProvider.get(null)).toMatchObject({ provider: null, lastUsedAt: null });
   });
 });
 
@@ -588,7 +585,7 @@ describe("passkey registration's own-credential check", () => {
     expect(await res.json()).toEqual({
       error: { code: "management_session.proof_required", params: {} },
     });
-    expect(suite.db.all(sql`select id from webauthn_challenges`)).toEqual([]);
+    expect(suite.db.all(sql`select id from sign_in_challenges`)).toEqual([]);
   });
 
   it("passes the authenticator code through for a person with two-factor sign-in", async () => {

@@ -27,7 +27,6 @@ const profile: OwnProfile = {
   passkeys: [
     {
       id: "key1",
-      name: "Desk",
       createdAt: "2026-09-09T12:00:00Z",
       lastUsedAt: null,
       provider: null,

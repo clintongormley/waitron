@@ -1772,6 +1772,10 @@ _2026-11-16 (A1308 pp1):_ `sessions` and `management_sessions` are now `till_ses
 and `dashboard_sessions`; both declare a person key that restricts deletion.
 See `packages/db/src/schema/identity/till-sessions.ts` and `dashboard-sessions.ts`.
 
+_2026-11-16 (A1308 pp2):_ the three temporary ceremony tables are now `sign_in_challenges`,
+whose person key cascades deletion. Task 1b's remaining keys are complete.
+See `packages/db/src/schema/identity/sign-in-challenges.ts` and its constraint tests.
+
 _2026-11-03 (A1301 S12b):_ `join_requests.location_id` was stamped with the venue's id.
 _2026-11-12 (A1308 5e):_ that column and the venue foreign keys on `devices` and `print_agents` are removed.
 _2026-11-14 (A1308 5h):_ `locations` and its interim id accessor are removed; venue and business-day reads use the shared settings documents.

@@ -49,7 +49,7 @@ describe("archived operational TOTP derivation", () => {
         }),
       );
       const [enrolment] = suite.db.all<{ encrypted_secret: string }>(
-        sql`select encrypted_secret from totp_enrollments`,
+        sql`select encrypted_secret from sign_in_challenges where kind='totp_enrolment'`,
       );
       await suite.db
         .update(persons)
@@ -92,7 +92,11 @@ describe("archived operational TOTP derivation", () => {
           ],
         });
         expect(suite.db.all(sql`select * from persons`)).toEqual(snapshot);
-        expect(suite.db.all(sql`select count(*) as n from totp_enrollments`)).toEqual([{ n: 1 }]);
+        expect(
+          suite.db.all(
+            sql`select count(*) as n from sign_in_challenges where kind='totp_enrolment'`,
+          ),
+        ).toEqual([{ n: 1 }]);
       } finally {
         await handle.close();
       }

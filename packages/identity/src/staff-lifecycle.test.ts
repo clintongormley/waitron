@@ -1,3 +1,4 @@
+import { hashSessionToken } from "./session-token.js";
 import { readPersonAuthority } from "./authority.js";
 import { ensureBuiltInRoles, setPersonAccessRoles } from "./roles.js";
 import { builtInRoleForTest } from "../test/person-rows.js";
@@ -11,8 +12,7 @@ import {
   checkFailed,
   withTransaction,
   recoveryCodes,
-  totpEnrollments,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -689,7 +689,9 @@ describe("deactivatePerson refusals", () => {
     await run((tx) =>
       deactivatePerson(tx, { managementSessionId: token, personId: target.toUpperCase() }),
     );
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(target)).toEqual(
+      withClearedSignInFactors("suspended", VERIFIED_AT),
+    );
   });
 
   it("refuses a staff actor with authorization.not_permitted, leaving the person active", async () => {
@@ -956,7 +958,6 @@ describe("a colliding row that lands after the pre-check", () => {
 
 const VERIFIED_AT = "2026-09-01T00:00:00.000Z";
 
-/** Gives a person every sign-in detail: the four columns and one row of each of the four tables. */
 async function seedSignInDetails(personId: string, email: string): Promise<void> {
   await suite.db.execute(sql`update persons
     set pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp',
@@ -969,14 +970,29 @@ async function seedSignInDetails(personId: string, email: string): Promise<void>
     publicKey: "public-key",
   });
   await suite.db.insert(recoveryCodes).values({ personId, codeHash: "a".repeat(64) });
-  await suite.db.insert(totpEnrollments).values({
+  await suite.db.insert(signInChallenges).values({
+    kind: "totp_enrolment",
+    createdAt: "2026-11-16T12:00:00.000Z",
     personId,
     encryptedSecret: "enrolment",
     expiresAt: "2099-01-01T00:00:00.000Z",
   });
-  await suite.db
-    .insert(webauthnChallenges)
-    .values({ personId, challenge: "challenge", purpose: "registration" });
+  await suite.db.insert(signInChallenges).values({
+    personId,
+    challenge: "challenge",
+    kind: "passkey_registration",
+    createdAt: "2026-11-16T12:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await suite.db.insert(signInChallenges).values({
+    kind: "google_link",
+    personId,
+    stateHash: hashSessionToken(personId),
+    nonce: "nonce",
+    verifier: "verifier",
+    createdAt: "2026-11-16T12:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
 }
 
 async function signInDetailsOf(personId: string): Promise<unknown> {
@@ -987,12 +1003,13 @@ async function signInDetailsOf(personId: string): Promise<unknown> {
   const counts = await suite.db.execute<Record<string, number>>(sql`select
       (select count(*) from webauthn_credentials where person_id = ${personId}) as passkeys,
       (select count(*) from recovery_codes where person_id = ${personId}) as recovery_codes,
-      (select count(*) from totp_enrollments where person_id = ${personId}) as totp_enrollments,
-      (select count(*) from webauthn_challenges where person_id = ${personId}) as challenges`);
+      (select count(*) from sign_in_challenges where kind = 'totp_enrolment' and person_id = ${personId}) as totp_setups,
+      (select count(*) from sign_in_challenges where kind in ('passkey_registration','passkey_login','passkey_check') and person_id = ${personId}) as challenges,
+      (select count(*) from sign_in_challenges where kind='google_link' and person_id=${personId}) as pending_google_links`);
   return { ...columns.rows[0], ...counts.rows[0] };
 }
 
-function withNoSignInDetails(status: string, emailVerifiedAt: string | null): unknown {
+function withClearedSignInFactors(status: string, emailVerifiedAt: string | null): unknown {
   return {
     status,
     pin_hash: null,
@@ -1002,8 +1019,10 @@ function withNoSignInDetails(status: string, emailVerifiedAt: string | null): un
     email_verified_at: emailVerifiedAt,
     passkeys: 0,
     recovery_codes: 0,
-    totp_enrollments: 0,
+    totp_setups: 0,
     challenges: 0,
+    // Pending Google links survive factor cleanup (pp2 plan, Task 2).
+    pending_google_links: 1,
   };
 }
 
@@ -1017,12 +1036,13 @@ function withEverySignInDetail(personId: string, status: string): unknown {
     email_verified_at: VERIFIED_AT,
     passkeys: 1,
     recovery_codes: 1,
-    totp_enrollments: 1,
+    totp_setups: 1,
     challenges: 1,
+    pending_google_links: 1,
   };
 }
 
-describe("disabling a person deletes their sign-in details", () => {
+describe("disabling a person clears their sign-in factors", () => {
   async function seedPair(
     targetStatus: "active" | "suspended",
   ): Promise<{ token: string; target: string; bystander: string }> {
@@ -1047,10 +1067,12 @@ describe("disabling a person deletes their sign-in details", () => {
   };
 
   for (const [name, act] of Object.entries(disable)) {
-    it(`${name} deletes an active person's sign-in details and nobody else's`, async () => {
+    it(`${name} clears an active person's sign-in factors and nobody else's`, async () => {
       const { token, target, bystander } = await seedPair("active");
       await act(token, target);
-      expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+      expect(await signInDetailsOf(target)).toEqual(
+        withClearedSignInFactors("suspended", VERIFIED_AT),
+      );
       expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
     });
   }
@@ -1058,7 +1080,9 @@ describe("disabling a person deletes their sign-in details", () => {
   it("the Disable action deletes the sign-in details an already inactive person still holds", async () => {
     const { token, target, bystander } = await seedPair("suspended");
     await disable["the Disable action"](token, target);
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(target)).toEqual(
+      withClearedSignInFactors("suspended", VERIFIED_AT),
+    );
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 
@@ -1073,14 +1097,14 @@ describe("disabling a person deletes their sign-in details", () => {
     await run((tx) =>
       reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
     );
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(target)).toEqual(withClearedSignInFactors("pending", null));
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 
-  it("reset login deletes every sign-in detail, the rows included", async () => {
+  it("reset login clears sign-in factors and keeps its pending Google link", async () => {
     const { token, target, bystander } = await seedPair("active");
     await run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: target }));
-    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(target)).toEqual(withClearedSignInFactors("pending", null));
     expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 });

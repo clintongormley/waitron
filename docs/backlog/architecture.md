@@ -966,9 +966,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
-- **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
-  use the detected password manager. Decide whether to remove it after the hold.
-  [Detail](dashboard.md#passkey-name-column-after-a760)
 - **Finish the remaining person-id foreign keys and `order_draft_lines.menu_item_id`.**
   Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
   (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
@@ -1009,8 +1006,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)
 - **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
   [Detail](dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
-- **Task 1b** (#554, session cookies stored only as hashes).
-  [Detail](dashboard.md#task-1b-554-session-cookies-stored-only-as-hashes)
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**

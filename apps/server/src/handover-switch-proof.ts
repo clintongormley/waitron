@@ -132,7 +132,7 @@ export function readSwitchProofCookie(c: Context): string | null {
 }
 
 /**
- * Passkey challenges for the switch, kept in memory and never in `webauthn_challenges`, which
+ * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
  * streams with the copy a spare follows (A947 4d plan D9). Each is taken once.
  */
 export function createSwitchChallenges() {

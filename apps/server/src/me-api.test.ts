@@ -1185,7 +1185,9 @@ describe("mountMeApi — own credentials and second factor", () => {
         { id: keyId },
       ]);
       expect(
-        suite.db.all(sql`select id from totp_enrollments where person_id=${personId}`),
+        suite.db.all(
+          sql`select id from sign_in_challenges where kind='totp_enrolment' and person_id=${personId}`,
+        ),
       ).toEqual([]);
       expect(suite.db.all(sql`select id from recovery_codes where person_id=${personId}`)).toEqual(
         [],
