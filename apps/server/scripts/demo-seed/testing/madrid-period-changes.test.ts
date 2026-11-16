@@ -13,7 +13,7 @@ const day = (department: string, weekday: number | null, special: string | null 
   weekday,
   special_day_date_id: special,
 });
-const range = (coordinates: ReturnType<typeof day>, startsAt: string, _endsAt: string) =>
+const range = (coordinates: ReturnType<typeof day>, startsAt: string) =>
   `@opening_hours:${JSON.stringify([coordinates.department_id, null, coordinates.season_id, coordinates.special_day_date_id, coordinates.weekday, startsAt])}`;
 const table = (rows: Record<string, Record<string, unknown>>) => ({
   columns: [],
@@ -27,7 +27,7 @@ const rangeRow = (
   startsAt: string,
   endsAt: string,
 ) => ({
-  id: range(dayId, startsAt, endsAt),
+  id: range(dayId, startsAt),
   ...dayId,
   kind: periodId === null ? "closed" : "period",
   department_id: department,
@@ -173,8 +173,7 @@ it("refuses a declared period the capture already holds", () => {
 
 it("refuses a weekday range of the department that another period serves", () => {
   const other = original();
-  other.tables.opening_hours!.rows[range(day(bar, 1), "09:00:00", "00:00:00")]!.period_id =
-    deliOpen;
+  other.tables.opening_hours!.rows[range(day(bar, 1), "09:00:00")]!.period_id = deliOpen;
   expect(() => madridWithPeriodChanges(other, change)).toThrow(
     "Madrid range not served by the replaced period",
   );
