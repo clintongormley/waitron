@@ -154,7 +154,7 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
 - **Make `packages/provisioning`'s tests regime-agnostic** (fiscal; the owner lands it): point the
   ones that do not test a fiscal regime at `fiscal-none` rather than `fiscal-verifactu`. Left open
-  by the removal of the Verifactu backend's unused `resolveClient` and `skipRetryMs`.
+  by #3461, which removed the Verifactu backend's unused `resolveClient` and `skipRetryMs`.
 
 - **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
   reads signed paper, Cloud receipts and emergency names, and three Cloud settings whose only
