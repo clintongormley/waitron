@@ -172,6 +172,12 @@ async function referencesValid(query: BackupQuery): Promise<boolean> {
           defaultId?: string | null;
         };
         if (
+          (list.ids !== undefined &&
+            (!Array.isArray(list.ids) || list.ids.some((id) => typeof id !== "string"))) ||
+          (list.defaultId != null && typeof list.defaultId !== "string")
+        )
+          return false;
+        if (
           (list.ids ?? []).some((id) => !readerIds.has(id)) ||
           (list.defaultId != null && !readerIds.has(list.defaultId))
         )

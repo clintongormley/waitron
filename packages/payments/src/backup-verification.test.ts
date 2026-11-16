@@ -419,6 +419,9 @@ it.each([
   ["devices", "card_reader_id='missing'"],
   ["device_profiles", `card_readers='{"ids":["missing"],"defaultId":null}'`],
   ["device_profiles", `card_readers='{"ids":["reader"],"defaultId":"missing"}'`],
+  ["device_profiles", `card_readers='{"ids":"reader"}'`],
+  ["device_profiles", `card_readers='{"ids":{"a":"missing"}}'`],
+  ["device_profiles", `card_readers='{"ids":["reader"],"defaultId":5}'`],
 ])("checks plain reader ids in matching copies of %s", async (table, change) => {
   for (const db of [original.db, restored.db]) corrupt(db, `update "${table}" set ${change}`);
   expect(await run()).toMatchObject({ status: "invalid" });
