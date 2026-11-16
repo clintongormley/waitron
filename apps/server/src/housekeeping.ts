@@ -83,6 +83,7 @@ export async function clearOldActivityLog(
 export function housekeepingJob(deps: {
   db: Database;
   isPrimary(): boolean;
+  clockUnconfirmed(): boolean;
   readClock(): Promise<BusinessDayClock>;
   jitterSeed: string;
   now(): Date;
@@ -103,7 +104,7 @@ export function housekeepingJob(deps: {
       due ??= ctx.now.getTime();
       if (ctx.now.getTime() >= due) {
         await clearOldPrintPayloads(deps.db, ctx.now, ctx.signal);
-        await clearOldActivityLog(deps.db, ctx.now, ctx.signal);
+        if (!deps.clockUnconfirmed()) await clearOldActivityLog(deps.db, ctx.now, ctx.signal);
         due = nextFireMs(schedule, clock, deps.now(), deps.jitterSeed);
       }
       return { nextDueAt: new Date(due) };

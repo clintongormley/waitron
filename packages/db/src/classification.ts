@@ -78,7 +78,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "activity_log",
     "ledger",
-    "who did what, for people to read; product logic never decides from it; an entry is never corrected",
+    "who did what, for people to read; product logic never decides from it; UPDATE is refused",
   ),
   classify(
     "bill_payments",

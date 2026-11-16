@@ -4763,6 +4763,7 @@ async function bootServer(
     housekeepingJob({
       db,
       isPrimary: () => holders.singletonRole.current === "primary",
+      clockUnconfirmed: startClockHolds,
       readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
       jitterSeed: tradingContext.nodeId,
       now,

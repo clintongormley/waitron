@@ -92,7 +92,7 @@ describe("activity log storage", () => {
     const changed = await captureError(() =>
       suite.db.update(activityLog).set({ subjectId: "other" }).where(eq(activityLog.id, row!.id)),
     );
-    expect(triggerRaised(changed, "activity_log is append-only")).toBe(true);
+    expect(triggerRaised(changed, "activity_log entries cannot be updated")).toBe(true);
     expect(
       await suite.db
         .select()

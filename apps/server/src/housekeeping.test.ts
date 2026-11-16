@@ -11,6 +11,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { clearOldActivityLog, clearOldPrintPayloads, housekeepingJob } from "./housekeeping.js";
+import { startClockState } from "./start-clock-check.js";
+import { startClockGateHolds } from "./start-clock-gate.js";
 import { createJobRunner } from "./job-runner.js";
 import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
@@ -67,6 +69,7 @@ describe("activity log housekeeping", () => {
     const duty = housekeepingJob({
       db: suite.db,
       isPrimary: () => true,
+      clockUnconfirmed: () => false,
       readClock: async () => ({
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
@@ -85,6 +88,28 @@ describe("activity log housekeeping", () => {
       [],
     );
     expect(lengths()[0]!.size).toBe(0);
+  });
+  it("honours a stop received while a batch waits for the write lock", async () => {
+    const entry = await activity("2026-10-01T00:00:00.000Z");
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const holding = withTransaction(suite.db, async () => {
+      entered();
+      await gate;
+    });
+    await started;
+    const controller = new AbortController();
+    const pruning = clearOldActivityLog(suite.db, now, controller.signal, 2);
+    controller.abort();
+    release();
+    await holding;
+    expect(await pruning).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).toEqual([entry.id]);
   });
   it("yields between batches and honours an abort before the next write", async () => {
     for (let i = 0; i < 3; i++) await activity("2026-10-01T00:00:00.000Z");
@@ -173,6 +198,7 @@ describe("print payload housekeeping", () => {
       const duty = housekeepingJob({
         db: suite.db,
         isPrimary: () => true,
+        clockUnconfirmed: () => false,
         readClock: async () => ({
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
@@ -210,9 +236,24 @@ describe("print payload housekeeping", () => {
     const row = await job(p.id);
     let at = new Date("2026-11-14T02:00:00.000Z");
     let primary = true;
+    const startClock = startClockState();
+    const activity = await withTransaction(suite.db, (tx) =>
+      recordActivity(tx, {
+        kind: "settings.saved",
+        subjectId: "venue",
+        personId: null,
+        data: { revision: 1 },
+        at: new Date("2026-10-01T00:00:00.000Z"),
+      }),
+    );
     const duty = housekeepingJob({
       db: suite.db,
       isPrimary: () => primary,
+      clockUnconfirmed: startClockGateHolds(
+        startClock,
+        () => true,
+        () => false,
+      ),
       readClock: async () => ({
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
@@ -229,6 +270,9 @@ describe("print payload housekeeping", () => {
       new Date("2026-11-14T03:00:00.000Z"),
     );
     expect(lengths()[0]!.size).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((entry) => entry.id)).toEqual([
+      activity.id,
+    ]);
     await suite.db
       .update(printJobs)
       .set({ payload: new Uint8Array([1, 2, 3]) })
@@ -236,10 +280,12 @@ describe("print payload housekeeping", () => {
     await duty.pass({ now: at, signal: new AbortController().signal });
     expect(lengths()[0]!.size).toBe(3);
     at = new Date("2026-11-14T03:00:00.000Z");
+    startClock.confirm("by_person", {});
     expect((await duty.pass({ now: at, signal: new AbortController().signal })).nextDueAt).toEqual(
       new Date("2026-11-15T03:00:00.000Z"),
     );
     expect(lengths()[0]!.size).toBe(0);
+    expect(await suite.db.select().from(activityLog)).toEqual([]);
     await suite.db
       .update(printJobs)
       .set({ payload: new Uint8Array([1]) })

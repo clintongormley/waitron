@@ -6572,15 +6572,17 @@ The registry's rules apply to every kind:
 
 Data keys use camelCase. These rules override the appendices' `authorized_by` / `print_job_id`
 spellings and tables-devices' suggestion to copy people's names: A980 anonymises `persons`, while
-activity rows cannot change. Labels of things, such as menus and roles, may still be copied.
+activity rows refuse UPDATE. Labels of things, such as menus and roles, may still be copied.
 
 The writer fixes the subject kind. With a literal kind and data object, TypeScript checks the
 declared fields; variables, spreads and union kinds can bypass that check, so review still checks
 what each caller records. There is no CHECK listing kinds, subjects or data shapes.
 
 Housekeeping removes entries older than 30 days in bounded transactions, through
-`pruneActivityLog` in the same writer file. Entries still refuse UPDATE through
+`pruneActivityLog` in the same writer file. The scheduled pruning waits while the existing
+start-clock gate holds; print-payload cleanup does not. Entries still refuse UPDATE through
 `activity_log_refuse_update`; the table remains a ledger but is not append-only.
+DELETE and replacement inserts are confined to the writer file only by the source-text guard below.
 Activity history does not count as protected holdings for Start again; invoice and accepted-record
 refusals still apply. Actor and device keys refuse deletion while retained entries reference them.
 The source guard `scripts/write-path-tables.test.ts` restricts writes to the writer's file; it reads
