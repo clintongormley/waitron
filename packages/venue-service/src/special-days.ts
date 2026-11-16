@@ -1,7 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import {
-  departmentDayRanges,
-  departmentDays,
   departments,
   floorZones,
   menuPeriods,
@@ -259,31 +257,16 @@ async function occurrencesOf(
 ): Promise<(row: OccurrenceRow) => SpecialDayOccurrence> {
   const paint = await tx
     .select({
-      dateId: departmentDays.specialDayDateId,
-      ownerId: departmentDays.departmentId,
-      periodId: departmentDayRanges.periodId,
-      kind: sql<ZonePaint["kind"] | null>`null`,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      dateId: openingHours.specialDayDateId,
+      departmentId: openingHours.departmentId,
+      zoneId: openingHours.zoneId,
+      periodId: openingHours.periodId,
+      kind: openingHours.kind,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(inArray(departmentDays.specialDayDateId, [...dateIds]))
-    .unionAll(
-      tx
-        .select({
-          dateId: openingHours.specialDayDateId,
-          ownerId: sql<string>`${openingHours.zoneId}`,
-          periodId: sql<string | null>`null`,
-          kind: sql<ZonePaint["kind"]>`${openingHours.kind}`,
-          startsAt: openingHours.startsAt,
-          endsAt: openingHours.endsAt,
-        })
-        .from(openingHours)
-        .where(
-          and(isNotNull(openingHours.zoneId), inArray(openingHours.specialDayDateId, [...dateIds])),
-        ),
-    );
+    .from(openingHours)
+    .where(inArray(openingHours.specialDayDateId, [...dateIds]));
   const departmentPaint = new Map<string, Map<string, PaintRange[]>>();
   const zonePaint = new Map<string, Map<string, ZonePaint[]>>();
   const add = <T>(
@@ -298,9 +281,10 @@ async function occurrencesOf(
   };
   for (const row of paint) {
     const range = { startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) };
-    if (row.kind === null)
-      add(departmentPaint, row.dateId!, row.ownerId, { periodId: row.periodId, ...range });
-    else add(zonePaint, row.dateId!, row.ownerId, { kind: row.kind, ...range });
+    if (row.departmentId !== null)
+      add(departmentPaint, row.dateId!, row.departmentId, { periodId: row.periodId, ...range });
+    else
+      add(zonePaint, row.dateId!, row.zoneId!, { kind: row.kind as ZonePaint["kind"], ...range });
   }
   return (row) => ({
     specialDayId: row.specialDayId,
@@ -791,16 +775,17 @@ export async function readSpecialDay(tx: Transaction, id: string): Promise<Speci
   const dateIds = [...dateOf.keys()];
   const paint = await tx
     .select({
-      dateId: departmentDays.specialDayDateId,
-      departmentId: departmentDays.departmentId,
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      dateId: openingHours.specialDayDateId,
+      departmentId: openingHours.departmentId,
+      periodId: openingHours.periodId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(inArray(departmentDays.specialDayDateId, dateIds))
-    .orderBy(asc(departmentDays.departmentId), asc(departmentDayRanges.startsAt));
+    .from(openingHours)
+    .where(
+      and(isNotNull(openingHours.departmentId), inArray(openingHours.specialDayDateId, dateIds)),
+    )
+    .orderBy(asc(openingHours.departmentId), asc(openingHours.startsAt));
   const zonePaint = await tx
     .select({
       dateId: openingHours.specialDayDateId,
@@ -828,7 +813,7 @@ export async function readSpecialDay(tx: Transaction, id: string): Promise<Speci
   detail.paint = group(
     paint.map((row) => ({
       dateId: row.dateId,
-      ownerId: row.departmentId,
+      ownerId: row.departmentId!,
       range: {
         periodId: row.periodId,
         startsAt: wireTime(row.startsAt),
@@ -956,22 +941,19 @@ export async function saveSpecialDay(
   for (const entry of parsed.paint) {
     const specialDayDateId = dateIds.get(entry.date)!;
     await tx
-      .delete(departmentDays)
+      .delete(openingHours)
       .where(
         and(
-          eq(departmentDays.departmentId, entry.ownerId),
-          eq(departmentDays.specialDayDateId, specialDayDateId),
+          eq(openingHours.departmentId, entry.ownerId),
+          eq(openingHours.specialDayDateId, specialDayDateId),
         ),
       );
     if (entry.ranges.length === 0) continue;
-    const dayId = newId();
-    await tx
-      .insert(departmentDays)
-      .values({ id: dayId, departmentId: entry.ownerId, specialDayDateId });
-    await tx.insert(departmentDayRanges).values(
+    await tx.insert(openingHours).values(
       joinTouching(entry.ranges, (a, b) => a.periodId === b.periodId).map((range) => ({
-        dayId,
         departmentId: entry.ownerId,
+        specialDayDateId,
+        kind: range.periodId === null ? ("closed" as const) : ("period" as const),
         periodId: range.periodId,
         startsAt: storedTime(range.startsAt),
         endsAt: storedTime(range.endsAt),

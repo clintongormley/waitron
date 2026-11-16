@@ -146,11 +146,10 @@ describe("OpeningHoursApi", () => {
     try {
       await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
       const tables = [
+        "opening_hours",
         "menu_periods",
         "departments",
         "seasons",
-        "department_days",
-        "department_day_ranges",
         "special_days",
         "special_day_dates",
         "settings.business_day",
@@ -232,8 +231,6 @@ describe("OpeningHoursApi", () => {
           "settings.venue",
           "day_cutover_changes",
           "seasons",
-          "department_days",
-          "department_day_ranges",
           "opening_hours",
           "special_days",
           "special_day_dates",
@@ -281,8 +278,6 @@ describe("OpeningHoursApi", () => {
           "settings.venue",
           "day_cutover_changes",
           "seasons",
-          "department_days",
-          "department_day_ranges",
           "opening_hours",
           "special_days",
           "special_day_dates",
@@ -369,8 +364,6 @@ describe("OpeningHoursApi", () => {
 
           "products",
           "seasons",
-          "department_days",
-          "department_day_ranges",
           "opening_hours",
           "special_days",
           "special_day_dates",

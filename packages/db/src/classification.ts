@@ -371,8 +371,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("seasons", "state", SERVICE_STATE),
   classify("special_days", "state", SERVICE_STATE),
   classify("special_day_dates", "state", SERVICE_STATE),
-  classify("department_days", "state", SERVICE_STATE),
-  classify("department_day_ranges", "state", SERVICE_STATE),
   classify("opening_hours", "state", SERVICE_STATE),
 
   // media

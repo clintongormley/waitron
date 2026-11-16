@@ -1,13 +1,6 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
-import {
-  departmentDayRanges,
-  departmentDays,
-  departments,
-  readVenueClock,
-  seasons,
-  type Transaction,
-} from "@waitron/db";
+import { openingHours, departments, readVenueClock, seasons, type Transaction } from "@waitron/db";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -198,10 +191,9 @@ export async function seasonDeleteImpact(
   await targetSeasons(tx, id);
   const painted = await tx
     .selectDistinct({ id: departments.id, name: departments.name })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
-    .where(eq(departmentDays.seasonId, id))
+    .from(openingHours)
+    .innerJoin(departments, eq(departments.id, openingHours.departmentId))
+    .where(eq(openingHours.seasonId, id))
     .orderBy(asc(departments.name), asc(departments.id));
   return { departments: painted };
 }

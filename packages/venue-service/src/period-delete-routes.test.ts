@@ -6,8 +6,7 @@ import { beforeEach, beforeAll, describe, expect, it } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  departmentDayRanges,
-  departmentDays,
+  openingHours,
   kitchenStations,
   settings as businessDaySettingsTable,
   menuPeriods,
@@ -169,34 +168,30 @@ async function stored(r: Routed) {
   const seasonRanges = await db
     .select({
       season: seasonsTable.name,
-      weekday: departmentDays.weekday,
+      weekday: openingHours.weekday,
       period: menuPeriods.name,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(seasonsTable, eq(seasonsTable.id, departmentDays.seasonId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-    .where(eq(departmentDays.departmentId, r.restaurant))
-    .orderBy(
-      asc(seasonsTable.startsOn),
-      asc(departmentDays.weekday),
-      asc(departmentDayRanges.startsAt),
-    );
+    .from(openingHours)
+
+    .innerJoin(seasonsTable, eq(seasonsTable.id, openingHours.seasonId))
+    .innerJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+    .where(eq(openingHours.departmentId, r.restaurant))
+    .orderBy(asc(seasonsTable.startsOn), asc(openingHours.weekday), asc(openingHours.startsAt));
   const specialDayRanges = await db
     .select({
       date: specialDayDates.date,
       period: menuPeriods.name,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
-    .leftJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-    .where(eq(departmentDays.departmentId, r.restaurant))
-    .orderBy(asc(specialDayDates.date), asc(departmentDayRanges.startsAt));
+    .from(openingHours)
+
+    .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
+    .leftJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+    .where(eq(openingHours.departmentId, r.restaurant))
+    .orderBy(asc(specialDayDates.date), asc(openingHours.startsAt));
   const routing = await db
     .select({ period: menuPeriods.name })
     .from(routingCellPeriods)

@@ -69,14 +69,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual([["kitchen_notices", "state"]]);
   });
   it("classifies seasons, special days and their day rows as replicated state", () => {
-    const seasons = [
-      "seasons",
-      "special_days",
-      "special_day_dates",
-      "department_days",
-      "department_day_ranges",
-      "opening_hours",
-    ];
+    const seasons = ["seasons", "special_days", "special_day_dates", "opening_hours"];
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => seasons.includes(entry.table)).map((entry) => [
         entry.table,

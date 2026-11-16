@@ -248,9 +248,8 @@ describe("provisionVenue", () => {
         (select cast(count(*) as int) from menu_periods p
           join departments d on d.id = p.department_id
           ) as periods,
-        (select cast(count(*) as int) from department_day_ranges s
-          join department_days t on t.id = s.day_id
-          join seasons se on se.id = t.season_id and se.starts_on = '12-01'
+        (select cast(count(*) as int) from opening_hours s
+          join seasons se on se.id = s.season_id and se.starts_on = '12-01'
           join departments d on d.id = s.department_id
           ) as slots`);
     expect(defaults.rows[0]).toEqual({ menus: 1, periods: 1, slots: 5 });
@@ -562,14 +561,12 @@ describe("clearProvisionFixture", () => {
       await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
         values (${date}, ${fiesta}, '2026-08-15', 0)`);
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
-      await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
-        values (${day}, ${department.id}, null, null, ${date})`);
-      await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
-        values (${randomUUID()}, ${day}, ${department.id}, null, '12:00:00', '16:00:00')`);
+      await tx.execute(sql`insert into opening_hours (id, special_day_date_id, department_id, kind, period_id, starts_at, ends_at)
+        values (${day}, ${date}, ${department.id}, 'closed', null, '12:00:00', '16:00:00')`);
     });
-    expect(
-      (await db.execute(sql`select day_id from department_day_ranges where day_id = ${day}`)).rows,
-    ).toEqual([{ day_id: day }]);
+    expect((await db.execute(sql`select id from opening_hours where id = ${day}`)).rows).toEqual([
+      { id: day },
+    ]);
 
     await clearProvisionFixture(db);
 
@@ -577,7 +574,7 @@ describe("clearProvisionFixture", () => {
       select
         (select cast(count(*) as int) from special_days) as special_days,
         (select cast(count(*) as int) from special_day_dates) as dates,
-        (select cast(count(*) as int) from department_day_ranges) as paint,
+        (select cast(count(*) as int) from opening_hours) as paint,
         (select cast(count(*) as int) from settings where module = 'venue') as venue_documents`);
     expect(rows[0]).toEqual({ special_days: 0, dates: 0, paint: 0, venue_documents: 0 });
   });

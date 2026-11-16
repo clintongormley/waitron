@@ -83,8 +83,6 @@ for (const enabled of [true, false]) {
         "routing_cells",
         "routing_cell_periods",
         "menu_periods",
-        "department_days",
-        "department_day_ranges",
         "opening_hours",
         "department_transfer_destinations",
         "department_transfer_requests",

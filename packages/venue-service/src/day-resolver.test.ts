@@ -5,8 +5,6 @@ import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  departmentDayRanges,
-  departmentDays as departmentDayRows,
   floorZones,
   seasons,
   specialDayDates,
@@ -129,7 +127,7 @@ async function autumnAndWinter(): Promise<Venue> {
   return v;
 }
 
-const departmentDays = (v: Venue, days: readonly string[], clock = CLOCK) =>
+const resolvedDays = (v: Venue, days: readonly string[], clock = CLOCK) =>
   scoped((tx) => resolveDepartmentDays(tx, v.departmentId, days, clock));
 const zoneDays = (zoneIds: readonly string[] | undefined, days: readonly string[]) =>
   scoped((tx) => resolveZoneClosedDays(tx, zoneIds, days, CLOCK));
@@ -137,7 +135,7 @@ const zoneDays = (zoneIds: readonly string[] | undefined, days: readonly string[
 describe("resolveDepartmentDays", () => {
   it("gives each business day the week of the season holding it, so yesterday keeps its own", async () => {
     const v = await autumnAndWinter();
-    const days = await departmentDays(v, ["2030-11-30", "2030-12-01"]);
+    const days = await resolvedDays(v, ["2030-11-30", "2030-12-01"]);
     expect(days.get("2030-11-30")).toEqual({
       businessDay: "2030-11-30",
       seasonId: v.seasons.Autumn,
@@ -152,7 +150,7 @@ describe("resolveDepartmentDays", () => {
 
   it("resolves Sunday 29 February 2032 to Winter's Sunday", async () => {
     const v = await autumnAndWinter();
-    const days = await departmentDays(v, ["2032-02-29"]);
+    const days = await resolvedDays(v, ["2032-02-29"]);
     expect(days.get("2032-02-29")).toEqual({
       businessDay: "2032-02-29",
       seasonId: v.seasons.Winter,
@@ -166,7 +164,7 @@ describe("resolveDepartmentDays", () => {
       [SATURDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" }],
     });
     const dates = ["2030-01-05", "2030-06-01", "2030-11-30", "2032-02-28"];
-    const days = await departmentDays(v, dates);
+    const days = await resolvedDays(v, dates);
     expect(dates.map((date) => days.get(date)?.seasonId)).toEqual(
       dates.map(() => v.seasons["All year"]),
     );
@@ -177,7 +175,7 @@ describe("resolveDepartmentDays", () => {
 
   it("answers no hours on a season whose week was never written", async () => {
     const v = await autumnAndWinter();
-    const days = await departmentDays(v, ["2030-06-01"]);
+    const days = await resolvedDays(v, ["2030-06-01"]);
     expect(days.get("2030-06-01")).toEqual({
       businessDay: "2030-06-01",
       seasonId: v.seasons.Summer,
@@ -220,7 +218,7 @@ describe("resolveDepartmentDays", () => {
       ...CLOCK,
       cutoverChanges: [{ effectiveBusinessDay: "2030-12-08", dayCutover: "04:00" }],
     };
-    const days = await departmentDays(v, ["2030-12-07", "2030-12-08"], clock);
+    const days = await resolvedDays(v, ["2030-12-07", "2030-12-08"], clock);
     expect(days.get("2030-12-07")?.ranges.map((range) => range.startsAt)).toEqual([
       "20:00",
       "04:30",
@@ -248,7 +246,7 @@ describe("resolveDepartmentDays", () => {
       cutoverChanges: [{ effectiveBusinessDay: "2030-12-08", dayCutover: "04:00" }],
     };
     const days = ["2030-12-07", "2030-12-08"];
-    const alone = await departmentDays(v, days, clock);
+    const alone = await resolvedDays(v, days, clock);
     const together = await scoped((tx) =>
       resolveDepartmentsDays(tx, [randomUUID(), v.departmentId], days, clock),
     );
@@ -257,7 +255,7 @@ describe("resolveDepartmentDays", () => {
 
   it("answers an empty map for no days", async () => {
     const v = await autumnAndWinter();
-    expect((await departmentDays(v, [])).size).toBe(0);
+    expect((await resolvedDays(v, [])).size).toBe(0);
   });
 });
 
@@ -498,14 +496,15 @@ async function specialDay(
     })
     .returning({ id: specialDayDates.id });
   for (const [departmentId, ranges] of Object.entries(options.paint ?? {})) {
-    const [row] = await db
-      .insert(departmentDayRows)
-      .values({ departmentId, specialDayDateId: dated!.id })
-      .returning({ id: departmentDayRows.id });
     if (ranges.length > 0)
-      await db
-        .insert(departmentDayRanges)
-        .values(ranges.map((range) => ({ ...range, dayId: row!.id, departmentId })));
+      await db.insert(openingHours).values(
+        ranges.map((range) => ({
+          ...range,
+          departmentId,
+          specialDayDateId: dated!.id,
+          kind: range.periodId === null ? ("closed" as const) : ("period" as const),
+        })),
+      );
   }
   for (const [zoneId, ranges] of Object.entries(options.zonePaint ?? {})) {
     if (ranges.length > 0)
@@ -540,7 +539,7 @@ describe("special-day paint over the season", () => {
     // 01:00 in Madrid on Sunday 15 December, business day Saturday 14th.
     const second = await service("2030-12-15T00:00:00Z");
     expect({ open: second.open, period: second.periodName }).toEqual({ open: false, period: null });
-    const days = await departmentDays(v, ["2030-12-13", "2030-12-14"]);
+    const days = await resolvedDays(v, ["2030-12-13", "2030-12-14"]);
     expect(days.get("2030-12-13")).toEqual({
       businessDay: "2030-12-13",
       seasonId: v.seasons.Winter,
@@ -583,7 +582,7 @@ describe("special-day paint over the season", () => {
       );
       return id;
     });
-    expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([]);
+    expect((await resolvedDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([]);
     const laterDays = await scoped((tx) =>
       resolveDepartmentDays(tx, later, ["2030-12-13", "2030-12-20"], CLOCK),
     );
@@ -600,7 +599,7 @@ describe("special-day paint over the season", () => {
       repeats: true,
       paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" }] },
     });
-    const days = await departmentDays(v, ["2029-12-24", "2030-12-24", "2031-12-24"]);
+    const days = await resolvedDays(v, ["2029-12-24", "2030-12-24", "2031-12-24"]);
     expect(days.get("2029-12-24")?.ranges).toEqual([]);
     expect(days.get("2030-12-24")?.ranges).toEqual([
       { periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" },
@@ -616,7 +615,7 @@ describe("special-day paint over the season", () => {
       repeats: true,
       paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" }] },
     });
-    const days = await departmentDays(v, ["2031-02-28", "2031-03-01", "2032-02-29"]);
+    const days = await resolvedDays(v, ["2031-02-28", "2031-03-01", "2032-02-29"]);
     expect(days.get("2031-02-28")?.ranges).toEqual([]);
     expect(days.get("2031-03-01")?.ranges).toEqual([]);
     expect(days.get("2032-02-29")?.ranges).toEqual([
@@ -656,7 +655,7 @@ describe("special-day paint over the season", () => {
     await specialDay(v, "2030-11-20", {
       paint: { [v.departmentId]: [{ periodId: v.breakfast, startsAt: "09:00", endsAt: "10:00" }] },
     });
-    expect((await departmentDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
+    expect((await resolvedDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
       businessDay: "2030-11-20",
       seasonId: v.seasons.Autumn,
       ranges: [
@@ -665,7 +664,7 @@ describe("special-day paint over the season", () => {
       ],
     });
     await db.update(seasons).set({ startsOn: "11-15" }).where(eq(seasons.id, v.seasons.Winter!));
-    expect((await departmentDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
+    expect((await resolvedDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
       businessDay: "2030-11-20",
       seasonId: v.seasons.Winter,
       ranges: [
@@ -726,7 +725,7 @@ describe("special-day paint over the season", () => {
     await specialDay(v, "2030-12-13", {
       paint: { [v.departmentId]: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }] },
     });
-    expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([
+    expect((await resolvedDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([
       { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
     ]);
     expect((await zoneDays([v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([

@@ -2513,35 +2513,6 @@ CREATE TABLE `device_profile_kitchen_screens` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_kitchen_screens_kind_key` ON `device_profile_kitchen_screens` (`device_profile_id`,`screen`);--> statement-breakpoint
-CREATE TABLE `department_day_ranges` (
-	`id` text PRIMARY KEY NOT NULL,
-	`day_id` text NOT NULL,
-	`department_id` text NOT NULL,
-	`period_id` text,
-	`starts_at` text NOT NULL,
-	`ends_at` text NOT NULL,
-	FOREIGN KEY (`day_id`,`department_id`) REFERENCES `department_days`(`id`,`department_id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`period_id`,`department_id`) REFERENCES `menu_periods`(`id`,`department_id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "department_day_ranges_step_ck" CHECK(substr("department_day_ranges"."starts_at", 4, 2) in ('00', '15', '30', '45') and substr("department_day_ranges"."ends_at", 4, 2) in ('00', '15', '30', '45'))
-);
---> statement-breakpoint
-CREATE INDEX `department_day_ranges_day_idx` ON `department_day_ranges` (`day_id`,`starts_at`);--> statement-breakpoint
-CREATE TABLE `department_days` (
-	`id` text PRIMARY KEY NOT NULL,
-	`department_id` text NOT NULL,
-	`season_id` text,
-	`weekday` integer,
-	`special_day_date_id` text,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "department_days_one_day_ck" CHECK(("department_days"."season_id" is null) <> ("department_days"."special_day_date_id" is null) and ("department_days"."season_id" is null) = ("department_days"."weekday" is null)),
-	CONSTRAINT "department_days_weekday_ck" CHECK("department_days"."weekday" is null or "department_days"."weekday" between 0 and 6)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `department_days_season_key` ON `department_days` (`department_id`,`season_id`,`weekday`) WHERE "department_days"."season_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `department_days_date_key` ON `department_days` (`department_id`,`special_day_date_id`) WHERE "department_days"."special_day_date_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `department_days_department_key` ON `department_days` (`id`,`department_id`);--> statement-breakpoint
 CREATE TABLE `seasons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

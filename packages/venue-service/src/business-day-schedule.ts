@@ -1,8 +1,6 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 import { asc, eq, isNotNull, sql } from "drizzle-orm";
 import {
-  departmentDayRanges,
-  departmentDays,
   departments,
   floorZones,
   readBusinessDayRevision,
@@ -55,21 +53,20 @@ export async function businessDayClockConflicts(
 ): Promise<{ conflicts: BusinessDayClockConflict[]; conflictCount: number }> {
   const seasonPeriods = await tx
     .select({
-      departmentId: departmentDays.departmentId,
+      departmentId: sql<string>`${openingHours.departmentId}`,
       departmentName: departments.name,
       periodName: menuPeriods.name,
-      weekday: departmentDays.weekday,
-      seasonId: departmentDays.seasonId,
+      weekday: openingHours.weekday,
+      seasonId: openingHours.seasonId,
       periodId: menuPeriods.id,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-    .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
-    .where(isNotNull(departmentDays.seasonId))
-    .orderBy(asc(departmentDayRanges.id));
+    .from(openingHours)
+    .innerJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+    .innerJoin(departments, eq(departments.id, openingHours.departmentId))
+    .where(isNotNull(openingHours.seasonId))
+    .orderBy(asc(openingHours.id));
   const seasonClosures = await tx
     .select({
       departmentId: floorZones.departmentId,
@@ -99,39 +96,24 @@ export async function businessDayClockConflicts(
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const specialPaint = await tx
     .select({
-      dateId: departmentDays.specialDayDateId,
-      departmentId: departmentDays.departmentId,
+      dateId: openingHours.specialDayDateId,
+      departmentId: sql<string>`coalesce(${openingHours.departmentId}, ${floorZones.departmentId})`,
       departmentName: departments.name,
-      zoneId: sql<string | null>`null`,
-      zoneName: sql<string | null>`null`,
-      periodId: departmentDayRanges.periodId,
+      zoneId: floorZones.id,
+      zoneName: floorZones.name,
+      periodId: openingHours.periodId,
       periodName: menuPeriods.name,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
-    .leftJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-    .where(isNotNull(departmentDays.specialDayDateId))
-    .unionAll(
-      tx
-        .select({
-          dateId: openingHours.specialDayDateId,
-          departmentId: floorZones.departmentId,
-          departmentName: departments.name,
-          zoneId: floorZones.id,
-          zoneName: floorZones.name,
-          periodId: sql<string | null>`null`,
-          periodName: sql<string | null>`null`,
-          startsAt: openingHours.startsAt,
-          endsAt: openingHours.endsAt,
-        })
-        .from(openingHours)
-        .innerJoin(floorZones, eq(floorZones.id, openingHours.zoneId))
-        .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-        .where(isNotNull(openingHours.specialDayDateId)),
-    );
+    .from(openingHours)
+    .leftJoin(floorZones, eq(floorZones.id, openingHours.zoneId))
+    .innerJoin(
+      departments,
+      eq(departments.id, sql`coalesce(${openingHours.departmentId}, ${floorZones.departmentId})`),
+    )
+    .leftJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+    .where(isNotNull(openingHours.specialDayDateId));
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
     const day = specialDayOf.get(row.dateId!);

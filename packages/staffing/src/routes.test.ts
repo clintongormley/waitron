@@ -18,8 +18,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   departments,
   menuPeriods,
-  departmentDays,
-  departmentDayRanges,
+  openingHours,
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
@@ -1202,13 +1201,11 @@ it("A724 paint routes carry exact period metadata for season and special-day gui
       .insert(menuPeriods)
       .values({ departmentId: p.departmentId, menuId, name: "Lunch", colour: "blue" })
       .returning();
-    const [day] = await tx
-      .insert(departmentDays)
-      .values({ departmentId: p.departmentId, seasonId: p.seasonId, weekday: 5 })
-      .returning();
-    await tx.insert(departmentDayRanges).values({
+    await tx.insert(openingHours).values({
+      kind: "period",
+      seasonId: p.seasonId,
+      weekday: 5,
       departmentId: p.departmentId,
-      dayId: day!.id,
       periodId: period!.id,
       startsAt: "12:00:00",
       endsAt: "16:00:00",

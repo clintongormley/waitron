@@ -52,7 +52,7 @@ it("a held database missing its invoice table: the summary says it cannot be rea
 
 it("a held database missing a table beside a readable sale refuses kept-records, and deletes nothing", async () => {
   const f = await heldSetup({ invoices: 1 });
-  dropTables(f, ["department_days"]);
+  dropTables(f, ["opening_hours"]);
   await expectHeldRefused(f, keptRecords);
 });
 
@@ -73,7 +73,7 @@ it.each([
 it("a damaged held database with no invoice and its own pending -wal is refused setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(f)}-wal`);
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   await writeFile(`${venueDb(f)}-wal`, wal);
   await expectHeldRefused(f, {
     code: "setup.not_ready",
@@ -130,7 +130,7 @@ it.each([
   async (code, refusal) => {
     const f = await heldSetup();
     checkpointed(venueDb(f));
-    damagePages(venueDb(f), "department_days");
+    damagePages(venueDb(f), "opening_hours");
     // Only a -journal beside the database is read through a private copy.
     foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
     copyFails.code = code;
@@ -184,7 +184,7 @@ it.each([
 
 it("saved trading settings beside a damaged database: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup({ tradingSettings: true });
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   const shown = await unreadableSummary(f);
   expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
   await expectUnreadableDeleted(f, shown);
@@ -192,7 +192,7 @@ it("saved trading settings beside a damaged database: the summary says it cannot
 
 it("a finished setup beside a damaged database refuses setup-finished, and nothing changes", async () => {
   const f = await heldSetup({ status: "complete" });
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   await expectHeldRefused(f, {
     code: "setup.start_again_refused",
     params: { cause: "setup-finished" },

@@ -48,8 +48,6 @@ describe("OpeningHoursApi.watchYear", () => {
       "settings.venue",
       "day_cutover_changes",
       "seasons",
-      "department_days",
-      "department_day_ranges",
       "opening_hours",
       "special_days",
       "special_day_dates",

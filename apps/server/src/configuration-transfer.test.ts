@@ -473,7 +473,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 44,
+  version: 45,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5578,7 +5578,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(44);
+  expect(exported.version).toBe(45);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6593,18 +6593,18 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     ),
   );
   const seasonsHolding = await targetSuite.db.execute(sql`
-    select count(distinct t.season_id) as seasons
-    from department_day_ranges x join department_days t on t.id=x.day_id
+    select count(distinct x.season_id) as seasons
+    from opening_hours x
     join menu_periods p on p.id=x.period_id where p.name='Night transfer'`);
   expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
   const rows = await targetSuite.db.execute(sql`
     select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.value as staff_id,
       p.name, p.colour, c.name as customer, sc.name as staff, s.key as display_order,
-      t.weekday, x.starts_at, x.ends_at
+      x.weekday, x.starts_at, x.ends_at
     from menu_periods p join departments d on d.id=p.department_id
     join menus c on c.id=p.menu_id join json_each(p.staff_menu_ids) s
-    join menus sc on sc.id=s.value join department_days t on t.department_id=d.id
-    join department_day_ranges x on x.day_id=t.id and x.period_id=p.id
+    join menus sc on sc.id=s.value
+    join opening_hours x on x.department_id=d.id and x.period_id=p.id
     where p.name='Night transfer' order by s.key`);
   expect(rows.rows).toEqual([
     {
@@ -6657,12 +6657,12 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     for (const key of ["period_id", "department_id", "customer_id", "staff_id"])
       expect(original).not.toContain(row[key]);
   const bad = structuredClone(bundle);
-  const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[5])!;
+  const range = bad.tables.opening_hours!.find((row) => row.period_id === original[5])!;
   range.ends_at = "05:00:00";
   expect(() => validateConfigurationBundle(bad, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({
       code: "setup.request_invalid",
-      params: { field: "department_day_ranges" },
+      params: { field: "opening_hours" },
     }),
   );
 });
@@ -7616,12 +7616,12 @@ describe("dated business-day configuration transfer", () => {
       startsAt: string;
       endsAt: string;
     }>(sql`
-      select distinct d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt"
-      from department_day_ranges s join department_days d on d.id=s.day_id join menu_periods p on p.id=s.period_id
-      where p.name='Clock period' order by d.weekday`);
+      select distinct s.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt"
+      from opening_hours s join menu_periods p on p.id=s.period_id
+      where p.name='Clock period' order by s.weekday`);
     const seasonsHolding = await targetSuite.db.execute(sql`
-      select count(distinct d.season_id) as seasons
-      from department_day_ranges s join department_days d on d.id=s.day_id
+      select count(distinct s.season_id) as seasons
+      from opening_hours s
       join menu_periods p on p.id=s.period_id where p.name='Clock period'`);
     expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
     expect(slots.rows).toEqual(
@@ -7744,10 +7744,10 @@ describe("seasons in a configuration transfer", () => {
   async function saturdays(db: typeof suite.db) {
     const rows = await db.execute(sql`
       select s.name as season, p.name as period, r.starts_at, r.ends_at
-      from department_day_ranges r join department_days d on d.id=r.day_id
-      join seasons s on s.id=d.season_id join menu_periods p on p.id=r.period_id
-      join departments dep on dep.id=d.department_id
-      where dep.name='Season transfer' and d.weekday=6 and s.name in ('Harvest', ${STARTER_SEASON_NAMES.Winter.es})
+      from opening_hours r
+      join seasons s on s.id=r.season_id join menu_periods p on p.id=r.period_id
+      join departments dep on dep.id=r.department_id
+      where dep.name='Season transfer' and r.weekday=6 and s.name in ('Harvest', ${STARTER_SEASON_NAMES.Winter.es})
       order by s.starts_on`);
     return rows.rows;
   }
@@ -7881,9 +7881,8 @@ describe("special days in a configuration transfer", () => {
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, dep.name as department,
         p.name as period, r.starts_at, r.ends_at
       from special_days s join special_day_dates d on d.special_day_id=s.id
-      left join department_days dd on dd.special_day_date_id=d.id
-      left join departments dep on dep.id=dd.department_id
-      left join department_day_ranges r on r.day_id=dd.id
+      left join opening_hours r on r.special_day_date_id=d.id and r.department_id is not null
+      left join departments dep on dep.id=r.department_id
       left join menu_periods p on p.id=r.period_id
 
       order by d.date, r.starts_at`);
@@ -7916,19 +7915,15 @@ describe("special days in a configuration transfer", () => {
         name: "Fiesta terrace",
         departmentId: department.id,
       });
-      const [fiesta, fifteenth, sixteenth, restaurantDay, terraceDay] = [1, 2, 3, 4, 5].map(() =>
-        randomUUID(),
-      );
+      const [fiesta, fifteenth, sixteenth, terraceDay] = [1, 2, 3, 4].map(() => randomUUID());
       await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
         values (${fiesta}, 'Fiesta', 1)`);
       await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
         values (${fifteenth}, ${fiesta}, '2029-08-15', 0),
           (${sixteenth}, ${fiesta}, '2029-08-16', 1)`);
-      await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
-        values (${restaurantDay}, ${department.id}, null, null, ${fifteenth})`);
-      await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
-        values (${randomUUID()}, ${restaurantDay}, ${department.id}, ${bar}, '20:00:00', '23:00:00'),
-          (${randomUUID()}, ${restaurantDay}, ${department.id}, null, '12:00:00', '16:00:00')`);
+      await tx.execute(sql`insert into opening_hours (id, special_day_date_id, department_id, kind, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${fifteenth}, ${department.id}, 'period', ${bar}, '20:00:00', '23:00:00'),
+          (${randomUUID()}, ${fifteenth}, ${department.id}, 'closed', null, '12:00:00', '16:00:00')`);
       await tx.execute(sql`insert into opening_hours
         (id, zone_id, special_day_date_id, kind, starts_at, ends_at)
         values (${terraceDay}, ${terrace.id}, ${fifteenth}, 'closed', '21:00:00', '22:00:00')`);

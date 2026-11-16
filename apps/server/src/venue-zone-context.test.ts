@@ -47,8 +47,7 @@ const retained = () => ({
   changes: suite.db.all(sql`select * from day_cutover_changes order by effective_business_day`),
   settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
   periods: suite.db.all(sql`select * from menu_periods`),
-  days: suite.db.all(sql`select * from department_days`),
-  ranges: suite.db.all(sql`select * from department_day_ranges`),
+  ranges: suite.db.all(sql`select * from opening_hours`),
 });
 
 describe("raw saved zone context", () => {
@@ -257,13 +256,13 @@ describe("retained clock candidate validation", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
     );
     const before = retained();
-    const schedules = suite.db.all(sql`select * from department_day_ranges`);
+    const schedules = suite.db.all(sql`select * from opening_hours`);
     expect(await preview()).toEqual({
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       cutoverChanges: [],
     });
-    expect(suite.db.all(sql`select * from department_day_ranges`)).toEqual(schedules);
+    expect(suite.db.all(sql`select * from opening_hours`)).toEqual(schedules);
     expect(retained()).toEqual(before);
   });
 });

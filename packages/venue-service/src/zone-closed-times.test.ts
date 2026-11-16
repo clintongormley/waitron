@@ -408,7 +408,9 @@ describe("zones closed at an instant", () => {
         "opening_hours",
         "floor_zones",
       ])
-        expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
+        expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(
+          table === "opening_hours" ? 2 : 1,
+        );
       expect(texts).toHaveLength(6);
     }
     expect(three).toHaveLength(one.length);

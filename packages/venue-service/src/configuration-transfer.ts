@@ -262,63 +262,68 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     seasonIds.add(row.id);
   }
   const specialDates = validateSpecialDays(tables);
-  const departmentDays = dayRows(
-    tables.department_days,
-    "department_days",
+  const hours = tables.opening_hours ?? [];
+  for (const row of hours)
+    if (((row.department_id ?? null) === null) === ((row.zone_id ?? null) === null))
+      refuse("opening_hours.department_id");
+  const departmentRanges = hours.filter((row) => (row.department_id ?? null) !== null);
+  const zoneRanges = hours.filter((row) => (row.zone_id ?? null) !== null);
+  const departmentKeys = dayRows(
+    departmentRanges,
+    "opening_hours",
     "department_id",
     ids(tables.departments),
     seasonIds,
     specialDates,
+    true,
   );
-  const zones = new Set((tables.floor_zones ?? []).map((row) => row.id));
-  const zoneDays = dayRows(
-    tables.opening_hours,
+  const zoneKeys = dayRows(
+    zoneRanges,
     "opening_hours",
     "zone_id",
-    zones,
+    ids(tables.floor_zones),
     seasonIds,
     specialDates,
     true,
   );
-  const departmentRanges = tables.department_day_ranges ?? [];
-  const zoneRanges = tables.opening_hours ?? [];
-  if (departmentRanges.length + zoneRanges.length === 0) return;
-  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover))
-    refuse(departmentRanges.length > 0 ? "department_day_ranges" : "opening_hours");
+  if (hours.length === 0) return;
+  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("opening_hours");
 
   const periodDepartment = new Map(
     (tables.menu_periods ?? []).map((row) => [row.id, row.department_id]),
   );
   const departmentWeeks = new Map<unknown, ServiceRange[]>(
-    [...departmentDays.seasonDays.keys()].map((id) => [id, []]),
+    [...departmentKeys.seasonDays.keys()].map((id) => [id, []]),
   );
   const departmentPaint = new Map<unknown, PaintRange[]>(
-    [...departmentDays.specialDays.keys()].map((id) => [id, []]),
+    [...departmentKeys.specialDays.keys()].map((id) => [id, []]),
   );
   for (const row of departmentRanges) {
     const day =
-      departmentDays.seasonDays.get(row.day_id) ?? departmentDays.specialDays.get(row.day_id);
-    if (day === undefined) refuse("department_day_ranges.day_id");
-    if (row.department_id !== day.ownerId) refuse("department_day_ranges.department_id");
-    const paint = departmentPaint.get(row.day_id);
+      departmentKeys.seasonDays.get(rangeDayKey(row, "department_id")) ??
+      departmentKeys.specialDays.get(rangeDayKey(row, "department_id"));
+    const paint = departmentPaint.get(rangeDayKey(row, "department_id"));
     // Closed (a null period) belongs to a special-day date only.
     if (
       !(paint !== undefined && row.period_id === null) &&
-      (typeof row.period_id !== "string" || periodDepartment.get(row.period_id) !== day.ownerId)
+      (typeof row.period_id !== "string" || periodDepartment.get(row.period_id) !== day!.ownerId)
     )
-      refuse("department_day_ranges.period_id");
-    const stored = storedRange(row, "department_day_ranges");
+      refuse("opening_hours.period_id");
+    if (row.kind !== (row.period_id === null ? "closed" : "period")) refuse("opening_hours.kind");
+    const stored = storedRange(row, "opening_hours");
     if (paint !== undefined) paint.push({ periodId: row.period_id as string | null, ...stored });
-    else departmentWeeks.get(row.day_id)!.push({ periodId: row.period_id as string, ...stored });
+    else
+      departmentWeeks
+        .get(rangeDayKey(row, "department_id"))!
+        .push({ periodId: row.period_id as string, ...stored });
   }
   const zoneWeeks = new Map<unknown, ClosedRange[]>(
-    [...zoneDays.seasonDays.keys()].map((id) => [id, []]),
+    [...zoneKeys.seasonDays.keys()].map((id) => [id, []]),
   );
   const zonePaint = new Map<unknown, ClosedRange[]>(
-    [...zoneDays.specialDays.keys()].map((id) => [id, []]),
+    [...zoneKeys.specialDays.keys()].map((id) => [id, []]),
   );
   for (const row of zoneRanges) {
-    if ((row.department_id ?? null) !== null) refuse("opening_hours.department_id");
     if ((row.period_id ?? null) !== null) refuse("opening_hours.period_id");
     const dayId = rangeDayKey(row, "zone_id");
     const paint = zonePaint.get(dayId);
@@ -332,11 +337,11 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     (paint ?? zoneWeeks.get(dayId)!).push(stored);
   }
   for (const ranges of departmentWeeks.values())
-    parsedAs("department_day_ranges", () => parseServiceDay(ranges, "slots", bundle.dayCutover));
+    parsedAs("opening_hours", () => parseServiceDay(ranges, "slots", bundle.dayCutover));
   for (const ranges of [...zoneWeeks.values(), ...zonePaint.values()])
     parsedAs("opening_hours", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
   for (const ranges of departmentPaint.values())
-    parsedAs("department_day_ranges", () =>
+    parsedAs("opening_hours", () =>
       parseClosedRanges(
         ranges.map(({ startsAt, endsAt }) => ({ startsAt, endsAt })),
         "ranges",
@@ -344,13 +349,13 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
       ),
     );
   refuseSkippedPaint(
-    departmentDays.specialDays,
+    departmentKeys.specialDays,
     departmentPaint,
     specialDates,
     bundle,
-    "department_day_ranges",
+    "opening_hours",
   );
-  refuseSkippedPaint(zoneDays.specialDays, zonePaint, specialDates, bundle, "opening_hours");
+  refuseSkippedPaint(zoneKeys.specialDays, zonePaint, specialDates, bundle, "opening_hours");
 }
 
 /** Refuses special-day paint at a time the clocks skip on its business day; a repeating date is
@@ -696,8 +701,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "special_days" },
     { name: "special_day_dates" },
     { name: "seasons" },
-    { name: "department_days" },
-    { name: "department_day_ranges" },
     { name: "opening_hours" },
   ],
   validate: validateVenueServiceConfiguration,

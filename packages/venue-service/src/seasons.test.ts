@@ -6,7 +6,6 @@ import { beforeEach, beforeAll, describe, expect, it } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  departmentDays,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   seasons,
@@ -279,8 +278,8 @@ const seasonOnDay = (v: AutumnVenue, day: string) =>
     return days.get(day)?.seasonId;
   });
 const restaurantWeek = (v: AutumnVenue, seasonId: string) =>
-  scoped((tx) => readDepartmentSeasonWeeks(tx, [v.restaurant])).then((weeks) =>
-    weeks.get(v.restaurant)?.get(seasonId),
+  scoped((tx) => readDepartmentSeasonWeeks(tx, [v.restaurant])).then(
+    (weeks) => weeks.get(v.restaurant)?.get(seasonId) ?? EMPTY_WEEK(),
   );
 const terraceWeek = (v: AutumnVenue, seasonId: string) =>
   scoped((tx) => readZoneSeasonWeeks(tx, [v.terrace])).then((weeks) =>
@@ -496,7 +495,8 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await terraceWeek(v, mid.id)).toEqual(v.zoneWeek);
     expect(
-      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar)?.get(mid.id),
+      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar)?.get(mid.id) ??
+        EMPTY_WEEK(),
     ).toEqual(EMPTY_WEEK());
   });
 
@@ -544,9 +544,6 @@ describe("saveSeasons", () => {
     expect(await seasonOnDay(v, "2030-12-20")).toBe(v.winter);
     expect(await seasonsOf()).toEqual(THREE);
     expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, christmas.id)),
-    ).toEqual([]);
-    expect(
       await db.select().from(openingHours).where(eq(openingHours.seasonId, christmas.id)),
     ).toEqual([]);
   });
@@ -558,9 +555,6 @@ describe("saveSeasons", () => {
     await change({ delete: [v.autumn] });
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.winter);
     expect(await seasonsOf()).toEqual(THREE.slice(1));
-    expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.autumn)),
-    ).toEqual([]);
     expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
       [],
     );
@@ -586,9 +580,9 @@ describe("saveSeasons", () => {
     const kitchen = (await scoped((tx) => createDepartment(tx, { name: "Kitchen" }))).id;
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, kitchen, [summer!.id], EMPTY_WEEK()));
     const daysOf = (seasonId: string) =>
-      db.select().from(departmentDays).where(eq(departmentDays.seasonId, seasonId));
+      db.select().from(openingHours).where(eq(openingHours.seasonId, seasonId));
     const summerDays = await daysOf(summer!.id);
-    expect(summerDays).toHaveLength(7);
+    expect(summerDays).toEqual([]);
     expect(await daysOf(autumn!.id)).toEqual([]);
     const saved = await change({
       save: [
@@ -660,12 +654,14 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await restaurantWeek(v, early.id)).toEqual(v.winterWeek);
     expect(await terraceWeek(v, early.id)).toEqual(v.zoneWeek);
-    const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar);
-    expect(barWeeks?.get(mid.id)).toEqual(EMPTY_WEEK());
+    const barWeeks =
+      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar) ??
+      new Map<string, ServiceRange[][]>();
+    expect(barWeeks?.get(mid.id) ?? EMPTY_WEEK()).toEqual(EMPTY_WEEK());
     expect(barWeeks?.has(early.id)).toBe(false);
-    expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.winter)),
-    ).toEqual([]);
+    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.winter))).toEqual(
+      [],
+    );
   });
 
   it("refuses a duplicate between two sent entries naming the later one", async () => {

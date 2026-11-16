@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departmentCourses,
   kitchenCourses,
   menus,
-  departmentDayRanges,
-  departmentDays,
   departments,
   departmentTransferDestinations,
   deviceProfileKitchenScreens,
@@ -392,22 +390,29 @@ it("delete takes the department's season days and their ranges before its period
       .insert(seasons)
       .values({ ...f.cfg, name: "Winter", startsOn: "12-01" })
       .returning();
-    const days = await tx
-      .insert(departmentDays)
+    const ranges = await tx
+      .insert(openingHours)
       .values([
-        { departmentId: f.department, seasonId: winter!.id, weekday: 2 },
-        { departmentId: f.alpha, seasonId: winter!.id, weekday: 2 },
+        {
+          departmentId: f.department,
+          seasonId: winter!.id,
+          weekday: 2,
+          periodId: lunch!.id,
+          kind: "period" as const,
+          startsAt: "13:00:00",
+          endsAt: "16:00:00",
+        },
+        {
+          departmentId: f.alpha,
+          seasonId: winter!.id,
+          weekday: 2,
+          periodId: other!.id,
+          kind: "period" as const,
+          startsAt: "13:00:00",
+          endsAt: "16:00:00",
+        },
       ])
       .returning();
-    await tx.insert(departmentDayRanges).values(
-      days.map((day, i) => ({
-        dayId: day.id,
-        departmentId: day.departmentId,
-        periodId: (i === 0 ? lunch : other)!.id,
-        startsAt: "13:00:00",
-        endsAt: "16:00:00",
-      })),
-    );
     await tx.insert(openingHours).values(
       [f.gone, f.elsewhere].map((zoneId) => ({
         zoneId,
@@ -429,18 +434,18 @@ it("delete takes the department's season days and their ranges before its period
     ).toEqual([{ id: other!.id }]);
     expect(
       await tx
-        .select({ departmentId: departmentDays.departmentId })
-        .from(departmentDays)
-        .where(eq(departmentDays.seasonId, winter!.id)),
+        .select({ departmentId: openingHours.departmentId })
+        .from(openingHours)
+        .where(and(isNotNull(openingHours.departmentId), eq(openingHours.seasonId, winter!.id))),
     ).toEqual([{ departmentId: f.alpha }]);
     expect(
       await tx
-        .select({ periodId: departmentDayRanges.periodId })
-        .from(departmentDayRanges)
+        .select({ periodId: openingHours.periodId })
+        .from(openingHours)
         .where(
           inArray(
-            departmentDayRanges.dayId,
-            days.map((day) => day.id),
+            openingHours.id,
+            ranges.map((range) => range.id),
           ),
         ),
     ).toEqual([{ periodId: other!.id }]);
@@ -448,7 +453,7 @@ it("delete takes the department's season days and their ranges before its period
       await tx
         .select({ zoneId: openingHours.zoneId })
         .from(openingHours)
-        .where(eq(openingHours.seasonId, winter!.id)),
+        .where(and(isNotNull(openingHours.zoneId), eq(openingHours.seasonId, winter!.id))),
     ).toEqual([{ zoneId: f.elsewhere }]);
   });
 });
@@ -547,8 +552,7 @@ it("a department delete clears a week painted in Winter only and a Winter closur
     await closure(season("Winter"));
 
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
-    expect(await tx.select().from(departmentDays)).toEqual([]);
-    expect(await tx.select().from(departmentDayRanges)).toEqual([]);
+    expect(await tx.select().from(openingHours)).toEqual([]);
     expect(await tx.select().from(openingHours)).toEqual([]);
   });
 });

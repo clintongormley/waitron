@@ -1,7 +1,6 @@
 import { deleteServiceSteps } from "./service-steps.js";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
-  departmentDays,
   floorPlanSets,
   departments,
   departmentCourses,
@@ -343,7 +342,7 @@ export async function clearServiceDeleteSettings(
     })
     .where(inArray(floorZones.id, selected.zoneIds));
   if (selected.departmentId !== null) {
-    await tx.delete(departmentDays).where(eq(departmentDays.departmentId, selected.departmentId));
+    await tx.delete(openingHours).where(eq(openingHours.departmentId, selected.departmentId));
     await tx.delete(menuPeriods).where(eq(menuPeriods.departmentId, selected.departmentId));
     await tx
       .delete(departmentCourses)
