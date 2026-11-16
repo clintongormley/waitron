@@ -2650,19 +2650,81 @@ export interface PrintProblem {
   since: string;
 }
 
+interface KitchenProblemLink {
+  printJobId: string;
+  workingOrderId: string;
+  stationId: string;
+  printerId: string;
+}
+
+/** Moved dishes need their own later paper; a copied bill link is never itself a Reprint. */
+async function printedMovedDishes(tx: Transaction, links: readonly { printJobId: string }[]) {
+  const lines = await tx
+    .select({
+      printJobId: kitchenPrintJobLines.printJobId,
+      lineId: workingOrderLines.id,
+      workingOrderId: workingOrderLines.workingOrderId,
+      stationId: ticketItems.stationId,
+      queued: sql<number>`${printJobs}.rowid`,
+    })
+    .from(kitchenPrintJobLines)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobLines.printJobId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, kitchenPrintJobLines.workingOrderLineId))
+    .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      inIds(kitchenPrintJobLines.printJobId, [...new Set(links.map((row) => row.printJobId))]),
+    );
+  const reprints =
+    lines.length === 0
+      ? []
+      : await tx
+          .select({
+            lineId: kitchenPrintJobLines.workingOrderLineId,
+            stationId: kitchenPrintJobs.stationId,
+            printerId: printJobs.printerId,
+            queued: sql<number>`${printJobs}.rowid`,
+          })
+          .from(kitchenPrintJobLines)
+          .innerJoin(
+            kitchenPrintJobs,
+            eq(kitchenPrintJobs.printJobId, kitchenPrintJobLines.printJobId),
+          )
+          .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobLines.printJobId))
+          .where(
+            and(
+              inIds(kitchenPrintJobLines.workingOrderLineId, [
+                ...new Set(lines.map((row) => row.lineId)),
+              ]),
+              eq(kitchenPrintJobs.reprint, true),
+              printedOrResent(printJobs),
+            ),
+          );
+  const latest = new Map<string, number>();
+  for (const row of reprints) {
+    const key = `${row.lineId}|${row.stationId}|${row.printerId}`;
+    latest.set(key, Math.max(latest.get(key) ?? 0, row.queued));
+  }
+  const relevant = new Map<string, typeof lines>();
+  for (const row of lines) {
+    const key = `${row.printJobId}|${row.workingOrderId}|${row.stationId}`;
+    const own = relevant.get(key);
+    if (own === undefined) relevant.set(key, [row]);
+    else own.push(row);
+  }
+  return (link: KitchenProblemLink): boolean => {
+    const own = relevant.get(`${link.printJobId}|${link.workingOrderId}|${link.stationId}`);
+    return (
+      own !== undefined &&
+      own.every(
+        (row) => (latest.get(`${row.lineId}|${row.stationId}|${link.printerId}`) ?? 0) > row.queued,
+      )
+    );
+  };
+}
+
 /**
- * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
- * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
- * bill and station, on the same printer, queued after it has printed, itself or through a resend
- * ({@link printedOrResent}): only a reprint carries every dish still fired on the bill, and the
- * held dishes on recorded HOLD paper, including those waiting for the pass, so a later round's
- * ticket printing clears nothing, and another printer's paper says nothing of this one's. It is no
- * problem either once a Reprint of the bill would link nothing on that printer to that station, were
- * the printer switched on ({@link readReprintTargets}), as when its dishes there are voided or the
- * printer is detached from the station.
- * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
- * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
- * its job or its bill is deleted, or when {@link writeLinksAfter} writes it again. Oldest first.
+ * Same-bill coverage uses link order; moved-dish coverage uses original job order.
+ * Empty dish sets still use readReprintTargets for voided work and detached printers.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -2671,6 +2733,7 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
       workingOrderId: kitchenPrintJobs.workingOrderId,
       stationId: kitchenPrintJobs.stationId,
       stationName: kitchenStations.name,
+      printJobId: printJobs.id,
       printerId: printJobs.printerId,
       createdAt: printJobs.createdAt,
       queued: sql<number>`${kitchenPrintJobs}.rowid`,
@@ -2704,11 +2767,13 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
     return reprinted === undefined || reprinted <= row.queued;
   });
   if (uncleared.length === 0) return [];
+  const movedPaperPrinted = await printedMovedDishes(tx, uncleared);
   const targets = await readReprintTargets(tx, [
     ...new Set(uncleared.map((row) => row.workingOrderId)),
   ]);
   const problems = new Map<string, PrintProblem>();
   for (const row of uncleared) {
+    if (movedPaperPrinted(row)) continue;
     if (!targets.get(row.workingOrderId)!.has(`${row.printerId}|${row.stationId}`)) continue;
     const known = problems.get(key(row));
     if (known === undefined || row.createdAt < known.since) {
@@ -2755,6 +2820,7 @@ export async function kitchenJobsNotWaiting(
       ),
     );
   if (links.length === 0) return settled;
+  const movedPaperPrinted = await printedMovedDishes(tx, links);
   const orderIds = links.map((row) => row.workingOrderId);
   const reprints = await tx
     .select({
@@ -2806,8 +2872,10 @@ export async function kitchenJobsNotWaiting(
   for (const job of jobs) {
     const rows = uncleared.get(job.id);
     if (rows === undefined) continue;
-    const waiting = rows.some((row) =>
-      targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`),
+    const waiting = rows.some(
+      (row) =>
+        !movedPaperPrinted({ ...row, printerId: job.printerId }) &&
+        targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`),
     );
     if (!waiting) settled.add(job.id);
   }
@@ -2896,13 +2964,23 @@ export async function moveKitchenPrintLinks(
 ): Promise<void> {
   const moving = await readUncoveredLinks(tx, fromOrderId);
   if (moving.length === 0) return;
-  await tx.delete(kitchenPrintJobs).where(
-    inArray(
-      kitchenPrintJobs.id,
-      moving.map((row) => row.id),
-    ),
+  const originals = moving.filter((row) => !row.reprint);
+  if (originals.length > 0) {
+    await tx.delete(kitchenPrintJobs).where(
+      inIds(
+        kitchenPrintJobs.id,
+        originals.map((row) => row.id),
+      ),
+    );
+  }
+  await writeLinksAfter(
+    tx,
+    intoOrderId,
+    moving.map((row) => ({
+      ...row,
+      id: row.reprint ? undefined : row.id,
+    })),
   );
-  await writeLinksAfter(tx, intoOrderId, moving);
 }
 
 /**
