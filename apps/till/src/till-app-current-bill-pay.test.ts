@@ -548,3 +548,95 @@ it("keeps a refund being sent and shows its result after the bill moves", async 
     }),
   );
 });
+
+it("keeps a handheld's earlier card watched after the next guest's preview and a bill move", async () => {
+  const getPartyBills = vi.fn().mockResolvedValue([billOf({ hasPayments: true })]);
+  const pending = paymentOf({
+    method: "card",
+    entry: "reader",
+    state: "pending",
+    applied: "40.00",
+    tendered: null,
+    change: null,
+  });
+  const waiting = balanceOf({ reserved: "40.00", outstanding: "80.00", payments: [pending] });
+  const getBillBalance = vi.fn().mockResolvedValue(balanceOf());
+  const previewBillPayment = vi
+    .fn()
+    .mockResolvedValue({
+      kind: "allocated",
+      choice: null,
+      applied: "40.00",
+      tip: "0.00",
+      charged: "40.00",
+      change: null,
+    });
+  const takeBillPayment = vi.fn().mockImplementation(async () => {
+    getBillBalance.mockResolvedValue(waiting);
+    return { ...takenOf(pending, waiting), outcome: "timeout" };
+  });
+  const api = stubApi({
+    getPartyBills,
+    getBillBalance,
+    previewBillPayment,
+    takeBillPayment,
+    getTill: vi
+      .fn()
+      .mockResolvedValue({
+        ...readerTill,
+        formFactor: "phone-portrait",
+        cardProvider: "sumup_cloud",
+        activeReaders: [{ id: "r2", name: "Reader", provider: "sumup_cloud" }],
+        defaultReaderId: "r2",
+      }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({ deviceId: "phone", name: "Phone", formFactor: "phone-portrait" }),
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(SECOND_READER)),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  await showBillFooter(order);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await openDialog(el, "contribution");
+  await type(el, "amount", "40");
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+  expect(dialog(el)!.taken?.pending).toBe("40.00");
+  await press(el, "[data-pay-next]");
+  await type(el, "amount", "10");
+  previewBillPayment.mockResolvedValue({
+    kind: "allocated",
+    choice: null,
+    applied: "10.00",
+    tip: "0.00",
+    charged: "10.00",
+    change: null,
+  });
+  emit(dialog(el)!, "bill-pay-preview", {
+    choice: { kind: "contribution", amount: "10" },
+    pay: { method: "card" },
+    card: { entry: "reader", readerId: "r2" },
+  });
+  await flush(el);
+  expect(dialog(el)!.taken).toBeNull();
+  getPartyBills.mockResolvedValue([billOf({ workingOrderId: "wo-9", billNumber: 2 })]);
+  window.dispatchEvent(new Event("focus"));
+  await flush(el, 10);
+  expect(tableOrder(el).orderId).toBe("wo-9");
+  expect(dialog(el) !== null).toBe(true);
+  getBillBalance.mockResolvedValue(
+    balanceOf({
+      received: "40.00",
+      outstanding: "80.00",
+      payments: [{ ...pending, state: "received" }],
+    }),
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+  await flush(el);
+  expect(text(inDialog(el, "[data-pay-notice]"))).toBe(
+    t("bill_pay.late_received").replace("{amount}", money("40.00")),
+  );
+  expect(dialog(el)!.asked?.choice).toEqual({ kind: "contribution", amount: "10" });
+  expect(takeBillPayment).toHaveBeenCalledOnce();
+});
