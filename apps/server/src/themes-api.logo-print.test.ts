@@ -223,8 +223,12 @@ describe("GET /management-api/theme-logo-print", () => {
   });
 
   it("an image whose source bytes are gone draws nothing", async () => {
-    await suite.db.execute(sql`delete from media_image_data`);
-    await suite.db.execute(sql`delete from media_image_blobs`);
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.execute(sql`delete from media_blobs`);
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -237,8 +241,15 @@ describe("GET /management-api/theme-logo-print", () => {
   });
 
   it("an image whose source bytes do not decode draws nothing", async () => {
-    await suite.db.execute(sql`update media_image_data set bytes = ${new Uint8Array([1, 2, 3])}`);
-    await suite.db.execute(sql`update media_image_blobs set bytes = ${new Uint8Array([1, 2, 3])}`);
+    await suite.db.execute(sql`drop trigger media_blobs_no_update`);
+
+    try {
+      await suite.db.execute(sql`update media_blobs set bytes = ${new Uint8Array([1, 2, 3])}`);
+    } finally {
+      await suite.db.execute(
+        sql`create trigger media_blobs_no_update before update on media_blobs begin select raise(abort, 'media_blobs rows are never changed'); end`,
+      );
+    }
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({

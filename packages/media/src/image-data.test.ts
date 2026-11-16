@@ -1,51 +1,78 @@
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImages } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  mediaBlobs,
+  mediaImages,
+  readActivityForSubject,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { uploadImage } from "./images.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { deleteImage, readImageBytes, uploadImage } from "./images.js";
+import { saveImage } from "./image-edits.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
-/**
- * `media_image_data` may only hold bytes for an image that exists, and it loses them when that
- * image goes.
- *
- * One writer at a time is what the venue file gives (`packages/store/src/write-queue.ts`), so no
- * case here interleaves two transactions.
- */
-const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS],
-});
-
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const photo = await samplePreparedImage({ width: 8 });
-const options = { fallbackLanguage: "en" };
-
-it("refuses image bytes for an absent image and removes the bytes with their image", async () => {
-  await seedTaxpayer(suite.db);
-  const { image } = await withTransaction(suite.db, (tx) =>
-    uploadImage(tx, { image: photo, names: { en: "Bread" } }, options),
+const replacement = await samplePreparedImage({ width: 12 });
+const next = await samplePreparedImage({ width: 15 });
+const upload = (image = photo) =>
+  withTransaction(suite.db, (tx) =>
+    uploadImage(tx, { image, names: { en: "Bread" } }, { fallbackLanguage: "en" }),
+  );
+const replace = (id: string, picture: typeof photo, expectedRevision: number) =>
+  withTransaction(suite.db, (tx) =>
+    saveImage(
+      tx,
+      id,
+      { names: { en: "Bread" }, framing: { x: 5000, y: 5000, zoom: 100 }, expectedRevision },
+      picture,
+      undefined,
+      "en",
+    ),
   );
 
-  // Bytes naming no image row. `errcode` 787 is `SQLITE_CONSTRAINT_FOREIGNKEY`
-  // (`packages/db/src/sql-state.ts`'s `FOREIGN_KEY_VIOLATION`); the engine reports one `code` —
-  // `"ERR_SQLITE_ERROR"` — for every refusal alike, so the CLASS has to come off `errcode`.
-  await expect(
-    suite.db.insert(mediaImageData).values({ imageId: crypto.randomUUID(), bytes: photo.bytes }),
-  ).rejects.toMatchObject({ errcode: 787, message: "FOREIGN KEY constraint failed" });
-
-  // The accepting control in the other direction, so the case above is not passing because every
-  // insert is refused.
-  const [before] = await suite.db
-    .select({ n: sql<number>`count(*)` })
-    .from(mediaImageData)
-    .where(eq(mediaImageData.imageId, image.id));
-  expect(before!.n).toBe(1);
-
-  // `on delete cascade` takes the bytes with the image.
-  await suite.db.delete(mediaImages).where(eq(mediaImages.id, image.id));
-  const [after] = await suite.db
-    .select({ n: sql<number>`count(*)` })
-    .from(mediaImageData)
-    .where(eq(mediaImageData.imageId, image.id));
-  expect(after!.n).toBe(0);
+it("stores identical uploads once", async () => {
+  const a = await upload();
+  const b = await upload();
+  expect(b).toEqual({ created: false, image: a.image });
+  expect(suite.db.get(sql`select count(*) as n from media_blobs`)).toEqual({ n: 1 });
+});
+it("prunes a replaced source and deletes unused originals and sources with their photo", async () => {
+  const { image } = await upload();
+  await replace(image.id, replacement, 1);
+  await replace(image.id, next, 2);
+  expect(await readImageBytes(suite.db, replacement.filename)).toBeNull();
+  expect((await readImageBytes(suite.db, photo.filename))!.bytes).toEqual(photo.bytes);
+  const person = await seedPerson(suite.db);
+  expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id, person))).toEqual({
+    deleted: true,
+    uses: [],
+  });
+  expect(await suite.db.select().from(mediaBlobs)).toEqual([]);
+  expect(await suite.db.select().from(mediaImages)).toEqual([]);
+  const events = await readActivityForSubject(suite.db, { kind: "media_image", id: image.id });
+  expect(events).toEqual([
+    expect.objectContaining({
+      kind: "photo.deleted",
+      personId: person,
+      data: { filename: photo.filename, names: { en: "Bread" } },
+    }),
+  ]);
+});
+it("keeps an original used as another photo's replacement until neither names it", async () => {
+  const a = (await upload()).image;
+  const b = (await upload(replacement)).image;
+  await replace(b.id, photo, 1);
+  await withTransaction(suite.db, (tx) => deleteImage(tx, a.id, null));
+  expect((await readImageBytes(suite.db, photo.filename))!.bytes).toEqual(photo.bytes);
+  expect(
+    await suite.db
+      .select({ hash: mediaBlobs.hash })
+      .from(mediaBlobs)
+      .where(eq(mediaBlobs.hash, photo.filename.slice(0, 64))),
+  ).toHaveLength(1);
+  await withTransaction(suite.db, (tx) => deleteImage(tx, b.id, null));
+  expect(await suite.db.select().from(mediaBlobs)).toEqual([]);
 });

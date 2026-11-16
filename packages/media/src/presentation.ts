@@ -1,8 +1,8 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import { IMAGE_LIST_COLUMNS } from "./image-page-query.js";
-import { mediaImageEdits, mediaImages } from "@waitron/db";
+import { mediaImages } from "@waitron/db";
 import { validateFraming, type ImageFraming } from "./framing.js";
 import type { RenditionShape } from "./renditions.js";
 import "./errors.js";
@@ -50,7 +50,6 @@ export async function readPresentations(tx: Transaction, references: string[]) {
   const rows = await tx
     .select(IMAGE_LIST_COLUMNS)
     .from(mediaImages)
-    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
     .where(inArray(mediaImages.filename, references));
   return Object.fromEntries(
     rows.map((row) => [

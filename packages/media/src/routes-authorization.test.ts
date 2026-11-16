@@ -2,7 +2,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, type Database, mediaImageData, mediaImages } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database, mediaBlobs, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
@@ -137,9 +137,9 @@ it("denies every library operation to a staff caller and preserves existing imag
     .from(mediaImages);
   expect(rows).toEqual([{ id: image.id, filename: image.filename, ...original }]);
   const data = await suite.db
-    .select({ imageId: mediaImageData.imageId })
-    .from(mediaImageData)
-    .where(eq(mediaImageData.imageId, image.id));
+    .select({ hash: mediaBlobs.hash })
+    .from(mediaBlobs)
+    .where(eq(mediaBlobs.hash, image.filename.slice(0, 64)));
   expect(data).toHaveLength(1);
 });
 

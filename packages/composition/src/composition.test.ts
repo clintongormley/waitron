@@ -238,7 +238,7 @@ describe("ALL_MODULES backup contribution", () => {
       core?.classification
         ?.map((table) => table.table)
         .filter((table) => (MEDIA_TABLES as readonly string[]).includes(table)),
-    ).toEqual(["media_images", "media_image_data", "media_image_blobs", "media_image_edits"]);
+    ).toEqual(["media_images", "media_blobs"]);
   });
   it("identity declares its offline verification owner", () => {
     const identity = ALL_MODULES.find((m) => m.name === "identity");

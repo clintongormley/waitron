@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mediaImageData, mediaImages, readImageBytes } from "@waitron/media";
+import { mediaBlobs, mediaImages, readImageBytes } from "@waitron/media";
 import {
   invoiceSeries,
   nodes,
@@ -154,14 +154,9 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
 /** The filename has the shape `media_images_filename_ck` requires: sha256 hex plus an extension. */
 async function seedImage(db: Database): Promise<void> {
   const filename = `${createHash("sha256").update(BASELINE_MEDIA).digest("hex")}.jpg`;
-  const [row] = await db
-    .insert(mediaImages)
-    .values({
-      filename,
-      names: { es: "Pan" },
-    })
-    .returning({ id: mediaImages.id });
-  await db.insert(mediaImageData).values({ imageId: row!.id, bytes: BASELINE_MEDIA });
+  const hash = filename.slice(0, 64);
+  await db.insert(mediaBlobs).values({ hash, format: "jpg", bytes: BASELINE_MEDIA });
+  await db.insert(mediaImages).values({ filename, originalHash: hash, names: { es: "Pan" } });
 }
 
 let scratchRoot: string;

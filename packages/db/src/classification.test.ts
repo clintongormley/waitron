@@ -125,8 +125,8 @@ const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update:
   },
   menu_version_images: {
     insert: [
-      sql`insert into media_images (id, filename, names, created_at, updated_at)
-          values ('image-1', ${IMAGE}, '{}', ${AT}, ${AT})`,
+      sql`insert into media_images (id, filename, names, original_hash, created_at, updated_at)
+          values ('image-1', ${IMAGE}, '{}', ${IMAGE.slice(0, 64)}, ${AT}, ${AT})`,
       sql`insert into menu_version_images (version_id, filename) values ('version-1', ${IMAGE})`,
     ],
     update: sql`update menu_version_images set version_id = 'version-2'`,

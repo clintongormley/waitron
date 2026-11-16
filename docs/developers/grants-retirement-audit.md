@@ -8,6 +8,8 @@ removed that record after checking each table it restricted. Use the module's `a
 declarations and the write-path guard for their stated protections. The remaining restrictions
 below need individual decisions; this audit does not authorise adding or removing protection.
 
+**2026-11-16, A1308 mn13:** `media_image_data`, `media_image_blobs` and `media_image_edits` are replaced by `media_images` and `media_blobs`. A blob cannot be updated; either photo key restricts its deletion while referenced. See `packages/db/src/schema/media/images.ts` and `packages/db/triggers/core.sql`.
+
 ## What was checked
 
 On 2026-10-19, at base `3351ca5073a81bf11596faef8aa744ab2c33ffc3`, the audit applied every set

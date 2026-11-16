@@ -82,13 +82,13 @@ export const MEDIA_ROUTES: ModuleRoutes = {
   mount(app, ctx, log) {
     const fallbackLanguage = ctx.cfg.contentDefaultLanguage ?? FALLBACK_LOCALE;
     const maxUploadBytes = ctx.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES;
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
+    const gated = <T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) =>
       withTransaction(ctx.db, async (tx) => {
-        await authorizeManager(tx, {
+        const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "menu.manage",
         });
-        return fn(tx);
+        return fn(tx, authorizedBy);
       });
     app.get("/management-api/images", (c) =>
       run(c, log, async () => {
@@ -237,7 +237,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const session = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "ImageId");
-        return c.json(await gated(session, (tx) => deleteImage(tx, id)));
+        return c.json(await gated(session, (tx, personId) => deleteImage(tx, id, personId)));
       }),
     );
     const renditions = new RenditionCache();

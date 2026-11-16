@@ -55,12 +55,7 @@ it("covers the actual composition and every migrated data table, including disab
   expect([...declared].sort()).toEqual(actual.sort());
   const media = ALL_MODULES.find((module) => module.name === "media")!;
   expect(media.tablesIn).toBe("core");
-  expect(media.backup!.verification!.data.tables).toEqual([
-    "media_images",
-    "media_image_data",
-    "media_image_blobs",
-    "media_image_edits",
-  ]);
+  expect(media.backup!.verification!.data.tables).toEqual(["media_images", "media_blobs"]);
 });
 
 it.each(ALL_MODULES.map((module) => module.name))(

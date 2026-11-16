@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -7,7 +8,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/menu";
-import { mediaImages } from "@waitron/media";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
@@ -26,7 +26,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
-    await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Sopa" } });
+    await seedPhotoMetadata(db, { filename: PHOTO, names: { es: "Sopa" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await seedPersons(tx, {
         displayName: "Anna Manager",
@@ -244,7 +244,7 @@ describe("reading and patching a menu's live version", () => {
     await publish(app, menuId);
     const base = await json<LiveMenu>(await live(app, menuId), 200);
     const deleted = `${"d".repeat(64)}.jpg`;
-    await suite.db.insert(mediaImages).values({ filename: deleted, names: { es: "Borrada" } });
+    await seedPhotoMetadata(suite.db, { filename: deleted, names: { es: "Borrada" } });
     await suite.db.execute(sql`delete from media_images where filename = ${deleted}`);
     const before = await publicationTables();
     expect(

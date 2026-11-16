@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -6,7 +7,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { DocumentMember, MenuPreview, MenuStructureNode } from "@waitron/menu";
-import { mediaImages } from "@waitron/media";
 
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -32,7 +32,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       timeZone: "Europe/Madrid",
     });
-    await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Copas" } });
+    await seedPhotoMetadata(db, { filename: PHOTO, names: { es: "Copas" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await seedPersons(tx, {
         displayName: "Anna Manager",

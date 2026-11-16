@@ -1,16 +1,10 @@
 import { eq, sql } from "drizzle-orm";
-import {
-  customThemes,
-  nowIso,
-  type Transaction,
-  mediaImageBlobs,
-  mediaImageEdits,
-  mediaImages,
-} from "@waitron/db";
+import { customThemes, nowIso, type Transaction, mediaBlobs, mediaImages } from "@waitron/db";
 import { departments } from "@waitron/venue-service";
 import { AppError, type ReceiptLogoRasters } from "@waitron/shared";
 import { validateFraming, type ImageEditInput } from "./framing.js";
 import {
+  pruneBlobs,
   readImage,
   readImageBytes,
   themeLogoName,
@@ -67,12 +61,12 @@ export async function saveImage(
       throw new AppError("image.hash_conflict", { filename: prepared.filename });
     const hash = prepared.filename.slice(0, 64);
     const [blob] = await tx
-      .select({ bytes: mediaImageBlobs.bytes })
-      .from(mediaImageBlobs)
-      .where(eq(mediaImageBlobs.hash, hash));
+      .select({ bytes: mediaBlobs.bytes })
+      .from(mediaBlobs)
+      .where(eq(mediaBlobs.hash, hash));
     if (blob && !Buffer.from(blob.bytes).equals(prepared.bytes))
       throw new AppError("image.hash_conflict", { filename: prepared.filename });
-    if (!blob) await tx.insert(mediaImageBlobs).values({ hash, bytes: prepared.bytes });
+    if (!blob) await tx.insert(mediaBlobs).values({ hash, bytes: prepared.bytes, format: "webp" });
   }
   // Match receipts and themes inside the write transaction: a logo may have been attached while
   // pixels were prepared.
@@ -99,20 +93,19 @@ export async function saveImage(
   }
   await tx
     .update(mediaImages)
-    .set({ ...metadata, updatedAt: new Date() })
+    .set({
+      ...metadata,
+      updatedAt: new Date(),
+      sourceHash: sourceFilename === current.filename ? null : sourceFilename.slice(0, 64),
+      focusX: framing.x,
+      focusY: framing.y,
+      zoom: framing.zoom,
+      revision: current.revision + 1,
+      originalFilename,
+    })
     .where(eq(mediaImages.id, id));
-  const values = {
-    sourceHash: sourceFilename === current.filename ? null : sourceFilename.slice(0, 64),
-    focusX: framing.x,
-    focusY: framing.y,
-    zoom: framing.zoom,
-    revision: current.revision + 1,
-    originalFilename,
-  };
-  await tx
-    .insert(mediaImageEdits)
-    .values({ imageId: id, ...values })
-    .onConflictDoUpdate({ target: mediaImageEdits.imageId, set: values });
+  if (sourceFilename !== current.sourceFilename)
+    await pruneBlobs(tx, [current.sourceFilename.slice(0, 64)]);
   return readImage(tx, id);
 }
 

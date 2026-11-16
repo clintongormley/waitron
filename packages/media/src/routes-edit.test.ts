@@ -1,9 +1,9 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import sharp from "sharp";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImageEdits } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, mediaBlobs } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
@@ -116,22 +116,21 @@ it("commits names, replacement, upload basename and adjusted framing in one requ
   expect(rendered).toHaveBeenCalledTimes(1);
   expect((await readImageBytes(suite.db, image.filename))!.bytes).toEqual(first.bytes);
 });
-it("accepts revision zero and names-only edits without requiring image work", async () => {
+it("accepts names-only edits without requiring image work", async () => {
   const { image, edit } = await fixture();
-  await suite.db.delete(mediaImageEdits).where(eq(mediaImageEdits.imageId, image.id));
   const response = await edit({
     names: { en: "Renamed" },
     framing: DEFAULT_FRAMING,
-    expectedRevision: 0,
+    expectedRevision: 1,
   });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    image: { names: { en: "Renamed" }, revision: 1, framing: DEFAULT_FRAMING },
+    image: { names: { en: "Renamed" }, revision: 2, framing: DEFAULT_FRAMING },
   });
   const stale = await edit({
     names: { en: "Lost update" },
     framing: DEFAULT_FRAMING,
-    expectedRevision: 0,
+    expectedRevision: 1,
   });
   expect(stale.status).toBe(409);
   expect(await stale.json()).toEqual({
@@ -296,7 +295,12 @@ it("does not commit a framing save after preparation fails or finds missing sour
     (await edit({ names: { en: "Changed" }, framing: frame, expectedRevision: 1 })).status,
   ).toBe(500);
   expect((await readImage(suite.db, image.id)).revision).toBe(1);
-  await suite.db.delete(mediaImageData).where(eq(mediaImageData.imageId, image.id));
+  await suite.db.execute(sql`pragma foreign_keys=off`);
+  try {
+    await suite.db.delete(mediaBlobs).where(eq(mediaBlobs.hash, image.filename.slice(0, 64)));
+  } finally {
+    await suite.db.execute(sql`pragma foreign_keys=on`);
+  }
   const missing = await edit({ names: { en: "Changed" }, framing: frame, expectedRevision: 1 });
   expect(missing.status).toBe(404);
   expect(await missing.json()).toEqual({
@@ -330,7 +334,12 @@ it("refuses a revision changed during preparation and retains the newer edit", a
 
 it("saves names without needing source bytes or image decoding", async () => {
   const { edit, image } = await fixture();
-  await suite.db.delete(mediaImageData).where(eq(mediaImageData.imageId, image.id));
+  await suite.db.execute(sql`pragma foreign_keys=off`);
+  try {
+    await suite.db.delete(mediaBlobs).where(eq(mediaBlobs.hash, image.filename.slice(0, 64)));
+  } finally {
+    await suite.db.execute(sql`pragma foreign_keys=on`);
+  }
   const response = await edit({
     names: { en: "Names only" },
     framing: DEFAULT_FRAMING,

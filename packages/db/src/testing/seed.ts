@@ -1,5 +1,5 @@
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
-import { mediaImages } from "../schema/media/images.js";
+import { mediaImages, mediaBlobs } from "../schema/media/images.js";
 import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
@@ -400,4 +400,24 @@ export async function seedDepartmentReceipt(
       receiptUpdatedAt: nowIso(),
     })
     .where(eq(departments.id, departmentId));
+}
+
+/** Metadata-only fixtures need a referenced blob, without claiming its empty bytes are a picture. */
+export async function seedPhotoMetadata(
+  db: Database | Transaction,
+  image: Omit<typeof mediaImages.$inferInsert, "originalHash">,
+): Promise<void> {
+  const hash = image.filename.slice(0, 64);
+  await db
+    .insert(mediaBlobs)
+    .values({
+      hash,
+      format: image.filename.slice(65) as "jpg" | "png" | "webp",
+      bytes: new Uint8Array(),
+    })
+    .onConflictDoNothing({ target: mediaBlobs.hash });
+  await db
+    .insert(mediaImages)
+    .values({ ...image, originalHash: hash })
+    .onConflictDoNothing({ target: mediaImages.filename });
 }

@@ -1,6 +1,6 @@
 // Measurement 4 (#540): how long a rebuild's restore takes, with a day of changes
 // on top of the last full copy, on a database carrying product images (they live in the database:
-// `media_image_data.bytes`, packages/db/src/schema/media/images.ts).
+// `media_blobs.bytes`, packages/db/src/schema/media/images.ts).
 //
 // Sizes: the owner's figure of up to 5,000 product images, each stored as the
 // shrunk copy an upload makes — 171 KiB on average and 338 KB at most over ten real photos — so
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       // folded before Litestream reads them. What that setting does to the product is measurement 2's
       // question, not this one's; a restore's duration does not depend on it.
       node.exec("PRAGMA wal_autocheckpoint = 0");
-      // Stands in for media_image_data: one row per image, the bytes whole.
+      // Stands in for media_blobs: each picture's bytes are stored whole.
       node.exec("CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, bytes BLOB NOT NULL)");
       const insert = node.handle.prepare("INSERT INTO images (bytes) VALUES (?)");
       for (let i = 0; i < o.images; i += 20) {

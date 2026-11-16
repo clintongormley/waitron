@@ -94,6 +94,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  */
 const EXPECTED_TRIGGERS = [
   "activity_log_refuse_update",
+  "media_blobs_no_update",
   "party_allergy_guests_need_answer_insert",
   "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",
@@ -463,6 +464,25 @@ describe("the behavioural triggers a migrated venue file carries", () => {
         (name) => !name.endsWith("_append_only_update") && !name.endsWith("_append_only_delete"),
       );
     expect(created).toEqual([...EXPECTED_TRIGGERS, ...IMAGE_REFERENCE_TRIGGERS].sort());
+  });
+});
+
+describe("media_blobs_no_update", () => {
+  it("refuses changes while allowing an unreferenced blob to be inserted and deleted", () => {
+    const hash = "a".repeat(64);
+    connection.exec(
+      `insert into media_blobs (hash, format, bytes) values ('${hash}', 'png', x'01')`,
+    );
+    expect(refusalFor(connection, `update media_blobs set bytes=x'02' where hash='${hash}'`)).toBe(
+      "media_blobs rows are never changed",
+    );
+    expect(
+      connection.prepare(`select bytes from media_blobs where hash=?`).get(hash).bytes,
+    ).toEqual(new Uint8Array([1]));
+    expect(refusalFor(connection, `delete from media_blobs where hash='${hash}'`)).toBeUndefined();
+    expect(
+      connection.prepare(`select hash from media_blobs where hash=?`).get(hash),
+    ).toBeUndefined();
   });
 });
 

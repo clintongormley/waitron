@@ -274,9 +274,17 @@ describe("POST receipt draft preview", () => {
       height: 151,
     });
     expect(await suite.db.select().from(departments)).toEqual(before);
-    await suite.db.execute(
-      sql`update media_image_data set bytes = ${Buffer.from([1, 2, 3])} where image_id = ${stored.id}`,
-    );
+    await suite.db.execute(sql`drop trigger media_blobs_no_update`);
+
+    try {
+      await suite.db.execute(
+        sql`update media_blobs set bytes = ${Buffer.from([1, 2, 3])} where hash = ${stored.filename.slice(0, 64)}`,
+      );
+    } finally {
+      await suite.db.execute(
+        sql`create trigger media_blobs_no_update before update on media_blobs begin select raise(abort, 'media_blobs rows are never changed'); end`,
+      );
+    }
     expect((await drawn({ ...draft(), receipt: { logo: stored.filename } })).marks.logo).toBeNull();
     expect(
       (await drawn({ ...draft(), receipt: { logo: "ab".repeat(32) + ".png" } })).marks.logo,

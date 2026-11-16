@@ -1,5 +1,6 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
-import { mediaImages, type Database, type Transaction } from "@waitron/db";
+import { type Database, type Transaction } from "@waitron/db";
 
 /**
  * A media-library file name standing in for a test's made-up one: `"lemonade.jpg"` becomes the
@@ -20,9 +21,6 @@ export async function seedLibraryImages(
   db: Database | Transaction,
   ...madeUp: string[]
 ): Promise<void> {
-  if (madeUp.length === 0) return;
-  await db
-    .insert(mediaImages)
-    .values(madeUp.map((name) => ({ filename: libraryImageName(name), names: {} })))
-    .onConflictDoNothing({ target: mediaImages.filename });
+  for (const name of madeUp)
+    await seedPhotoMetadata(db, { filename: libraryImageName(name), names: {} });
 }

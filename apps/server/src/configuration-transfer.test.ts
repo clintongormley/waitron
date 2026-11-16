@@ -69,8 +69,7 @@ import {
   readImage,
   saveImage,
   mediaImages,
-  mediaImageEdits,
-  mediaImageBlobs,
+  mediaBlobs,
   renderRendition,
   listImageUsages,
 } from "@waitron/media";
@@ -327,8 +326,8 @@ it("transfers two photo identities sharing replacement bytes with framing, names
     new Date("2026-10-17T10:00:00Z"),
     versions,
   );
-  expect(transferred.tables.media_image_blobs).toHaveLength(1);
-  expect(transferred.tables.media_image_edits).toHaveLength(2);
+  expect(transferred.tables.media_blobs).toHaveLength(3);
+  expect(transferred.tables.media_images).toHaveLength(2);
   const originalBundle = structuredClone(transferred);
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
@@ -338,16 +337,21 @@ it("transfers two photo identities sharing replacement bytes with framing, names
   expect(transferred).toEqual(originalBundle);
   const rows = await targetSuite.db.select().from(mediaImages);
   expect(rows).toHaveLength(2);
-  const edits = await targetSuite.db.select().from(mediaImageEdits);
-  expect(edits).toHaveLength(2);
-  expect(await targetSuite.db.select().from(mediaImageBlobs)).toEqual([
-    { hash: replacement.filename.slice(0, 64), bytes: replacement.bytes },
-  ]);
+  expect(await targetSuite.db.select().from(mediaBlobs)).toHaveLength(3);
+  expect(await targetSuite.db.select().from(mediaBlobs)).toEqual(
+    expect.arrayContaining(
+      [originalA, originalB, replacement].map((image) => ({
+        hash: image.filename.slice(0, 64),
+        format: "webp",
+        bytes: image.bytes,
+      })),
+    ),
+  );
   for (const [index, original] of originals.entries()) {
     const imported = rows.find((row) => row.filename === original!.filename)!;
     expect(imported.id).not.toBe(original!.id);
     expect(imported.names).toEqual(original!.names);
-    expect(edits.find((row) => row.imageId === imported.id)).toMatchObject({
+    expect(imported).toMatchObject({
       sourceHash: replacement.filename.slice(0, 64),
       focusX: frames[index]!.x,
       focusY: frames[index]!.y,
@@ -421,13 +425,13 @@ it("refuses corrupt photo override configuration before writing any target rows"
   );
   for (const fault of ["bytes", "source", "revision", "framing", "duplicate"] as const) {
     const corrupt = structuredClone(bundle);
-    if (fault === "bytes") corrupt.tables.media_image_blobs![0]!.bytes = "\\x0001";
-    if (fault === "source") corrupt.tables.media_image_edits![0]!.source_hash = "a".repeat(64);
+    if (fault === "bytes") corrupt.tables.media_blobs![0]!.bytes = "\\x0001";
+    if (fault === "source") corrupt.tables.media_images![0]!.source_hash = "a".repeat(64);
     if (fault === "revision")
-      corrupt.tables.media_image_edits![0]!.revision = Number.MAX_SAFE_INTEGER + 1;
-    if (fault === "framing") corrupt.tables.media_image_edits![0]!.focus_x = 0.5;
+      corrupt.tables.media_images![0]!.revision = Number.MAX_SAFE_INTEGER + 1;
+    if (fault === "framing") corrupt.tables.media_images![0]!.focus_x = 0.5;
     if (fault === "duplicate")
-      corrupt.tables.media_image_blobs!.push({ ...corrupt.tables.media_image_blobs![0]! });
+      corrupt.tables.media_blobs!.push({ ...corrupt.tables.media_blobs![0]! });
     expect(() => validateConfigurationBundle(corrupt, ALL_MODULES, versions)).toThrow(
       expect.objectContaining({ code: "image.invalid_metadata" }),
     );
@@ -439,12 +443,9 @@ it("refuses corrupt photo override configuration before writing any target rows"
     expect(
       (await targetSuite.db.execute(sql`select count(*) as n from media_images`)).rows,
     ).toEqual([{ n: 0 }]);
-    expect(
-      (await targetSuite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows,
-    ).toEqual([{ n: 0 }]);
-    expect(
-      (await targetSuite.db.execute(sql`select count(*) as n from media_image_edits`)).rows,
-    ).toEqual([{ n: 0 }]);
+    expect((await targetSuite.db.execute(sql`select count(*) as n from media_blobs`)).rows).toEqual(
+      [{ n: 0 }],
+    );
   }
 });
 
@@ -477,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 42,
+  version: 43,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -518,10 +519,17 @@ describe("configuration transfer archive", () => {
           {
             id: "image",
             filename: "a".repeat(64) + ".png",
+            original_hash: "a".repeat(64),
+            source_hash: null,
+            focus_x: 5000,
+            focus_y: 5000,
+            zoom: 100,
+            revision: 1,
+            original_filename: null,
             names: { en: "Bread" },
           },
         ],
-        media_image_data: [{ image_id: "image", bytes: "\\x89504e470d0a1a0a" }],
+        media_blobs: [{ hash: "a".repeat(64), format: "png", bytes: "\\x89504e470d0a1a0a" }],
       },
     };
     expect(
@@ -5575,7 +5583,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(42);
+  expect(exported.version).toBe(43);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

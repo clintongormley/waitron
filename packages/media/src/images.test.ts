@@ -1,3 +1,5 @@
+import { sampleImage } from "./testing/sample-image.js";
+import { createHash } from "node:crypto";
 import { columnsFromOverrides } from "@waitron/menu";
 import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,8 +11,9 @@ import {
   products,
   workingOrderLines,
   type Transaction,
-  mediaImageData,
+  mediaBlobs,
   mediaImages,
+  readActivityForSubject,
 } from "@waitron/db";
 import {
   writeContentLanguages,
@@ -121,7 +124,7 @@ describe("unknown images and other refusals", () => {
     for (const call of [
       (tx: Transaction): Promise<unknown> => readImage(tx, imageId),
       (tx: Transaction) => listImageUsages(tx, imageId),
-      (tx: Transaction) => deleteImage(tx, imageId),
+      (tx: Transaction) => deleteImage(tx, imageId, null),
     ]) {
       await expect(withTransaction(suite.db, call)).rejects.toMatchObject({
         code: "image.not_found",
@@ -191,7 +194,7 @@ describe("metadata and references", () => {
       );
       expect(edited.filename).toBe(first.image.filename);
       expect(edited.names).toEqual({ en: "Sourdough", fr: "Pain" });
-      expect(await deleteImage(tx, second.image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, second.image.id, null)).toEqual({ deleted: true, uses: [] });
       expect(await readImageBytes(tx, second.image.filename)).toBeNull();
     });
   });
@@ -226,10 +229,11 @@ describe("metadata and references", () => {
         },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
+      expect(await readActivityForSubject(tx, { kind: "media_image", id: image.id })).toEqual([]);
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       await tx.execute(sql`update products set image = null`);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     });
   });
 
@@ -273,13 +277,13 @@ describe("metadata and references", () => {
         },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
       // The detail read and the list read must agree: the list's count is its own SQL, so a use the
       // scan finds but the count misses would show the library a free photo that refuses to delete.
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
       await tx.execute(sql`update products set image = null where id = ${variant!.id}`);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     });
   });
 
@@ -589,11 +593,21 @@ describe("one search rule with every other search", () => {
     const createdAt = new Date(2026, 0, 1);
     await withTransaction(suite.db, async (tx) => {
       // The higher id is stored first, so storage order alone would list it first.
-      for (const [id, filename] of [
-        [high, `${"b".repeat(64)}.webp`],
-        [low, `${"c".repeat(64)}.webp`],
+      for (const [id, width] of [
+        [high, 301],
+        [low, 302],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: "Gin" }, createdAt });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: "Gin" },
+          createdAt,
+        });
       }
       for (const sort of ["relevance", "date"] as const)
         expect(await ids(tx, { query: "gin", sort })).toEqual([low, high]);
@@ -627,15 +641,25 @@ describe("input boundaries", () => {
   ])("serves a stored .$extension row as $contentType", async ({ extension, contentType }) => {
     // Uploads store WebP only; .jpg and .png rows still arrive through configuration transfer,
     // which copies a bundle's bytes unchanged.
-    const bytes = new Uint8Array([1, 2, 3]);
-    const filename = `${"a".repeat(64)}.${extension}`;
+    const bytes = await sampleImage({
+      width: 8,
+      height: 6,
+      format: extension === "jpg" ? "jpeg" : (extension as "png" | "webp"),
+    });
+    const filename = `${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
     await withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
+      await tx.insert(mediaBlobs).values({
+        hash: filename.slice(0, 64),
+        format: extension as "jpg" | "png" | "webp",
+        bytes,
+      });
+      await tx
         .insert(mediaImages)
-        .values({ filename, names: { en: "Dish" } })
-        .returning({ id: mediaImages.id });
-      await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
+        .values({ filename, originalHash: filename.slice(0, 64), names: { en: "Dish" } });
       expect(await readImageBytes(tx, filename)).toEqual({ bytes, contentType });
+      expect(
+        await readImageBytes(tx, filename.slice(0, 64) + (extension === "webp" ? ".jpg" : ".webp")),
+      ).toBeNull();
     });
   });
 
@@ -648,7 +672,7 @@ describe("input boundaries", () => {
       );
       expect(await imageExists(tx, image.filename)).toBe(true);
       expect(await imageExists(tx, `${"0".repeat(64)}.webp`)).toBe(false);
-      await deleteImage(tx, image.id);
+      await deleteImage(tx, image.id, null);
       expect(await imageExists(tx, image.filename)).toBe(false);
     });
   });
@@ -754,10 +778,10 @@ it("protects an image used by sections, a menu's own list among them, and counts
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(2);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await updateSection(tx, drinks.id, { image: null });
     await tx.update(sections).set({ image: null }).where(eq(sections.id, root!.id));
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -806,7 +830,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await tx
       .update(sectionMembers)
       .set({ showAsFolder: false })
@@ -818,7 +842,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
       .set({ ...columnsFromOverrides({ image: null }) })
       .where(eq(sectionMembers.id, member!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -854,7 +878,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
     ];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
   });
 });
 
@@ -878,7 +902,7 @@ it("ignores a retired venue logo for usage counts and deletion", async () => {
         [image.id]: 0,
         [other.id]: 0,
       });
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     expect(await readImageBytes(tx, image.filename)).toBeNull();
 
     expect((await readImage(tx, other.id)).usageCount).toBe(0);
@@ -926,11 +950,11 @@ it("protects an image only a live menu version names, and releases it once anoth
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await publish(tx, menu.id);
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -984,12 +1008,12 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await cancelMenuPublication(tx, menu.id, queued.versionId, "manager-luis");
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await readImage(tx, image.id)).usageCount).toBe(0);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -1110,12 +1134,12 @@ it("protects the photo of a product a live menu version offers only as an extra"
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await publish(tx, menu.id);
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await readImage(tx, image.id)).usageCount).toBe(0);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -1129,11 +1153,21 @@ describe("relevance scores and tie-breaks", () => {
     const createdAt = new Date(2026, 0, 1);
     await withTransaction(suite.db, async (tx) => {
       // The higher id is stored first, so storage order alone would list it first.
-      for (const [id, filename] of [
-        [high, `${"b".repeat(64)}.webp`],
-        [low, `${"c".repeat(64)}.webp`],
+      for (const [id, width] of [
+        [high, 301],
+        [low, 302],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: "Bread" }, createdAt });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: "Bread" },
+          createdAt,
+        });
       }
       for (const sort of ["name", "date"] as const) {
         for (const direction of ["asc", "desc"] as const) {
@@ -1148,11 +1182,20 @@ describe("relevance scores and tie-breaks", () => {
     const high = "00000000-0000-4000-8000-000000000002";
     await withTransaction(suite.db, async (tx) => {
       // The id tie-break alone would list the prefix-only match, which has the lower id, first.
-      for (const [id, filename, name] of [
-        [low, `${"b".repeat(64)}.webp`, "Chicken"],
-        [high, `${"c".repeat(64)}.webp`, "Chick peas"],
+      for (const [id, width, name] of [
+        [low, 301, "Chicken"],
+        [high, 302, "Chick peas"],
       ] as const) {
-        await tx.insert(mediaImages).values({ id, filename, names: { en: name } });
+        const picture = await prepare(width);
+        await tx
+          .insert(mediaBlobs)
+          .values({ hash: picture.filename.slice(0, 64), format: "webp", bytes: picture.bytes });
+        await tx.insert(mediaImages).values({
+          id,
+          filename: picture.filename,
+          originalHash: picture.filename.slice(0, 64),
+          names: { en: name },
+        });
       }
       const options = { fallbackLanguage: "en" } as const;
       expect(await ids(tx, { ...options, query: "chick" })).toEqual([high, low]);

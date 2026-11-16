@@ -12,13 +12,12 @@ import {
   validateContentTranslations,
 } from "@waitron/menu";
 import {
+  recordActivity,
   menus,
   customThemes,
   products,
   type Transaction,
-  mediaImageBlobs,
-  mediaImageData,
-  mediaImageEdits,
+  mediaBlobs,
   mediaImages,
 } from "@waitron/db";
 import { departments } from "@waitron/venue-service";
@@ -291,7 +290,6 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
   const [row] = await tx
     .select(IMAGE_LIST_COLUMNS)
     .from(mediaImages)
-    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
     .where(eq(mediaImages.id, imageId));
   if (!row) throw new AppError("image.not_found", { imageId });
   return {
@@ -318,7 +316,6 @@ export async function uploadImage(
   const [current] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
-    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
     .where(eq(IMAGE_LIST_COLUMNS.sourceFilename, filename))
     .orderBy(asc(mediaImages.createdAt), asc(mediaImages.id))
     .limit(1);
@@ -328,12 +325,21 @@ export async function uploadImage(
     .from(mediaImages)
     .where(eq(mediaImages.filename, filename));
   if (occupied) throw new AppError("image.reference_conflict", { imageId: occupied.id });
+  const hash = filename.slice(0, 64);
+  const [blob] = await tx
+    .select({ bytes: mediaBlobs.bytes })
+    .from(mediaBlobs)
+    .where(eq(mediaBlobs.hash, hash));
+  if (blob && !Buffer.from(blob.bytes).equals(bytes))
+    throw new AppError("image.hash_conflict", { filename });
+  if (!blob)
+    await tx
+      .insert(mediaBlobs)
+      .values({ hash, bytes, format: filename.slice(65) as "jpg" | "png" | "webp" });
   const [row] = await tx
     .insert(mediaImages)
-    .values({ filename, ...values })
+    .values({ filename, ...values, originalHash: filename.slice(0, 64), originalFilename })
     .returning({ id: mediaImages.id });
-  await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
-  await tx.insert(mediaImageEdits).values({ imageId: row!.id, originalFilename });
   return { created: true, image: await readImage(tx, row!.id) };
 }
 
@@ -349,25 +355,16 @@ export async function readImageBytes(
   tx: Transaction,
   filename: string,
 ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  if (!/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(filename)) return null;
   const [row] = await tx
-    .select({ bytes: mediaImageData.bytes })
-    .from(mediaImages)
-    .innerJoin(mediaImageData, eq(mediaImages.id, mediaImageData.imageId))
-    .where(eq(mediaImages.filename, filename));
-  if (!row) {
-    if (!/^[a-f0-9]{64}\.webp$/.test(filename)) return null;
-    const [blob] = await tx
-      .select({ bytes: mediaImageBlobs.bytes })
-      .from(mediaImageBlobs)
-      .where(eq(mediaImageBlobs.hash, filename.slice(0, 64)));
-    return blob ? { bytes: blob.bytes, contentType: "image/webp" } : null;
-  }
-  const contentType = filename.endsWith(".jpg")
-    ? "image/jpeg"
-    : filename.endsWith(".png")
-      ? "image/png"
-      : "image/webp";
-  return { bytes: row.bytes, contentType };
+    .select({ bytes: mediaBlobs.bytes, format: mediaBlobs.format })
+    .from(mediaBlobs)
+    .where(eq(mediaBlobs.hash, filename.slice(0, 64)));
+  if (!row || row.format !== filename.slice(65)) return null;
+  return {
+    bytes: row.bytes,
+    contentType: row.format === "jpg" ? "image/jpeg" : `image/${row.format}`,
+  };
 }
 
 export async function updateImage(
@@ -398,21 +395,47 @@ export async function listImageTranslationGaps(
     .map((row) => ({ kind: "image", id: row.id }));
 }
 
+export async function pruneBlobs(
+  tx: Transaction,
+  hashes: readonly (string | null)[],
+): Promise<void> {
+  for (const hash of new Set(hashes)) {
+    if (hash === null) continue;
+    await tx.delete(mediaBlobs).where(sql`${mediaBlobs.hash} = ${hash} and not exists (
+      select 1 from ${mediaImages} where ${mediaImages.originalHash} = ${hash} or ${mediaImages.sourceHash} = ${hash}
+    )`);
+  }
+}
+
 export async function deleteImage(
   tx: Transaction,
   imageId: string,
+  personId: string | null,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
   // No attach can slip between the usage check and the delete: one write transaction runs on the
   // venue file at a time (the pattern is on `assertExtraListForWrite`,
   // `packages/menu/src/extras.ts`).
   const [image] = await tx
-    .select({ id: mediaImages.id })
+    .select({
+      id: mediaImages.id,
+      originalHash: mediaImages.originalHash,
+      sourceHash: mediaImages.sourceHash,
+      filename: mediaImages.filename,
+      names: mediaImages.names,
+    })
     .from(mediaImages)
     .where(eq(mediaImages.id, imageId));
   if (!image) throw new AppError("image.not_found", { imageId });
   const uses = await listImageUsages(tx, imageId);
   if (uses.length > 0) return { deleted: false, uses };
   await tx.delete(mediaImages).where(eq(mediaImages.id, imageId));
+  await pruneBlobs(tx, [image.originalHash, image.sourceHash]);
+  await recordActivity(tx, {
+    kind: "photo.deleted",
+    subjectId: imageId,
+    personId,
+    data: { filename: image.filename, names: image.names },
+  });
   return { deleted: true, uses: [] };
 }
 
@@ -479,10 +502,7 @@ export async function listImages(
     };
   }
 
-  const rows = await tx
-    .select(IMAGE_LIST_COLUMNS)
-    .from(mediaImages)
-    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id));
+  const rows = await tx.select(IMAGE_LIST_COLUMNS).from(mediaImages);
 
   const matched: { row: (typeof rows)[number]; rank: SearchRank | undefined }[] = [];
   for (const row of rows) {

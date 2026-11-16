@@ -22,6 +22,13 @@ it("has no alt text or labels columns", async () => {
     "names",
     "created_at",
     "updated_at",
+    "original_hash",
+    "source_hash",
+    "focus_x",
+    "focus_y",
+    "zoom",
+    "revision",
+    "original_filename",
   ]);
 });
 
@@ -33,14 +40,19 @@ it("keeps the table's indexes", async () => {
   expect(indexes.rows.map((index) => index.name)).toEqual([
     "media_images_date_idx",
     "media_images_filename_key",
+    "media_images_original_hash_idx",
+    "media_images_source_hash_idx",
   ]);
 });
 
 it("refuses names that are not an object, and accepts names that are", async () => {
   const insert = async (filename: string, names: string): Promise<void> => {
+    await suite.db.execute(
+      sql`insert into media_blobs(hash,format,bytes) values (${filename.slice(0, 64)},'jpg',x'1234')`,
+    );
     await suite.db.execute(sql`
-      insert into media_images (id, filename, names, created_at, updated_at)
-      values (${filename}, ${filename}, ${names}, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`);
+      insert into media_images (id, filename, names, original_hash, created_at, updated_at)
+      values (${filename}, ${filename}, ${names}, ${filename.slice(0, 64)}, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`);
   };
   await expect(insert(photo("a"), "[]")).rejects.toMatchObject({
     message: expect.stringContaining("media_images_names_ck"),

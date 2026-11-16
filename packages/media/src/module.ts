@@ -13,13 +13,8 @@ export const MEDIA_CONFIGURATION_TRANSFER = {
   kind: "tables",
   validate: validateMediaConfiguration,
   tables: [
-    {
-      name: "media_images",
-      before: ["media_image_edits", "products", "sections", "section_members"],
-    },
-    { name: "media_image_data", before: ["products", "sections", "section_members"] },
-    { name: "media_image_blobs", before: ["media_image_edits"] },
-    { name: "media_image_edits", before: ["products", "sections", "section_members"] },
+    { name: "media_blobs", before: ["media_images"] },
+    { name: "media_images", before: ["products", "sections", "section_members"] },
   ],
 } as const;
 export const MEDIA_PERMISSIONS: readonly ModulePermission[] = [];

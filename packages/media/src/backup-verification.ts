@@ -5,7 +5,7 @@ import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { MEDIA_TABLES } from "./tables.js";
 
-const immutableTables = ["media_image_data", "media_image_blobs"];
+const immutableTables = ["media_blobs"];
 export const MEDIA_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
@@ -72,50 +72,31 @@ function integer(value: BackupValue | undefined, min: number, max: number): bool
 }
 async function checkMedia(query: BackupQuery): Promise<boolean> {
   const images = await has(query, "media_images");
-  const data = await has(query, "media_image_data");
-  const blobs = await has(query, "media_image_blobs");
-  const edits = await has(query, "media_image_edits");
+  const blobs = await has(query, "media_blobs");
+  if (blobs)
+    for await (const row of query.rows("select * from media_blobs")) {
+      if (
+        !(row.bytes instanceof Uint8Array) ||
+        row.hash !== digest(row.bytes) ||
+        sniffImageType(row.bytes) !== row.format
+      )
+        return false;
+    }
   if (images)
     for await (const row of query.rows("select * from media_images")) {
       const names = jsonObject(row.names);
       if (names === null || Object.values(names).some((value) => typeof value !== "string"))
         return false;
-      const bytes = data
-        ? (await first(query, "select bytes from media_image_data where image_id=?", [row.id!]))
-            ?.bytes
-        : null;
-      if (!(bytes instanceof Uint8Array)) return false;
-      const extension = sniffImageType(bytes);
-      if (extension === null || row.filename !== `${digest(bytes)}.${extension}`) return false;
-    }
-  if (data)
-    for await (const row of query.rows("select image_id from media_image_data")) {
-      if (
-        !images ||
-        !(await first(query, "select 1 from media_images where id=?", [row.image_id!]))
-      )
-        return false;
-    }
-  if (blobs)
-    for await (const row of query.rows("select * from media_image_blobs")) {
-      if (
-        !(row.bytes instanceof Uint8Array) ||
-        sniffImageType(row.bytes) !== "webp" ||
-        row.hash !== digest(row.bytes)
-      )
-        return false;
-    }
-  if (edits)
-    for await (const row of query.rows("select * from media_image_edits")) {
-      if (
-        !images ||
-        !(await first(query, "select 1 from media_images where id=?", [row.image_id!]))
-      )
-        return false;
+      const original = blobs
+        ? await first(query, "select format from media_blobs where hash=?", [row.original_hash!])
+        : undefined;
+      if (!original || row.filename !== `${row.original_hash}.${original.format}`) return false;
       if (
         row.source_hash !== null &&
         (!blobs ||
-          !(await first(query, "select 1 from media_image_blobs where hash=?", [row.source_hash!])))
+          !(await first(query, "select 1 from media_blobs where hash=? and format='webp'", [
+            row.source_hash!,
+          ])))
       )
         return false;
       if (
@@ -133,41 +114,33 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
       )
         return false;
     }
-  async function reference(value: unknown, historical: boolean): Promise<boolean> {
+  async function reference(value: unknown): Promise<boolean> {
     if (value === null || value === undefined) return true;
-    if (typeof value !== "string") return false;
-    if (
+    return (
+      typeof value === "string" &&
       images &&
-      data &&
+      blobs &&
       (await first(
         query,
-        "select 1 from media_images i join media_image_data d on d.image_id=i.id where i.filename=?",
+        "select 1 from media_images i join media_blobs b on b.hash=i.original_hash where i.filename=?",
         [value],
-      ))
-    )
-      return true;
-    return (
-      historical &&
-      /^[a-f0-9]{64}\.webp$/.test(value) &&
-      blobs &&
-      (await first(query, "select 1 from media_image_blobs where hash=?", [value.slice(0, 64)])) !==
-        undefined
+      )) !== undefined
     );
   }
-  for (const [table, column, nested] of [
-    ["products", "image", null],
-    ["sections", "image", null],
-    ["section_members", "folder_image", null],
-    ["menu_version_images", "filename", null],
+  for (const [table, column] of [
+    ["products", "image"],
+    ["sections", "image"],
+    ["section_members", "folder_image"],
   ] as const) {
     if (!(await has(query, table))) continue;
-    for await (const row of query.rows(`select ${ident(column)} as value from ${ident(table)}`)) {
-      if (nested !== null) {
-        const object = jsonObject(row.value);
-        if (object === null || !(await reference(object[nested], false))) return false;
-      } else if (!(await reference(row.value, table === "menu_version_images"))) return false;
-    }
+    for await (const row of query.rows(`select ${ident(column)} as value from ${ident(table)}`))
+      if (!(await reference(row.value))) return false;
   }
+  if (await has(query, "menu_version_images"))
+    for await (const row of query.rows(
+      "select mvi.filename from menu_version_images mvi join menu_releases r on r.version_id=mvi.version_id where r.state in ('live','queued')",
+    ))
+      if (!(await reference(row.filename))) return false;
   if (await has(query, "departments")) {
     for await (const row of query.rows(
       "select receipt_logo_image_id as id from departments where receipt_logo_image_id is not null",
@@ -175,10 +148,10 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
       if (
         typeof row.id !== "string" ||
         !images ||
-        !data ||
+        !blobs ||
         !(await first(
           query,
-          "select 1 from media_images i join media_image_data d on d.image_id=i.id where i.id=?",
+          "select 1 from media_images i join media_blobs b on b.hash=i.original_hash where i.id=?",
           [row.id],
         ))
       )

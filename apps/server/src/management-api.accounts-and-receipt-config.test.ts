@@ -1342,10 +1342,18 @@ async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
 
 /** Replaces a library image's bytes with some that will not decode. */
 async function spoilImageBytes(filename: string): Promise<void> {
-  await suite.db.execute(
-    sql`update media_image_data set bytes = ${Buffer.from([1, 2, 3])}
-        where image_id = (select id from media_images where filename = ${filename})`,
-  );
+  await suite.db.execute(sql`drop trigger media_blobs_no_update`);
+
+  try {
+    await suite.db.execute(
+      sql`update media_blobs set bytes = ${Buffer.from([1, 2, 3])}
+        where hash = (select original_hash from media_images where filename = ${filename})`,
+    );
+  } finally {
+    await suite.db.execute(
+      sql`create trigger media_blobs_no_update before update on media_blobs begin select raise(abort, 'media_blobs rows are never changed'); end`,
+    );
+  }
 }
 
 /** Starts `first`, waits until it is queued behind the held lock, then queues `second`. */

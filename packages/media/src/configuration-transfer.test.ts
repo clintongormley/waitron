@@ -11,16 +11,27 @@ function validate(
   >[1]);
 }
 const bytes = Buffer.from([0xff, 0xd8, 0xff, 1]);
+const hash = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
+const defaults = {
+  source_hash: null as string | null,
+  focus_x: 5000,
+  focus_y: 5000,
+  zoom: 100,
+  revision: 1,
+  original_filename: null as string | null,
+};
 function tables() {
   return {
     media_images: [
       {
+        ...defaults,
+        original_hash: hash(bytes),
         id: "image-a",
         filename: `${createHash("sha256").update(bytes).digest("hex")}.jpg`,
         names: { en: "Bread" },
       },
     ],
-    media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
+    media_blobs: [{ hash: hash(bytes), format: "jpg", bytes: `\\x${bytes.toString("hex")}` }],
   };
 }
 /**
@@ -61,13 +72,12 @@ it.each(["mismatch", "missing", "extra", "duplicate", "type", "hex", "oversize",
   (kind) => {
     const input = tables();
     if (kind === "mismatch") input.media_images[0]!.filename = "0".repeat(64) + ".jpg";
-    if (kind === "missing") input.media_image_data = [];
+    if (kind === "missing") input.media_blobs = [];
     if (kind === "extra") input.media_images = [];
-    if (kind === "duplicate") input.media_image_data.push({ ...input.media_image_data[0]! });
-    if (kind === "type") input.media_image_data[0]!.bytes = "\\x010203";
-    if (kind === "hex") input.media_image_data[0]!.bytes = "\\xz123";
-    if (kind === "oversize")
-      input.media_image_data[0]!.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
+    if (kind === "duplicate") input.media_blobs.push({ ...input.media_blobs[0]! });
+    if (kind === "type") input.media_blobs[0]!.bytes = "\\x010203";
+    if (kind === "hex") input.media_blobs[0]!.bytes = "\\xz123";
+    if (kind === "oversize") input.media_blobs[0]!.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
     if (kind === "name") input.media_images[0]!.names.en = " ";
     expect(() => validate(wire(input))).toThrow();
   },
@@ -78,11 +88,17 @@ const otherBytes = Buffer.from([0xff, 0xd8, 0xff, 2]);
 function twoImages() {
   const input = tables();
   input.media_images.push({
+    ...defaults,
+    original_hash: hash(otherBytes),
     id: "image-b",
     filename: `${createHash("sha256").update(otherBytes).digest("hex")}.jpg`,
     names: { en: "Juice" },
   });
-  input.media_image_data.push({ image_id: "image-b", bytes: `\\x${otherBytes.toString("hex")}` });
+  input.media_blobs.push({
+    hash: hash(otherBytes),
+    format: "jpg",
+    bytes: `\\x${otherBytes.toString("hex")}`,
+  });
   return input;
 }
 const refused = expect.objectContaining({ code: "image.invalid_metadata" });
@@ -91,15 +107,27 @@ it("accepts two valid images", () => {
   expect(() => validate(wire(twoImages()))).not.toThrow();
 });
 
-it("refuses a data row whose image_id is not a string", () => {
+it("refuses a JPEG original named as a replacement", () => {
   const input = wire(tables());
-  (input.media_image_data[0] as Record<string, unknown>).image_id = 42;
+  input.media_images[0]!.source_hash = hash(bytes);
+  expect(() => validate(input)).toThrow(refused);
+});
+it("refuses a blob and filename relabelled to a format their bytes do not have", () => {
+  const input = wire(tables());
+  input.media_blobs[0]!.format = "png";
+  input.media_images[0]!.filename = `${hash(bytes)}.png`;
   expect(() => validate(input)).toThrow(refused);
 });
 
-it("refuses two data rows for one image even when the row counts agree", () => {
+it("refuses a blob whose hash is not a string", () => {
+  const input = wire(tables());
+  (input.media_blobs[0] as Record<string, unknown>).hash = 42;
+  expect(() => validate(input)).toThrow(refused);
+});
+
+it("refuses two byte rows with the same hash", () => {
   const input = wire(twoImages());
-  input.media_image_data[1]!.image_id = "image-a";
+  input.media_blobs[1]!.hash = input.media_blobs[0]!.hash;
   expect(() => validate(input)).toThrow(refused);
 });
 
@@ -127,16 +155,18 @@ it.each(["und", "not a tag"])(
 
 const replacement = await samplePreparedImage({ width: 31 });
 function editedTables(): Record<string, Record<string, unknown>[]> {
+  const input = wire(twoImages());
   return {
-    ...wire(twoImages()),
-    media_image_blobs: [
+    media_blobs: [
+      ...input.media_blobs,
       {
         hash: replacement.filename.slice(0, 64),
+        format: "webp",
         bytes: `\\x${Buffer.from(replacement.bytes).toString("hex")}`,
       },
     ],
-    media_image_edits: ["image-a", "image-b"].map((image_id) => ({
-      image_id,
+    media_images: input.media_images.map((image) => ({
+      ...image,
       source_hash: replacement.filename.slice(0, 64),
       focus_x: 1000,
       focus_y: 8000,
@@ -150,8 +180,8 @@ function editedTables(): Record<string, Record<string, unknown>[]> {
 it("accepts two edits sharing one immutable blob and an original-source edit", () => {
   const input = editedTables();
   expect(() => validate(input)).not.toThrow();
-  input.media_image_edits![0]!.source_hash = null;
-  input.media_image_edits![0]!.original_filename = null;
+  input.media_images![0]!.source_hash = null;
+  input.media_images![0]!.original_filename = null;
   expect(() => validate(input)).not.toThrow();
 });
 
@@ -165,7 +195,6 @@ it.each([
   "duplicate-blob",
   "dangling-source",
   "dangling-image",
-  "duplicate-edit",
   "focus-fraction",
   "focus-string",
   "focus-range",
@@ -178,21 +207,20 @@ it.each([
   "duplicate-image",
 ])("refuses edited configuration before writes: %s", (fault) => {
   const input = editedTables();
-  const blob = input.media_image_blobs![0]!;
-  const edit = input.media_image_edits![0]!;
+  const blob = input.media_blobs![2]!;
+  const edit = input.media_images![0]!;
   if (fault === "blob-key") blob.hash = "A".repeat(64);
   if (fault === "blob-hash") {
     blob.hash = "a".repeat(64);
-    for (const row of input.media_image_edits!) row.source_hash = blob.hash;
+    for (const row of input.media_images!) row.source_hash = blob.hash;
   }
   if (fault === "blob-type") blob.bytes = "\\xffd8ff01";
   if (fault === "blob-missing-bytes") delete blob.bytes;
   if (fault === "blob-hex") blob.bytes = "\\xzz";
   if (fault === "blob-oversize") blob.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
-  if (fault === "duplicate-blob") input.media_image_blobs!.push({ ...blob });
+  if (fault === "duplicate-blob") input.media_blobs!.push({ ...blob });
   if (fault === "dangling-source") edit.source_hash = "a".repeat(64);
-  if (fault === "dangling-image") edit.image_id = "missing";
-  if (fault === "duplicate-edit") input.media_image_edits!.push({ ...edit });
+  if (fault === "dangling-image") edit.original_hash = "a".repeat(64);
   if (fault === "focus-fraction") edit.focus_x = 0.5;
   if (fault === "focus-string") edit.focus_y = "5000";
   if (fault === "focus-range") edit.focus_x = 10001;
@@ -203,5 +231,11 @@ it.each([
   if (fault === "filename-control") edit.original_filename = "a\0b";
   if (fault === "filename-long") edit.original_filename = "a".repeat(256);
   if (fault === "duplicate-image") input.media_images!.push({ ...input.media_images![0]! });
+  expect(() => validate(input)).toThrow(refused);
+});
+
+it("refuses a blob whose declared format differs from its bytes", () => {
+  const input = wire(tables());
+  input.media_blobs[0]!.format = "png";
   expect(() => validate(input)).toThrow(refused);
 });
