@@ -200,9 +200,23 @@ describe("liveSteps", () => {
     const rules = [rule("Take order", "seated", 5)];
     const ordered = { firstOrderAt: at("20:30"), lastOrderAt: at("20:30") };
     expect(liveSteps(rules, facts(ordered), at("20:31"))).toEqual([]);
-    const before = { firstOrderAt: at("20:29"), lastOrderAt: at("20:29") };
-    expect(liveSteps(rules, facts(before), at("20:31"))).toEqual([
-      live("Take order", "20:30", "20:35"),
+  });
+
+  it("a seated step clears at a first order earlier than the seating, as a party taken in brings", () => {
+    const rules = [rule("Take order", "seated", 5), rule("Set up", "seated", 0)];
+    const inherited = { firstOrderAt: at("20:05"), lastOrderAt: at("20:05") };
+    expect(liveSteps(rules, facts(inherited), at("20:31"))).toEqual([]);
+  });
+
+  it("a first order earlier than a step another start triggered does not clear it", () => {
+    const rules = [
+      rule("Set up", "seated", 0),
+      rule("Take order", "after_step", 2, null, "Set up"),
+    ];
+    const doneAt = new Map([["Set up", at("20:33")]]);
+    const ordered = { doneAt, firstOrderAt: at("20:05"), lastOrderAt: at("20:05") };
+    expect(liveSteps(rules, facts(ordered), at("20:34"))).toEqual([
+      live("Take order", "20:33", "20:35"),
     ]);
   });
 

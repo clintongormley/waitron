@@ -78,11 +78,11 @@ function ordersClear(rule: StepRule, facts: StepFacts): boolean {
 }
 
 /**
- * A bill arriving at a free table opens the party and records its order in one transaction, so the
- * two times can be equal.
+ * A party that takes in an older one brings that party's first order, which can be earlier than
+ * its own seating, so any first order clears a seated step.
  */
 function firstOrderClears(rule: StepRule, firstOrderAt: number, triggeredAt: number): boolean {
-  return rule.start === "seated" ? firstOrderAt >= triggeredAt : firstOrderAt > triggeredAt;
+  return rule.start === "seated" || firstOrderAt > triggeredAt;
 }
 
 /**
@@ -92,7 +92,7 @@ function firstOrderClears(rule: StepRule, firstOrderAt: number, triggeredAt: num
  * trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
  * is later than its trigger, an order is sent later than its due time, the party's first order is
  * later than its trigger, or — before the first order — the party has an open draft. A seated step
- * also clears at a first order at the same instant. Arrival times do not clear steps that start
+ * clears at any first order, whenever it was sent. Arrival times do not clear steps that start
  * from a serving. Live steps come soonest due first, ties in list order.
  */
 export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[] {

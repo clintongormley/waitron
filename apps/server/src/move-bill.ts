@@ -24,6 +24,7 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
+import { carryServingStepDones } from "./service-step-done.js";
 import {
   copyHeldGroups,
   copyWaitingGroups,
@@ -42,6 +43,7 @@ import {
   checkAndBumpParty,
   ensureFamilyBill,
   holderOf,
+  memberTables,
   openParty,
   partyZone,
   refuseMovedParty,
@@ -278,6 +280,7 @@ async function moveBillOnce(
     if (source !== null) {
       await copyWaitingGroups(tx, source.id, partyId, waitingLineIds, options.operatorId, activity);
       await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
+      await carryServingStepDones(tx, source.id, partyId, [destination.tableId]);
     }
     result = { partyId, billId };
   } else {
@@ -298,6 +301,7 @@ async function moveBillOnce(
     if (source !== null) {
       await copyWaitingGroups(tx, source.id, partyId, waitingLineIds, options.operatorId, activity);
       await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
+      await carryServingStepDones(tx, source.id, partyId, await memberTables(tx, partyId));
     }
     await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);

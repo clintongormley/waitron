@@ -270,6 +270,59 @@ describe("markServiceStepDone", () => {
     expect(await liveAt(v, partyId, tableId, at + MINUTE)).toEqual([bread, coffee]);
   });
 
+  describe("a till whose clock is a few seconds ahead of the server's", () => {
+    /** A party whose first every-20-minutes repeat was done; the next falls due at `next`. */
+    async function repeatAfterDone(v: PartyVenue) {
+      const [drinks] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+        { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+      ]);
+      const { tableId, partyId } = await seatedAtTable1(v);
+      await orderForParty(v, partyId, ["Caña"]);
+      const ordered = await lastOrderAt(v, partyId);
+      await done(v, partyId, drinks!, ordered + 20 * MINUTE, ordered + 21 * MINUTE);
+      return { drinks: drinks!, tableId, partyId, ordered, next: ordered + 40 * MINUTE };
+    }
+
+    it("clears a repeat it shows 5 seconds before the server reaches it, as done when it fell due", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, tableId, partyId, ordered, next } = await repeatAfterDone(v);
+
+      expect(await done(v, partyId, drinks, next, next - 5_000)).toEqual({ cleared: [drinks] });
+
+      expect((await completions(v, partyId)).map((row) => row.doneAt).sort()).toEqual([
+        new Date(ordered + 21 * MINUTE).toISOString(),
+        new Date(next).toISOString(),
+      ]);
+      expect(await dueMinutesAt(v, partyId, tableId, next + MINUTE, ordered)).toEqual([
+        { stepId: drinks, dueMinutes: 60 },
+      ]);
+    });
+
+    it("clears nothing for a repeat it shows 31 seconds before the server reaches it", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, partyId, next } = await repeatAfterDone(v);
+
+      expect(await done(v, partyId, drinks, next, next - 31_000)).toEqual({ cleared: [] });
+
+      expect(await completions(v, partyId)).toHaveLength(1);
+    });
+
+    it("records Done on a step that does not repeat at the server's time", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const [water] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+        seated("Water?", 5),
+      ]);
+      const { partyId } = await seatedAtTable1(v);
+      const dueAt = OPENED_MS + 5 * MINUTE;
+
+      expect(await done(v, partyId, water!, dueAt, dueAt - 5_000)).toEqual({ cleared: [water] });
+
+      expect((await completions(v, partyId)).map((row) => row.doneAt)).toEqual([
+        new Date(dueAt - 5_000).toISOString(),
+      ]);
+    });
+  });
+
   it("Done on a step not yet due is accepted", async () => {
     const v = await setupPartyVenue(suite.db);
     const [water] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [

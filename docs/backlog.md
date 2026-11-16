@@ -698,7 +698,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **Service steps after a bill moves or tables combine** (bundle of 4, 2 important, size S). Holds A1330, A1331, A1333, A1005. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves-or-tables-combine)
+- **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
   server.** Left open by A1171 part 3.

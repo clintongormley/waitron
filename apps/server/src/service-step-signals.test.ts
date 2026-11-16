@@ -20,6 +20,7 @@ import {
   createDepartment,
   createServiceZone,
   recordStepCompletions,
+  serviceStepCompletions,
   serviceSteps,
 } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
@@ -597,6 +598,32 @@ describe("readTableSteps", () => {
     ];
     expect(await liveAt(v, a.partyId, firstTable, ordered + 25 * MINUTE)).toEqual(live);
     expect(await liveAt(v, a.partyId, secondTable, ordered + 25 * MINUTE)).toEqual(live);
+  });
+
+  it("a party seated after an older one's first order has ordered once it takes that party in", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await setSteps(v, await tablesDepartment(v), [seated("Take order")]);
+    const olderTable = await v.table("Table 1");
+    const laterTable = await v.table("Table 2");
+    const older = await seat(v, olderTable);
+    await setOpenedAt(v, older.partyId, OPENED);
+    await orderForParty(v, older.partyId, ["Water"]);
+    const later = await seat(v, laterTable);
+    const seatedAt = new Date((await lastOrderAt(v, older.partyId)) + 5 * MINUTE).toISOString();
+    await setOpenedAt(v, later.partyId, seatedAt);
+
+    const into = await commandFor(v, later.partyId);
+    const from = await commandFor(v, older.partyId);
+    await inTx(v, (tx) =>
+      joinTables(tx, v.cfg, later.partyId, olderTable, {
+        ...into,
+        otherPartyId: older.partyId,
+        expectedOtherPartyRevision: from.expectedPartyRevision,
+      }),
+    );
+
+    expect(await liveAt(v, later.partyId, laterTable)).toEqual([]);
+    expect(await liveAt(v, later.partyId, olderTable)).toEqual([]);
   });
 
   it("reads every fact once, whatever the number of parties", async () => {
@@ -1370,4 +1397,91 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       ]);
     });
   }
+
+  describe("a Done on a step a serving started travels with the bill", () => {
+    async function servedAndDone(v: PartyVenue, markDone: boolean) {
+      const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
+      const [dessert, anything, takeOrder, another] = await setSteps(v, await tablesDepartment(v), [
+        { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
+        { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
+        TAKE_ORDER,
+        ANOTHER,
+      ]);
+      const from = await partyWith(v, "Table 1", "fire");
+      await setCourse(v, mains.id, [await lineIdOf(v, from.billId, "Water")]);
+      const servedAt = await serve(v, from.billId, "Water");
+      const doneAt = new Date(servedAt + 1).toISOString();
+      if (markDone)
+        await inTx(v, (tx) =>
+          recordStepCompletions(tx, [
+            { partyId: from.partyId, stepId: dessert!, doneAt, doneBy: OPERATOR },
+            { partyId: from.partyId, stepId: anything!, doneAt, doneBy: OPERATOR },
+            { partyId: from.partyId, stepId: takeOrder!, doneAt, doneBy: OPERATOR },
+            { partyId: from.partyId, stepId: another!, doneAt, doneBy: OPERATOR },
+          ]),
+        );
+      return { from, dessert: dessert!, anything: anything!, doneAt };
+    }
+
+    /** The live steps a serving started; the repeat counted from the arrival always shows. */
+    async function servingStepsAt(v: PartyVenue, partyId: string, tableId: string) {
+      return (await liveAt(v, partyId, tableId))!
+        .filter((step) => step.name === "Dessert?" || step.name === "Anything else?")
+        .map((step) => step.stepId)
+        .sort();
+    }
+
+    async function doneRows(v: PartyVenue, partyId: string) {
+      return inTx(v, (tx) =>
+        tx
+          .select({
+            stepId: serviceStepCompletions.stepId,
+            doneAt: serviceStepCompletions.doneAt,
+            doneBy: serviceStepCompletions.doneBy,
+          })
+          .from(serviceStepCompletions)
+          .where(eq(serviceStepCompletions.partyId, partyId)),
+      );
+    }
+
+    it("moved to a free table, the steps done at the old table are not asked again", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { from, dessert, anything, doneAt } = await servedAndDone(v, true);
+
+      const { partyId, tableId } = await carryToFreeTable(v, "move", from);
+
+      expect(await servingStepsAt(v, partyId, tableId)).toEqual([]);
+      expect(await doneRows(v, partyId)).toEqual(
+        expect.arrayContaining([
+          { stepId: dessert, doneAt, doneBy: OPERATOR },
+          { stepId: anything, doneAt, doneBy: OPERATOR },
+        ]),
+      );
+      expect(await doneRows(v, partyId)).toHaveLength(2);
+    });
+
+    it("moved to a table another party holds, the steps done at the old table are not asked again", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { from, dessert, anything } = await servedAndDone(v, true);
+      const tableId = await v.table("Table 2");
+      const { partyId } = await seat(v, tableId);
+
+      await moveToParty(v, from, partyId, tableId);
+
+      expect(await servingStepsAt(v, partyId, tableId)).toEqual([]);
+      expect((await doneRows(v, partyId)).map((row) => row.stepId).sort()).toEqual(
+        [dessert, anything].sort(),
+      );
+    });
+
+    it("with no Done at the old table, the steps still show at the new one", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { from, dessert, anything } = await servedAndDone(v, false);
+
+      const { partyId, tableId } = await carryToFreeTable(v, "move", from);
+
+      expect(await servingStepsAt(v, partyId, tableId)).toEqual([dessert, anything].sort());
+      expect(await doneRows(v, partyId)).toEqual([]);
+    });
+  });
 });
