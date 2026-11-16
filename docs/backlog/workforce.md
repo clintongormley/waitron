@@ -203,15 +203,6 @@ only once the page's own model loads (`render` in
 Staffing view sees the switch and the Opening hours error instead. Next: decide whether a
 module view draws without that model.
 
-## A colour chooser left open while its window narrows may hide the chosen colour
-
-Read from
-the code by A783's finish-branch re-read on 2026-10-18, not measured: open on the last colour in a
-wide window short enough that two columns would scroll but four do not, then narrow it until two
-columns are needed; the resize re-places the panel at the same scroll position and nothing scrolls
-the chosen tile into view (`positionPopup` in `packages/ui/src/components/wt-colour-chooser.ts`).
-Next: try it, and if it shows, keep the focused tile in view after the columns change.
-
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
 When the
@@ -304,14 +295,6 @@ exists unused. Shown in A585's picker and warnings. After A586.
 - **A711. Shared staffing painter chrome and date source.** The season stepper, paint-row markup,
   grid height and covers line still copy venue-service; special-day dates come from its first area.
   [Detail](workforce.md#a711-shared-staffing-painter-code)
-
-## Bundle: Colour chooser placement
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **A colour chooser left open while its window narrows may hide the chosen colour.** Read by
-  A783, not measured. Try it, and if it shows, keep the focused tile in view after the columns change.
-  [Detail](workforce.md#a-colour-chooser-left-open-while-its-window-narrows-may-hide-the-chosen-colour).
 
 ## Decisions and deliberate limits
 

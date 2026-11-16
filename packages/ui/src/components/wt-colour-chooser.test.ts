@@ -985,6 +985,60 @@ describe("columns", () => {
     });
   });
 
+  test("narrowing a short window from four columns to two keeps the chosen last colour in view", async () => {
+    await atViewport(1280, 300, async () => {
+      const { el, panel, tile } = await mountSixteen(sixteen("en"), "grey");
+      const group = panel.querySelector<HTMLElement>('[role="radiogroup"]')!;
+      await openByClick(el);
+      expect(group.dataset.columns).toBe("4");
+      expect(panel.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
+      await page.viewport(450, 300);
+      await vi.waitFor(() => expect(group.dataset.columns).toBe("2"));
+      expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+      const box = panel.getBoundingClientRect();
+      const last = tile("grey").getBoundingClientRect();
+      const shown = `panel ${box.top}-${box.bottom}, tile ${last.top}-${last.bottom}`;
+      expect(last.top, shown).toBeGreaterThanOrEqual(box.top - 0.5);
+      expect(last.bottom, shown).toBeLessThanOrEqual(box.bottom + 0.5);
+    });
+  });
+
+  test("widening a very short window from two columns to four brings the chosen first colour back into view", async () => {
+    await atViewport(450, 200, async () => {
+      const { el, panel, tile } = await mountSixteen(sixteen("en"), "red");
+      const group = panel.querySelector<HTMLElement>('[role="radiogroup"]')!;
+      await openByClick(el);
+      expect(group.dataset.columns).toBe("2");
+      panel.scrollTop = panel.scrollHeight;
+      await page.viewport(1280, 200);
+      await vi.waitFor(() => expect(group.dataset.columns).toBe("4"));
+      expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+      const box = panel.getBoundingClientRect();
+      const first = tile("red").getBoundingClientRect();
+      const shown = `panel ${box.top}-${box.bottom}, tile ${first.top}-${first.bottom}`;
+      expect(first.top, shown).toBeGreaterThanOrEqual(box.top - 0.5);
+      expect(first.bottom, shown).toBeLessThanOrEqual(box.bottom + 0.5);
+    });
+  });
+
+  test("a resize that keeps two columns leaves the chosen first colour scrolled out of view", async () => {
+    await atViewport(390, 400, async () => {
+      const { el, panel, tile } = await mountSixteen(sixteen("en"), "red");
+      await openByClick(el);
+      expect(columns(el)).toBe(2);
+      panel.scrollTop = panel.scrollHeight;
+      const scrolled = panel.scrollTop;
+      expect(tile("red").getBoundingClientRect().bottom).toBeLessThan(
+        panel.getBoundingClientRect().top,
+      );
+      await page.viewport(380, 400);
+      await vi.waitFor(() => expect(innerWidth).toBe(380));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(columns(el)).toBe(2);
+      expect(panel.scrollTop).toBe(scrolled);
+    });
+  });
+
   test("in a 390x400 window, opened on the last colour, its tile is focused and inside the panel", async () => {
     await atViewport(390, 400, async () => {
       const { el, root, panel, trigger, tile } = await mountSixteen(sixteen("en"), "grey");
