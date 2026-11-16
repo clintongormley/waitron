@@ -603,6 +603,8 @@ consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir e
 cuenta cuando esté registrado para ver el resultado. Si Comprobar pagos con tarjeta indica **Pago registrado.
 Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
 
+Si falla esa comprobación, sigue [Falló la comprobación de un cobro con tarjeta](table-service.md#card-check-failed).
+
 Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.
 Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo que quede pendiente.
 

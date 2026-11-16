@@ -563,7 +563,7 @@ record the provider’s confirmed outcome. Reopen the bill payment after it is r
 result. If Check card payments says **Payment recorded. The rest is still due.**, reopen the bill and
 collect only its outstanding balance.
 
-If that check fails, follow [A card-payment check failed](#card-check-failed) below.
+If that check fails, follow [A card-payment check failed](table-service.md#card-check-failed) below.
 
 If the reader took a different amount, compare the requested and taken figures in the warning.
 Check the bill balance before taking another payment, so you collect only what is still owed.
