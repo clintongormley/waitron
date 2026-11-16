@@ -107,7 +107,7 @@ describe("content languages", () => {
     expect(resolveContentText({}, "constructor", "toString")).toBe("");
   });
 
-  it("never takes another region's text for a regional request, after exact and bare matches", () => {
+  it("for a regional request, takes the exact tag, then the bare language, then a default in another language", () => {
     const text = { "en-US": "US", "en-AU": "AU", english: "Unrelated", fr: "French" };
     expect(resolveContentText(text, "en-CA", "fr")).toBe("French");
     expect(resolveContentText(text, "en-US", "fr")).toBe("US");

@@ -43,14 +43,14 @@ describe("toInvoiceLineDescriptions", () => {
   });
 
   it("matches by language when the menu is keyed by a different full tag", () => {
-    // Menu authored under es-419 (Latin-American Spanish), invoice wants es-ES: neither the
-    // exact tag nor the bare `es` key exists, so it resolves via the first same-language key.
+    // Neither es-ES nor bare `es` exists, so the request misses and the bare default `es` takes
+    // the first `es-*` key.
     expect(toInvoiceLineDescriptions({ "es-419": "Café" }, ["es-ES"], "es")).toEqual({
       "es-ES": "Café",
     });
   });
 
-  it("never fills a full tag from another region of its language", () => {
+  it("fills a full tag from a default in another language, not from another region of its own", () => {
     expect(
       toInvoiceLineDescriptions({ "es-MX": "Pan MX", fr: "Pain" }, ["es-ES", "fr-FR"], "fr"),
     ).toEqual({

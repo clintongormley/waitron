@@ -11,7 +11,7 @@ import {
   type EscSetting,
   type MonoRaster,
 } from "@waitron/printing";
-import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { compareDecimal, decimal, resolveSnapshotText, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
@@ -240,7 +240,7 @@ it.each(
       vatBreakdown: [{ rate: "21.00", base: "8.51", tax: "1.79" }],
       lines: [
         {
-          descriptions: { "es-ES": "Plato", en: "Dish" },
+          descriptions: { "es-ES": "Plato", en: "Plato" },
           quantity: "1",
           gross: "10.30",
           listGross: "12.00",
@@ -936,7 +936,7 @@ describe("the QR comes first on an invoice that carries one", () => {
 
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
 function lineName(line: TillSaleResult["lines"][number]): string {
-  return line.descriptions["es-ES"] ?? Object.values(line.descriptions)[0] ?? "";
+  return resolveSnapshotText(line.descriptions, "es-ES", "es-ES");
 }
 
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {

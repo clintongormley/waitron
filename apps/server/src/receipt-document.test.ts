@@ -524,7 +524,7 @@ describe("the simplified receipt's own layout (A663)", () => {
     expect(rows(input)).toContainEqual(["0,300 kg  Jamón ibérico", "9,00", undefined]);
   });
 
-  it("names a line missing the receipt's language by the alphabetically first non-blank text", () => {
+  it("names a line missing the receipt's language by the non-blank text whose language code sorts first", () => {
     const named = (descriptions: Record<string, string>) => {
       const input = structuredClone(SIMPLIFIED);
       input.namesLocale = "en-GB";

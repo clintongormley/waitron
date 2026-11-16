@@ -98,7 +98,11 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
   return standalone ? capitaliseFirst(name, locale) : name;
 }
 
-/** Empty translations fall back to the configured default without manufacturing a translation. */
+/**
+ * Empty translations fall back to the configured default without manufacturing a translation.
+ * A tag with no region also takes any region of its language, since receipt snapshots are keyed
+ * by full tags (`ca` reaches `ca-ES`).
+ */
 export function resolveContentText(
   translations: Readonly<Record<string, string>>,
   requestedLanguage: string,
