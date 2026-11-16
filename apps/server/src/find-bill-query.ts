@@ -1,5 +1,6 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { validateFindBillRange } from "./find-bill-dates.js";
+import { FILTER_TEXT_MAX } from "./orders-list.js";
 import type {
   BillsQuery,
   FindBillDates,
@@ -42,7 +43,7 @@ function base(
   defaultSort: string,
 ): FindBillQuery {
   const q = params.get("q") ?? "";
-  if (q.trim().length > 100) invalid("q");
+  if (q.trim().length > FILTER_TEXT_MAX) invalid("q");
   const rawPage = params.get("page");
   const page = rawPage === null ? 0 : Number(rawPage);
   if ((rawPage !== null && !/^\d+$/.test(rawPage)) || !Number.isSafeInteger(page * 50))

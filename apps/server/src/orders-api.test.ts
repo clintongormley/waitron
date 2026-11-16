@@ -235,6 +235,12 @@ describe("Orders routes", () => {
     expect(await ids(`q=${"x".repeat(100)}%20%20`)).toEqual([]);
   });
 
+  it("accepts a table filter of 100 characters, measured trimmed", async () => {
+    expect(
+      await get(venue.supervisorDashboard, `?anyDate=true&table=${"x".repeat(100)}%20%20`),
+    ).toMatchObject({ status: 200, json: { rows: [] } });
+  });
+
   it("answers not found for malformed and unknown ids", async () => {
     for (const id of ["not-a-uuid", randomUUID()]) {
       expect(await get(venue.supervisorDashboard, `/${id}`)).toMatchObject({

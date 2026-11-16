@@ -1795,9 +1795,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
 
-- **The server holds two separate 100-character limits for text a request sends**
-  [Detail](backlog/ci.md#the-server-holds-two-separate-100-character-limits-for-text-a-request-sends).
-
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**
   [Detail](backlog/ci.md#drizzle-kit-03111-left-out-on-delete-when-it-generated-an-alter-table--add--references-on-this-engine-while-its-snapshot-kept-it).
 
