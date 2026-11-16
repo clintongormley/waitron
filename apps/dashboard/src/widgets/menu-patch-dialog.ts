@@ -4,7 +4,7 @@ import {
   ContentLanguageController,
   currentContentLanguages,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   subscribeContentLanguages,
   type DraftScope,
@@ -186,7 +186,7 @@ export class MenuPatchDialog extends LitElement {
   #draft: MenuPatchDraft | null = null;
   /** Whether Review has been pressed since the dialog opened: until then no field shows its own
    * check's error. */
-  #pressed = false;
+  readonly #feedback = new FormFeedback(this);
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it, with its
    * error and, for a translated field, the language the error belongs under. A refresh never
    * replaces text the person typed; in a translated field, a language they left alone shows the
@@ -297,7 +297,7 @@ export class MenuPatchDialog extends LitElement {
     this.#held = null;
     this.#refusedKey = null;
     this.#draft = null;
-    this.#pressed = false;
+    this.#feedback.reset();
     this.#typed = new Map();
     this.#releaseScope();
     if (wanted !== null) void this.#load(wanted);
@@ -321,7 +321,7 @@ export class MenuPatchDialog extends LitElement {
    * once it commits. */
   #discard(): void {
     this.#draft = new MenuPatchDraft(this.live!.document, currentContentLanguages());
-    this.#pressed = false;
+    this.#feedback.reset();
     this.#typed = new Map();
     this.step = "edit";
     this.requestUpdate();
@@ -516,7 +516,7 @@ export class MenuPatchDialog extends LitElement {
 
   /** The sentence a field shows: a refusal's at once, its own check's once Review was pressed. */
   #shownError(typed: Typed | undefined): string {
-    return typed !== undefined && (typed.refused || this.#pressed) ? typed.error : "";
+    return typed !== undefined && (typed.refused || this.#feedback.attempted) ? typed.error : "";
   }
 
   /** The target keys of the items holding a field that shows an error, in the order edited. */
@@ -547,19 +547,21 @@ export class MenuPatchDialog extends LitElement {
 
   /** Review is held back only by an unchanged draft or, once pressed, by the form's own checks. */
   #reviewBlocked(): boolean {
-    return saveActionState(this.#scope).unchanged || (this.#pressed && this.#hasErrors());
+    return (
+      saveActionState(this.#scope).unchanged || (this.#feedback.attempted && this.#hasErrors())
+    );
   }
 
   async #review(): Promise<void> {
     if (this.#reviewBlocked()) return;
-    this.#pressed = true;
+    this.#feedback.attempted = true;
     this.requestUpdate();
     if (!this.#hasErrors()) return this.#toStep("review", "h3");
     const failing = this.#failing();
     if (!failing.some(([key]) => targetOf(key) === this.picked))
       this.picked = targetOf(failing[0]![0]);
     await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="form"]')!);
+    await this.#feedback.focus(this.renderRoot.querySelector('[data-test="form"]')!);
   }
 
   /** The button pressed to change step is gone afterwards; without a new focus inside the dialog,
@@ -632,7 +634,7 @@ export class MenuPatchDialog extends LitElement {
     this.step = "edit";
     await this.updateComplete;
     const form = this.renderRoot.querySelector('[data-test="form"]');
-    if (form !== null) await focusFirstInvalid(form);
+    if (form !== null) await this.#feedback.focus(form);
     return true;
   }
 
