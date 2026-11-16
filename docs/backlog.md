@@ -1387,7 +1387,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **A1268 part 2: pair a person's entries by write order after a backward clock step.** [Detail](backlog/box.md#a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step)
 
-- **Remaining bucket-copy limits** (earlier shutdown waits, local level-0 growth and pause/error qualification; bundle of 3, size S). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
+- **Remaining bucket-copy limits** (local level-0 growth and pause/error qualification; bundle of 2, size S). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
 
 - **Qualify clock confirmation through remote access** (bundle of 1, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 

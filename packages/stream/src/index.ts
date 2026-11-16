@@ -38,6 +38,7 @@ export {
   ENV_ENCRYPTION_KEY,
   ENV_SECRET_ACCESS_KEY,
   LITESTREAM_VERSION,
+  LITESTREAM_SHUTDOWN_TIMEOUT_MS,
   checkLitestreamSettings,
   resolveLitestreamBin,
 } from "./litestream.js";

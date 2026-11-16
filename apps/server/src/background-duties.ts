@@ -219,7 +219,10 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
  * Every abort in order, then every closer in order, each after the one before it settles, even when
  * one fails; then rejects with the first failure.
  */
-export async function stopBackgroundDuties(duties: BackgroundDuties): Promise<void> {
+export async function stopBackgroundDuties(
+  duties: BackgroundDuties,
+  onClosing?: (name: string) => void,
+): Promise<void> {
   const failures: unknown[] = [];
   for (const duty of duties.aborts) {
     try {
@@ -229,7 +232,12 @@ export async function stopBackgroundDuties(duties: BackgroundDuties): Promise<vo
     }
   }
   try {
-    await closeAll(duties.closers.map((closer) => closer.close));
+    await closeAll(
+      duties.closers.map((closer) => () => {
+        onClosing?.(closer.name);
+        return closer.close();
+      }),
+    );
   } catch (error) {
     failures.push(error);
   }

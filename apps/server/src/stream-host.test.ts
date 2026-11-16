@@ -343,6 +343,45 @@ describe("the live copy's wiring", () => {
         await rt.stop();
       }
     });
+    it("stops the child before a held observer finishes and shares the final stop", async () => {
+      await configure();
+      const bucket = store();
+      const binary = new FakeLitestream();
+      const rt = runtime({ store: bucket, spawn: binary.spawn });
+      await rt.start();
+      await vi.waitFor(() => expect(binary.running()).toBeDefined());
+      const child = binary.running()!;
+      let release!: () => void;
+      const held = new Promise<void>((done) => {
+        release = done;
+      });
+      let entered!: () => void;
+      const reading = new Promise<void>((done) => {
+        entered = done;
+      });
+      const get = bucket.get.bind(bucket);
+      vi.spyOn(bucket, "get").mockImplementation(async (...args) => {
+        entered();
+        await held;
+        return get(...args);
+      });
+      rt.observeNewerMain(async () => {});
+      let stopping: Promise<void> | undefined;
+      try {
+        await reading;
+        stopping = rt.stop();
+        await vi.waitFor(() => expect(child.killed).toBe(true));
+        expect(rt.stop()).toBe(stopping);
+        release();
+        await stopping;
+        await rt.reload();
+        expect(binary.replicas()).toHaveLength(1);
+      } finally {
+        release();
+        await stopping;
+        await rt.stop();
+      }
+    });
     it("settles an in-flight read before shutdown and ignores its late evidence", async () => {
       await configure();
       const bucket = store();

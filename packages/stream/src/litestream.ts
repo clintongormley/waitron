@@ -11,6 +11,7 @@ import "./errors.js";
  * Litestream notice file (`deploy/third-party/README.md`).
  */
 export const LITESTREAM_VERSION = "0.5.18";
+export const LITESTREAM_SHUTDOWN_TIMEOUT_MS = 4500;
 
 /** Found on PATH, where the box image puts it. */
 export const DEFAULT_LITESTREAM_BIN = "litestream";
@@ -90,7 +91,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     "  retention: 168h",
     "l0-retention: 5m",
     "l0-retention-check-interval: 5m",
-    "shutdown-timeout: 4500ms",
+    `shutdown-timeout: ${LITESTREAM_SHUTDOWN_TIMEOUT_MS}ms`,
     "",
     "dbs:",
     `  - path: ${JSON.stringify(input.dbPath)}`,
