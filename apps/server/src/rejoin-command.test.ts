@@ -10,6 +10,7 @@ import {
   readNodeMembership,
   writeNodeMembership,
   type Database,
+  type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -148,17 +149,30 @@ describe("waitron-rejoin rejoin", () => {
     expect(received?.acceptLoss).toBe(true);
   });
 
-  // The real closure against a REAL venue directory, not a fake: the whole of what `wipeDatabase`
-  // does is filesystem work, so a mock standing in for it would assert that this function calls
-  // something rather than that the box is wiped.
-  it("drives the real wipe closure: both database files go, then the directory is re-migrated and trading.env cleared", async () => {
+  it("drives the real wipe closure: both databases and their side files go, then the directory is re-migrated and trading.env cleared", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "rejoin-live-"));
     const venueDir = join(stateDir, "venue");
+    const files = [
+      "venue.db",
+      "venue.db-wal",
+      "venue.db-shm",
+      "node.db",
+      "node.db-wal",
+      "node.db-shm",
+    ];
+    let live: VenueDatabase | undefined;
     try {
-      const live = await openVenueDatabase(venueDir);
+      live = await openVenueDatabase(venueDir);
       live.venue.run(sql`create table venue_marker (v text)`);
+      live.venue.run(sql`insert into venue_marker (v) values ('VENUE-ROW')`);
       live.node.run(sql`create table node_marker (v text)`);
-      await live.close();
+      live.node.run(sql`insert into node_marker (v) values ('NODE-ROW')`);
+      // Keep the handle open so closing it cannot remove the side files before the wipe.
+      for (const name of files) {
+        await expect(stat(join(venueDir, name)), `before the wipe: ${name}`).resolves.toBeDefined();
+      }
+      expect((await stat(join(venueDir, "venue.db-wal"))).size).toBeGreaterThan(0);
+      expect((await stat(join(venueDir, "node.db-wal"))).size).toBeGreaterThan(0);
       await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
 
       const migrated: string[] = [];
@@ -179,20 +193,14 @@ describe("waitron-rejoin rejoin", () => {
       );
 
       expect(code).toBe(0);
-      for (const name of [
-        "venue.db",
-        "venue.db-wal",
-        "venue.db-shm",
-        "node.db",
-        "node.db-wal",
-        "node.db-shm",
-      ]) {
+      for (const name of files) {
         await expect(stat(join(venueDir, name))).rejects.toMatchObject({ code: "ENOENT" });
       }
       // The re-migrate targets the directory just emptied, and the next boot is setup mode.
       expect(migrated).toEqual([venueDir]);
       await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
+      await live?.close().catch(() => {});
       await rm(stateDir, { recursive: true, force: true });
     }
   });
