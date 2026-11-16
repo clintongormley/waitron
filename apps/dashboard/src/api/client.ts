@@ -2212,7 +2212,10 @@ export type RecoveryPackReason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
   | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
-  | { part: "bucket" | "archives" | "server-key"; kind: "removed" }
+  | { part: "bucket" | "archives" | "server-key" | "emergency"; kind: "removed" }
+  | { part: "emergency"; kind: "code_changed"; at: string }
+  | { part: "emergency"; kind: "code_missing" }
+  | { part: "emergency"; kind: "cannot_check" }
   | { part: "server-key"; kind: "key_replaced" };
 
 /** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
@@ -2225,6 +2228,7 @@ export interface RecoveryPackStatus {
     received: boolean;
     parts: {
       part: RecoveryPackPart;
+      codeIssuedAt?: string;
       state: "included" | "absent" | "failed" | "not-set-up";
     }[];
   };

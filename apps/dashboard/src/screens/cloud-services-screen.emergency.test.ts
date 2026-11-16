@@ -392,3 +392,13 @@ it("explains when Cloud cannot provide the code yet", async () => {
     .poll(() => section(el)?.querySelector('[role="alert"]')?.textContent)
     .toContain("The emergency code could not be read.");
 });
+
+it("links to the existing recovery-pack dialog on Backups", async () => {
+  const { el } = await open(facts(), status, true);
+  await expect.poll(() => section(el)).not.toBeNull();
+  const link = section(el)!.querySelector<HTMLAnchorElement>(
+    'a[href="/manage/backup?recovery-pack=make"]',
+  );
+  expect(link).not.toBeNull();
+  expect(link!.textContent).toContain(t("cloud.emergency_print_pack"));
+});

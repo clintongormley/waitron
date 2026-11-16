@@ -51,6 +51,8 @@ import { invoiceFontBytes } from "./invoice-font.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { emergencyReply } from "../test/cloud-emergency-fixture.js";
+import type { EmergencyDisplay } from "./cloud-emergency.js";
 import { createStaffApp } from "./cloud-remote.js";
 
 vi.mock("@simplewebauthn/server", async (original) => ({
@@ -1243,7 +1245,22 @@ const cloudPack = (
   code = async () => EMERGENCY,
   isPrimary = () => true,
 ): NonNullable<BackupRecoveryPackMakeDeps["cloud"]> => ({
-  connection: { status: async () => ({ state: "complete", code: "" }), emergencyCode: code },
+  connection: {
+    status: async () => ({ state: "complete", code: "" }),
+    emergencyCode: code,
+    emergency: async () =>
+      ({
+        ...emergencyReply("installation", "venue", EMERGENCY.asOf),
+        emergency: {
+          status: "ready",
+          open: true,
+          closedReason: null,
+          address: EMERGENCY.address,
+          codeIssuedAt: EMERGENCY.codeIssuedAt,
+        },
+        stale: false,
+      }) as EmergencyDisplay & { stale: boolean },
+  },
   managementOrigin: "https://box.test",
   isPrimary,
 });
@@ -1397,3 +1414,112 @@ it.each(["code permission", "maker permission", "cancelled"] as const)(
     }
   },
 );
+
+it("reads code status outside the write transaction and returns the printed issue date", async () => {
+  const cloud = cloudPack();
+  const f = fixture({ cloud });
+  await (await f.make()).arrayBuffer();
+  await f.received(1);
+  const issued = "2026-10-30T09:00:30.000Z";
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const read = vi.fn(async () => {
+    await gate;
+    return {
+      ...emergencyReply("installation", "venue", "2026-10-30T09:01:00.000Z"),
+      emergency: {
+        status: "ready",
+        open: true,
+        closedReason: null,
+        address: EMERGENCY.address,
+        codeIssuedAt: issued,
+      },
+      stale: false,
+    } as EmergencyDisplay & { stale: boolean };
+  });
+  cloud.connection.emergency = read;
+  const pending = f.status();
+  try {
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    expect(
+      await Promise.race([
+        withTransaction(suite.db, async () => "written"),
+        new Promise((resolve) => setTimeout(() => resolve("waiting"), 1000)),
+      ]),
+    ).toBe("written");
+  } finally {
+    release();
+  }
+  const response = await pending;
+  const value = await response.json();
+  expect(value).toMatchObject({
+    upToDate: false,
+    reasons: [{ part: "emergency", kind: "code_changed", at: issued }],
+  });
+  expect(value.latest.parts[0]).toEqual({
+    part: "emergency",
+    state: "included",
+    codeIssuedAt: EMERGENCY.codeIssuedAt,
+  });
+  expect(JSON.stringify(value)).not.toContain(EMERGENCY.code);
+});
+
+it("bounds a status read to eight seconds and reports an unknown code", async () => {
+  const cloud = cloudPack();
+  const f = fixture({ cloud });
+  await (await f.make()).arrayBuffer();
+  await f.received(1);
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+  let rejectRead!: (error: unknown) => void;
+  cloud.connection.emergency = vi.fn<typeof cloud.connection.emergency>(
+    (_origin, signal) =>
+      new Promise((_resolve, reject) => {
+        rejectRead = reject;
+        signal!.addEventListener("abort", () => reject(signal!.reason), { once: true });
+      }),
+  );
+  const pending = f.status();
+  try {
+    await vi.waitFor(() => expect(rejectRead).toBeTypeOf("function"));
+    expect(timeout).toHaveBeenCalledWith(8000);
+    deadline.abort();
+    const response = await Promise.race([
+      pending,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000)),
+    ]);
+    expect(response).not.toBeNull();
+    expect(await response!.json()).toMatchObject({
+      upToDate: false,
+      reasons: [{ part: "emergency", kind: "cannot_check" }],
+    });
+  } finally {
+    rejectRead(new Error("test cleanup"));
+    await pending;
+    timeout.mockRestore();
+  }
+});
+
+it("checks system.manage before contacting Cloud for pack status", async () => {
+  const supervisor = await openManagementSession(suite.db, "supervisor");
+  const cloud = cloudPack();
+  const read = vi.fn(cloud.connection.emergency);
+  cloud.connection.emergency = read;
+  const response = await fixture({ cloud }).status(supervisor.token);
+  expect(response.status).toBe(403);
+  expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+  expect(read).not.toHaveBeenCalled();
+});
+
+it("refuses pack status when permission is removed during the Cloud read", async () => {
+  const cloud = cloudPack();
+  const read = cloud.connection.emergency;
+  cloud.connection.emergency = async (...args) => {
+    const answer = await read(...args);
+    await setBuiltInRoleForTest(suite.db, admin.personId, "staff");
+    return answer;
+  };
+  const response = await fixture({ cloud }).status();
+  expect(response.status).toBe(403);
+  expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+});

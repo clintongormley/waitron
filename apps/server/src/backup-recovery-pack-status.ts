@@ -11,6 +11,8 @@ export type StatusRecord = RecoveryPackRecord & { madeByName: string | null };
 export type CurrentChecks = {
   /** The backup key's latest change time; `undefined` when nothing has changed it. */
   keyChangedAt: string | undefined;
+  /** Undefined without an applicable Cloud read; null when current facts could not be checked. */
+  emergency?: { asOf: string; open: boolean; codeIssuedAt: string | null } | null;
   /** `null` when the box has no bucket copy. */
   bucket: { revision: string } | null;
   /** `null` when the box makes no archives. */
@@ -35,7 +37,10 @@ type Reason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
   | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
-  | { part: "bucket" | "archives" | "server-key"; kind: "removed" }
+  | { part: "bucket" | "archives" | "server-key" | "emergency"; kind: "removed" }
+  | { part: "emergency"; kind: "code_changed"; at: string }
+  | { part: "emergency"; kind: "code_missing" }
+  | { part: "emergency"; kind: "cannot_check" }
   | { part: "server-key"; kind: "key_replaced" };
 
 type Keep = {
@@ -51,7 +56,11 @@ export type PackStatus = {
     madeAt: string;
     madeByName: string | null;
     received: boolean;
-    parts: { part: RecoveryPackPartRecord["part"]; state: RecoveryPackPartRecord["state"] }[];
+    parts: {
+      part: RecoveryPackPartRecord["part"];
+      state: RecoveryPackPartRecord["state"];
+      codeIssuedAt?: string;
+    }[];
   };
   upToDate: boolean;
   incomplete: boolean;
@@ -109,6 +118,17 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       reasons.push({ part: "server-key", kind: "set_up_after" });
     }
   }
+  const recorded = partOf(record, "emergency");
+  if (recorded?.state === "failed") return reasons;
+  const emergency = current.emergency;
+  if (recorded?.state === "included") {
+    if (!emergency?.open || emergency.codeIssuedAt !== recorded.codeIssuedAt) {
+      if (emergency == null || !later(emergency.asOf, record.madeAt.toISOString()))
+        reasons.push({ part: "emergency", kind: "cannot_check" });
+      else if (!emergency.open) reasons.push({ part: "emergency", kind: "removed" });
+      else reasons.push({ part: "emergency", kind: "code_changed", at: emergency.codeIssuedAt! });
+    }
+  } else if (emergency?.open) reasons.push({ part: "emergency", kind: "code_missing" });
   return reasons;
 }
 
@@ -231,7 +251,11 @@ export function packStatus(input: PackStatusInput): PackStatus {
             madeAt: latest.madeAt.toISOString(),
             madeByName: latest.madeByName,
             received: latest.receivedAt !== null,
-            parts: latest.parts.map(({ part, state }) => ({ part, state })),
+            parts: latest.parts.map(({ part, state, codeIssuedAt }) => ({
+              part,
+              state,
+              ...(codeIssuedAt === undefined ? {} : { codeIssuedAt }),
+            })),
           },
     upToDate:
       latest !== undefined && latest.receivedAt !== null && !incomplete && reasons.length === 0,

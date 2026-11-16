@@ -983,3 +983,108 @@ it("does not claim an emergency-only pack carries a backup key", async () => {
     fill("recovery_pack.backup_key_absent", { number: "3", date: DAYS["en-GB"].made }),
   );
 });
+
+it.each(["en-GB", "es-ES"])(
+  "shows the printed emergency issue time in the venue zone (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({
+            parts: [{ part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
+          }),
+          upToDate: true,
+        }),
+      ),
+    );
+    expect(row(el, "emergency-code")).toContain("2026");
+    expect(row(el, "emergency-code")).toContain("12:00");
+  },
+);
+
+it("does not call an unknown emergency code out of date or ask for another pack", async () => {
+  const el = await mount(
+    stubApi(status({ latest: latest(), reasons: [{ part: "emergency", kind: "cannot_check" }] })),
+  );
+  expect(line(el)).toContain(
+    fill("recovery_pack.cannot_check", { number: "3", date: DAYS["en-GB"].made }),
+  );
+  expect(line(el)).not.toContain(t("recovery_pack.make_new"));
+});
+
+it.each(["en-GB", "es-ES"] as const)(
+  "explains changed and missing emergency codes (%s)",
+  async (locale) => {
+    setLocale(locale);
+    for (const reason of [
+      { part: "emergency", kind: "code_changed", at: MADE_AT },
+      { part: "emergency", kind: "code_missing" },
+    ] as const) {
+      const el = await mount(stubApi(status({ latest: latest(), reasons: [reason] })));
+      expect(line(el)).toContain(
+        reason.kind === "code_changed"
+          ? fill("recovery_pack.reason.emergency_changed", { date: DAYS[locale].made })
+          : t("recovery_pack.reason.emergency_missing"),
+      );
+      expect(line(el)).toContain(t("recovery_pack.make_new"));
+    }
+  },
+);
+
+it.each([true, false])(
+  "waits for linked maker's server-key facts (present=%s)",
+  async (present) => {
+    const value = status({
+      latest: latest({ parts: present ? PARTS : [{ part: "server-key", state: "absent" }] }),
+      keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
+    });
+    const api = stubApi(value);
+    let release!: (value: RecoveryPackStatus) => void;
+    api.getRecoveryPackStatus.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+      api,
+      canManage: true,
+      openRequested: true,
+    });
+    const dialog = dialogOf(el);
+    try {
+      expect(dialog.isOpen).toBe(false);
+    } finally {
+      release(value);
+    }
+    await expect.poll(() => dialog.isOpen).toBe(true);
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector("#new-server-key") !== null).toBe(present);
+    if (present)
+      expect(words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
+        "recovery pack 1, made on 2 September",
+      );
+    dialog.dismiss();
+    api.getRecoveryPackStatus.mockResolvedValue({ ...value });
+    el.reload();
+    await settle(el);
+    expect(dialog.isOpen).toBe(false);
+  },
+);
+
+it("opens the linked maker after the initial status read fails", async () => {
+  const api = stubApi(STATES.none);
+  api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
+  const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+    api,
+    canManage: true,
+    openRequested: true,
+  });
+  await expect
+    .poll(
+      () =>
+        dialogOf(el).shadowRoot?.querySelector("wt-dialog")?.shadowRoot?.querySelector("dialog")
+          ?.open,
+    )
+    .toBe(true);
+});

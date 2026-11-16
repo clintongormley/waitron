@@ -46,6 +46,16 @@ const STATES: Record<string, RecoveryPackStatus> = {
     ],
     backupsUseOlderKey: true,
   },
+  "emergency unknown": {
+    ...BASE,
+    latest: LATEST,
+    reasons: [{ part: "emergency", kind: "cannot_check" }],
+  },
+  "emergency missing": {
+    ...BASE,
+    latest: LATEST,
+    reasons: [{ part: "emergency", kind: "code_missing" }],
+  },
   incomplete: {
     ...BASE,
     latest: { ...LATEST, parts: [{ part: "archives", state: "failed" }] },

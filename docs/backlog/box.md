@@ -1225,11 +1225,6 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
-## A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).
-
-- **A1187 part 2: status and Cloud shortcut.** Backups can print the emergency page, with Cloud’s address/code, QR codes, issue date, eligible people and steps. Codes require Cloud’s deployed endpoint and hosting eligibility. PR 2 still adds the Cloud shortcut opening the existing maker, current-code status checks and missing-code wording. The watcher retained the changed-code warning on 16 November; PR 2 follows this printing slice. No hosted activation is delivered here.
-  [Plan](../superpowers/plans/2026-11-15-a1187-2-emergency-page.md).
-
 ## A1187: wording part 1's reviews left on the restore command and setup.
 
 - **A1187: wording part 1's reviews left on the restore command and setup.** `waitron-restore`'s

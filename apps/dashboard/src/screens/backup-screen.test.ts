@@ -2910,3 +2910,26 @@ it.each(["settings", "turn-on"])(
     expect(el.shadowRoot!.querySelectorAll("[data-test=backup-admin-sign-in]")).toHaveLength(1);
   },
 );
+
+it("opens the existing pack maker for its linked address", async () => {
+  const before = location.href;
+  history.replaceState(null, "", "/manage/backup?recovery-pack=make");
+  try {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, OFF),
+      canManage: true,
+    });
+    const card = el.shadowRoot!.querySelector("dashboard-recovery-pack-card")!;
+    await card.updateComplete;
+    const dialog = card.shadowRoot!.querySelector("dashboard-recovery-pack-dialog")!;
+    await expect
+      .poll(
+        () =>
+          dialog.shadowRoot?.querySelector("wt-dialog")?.shadowRoot?.querySelector("dialog")?.open,
+      )
+      .toBe(true);
+    expect(new URL(location.href).searchParams.has("recovery-pack")).toBe(false);
+  } finally {
+    history.replaceState(null, "", before);
+  }
+});

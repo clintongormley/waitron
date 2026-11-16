@@ -3,7 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../api/client.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
@@ -11,7 +11,7 @@ import "../widgets/recovery-pack-dialog.js";
 import { keyHolder, packDate, unreceivedWords } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
-type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" }>;
+type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" | "code_changed" }>;
 
 const REASON_WORDS: {
   [K in Worded["kind"]]: Record<Extract<Worded, { kind: K }>["part"], StringKey>;
@@ -29,7 +29,10 @@ const REASON_WORDS: {
     bucket: "recovery_pack.reason.bucket_removed",
     archives: "recovery_pack.reason.archives_removed",
     "server-key": "recovery_pack.reason.server_key_removed",
+    emergency: "recovery_pack.reason.emergency_removed",
   },
+  code_missing: { emergency: "recovery_pack.reason.emergency_missing" },
+  cannot_check: { emergency: "recovery_pack.reason.emergency_unknown" },
   key_replaced: { "server-key": "recovery_pack.reason.server_key_replaced" },
 };
 
@@ -41,6 +44,10 @@ function reasonWords(reason: Worded): StringKey {
       return REASON_WORDS.set_up_after[reason.part];
     case "removed":
       return REASON_WORDS.removed[reason.part];
+    case "code_missing":
+      return REASON_WORDS.code_missing.emergency;
+    case "cannot_check":
+      return REASON_WORDS.cannot_check.emergency;
     case "key_replaced":
       return REASON_WORDS.key_replaced[reason.part];
   }
@@ -49,8 +56,13 @@ function reasonWords(reason: Worded): StringKey {
 /** Each reason's sentence once: the bucket copy and the archives share one recovery key. */
 function reasonSentences(reasons: Status["reasons"], date: (iso: string) => string): string[] {
   const sentences = reasons.map((reason) =>
-    reason.kind === "key_changed"
-      ? fill("recovery_pack.reason.key_changed", { date: date(reason.at) })
+    reason.kind === "key_changed" || reason.kind === "code_changed"
+      ? fill(
+          reason.kind === "key_changed"
+            ? "recovery_pack.reason.key_changed"
+            : "recovery_pack.reason.emergency_changed",
+          { date: date(reason.at) },
+        )
       : t(reasonWords(reason)),
   );
   return [...new Set(sentences)];
@@ -147,6 +159,7 @@ export class RecoveryPackCard extends LitElement {
   >;
   @property({ type: Boolean }) canManage = false;
 
+  @property({ type: Boolean }) openRequested = false;
   @state() private status: Status | null = null;
   @state() private failed = false;
   /** `arrivedAt` is the browser's time, used only until a status names the pack's own time. */
@@ -175,6 +188,15 @@ export class RecoveryPackCard extends LitElement {
     if (changes.has("canManage") || changes.has("api")) {
       this.#forget();
       if (this.canManage && this.api && this.isConnected) this.reload();
+    }
+    if (this.openRequested && this.canManage && this.api && (this.status !== null || this.failed)) {
+      this.openRequested = false;
+      const url = new URL(location.href);
+      if (url.searchParams.get("recovery-pack") === "make") {
+        url.searchParams.delete("recovery-pack");
+        history.replaceState(history.state, "", url);
+      }
+      this.#make();
     }
   }
 
@@ -325,6 +347,11 @@ export class RecoveryPackCard extends LitElement {
         lines.push(
           html`<strong>${fill("recovery_pack.incomplete", pack)}</strong> ${reasons.join(" ")}`,
         );
+      } else if (
+        status.reasons.length > 0 &&
+        status.reasons.every((reason) => reason.kind === "cannot_check")
+      ) {
+        lines.push(fill("recovery_pack.cannot_check", pack));
       } else if (!status.upToDate || reasons.length > 0) {
         lines.push(
           html`<strong>${fill("recovery_pack.out_of_date", pack)}</strong> ${[
@@ -381,6 +408,7 @@ export class RecoveryPackCard extends LitElement {
     if (latest === null)
       return html`<dl>${row("last", "recovery_pack.row.last", t("recovery_pack.last_none"))}</dl>`;
     const pack = { number: String(latest.number), date: this.#date(latest.madeAt) };
+    const issued = latest.parts.find((part) => part.part === "emergency")?.codeIssuedAt;
     return html`<dl>
       ${row(
         "last",
@@ -391,6 +419,17 @@ export class RecoveryPackCard extends LitElement {
       )}
       ${row("backup-key", "recovery_pack.row.backup_key", this.#backupKey(status, pack))}
       ${row("server-key", "recovery_pack.row.server_key", this.#serverKey(status))}
+      ${row(
+        "emergency-code",
+        "recovery_pack.row.emergency",
+        issued
+          ? new Date(issued).toLocaleString(currentLocale(), {
+              timeZone: status.timeZone,
+              dateStyle: "long",
+              timeStyle: "short",
+            })
+          : t("recovery_pack.emergency_absent"),
+      )}
     </dl>`;
   }
 
