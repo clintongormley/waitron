@@ -25,7 +25,7 @@ For each step, root writes the regression, observes the intended failure, implem
 
 ## Completion
 
-Root verifies Stripe's authoritative idempotency documentation before adopting the existing 24-hour policy (`provider.ts:77–81`); no unlimited-retention claim or provider calls. Reuse existing scheduler forwarding/enqueue tests. Narrow permanent-marker prose in `reconcile.ts` and `schema/payments.ts`; delete the completed entry and stale W44 references in `docs/backlog.md` and `docs/backlog/payments.md`.
+Verified 16 November: [Stripe API v1](https://docs.stripe.com/api/idempotent_requests) may prune keys ‘after they’re at least 24 hours old’. Reuse the existing 24-hour policy (`provider.ts:77–81`); older attempts are lookup-only. No provider calls. Reuse existing scheduler forwarding/enqueue tests. Narrow permanent-marker prose in `reconcile.ts` and `schema/payments.ts`; delete the completed entry and stale W44 references in `docs/backlog.md` and `docs/backlog/payments.md`.
 
 Estimated handwritten lines: production +150–180/−20–35; tests +230–280/−10–20; support +60–80/−0. Generated schema lines: zero. Focused checks belong to root; none run during drafting.
 
