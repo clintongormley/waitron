@@ -20,7 +20,6 @@ Left open:
   not run: `till-app.ts`'s `initialDevicePass`/`initialDevicePassMonitor`, `till-pass-screen.ts`'s
   adopting `initialBoard` in `connectedCallback`); post-load changes may disappear until the next read.
 
-
 - A switched-off printer's printing problem keeps showing until the printer is switched on
   and a Reprint prints there; there is no way to dismiss one.
 - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of

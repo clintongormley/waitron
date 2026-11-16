@@ -2416,6 +2416,7 @@ describe("till-app", () => {
       const previousSize = { width: innerWidth, height: innerHeight };
       await page.viewport(1280, 900);
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      let releaseRead: (() => void) | undefined;
       try {
         const template = allergyQueue();
         const queue = [1, 2, 4, 7].map((number) => ({
@@ -2477,15 +2478,22 @@ describe("till-app", () => {
         await flush(el);
         expect(shown()).toEqual([1, 2, 7]);
         expect(noticeNode()).not.toBeNull();
+        if (refresh) {
+          read.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => (releaseRead = () => resolve(answer([1, 2, 7], [notice])))),
+          );
+          vi.advanceTimersByTime(15_000);
+          await flush(el);
+          expect(releaseRead).toBeDefined();
+        }
         const acknowledge = board().shadowRoot!.querySelector<HTMLElement>("[data-acknowledge]")!;
         acknowledge.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
         await flush(el);
         expect(noticeNode()).toBeNull();
-        if (refresh) {
-          vi.advanceTimersByTime(15_000);
-          await flush(el);
-          expect(noticeNode()).toBeNull();
-        }
+        releaseRead?.();
+        await flush(el);
+        expect(noticeNode()).toBeNull();
         for (const code of ["es-ES", "en-GB"]) {
           const reads = read.mock.calls.length;
           emit(shell(el)!, "wt-locale-selected", { code });
@@ -2496,6 +2504,7 @@ describe("till-app", () => {
           expect(read).toHaveBeenCalledTimes(reads);
         }
       } finally {
+        releaseRead?.();
         vi.useRealTimers();
         setLocale(previousLocale);
         await page.viewport(previousSize.width, previousSize.height);
