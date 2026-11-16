@@ -373,6 +373,38 @@ it.each(
   },
 );
 
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["manual", "collect"] as const).map((method) => ({ locale, method })),
+  ),
+)(
+  "gives terminal refund advice on a $method counter sale once a refusal says the unanswered tap was not recorded, in $locale",
+  async ({ locale, method }) => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockRejectedValueOnce({ code: "bill.unsent_dishes", status: 409, billId: "bill-1" })
+      .mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { [sendOf[method]]: write });
+    const screen = await openCounter(el);
+    const tap = () => emit(screen, eventOf[method], { method: "card", amount: "3.00" });
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).not.toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(write.mock.calls[2]).toEqual(write.mock.calls[0]);
+    const shown = banner(el)?.textContent?.trim();
+    expect(shown).not.toBe(t("sale.unconfirmed"));
+    expect(shown).toBe(t("sale.chain_handed_over_manual_card"));
+    expect(shown).toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+  },
+);
+
 it.each(["en-GB", "es-ES"])(
   "names a box handing over on a reader counter sale once an answer follows the unanswered tap, in %s",
   async (locale) => {

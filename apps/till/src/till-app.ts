@@ -3586,9 +3586,10 @@ export class TillApp extends LitElement {
    * Neither path learns that card's fate later, so a bill stays marked for the page. */
   readonly #unknownCardOutcome = new Set<string>();
   /** Orders with a counter sale send (pay, collect, the reader on the counter or the presented
-   * sheet) that got no answer, and no answer to a send for the order since. A refusal does not
-   * clear one: some are answered before the server looks for the sale that send may have recorded.
-   * Whole payments keep theirs in `#unansweredWholePayments`. */
+   * sheet) that got no answer, and since then neither an answer to a send for the order nor a
+   * refusal {@link paymentNotRecorded} names. Those are raised only after the server found no sale
+   * recorded for the order; other refusals may come before it looks. Whole payments keep theirs in
+   * `#unansweredWholePayments`. */
   readonly #unansweredSales = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
@@ -4049,7 +4050,7 @@ export class TillApp extends LitElement {
 
   /** Notes how a sale send for order `id` ended, answering whether its outcome is unknown. */
   #saleSendEnded(id: string, error?: unknown): boolean {
-    if (error === undefined) {
+    if (error === undefined || paymentNotRecorded(error)) {
       this.#unansweredSales.delete(id);
       return false;
     }
