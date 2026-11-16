@@ -1,6 +1,7 @@
 import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./staff-screen.js";
@@ -71,6 +72,11 @@ describe.each(["light", "dark"] as const)("staff-screen a11y (%s theme)", (theme
       theme,
     );
     await flush(el);
+    expect(await visibleHelp(el.shadowRoot!)).toBe(0);
+    const table = el
+      .shadowRoot!.querySelector("dashboard-staff-list")!
+      .shadowRoot!.querySelector("wt-data-table")!;
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!);
     expect(await visibleHelp(el.shadowRoot!)).toBe(1);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });

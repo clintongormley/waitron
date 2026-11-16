@@ -60,7 +60,6 @@ Review #559 also recorded no test reaching `management_session.required` in
   Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
   chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
 
-
 ## What C47 part 2 found and did not fix
 
   In a screenshot of a `wt-modal` editor after a
