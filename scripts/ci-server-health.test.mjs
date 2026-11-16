@@ -1437,6 +1437,82 @@ describe("scheduled PR planner recovery", () => {
     ).toEqual([1, 2, 1, 2].map((page) => path + suffix + page));
     expect(calls.filter(([, options]) => options?.method)).toEqual([]);
   });
+  it("checks the returned runs in the captured eleven-of-twelve queued inventory", async () => {
+    const f = fixture(),
+      reports = [],
+      calls = [];
+    const ids = [
+      43095940549, 43096065293, 43096221831, 43096377363, 43096385123, 43097250695, 43098097375,
+      43098155829, 43098484124, 43880735755, 43882249019,
+    ];
+    const request = (path, options) => {
+      calls.push([path, options]);
+      if (path.includes("/workflows/ci.yml/runs?"))
+        return {
+          total_count: path.includes("status=queued") ? 12 : 0,
+          workflow_runs:
+            path.includes("status=queued") && path.endsWith("page=1")
+              ? ids.map((id) => ({ ...f.run, id, status: "queued" }))
+              : [],
+        };
+      if (path.includes("/jobs?")) return { total_count: 0, jobs: [] };
+      return f.request(path, options);
+    };
+    await health.healthCommand(
+      "check",
+      { ...f.options, request },
+      {
+        report: (line) => reports.push(line),
+      },
+    );
+    expect(
+      calls
+        .filter(([path]) => path.includes("/jobs?"))
+        .map(([path]) => Number(/\/runs\/(\d+)\//.exec(path)[1])),
+    ).toEqual(ids);
+    expect(
+      calls
+        .filter(([path]) => path.includes("status=queued"))
+        .map(([path]) => Number(/page=(\d+)$/.exec(path)[1])),
+    ).toEqual([1, 2, 1, 2]);
+    expect(reports.join("\n")).toContain("Queued workflow discovery count shortfall");
+    expect(reports.join("\n")).toContain("read=2; starting_total=12; reply_total=12; rows=11;");
+    expect(reports.at(-1)).toContain("unread runs may contain waiting work");
+    expect(reports.join("\n")).not.toContain("No stalled server queue");
+    expect(calls.filter(([, options]) => options?.method)).toEqual([]);
+  });
+  it("reports an observed stalled job when the queued workflow list ends short", async () => {
+    const f = fixture(),
+      reports = [],
+      calls = [];
+    const request = (path, options) => {
+      calls.push([path, options]);
+      if (path.includes("/workflows/ci.yml/runs?"))
+        return {
+          total_count: path.includes("status=queued") ? 2 : 0,
+          workflow_runs:
+            path.includes("status=queued") && path.endsWith("page=1")
+              ? [{ ...f.run, status: "queued" }]
+              : [],
+        };
+      return f.request(path, options);
+    };
+    await expect(
+      health.healthCommand(
+        "check",
+        {
+          ...f.options,
+          request,
+          capacity: { observedAt: now, slots: 6, serverRunning: 0, serverWaiting: 1 },
+        },
+        { report: (line) => reports.push(line) },
+      ),
+    ).rejects.toThrow("SERVER STUCK: runs 12");
+    expect(reports.join("\n")).toContain("Queued workflow discovery count shortfall");
+    expect(calls.some(([path]) => path.includes("/runs/12/attempts/1/jobs?"))).toBe(true);
+    expect(calls.filter(([, options]) => options?.method)).toEqual([]);
+  });
+
   it.each(["queued", "in_progress"])(
     "recovers an observed planner despite a short %s workflow list",
     async (status) => {

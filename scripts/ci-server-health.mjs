@@ -68,7 +68,7 @@ async function inventory(
       return entries.slice(0, limit ?? entries.length);
     if (!answer[key].length) {
       if (plannerShortfall && !reread) {
-        plannerShortfall(unavailable("Planner discovery count shortfall").message);
+        plannerShortfall(unavailable("discovery count shortfall").message);
         return entries;
       }
       if (reread)
@@ -175,7 +175,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
           100,
           true,
           status === "queued" ? staleQueuedCount : undefined,
-          plannerShortfall,
+          options.plannersOnly || status === "queued" ? plannerShortfall : undefined,
         ),
       unavailable,
     )) {
@@ -404,7 +404,7 @@ export async function recoverServer(options) {
       options,
       undefined,
       undefined,
-      plannersOnly ? (options.report ?? (() => {})) : undefined,
+      plannersOnly ? (message) => options.report?.(`Planner ${message}`) : undefined,
     );
   if (!plannersOnly && state.stuck.length && (await completedServerTraffic(options)))
     return { retried };
@@ -621,12 +621,25 @@ export async function healthCommand(command, options, { report, output }) {
       report(`CI route: ${answer.route}; ${answer.reason}`);
       if (answer.blind) report(`CI_ROUTE_BLIND run=${options.runId} attempt=${options.attempt}`);
     } else if (command === "check") {
-      const state = await serverHealth(options);
+      let short = false;
+      const state = await serverHealth(
+        { ...options, plannersOnly: false },
+        undefined,
+        undefined,
+        (message) => {
+          short = true;
+          report(`Queued workflow ${message}`);
+        },
+      );
       assert.ok(
         !state.stuck.length || serverFull(options) || (await completedServerTraffic(options)),
         `SERVER STUCK: runs ${state.stuck.map((run) => run.id).join(", ")} have waited five minutes without server progress.`,
       );
-      report("No stalled server queue needs attention.");
+      report(
+        short
+          ? "Queued workflow inventory was short; no stall was seen in inspected runs; unread runs may contain waiting work."
+          : "No stalled server queue needs attention.",
+      );
     } else if (command === "recover" || command === "recover-planners") {
       const { retried, preserved = [] } = await recoverServer({
         ...options,

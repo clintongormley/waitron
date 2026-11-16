@@ -9,7 +9,7 @@ Request: `~/waitron-campaign-i/questions.md`, watcher 2026-11-16 15:20:
 
 **Finish line:** standalone `check` inspects the workflow rows GitHub returned after
 its existing reread ends short, rather than abandoning those rows. It reports the
-observation's limits. The schedule backstop below is a proposal, not a build.
+observation's limits. The schedule backstop was dropped by the watcher before build.
 
 **Evidence:** `~/waitron-campaign-i/receipts/firing-20261116-1520/`.
 `scheduled-health.log:538` captures run 43882357125's queued workflow list:
@@ -52,19 +52,10 @@ No workflow, shared-script, controller, cache, record or cancellation-policy cha
       listed docs with a few sentences; retain the broad routing qualification and A935.
       These fixtures prove neither natural recovery nor GitHub's internal cause.
 
-**Schedule proposal, separately cleared before implementation:** No, schedule alone is
-not enough. The existing hosted `server-queue-watchdog` dispatches health but depends
-on `changes`, so it cannot rescue a waiting planner (`ci.yml:4002,4160`). Reuse the machine-local
-`~/waitron-campaign-shared/watch-stalls.sh` server-stuck alarm. When its existing
-status-backed conditions find old waiting work, free slots and no recent admission,
-read Server health history. With no queued/running pass and none created for ten
-minutes, dispatch existing `server-health.yml` on `main` under its existing 30-minute
-alarm suppression. Unreadable history reports uncertainty. Add no service or scheduler.
-Mac off and GitHub/API outages remain limits; schedule alone cannot guarantee cadence.
-
-| Source                                                                                                                                             | Source words                                                              | Implication                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [GitHub schedule docs](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), read 2026-11-16 | “The `schedule` event can be delayed”; “some queued jobs may be dropped.” | Keep an independent trigger available; this capture proves only the measured gap. |
+**Watcher amendment, 2026-11-16 15:36:** queued-only read-only repair cleared;
+probe stays strict. The watcher accepted the timing correction and dropped both
+schedule dispatch and alarm additions because their incident premise did not happen.
+No schedule tooling is built. The broader pickup cause remains unproved.
 
 Expected physical additions plus deletions: production 5–20, tests 40–85, docs
 80–90 including this plan; total 125–195, outside scope opinion above 292.5.
@@ -74,4 +65,4 @@ and authorised landing. Record changed test checks; preserve the qualification r
 
 Claude reviewed the initial plan once (218 seconds). Driver revisions narrow the
 exception to queued discovery, preserve every existing refusal assertion, name the
-actual missing-target capture, and shrink the build. Watcher clearance is pending.
+actual missing-target capture, and shrink the build. Watcher cleared the smaller repair on 16 November at 15:36.
