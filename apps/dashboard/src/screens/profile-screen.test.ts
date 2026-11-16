@@ -72,7 +72,6 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       passkeys: [
         {
           id: "credential",
-          name: null,
           createdAt: "2026-09-09T12:00:00Z",
           lastUsedAt: null,
           provider: null,
@@ -334,24 +333,35 @@ describe("your profile", () => {
     expect(api.changePassword).toHaveBeenCalledWith({ password: "replacement password" });
     await expectNoA11yViolations(host);
   });
-  it("shows a passkey's name and keeps a numbered fallback for unnamed keys", async () => {
+  it("labels a passkey by its provider, or Passkey N when the provider is unknown", async () => {
     const { el, api } = await mount();
-    expect(el.shadowRoot!.textContent).toContain("Passkey 1");
     const profile = await api.getProfile();
     Object.assign(el, {
-      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Work laptop" }] },
+      profile: {
+        ...profile,
+        passkeys: [
+          { ...profile.passkeys[0], provider: "iCloud Keychain" },
+          { ...profile.passkeys[0], id: "other", provider: null },
+        ],
+      },
     });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain("Work laptop");
-    expect(
-      el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
-    ).toBe(t("profile.remove_passkey_name").replace("{name}", "Work laptop"));
+    const labels = [...el.shadowRoot!.querySelectorAll(".passkey-text")].map(
+      (row) => row.textContent,
+    );
+    expect(labels[0]).toContain("iCloud Keychain");
+    expect(labels[1]).toContain("Passkey 2");
+    const buttons = [...el.shadowRoot!.querySelectorAll("[data-test=remove-passkey]")];
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      t("profile.remove_passkey_name").replace("{name}", "iCloud Keychain"),
+      t("profile.remove_passkey_name").replace("{name}", "Passkey 2"),
+    ]);
   });
   it("names a passkey's Remove button by a name holding a replacement pattern as written", async () => {
     const { el, api } = await mount();
     const profile = await api.getProfile();
     Object.assign(el, {
-      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Laptop $&" }] },
+      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], provider: "Laptop $&" }] },
     });
     await flush(el);
     expect(
@@ -383,14 +393,12 @@ describe("your profile", () => {
   describe("each passkey's provider and last use", () => {
     const used = {
       id: "used",
-      name: "Phone",
       createdAt: "2026-09-09T12:00:00Z",
       lastUsedAt: "2026-09-28T08:30:00Z",
       provider: "Google Password Manager",
     };
     const neverUsed = {
       id: "never",
-      name: "Spare key",
       createdAt: "2026-09-10T12:00:00Z",
       lastUsedAt: null,
       provider: null,
@@ -433,11 +441,13 @@ describe("your profile", () => {
             provider: "Google Password Manager",
           };
           const [first, second] = await rows([
-            { ...sameDay, id: "replaced", name: null, lastUsedAt: "2026-09-30T09:05:00Z" },
-            { ...sameDay, id: "current", name: null, lastUsedAt: "2026-09-30T17:40:00Z" },
+            { ...sameDay, id: "replaced", lastUsedAt: "2026-09-30T09:05:00Z" },
+            { ...sameDay, id: "current", lastUsedAt: "2026-09-30T17:40:00Z" },
           ]);
-          expect(first).toContain(`Google Password Manager · ${morning}`);
-          expect(second).toContain(`Google Password Manager · ${evening}`);
+          expect(first).toContain("Google Password Manager");
+          expect(first).toContain(morning);
+          expect(second).toContain("Google Password Manager");
+          expect(second).toContain(evening);
           expect(first).not.toContain(evening);
           expect(second).not.toContain(morning);
         } finally {
@@ -464,7 +474,7 @@ describe("your profile", () => {
         const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
         tabs.shadowRoot!.querySelector<HTMLElement>("[role=tab][data-key=security]")!.click();
         await flush(el);
-        const meta = el.shadowRoot!.querySelector(".passkey-item .field-meta")!;
+        const meta = el.shadowRoot!.querySelector(".passkey-item")!;
         const range = document.createRange();
         const walker = document.createTreeWalker(meta, NodeFilter.SHOW_TEXT);
         let found = false;
@@ -493,8 +503,8 @@ describe("your profile", () => {
       expect(second).not.toContain("Google Password Manager");
     });
 
-    it("names the password manager once when the passkey is already named after it", async () => {
-      const [row] = await rows([{ ...used, name: "Google Password Manager" }]);
+    it("names the password manager once per passkey", async () => {
+      const [row] = await rows([used]);
       expect(row!.split("Google Password Manager")).toHaveLength(2);
     });
   });

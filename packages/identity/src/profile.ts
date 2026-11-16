@@ -1,3 +1,4 @@
+import { insertSignInChallenge } from "./sign-in-challenges.js";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
@@ -7,7 +8,7 @@ import {
   accountActions,
   webauthnCredentials,
   tillSessions,
-  totpEnrollments,
+  signInChallenges,
   recoveryCodes,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -165,18 +166,22 @@ export async function beginOwnTotpEnrollment(
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
   const secret = generateTotpSecret();
-  const expiresAt = new Date(Date.now() + TOTP_ENROLLMENT_TTL_MS).toISOString();
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
-  const [row] = await tx
-    .insert(totpEnrollments)
-    .values({
-      personId: person.id,
-      encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
-      expiresAt,
-    })
-    .returning({ id: totpEnrollments.id });
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + TOTP_ENROLLMENT_TTL_MS).toISOString();
+  await tx
+    .delete(signInChallenges)
+    .where(
+      and(eq(signInChallenges.personId, person.id), eq(signInChallenges.kind, "totp_enrolment")),
+    );
+  const enrollmentId = await insertSignInChallenge(tx, {
+    kind: "totp_enrolment",
+    personId: person.id,
+    encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
+    lifetimeMs: TOTP_ENROLLMENT_TTL_MS,
+    now,
+  });
   return {
-    enrollmentId: row!.id,
+    enrollmentId,
     secret,
     uri: totpAuthUri(secret, person.email ?? person.displayName),
     expiresAt,
@@ -189,26 +194,34 @@ export async function finishOwnTotpEnrollment(
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   const [enrollment] = await tx
-    .select({ encryptedSecret: totpEnrollments.encryptedSecret })
-    .from(totpEnrollments)
+    .select({ encryptedSecret: signInChallenges.encryptedSecret })
+    .from(signInChallenges)
     .where(
       and(
-        eq(totpEnrollments.id, input.enrollmentId),
-        eq(totpEnrollments.personId, person.id),
-        gt(totpEnrollments.expiresAt, new Date().toISOString()),
+        eq(signInChallenges.id, input.enrollmentId),
+        eq(signInChallenges.kind, "totp_enrolment"),
+        eq(signInChallenges.personId, person.id),
+        gt(signInChallenges.expiresAt, new Date().toISOString()),
         // A later expiry was stamped before a backward clock step, and counts as passed.
-        lte(totpEnrollments.expiresAt, new Date(Date.now() + TOTP_ENROLLMENT_TTL_MS).toISOString()),
+        lte(
+          signInChallenges.expiresAt,
+          new Date(Date.now() + TOTP_ENROLLMENT_TTL_MS).toISOString(),
+        ),
       ),
     );
   const secret =
-    enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret, input.keyRing);
+    enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret!, input.keyRing);
   if (secret === null || !verifyTotp(input.code, secret.secret))
     throw new AppError("totp.invalid", {});
   await tx
     .update(persons)
     .set({ totpSecret: enrollment!.encryptedSecret })
     .where(eq(persons.id, person.id));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.id, input.enrollmentId));
+  await tx
+    .delete(signInChallenges)
+    .where(
+      and(eq(signInChallenges.id, input.enrollmentId), eq(signInChallenges.kind, "totp_enrolment")),
+    );
   const codes = await replaceRecoveryCodes(tx, person.id);
   await queueSecurityChangeMail(tx, { personId: person.id, change: "authenticator_set_up" });
   return { codes };
@@ -230,7 +243,11 @@ export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials
   await verifyCurrent(tx, person, input);
   await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
+  await tx
+    .delete(signInChallenges)
+    .where(
+      and(eq(signInChallenges.personId, person.id), eq(signInChallenges.kind, "totp_enrolment")),
+    );
   if (person.totpSecret !== null)
     await queueSecurityChangeMail(tx, { personId: person.id, change: "authenticator_removed" });
 }
@@ -255,7 +272,6 @@ export async function readPasskeys(tx: Transaction, personId: string) {
   const rows = await tx
     .select({
       id: webauthnCredentials.id,
-      name: webauthnCredentials.name,
       createdAt: webauthnCredentials.createdAt,
       lastUsedAt: webauthnCredentials.lastUsedAt,
       aaguid: webauthnCredentials.aaguid,

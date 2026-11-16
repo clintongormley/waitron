@@ -1,15 +1,5 @@
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
-import {
-  bigCount,
-  enumCheck,
-  enumType,
-  id,
-  label,
-  newId,
-  nowIso,
-  table,
-  tsString,
-} from "../columns.js";
+import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { bigCount, id, label, newId, nowIso, table, tsString } from "../columns.js";
 import { persons } from "./persons.js";
 
 /**
@@ -23,7 +13,6 @@ export const webauthnCredentials = table(
     personId: id("person_id").notNull(),
     /** The credential id the authenticator returned, base64url. */
     credentialId: label("credential_id").notNull(),
-    name: label("name"),
     /** base64url of the COSE public key. */
     publicKey: label("public_key").notNull(),
     /** The authenticator's signature counter, kept to detect a cloned authenticator. */
@@ -49,27 +38,4 @@ export const webauthnCredentials = table(
     unique("webauthn_credentials_credential_id_uq").on(t.credentialId),
     index("webauthn_credentials_person_idx").on(t.personId),
   ],
-);
-
-/**
- * The ceremony that issued a challenge, and the only one that accepts it: enrolling a passkey, the
- * public sign-in, or a signed-in person's check of their own passkey.
- */
-export const challengePurpose = enumType(["registration", "login", "check"]);
-
-/**
- * Consumed by `consumeChallenge` (`packages/identity/src/passkey.ts`). An expired challenge is
- * refused at consume time by the `CHALLENGE_TTL_MS` check, not swept: there is no sweep job.
- */
-export const webauthnChallenges = table(
-  "webauthn_challenges",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    /** null for a login (discoverable) ceremony, where the person is not yet known. */
-    personId: id("person_id"),
-    challenge: label("challenge").notNull(),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    purpose: challengePurpose("purpose").notNull(),
-  },
-  (t) => [check("webauthn_challenges_purpose_ck", enumCheck(t.purpose))],
 );

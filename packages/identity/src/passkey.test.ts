@@ -6,7 +6,7 @@ import {
   withTransaction,
   dashboardSessions,
   persons,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -131,7 +131,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.useRealTimers();
   await run((tx) => tx.delete(webauthnCredentials));
-  await run((tx) => tx.delete(webauthnChallenges));
+  await run((tx) => tx.delete(signInChallenges));
 });
 
 /** Freezes `Date` for the rest of the test, so a boundary is exact whatever the calls between take. */
@@ -150,11 +150,11 @@ describe("passkey registration", () => {
     expect(begun.options.challenge).toBeTruthy();
 
     const stored = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.personId).toBe(personId);
-    expect(stored[0]!.purpose).toBe("registration");
+    expect(stored[0]!.kind).toBe("passkey_registration");
 
     const done = await finish(token, begun.challengeHandle);
     expect(done.credentialId).toBe("cred-abc");
@@ -172,7 +172,7 @@ describe("passkey registration", () => {
     });
 
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(0);
   });
@@ -376,7 +376,7 @@ describe("passkey registration", () => {
     expect(creds).toHaveLength(0);
     // The throw rolls finish's transaction back, so the challenge survives for a retry.
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
     expect(
@@ -393,14 +393,26 @@ describe("passkey registration", () => {
     expect(mockVerify).not.toHaveBeenCalled();
   });
 
+  it("refuses an expired registration swept by another person's insert as unknown", async () => {
+    freezeDate();
+    const first = await openManagementSession(suite.db, "admin");
+    const second = await openManagementSession(suite.db, "admin");
+    const begun = await begin(first.token);
+    vi.setSystemTime(new Date("2026-10-31T12:06:00.000Z"));
+    await begin(second.token);
+    expect(await codeOf(() => finish(first.token, begun.challengeHandle))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
   it("throws passkey.challenge_expired once the challenge is older than CHALLENGE_TTL_MS", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const begun = await begin(token);
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 60_000).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
@@ -415,9 +427,9 @@ describe("passkey registration", () => {
     const begun = await begin(token);
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() + 60_001).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
@@ -433,9 +445,9 @@ describe("passkey registration", () => {
     const begun = await begin(token);
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() + 60_000).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
@@ -456,7 +468,7 @@ describe("passkey registration", () => {
     const creds = await run((tx) => tx.select().from(webauthnCredentials));
     expect(creds).toHaveLength(0);
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
   });
@@ -503,14 +515,15 @@ describe("passkey authentication", () => {
   it("removes expired anonymous login challenges while retaining live ceremonies", async () => {
     const live = await beginAuth();
     await run((tx) =>
-      tx.insert(webauthnChallenges).values({
+      tx.insert(signInChallenges).values({
         challenge: "expired-login",
-        purpose: "login",
+        kind: "passkey_login",
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
         createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 1000).toISOString(),
       }),
     );
     const next = await beginAuth();
-    const rows = await run((tx) => tx.select().from(webauthnChallenges));
+    const rows = await run((tx) => tx.select().from(signInChallenges));
     expect(rows.map((row) => row.id).sort()).toEqual(
       [live.challengeHandle, next.challengeHandle].sort(),
     );
@@ -536,10 +549,10 @@ describe("passkey authentication", () => {
     expect(begun.options.challenge).toBeTruthy();
 
     const [chalRow] = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chalRow!.personId).toBeNull();
-    expect(chalRow!.purpose).toBe("login");
+    expect(chalRow!.kind).toBe("passkey_login");
 
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     expect(session.personId).toBe(personId);
@@ -551,7 +564,7 @@ describe("passkey authentication", () => {
     expect(cred!.counter).toBe(1);
 
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(0);
 
@@ -688,7 +701,7 @@ describe("passkey authentication", () => {
     );
     expect(cred!.counter).toBe(7);
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
     const opened = await run((tx) =>
@@ -712,9 +725,9 @@ describe("passkey authentication", () => {
     const begun = await beginAuth();
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 60_000).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
@@ -722,7 +735,7 @@ describe("passkey authentication", () => {
     );
     expect(mockVerifyAuth).not.toHaveBeenCalled();
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
   });
@@ -734,9 +747,9 @@ describe("passkey authentication", () => {
     const begun = await beginAuth();
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() + 60_001).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
@@ -928,10 +941,10 @@ describe("checking the signed-in person's own passkey", () => {
     const begun = await beginCheck(token);
 
     const [row] = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(row!.personId).toBe(personId);
-    expect(row!.purpose).toBe("check");
+    expect(row!.kind).toBe("passkey_check");
     expect(row!.challenge).toBe(begun.options.challenge);
     expect(begun.options.allowCredentials?.map((c) => c.id)).toEqual(["cred-mine"]);
     expect(begun.options.userVerification).toBe("required");
@@ -940,7 +953,7 @@ describe("checking the signed-in person's own passkey", () => {
   it("refuses a person who holds no passkey as passkey.not_registered, storing no challenge", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     expect(await codeOf(() => beginCheck(token))).toBe("passkey.not_registered");
-    expect(await run((tx) => tx.select().from(webauthnChallenges))).toHaveLength(0);
+    expect(await run((tx) => tx.select().from(signInChallenges))).toHaveLength(0);
   });
 
   it("accepts the person's own passkey, starting no session and updating the passkey's counter and last use", async () => {
@@ -967,7 +980,7 @@ describe("checking the signed-in person's own passkey", () => {
       credential: { id: "cred-abc", counter: 3 },
     });
     const chal = await run((tx) =>
-      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+      tx.select().from(signInChallenges).where(eq(signInChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(0);
   });
@@ -1042,9 +1055,9 @@ describe("checking the signed-in person's own passkey", () => {
     const begun = await beginCheck(token);
     await run((tx) =>
       tx
-        .update(webauthnChallenges)
+        .update(signInChallenges)
         .set({ createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 60_000).toISOString() })
-        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+        .where(eq(signInChallenges.id, begun.challengeHandle)),
     );
 
     expect(await codeOf(() => check(token, begun.challengeHandle, "cred-mine"))).toBe(

@@ -963,7 +963,7 @@ export class ProfileScreen extends LitElement {
           </div>
           ${p.passkeys.map((key, index) => {
             const name =
-              key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
+              key.provider ?? t("profile.passkey_number").replace("{number}", String(index + 1));
             const created = fill("profile.passkey_added", { date: inLocale(key.createdAt, DAY) });
             const lastUsed =
               key.lastUsedAt === null

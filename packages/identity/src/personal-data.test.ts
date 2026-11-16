@@ -4,14 +4,12 @@ import {
   CORE_MIGRATIONS,
   withTransaction,
   persons,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
   recoveryCodes,
   tillSessions,
   dashboardSessions,
   accountActions,
-  totpEnrollments,
-  googleOidcStates,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
@@ -98,7 +96,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     {
       personId,
       credentialId: secrets.credentialIds[1]!,
-      name: s("Laptop key"),
       publicKey: secrets.publicKeys[1]!,
       counter: 7,
       transports: '["usb"]',
@@ -109,7 +106,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     {
       personId,
       credentialId: secrets.credentialIds[0]!,
-      name: s("Phone key"),
       publicKey: secrets.publicKeys[0]!,
       counter: 3,
       transports: '["internal"]',
@@ -213,30 +209,44 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     },
   ]);
 
-  await db.insert(totpEnrollments).values([
+  await db.insert(signInChallenges).values([
     {
       personId,
-      encryptedSecret: secrets.enrollmentCiphertexts[1]!,
-      createdAt: t(35),
-      expiresAt: t(36),
-    },
-    {
-      personId,
+      kind: "totp_enrolment",
       encryptedSecret: secrets.enrollmentCiphertexts[0]!,
       createdAt: t(30),
       expiresAt: t(31),
     },
   ]);
   // The third is a fresh sign-in check of a passkey the person already holds, not a setup.
-  await db.insert(webauthnChallenges).values([
-    { personId, challenge: secrets.challenges[1]!, createdAt: t(37), purpose: "registration" },
-    { personId, challenge: secrets.challenges[0]!, createdAt: t(32), purpose: "registration" },
-    { personId, challenge: secrets.challenges[2]!, createdAt: t(39), purpose: "check" },
+  await db.insert(signInChallenges).values([
+    {
+      personId,
+      challenge: secrets.challenges[1]!,
+      createdAt: t(37),
+      expiresAt: t(38),
+      kind: "passkey_registration",
+    },
+    {
+      personId,
+      challenge: secrets.challenges[0]!,
+      createdAt: t(32),
+      expiresAt: t(33),
+      kind: "passkey_registration",
+    },
+    {
+      personId,
+      challenge: secrets.challenges[2]!,
+      createdAt: t(39),
+      expiresAt: t(40),
+      kind: "passkey_check",
+    },
   ]);
-  await db.insert(googleOidcStates).values(
+  await db.insert(signInChallenges).values(
     [1, 0].map((i) => ({
       personId,
-      mode: "link",
+      kind: "google_link" as const,
+      createdAt: t(0),
       stateHash: secrets.stateHashes[i]!,
       nonce: secrets.nonces[i]!,
       verifier: secrets.verifiers[i]!,
@@ -271,11 +281,18 @@ async function seedSignInsWithNoPerson(db: Database): Promise<string[]> {
   const challenge = "nobody-sign-in-challenge-secret";
   const stateHash = hash64("nobody-google-state");
   await db
-    .insert(webauthnChallenges)
-    .values({ personId: null, challenge, createdAt: at(2024, 1), purpose: "login" });
-  await db.insert(googleOidcStates).values({
+    .insert(signInChallenges)
+    .values({
+      personId: null,
+      challenge,
+      createdAt: at(2024, 1),
+      expiresAt: at(2024, 2),
+      kind: "passkey_login",
+    });
+  await db.insert(signInChallenges).values({
     personId: null,
-    mode: "login",
+    kind: "google_login",
+    createdAt: at(2024, 1),
     stateHash,
     nonce: "nobody-nonce-secret",
     verifier: "nobody-verifier-secret",
@@ -346,8 +363,8 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       googleLinked: true,
       passkeyOfferedAt: t(1),
       passkeys: [
-        { name: "marta-Phone key", provider: "1Password", createdAt: t(3), lastUsedAt: t(5) },
-        { name: "marta-Laptop key", provider: null, createdAt: t(4), lastUsedAt: null },
+        { provider: "1Password", createdAt: t(3), lastUsedAt: t(5) },
+        { provider: null, createdAt: t(4), lastUsedAt: null },
       ],
       recoveryCodes: { unused: 3, used: 2 },
       dashboardSessions: [
@@ -395,7 +412,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       ],
       unfinishedSetups: [
         { kind: "two-factor", startedAt: t(30), expiresAt: t(31) },
-        { kind: "two-factor", startedAt: t(35), expiresAt: t(36) },
         { kind: "passkey", startedAt: t(32), expiresAt: null },
         { kind: "passkey", startedAt: t(37), expiresAt: null },
         { kind: "google-link", startedAt: null, expiresAt: t(33) },

@@ -43,7 +43,7 @@ export {
   persons,
   personStatus,
   tillSessions,
-  webauthnChallenges,
+  signInChallenges,
   webauthnCredentials,
 } from "@waitron/db";
 export type { Session } from "./login.js";

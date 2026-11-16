@@ -4,29 +4,49 @@ import { enumCheck, enumType, id, label, newId, table, tsString } from "../colum
 import { persons } from "./persons.js";
 
 export const signInChallengeKind = enumType([
-  "passkey_registration", "passkey_login", "passkey_check",
-  "google_login", "google_link", "totp_enrolment",
+  "passkey_registration",
+  "passkey_login",
+  "passkey_check",
+  "google_login",
+  "google_link",
+  "totp_enrolment",
 ]);
-export const signInChallenges = table("sign_in_challenges", {
-  id: id("id").primaryKey().$defaultFn(newId),
-  kind: signInChallengeKind("kind").notNull(),
-  personId: id("person_id"),
-  challenge: label("challenge"),
-  stateHash: label("state_hash"),
-  nonce: label("nonce"),
-  verifier: label("verifier"),
-  encryptedSecret: label("encrypted_secret"),
-  createdAt: tsString("created_at").notNull(),
-  expiresAt: tsString("expires_at").notNull(),
-}, (t) => [
-  foreignKey({ columns: [t.personId], foreignColumns: [persons.id], name: "sign_in_challenges_person_fk" }).onDelete("cascade"),
-  index("sign_in_challenges_person_idx").on(t.personId),
-  uniqueIndex("sign_in_challenges_state_hash_uq").on(t.stateHash).where(sql`${t.stateHash} is not null`),
-  uniqueIndex("sign_in_challenges_totp_person_uq").on(t.personId).where(sql`${t.kind} = 'totp_enrolment'`),
-  check("sign_in_challenges_kind_ck", enumCheck(t.kind)),
-  check("sign_in_challenges_state_hash_ck", sql`${t.stateHash} is null or length(${t.stateHash}) = 64`),
-  check("sign_in_challenges_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
-  check("sign_in_challenges_shape_ck", sql`
+export const signInChallenges = table(
+  "sign_in_challenges",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    kind: signInChallengeKind("kind").notNull(),
+    personId: id("person_id"),
+    challenge: label("challenge"),
+    stateHash: label("state_hash"),
+    nonce: label("nonce"),
+    verifier: label("verifier"),
+    encryptedSecret: label("encrypted_secret"),
+    createdAt: tsString("created_at").notNull(),
+    expiresAt: tsString("expires_at").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "sign_in_challenges_person_fk",
+    }).onDelete("cascade"),
+    index("sign_in_challenges_person_idx").on(t.personId),
+    uniqueIndex("sign_in_challenges_state_hash_uq")
+      .on(t.stateHash)
+      .where(sql`${t.stateHash} is not null`),
+    uniqueIndex("sign_in_challenges_totp_person_uq")
+      .on(t.personId)
+      .where(sql`${t.kind} = 'totp_enrolment'`),
+    check("sign_in_challenges_kind_ck", enumCheck(t.kind)),
+    check(
+      "sign_in_challenges_state_hash_ck",
+      sql`${t.stateHash} is null or length(${t.stateHash}) = 64`,
+    ),
+    check("sign_in_challenges_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
+    check(
+      "sign_in_challenges_shape_ck",
+      sql`
     (${t.kind} in ('passkey_registration', 'passkey_login', 'passkey_check')
       and ${t.challenge} is not null and ${t.stateHash} is null and ${t.nonce} is null
       and ${t.verifier} is null and ${t.encryptedSecret} is null
@@ -40,5 +60,7 @@ export const signInChallenges = table("sign_in_challenges", {
     or (${t.kind} = 'totp_enrolment' and ${t.encryptedSecret} is not null
       and length(${t.encryptedSecret}) > 0 and ${t.personId} is not null
       and ${t.challenge} is null and ${t.stateHash} is null and ${t.nonce} is null and ${t.verifier} is null)
-  `),
-]);
+  `,
+    ),
+  ],
+);

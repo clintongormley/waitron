@@ -8,18 +8,39 @@ import { useVenueDb } from "../../testing/venue-db.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let personId: string;
-beforeEach(async () => { personId = await seedPerson(suite.db); });
-const kinds = ["passkey_registration", "passkey_login", "passkey_check", "google_login", "google_link", "totp_enrolment"] as const;
-type Row = { kind: string; personId: string | null; challenge: string | null; stateHash: string | null; nonce: string | null; verifier: string | null; encryptedSecret: string | null; createdAt: string; expiresAt: string };
-function row(kind: typeof kinds[number]): Row {
+beforeEach(async () => {
+  personId = await seedPerson(suite.db);
+});
+const kinds = [
+  "passkey_registration",
+  "passkey_login",
+  "passkey_check",
+  "google_login",
+  "google_link",
+  "totp_enrolment",
+] as const;
+type Row = {
+  kind: string;
+  personId: string | null;
+  challenge: string | null;
+  stateHash: string | null;
+  nonce: string | null;
+  verifier: string | null;
+  encryptedSecret: string | null;
+  createdAt: string;
+  expiresAt: string;
+};
+function row(kind: (typeof kinds)[number]): Row {
   return {
-    kind, personId: kind.endsWith("login") ? null : personId,
+    kind,
+    personId: kind.endsWith("login") ? null : personId,
     challenge: kind.startsWith("passkey_") ? "challenge" : null,
     stateHash: kind.startsWith("google_") ? "a".repeat(64) : null,
     nonce: kind.startsWith("google_") ? "nonce" : null,
     verifier: kind.startsWith("google_") ? "verifier" : null,
     encryptedSecret: kind === "totp_enrolment" ? "sealed" : null,
-    createdAt: "2026-11-16T12:00:00.000Z", expiresAt: "2026-11-16T12:05:00.000Z",
+    createdAt: "2026-11-16T12:00:00.000Z",
+    expiresAt: "2026-11-16T12:05:00.000Z",
   };
 }
 async function insert(r: Row) {
@@ -61,18 +82,24 @@ it.each([
   const error = await captureError(() => insert(malformed));
   expect(engineErrorMessage(error)).toContain("sign_in_challenges_shape_ck");
 });
-it.each(["", "a".repeat(63), "a".repeat(65)])("refuses a Google state hash of the wrong length (%s)", async (stateHash) => {
-  const error = await captureError(() => insert({ ...row("google_login"), stateHash }));
-  expect(engineErrorMessage(error)).toContain("sign_in_challenges_state_hash_ck");
-});
+it.each(["", "a".repeat(63), "a".repeat(65)])(
+  "refuses a Google state hash of the wrong length (%s)",
+  async (stateHash) => {
+    const error = await captureError(() => insert({ ...row("google_login"), stateHash }));
+    expect(engineErrorMessage(error)).toContain("sign_in_challenges_state_hash_ck");
+  },
+);
 it("refuses an unknown kind", async () => {
   const error = await captureError(() => insert({ ...row("passkey_login"), kind: "unknown" }));
   expect(engineErrorMessage(error)).toContain("sign_in_challenges_kind_ck");
 });
-it.each(["2026-11-16T12:00:00.000Z", "2026-11-16T11:59:59.999Z"])("refuses expiry at or before creation (%s)", async (expiresAt) => {
-  const error = await captureError(() => insert({ ...row("passkey_login"), expiresAt }));
-  expect(engineErrorMessage(error)).toContain("sign_in_challenges_expiry_ck");
-});
+it.each(["2026-11-16T12:00:00.000Z", "2026-11-16T11:59:59.999Z"])(
+  "refuses expiry at or before creation (%s)",
+  async (expiresAt) => {
+    const error = await captureError(() => insert({ ...row("passkey_login"), expiresAt }));
+    expect(engineErrorMessage(error)).toContain("sign_in_challenges_expiry_ck");
+  },
+);
 it("refuses a second pending two-step setup for one person", async () => {
   await insert(row("totp_enrolment"));
   const error = await captureError(() => insert(row("totp_enrolment")));
@@ -81,7 +108,9 @@ it("refuses a second pending two-step setup for one person", async () => {
 it("accepts two-step setups for two people", async () => {
   await insert(row("totp_enrolment"));
   const other = await seedPerson(suite.db, { displayName: "Other person" });
-  expect((await insert({ ...row("totp_enrolment"), personId: other })).rows).toEqual([{ kind: "totp_enrolment" }]);
+  expect((await insert({ ...row("totp_enrolment"), personId: other })).rows).toEqual([
+    { kind: "totp_enrolment" },
+  ]);
 });
 it("refuses two rows with the same state hash", async () => {
   await insert(row("google_login"));
@@ -89,7 +118,9 @@ it("refuses two rows with the same state hash", async () => {
   expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: sign_in_challenges.state_hash");
 });
 it("refuses a row for a person who does not exist", async () => {
-  const error = await captureError(() => insert({ ...row("passkey_registration"), personId: randomUUID() }));
+  const error = await captureError(() =>
+    insert({ ...row("passkey_registration"), personId: randomUUID() }),
+  );
   expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
 });
 it("deletes a person's challenges with the person", async () => {
@@ -97,5 +128,7 @@ it("deletes a person's challenges with the person", async () => {
   await insert(row("totp_enrolment"));
   await insert(row("google_login"));
   await suite.db.execute(sql`delete from persons where id = ${personId}`);
-  expect((await suite.db.execute(sql`select kind from sign_in_challenges`)).rows).toEqual([{ kind: "google_login" }]);
+  expect((await suite.db.execute(sql`select kind from sign_in_challenges`)).rows).toEqual([
+    { kind: "google_login" },
+  ]);
 });

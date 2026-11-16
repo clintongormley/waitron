@@ -123,9 +123,10 @@ beforeEach(async () => {
     suite.db.run(
       sql`insert into person_staff_roles (person_id, staff_role_id) values (${person}, 'job')`,
     );
-    await suite.db.insert(schema.totpEnrollments).values({
+    await suite.db.insert(schema.signInChallenges).values({
       id: person,
       personId: second,
+      kind: "totp_enrolment",
       encryptedSecret: pending,
       expiresAt: end,
       createdAt: old,
@@ -166,12 +167,20 @@ beforeEach(async () => {
       lastUsedAt: now,
     });
     await suite.db
-      .insert(schema.webauthnChallenges)
-      .values({ id: person, personId: null, challenge: "AQID", createdAt: old, purpose: "login" });
-    await suite.db.insert(schema.googleOidcStates).values({
-      id: person,
+      .insert(schema.signInChallenges)
+      .values({
+        id: `${person}-passkey`,
+        personId: null,
+        challenge: "AQID",
+        createdAt: old,
+        expiresAt: end,
+        kind: "passkey_login",
+      });
+    await suite.db.insert(schema.signInChallenges).values({
+      id: `${person}-google`,
       personId: null,
-      mode: "login",
+      kind: "google_login",
+      createdAt: old,
       stateHash: digest,
       nonce: Buffer.alloc(32, 3).toString("base64url"),
       verifier: Buffer.alloc(48, 4).toString("base64url"),
@@ -294,16 +303,23 @@ describe("identity offline backup owner", () => {
   it.each(["before", "after", "both"] as const)(
     "authenticates pending enrolment ciphertext in %s",
     async (side) => {
-      damage("update totp_enrollments set encrypted_secret='" + tamper(pending) + "'", side);
+      damage(
+        "update sign_in_challenges set encrypted_secret='" +
+          tamper(pending) +
+          "' where kind='totp_enrolment'",
+        side,
+      );
       await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
     },
   );
-  it.each(["persons", "totp_enrollments"])(
+  it.each(["persons", "sign_in_challenges"])(
     "unknown stored TOTP version stays unsupported: %s",
     async (table) => {
       const column = table === "persons" ? "totp_secret" : "encrypted_secret";
       const value = encryptTotpSecret(secret, { version: 7, key: vault });
-      damage(`update ${table} set ${column}='${value}'`);
+      damage(
+        `update ${table} set ${column}='${value}'${table === "sign_in_challenges" ? " where kind='totp_enrolment'" : ""}`,
+      );
       expect(await run()).toEqual(verdict("passed", "unsupported"));
     },
   );
@@ -317,7 +333,9 @@ describe("identity offline backup owner", () => {
   it.each(["v1.1.a.b", "v1.1.AA.AA.AA"])(
     "malformed known ciphertext is invalid: %s",
     async (value) => {
-      damage(`update totp_enrollments set encrypted_secret='${value}'`);
+      damage(
+        `update sign_in_challenges set encrypted_secret='${value}' where kind='totp_enrolment'`,
+      );
       expect(await run()).toEqual(verdict("passed", "invalid"));
     },
   );
@@ -325,7 +343,9 @@ describe("identity offline backup owner", () => {
     "authenticated malformed plaintext is invalid: %s",
     async (value) => {
       const encryptedBad = encryptTotpSecret(value, { version: 1, key: totpKey });
-      damage(`update totp_enrollments set encrypted_secret='${encryptedBad}'`);
+      damage(
+        `update sign_in_challenges set encrypted_secret='${encryptedBad}' where kind='totp_enrolment'`,
+      );
       expect(await run()).toEqual(verdict("passed", "invalid"));
     },
   );
@@ -371,14 +391,14 @@ describe("identity offline backup owner", () => {
     ["staff_roles", "name='Changed role'"],
     ["staff_roles", "hidden_at='2026-11-12T12:00:00.000Z'"],
     ["persons", "display_name='Changed'"],
-    ["totp_enrollments", "expires_at='2026-10-21T00:00:00.000Z'"],
+    ["sign_in_challenges", "expires_at='2026-10-21T00:00:00.000Z' where kind='totp_enrolment'"],
     ["account_actions", "code_attempts=3"],
     ["webauthn_credentials", "counter=43"],
     ["recovery_codes", "used_at=null"],
     ["till_sessions", "ended_at=null"],
     ["dashboard_sessions", "last_seen_at='2026-10-21T00:00:00.000Z'"],
-    ["webauthn_challenges", "challenge='AQIE'"],
-    ["google_oidc_states", "nonce='AQIE'"],
+    ["sign_in_challenges", "challenge='AQIE' where kind='passkey_login'"],
+    ["sign_in_challenges", "nonce='AQIE' where kind='google_login'"],
     ["device_profile_admission_roles", "device_profile_id='other-profile'"],
   ])("preserves all captured rows in %s", async (table, change) => {
     damage(`update ${table} set ${change}`, "after");
@@ -397,30 +417,32 @@ describe("identity offline backup owner", () => {
     ["webauthn_credentials", "credential_id='@bad'"],
     ["webauthn_credentials", "counter=-1"],
     ["webauthn_credentials", "transports='{}'"],
-    ["webauthn_challenges", "challenge='@bad'"],
-    ["google_oidc_states", "state_hash='" + "z".repeat(64) + "'"],
-    ["google_oidc_states", "verifier='bad'"],
-    ["google_oidc_states", "nonce='bad'"],
+    ["sign_in_challenges", "challenge='@bad' where kind='passkey_login'"],
+    ["sign_in_challenges", "state_hash='" + "z".repeat(64) + "' where kind='google_login'"],
+    ["sign_in_challenges", "verifier='bad' where kind='google_login'"],
+    ["sign_in_challenges", "nonce='bad' where kind='google_login'"],
   ])("refuses malformed authenticator representation in %s: %s", async (table, change) => {
     damage(`update ${table} set ${change}`);
     expect(await run()).toEqual(verdict("invalid", "passed"));
   });
   it.each([
-    "till_sessions",
-    "dashboard_sessions",
-    "totp_enrollments",
-    "webauthn_challenges",
-    "google_oidc_states",
-  ])("checks stored person references on damaged copies: %s", async (table) => {
-    // A kind that names a person, so only the missing-person check can refuse the row.
-    const kind =
-      {
-        webauthn_challenges: "purpose='registration',",
-        google_oidc_states: "mode='link',",
-      }[table] ?? "";
+    ["till_sessions", ""],
+    ["dashboard_sessions", ""],
+    ["sign_in_challenges", "totp_enrolment"],
+    ["sign_in_challenges", "passkey_registration"],
+    ["sign_in_challenges", "google_link"],
+  ])("checks stored person references on damaged copies: %s %s", async (table, kind) => {
     damage("pragma foreign_keys=off");
     try {
-      damage(`update ${table} set ${kind}person_id='10000000-0000-4000-8000-999999999999'`);
+      const sourceKind =
+        kind === "passkey_registration"
+          ? "passkey_login"
+          : kind === "google_link"
+            ? "google_login"
+            : kind;
+      damage(
+        `update ${table} set ${kind ? `kind='${kind}',` : ""}person_id='10000000-0000-4000-8000-999999999999'${kind ? ` where kind='${sourceKind}'` : ""}`,
+      );
     } finally {
       damage("pragma foreign_keys=on");
     }
@@ -546,20 +568,34 @@ it("permits an absent optional email code", async () => {
   expect(await run()).toEqual(passed);
 });
 it("retains a legitimate pending Google link to a suspended person", async () => {
-  damage(`update google_oidc_states set mode='link',person_id='${second}'`);
-  damage(`update webauthn_challenges set purpose='registration',person_id='${second}'`);
+  damage(
+    `update sign_in_challenges set kind='google_link',person_id='${second}' where kind='google_login'`,
+  );
+  damage(
+    `update sign_in_challenges set kind='passkey_registration',person_id='${second}' where kind='passkey_login'`,
+  );
   expect(await run()).toEqual(passed);
 });
 it.each([
-  ["a sign-in challenge naming a person", (p: string) => `purpose='login',person_id='${p}'`],
-  ["a registration challenge naming no person", () => "purpose='registration',person_id=null"],
-  ["a fresh check challenge naming no person", () => "purpose='check',person_id=null"],
+  ["a sign-in challenge naming a person", (p: string) => `kind='passkey_login',person_id='${p}'`],
+  ["a registration challenge naming no person", () => "kind='passkey_registration',person_id=null"],
+  ["a fresh check challenge naming no person", () => "kind='passkey_check',person_id=null"],
 ])("refuses %s", async (_name, change) => {
-  damage(`update webauthn_challenges set ${change(second)}`);
+  damage("pragma ignore_check_constraints=on");
+  damage(`update sign_in_challenges set ${change(second)} where kind='passkey_login'`);
+  damage("pragma ignore_check_constraints=off");
+  expect(await run()).toEqual(verdict("invalid", "passed"));
+});
+it("refuses an unknown sign-in challenge kind", async () => {
+  damage("pragma ignore_check_constraints=on");
+  damage("update sign_in_challenges set kind='unknown' where kind='passkey_login'");
+  damage("pragma ignore_check_constraints=off");
   expect(await run()).toEqual(verdict("invalid", "passed"));
 });
 it("refuses a Google link without its person", async () => {
-  damage("update google_oidc_states set mode='link'");
+  damage("pragma ignore_check_constraints=on");
+  damage("update sign_in_challenges set kind='google_link' where kind='google_login'");
+  damage("pragma ignore_check_constraints=off");
   expect(await run()).toEqual(verdict("invalid", "passed"));
 });
 it("empty identity tables are a valid preserved set", async () => {
@@ -602,7 +638,9 @@ it.each(["A", "AAA", "AAAAAA", "AB"])(
   "refuses authenticated incomplete base32 bytes: %s",
   async (value) => {
     const cipher = encryptTotpSecret(value, { version: 1, key: totpKey });
-    damage(`update totp_enrollments set encrypted_secret='${cipher}'`);
+    damage(
+      `update sign_in_challenges set encrypted_secret='${cipher}' where kind='totp_enrolment'`,
+    );
     expect(await run()).toEqual(verdict("passed", "invalid"));
   },
 );

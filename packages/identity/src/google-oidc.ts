@@ -1,14 +1,16 @@
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, lt, lte, or } from "drizzle-orm";
-import { isUniqueViolation, googleOidcStates, persons } from "@waitron/db";
+import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { isUniqueViolation, signInChallenges, persons } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { startManagementSession } from "./management-session.js";
 import type { ManagementSession } from "./management-session.js";
 import { verifyOwnCredentials } from "./profile.js";
 import type { TotpKeyRing } from "./mfa.js";
+
+import { insertSignInChallenge } from "./sign-in-challenges.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -49,21 +51,14 @@ async function begin(
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const now = input.now ?? new Date();
-  await tx
-    .delete(googleOidcStates)
-    .where(
-      or(
-        lt(googleOidcStates.expiresAt, now.toISOString()),
-        gt(googleOidcStates.expiresAt, latestLiveExpiry(now)),
-      ),
-    );
-  await tx.insert(googleOidcStates).values({
+  await insertSignInChallenge(tx, {
+    kind: mode === "login" ? "google_login" : "google_link",
     personId,
-    mode,
     stateHash: digest(state),
     nonce,
     verifier,
-    expiresAt: new Date(now.getTime() + STATE_TTL_MS).toISOString(),
+    lifetimeMs: STATE_TTL_MS,
+    now,
   });
   const url = new URL(AUTHORIZATION_ENDPOINT);
   url.searchParams.set("client_id", input.clientId);
@@ -98,25 +93,31 @@ export async function claimGoogleState(
   input: { state: string; now?: Date },
 ): Promise<GoogleOidcClaim> {
   const rows = await tx
-    .delete(googleOidcStates)
+    .delete(signInChallenges)
     .where(
       and(
-        eq(googleOidcStates.stateHash, digest(input.state)),
-        gt(googleOidcStates.expiresAt, (input.now ?? new Date()).toISOString()),
-        lte(googleOidcStates.expiresAt, latestLiveExpiry(input.now ?? new Date())),
+        eq(signInChallenges.stateHash, digest(input.state)),
+        inArray(signInChallenges.kind, ["google_login", "google_link"]),
+        gt(signInChallenges.expiresAt, (input.now ?? new Date()).toISOString()),
+        lte(signInChallenges.expiresAt, latestLiveExpiry(input.now ?? new Date())),
       ),
     )
     .returning({
-      mode: googleOidcStates.mode,
-      personId: googleOidcStates.personId,
-      nonce: googleOidcStates.nonce,
-      verifier: googleOidcStates.verifier,
+      kind: signInChallenges.kind,
+      personId: signInChallenges.personId,
+      nonce: signInChallenges.nonce,
+      verifier: signInChallenges.verifier,
     });
   const row = rows[0];
-  if (row === undefined || (row.mode !== "login" && row.mode !== "link")) {
+  if (row === undefined) {
     throw new AppError("google.invalid", {});
   }
-  return { ...row, mode: row.mode };
+  return {
+    mode: row.kind === "google_login" ? "login" : "link",
+    personId: row.personId,
+    nonce: row.nonce!,
+    verifier: row.verifier!,
+  };
 }
 
 export async function completeGoogleLink(

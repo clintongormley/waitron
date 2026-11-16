@@ -200,8 +200,7 @@ it("admits the actual identity descriptor with all authenticator and ceremony ob
   const entry = entryCovering(inventory, "identity");
   const owner = [entry.module, ...entry.hosted].find((m) => m.name === "identity")!.backup!
     .verification!;
-  expect(owner.data.tables).toContain("totp_enrollments");
-  expect(owner.data.tables).toContain("google_oidc_states");
+  expect(owner.data.tables).toContain("sign_in_challenges");
   expect(owner.data.checks).toEqual(["data", "secret"]);
   for (const table of owner.data.tables) expect(entry.verification.data.tables).toContain(table);
   expect(entry.verification.data.checks).toEqual(expect.arrayContaining(["data", "secret"]));

@@ -419,12 +419,11 @@ describe("your profile", () => {
     // `created_at` is a `$defaultFn` generator, not a column DEFAULT, so a raw insert names it.
     const stamp = new Date().toISOString();
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,created_at) values (${credentialId},${f.personId},'own','public','Work laptop',${stamp}),(${otherId},${colleague},'other','public','Colleague laptop',${stamp})`,
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,created_at) values (${credentialId},${f.personId},'own','public',${stamp}),(${otherId},${colleague},'other','public',${stamp})`,
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([
       {
         id: credentialId,
-        name: "Work laptop",
         createdAt: expect.any(String),
         lastUsedAt: null,
         provider: null,
@@ -460,19 +459,17 @@ describe("your profile", () => {
     const created = "2026-09-01T10:00:00.000Z";
     const lastUsed = "2026-09-29T08:30:00.000Z";
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,aaguid,created_at,last_used_at) values (${used},${f.personId},'used','public','Phone','ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4',${created},${lastUsed}),(${neverUsed},${f.personId},'never','public',null,'00000000-0000-0000-0000-000000000000',${created},null)`,
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,aaguid,created_at,last_used_at) values (${used},${f.personId},'used','public','ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4',${created},${lastUsed}),(${neverUsed},${f.personId},'never','public','00000000-0000-0000-0000-000000000000',${created},null)`,
     );
     const { passkeys } = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
     expect(passkeys.find((p) => p.id === used)).toEqual({
       id: used,
-      name: "Phone",
       createdAt: created,
       lastUsedAt: lastUsed,
       provider: "Google Password Manager",
     });
     expect(passkeys.find((p) => p.id === neverUsed)).toEqual({
       id: neverUsed,
-      name: null,
       createdAt: created,
       lastUsedAt: null,
       provider: null,
@@ -921,7 +918,7 @@ describe("an authenticator enrolment begun before a backward clock step", () => 
     );
     const expiresAt = new Date(Date.now() + aheadOfClockMs).toISOString();
     await suite.db.execute(
-      sql`update totp_enrollments set expires_at = ${expiresAt} where id = ${pending.enrollmentId}`,
+      sql`update sign_in_challenges set expires_at = ${expiresAt} where id = ${pending.enrollmentId}`,
     );
     try {
       await withTransaction(suite.db, (tx) =>
