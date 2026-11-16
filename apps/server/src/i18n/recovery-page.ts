@@ -103,7 +103,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
     lastError: (code, at) => `Último error: ${code}, fecha: ${at}`,
     noCode: "ninguno",
     noTime: "nunca",
-    noLog: "(aún no hay registro)",
+    noLog: "(todavía no hay registro)",
   },
 };
 

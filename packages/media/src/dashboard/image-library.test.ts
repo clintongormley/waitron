@@ -1335,11 +1335,7 @@ it.each([
 
 it.each([
   ["en-GB", "Toast · Large (Archived variant)", "Old toast · Small (Archived product)"],
-  [
-    "es-ES",
-    `Toast · Large (${ES["image.archived_variant"]})`,
-    `Old toast · Small (${ES["image.archived_product"]})`,
-  ],
+  ["es-ES", "Toast · Large (Variante archivada)", "Old toast · Small (Producto archivado)"],
 ])(
   "in %s, marks an archived variant of an active product apart from a variant whose product is archived",
   async (locale, archivedVariant, archivedProduct) => {
@@ -1374,10 +1370,6 @@ it.each([
     ).toEqual([archivedVariant, archivedProduct]);
   },
 );
-
-it("words an archived variant in Spanish", () => {
-  expect(ES["image.archived_variant"]).toBe("Variante archivada");
-});
 
 it.each([
   ["en-GB", "Dining receipt logo"],

@@ -1170,7 +1170,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.health.sent": "Enviado",
   "prep.health.state": "Estado",
   "prep.health.empty": "No hay platos pendientes de servir",
-  "prep.stations_empty": "No hay estaciones de preparación todavía",
+  "prep.stations_empty": "Todavía no hay estaciones de preparación",
   "nav.prep_stations": "Estaciones de preparación",
   "prep.title": "Estaciones de preparación",
   "prep.tab.stations": "Estaciones",

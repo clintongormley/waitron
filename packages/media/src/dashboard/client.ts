@@ -25,7 +25,6 @@ export type ImageUsage =
       menuId: string;
       name: string;
       active: boolean;
-      /** The parent product is Active. */
       productActive: boolean;
     }
   | {
