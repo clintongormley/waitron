@@ -24,7 +24,7 @@ on its card, a seated-blue table with "🛎 Dessert?" on the map, the step with 
 and a tap on Done, an order sent once it is due, the party's first order, or the party leaving
 clears it.
 
-_(2026-11-04, A803 slice 4b: a party with no order of its own counts a bill moved in as its first order, while its family has any dish on a shown bill; a bill that has left still counts while another dish remains. That arrival does not clear a step started by a serving.)_ _(2026-11-16, #3507: a seated step clears at any first order, even one inherited from before the seating; a party a bill move to a free table or a split opens gets the old party's latest Done of each step a serving starts; a Done on an every-N-minutes repeat shown up to 30 seconds before the server's clock reaches it is recorded at that repeat's due time.)_
+_(2026-11-04, A803 slice 4b: a party with no order of its own counts a bill moved in as its first order, while its family has any dish on a shown bill; a bill that has left still counts while another dish remains. That arrival does not clear a step started by a serving.)_ _(2026-11-16, #3507: a seated step clears at any first order, even one inherited from before the seating; a party a bill move to a free table or a split opens gets, when a dish comes with it, the old party's latest Done of each step a serving starts, recorded no later than just before the dishes arrive; a Done on an every-N-minutes repeat shown up to 30 seconds before the server's clock reaches it is recorded at that repeat's due time.)_
 
 **Architecture:** a new venue-service table, `service_step_completions`, records each Done (party,
 step, time, person). The server works out each seated table's steps on every floor read in a pure

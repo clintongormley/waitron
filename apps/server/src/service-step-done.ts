@@ -67,7 +67,8 @@ export async function markServiceStepDone(
  * already seated or in a combine, where it would hide that party's own due step. `to` gets
  * `from`'s latest Done of each step a serving starts, as the dishes it takes keep their serving
  * times; with no dish arrived it gets none. Each is recorded before `to`'s first order, the
- * arrival, so that order clears every step following it, however far ahead its Done was stamped.
+ * arrival, so while a dish that came with it stays, that order clears every step following it,
+ * however far ahead its Done was stamped.
  */
 export async function carryDoneWithBill(
   tx: Transaction,

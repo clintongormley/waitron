@@ -325,8 +325,8 @@ export interface SplitSelection {
  * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
  * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
  * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives
- * ({@link groupArrivingDishes}). The new party also takes the staying party's latest Done of each
- * step a serving starts ({@link carryDoneWithBill}). A staying party whose family is left with no
+ * ({@link groupArrivingDishes}). When a dish comes with it, the new party also takes the staying
+ * party's latest Done of each step a serving starts ({@link carryDoneWithBill}). A staying party whose family is left with no
  * bill that is not abandoned is given a new empty one. The answer's `billIds` are the new party's
  * bills in number order, and `looseSourceIds` the bills that lost loose dishes.
  */

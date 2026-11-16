@@ -935,7 +935,10 @@ A table that sent its own order keeps those order times after every bill has lef
 stays. Run at `c11d7ff0c3`, before 4b's service-step fix, a party moving its one fired bill to a
 free table left its old table on "Another order?". Decide whether that is wrong: the people may
 still be sitting there. See #2454's "Left open". Since A803 4c, Split anyway (everything ticked
-goes) reaches this state more easily; it stays the owner's question.
+goes) reaches this state more easily; it stays the owner's question. The same holds for a step
+that follows a Done ("Coffee?"), including a Done copied with a bill that has since moved on again
+(#3507's re-read: a bill moved from table 1 to free table 2, then on to free table 3, left table 2
+showing "Coffee?").
 
 
 ## A Spanish invoice recipient's locality or province holding a comma is refused only at the server.
@@ -2159,7 +2162,8 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 - **A step done before a bill moves onto a seated table, or before two parties combine, is asked
   again at the receiving table (watcher, 2026-11-16, #3507, not the owner; the owner may
   overrule).** "Asking twice is a small annoyance; a missed step is a lost sale." A Done is copied
-  only to the party a move to a free table or a split opens (`carryDoneWithBill`,
+  only to the party a move to a free table or a split opens, and only when a dish comes with it
+  (`carryDoneWithBill`,
   `apps/server/src/service-step-done.ts`).
 
 - **A dragged table keeps its square when the map refits mid-drag (A766 decision 4, kept by the
