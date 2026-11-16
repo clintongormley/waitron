@@ -39,6 +39,7 @@ const INCIDENT_CODE_SOURCES = [
   "packages/fiscal-verifactu/src/drain.ts",
   "packages/fiscal-verifactu/src/reconcile.ts",
   "packages/fiscal-verifactu/src/record-remedy.ts",
+  "packages/payments-stripe/src/reconciler.ts",
   "packages/payments-sumup/src/provider.ts",
   "packages/payments/src/capture-mismatch.ts",
   "packages/payments/src/held-alert.ts",
