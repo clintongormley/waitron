@@ -32,6 +32,7 @@ export function dietLabel(label: DietaryLabel): string {
   return t(DIET_KEYS[label]);
 }
 
+// wt-icon reads no label; role and aria-label give it its name.
 function namedIcon(name: string, label: string, size: WtIconSize) {
   return html`<wt-icon name=${name} size=${size} role="img" aria-label=${label}></wt-icon>`;
 }

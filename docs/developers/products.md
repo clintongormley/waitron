@@ -956,7 +956,8 @@ On a signed-in take-orders device, it also stops and restores dishes, sizes, pub
 option choices. Extras appear when the dish or an available variant takes whole-portion extras.
 Changes refresh the menu immediately; restoration stays manual.
 
-`nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names.
+`nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names,
+and, at the large size, a dish's and an extra's allergens on the station and pass cards.
 A null allergen declaration draws no icons. Sent counter and table rows use `sentNutrition` from
 `working_line_contexts`, captured at the first `sent_at` through the effective current product
 read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
