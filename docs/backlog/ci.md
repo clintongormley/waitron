@@ -159,6 +159,8 @@ with CI's excludes (1,809 passed). The seed's random numbers come from a fixed L
 (`scripts/demo-seed/seed-sales.ts:115`) and the case freezes `Date`, so what differed on the runner is
 not found. The log is kept at `~/waitron-campaign-b/ci-logs/pr3494-run43862896971-test-server-13.log`.
 
+16 November 2026: the demo seed cola assertion recorded from [PR #3494, run 43862896971](https://github.com/clintongormley/waitron/actions/runs/43862896971/job/133284679660) recurred on [PR #3516, run 43871829602, shard 13](https://github.com/clintongormley/waitron/actions/runs/43871829602/job/133315565161). `apps/server/scripts/demo-seed/seed.test.ts:355` expected a restaurant cola sale and found none (`expected 0 to be greater than 0`); 1 failed and 1,730 passed. PR #3516 changes only a fake peer response in `waiting-start.test.ts`. Its full failed-job log is `~/waitron-campaign-k/receipts/live-setup-stamp-order/waiting-fixture-ci-server13.log`. The runner difference remains unexplained; a passing retry does not close this incident.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job

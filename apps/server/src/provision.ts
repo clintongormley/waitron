@@ -84,9 +84,8 @@ export function recoverProvisionedVenue(
  * Callers must serialize provisioning: the taxpayer-exists read is not atomic with `applyVenue`. The
  * setup route supplies a process-local latch; the checks below reject sequential retries.
  *
- * Not one transaction: `stampDeployment` writes before `applyVenue`'s transaction opens, so a
- * refusal from `applyVenue` or its `beforeCommit` leaves the database stamped. A retry for the same
- * environment passes the stamp; a different one is refused (`deployment.already_stamped`).
+ * The stamp stays outside the venue transaction, after the activation marker when supplied, so a
+ * refusal before that marker leaves no stamp to block the original host from restarting.
  */
 export async function provisionVenue(
   deps: ProvisionDeps,
@@ -145,8 +144,6 @@ export async function provisionVenue(
           req.environment,
         ]);
 
-  await stampDeployment(deps.ownerDb, req.environment);
-
   let remaining = modules.filter(
     (module) =>
       module.operations !== undefined &&
@@ -170,13 +167,19 @@ export async function provisionVenue(
                 run: (prepared: import("@waitron/module").ModuleOperationInput) => Promise<T>,
               ) =>
                 operations.prepare(operation, async (prepared) => {
-                  if (--remaining === 0) await deps.beforeTransaction!();
+                  if (--remaining === 0) {
+                    await deps.beforeTransaction!();
+                    await stampDeployment(deps.ownerDb, req.environment);
+                  }
                   return run(prepared);
                 }),
             },
           };
         });
-  if (deps.beforeTransaction !== undefined && remaining === 0) await deps.beforeTransaction();
+  if (deps.beforeTransaction === undefined || remaining === 0) {
+    await deps.beforeTransaction?.();
+    await stampDeployment(deps.ownerDb, req.environment);
+  }
   const result = await applyVenue(plan, {
     ...(initial === undefined ? {} : initialVenueApplyInput(initial)),
     db: deps.ownerDb,
