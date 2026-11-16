@@ -1,6 +1,6 @@
 # Login one-answer gaps: implementation plan
 
-**Status:** Codex proposal; Claude review and Lane K watcher clearance pending. No owner design approval claimed. Execute inline after clearance.
+**Status:** Claude reviewed the proposal below; the watcher superseded its throttle work on 2026-11-16 at 05:32. Build only the four HTTP tests and documentation, as the dated clearance below states. No owner design approval claimed.
 **Ask:** LOGIN-ONE-ANSWER-GAPS in `~/waitron-campaign-k/queue.md`, started 2026-11-16 05:05; `docs/backlog/dashboard.md` → Every login failure is one answer. One implementation PR, about 500 changed lines.
 
 ## Result, reuse and boundaries
@@ -28,3 +28,7 @@ Update `docs/developers/conventions-ui.md`'s four-route coverage gap. Delete onl
 - [ ] Claude plan read, corrections and watcher clearance precede build. The sign-in risk requires two independent Claude run-it angles during `finish-branch`, then one fresh read of fixes if needed. Focused checks, the normal push hook and required current-head CI precede authorized `land-branch`.
 
 **Forecast:** production +8/−9; tests +345/−20; support +0/−0; prose +90/−28 = 500 changed lines. Outside opinion past 750 changed lines. No implementation edits yet. The existing takeover test was run: one selected pass, 30 skipped, proving today's displacement behavior, not the desired fix.
+
+## Watcher clearance, 2026-11-16 05:32
+
+Lane K questions.md: “Do not ship the counter change. Build and land: the four route tests, the hash count with its remove-the-dummy-hash check, the conventions-ui.md update, deleting the four-route backlog line, and a rewrite of the throttle backlog line giving both orders and the reviewer's figures (the cost is min(g,4) wrong tries per made-up address under the plan versus g today).” The watcher is asking the owner about a redesign; do not start one. This clearance supersedes all throttle implementation/test tasks above. Retain the original proposal as the reviewed record; implement its four HTTP cases, total-hash observer and disposable controls inline. No production behavior changes.

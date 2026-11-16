@@ -80,16 +80,19 @@ Review #559 also recorded no test reaching `management_session.required` in
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
   re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  - The membership route, the adjustment approver, the refund override and the manual-refund
-    confirmer have no one-answer test case of their own.
   - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
   - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
     existing test pins that), while Reset and the dashboard sign-in move it to the password; the
     owner's rule covers marking fields, not the cursor, so whether Connect should match is the
     owner's call (left by A153, #952).
-  - The password throttle (A154, #977): a real address with 4 wrong tries, once forgotten, comes
-    back with a fresh count if a made-up address with 5 wrong tries lands on its counter (measured
-    by simulation; the figures are in #977's description). The PIN back-off
+  - The password throttle (A154, #977) still loses an address's count under collisions in both
+    arrival orders: a forgotten real address with four failures is displaced when a made-up
+    address with five failures claims its counter; a made-up address holding the counter first
+    can instead keep the real address's count out when the real address is forgotten. The
+    2026-11-16 review's proposed rule protected counters after their fourth failure, but reduced
+    the spray-first cost to `min(g, 4)` wrong tries per made-up address, versus `g` today, for a
+    cycle of `g` real-address failures. The watcher kept the counter unchanged and referred a
+    redesign to the owner; no redesign is cleared here. The PIN back-off
     (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
     one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
   - Password-reset timing (A147, #942; A159, #986): the real mail-server conversation, which only a

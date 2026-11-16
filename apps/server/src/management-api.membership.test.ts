@@ -1,5 +1,6 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -20,7 +21,11 @@ import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
-import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
+import {
+  watchingDerivations,
+  writerBesideRequest,
+  whileSuspendingOnLockRequest,
+} from "./testing/watched-scrypt.js";
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
@@ -136,6 +141,35 @@ beforeAll(async () => {
 });
 
 describe("GET /management-api/membership", () => {
+  it("gives unknown, suspended and wrong-password credentials one answer and one derivation", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const [suspended] = await withTransaction(db, (tx) =>
+      seedPersons(tx, {
+        displayName: "Suspended administrator",
+        role: "admin",
+        status: "suspended",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(ADMIN_PASSWORD),
+      }),
+    );
+    const app = mountApp(designated);
+    const causes = {
+      unknown: { personId: randomUUID(), password: ADMIN_PASSWORD },
+      suspended: { personId: suspended!.id, password: ADMIN_PASSWORD },
+      wrongPassword: { personId: adminPersonId, password: "wrong-password" },
+    };
+    for (const [cause, credential] of Object.entries(causes)) {
+      const { result, outside, order } = await watchingDerivations(() =>
+        getMembership(app, credential),
+      );
+      expect({ status: result.status, body: await result.json() }, cause).toEqual({
+        status: 401,
+        body: { error: { code: "password.invalid", params: {} } },
+      });
+      expect(outside + order.length, cause).toBe(1);
+    }
+  });
+
   it("returns this node's held signed membership document for an authorised admin credential", async () => {
     const { designated, adminPersonId } = await setupVenue();
     // `node_membership` is a singleton, so seed one past whatever term is held rather than at 0.

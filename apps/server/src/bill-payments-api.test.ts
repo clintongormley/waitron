@@ -92,7 +92,11 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { todayLine, todayLineNos } from "./testing/adjustment-venue.js";
-import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
+import {
+  watchDerivationsAndLock,
+  watchedOrder,
+  watchingDerivations,
+} from "./testing/watched-scrypt.js";
 import { disableDevice } from "./device-delete.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
@@ -5446,6 +5450,64 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
         .where(eq(persons.id, venue.adminId)),
     );
   }
+
+  it("gives unknown, suspended and wrong-PIN refund overrides one answer and one derivation", async () => {
+    const pinHash = hashPin("5555");
+    const [suspended, active] = await inTx((tx) =>
+      seedPersons(tx, [
+        { displayName: "Suspended refund manager", role: "manager", status: "suspended", pinHash },
+        { displayName: "Active refund manager", role: "manager", pinHash },
+      ]),
+    );
+    const refundOn = refundsWithOwnLimit();
+    const causes = {
+      unknown: { personId: randomUUID(), pin: "5555" },
+      suspended: { personId: suspended!.id, pin: "5555" },
+      wrongPin: { personId: active!.id, pin: "0000" },
+    };
+    for (const [cause, override] of Object.entries(causes)) {
+      const billId = await bill120();
+      const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+      const before = drawerJobCount();
+      const { result, outside, order } = await watchingDerivations(() =>
+        refundOn(billId, paymentId, { ...ask, override }),
+      );
+      expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+      expect(outside + order.length, cause).toBe(1);
+      expect(await refundRows(paymentId), cause).toEqual([]);
+      expect(await refundDrawerOpens(paymentId), cause).toEqual([]);
+      expect(drawerJobCount(), cause).toBe(before);
+    }
+  });
+
+  it("gives unknown, suspended and wrong-PIN manual-refund confirmers one answer and one derivation", async () => {
+    const pinHash = hashPin("5555");
+    const [suspended, active] = await inTx((tx) =>
+      seedPersons(tx, [
+        { displayName: "Suspended confirmer", role: "manager", status: "suspended", pinHash },
+        { displayName: "Active confirmer", role: "manager", pinHash },
+      ]),
+    );
+    const refundOn = refundsWithOwnLimit();
+    const cookie = await adminCookie();
+    const causes = {
+      unknown: { personId: randomUUID(), pin: "5555" },
+      suspended: { personId: suspended!.id, pin: "5555" },
+      wrongPin: { personId: active!.id, pin: "0000" },
+    };
+    for (const [cause, override] of Object.entries(causes)) {
+      const { billId, paymentId } = await handKeyedCard();
+      const before = drawerJobCount();
+      const { result, outside, order } = await watchingDerivations(() =>
+        refundOn(billId, paymentId, { ...ask, manualConfirmed: true, override }, cookie),
+      );
+      expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+      expect(outside + order.length, cause).toBe(1);
+      expect(await refundRows(paymentId), cause).toEqual([]);
+      expect(await refundDrawerOpens(paymentId), cause).toEqual([]);
+      expect(drawerJobCount(), cause).toBe(before);
+    }
+  });
 
   it("refunds on a supervisor's override while another writer commits during the PIN check", async () => {
     const refundOn = refundsWithOwnLimit();

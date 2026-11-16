@@ -49,7 +49,7 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { parkOrder, updateHeldOrder } from "./working-order.js";
 import "./errors.js";
-import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+import { watchDerivations, watchedOrder, watchingDerivations } from "./testing/watched-scrypt.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -569,6 +569,45 @@ describe("approval through the route (plan D6)", () => {
       ]);
     }
     expect(await recordedOn(billId)).toEqual([]);
+  });
+
+  it("gives unknown, suspended and wrong-PIN approvers one answer and one derivation", async () => {
+    const [suspended, active] = await inTx(venue, (tx) =>
+      seedPersons(tx, [
+        {
+          displayName: "Suspended adjustment manager",
+          role: "manager",
+          status: "suspended",
+          pinHash: fixturePinHash(PINS.manager),
+        },
+        {
+          displayName: "Active adjustment manager",
+          role: "manager",
+          pinHash: fixturePinHash(PINS.manager),
+        },
+      ]),
+    );
+    const causes = {
+      unknown: { personId: randomUUID(), pin: PINS.manager },
+      suspended: { personId: suspended!.id, pin: PINS.manager },
+      wrongPin: { personId: active!.id, pin: "0000" },
+    };
+    try {
+      for (const [cause, approver] of Object.entries(causes)) {
+        const { billId } = await billWith(venue, [{ name: "Burger" }]);
+        const body = { ...(await comp(billId)), approver };
+        const { result, outside, order } = await watchingDerivations(() =>
+          post(billId, body, { cookie: venue.cookie.staff }),
+        );
+        expect(result, cause).toEqual({ status: 401, json: { code: "pin.invalid", params: {} } });
+        expect(outside + order.length, cause).toBe(1);
+        expect(await recordedOn(billId), cause).toEqual([]);
+      }
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, active!.id)),
+      );
+    }
   });
 
   it("answers a wrong PIN as pin.invalid, 401", async () => {
