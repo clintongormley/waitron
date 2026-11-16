@@ -933,7 +933,7 @@ export class ExtraListForm extends LitElement {
                     : nothing
                 }
               </th>
-              <th scope="col" colspan="2">${t("extras.price")}</th>
+              <th scope="col" colspan="2">${t("extras.price_heading")}</th>
             </tr>
           </thead>
           <tbody>

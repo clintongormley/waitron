@@ -280,10 +280,6 @@ the 2026-09-30 folders design; what remains:
 
 [integration contract](../developers/modifiers.md).
 
-- **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
-  When a server refusal adds an error line under an option's name, the dot and menu centre on the
-  name and the error together. Expected from the CSS in `option-list-form.ts`, not looked at on
-  screen. **Next action:** screenshot a row carrying an error and decide.
 - **A stored empty options default is still possible** through configuration transfer, which
   copies rows without re-parsing them (the spec's D8).
 - **The two list forms still share about a hundred lines of per-form plumbing**
@@ -291,29 +287,12 @@ the 2026-09-30 folders design; what remains:
   guard, the Escape-while-busy handler and the footer). **Next action:** decide whether a shared
   base or a controller is the right vehicle before a third list form is written; the row editors
   genuinely differ and should NOT be merged.
-- **The seven string-parsing helpers are copied between the two contracts.**
-  `packages/menu/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
-  `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
-  the error-code prefix. **Next action:** extract them, and decide at the same time whether
-  `product-editor-input.ts`'s near-copies join them. A review also suggested moving
-  `resolveExtraPrice` from `extras.ts` into `extra-contract.ts`, beside the price parsing.
 - **`optionListDependants` and `listOptionLists`' usage count each select the carrying
   `product_modifiers` rows with their own condition on `option_list_id`.** Whoever writes a refusal
   that uses the same condition shares it then.
 - **A list switched on with no pickable label is refused only by the parser.**
   `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
   directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
-- **`packages/menu/src/options.ts` still says `findContentTranslationGap` returns rather than
-  throwing.** It throws `content.translation_invalid` for a non-text value.
-- **The definition reads behind a dish's offered lists take no lock, and whether the storage
-  switch closed the gap is unestablished.** `readMenuExtras`, `readProductExtras`,
-  `readOptionListsByIds` and `readProductModifiers`, reached from `walkAttachedModifiers`
-  (`packages/menu/src/offered-modifiers.ts`), are off the sale path since menus Task 7 except
-  for an edit of a saved line whose dish the live version no longer offers (`productOptionLists`,
-  `apps/server/src/working-order.ts`). The concern is a list edit committing mid-read, giving one
-  order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
-  reads — if every one goes through `withTransaction` (the write lock), the entry closes on that
-  alone; if any does not, decide deliberately.
 
 ## A name stored under a regional code such as `en-GB` is read by the forms as the plain code first, then its regional ones
 
@@ -405,11 +384,6 @@ names; folding them into the one helper was not part of W77a.
   2147483647, which needs about 82px against the 66px between the buttons (measured by #1151's
   review); three digits need about 26px. Left alone because widening the box would undo the size
   the owner approved. OPEN, unqueued.
-- At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
-  #1151's review measured it on main before the change (452px against a 373px area) and smaller
-  after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
-  remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
-  the table; not re-measured.)
 
 ## Allergens and dietary preferences are edited in place (A213): what #1079 left open
 
@@ -785,18 +759,11 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: Extras list forms
 
-3 entries, size M. The remaining deliberate limits, wording and variant-warning wrapping.
+The remaining storage, input-validation and shared-form limits.
 
 - **Extras and Options — deliberate limits, and what is left open.**
   [integration contract](../developers/modifiers.md).
   [Detail](menu.md#extras-and-options--deliberate-limits-and-what-is-left-open)
-- **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
-  its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
-  (`packages/menu/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
-  Extras editor shows Portion beside Price, #1194).
-- **At 390px the variant warning wraps in an extras list's narrow product column**, so a marked
-  row is about twice as tall as its neighbours. Left open by A223 (#1098, an extras list's product
-  dropdown greys a product with variants).
 
 ## Menu home preview rendering
 

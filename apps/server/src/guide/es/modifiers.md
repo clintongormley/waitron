@@ -15,7 +15,7 @@ un producto que ya has creado y toma de él sus nombres, su IVA, sus alérgenos,
 dietéticas y su foto, así que nunca los vuelves a escribir aquí. Un producto con variantes activas
 no puede ser un elemento, porque solo se vende como una de sus variantes. En el elemento fijas las
 condiciones de la oferta: **Cantidad máxima**, cuántas veces puede elegirse para un plato (1
-significa "una o ninguna"); **Preseleccionado**, si empieza elegido; y **Precio por porción**, lo
+significa "una o ninguna"); **Preseleccionado**, si empieza elegido; y **Precio**, lo
 que cuesta cada selección. Pulsa − de 2 a 1 y después hasta dejar la casilla vacía para quitar el
 límite del elemento. El marcador ∞ indica ese valor vacío. Las **Selecciones máximas** de la lista
 siguen limitando el total de selecciones cuando fijas un valor. Para un producto que se vende en

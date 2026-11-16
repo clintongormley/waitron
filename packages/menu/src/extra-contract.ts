@@ -1,11 +1,4 @@
-import {
-  AppError,
-  decimal,
-  isUuid,
-  multiplyDecimal,
-  toScale,
-  nonBlankTranslations,
-} from "@waitron/shared";
+import { AppError, decimal, isUuid, multiplyDecimal, toScale } from "@waitron/shared";
 import type {
   ExtraSelection,
   ExtraList,
@@ -13,7 +6,7 @@ import type {
   ExtraListInput,
 } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
-import { validateOptionalTranslations } from "./optional-translations.js";
+import { contractInput } from "./contract-input.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";
 
@@ -21,42 +14,10 @@ export type { ExtraSelection } from "@waitron/shared";
 
 export type { ExtraList, ExtraListInput, ExtraListItem, ExtraListItemInput } from "@waitron/shared";
 
-function invalid(field: string): never {
-  throw new AppError("extras.invalid", { field });
-}
-function record(value: unknown, field: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalid(field);
-  return value as Record<string, unknown>;
-}
-function keys(value: Record<string, unknown>, allowed: string[], field: string) {
-  for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`${field}.${key}`);
-}
-/** The staff name: plain text, required, and blank is the same as missing. */
-function staffName(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") invalid(field);
-  return value;
-}
-/**
- * The translated customer name: absent, null, or a map holding no text anywhere means "fall back to
- * the staff name". A bad language key is reported with the field path rather than letting
- * `contentLanguageCode`'s own fieldless `content.language_invalid` out.
- */
-function translations(value: unknown, field: string): Record<string, string> | null {
-  if (value === undefined || value === null) return null;
-  const map = record(value, field);
-  try {
-    validateOptionalTranslations(map);
-  } catch {
-    invalid(field);
-  }
-  return nonBlankTranslations({ ...map } as Record<string, string>);
-}
-/** The kitchen name: plain text, and blank is the same as missing. */
-function kitchenName(value: unknown, field: string): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string") invalid(field);
-  return value.trim() === "" ? null : value;
-}
+const input = contractInput("extras.invalid");
+const invalid: (field: string) => never = input.invalid;
+const { record, keys, staffName, translations, kitchenName, id } = input;
+
 function bool(value: unknown, field: string, fallback: boolean): boolean {
   if (value === undefined) return fallback;
   if (typeof value !== "boolean") invalid(field);
@@ -71,14 +32,6 @@ function whole(value: unknown, field: string, minimum: number): number {
   )
     invalid(field);
   return value;
-}
-/**
- * `isUuid` accepts either case; lower-casing makes a body's ids comparable to each other and to the
- * stored rows — the same normalisation `product-editor-input.ts` applies.
- */
-function id(value: unknown, field: string): string {
-  if (typeof value !== "string" || !isUuid(value)) invalid(field);
-  return value.toLowerCase();
 }
 /**
  * A price in the product-price shape, normalised to two decimals; null means "inherit". Exported
