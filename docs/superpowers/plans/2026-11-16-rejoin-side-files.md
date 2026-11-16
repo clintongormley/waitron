@@ -17,13 +17,13 @@
 - [ ] Before `run`, assert these exist: `venue.db`, `venue.db-wal`, `venue.db-shm`, `node.db`, `node.db-wal`, `node.db-shm`. Both WALs (write-ahead logs) must have `stat(...).size > 0`. Reuse one local filename list before/after.
 - [ ] Retain injected `openDb`, `rejoin`, `closePreWipe` and `migrate`. Keep the separate real handle open through the wipe and assertions, preventing close from removing side files first.
 - [ ] Preserve `code === 0`, all six post-wipe `stat` rejections with `code: "ENOENT"`, `migrated === [venueDir]`, and the `trading.env` absence assertion.
-- [ ] Keep the handle in a guarded local; close it in `finally`, then remove `stateDir` in a nested `finally`, even if close fails. The case owns the wipeable resource so it can assert removal before closing it.
-- [ ] Omit duplicate absence assertions inside `migrate`: that callback only records the directory; post-call checks expose leftovers. Preserve its target assertion.
-- [ ] Use a disposable checkout with its own locked dependency install for the controls; reuse the driver’s already-created detached shared clone.
+- [ ] Use `let live: VenueDatabase | undefined`; in `finally`, use `await live?.close().catch(() => {})`, then remove `stateDir`, matching `db-wipe.test.ts` and preserving assertion failures. The case owns the wipeable resource so it can assert removal before closing it.
+- [ ] Leave `migrate` unchanged; it records the directory without recreating files. Preserve its target assertion.
+- [ ] Reuse the driver’s already-created detached shared clone, which already has its own `pnpm install --frozen-lockfile` install.
 - [ ] There only, change `apps/server/src/db-wipe.ts`'s suffix loop to `[""]`, omitting side-file removal. Run the original case: expect PASS without side files at wipe time.
 - [ ] Apply the strengthened test there: expect FAIL on the remaining `venue.db-wal` absence assertion, not setup/cleanup. Record output.
 - [ ] Restore `db-wipe.ts`; rerun for PASS. Remove only that disposable clone and its temporary parent after collecting receipts. Feature-branch production stays untouched.
-- [ ] Delete only this backlog bullet/link and detail heading/body; preserve adjacent entries.
+- [ ] Delete the backlog entry by its exact heading, “`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe”, in `docs/backlog.md` and `docs/backlog/ci.md`; the quoted ask’s line number has drifted. Preserve adjacent entries.
 
 **Named verification commands (from the checkout root):**
 
