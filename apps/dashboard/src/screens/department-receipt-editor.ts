@@ -22,6 +22,10 @@ import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { PrintPaper, paperStrut, paperStyles } from "../widgets/print-paper.js";
 import { columnsFor } from "@waitron/printing/src/layout.js";
+import {
+  MAX_RECEIPT_EMAIL_LENGTH,
+  MAX_RECEIPT_PHONE_LENGTH,
+} from "@waitron/layouts/src/receipt-limits.js";
 import { receiptLanguageName } from "../widgets/receipt-language.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -540,7 +544,7 @@ export class DepartmentReceiptEditor extends LitElement {
     const receipt = this.#body().receipt;
     for (const field of ["phone", "email"] as const) {
       const value = receipt[field] ?? "";
-      const max = field === "phone" ? 30 : 254;
+      const max = field === "phone" ? MAX_RECEIPT_PHONE_LENGTH : MAX_RECEIPT_EMAIL_LENGTH;
       if (value.length > max)
         problems[field] = t("receipts.trim_too_long").replace("{max}", String(max));
       else if (

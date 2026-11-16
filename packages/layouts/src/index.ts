@@ -3,9 +3,8 @@ export {
   MAX_RECEIPT_EMAIL_LENGTH,
   MAX_RECEIPT_FIELD_LENGTH,
   MAX_RECEIPT_PHONE_LENGTH,
-  validateReceiptConfig,
-  validateDepartmentReceipt,
-} from "./validate.js";
+} from "./receipt-limits.js";
+export { validateReceiptConfig, validateDepartmentReceipt } from "./validate.js";
 
 export {
   FORM_FACTORS,
