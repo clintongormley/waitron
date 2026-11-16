@@ -224,7 +224,12 @@ const pending: JoinRequestRow[] = [
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
-const SHUT = { open: false, openUntil: null, deviceAddress: "https://waitron.local" };
+const SHUT = {
+  open: false,
+  openUntil: null,
+  deviceAddress: "https://waitron.local",
+  timeZone: "UTC",
+};
 const TAKEN_UNTIL = "2026-09-08T10:05:00.000Z";
 
 const printers: Printer[] = [
@@ -706,9 +711,12 @@ describe("the device table", () => {
       batteryReportedAt: minutes === null ? null : minutesAgo(minutes),
     });
 
-    async function mountBattery(rows: DeviceRow[]): Promise<DevicesScreen> {
+    async function mountBattery(
+      rows: DeviceRow[],
+      overrides: Partial<DashboardApi> = {},
+    ): Promise<DevicesScreen> {
       const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-        api: stubApi({ listDevices: vi.fn().mockResolvedValue(rows) }),
+        api: stubApi({ listDevices: vi.fn().mockResolvedValue(rows), ...overrides }),
         now: () => NOW,
       });
       await flush(el);
@@ -785,6 +793,24 @@ describe("the device table", () => {
           expect(tip.matches(":popover-open")).toBe(true);
           cleanupWidgets();
         }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("gives a greyed report's exact time in the venue's time zone, not the browser's", async () => {
+      const before = currentLocale();
+      try {
+        setLocale("en-GB");
+        const el = await mountBattery([reported("old", 82, false, 11)], {
+          pairingMode: vi.fn().mockResolvedValue({ ...SHUT, timeZone: "Pacific/Auckland" }),
+        });
+        const time = cell(el, "old").querySelector("wt-relative-time")!;
+        await time.updateComplete;
+        const button = time.shadowRoot!.querySelector("button")!;
+        const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+        // In UTC the same instant reads "5 October 2026 at 11:49".
+        expect(tip.textContent!.trim()).toBe("6 October 2026 at 00:49");
       } finally {
         setLocale(before);
       }
@@ -3827,6 +3853,26 @@ describe("add a device", () => {
     }
   });
 
+  it("gives the window's closing time in the venue's time zone, not the browser's", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const el = await openAdd(
+        stubApi({
+          pairingMode: vi.fn().mockResolvedValue({ ...SHUT, timeZone: "Pacific/Auckland" }),
+        }),
+      );
+      const time = q(el, "[data-test=pairing-until]")!.querySelector("wt-relative-time")!;
+      await time.updateComplete;
+      const button = time.shadowRoot!.querySelector("button")!;
+      const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+      // In UTC the same instant reads "8 September 2026 at 10:05".
+      expect(tip.textContent!.trim()).toBe("8 September 2026 at 22:05");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("closing the dialog releases the hold", async () => {
     const api = stubApi();
     const el = await openAdd(api);
@@ -4485,6 +4531,34 @@ describe("add a device", () => {
     );
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
     expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+  });
+
+  it("lets both dialogs close again once a Pair save gives up waiting", async () => {
+    let giveUp!: (reason: unknown) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockReturnValue(new Promise((_r, reject) => (giveUp = reject))),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+    const dismissible = (id: string): boolean =>
+      (q(el, `[data-test=${id}]`) as HTMLElement & { dismissible: boolean }).dismissible;
+    expect([dismissible("pair-modal"), dismissible("add-device-modal")]).toEqual([false, false]);
+
+    giveUp({ code: "connection.timed_out" });
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("connection.timed_out"),
+      ),
+    );
+    expect([dismissible("pair-modal"), dismissible("add-device-modal")]).toEqual([true, true]);
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
   });
 
   it("lets a Pair save that is under way decide the outcome: Escape and Cancel wait for it", async () => {

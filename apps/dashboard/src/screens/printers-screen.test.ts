@@ -317,11 +317,17 @@ const pending: JoinRequestRow[] = [
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
-const SHUT = { open: false, openUntil: null, deviceAddress: "https://waitron.local" };
+const SHUT = {
+  open: false,
+  openUntil: null,
+  deviceAddress: "https://waitron.local",
+  timeZone: "UTC",
+};
 const OPEN = {
   open: true,
   openUntil: "2026-09-08T10:20:00.000Z",
   deviceAddress: "https://waitron.local",
+  timeZone: "UTC",
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -1858,6 +1864,29 @@ describe("printers-screen", () => {
       }
     } finally {
       vi.useRealTimers();
+      setLocale(before);
+    }
+  });
+
+  it("gives the window's closing time in the venue's time zone, not the browser's", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi({
+          pairingMode: vi.fn().mockResolvedValue({ ...SHUT, timeZone: "Pacific/Auckland" }),
+        }),
+      });
+      await flush(el);
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      const time = q(el, "[data-test=pairing-until]")!.querySelector("wt-relative-time")!;
+      await time.updateComplete;
+      const button = time.shadowRoot!.querySelector("button")!;
+      const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+      // In UTC the same instant reads "8 September 2026 at 10:20".
+      expect(tip.textContent!.trim()).toBe("8 September 2026 at 22:20");
+    } finally {
       setLocale(before);
     }
   });

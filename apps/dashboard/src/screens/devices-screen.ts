@@ -1089,7 +1089,10 @@ export class DevicesScreen extends LitElement {
       }${
         stale
           ? html` <span part="battery-updated"
-              >${relativeTime(t("devices.battery_updated"), at, { now: this.now })}</span
+              >${relativeTime(t("devices.battery_updated"), at, {
+                now: this.now,
+                timeZone: this.pairing?.timeZone ?? "",
+              })}</span
             >`
           : nothing
       }</span
@@ -1929,7 +1932,7 @@ export class DevicesScreen extends LitElement {
       <p class="hint">
         ${before}<code data-test="device-address">${this.deviceAddress}</code>${after}
       </p>
-      ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${relativeTime(t("devices.window_closes"), until, { deadline: true, now: this.now })}</p>`}
+      ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${relativeTime(t("devices.window_closes"), until, { deadline: true, now: this.now, timeZone: this.pairing?.timeZone ?? "" })}</p>`}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}
       ${
         this.askedAgain === null

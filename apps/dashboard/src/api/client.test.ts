@@ -1841,6 +1841,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Pass screen", profileId: "dp1" }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2794,7 +2795,7 @@ it("renews a pairing hold without reporting dashboard session activity", async (
   expect(activity).not.toHaveBeenCalled();
 });
 
-describe("the card readers' outside-provider reads", () => {
+describe("requests' time limits", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
@@ -2865,6 +2866,20 @@ describe("the card readers' outside-provider reads", () => {
     await vi.advanceTimersByTimeAsync(54_000);
     expect(out.settled).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1_000);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+  });
+
+  it("gives up on a device accept that never answers at 30 seconds", async () => {
+    const out = track(
+      new DashboardApi("", answersAfter(240_000, {})).acceptDeviceJoinRequest("j1", {
+        name: "Pass",
+        profileId: "dp1",
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(out.settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
     expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
   });
 });

@@ -764,12 +764,6 @@ of the departed bill requires correction authority and writes its credit note
     The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
     cancel's answer empty, so the till goes on reading the credit note's number from the bills.
-    Open:
-    - **No till test covers a payment refusal that arrives after the approver's PIN.** Since A845
-      (#1895) a person without `sale.rectify` meets the PIN prompt before the server's
-      `bill.payments_received` or `order.payment_in_flight`; by reading only (#1895's review), the
-      till then closes the PIN prompt and the cancel dialog shows the payment message. Add a till
-      case that answers the PIN with each refusal and checks what the dialog shows.
   - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
     unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
     inside the held-orders card" (Task 16, in [till.md](till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)), so a till layout without that card offers no Cancel and

@@ -347,6 +347,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       open: false,
       openUntil: null,
       deviceAddress: "https://waitron.local",
+      timeZone: "Europe/Madrid",
     });
 
     const knockRes = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
@@ -362,6 +363,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       open: false,
       openUntil: null,
       deviceAddress: "https://waitron.local",
+      timeZone: "Europe/Madrid",
     });
   });
 });

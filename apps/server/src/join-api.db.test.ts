@@ -155,7 +155,23 @@ describe("the join window's holds", () => {
       open: false,
       openUntil: null,
       deviceAddress: "https://waitron.local",
+      timeZone: "Europe/Madrid",
     });
+  });
+
+  it.each([
+    ["the venue's zone", "Pacific/Auckland", "Pacific/Auckland"],
+    ["UTC for a stored zone the runtime does not know", "Mars/Olympus", "UTC"],
+  ])("GET answers %s", async (_what, stored, answered) => {
+    const venue = await setupVenue(suite.db);
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${stored}) where module = 'business_day'`,
+    );
+    const res = await send(mountApp(venue.cfg), "GET", "/management-api/pairing-mode", {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { timeZone: string }).timeZone).toBe(answered);
   });
 
   it("taking a hold answers its id and lapse instant, and GET then reports the open window", async () => {
@@ -178,6 +194,7 @@ describe("the join window's holds", () => {
       open: true,
       openUntil,
       deviceAddress: "https://waitron.local",
+      timeZone: "Europe/Madrid",
     });
   });
 

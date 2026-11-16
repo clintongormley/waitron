@@ -2580,7 +2580,7 @@ export class PrintersScreen extends LitElement {
           ? read
           : this.takenUntil;
     return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
-      ${until !== null ? html`<p data-test="pairing-until">${relativeTime(t("printers.pairing_closes"), until, { deadline: true })}</p>` : nothing}
+      ${until !== null ? html`<p data-test="pairing-until">${relativeTime(t("printers.pairing_closes"), until, { deadline: true, timeZone: this.pairing?.timeZone ?? "" })}</p>` : nothing}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}`;
   }
 
