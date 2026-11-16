@@ -1510,3 +1510,16 @@ it("checks system.manage before contacting Cloud for pack status", async () => {
   expect((await codeOf(response)).code).toBe("authorization.not_permitted");
   expect(read).not.toHaveBeenCalled();
 });
+
+it("refuses pack status when permission is removed during the Cloud read", async () => {
+  const cloud = cloudPack();
+  const read = cloud.connection.emergency;
+  cloud.connection.emergency = async (...args) => {
+    const answer = await read(...args);
+    await setBuiltInRoleForTest(suite.db, admin.personId, "staff");
+    return answer;
+  };
+  const response = await fixture({ cloud }).status();
+  expect(response.status).toBe(403);
+  expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+});

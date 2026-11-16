@@ -504,7 +504,7 @@ describe("emergency-code freshness", () => {
     ],
     ["closed venue without code", { asOf: fresh, open: false, codeIssuedAt: null }, "absent", []],
     ["no Cloud without code", undefined, "absent", []],
-    ["unavailable without code", null, "absent", [{ part: "emergency", kind: "cannot_check" }]],
+    ["unavailable without code", null, "absent", []],
   ] as const)("%s", (_label, emergency, state, reasons) => {
     const record = pack(1, made, {
       parts:

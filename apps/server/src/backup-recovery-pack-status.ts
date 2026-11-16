@@ -128,8 +128,7 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       else if (!emergency.open) reasons.push({ part: "emergency", kind: "removed" });
       else reasons.push({ part: "emergency", kind: "code_changed", at: emergency.codeIssuedAt! });
     }
-  } else if (emergency === null) reasons.push({ part: "emergency", kind: "cannot_check" });
-  else if (emergency?.open) reasons.push({ part: "emergency", kind: "code_missing" });
+  } else if (emergency?.open) reasons.push({ part: "emergency", kind: "code_missing" });
   return reasons;
 }
 
