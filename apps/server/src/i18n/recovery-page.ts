@@ -490,13 +490,13 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     // No retry: the refusal leaves the copy unchanged, so the next start reads it again.
     "en-GB": {
       title:
-        "The list of machines in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
+        "The list of servers in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
       action:
         "The box will not start from this copy. Unless it was changed after it was saved, this is a fault in Waitron or this box's disk.",
     },
     "es-ES": {
       title:
-        "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
+        "La lista de servidores de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
       action:
         "El equipo no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este equipo.",
     },

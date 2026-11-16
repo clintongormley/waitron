@@ -514,44 +514,6 @@ no work, so another live operation can leave it on disk. A full disk can still p
 reason from being stored. The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
 is available when the copy keeps failing its checks.
 
-## Slice 6's list: the handover words no screen shows yet
-
-9 November: the controlled Servers-to-spare flow now shows start refusals with next steps. The
-setup page describes stored copy waits without rendering their raw codes. The list below keeps
-wording still left in other routes and the return flow.
-
-Left open by A1018 Slice 5 (Ruling P29 allows such words until a screen shows them; Ruling R53). This
-is read from `apps/dashboard/src/i18n/codes.ts` at Slice 5's tip, and which words name a next step is
-a reader's judgement.
-
-**The list's two names:** the words call the chart both "list of boxes / lista de equipos" and
-"list of servers / lista de servidores" (`source_no_longer_main` and its neighbours); pick one.
-
-**No words at all:** `provisioning.database_ahead`, a compare reason the duty stores and the status
-route answers (`apps/server/src/handover-compare.ts`).
-
-**Words naming no next step:** `stepping_down`, `known_handover`, `peer_unknown`, `not_stepped_down`,
-`operation_unknown`, `final_copy_changed`, `not_a_spare`, `membership_mismatch`,
-`indicator_untrusted`, `chain_broken`,
-`preparation_state_too_large`, `summary_mismatch`, `summary_unreadable`, `copy_lacks_destination`,
-`authoriser_not_permitted`, `preparation_state_unusable`, `accepted_copy_missing`,
-`indicator_mismatch`, `copy_check_failed` (all `handover.`).
-
-**Words false, or misleading, where they appear:**
-- `source_unreachable` also covers a local disk error on the spare, a real full disk on the old box
-  (its 507) and a chart with the old box gone from it, and says "Nothing was changed".
-- `indicator_mismatch`, `copy_check_failed`, `not_stepped_down` say nothing changed, reused at
-  `copy_accepted`, after the spare accepted.
-- `copy_damaged` says "damaged" and "fetching it again" for a row the old box itself holds, which a
-  fresh fetch cannot cure.
-- `no_room_to_place` with nothing free is not stored, so the screen shows the earlier reason.
-- A module's name in `chain_broken` or `summary_mismatch` reaches only the log.
-- The recovery page's entries for `accepted_copy_missing`, `copy_mismatch` and
-  `preparation_state_unusable` offer only a retry.
-- A third box is main: there is no way out to offer yet (see "A new box has no way out while a third
-  box is main").
-- Spanish uses both "traspaso" and "cambio de servidor"; pick one.
-
 ## A1185: a venue not yet connected sees no prices
 
 The Cloud services screen shows the plan
@@ -749,6 +711,10 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 ## Decisions and deliberate limits
+
+**HANDOVER-WORDS, 16 November 2026:** the watcher cleared keeping a refused copy’s module name
+in the log only (`handover.chain_broken` and `handover.summary_mismatch`). The screen describes
+the failed check without naming the module. This is watcher clearance, not an owner decision.
 
 **A1321 retiring a spare, 2026-11-14:** Servers' Remove takes a spare that finished joining once
 an administrator declares it switched off and no other recovery in progress; the declarations are

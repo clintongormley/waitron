@@ -5,6 +5,7 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 import type { StartedServer } from "./boot.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
+import { steppingDownResponse } from "./handover-gate.js";
 import { mountNodeApi } from "./node-api.js";
 
 export interface RestrictedStartDeps {
@@ -29,6 +30,8 @@ export interface RestrictedStartDeps {
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
+  deps.app.post("/api/sales", steppingDownResponse);
+  deps.app.post("/api/pay", steppingDownResponse);
   mountNodeApi(
     deps.app,
     {

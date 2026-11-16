@@ -1521,15 +1521,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "handover.request_invalid": {
     en: "The request to hand the work over to another server was not valid, so nothing was changed. Start the handover again.",
-    es: "La solicitud para pasar el trabajo a otro servidor no era válida, así que no se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
+    es: "La solicitud para pasar el trabajo a otro servidor no era válida, así que no se ha cambiado nada. Vuelve a empezar el traspaso.",
   },
   "handover.step_out_of_order": {
     en: "The handover is at a different stage, so this step cannot be taken now. Refresh the page to see where it stands.",
-    es: "El cambio de servidor está en otra fase, así que este paso no se puede dar ahora. Actualiza la página para ver en qué punto está.",
+    es: "El traspaso está en otra fase, así que este paso no se puede dar ahora. Actualiza la página para ver en qué punto está.",
   },
   "handover.operation_conflict": {
     en: "This handover was already started with different details, so nothing was changed. Start a new handover.",
-    es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
+    es: "Este traspaso ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un traspaso nuevo.",
   },
   "promotion.from_box_only": {
     en: "In this version a standby server cannot be switched on from another device. Nothing was changed.",
@@ -1545,45 +1545,49 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This server has already recorded that it handed over its work, with different details, so the record was not changed. This is a fault in Waitron.",
     es: "Este servidor ya registró que pasó su trabajo a otro, con otros datos, así que el registro no se ha cambiado. Es un fallo de Waitron.",
   },
+  "provisioning.database_ahead": {
+    en: "The database contains changes this version of Waitron does not recognise. Install the same or a newer version of Waitron before trying again.",
+    es: "La base de datos contiene cambios que esta versión de Waitron no reconoce. Instala la misma versión de Waitron o una más reciente antes de volver a intentarlo.",
+  },
   "handover.stepping_down": {
-    en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
-    es: "Este servidor ya no lleva el local, así que ahora no atiende solicitudes. No se ha cambiado nada.",
+    en: "This server is handing over or has handed over the venue, so it refused this action. Use the main server’s address once that server is taking sales.",
+    es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   },
   "handover.known_handover": {
-    en: "This box has already handed over to another box. It cannot carry on as the main box.",
-    es: "Este servidor ya ha pasado el local a otro servidor. No puede seguir como servidor principal.",
+    en: "This server has already handed over the venue. Open the current main server’s address to continue.",
+    es: "Este servidor ya ha traspasado el local. Abre la dirección del servidor principal actual para continuar.",
   },
   "handover.peer_unknown": {
-    en: "This server does not accept that request from the server that sent it, so it did not answer. Nothing was changed.",
-    es: "Este servidor no acepta esa solicitud del servidor que la ha enviado, así que no ha respondido. No se ha cambiado nada.",
+    en: "The sending server is not trusted for this request. Check the list of servers on the current main server before trying again.",
+    es: "El servidor que envía la solicitud no está autorizado para hacerla. Revisa la lista de servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.not_stepped_down": {
-    en: "The old box has not handed over its work in this handover, so it will not send its final copy of the venue. Nothing was changed.",
-    es: "El servidor antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
+    en: "The old server has not confirmed that it stopped for this handover. Keep both servers connected and check the handover’s progress on the old server.",
+    es: "El servidor antiguo no ha confirmado que se haya detenido para este traspaso. Mantén ambos servidores conectados y consulta el progreso del traspaso en el servidor antiguo.",
   },
   "handover.operation_unknown": {
-    en: "That box holds no record of that handover, so it sent nothing. Nothing was changed.",
-    es: "Ese servidor no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+    en: "That server has no record of this handover. Open Servers on the current main server to check the current handover.",
+    es: "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
   },
   "handover.final_copy_changed": {
-    en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
-    es: "Los datos del local en el servidor antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
+    en: "The old server’s venue data changed after its final copy was made. Keep both servers connected while the copy is requested again.",
+    es: "Los datos del local en el servidor antiguo han cambiado después de hacer su copia final. Mantén ambos servidores conectados mientras se vuelve a pedir la copia.",
   },
   "handover.source_unreachable": {
-    en: "This box can't get an answer it can use from the old box yet. It keeps asking by itself. Nothing was changed.",
-    es: "Este servidor aún no recibe una respuesta válida del servidor antiguo. Sigue preguntando por sí solo. No se ha cambiado nada.",
+    en: "This server could not complete this handover step. It retries by itself. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    es: "Este servidor no ha podido completar este paso del traspaso. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   },
   "handover.not_a_spare": {
-    en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
-    es: "Este servidor no es un servidor de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
+    en: "This server is not a spare and cannot accept this handover. Open Servers on the main server and choose a joined spare.",
+    es: "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   },
   "handover.promotion_running": {
     en: "This box is being made the main box right now, so it did not accept this handover. Nothing was changed. If that does not finish, start the handover again.",
     es: "Este servidor está pasando a ser el servidor principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
   },
   "handover.membership_mismatch": {
-    en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
-    es: "El servidor que ofrece este traspaso no es el servidor principal en la lista de servidores del local de este servidor, o los dos servidores tienen datos del local o listas distintos, así que este servidor no ha aceptado el traspaso. No se ha cambiado nada.",
+    en: "The servers disagree about the venue or its list of servers, or the sender is not listed as main. Check Servers on the current main server before trying again.",
+    es: "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.not_main_box": {
     en: "This box is not the main box. Open Servers at the main box’s address to start a handover.",
@@ -1614,11 +1618,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este traspaso se canceló antes de que este servidor cediera el local. Revisa la lista actual de Servidores e inicia otro traspaso si el servidor de reserva sigue en ella.",
   },
   "handover.superseded_during_start": {
-    en: "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
+    en: "Another box took over or the venue’s list of servers changed. Open the current main box’s address to continue.",
     es: "Otro servidor ha pasado a llevar el local o ha cambiado la lista de servidores. Abre la dirección del servidor principal actual para continuar.",
   },
   "handover.membership_changed": {
-    en: "The venue’s details or its list of boxes changed during this handover. Check Servers on the current main box before starting a new handover.",
+    en: "The venue’s details or its list of servers changed during this handover. Check Servers on the current main box before starting a new handover.",
     es: "Los datos del local o su lista de servidores han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
@@ -1646,44 +1650,44 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los ajustes de este servidor han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.indicator_untrusted": {
-    en: "The description of the final copy was not signed by the box handing over, so the spare did not accept it. The old box stays stopped.",
-    es: "La descripción de la copia final no está firmada por el servidor que hace el traspaso, así que el servidor de reserva no la ha aceptado. El servidor antiguo sigue detenido.",
+    en: "The final copy’s description could not be verified as coming from the old server. Check the list of servers on the current main server before trying again.",
+    es: "No se ha podido verificar que la descripción de la copia final venga del servidor antiguo. Revisa la lista de servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.copy_mismatch": {
     en: "This copy has not been confirmed for this handover. A controlled handover fetches it again. After an emergency restart, repeat the declaration to check it again; a changed copy cannot activate a saved declaration.",
     es: "Esta copia no está confirmada para este traspaso. Un traspaso controlado vuelve a pedirla. Tras reiniciar durante una emergencia, repite la declaración para comprobarla; una copia que haya cambiado no puede activar una declaración guardada.",
   },
   "handover.copy_damaged": {
-    en: "This copy is damaged. A controlled handover fetches it again. In an emergency, retry when a working copy is available.",
-    es: "Esta copia está dañada. Un traspaso controlado vuelve a pedirla. En una emergencia, reintenta cuando haya una copia válida disponible.",
+    en: "This copy failed its database check. A controlled handover requests another copy, but that cannot repair invalid data on the old server. If the checks keep failing, use the emergency procedure with a working backup.",
+    es: "Esta copia no ha superado la comprobación de su base de datos. Un traspaso controlado pide otra copia, pero eso no repara datos inválidos en el servidor antiguo. Si las comprobaciones siguen fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
   },
   "handover.chain_broken": {
-    en: "The records in this copy failed their check, so this box has not taken over. Retry when a working copy is available.",
-    es: "Los registros de esta copia no han superado su comprobación, así que este servidor no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
+    en: "The records in this copy failed their check, so this server has not taken over. Use the emergency procedure with a backup that passes its checks.",
+    es: "Los registros de esta copia no han superado su comprobación, así que este servidor no ha tomado el relevo. Usa el procedimiento de emergencia con una copia de seguridad que supere las comprobaciones.",
   },
   "handover.preparation_state_too_large": {
-    en: "The two boxes' saved preparations would leave their file with too little room to be sure the spare can take over, so the spare did not accept this handover. The old box stays stopped.",
-    es: "Los preparativos guardados de los dos servidores dejarían su archivo con muy poco espacio para asegurar que el servidor de reserva pueda tomar el relevo, así que no ha aceptado este traspaso. El servidor antiguo sigue detenido.",
+    en: "The saved module preparations leave too little room to accept this handover. This is a fault in Waitron; retrying the same copy will not make that file smaller.",
+    es: "Los preparativos de módulos guardados dejan demasiado poco espacio para aceptar este traspaso. Es un fallo de Waitron; reintentar con la misma copia no reduce ese archivo.",
   },
   "handover.summary_mismatch": {
-    en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",
-    es: "La copia que ha recibido el servidor de reserva no contiene lo que el servidor antiguo dijo que contenía, así que no la ha aceptado. El servidor antiguo sigue detenido.",
+    en: "The copy’s contents do not match the old server’s description. Repeating the check does not repair that copy. Use the emergency procedure with a working backup.",
+    es: "El contenido de la copia no coincide con la descripción del servidor antiguo. Repetir la comprobación no repara esa copia. Usa el procedimiento de emergencia con una copia de seguridad válida.",
   },
   "handover.summary_unreadable": {
-    en: "The spare could not read the copy it received to check what it holds, so it did not accept it. The old box stays stopped.",
-    es: "El servidor de reserva no ha podido leer la copia que ha recibido para comprobar su contenido, así que no la ha aceptado. El servidor antiguo sigue detenido.",
+    en: "This server could not read the copy’s contents to check them. Keep both servers connected while it retries. If it keeps failing, use the emergency procedure with a working backup.",
+    es: "Este servidor no ha podido leer el contenido de la copia para comprobarlo. Mantén ambos servidores conectados mientras lo reintenta. Si sigue fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
   },
   "handover.copy_lacks_destination": {
-    en: "The copy the spare received has no usable record of the spare, so the spare could not start from it and did not accept it. The old box stays stopped.",
-    es: "La copia que ha recibido el servidor de reserva no tiene un registro válido de ese servidor, así que no podría arrancar con ella y no la ha aceptado. El servidor antiguo sigue detenido.",
+    en: "This copy has no usable record of this spare. Check the list of servers on the old server; a controlled handover needs a spare that has finished joining.",
+    es: "Esta copia no tiene un registro válido de este servidor de reserva. Revisa la lista de servidores en el servidor antiguo; un traspaso controlado necesita un servidor de reserva que haya terminado de unirse.",
   },
   "handover.authoriser_not_permitted": {
-    en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
-    es: "Según la copia que ha recibido el servidor de reserva, la persona que autorizó este traspaso no puede pasar el local a otro servidor, así que no la ha aceptado. El servidor antiguo sigue detenido.",
+    en: "The person who authorised this handover lacks Manage boxes permission in this copy. Check their permissions on the main server before starting another handover.",
+    es: "La persona que autorizó este traspaso no tiene permiso de Gestionar servidores en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
   },
   "handover.preparation_state_unusable": {
-    en: "This box's module preparation file is unreadable or too full to take the old box's selections, so this box did not put the accepted copy in place.",
-    es: "El archivo de preparación de módulos de este servidor no se puede leer o está demasiado lleno para añadir las selecciones del servidor antiguo, así que este servidor no ha puesto en su sitio la copia aceptada.",
+    en: "This server cannot read or add to its module preparation file, so it has not placed the accepted copy. This is a fault in Waitron or this server’s disk. Retry a normal boot only after that file is repaired.",
+    es: "Este servidor no puede leer o ampliar su archivo de preparación de módulos, así que no ha colocado la copia aceptada. Es un fallo de Waitron o del disco de este servidor. Reintenta un arranque normal solo después de reparar ese archivo.",
   },
   "handover.placement_failed": {
     en: "This box could not put the copy of the venue it accepted in place. The copy is kept, and Retry tries again.",
@@ -1698,8 +1702,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El disco de este servidor no tiene sitio para poner en su sitio la copia aceptada del local. Pedirá al servidor antiguo que ceda el envío de registros cuando haya sitio. El servidor antiguo sigue detenido.",
   },
   "handover.accepted_copy_missing": {
-    en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
-    es: "La copia del local que este servidor aceptó ya no está en su disco, así que este servidor no puede pasar a llevar el local.",
+    en: "The accepted copy is no longer on this server’s disk. This is a fault in Waitron or this server’s disk. Retry a normal boot only if that copy has been put back.",
+    es: "La copia aceptada ya no está en el disco de este servidor. Es un fallo de Waitron o del disco de este servidor. Reintenta un arranque normal solo si esa copia ha vuelto a su sitio.",
   },
   "handover.source_no_longer_main": {
     en: "This box's list of servers no longer has the old box as the main box, so this box has not taken over from it. If a newer list names the old box again, a waiting box carries on by itself, and an activation that was refused has to be sent again.",
@@ -1714,12 +1718,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El servidor antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
   },
   "handover.indicator_mismatch": {
-    en: "The description the old box sent of its final copy is not one this box can read or does not belong to this handover, so this box did not accept the copy. Nothing changed on this box.",
-    es: "La descripción que ha enviado el servidor antiguo de su copia final no se puede leer en este servidor o no corresponde a este traspaso, así que este servidor no ha aceptado la copia. No ha cambiado nada en este servidor.",
+    en: "The final copy’s description cannot be read or does not match this handover. Check the handover’s progress on both servers before trying again.",
+    es: "La descripción de la copia final no se puede leer o no corresponde a este traspaso. Consulta el progreso del traspaso en ambos servidores antes de volver a intentarlo.",
   },
   "handover.copy_check_failed": {
-    en: "This box could not finish checking the copy, so it has not taken over. Try again.",
-    es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Reinténtalo.",
+    en: "This server could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, check this copy again, or use a working backup.",
+    es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, vuelve a comprobar esta copia o usa una copia de seguridad válida.",
   },
   "handover.source_still_answering": {
     en: "The old box still answers. Switch it off before declaring an emergency handover, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",

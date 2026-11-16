@@ -881,8 +881,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
   "handover.stepping_down": {
-    en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
-    es: "Este servidor ya no lleva el local, así que ahora no atiende solicitudes. No se ha cambiado nada.",
+    en: "This server is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main server once that server is taking sales.",
+    es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
   },
   "server.internal": {
     en: "Something went wrong, try again",

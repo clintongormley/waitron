@@ -54,3 +54,9 @@ describe("the setup string catalogue", () => {
     },
   );
 });
+
+it("keeps the Spanish source-wait wording broad enough for local and server-list failures", () => {
+  expect(es["handover.source"]).toBe(
+    "El último intento no pudo completar este paso del traspaso. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
+  );
+});
