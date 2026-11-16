@@ -21,3 +21,5 @@ Read `docs/developers/testing-guide.md` and the second-pass plan. Reuse `apps/se
 - [ ] Narrow the fixed-secret and remaining-salt entries in docs/backlog/ci.md and their docs/backlog.md index; preserve held/unconverted work. Inspect diff for unchanged assertions, secrets and subject calls. Driver completes finish-branch review/current-head CI and authorised land-branch as one PR.
 
 Estimate: production 0; test changes 15–30 physical lines, support 10–20, docs 50–100 including this plan; total 75–150. These are estimates; growth beyond 225 requires an outside opinion, not a ceiling. Three-hour-to-PR budget excludes waits. No baseline or implementation has run.
+
+16 November 2026, 19:40 — Claude reviewed this plan once (132 seconds); the driver accepted every finding. The watcher cleared it in Lane I questions.md: “Inside the queued item, as corrected: the four sites, the smaller verification, one before/after timing of the set”. The same note directs the five held conversions into one follow-up commit after pp1 lands, on the next open branch. No owner design approval is claimed.
