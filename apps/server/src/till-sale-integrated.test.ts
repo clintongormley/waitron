@@ -7,7 +7,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { fromRegistroRow, registrosFacturacion, type RegistroRow } from "@waitron/fiscal-verifactu";
-import type { TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
+import { venueModuleConfig } from "./provision.js";
+import { deploymentEnvironment } from "./config.js";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -232,21 +236,44 @@ describe("saved-zone payment transactions", () => {
     req: ReturnType<typeof zoneRequest>,
     clock: TrustedClock,
     issue: boolean,
+    backend: FiscalBackend = zoneVenue.backend,
   ) {
     await zoneHeld(req);
     await withTransaction(zoneDb.db, async (tx) => {
       if (issue)
         await issueUnpaidInvoice(
           tx,
-          zoneVenue.backend,
+          backend,
           zoneVenue.cfg,
-          await priceForIssuance(tx, clock, zoneVenue.backend, zoneVenue.cfg, req.id),
+          await priceForIssuance(tx, clock, backend, zoneVenue.cfg, req.id),
           zoneVenue.operatorId,
           testTradingAdmission(),
         );
       await markOrderPlaced(tx, clock, zoneVenue.cfg, req.id, zoneVenue.operatorId);
     });
   }
+  it("pays and replays a presented no-fiscal bill", async () => {
+    const { clock } = zoneClock();
+    const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
+    const backend = fiscalSlot(enabledModules(ALL_MODULES, config), null).makeBackend({
+      db: zoneDb.db,
+      clock,
+      environment: deploymentEnvironment(process.env),
+    });
+    const deps = { ...zoneDeps(clock), backend };
+    const req = { ...zoneRequest(), tender: { method: "cash" as const, amount: "3.00" } };
+    await zonePlaced(req, clock, true, backend);
+
+    const paid = await collectOrder(deps, zoneVenue.cfg, req);
+    const replay = await collectOrder(deps, zoneVenue.cfg, req);
+
+    expect(paid.total).toBe("2.50");
+    expect(paid.tender).toEqual({ method: "cash", change: "0.50" });
+    expect(paid.vatBreakdown).toEqual([{ rate: "10.00", base: "2.27", tax: "0.23" }]);
+    expect(paid.qr).toBe("");
+    expect(paid).not.toHaveProperty("invoiceType");
+    expect(replay).toEqual(paid);
+  });
   describe("whole-order saved-zone issuance", () => {
     it.each(["walk-up", "held", "placed", "free"] as const)(
       "dates %s in Madrid while the source clock reports UTC",

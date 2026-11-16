@@ -282,22 +282,6 @@ question: moving a bill or its guests changes nothing the bill charges, so it go
 pending refund, then reword §8 test 17's "a move" and §5.2's "transfer" to name only moves of
 dishes between bills.
 
-## Check first: on a venue with no fiscal module, replaying a settled bill may throw
-
-(read, not
-run; found by A796's Task 23 review). `readSettledTicket`, which rebuilds the ticket for a
-replay, throws when the backend has no filed record (`apps/server/src/till-sale.ts:840-846`),
-and the no-fiscal backend's `filedReceiptFor` always answers `undefined`
-(`packages/fiscal-none/src/backend.ts:67`). First run a replay on such a venue to see whether it
-is reached.
-
-## On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is paid, not the paid screen
-
-(known limit of A796; read, not run). The paid screen shows only for
-an `F2` result (the `paid` check in `apps/till/src/till-app.ts`), and the presented path takes its invoice
-type from `readReceiptIssuer`, which returns none when the backend has no filed record
-(`apps/server/src/receipt-issuer.ts:8-9`).
-
 ## A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets
 
 NOT APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
@@ -368,17 +352,6 @@ Remaining Stripe qualification and maintenance.
   the one-time native-app decision
   ([native app capabilities](../superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2;
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
-
-## Bundle: No fiscal venue paid flow
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Check first: on a venue with no fiscal module, replaying a settled bill may throw** (read, not
-  run; found by A796's Task 23 review). First run a replay on such a venue to see whether it is reached.
-  [Detail](payments.md#check-first-on-a-venue-with-no-fiscal-module-replaying-a-settled-bill-may-throw)
-- **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
-  paid, not the paid screen** (known limit of A796; read, not run).
-  [Detail](payments.md#on-a-venue-with-no-fiscal-module-a-handheld-shows-the-ticket-view-after-a-presented-bill-is-paid-not-the-paid-screen)
 
 ## Decisions and deliberate limits
 

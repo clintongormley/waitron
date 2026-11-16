@@ -20,9 +20,7 @@ import type { Transaction } from "@waitron/db";
  * write methods keep an unused leading `_tx`: the input they do read comes after it.
  *
  * `state: "recorded"` is deliberate, not a placeholder: the state means "the legally-required
- * record exists locally", which for a venue with no fiscal regime is vacuously true. Reporting it
- * as recorded lets the generic sale path treat a none sale exactly like any other — no branch on
- * the regime — which is the whole point of the swappable slot.
+ * record exists locally", which for a venue with no fiscal regime is vacuously true.
  */
 export class NoneBackend implements FiscalBackend {
   readonly id = "none";
