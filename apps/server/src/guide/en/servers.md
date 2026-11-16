@@ -154,6 +154,8 @@ If the copy check keeps failing, read [how to switch to a spare](servers.md#emer
 Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
 handover on the spare. Keep the old box and its data.
 
+On a till, keep the screen open; it follows the main server once that server is taking sales.
+
 ## When a box no longer runs the venue {#handed-over}
 
 If you open a box's address in a browser and see a page titled **This box no longer runs the

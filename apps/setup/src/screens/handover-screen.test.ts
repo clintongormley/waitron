@@ -379,3 +379,45 @@ it.each(["en", "es"])(
     }
   },
 );
+
+it.each([
+  [
+    "en-GB",
+    "The last attempt could not finish exchanging handover data with the old server. Check both servers’ power, connections and free disk space.",
+  ],
+  [
+    "es-ES",
+    "El último intento no pudo terminar el intercambio de datos del traspaso con el servidor antiguo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores.",
+  ],
+])("describes a failed source attempt before and after acceptance in %s", async (locale, words) => {
+  const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+  const { currentLocale, setLocale } = await import("../i18n/t.js");
+  const original = currentLocale();
+  setLocale(locale);
+  try {
+    for (const state of ["prepared", "copy_accepted"]) {
+      const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+        api: new SetupApi(
+          "",
+          async () =>
+            new Response(
+              JSON.stringify({
+                body: {
+                  ...status,
+                  state,
+                  copyPlaced: false,
+                  waitingReason: "handover.source_unreachable",
+                },
+              }),
+            ),
+        ),
+        operationId: "move one",
+      });
+      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(words));
+      cleanupWidgets();
+    }
+  } finally {
+    cleanupWidgets();
+    setLocale(original);
+  }
+});

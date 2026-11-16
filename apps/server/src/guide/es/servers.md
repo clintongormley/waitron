@@ -168,6 +168,8 @@ Si sigue fallando la comprobación de la copia, consulta [cómo cambiar al servi
 Usa la dirección del nuevo servidor. Si la página del servidor anterior ofrece **Progreso**, sigue el
 enlace para continuar el traspaso en el de reserva. Conserva el servidor anterior y sus datos.
 
+En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese servidor acepte ventas.
+
 ## Cuando el local ya no funciona con un servidor {#handed-over}
 
 Si abres la dirección de un servidor en un navegador y ves una página titulada **El local ya no

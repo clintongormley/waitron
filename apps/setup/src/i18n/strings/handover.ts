@@ -13,7 +13,7 @@ export const handoverEn = {
   "handover.space":
     "The last attempt found too little room on this box. Make room, then keep this page open to try again.",
   "handover.source":
-    "The last attempt could not reach the old box. Check its power and network connection.",
+    "The last attempt could not finish exchanging handover data with the old server. Check both servers’ power, connections and free disk space.",
   "handover.done": "This box has taken over the venue.",
   "handover.restarting": "The venue has started here; this box is restarting.",
   "handover.continue": "Continue to this box",
@@ -174,7 +174,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.space":
     "El último intento detectó poco espacio en este servidor. Libera espacio y mantén esta página abierta para volver a intentarlo.",
   "handover.source":
-    "El último intento no pudo conectar con el servidor anterior. Comprueba su alimentación y conexión de red.",
+    "El último intento no pudo terminar el intercambio de datos del traspaso con el servidor antiguo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores.",
   "handover.done": "Este servidor ha pasado a llevar el local.",
   "handover.restarting": "El local se ha iniciado aquí; este servidor se está reiniciando.",
   "handover.continue": "Continuar en este servidor",

@@ -1011,3 +1011,12 @@ it.each([
     expect(sale).toContain(week);
   },
 );
+
+it("keeps a till on the handover screen while it follows the main server", () => {
+  expect(codeMessage("handover.stepping_down", "en")).toBe(
+    "This server is not taking sales. Keep this screen open; the till follows the main server once that server is taking sales.",
+  );
+  expect(codeMessage("handover.stepping_down", "es")).toBe(
+    "Este servidor no acepta ventas. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
+  );
+});
