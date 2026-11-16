@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as paymentStore from "@waitron/payments";
-import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
@@ -18,13 +17,6 @@ import { FakeStripe } from "./testing/fake-stripe.js";
 import type { NodeId } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-  await suite.db.execute(sql`delete from incidents`);
-});
 
 const NOW = new Date("2026-07-25T12:00:00Z");
 const OLD = new Date("2026-07-01T12:00:00Z");

@@ -19,16 +19,6 @@ import { manifestSets, migrationOptionsFor } from "./manifest.js";
  * `scripts/english-only.test.ts` gives a fiscal term one declaring home.
  */
 const APPEND_ONLY_TABLES = ["sales", "order_amendments", "time_entries"] as const;
-/**
- * The controls, in the other direction — both must still take a delete after the same migrate.
- *
- * `payments` is the sharp one: it is classified `ledger` and is deliberately NOT append-only,
- * because `packages/payments/src/store.ts` moves a card payment's row through its states. A wiring
- * that read the CLASS rather than the `appendOnly()` declaration would refuse those.
- * `settings` is an ordinary `state` table.
- */
-const WRITABLE_TABLES = ["payments", "settings"] as const;
-
 const scratch: string[] = [];
 afterAll(() => {
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
@@ -134,11 +124,13 @@ describe("applyMigrations installs the append-only triggers on the product's own
     await applyMigrations(venue, migrationOptionsFor(manifestSets(), null));
 
     await withVenue(venue, (db) => {
-      for (const table of WRITABLE_TABLES) {
-        seedOneRow(db, table);
-        db.run(sql.raw(`delete from "${table}"`));
-        expect(rowCount(db, table)).toBe(0);
-      }
+      // A ledger classification must still allow payments to move through their states.
+      seedOneRow(db, "payments");
+      db.run(sql`update payments set updated_at = updated_at`);
+      expect(rowCount(db, "payments")).toBe(1);
+      seedOneRow(db, "settings");
+      db.run(sql`delete from settings`);
+      expect(rowCount(db, "settings")).toBe(0);
     });
   });
 

@@ -1,7 +1,7 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
@@ -11,12 +11,6 @@ import { SimulatorPaymentProvider } from "./simulator.js";
 import { billPaymentOfRow, freshNif, seedBillPayment, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
-
-beforeEach(async () => {
-  // Child before parent: a `payment_refunds` row points at its payment.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
 
 async function setup() {
   const seeded = await seedWorkingOrder(suite.db, freshNif());

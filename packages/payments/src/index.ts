@@ -165,6 +165,6 @@ export {
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";
 export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS } from "./settings.js";
 
-export { PAYMENT_CHANGE_REFUSAL } from "./trigger-refusals.js";
+export { PAYMENT_CHANGE_REFUSAL, PAYMENT_DELETE_REFUSAL } from "./trigger-refusals.js";
 
 export { paymentResolutionOutcome, paymentHoldOutcome } from "./schema/payments.js";

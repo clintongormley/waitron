@@ -206,7 +206,7 @@ describe("every table declared append-only refuses an update and a delete", () =
   // because `packages/payments/src/store.ts` moves a card payment's row through its states.
   it("leaves a ledger table nobody declared append-only writable", () => {
     expect(tables).not.toContain("payments");
-    expect(refusalFor(connection, `delete from "payments"`)).toBeUndefined();
+    expect(refusalFor(connection, `update payments set updated_at = updated_at`)).toBeUndefined();
   });
 
   // `it.each([])` reports NOTHING and exits 0, so an empty declaration set, a migrate that created

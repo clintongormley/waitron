@@ -67,12 +67,6 @@ beforeEach(async () => {
   });
 });
 
-beforeEach(async () => {
-  // Child before parent: `payment_refunds` points at `payments`.
-  await suite.db.execute(sql`delete from payment_refunds`);
-  await suite.db.execute(sql`delete from payments`);
-});
-
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 
 async function seedTaxpayer() {

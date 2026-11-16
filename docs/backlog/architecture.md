@@ -960,7 +960,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`payments`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
