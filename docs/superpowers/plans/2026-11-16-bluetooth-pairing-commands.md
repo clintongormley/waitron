@@ -14,7 +14,7 @@
 | Primary provenance | Consequence |
 | --- | --- |
 | [Debian file list](https://packages.debian.org/trixie/amd64/bluez/filelist): `/usr/bin/sdptool` | Reuse installed BlueZ. |
-| [BlueZ 5.82](https://github.com/bluez/bluez/blob/5.82/lib/sdp.c#L4482): `socket(PF_BLUETOOTH` | Direct socket; existing AppArmor `network,` appears sufficient, pending image evidence. |
+| [BlueZ 5.82](https://raw.githubusercontent.com/bluez/bluez/5.82/lib/sdp.c): `socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP)` | Direct socket; existing AppArmor `network,` appears sufficient, pending image evidence. |
 | [Manual](https://manpages.debian.org/trixie/bluez/sdptool.1.en.html): `search [--bdaddr bdaddr]` | Addressed service lookup. |
 
 **Build/verification:** after root's Claude plan review and watcher clearance, implement inline. Reproduce each failure with a failing behavioral test before production edits; preserve unrelated assertions. Run only named files/cases via each package's `exec vitest run`, plus the targeted image CI checks. Stubs and socket-denial checks prove no radio connection or paper output.
