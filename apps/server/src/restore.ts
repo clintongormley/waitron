@@ -13,6 +13,7 @@ import {
 } from "@waitron/store";
 
 import { syncFolderHolding } from "./fs-atomic.js";
+import { reachDisk } from "./sync-path.js";
 
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
@@ -77,6 +78,7 @@ import { recoveryStreamSourceId } from "./recovery-source.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
+import { BackupManifestReadError, readBackupManifest } from "./backup-manifest-reader.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
@@ -319,7 +321,7 @@ async function validateEntryMetadata(
   nodeDump: Uint8Array;
   secretEntries: ArchiveEntry[];
 }> {
-  // Rejection precedence is the statement order below: missing manifest → missing dump → missing
+  // Rejection precedence is the statement order below: missing manifest → manifest admission → missing dump → missing
   // node copy → compatibility gate → unexpected entry → path guard / duplicate destination → identity
   // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
   // destination is refused by the guard loop regardless.
@@ -343,7 +345,14 @@ async function validateEntryMetadata(
   if (manifestEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: MANIFEST_NAME });
   }
-  const manifest = JSON.parse(Buffer.from(manifestEntry.bytes).toString("utf8")) as BackupManifest;
+  let manifest: BackupManifest;
+  try {
+    manifest = readBackupManifest(manifestEntry.bytes);
+  } catch (error) {
+    if (error instanceof BackupManifestReadError)
+      throw new AppError("restore.manifest_invalid", { reason: error.status });
+    throw error;
+  }
 
   if (dumpEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: DB_DUMP_NAME });
@@ -605,6 +614,8 @@ export async function restoreDatabase(args: {
   /** The venue's own state folder, whose backup room note vouches for the `venue.db` replaced. */
   stateDir: string;
   log: Logger;
+  /** Only disposable backup verification may skip flushing. */
+  durable?: boolean;
   /** Tests inject failures here; production passes nothing. */
   fs?: PlacementFs;
 }): Promise<string> {
@@ -668,14 +679,18 @@ export async function restoreDatabase(args: {
       await (fs.copyFile ?? copyFile)(args.databasePath, incoming);
       await (fs.chmod ?? chmod)(incoming, VENUE_FILE_MODE);
     }
-    if (args.nodeDump !== undefined)
+    if (args.durable !== false) await reachDisk(incoming);
+    if (args.nodeDump !== undefined) {
       await writeFile(nodeIncoming, args.nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
+      if (args.durable !== false) await reachDisk(nodeIncoming);
+    }
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
   } catch (error) {
     await removeIncomings();
     throw error;
   }
+  args.log("debug", "restore.db.staged");
   const replaced = args.nodeDump === undefined ? [target] : [target, nodeTarget];
   const moved: string[] = [];
   let nodePlaced = false;
@@ -693,11 +708,14 @@ export async function restoreDatabase(args: {
       await fs.rename(member, join(aside, basename(member)));
       moved.push(member);
     }
+    args.log("debug", "restore.db.previous_moved");
     if (args.nodeDump !== undefined) {
       await fs.rename(nodeIncoming, nodeTarget);
       nodePlaced = true;
+      args.log("debug", "restore.db.node_placed");
     }
     await fs.rename(incoming, target);
+    args.log("debug", "restore.db.venue_placed");
   } catch (error) {
     // The backup's node.db never stays without its venue.db: the box's own goes back or none does.
     if (nodePlaced) await removeIncoming(fs, nodeTarget, args.log);
@@ -714,6 +732,18 @@ export async function restoreDatabase(args: {
       errno: errnoOf(error),
     });
     throw new AppError("restore.placement_failed", params);
+  }
+  // Publication has completed: refusing here would restore the old identity beside the new pair.
+  // Keep the matching identity; durability is unconfirmed when the folder flush fails.
+  if (args.durable !== false) {
+    try {
+      await syncFolderHolding(target);
+    } catch (error) {
+      args.log("error", "restore.db.folder_sync_failed", {
+        folder: args.venueDir,
+        errno: errnoOf(error),
+      });
+    }
   }
   try {
     await fs.rm(aside, { recursive: true, force: true });

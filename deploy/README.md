@@ -800,10 +800,12 @@ command against it treat that entrypoint differently:
   `archive-validate-` or `restore-admission-`, each followed by six random characters) and removes
   them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
   or the encrypted archive, and the next server start removes them. Beside the secrets in the
-  state folder it can also leave `<name>.incoming`, `<name>.incoming.tmp` and
-  `<name>.restore-previous` files, which no start removes and a later restore replaces only for the
-  names its own backup carries; delete them once no restore is running and the file each is named
-  for is present beside it; if that file is missing, run the restore again. A `--from-archive` run that
+  state folder it can also leave `<name>.tmp`, `<name>.incoming`, `<name>.incoming.tmp` and
+  `<name>.restore-previous` files. Once recovery has finished, a later server start removes them
+  beside live regular files. It waits while a restore or its first start is pending, or the old
+  identity remains set aside; the first recovery start may leave cleanup to the next start.
+  Linked folders and files, and working files with no live target, are kept with a warning.
+  If a live file is missing, run the restore again. A `--from-archive` run that
   downloaded the archive but cannot remove its `archive-download-*` folder afterwards prints its
   result and then a line saying the next server start tries to remove it. Break-glass is the exception by design: it runs beside the server
   and takes no lock. Whatever holds the folder keeps a small file beside it,

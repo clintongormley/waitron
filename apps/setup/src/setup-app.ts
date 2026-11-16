@@ -341,6 +341,8 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 
 /** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
 function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
+  const manifestKey = manifestRefusalKey(code, params);
+  if (manifestKey !== undefined) return say(manifestKey);
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
   if (code === "password.throttled") return describeThrottle(params);
@@ -550,11 +552,24 @@ const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 /** The sentence for a bucket refusal the screen does not answer with a question of its own. */
+function manifestRefusalKey(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+): StringKey | undefined {
+  return code === "restore.manifest_invalid"
+    ? params?.reason === "unsupported"
+      ? "shell.restore.manifest_unsupported"
+      : "shell.restore.manifest_invalid"
+    : undefined;
+}
+
 function describeBucketRefusal(
   code: unknown,
   params: Record<string, unknown> | undefined,
 ): Message {
   if (typeof code !== "string") return say("shell.bucket.no_answer");
+  const manifestKey = manifestRefusalKey(code, params);
+  if (manifestKey !== undefined) return say(manifestKey);
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
   if (code === "backup.stream_kit_invalid" && params?.reason === "version")
@@ -1854,7 +1869,7 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       const { code, params } = (error ?? {}) as {
         code?: unknown;
-        params?: { lastChangeAt?: unknown };
+        params?: Record<string, unknown>;
       };
       const held = restoreOrResetRefusalWords(code, "shell.restore.first_setup_held");
       if (held !== undefined) {
@@ -1878,7 +1893,8 @@ export class SetupApp extends LitElement {
           RESTORE_FIELD_CODES,
           RESTORE_FIELD_PATHS,
         );
-        const finishKey = finishRefusalKey(error, "shell.clock_step_unsaved");
+        const finishKey =
+          manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =
           finishKey !== undefined
             ? say(finishKey)
@@ -2050,7 +2066,7 @@ export class SetupApp extends LitElement {
       if (current()) {
         const { code, params } = (error ?? {}) as {
           code?: unknown;
-          params?: { lastChangeAt?: unknown };
+          params?: Record<string, unknown>;
         };
         const held = restoreOrResetRefusalWords(code, "shell.restore.first_setup_held");
         if (held !== undefined) {
@@ -2077,7 +2093,8 @@ export class SetupApp extends LitElement {
           );
         } else {
           this.cloudRecoveryError = say(
-            finishRefusalKey(error, "shell.clock_step_unsaved") ??
+            manifestRefusalKey(code, params) ??
+              finishRefusalKey(error, "shell.clock_step_unsaved") ??
               (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
               (event.detail.action === "restore"
                 ? "shell.cloud.restore_unavailable"

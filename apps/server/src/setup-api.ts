@@ -285,6 +285,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
+  "restore.manifest_invalid": 422,
   "restore.archive_resource_limit": 507,
   // An export's image metadata, or its language, the media module refuses; 400, as
   // packages/media/src/routes.ts answers both.

@@ -2,9 +2,13 @@ import { moduleRecordBytes } from "@waitron/provisioning";
 import {
   INCOMING_SUFFIX as STAGED_SECRET_SUFFIX,
   MODULE_RECORDS_DIR,
+  REQUIRED_BACKUP_STATE,
+  OPTIONAL_BACKUP_STATE,
+  RESTORE_FLOW_DIR,
+  TRADING_ENV_REPLACED_SUFFIX,
   TRADING_ENV_FILE,
 } from "@waitron/store";
-import { rename, rm, stat } from "node:fs/promises";
+import { lstat, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import type { ArchiveEntry } from "./backup-archive.js";
@@ -50,11 +54,6 @@ export async function moduleRecordEntries(
 }
 
 export { INCOMING_SUFFIX as STAGED_SECRET_SUFFIX } from "@waitron/store";
-/** A killed restore can leave `.incoming`, `.incoming.tmp` and
- * `.restore-previous` files beside the secrets. One killed while publishing can leave a target
- * missing, with the box's old file as `.restore-previous` and the backup's as `.incoming`. The next
- * restore replaces only those of the names its own archive carries, so a `tls/*.restore-previous`
- * copy of an old private key can survive. */
 export const PREVIOUS_SECRET_SUFFIX = ".restore-previous";
 /** The set-aside identity's name, `trading.env.replaced`, in `restore.ts`. */
 const REPLACED_IDENTITY_SUFFIX = ".replaced";
@@ -239,5 +238,69 @@ async function statOrUndefined(path: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
+  }
+}
+
+/** Called before boot's writers, while node-entry holds the venue folder. */
+export async function clearRestoreSecretFiles(stateDir: string, log: Logger): Promise<void> {
+  const info = async (rel: string) => {
+    try {
+      return await lstat(join(stateDir, rel));
+    } catch (error) {
+      if (errnoOf(error) === "ENOENT") return undefined;
+      throw error;
+    }
+  };
+  try {
+    if (
+      !(await info(TRADING_ENV_FILE))?.isFile() ||
+      (await info(`${TRADING_ENV_FILE}${TRADING_ENV_REPLACED_SUFFIX}`)) ||
+      (await info(RESTORE_FLOW_DIR))
+    ) {
+      log("warn", "restore.secrets.cleanup_deferred", { folder: stateDir });
+      return;
+    }
+    const targets = [...REQUIRED_BACKUP_STATE, ...OPTIONAL_BACKUP_STATE];
+    const records = await info(MODULE_RECORDS_DIR);
+    if (records?.isDirectory()) {
+      for (const entry of await readdir(join(stateDir, MODULE_RECORDS_DIR))) {
+        const name = entry.replace(/(?:\.incoming\.tmp|\.restore-previous|\.incoming|\.tmp)$/, "");
+        if (/^[a-z][a-z0-9-]*\.json$/.test(name)) targets.push(`${MODULE_RECORDS_DIR}/${name}`);
+      }
+    } else if (records) {
+      log("warn", "restore.secrets.working_kept", { file: MODULE_RECORDS_DIR });
+    }
+    for (const rel of new Set(targets)) {
+      const parent = dirname(rel);
+      if (parent !== ".") {
+        const folder = await info(parent);
+        if (!folder?.isDirectory()) {
+          if (folder) log("warn", "restore.secrets.working_kept", { file: rel });
+          continue;
+        }
+      }
+      const live = await info(rel);
+      for (const suffix of [
+        stagedPath(""),
+        STAGED_SECRET_SUFFIX,
+        `${STAGED_SECRET_SUFFIX}.tmp`,
+        PREVIOUS_SECRET_SUFFIX,
+      ]) {
+        const working = `${rel}${suffix}`;
+        const found = await info(working);
+        if (found === undefined) continue;
+        if (!live?.isFile() || !found.isFile()) {
+          log("warn", "restore.secrets.working_kept", { file: working });
+          continue;
+        }
+        try {
+          await rm(join(stateDir, working));
+        } catch (error) {
+          log("warn", "restore.secrets.working_kept", { file: working, errno: errnoOf(error) });
+        }
+      }
+    }
+  } catch (error) {
+    log("warn", "restore.secrets.cleanup_deferred", { folder: stateDir, errno: errnoOf(error) });
   }
 }

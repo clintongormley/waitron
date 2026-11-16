@@ -109,7 +109,8 @@ If the upload does not finish, keep your selected file, improve the connection a
 
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
 date, node and server key. Check those details before continuing. Keep production and
-preproduction separate.
+preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
+If the format is unsupported, install a Waitron version that supports it before trying again.
 
 The recovery key, the bucket kit and the Cloud approval give access to a copy. You still need that
 copy's named server key to authenticate recovery.

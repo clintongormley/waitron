@@ -1816,6 +1816,7 @@ declare module "@waitron/shared" {
      * restored. `missing` is the fixed entry name.
      */
     "restore.archive_incomplete": { missing: string };
+    "restore.manifest_invalid": { reason: "invalid" | "unsupported" };
     /** A staging or decoding capacity refusal is not evidence that the archive is damaged. */
     "restore.archive_resource_limit": Record<string, never>;
     /**

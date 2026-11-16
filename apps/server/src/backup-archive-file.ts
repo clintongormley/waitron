@@ -1,3 +1,4 @@
+import { ARCHIVE_MAX_ENTRIES, ARCHIVE_MAX_NAME_BYTES } from "@waitron/provisioning";
 import { VENUE_FILE } from "@waitron/store";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,8 +9,7 @@ import "./errors.js";
 
 export type ArchiveInputEntry =
   { kind: "bytes"; entry: ArchiveEntry } | { kind: "file"; name: string; path: string };
-export const ARCHIVE_MAX_ENTRIES = 4096;
-export const ARCHIVE_MAX_NAME_BYTES = 4096;
+export { ARCHIVE_MAX_ENTRIES, ARCHIVE_MAX_NAME_BYTES };
 export const ARCHIVE_MAX_METADATA_BYTES = 16 * 1024 * 1024;
 function invalid(reason: string): never {
   throw new AppError("backup.archive_invalid", { reason });

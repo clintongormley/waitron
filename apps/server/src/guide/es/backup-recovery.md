@@ -120,7 +120,9 @@ Si la carga no termina, conserva el archivo seleccionado, mejora la conexión y 
 
 Después elige **Revisar copia**. La página muestra la copia elegida: su origen, el negocio, el
 local, la fecha, el nodo y la clave del servidor. Compruébalos antes de continuar.
-Mantén separados producción y preproducción.
+Mantén separados producción y preproducción. Si el manifiesto está dañado o incompleto, elige otra
+copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
+de volver a intentarlo.
 
 La clave de recuperación, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
 necesitas la clave del servidor de esa copia para identificarte.

@@ -1280,6 +1280,34 @@ describe("runEntry", () => {
     expect(startServer).not.toHaveBeenCalled();
   });
 
+  it("cleans obsolete secrets after staged recovery under the venue hold, before boot", async () => {
+    const order: string[] = [];
+    await runEntry(
+      deps({
+        runStagedRestore: async () => {
+          order.push("restore");
+          return false;
+        },
+        lockVenue: async () => {
+          order.push("lock");
+          return {
+            release: () => {
+              order.push("release");
+            },
+          };
+        },
+        clearRestoreSecretFiles: async () => {
+          order.push("cleanup");
+        },
+        startServer: async () => {
+          order.push("boot");
+          return { close: async () => {} };
+        },
+      }),
+    );
+    expect(order).toEqual(["restore", "lock", "cleanup", "boot", "release"]);
+  });
+
   it("clears set-aside folders, then checks the VENUE DIRECTORY for an ahead database, before the server starts", async () => {
     const order: string[] = [];
     await runEntry(

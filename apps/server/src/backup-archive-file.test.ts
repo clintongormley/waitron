@@ -130,7 +130,19 @@ describe("file archive", () => {
         "metadata_too_large",
       ],
     ] as const) {
-      await writeFile(path, packArchive([...entries]));
+      // Malformed reader input must bypass the packer's admission limits.
+      const header = Buffer.from("574241310100000000", "hex");
+      header.writeUInt32LE(entries.length, 5);
+      const framed = [header];
+      for (const entry of entries) {
+        const name = Buffer.from(entry.name, "utf8");
+        const nameLength = Buffer.alloc(4);
+        nameLength.writeUInt32LE(name.length);
+        const dataLength = Buffer.alloc(8);
+        dataLength.writeBigUInt64LE(BigInt(entry.bytes.length));
+        framed.push(nameLength, name, dataLength, entry.bytes);
+      }
+      await writeFile(path, Buffer.concat(framed));
       await expect(unpackArchiveFile(path, dir)).rejects.toEqual(invalid(reason));
       await expect(
         collect(packArchiveStream(entries.map((entry) => ({ kind: "bytes" as const, entry })))),

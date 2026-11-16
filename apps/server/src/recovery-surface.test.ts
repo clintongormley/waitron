@@ -47,6 +47,17 @@ describe("recoveryApp", () => {
     expect(body).toMatch(/failed 3 times|3 consecutive/i);
   });
 
+  it("explains a refused manifest with a complete backup or supported version as the next step", async () => {
+    const app = recoveryApp({
+      state: afterFailure(FRESH, "restore.manifest_invalid", new Date()),
+      logDir: await mkdtemp(join(tmpdir(), "manifest-page-")),
+      onRetry: vi.fn(),
+    });
+    const body = await (await app.request("/")).text();
+    expect(body).toContain("Waitron could not read this backup&#39;s manifest.");
+    expect(body).toContain("Choose another complete backup");
+    expect(body).toContain("a Waitron version that can read this backup");
+  });
   it("serves exactly the same facts as JSON — no extra field leaks", async () => {
     const app = recoveryApp({
       state,

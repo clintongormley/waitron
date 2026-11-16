@@ -168,6 +168,7 @@ const STATUS = {
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
+  "restore.manifest_invalid": 422,
   "restore.archive_resource_limit": 507,
   "restore.environment_mismatch": 409,
   "restore.schema_too_new": 409,

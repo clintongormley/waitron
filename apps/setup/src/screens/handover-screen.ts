@@ -464,7 +464,7 @@ export class SetupHandoverScreen extends LitElement {
   #emergencyError(cause: unknown): string {
     const error = cause as {
       code?: string;
-      params?: { operationId?: string; sourceServersUrl?: string };
+      params?: { operationId?: string; sourceServersUrl?: string; reason?: string };
     } | null;
     const code = error?.code;
     this.refusalLink =
@@ -499,6 +499,12 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "handover.copy_predates_destination")
       return t("handover.emergency.backup_too_old");
     if (code === "restore.archive_resource_limit") return t("shell.restore.archive_resource_limit");
+    if (code === "restore.manifest_invalid")
+      return t(
+        error?.params?.reason === "unsupported"
+          ? "shell.restore.manifest_unsupported"
+          : "shell.restore.manifest_invalid",
+      );
     if (code === "handover.backup_key_missing" || code === "backup.recovery_key_too_short")
       return t("handover.emergency.backup_key_missing");
     if (

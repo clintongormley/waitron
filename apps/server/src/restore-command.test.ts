@@ -716,6 +716,14 @@ describe("waitron-restore restore --from-bucket", () => {
 
   it.each([
     [
+      new AppError("restore.manifest_invalid", { reason: "invalid" }),
+      "restore failed: the backup's manifest is malformed. Choose another complete backup",
+    ],
+    [
+      new AppError("restore.manifest_invalid", { reason: "unsupported" }),
+      "restore failed: this backup's manifest version is not supported. Use a Waitron version that supports this backup",
+    ],
+    [
       new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00.000Z" }),
       "restore failed: restore.stream_source_live — the old server wrote to its bucket at 2026-09-23T11:58:00.000Z and may still be selling; if it is switched off for good, re-run with --confirm-old-box-gone",
     ],
@@ -1130,6 +1138,14 @@ describe("waitron-restore restore <artifact> and the old server", () => {
   );
 
   it.each([
+    [
+      new AppError("restore.manifest_invalid", { reason: "invalid" }),
+      "restore failed: the backup's manifest is malformed. Choose another complete backup",
+    ],
+    [
+      new AppError("restore.manifest_invalid", { reason: "unsupported" }),
+      "restore failed: this backup's manifest version is not supported. Use a Waitron version that supports this backup",
+    ],
     [
       new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00.000Z" }),
       "restore failed: restore.stream_source_live — the server this backup came from wrote to its bucket at 2026-09-23T11:58:00.000Z and may still be selling; if it is switched off for good, re-run with --confirm-old-box-gone",
