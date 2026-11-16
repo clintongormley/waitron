@@ -24,7 +24,7 @@ export interface RestrictedStartDeps {
   listen: (app: Hono, stopWork: () => Promise<void>) => StartedServer;
 }
 
-const MONEY_AND_DRAWER_WRITES = [
+export const MONEY_AND_DRAWER_WRITES = [
   "/api/sales",
   "/api/pay",
   "/api/working-orders/:id/payments",
