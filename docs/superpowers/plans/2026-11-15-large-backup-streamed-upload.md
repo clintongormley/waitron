@@ -1,5 +1,7 @@
 # Large backup streamed upload — implementation plan
 
+_2026-11-16: The setup upload receiving limit in step 4 is superseded by the [slow-upload plan](2026-11-16-slow-restore-upload.md). The remaining steps below record the streamed-upload change._
+
 **Authority/outcome.** The watcher’s 2026-11-14 23:31 note in `~/waitron-campaign-j/questions.md` authorises planning without another dataset build. Staff will preview, stage and restore backups over 256 MiB through existing browser requests. Separate Sol/high draft, driver source check and Claude review/corrections are complete; the watcher cleared publication and build on 2026-11-15 00:36, including a useful interrupted-upload message; no owner design approval is claimed. The original queue ask and watcher words accompany the external review brief.
 
 **Evidence.** [A1533’s recorded month](../../backlog/setup.md#recovery-operations-still-buffer-whole-database-files) is 144,176,735 encrypted bytes; multiplying by 12 gives **1,649.97 MiB**, a linear 360-day estimate, not a measured year. The year remains unmeasured. Snapshot-inclusive validation peaked at 743 MiB near 256 MiB input, excluding HTTP receipt. Reuse `validateArtifactFile`, existing scratch layout, source hashing and durable restore flow.

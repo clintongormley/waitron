@@ -359,16 +359,6 @@ This inventory comes from following source reads, not large-file runtime qualifi
 remaining paths. Next: exercise each operation above its current buffer budget before replacing
 that operation's reader. Do not remove exact-content checks to make a large file fit.
 
-## Let slow large backup uploads finish
-
-The watcher cleared the 4 GiB browser-upload ceiling with Node's current 300-second receive limit
-on 15 November 2026. A 20 Mbit/s link can carry at most 715.26 MiB in that time; 100 Mbit/s can
-carry 3.49 GiB, before overhead. The linear 360-day estimate of 1,730,120,820 bytes needs
-46.14 Mbit/s; no year was measured. The upload may be repeated for review, staging and restore.
-The client explains a 408 or dropped connection and suggests a cable or the venue network.
-Choose a receiving policy for these routes that lets slower large transfers finish without changing
-the server-wide timeout. No new timeout policy is built by the streamed-upload change.
-
 ## Bundle: Restore paths run
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

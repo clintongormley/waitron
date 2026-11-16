@@ -1,3 +1,5 @@
+import { SETUP_RECEIVE_LIMITS } from "./request-receive-limits.js";
+import { listener } from "./testing/ephemeral-listener.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { ensureStreamId } from "@waitron/db";
@@ -13,7 +15,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
-import { createServer as createHttpsServer } from "node:https";
+import { createServer as createHttpsServer, Server as HttpsServer } from "node:https";
 import { X509Certificate } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -1178,6 +1180,28 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(keptStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("the setup HTTPS listener gives backup uploads a bounded longer receive window", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    try {
+      await withSetupBoot(venue.directory, {}, async ({ get }) => {
+        const raw = listener.current;
+        expect(raw).toBeInstanceOf(HttpsServer);
+        expect((raw as import("node:https").Server).requestTimeout).toBe(43_200_000);
+        expect((raw as import("node:https").Server).headersTimeout).toBe(60_000);
+        expect(SETUP_RECEIVE_LIMITS).toMatchObject({
+          ordinaryMs: 300_000,
+          idleMs: 120_000,
+          minProgressBytes: 65_536,
+        });
+        expect((await get("/setup-api/status")).status).toBe(200);
+      });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  });
 
   it("reports the process USB origin in fresh setup status", async () => {
     beforeServerStarts();

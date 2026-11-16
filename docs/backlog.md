@@ -395,11 +395,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Cloud transfers and configuration imports keep their separate buffers.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
-- **Let slow large backup uploads finish.** Browser recovery accepts files up to 4 GiB, but each
-  upload still has Node's 300-second receive limit. A 20 Mbit/s link allows about 715 MiB before
-  overhead; the scaled, unmeasured year needs 46.14 Mbit/s. Choose a per-route receive policy.
-  [Detail](backlog/setup.md#let-slow-large-backup-uploads-finish).
-
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
   Stays in the backlog, in no lane, until Cloud's sign-up and trial pages and a real box-to-Cloud connection exist (owner, 2026-11-09).

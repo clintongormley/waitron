@@ -1,3 +1,4 @@
+import { attachRequestReceiveLimits } from "./request-receive-limits.js";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
@@ -1894,6 +1895,7 @@ async function bootServer(
     );
     const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
     const server = startListening({ ...config, tls }, app, now, log);
+    attachRequestReceiveLimits(server as HttpsServer);
     undoOnFailure.push(() => closeListener(server));
     const venueName = watchVenueNameInSetup({
       hostname: BOX_HOSTNAME,

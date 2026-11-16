@@ -103,8 +103,9 @@ Choose a box with enough free disk space for the recovered database and the temp
 needed to open the backup.
 
 For a large backup, connect your device by cable or to the venue's network before uploading.
-Choose a file no larger than 4 GiB. Each upload must finish within five minutes: a 20 Mbit/s
-connection can send about 715 MiB, or a 100 Mbit/s connection about 3.49 GiB, before overhead.
+Choose a file no larger than 4 GiB. An upload can take up to 12 hours, provided the box receives
+at least 64 KiB every two minutes. If the connection stops or becomes too slow, the box ends the
+upload so you can try again.
 If the upload does not finish, keep your selected file, improve the connection and try again.
 
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
