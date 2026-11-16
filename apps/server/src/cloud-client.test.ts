@@ -461,3 +461,41 @@ it("treats a version-one connection file as not connected for status, refresh, r
     await f.close();
   }
 });
+
+it("refuses a list-valued pairing state on reply and reload without replacing saved facts", async () => {
+  const f = await fixture();
+  try {
+    const client = createCloudConnection(f.options);
+    await client.start();
+    f.approve();
+    await client.check();
+    const path = join(f.stateDir, "cloud/connection.json");
+    const before = await readFile(path, "utf8");
+    f.patchReply({ state: ["awaiting_local"] });
+    await expect(client.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(await readFile(path, "utf8")).toBe(before);
+    const saved = JSON.parse(before);
+    saved.view.state = ["awaiting_local"];
+    await writeFile(path, JSON.stringify(saved));
+    await expect(createCloudConnection(f.options).status()).rejects.toMatchObject({
+      code: "cloud.state_invalid",
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it.each([
+  { bytes: 16384, accepted: true },
+  { bytes: 16385, accepted: false },
+])("bounds valid pairing JSON at $bytes bytes", async ({ bytes, accepted }) => {
+  const f = await fixture();
+  try {
+    f.padReply(bytes);
+    const result = createCloudConnection(f.options).start();
+    if (accepted) expect((await result).state).toBe("awaiting_cloud");
+    else await expect(result).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    await f.close();
+  }
+});

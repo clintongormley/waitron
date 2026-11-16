@@ -1,4 +1,5 @@
-import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   SuggestionResult,
   SuggestionPage,
@@ -42,14 +43,9 @@ export function translationEnvelope(
     { action, operationId: input.operationId, lease: input.lease, body: input.signedBody },
     now,
   );
-  const key = createPrivateKey({
-    key: Buffer.from(state.privateKey, "base64url"),
-    format: "der",
-    type: "pkcs8",
-  });
   return {
     payload: bytes.toString("base64url"),
-    signature: sign(null, bytes, key).toString("base64url"),
+    signature: signCloudPayload(bytes, state.privateKey),
   };
 }
 
@@ -159,19 +155,10 @@ export async function serviceExchange(
         ? AbortSignal.any([signal, AbortSignal.timeout(limits.ms)])
         : AbortSignal.timeout(limits.ms),
     });
-    if (!response.body) unavailable();
-    let size = 0;
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of response.body) {
-      size += chunk.length;
-      if (size > limits.reply) unavailable();
-      chunks.push(chunk);
-    }
+    const replyBytes = await readCloudResponseBytes(response, limits.reply);
     let value: unknown;
     try {
-      value = JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
-      );
+      value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(replyBytes));
     } catch {
       if (response.ok) unavailable();
     }

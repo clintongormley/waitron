@@ -779,3 +779,46 @@ it("reads a version-one replacement file as absent and starts with new keys", as
   await client.prepare();
   expect(JSON.parse(await readFile(path, "utf8")).publicKey).not.toBe(saved.publicKey);
 });
+
+it("refuses a list-valued replacement state on reply and reload", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  const before = await readFile(path, "utf8");
+  const original = f.options.fetch;
+  const fetching = (async (url, init) => {
+    const response = await original(url, init);
+    return Response.json({ ...(await response.json()), state: ["complete"], registration: null });
+  }) as typeof fetch;
+  await expect(
+    createCloudReplacement({ ...f.options, fetch: fetching, connection: f.connection }).check(),
+  ).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect(await readFile(path, "utf8")).toBe(before);
+  const saved = JSON.parse(before);
+  saved.view.state = ["complete"];
+  await writeFile(path, JSON.stringify(saved));
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).status(),
+  ).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
+});
+
+it.each([
+  { bytes: 16384, accepted: true },
+  { bytes: 16385, accepted: false },
+])("bounds valid replacement JSON at $bytes bytes", async ({ bytes, accepted }) => {
+  const f = await fixture();
+  const original = f.options.fetch;
+  const fetching = (async (url, init) => {
+    const response = await original(url, init);
+    const text = await response.text();
+    return new Response(text + " ".repeat(bytes - Buffer.byteLength(text)));
+  }) as typeof fetch;
+  const result = createCloudReplacement({
+    ...f.options,
+    fetch: fetching,
+    connection: f.connection,
+  }).prepare();
+  if (accepted) expect((await result).state).toBe("awaiting_owner");
+  else await expect(result).rejects.toMatchObject({ code: "cloud.unavailable" });
+});

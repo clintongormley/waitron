@@ -660,3 +660,12 @@ it.each([
   });
   expect(f.submits()).toHaveLength(0);
 });
+
+it.each([{ state: ["pending"] }, { state: ["ready"] }])(
+  "refuses a list-valued certificate state $state",
+  async ({ state }) => {
+    const f = await fixture();
+    f.reply({ state });
+    await expect(f.pass()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  },
+);

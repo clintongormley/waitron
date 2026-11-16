@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 it("persists renewal intent, resumes a lost response after restart, and keeps credentials out of status", async () => {
@@ -383,6 +383,27 @@ it("does not repeat the fourth service when a report reply carries it", async ()
     expect(f.requests.at(-1)![2]).toBe("report");
     expect((await f.client.status()).installation!.services).toHaveLength(4);
   } finally {
+    await f.close();
+  }
+});
+
+it.each([
+  { bytes: 65536, accepted: true },
+  { bytes: 65537, accepted: false },
+])("bounds valid installation JSON at $bytes bytes", async ({ bytes, accepted }) => {
+  const f = await installationFixture();
+  const original = globalThis.fetch;
+  const fetching = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    const response = await original(url, init);
+    const text = await response.text();
+    return new Response(text + " ".repeat(bytes - Buffer.byteLength(text)));
+  });
+  try {
+    const result = f.client.refresh();
+    if (accepted) expect((await result).installation?.state).toBe("active");
+    else await expect(result).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    fetching.mockRestore();
     await f.close();
   }
 });

@@ -1757,7 +1757,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   production recovery remain open.
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 
-- **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
 - **A951-S provider trials.** Translate all returned one editable menu suggestion on the test box;
   address completion still needs its trial. Keep the approved consent and request limits.

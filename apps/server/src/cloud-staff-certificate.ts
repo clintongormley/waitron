@@ -115,7 +115,8 @@ export async function refreshStaffCertificate(
         reply.requestId !== requestId ||
         reply.revision !== discovered.revision ||
         reply.csrDigest !== csrDigest ||
-        !["pending", "ready"].includes(String(reply.state))
+        typeof reply.state !== "string" ||
+        !["pending", "ready"].includes(reply.state)
       )
         throw new Error();
       if (reply.state !== "ready") return false;
