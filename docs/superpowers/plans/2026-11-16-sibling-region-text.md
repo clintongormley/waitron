@@ -1,4 +1,4 @@
-# SIBLING-REGION-TEXT: a regional request never takes another region's text (lane L)
+# SIBLING-REGION-TEXT: a regional request takes the default before another region's text (lane L)
 
 Status: plan, 2026-11-16. Ask: lane L queue, SIBLING-REGION-TEXT (watcher 2026-11-16 19:04), after lane
 H reproduced it (`~/waitron-campaign-h/receipts/language-fallback/review-a.md`, row C9:
@@ -9,16 +9,17 @@ H reproduced it (`~/waitron-campaign-h/receipts/language-fallback/review-a.md`, 
 
 The shared lookup stops taking another region's text: a name asked for in one region of a language
 (Spain's Spanish, `es-ES`) no longer shows text stored only for another region (Mexico's, `es-MX`); it
-falls back as the design orders: requested tag → its bare language → the venue default → any stored
-text (`docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md:31-33`: "There is
+falls back as the design orders: requested tag → its bare language → the venue default
+(`resolveContentText`), then any stored text (`resolveSnapshotText` only) (`docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md:31-33`: "There is
 no lateral sibling-region jump (`es-PT` does not detour through `es-ES`)"). Stored snapshots are not
-touched.
+touched. With a default in the same language (`es`), the default's own pass can still reach `es-MX`,
+as the design's "any available entry" step allows.
 
 **On today's sales nothing printed changes** (fresh plan read, 2026-11-16, traced): line names are
 frozen in the default language under every receipt key (`defaultLanguageDescriptions`,
 `packages/menu/src/default-language-text.ts`, called at `apps/server/src/working-order.ts:1033`),
-unit names likewise (`prepareUnitSnapshot`), and content defaults never carry a region, so invoice and
-receipt lines are only ever looked up with a region-less default or an exact stored key. The visible
+unit names likewise (`prepareUnitSnapshot`), and receipts look both up by `namesLocale`, a key every
+line is stored under, whose bare step reaches a unit's content-code key. The visible
 change is on dashboard and till screens (whose interface language is `en-GB` or `es-ES`) reading a
 name stored only under another region's code, which the API accepts. `toInvoiceLineDescriptions` is
 called only by the demo seed.
@@ -43,9 +44,11 @@ called only by the demo seed.
    inserted value". The backlog entry names it. `namesLocale` is missing from a line's keys only when
    the receipt language changed after the order was saved, and every key holds the same default-
    language text, so no print changes; the change only decides what such a line prints (the shared order, then the
-   alphabetically first non-blank text, never a blank one). The till's own `lineName`
+   non-blank text whose language code sorts first, never a blank one). The till's own `lineName`
    (`apps/till/src/screens/till-ticket-view.ts:69`) is on-screen, not a document: one line in the PR
-   thread, not changed here.
+   thread, not changed here. As built: review found the till screen and the print then name a line
+   differently, so the till's `lineName` reads through `resolveSnapshotText` too, and its test
+   "names a filed line from its first stored description…" changed with it.
 
 ## Changed test checks (owner rule 2026-10-05: noted, not controversial)
 
@@ -59,6 +62,14 @@ Both pin the jump this item removes; each case is renamed for what it now proves
   translation with its actual language" (`es-AR` against `es-ES`/`es-MX`): now returns the staff
   name, "Counter burger", instead of "Hamburguesa de España". Only that test reaches
   `resolveMenuText` with a regional request; every real caller passes a bare content code.
+- As built, a third (decision 3's as-built note): `apps/till/src/screens/till-ticket-view.test.ts`
+  "names a filed line from its first stored description when none is in the invoice locale"
+  expected `"Water"` from `{ en: "Water", ca: "Aigua" }`; it now expects the non-blank text whose
+  language code sorts first, as the printed receipt does.
+- As built, a fourth, found by finish-branch: `apps/server/src/receipt-ticket.test.ts` "prints F1
+  reductions before VAT, at their rate, …" held `{ "es-ES": "Plato", en: "Dish" }` and expected
+  "Plato" in every language through the old first-entry fallback; its fixture now holds the same
+  text under both keys, as real lines do.
 
 ## Task 1 (one implementer, test-first)
 
@@ -71,7 +82,7 @@ Both pin the jump this item removes; each case is renamed for what it now proves
    fr: "Pain" }, ["es-ES", "fr-FR"], "fr")` gives `{ "es-ES": "Pain", "fr-FR": "Pain" }`. Watch it fail.
 3. `apps/server/src/receipt-document.test.ts`: a line whose descriptions are
    `{ "fr-FR": "Pain", "es-ES": "Pan" }` printed with `namesLocale` `en-GB` prints `"Pan"` (the
-   alphabetically first non-blank; today it prints the first inserted, `"Pain"`), and a line whose
+   non-blank text whose language code sorts first; today it prints the first inserted, `"Pain"`), and a line whose
    first inserted value is blank does not print a blank name. Watch both fail.
 4. Implement decision 1 in `resolveContentText` and decision 3 in `lineName`. All three files green.
 5. Run the whole `@waitron/shared` and `@waitron/menu` suites (`pnpm --filter @waitron/shared exec
@@ -83,7 +94,8 @@ Both pin the jump this item removes; each case is renamed for what it now proves
    bundle line); reword the bundle's intro and its index line in `docs/backlog.md` (now one entry, the
    other #379 followups); update the spec index row in `docs/backlog.md` that points at
    "_Language resolution follow-ons_" to whatever the backlog really still holds for that spec (grep
-   it; write nothing you have not found).
+   it; write nothing you have not found). As built: the bundle was dissolved and its remaining entry
+   listed on its own (cfbd8746c0).
 
 Size: about 10 production lines, about 40 test lines, about 15 lines of docs removed. No migration, no
 schema, no new error code. Fiscal: line descriptions are stored on the sale's lines and printed on
