@@ -438,6 +438,10 @@ function sharedRefusal(err: unknown): string {
     if (diskFullIn(err)) return RESTORE_DISK_FULL;
     return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; install a version that fixes this, then run the same command again: it starts the restore over";
   }
+  if (hasCode(err, "restore.manifest_invalid"))
+    return err.params.reason === "unsupported"
+      ? "restore failed: this backup's manifest version is not supported. Use a Waitron version that supports this backup"
+      : "restore failed: the backup's manifest is malformed. Choose another complete backup";
   if (hasCode(err, "restore.archive_resource_limit"))
     return "restore failed: not enough temporary disk space, or the space could not be measured. Free space on this box and try again";
   if (hasCode(err, "restore.hook_failed")) {

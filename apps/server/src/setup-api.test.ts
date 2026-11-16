@@ -1844,6 +1844,8 @@ describe("POST /setup-api/configuration", () => {
 
 /** Refusals every restore route can meet from the same validation, with the one status each answers. */
 const SHARED_RESTORE_REFUSALS: [AppError, number][] = [
+  [new AppError("restore.manifest_invalid", { reason: "invalid" }), 422],
+  [new AppError("restore.manifest_invalid", { reason: "unsupported" }), 422],
   [new AppError("recovery.passphrase_invalid", {}), 422],
   [new AppError("backup.artifact_invalid", { reason: "tag" }), 422],
   [new AppError("backup.archive_invalid", { reason: "truncated" }), 422],
@@ -2150,6 +2152,7 @@ describe("POST /setup-api/restore-bucket", () => {
   it("maps each refusal a rebuild can meet to its status", async () => {
     const cases: [AppError, number][] = [
       [new AppError("backup.stream_kit_invalid", { reason: "shape" }), 400],
+      [new AppError("restore.manifest_invalid", { reason: "invalid" }), 422],
       [new AppError("restore.stream_pointer_missing", {}), 422],
       [new AppError("restore.stream_pointer_unverified", { reason: "signature" }), 422],
       [new AppError("backup.stream_pointer_invalid", { reason: "not_json" }), 422],

@@ -273,6 +273,31 @@ it("uploads a checked archive, waits for restart, then signs its provenance and 
   );
 });
 
+it.each(["invalid", "unsupported"])("answers an %s backup manifest with 422", async (reason) => {
+  const s = service("https://spare.example", {
+    backup: {
+      readRecoveryKey: async () => backupKey,
+      environment: "preproduction",
+      migrationsRoot: null,
+      restart: vi.fn(),
+    },
+  });
+  const bytes = encryptArtifact(
+    packArchive([
+      {
+        name: "manifest.json",
+        bytes: Buffer.from(
+          reason === "invalid" ? "invalid JSON" : JSON.stringify({ manifestVersion: 2 }),
+        ),
+      },
+    ]),
+    backupKey,
+  );
+  const answer = await s.post(upload({ signIn: request.signIn }, bytes), true, "backup");
+  expect(answer.status).toBe(422);
+  expect(answer.body.error).toEqual({ code: "restore.manifest_invalid", params: { reason } });
+});
+
 it("answers a compressed-backup capacity refusal with 507", async () => {
   const space = vi.spyOn(freeSpace, "freeBytes").mockResolvedValue(0);
   try {
