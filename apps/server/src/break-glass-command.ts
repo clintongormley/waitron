@@ -35,8 +35,7 @@ export async function openBreakGlassVenue(
  * resets the password (and optionally the PIN), clears the admin's other login factors and pending passkey challenges, and
  * reactivates the account.
  *
- * The ungated reset lives here, not in `@waitron/identity`, because an importable ungated reset
- * would be a permission bypass. Secrets come from the environment, never argv, which `ps` shows.
+ * Secrets come from the environment, never argv, which `ps` shows.
  *
  * Returns the exit code: 0 on success, 2 on a usage or config error, 1 on an operational error.
  */

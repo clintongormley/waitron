@@ -510,9 +510,12 @@ the copies of each person's data. A deleted device can still ask to come back an
 sign-ins; a dashboard sign-in belongs to the person. So an admin opens **Users** and chooses
 **Reset login** for that person. It signs them out everywhere, deletes their PIN, password,
 passkeys, two-factor settings, recovery codes and Google link, and sends them a new invitation if
-email is set up. Waitron refuses it for the venue's only active admin who can sign in to the dashboard. Reset takes effect immediately. Any invitation sent in the last minute no longer works; wait a minute, then send the invitation again. The browser also keeps the
-person's email address if they chose **Remember my email on this device** when signing in. If the
-phone or laptop was also used as a till, follow the steps for a stolen till device as well.
+email is set up. Waitron refuses it for the venue's only active admin who can sign in to the
+dashboard. Reset takes effect immediately and invalidates invitations already delivered. If no new
+invitation arrives, check **Email settings**, wait a minute and send it again. The browser also
+keeps the person's email address if they chose **Remember my email on this device** when signing
+in. If the phone or laptop was also used as a till, follow the steps for a stolen till device as
+well.
 
 **A lost or stolen box.** Waitron does not encrypt the database on the box's disk, so treat
 everything in it as exposed: staff details and sign-ins, invoice customers, bookings, allergy notes
@@ -556,8 +559,10 @@ screen shows who downloaded an export.
 for the person. Both sign the person out everywhere and delete their PIN, password, two-factor
 settings, Google link, passkeys and recovery codes. **Reset login** sends a new invitation if
 email is set up, and **Disable** keeps the person out until an admin chooses **Enable and send
-invitation**. Reset takes effect immediately. Any invitation sent in the last minute no longer works; wait a minute, then send the invitation again. Then look at what was done under the account: download the person's copy of
-their data, and check **Orders**. See [Account access](staff.md#account-access).
+invitation**. Reset takes effect immediately and invalidates invitations already delivered. If no
+new invitation arrives, check **Email settings**, wait a minute and send it again. Then look at
+what was done under the account: download the person's copy of their data, and check **Orders**.
+See [Account access](staff.md#account-access).
 
 **An invoice emailed to the wrong address.** The email carries the invoice as a PDF, which shows
 the customer's name, tax number and address and what they bought. On **Orders**, **View details**

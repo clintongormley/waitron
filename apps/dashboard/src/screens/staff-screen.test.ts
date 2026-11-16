@@ -1894,7 +1894,7 @@ describe("account email outcome messages", () => {
       expect(
         el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent?.trim(),
       ).toBe(
-        "The login was reset. Any invitation sent in the last minute no longer works. Wait a minute, then send the invitation again.",
+        "The login was reset. Invitations already delivered no longer work. If a new invitation does not arrive, check Email settings and send it again after a minute.",
       ),
     );
   });

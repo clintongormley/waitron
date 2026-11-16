@@ -1122,7 +1122,7 @@ describe("Management API staff + session routes", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("reset login revokes access even just after an invitation was sent", async () => {
+  it("reset login revokes access even just after an invitation was queued", async () => {
     const { staffId } = await setupVenue();
     const app = mountApp(async () => "sent");
     const cookie = await login(app, "owner@example.test", "dashPass123");
