@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -21,7 +22,6 @@ import {
 } from "@waitron/db";
 import {
   deviceProfileAdmissionRoles,
-  hashPin,
   hashSessionToken,
   loginWithPin,
   persons,
@@ -561,7 +561,7 @@ describe("a deleted device comes back as the same device", () => {
   async function signedInOn(devices: { deviceId: string; jar: string }[]): Promise<string[]> {
     const [person] = await seedPersons(suite.db, {
       displayName: `Server ${randomUUID()}`,
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     const cookies: string[] = [];
@@ -715,7 +715,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     const session = await withTransaction(suite.db, (tx) =>
@@ -807,7 +807,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     between.pinCheckAndSignIn = async () => {
@@ -830,7 +830,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     let enabledJar = "";
@@ -868,7 +868,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     between.pinCheckAndSignIn = async () => {
@@ -903,7 +903,7 @@ describe("a deleted device comes back as the same device", () => {
     expect(accepted.status).toBe(200);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     let pinChecked = false;
@@ -931,7 +931,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     let moved = false;
@@ -959,7 +959,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     let moved = false;
@@ -999,8 +999,8 @@ describe("a deleted device comes back as the same device", () => {
     });
     expect(approved.status).toBe(204);
     const [manager, staff] = await seedPersons(suite.db, [
-      { displayName: "Manager", pinHash: hashPin("4321"), role: "manager" },
-      { displayName: "Server", pinHash: hashPin("4321"), role: "staff" },
+      { displayName: "Manager", pinHash: fixturePinHash("4321"), role: "manager" },
+      { displayName: "Server", pinHash: fixturePinHash("4321"), role: "staff" },
     ]);
     const [job] = await suite.db.insert(staffRoles).values({ name: randomUUID() }).returning();
     await suite.db.insert(personStaffRoles).values({ personId: manager!.id, staffRoleId: job!.id });
@@ -1045,7 +1045,7 @@ describe("a deleted device comes back as the same device", () => {
     const { deviceId, jar: oldJar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
-      pinHash: hashPin("4321"),
+      pinHash: fixturePinHash("4321"),
       role: "staff",
     });
     expect((await signIn(app, oldJar, person!.id)).status).toBe(200);

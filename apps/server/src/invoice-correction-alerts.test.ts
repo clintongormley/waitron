@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { markIncidentHandled, previewCorrectionAmounts } from "@waitron/core";
-import { hashPin, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import type { Logger } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
@@ -417,7 +418,7 @@ describe("automatic filing of a correction whose money is all back", () => {
 
   it("does not retry when the approver has been suspended, leaving the alert for Record correction", async () => {
     const [approver] = await inTx(v, (tx) =>
-      seedPersons(tx, { displayName: "Laura", pinHash: hashPin("7777"), role: "manager" }),
+      seedPersons(tx, { displayName: "Laura", pinHash: fixturePinHash("7777"), role: "manager" }),
     );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);
@@ -474,7 +475,7 @@ describe("automatic filing of a correction whose money is all back", () => {
 
   it("takes no write lock for a correction whose approver's refusal is already alerted, and files once the approver is active again", async () => {
     const [approver] = await inTx(v, (tx) =>
-      seedPersons(tx, { displayName: "Martha", pinHash: hashPin("6666"), role: "manager" }),
+      seedPersons(tx, { displayName: "Martha", pinHash: fixturePinHash("6666"), role: "manager" }),
     );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);

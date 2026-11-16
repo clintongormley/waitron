@@ -426,7 +426,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 
-3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size L. The fixed-secret entry covers the remaining setup.
 
 - **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
@@ -434,8 +434,8 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
   others were measured or named but not built. Plus two small guard gaps from the same PR.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
-- **Other server test files still hash fixed PINs and passwords on every test.**
-  [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
+- **Finish reusing fixed-secret hashes in remaining server test setup.**
+  [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
 
 ## Bundle: Vitest settings: remaining measurements
 
@@ -1008,16 +1008,18 @@ selection count and the screenshot before retrying.
 [Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 
-## Other server test files still hash fixed PINs and passwords on every test
+## Finish reusing fixed-secret hashes in remaining server test setup
 
-A801 moved the
-shared fixtures under `apps/server/src/testing/` and the set-up of five heavy test files onto
-`fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); other
-test files and helpers still call `hashPin`/`hashPassword` directly (`rg -l
-'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`), among them the
-`attendance-*` suites, left alone while lane G's A773-1 was editing them, and the two venue
-helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/provision-venue.ts`).
-Move the set-up ones over; leave any test that is about hashing. Left open by A801.
+Use `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
+for the remaining repeated stored-secret setup; keep hashing-subject tests and real sign-in
+checks unchanged. Another inspected subset is needed: the broad search also includes setup run
+once per file and tests about hashing. Find candidates with `rg -l 'hashPin\(|hashPassword\(' apps/server
+-g '*.test.ts' -g '**/testing/**'`, then inspect their call sites.
+
+Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
+`src/bill-payments-api.test.ts` and `src/attendance-till-api.test.ts`, plus the shared
+`src/testing/handover-placed-copy.ts`. The two staged-hour salt helpers remain in
+[the existing speed-up entry](#server-test-time-levers-left-after-a1297).
 
 
 ## A999 residual: retain the other allergy-move failure if it recurs
@@ -1180,8 +1182,9 @@ these, which it did not build (local figures, 2 November 2026):
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
 - **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
-  `src/testing/staged-hour-crash.ts` still draw one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
-  there, under coverage and mutation.
+  `src/testing/staged-hour-crash.ts` still draw one per call. Reuse the existing
+  `apps/server/test/fixture-salt.ts` helper there when those paths and their consumers are unheld;
+  keep the existing crypto checks.
 - **The recovery-key memo lives in `apps/server/test/hour-recovery-host.ts` only.** Files that do not
   load the host still pay the full derivation per check; moving the memo into a wider test setup
   must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.

@@ -1,3 +1,4 @@
+import { fixturePasswordHash } from "./known-secret-hashes.js";
 import { seedModuleRecord } from "../../test/module-records.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
@@ -9,7 +10,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import forge from "node-forge";
 import type { BackupQuery } from "@waitron/store";
-import { beginOwnTotpEnrollment, hashPassword, startManagementSession } from "@waitron/identity";
+import { beginOwnTotpEnrollment, startManagementSession } from "@waitron/identity";
 import { accountPurposeKey, resolveAccountKey } from "../account-key.js";
 import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -262,7 +263,7 @@ export function useBackupVerificationFixture() {
     const [person] = await seedPersons(suite.db, {
       displayName: "Fixture manager",
       email: "manager@example.test",
-      passwordHash: hashPassword("fixture-only-password"),
+      passwordHash: fixturePasswordHash("fixture-only-password"),
       role: "manager",
     });
     const session = await withTransaction(suite.db, (tx) =>

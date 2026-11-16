@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -12,7 +13,7 @@ import {
   type NodeDatabase,
 } from "@waitron/db";
 import type { VenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { enabledModules } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
@@ -71,8 +72,8 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
         rectificativeSeriesCode: "RF",
         admin: {
           displayName: "Owner",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(ADMIN_PASSWORD),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
           email: "owner@example.test",
         },
       },

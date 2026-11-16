@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -11,7 +12,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { endDeviceSessions, endSession, hashPin, loginWithPin } from "@waitron/identity";
+import { endDeviceSessions, endSession, loginWithPin } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   emptyPrinterLists,
@@ -177,7 +178,7 @@ async function readerHoldersOf(ids: string[]): Promise<Record<string, string>> {
 async function signIn(deviceId: string, displayName = "Lucy") {
   const [person] = await seedPersons(suite.db, {
     displayName,
-    pinHash: hashPin("4321"),
+    pinHash: fixturePinHash("4321"),
     role: "staff",
   });
   const session = await inTx((tx) =>

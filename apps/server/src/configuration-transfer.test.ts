@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
@@ -120,13 +121,7 @@ import {
 } from "@waitron/layouts";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
-import {
-  deviceProfileAdmissionRoles,
-  hashPassword,
-  hashPin,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { deviceProfileAdmissionRoles, persons, startManagementSession } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
 import { units, MENU_SETTINGS, saveMenuSettings, saveMenuDefaultColor } from "@waitron/menu";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
@@ -471,8 +466,8 @@ function venue(taxId: string): VenueRequest {
     admin: {
       displayName: "Admin",
       email: `${taxId.toLowerCase()}@example.test`,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword("a secure password"),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash("a secure password"),
     },
   };
 }

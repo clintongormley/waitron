@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { WorkforceBackend } from "@waitron/workforce";
 import { AppError, jobOrigin } from "@waitron/shared";
@@ -8,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
   absences,
@@ -43,12 +44,12 @@ const suite = useVenueDb({
       // generator a raw insert never reaches.
       const [mgr] = await seedPersons(tx, {
         displayName: "The Manager",
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role: "manager",
       });
       const [stf] = await seedPersons(tx, {
         displayName: "The Clerk",
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role: "staff",
       });
       const mSes = await startManagementSession(tx, { personId: mgr!.id });
@@ -260,7 +261,7 @@ describe("mountWorkforceApi — shift routes", () => {
     const { shiftId } = (await add.json()) as { shiftId: string };
     const [other] = await seedPersons(suite.db, {
       displayName: "The Cover",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "staff",
     });
     const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, {

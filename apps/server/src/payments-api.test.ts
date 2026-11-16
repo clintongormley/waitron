@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { recordIncidentOnce } from "@waitron/core";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -29,7 +30,7 @@ import {
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
@@ -119,12 +120,12 @@ async function seedVenueWithStaff(): Promise<Venue> {
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     const [stf] = await seedPersons(tx, {
       displayName: "The Clerk",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "staff",
     });
     const managerSession = await startManagementSession(tx, {

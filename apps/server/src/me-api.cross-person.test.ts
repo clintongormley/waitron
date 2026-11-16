@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
@@ -6,12 +7,7 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPassword,
-  hashPin,
-  startManagementSession,
-  webauthnCredentials,
-} from "@waitron/identity";
+import { startManagementSession, webauthnCredentials } from "@waitron/identity";
 import { shifts, rosterVersions } from "@waitron/workforce";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -45,7 +41,7 @@ describe("your profile", () => {
     const personId = await seedPerson("Profile owner");
     const colleagueId = await seedPerson("Colleague");
     await suite.db.execute(
-      sql`update persons set email='profile@example.com', password_hash=${hashPassword("current password")} where id=${personId}`,
+      sql`update persons set email='profile@example.com', password_hash=${fixturePasswordHash("current password")} where id=${personId}`,
     );
     const cookie = await cookieFor(personId);
     const app = mountApp();
@@ -147,8 +143,8 @@ async function setupVenue(): Promise<VenueResult> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -163,7 +159,7 @@ async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [row] = await seedPersons(tx, {
       displayName: name,
-      pinHash: hashPin("0000"),
+      pinHash: fixturePinHash("0000"),
       role: "staff",
     });
     tx.run(sql`update roles set permissions = '["payment.take"]' where built_in_key = 'staff'`);

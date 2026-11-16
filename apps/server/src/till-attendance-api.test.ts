@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -11,7 +12,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
   deviceProfileAdmissionRoles,
-  hashPin,
   persons,
   loginWithPin,
   registerModulePermissions,
@@ -73,7 +73,7 @@ beforeEach(async () => {
   const [manager] = await seedPersons(suite.db, {
     displayName: "Supervisor",
     role: "supervisor",
-    pinHash: hashPin("4321"),
+    pinHash: fixturePinHash("4321"),
   });
   managerId = manager!.id;
   await withTransaction(suite.db, async (tx) => {
@@ -162,7 +162,7 @@ it("offers a first correction before any clock history", async () => {
   const [worker] = await seedPersons(suite.db, {
     displayName: "New worker",
     role: "staff",
-    pinHash: hashPin("5678"),
+    pinHash: fixturePinHash("5678"),
   });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { personId: worker!.id, deviceId: venue.deviceId, pin: "5678" }),
@@ -657,7 +657,7 @@ it("hides foreign receipts and refuses another worker's question, item and targe
   const [other] = await seedPersons(suite.db, {
     displayName: "Other worker",
     role: "staff",
-    pinHash: hashPin("5555"),
+    pinHash: fixturePinHash("5555"),
   });
   await withTransaction(suite.db, async (tx) => {
     const common = {

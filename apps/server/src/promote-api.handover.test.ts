@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -17,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { sha256Hex, signEnvelope, type HandoverBinding } from "@waitron/handover";
-import { hashPassword, hashPin, hashSecret, managementSessions } from "@waitron/identity";
+import { hashSecret, managementSessions } from "@waitron/identity";
 import {
   canonicalize,
   endorseKey,
@@ -180,8 +181,8 @@ beforeEach(async () => {
   personId = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, {
       displayName: "Administrator",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(PASSWORD),
       role: "admin",
     });
     return person!.id;

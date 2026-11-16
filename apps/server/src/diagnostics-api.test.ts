@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -8,8 +9,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashSessionToken,
   managementSessions,
-  hashPassword,
-  hashPin,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
@@ -73,8 +72,8 @@ async function setupVenue(): Promise<Venue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -89,7 +88,7 @@ async function setupVenue(): Promise<Venue> {
     const seedPerson = async (role: BuiltInRoleKey): Promise<string> => {
       const [p] = await seedPersons(tx, {
         displayName: `The ${role}`,
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role,
       });
       const session = await startManagementSession(tx, { personId: p!.id });

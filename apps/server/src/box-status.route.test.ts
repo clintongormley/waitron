@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
@@ -65,8 +66,8 @@ async function provisionVenue(): Promise<{ nodeId: string; managerId: string }> 
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -82,8 +83,8 @@ async function provisionVenue(): Promise<{ nodeId: string; managerId: string }> 
     const [manager] = await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(PASSWORD),
       role: "manager",
     });
     return manager!.id;

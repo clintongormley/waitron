@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -10,7 +11,6 @@ import { seedWorkingOrder as seedOrderRow } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
-  hashPin,
   PIN_THROTTLE_FREE_ATTEMPTS,
   startManagementSession,
 } from "@waitron/identity";
@@ -51,12 +51,12 @@ async function setup() {
   const [manager] = await seedPersons(suite.db, {
     displayName: "The Manager",
     role: "manager",
-    pinHash: hashPin("1234"),
+    pinHash: fixturePinHash("1234"),
   });
   const [staff] = await seedPersons(suite.db, {
     displayName: "The Clerk",
     role: "staff",
-    pinHash: hashPin("5678"),
+    pinHash: fixturePinHash("5678"),
   });
   const sessions = await withTransaction(suite.db, async (tx) => ({
     manager: (await startManagementSession(tx, { personId: manager!.id })).token,

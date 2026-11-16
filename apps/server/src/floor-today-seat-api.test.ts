@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
@@ -7,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { diningTables, floorResetTables, parties, partyTables, workingOrders } from "@waitron/db";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -61,7 +62,7 @@ beforeAll(async () => {
   const session = await inTx(v, async (tx) => {
     const [person] = await seedPersons(tx, {
       displayName: "Anna",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });

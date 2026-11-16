@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
@@ -11,7 +12,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   endManagementSession,
-  hashPin,
   hashSessionToken,
   managementSessions,
   persons,
@@ -42,7 +42,7 @@ const MARTHA = {
   telephone: "+34611222333",
   firstNames: "MARTA-FIRST-CANARY",
   // A real hash, so her export reads it as a set PIN rather than a placeholder.
-  pinHash: hashPin("2468"),
+  pinHash: fixturePinHash("2468"),
 };
 
 const exportModules = ALL_MODULES.filter((m) => m.name === "identity" || m.name === "adjustments");

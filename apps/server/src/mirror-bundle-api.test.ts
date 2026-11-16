@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -26,7 +27,7 @@ import {
   writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashPassword, hashPin, personIdForLoginEmail } from "@waitron/identity";
+import { personIdForLoginEmail } from "@waitron/identity";
 import { generateSync } from "otplib";
 import {
   canonicalize,
@@ -186,8 +187,8 @@ async function setupVenue(): Promise<{
         rectificativeSeriesCode: "RF",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(ADMIN_PASSWORD),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
           email: ADMIN_EMAIL,
         },
       },
@@ -219,8 +220,8 @@ async function seedStaff(): Promise<string> {
     const [row] = await seedPersons(tx, {
       displayName: "Cashier",
       email: STAFF_EMAIL,
-      pinHash: hashPin("4321"),
-      passwordHash: hashPassword(STAFF_PASSWORD),
+      pinHash: fixturePinHash("4321"),
+      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
       role: "staff",
     });
     return row!.id;
@@ -888,8 +889,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const [row] = await seedPersons(tx, {
         displayName: "Suspended administrator",
         email: SUSPENDED_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
         role: "admin",
         status: "suspended",
       });
