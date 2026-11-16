@@ -1205,6 +1205,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
         expectedEdit: null,
         readerId: reader!.id,
         zoneId: v.zoneId,
+        dining: "eat_in",
       }),
     });
     expect(paid.status).toBe(200);
