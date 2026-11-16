@@ -235,7 +235,7 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
 ## A deleted bucket pointer can still look like another writer
 
 - A `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
-  to a missing object with 412 (SeaweedFS; the in-memory test store). In both cases the owner's alert
+  to a missing object with 412 (SeaweedFS; the in-memory test store). That refusal's alert
   (`backup.stream_refused`) still says another box is writing. On a bucket that answers that write
   with 404 instead (AWS, as it documents; versitygw, as measured), the deleted pointer surfaces as
   `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
@@ -425,7 +425,7 @@ snapshots or longer compaction intervals.
   limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
   stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
   owner's Mac. A venue's real rate and the box's disk were not measured.
-- Whether the side file grows, and the pause fires, in a real network outage was not run. A549
+- Starting Litestream during a real network outage still needs a Linux measurement. A549
   stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
   errors and drops its read transaction to retry (`db.go`, `init`, the same in v0.5.17 and
   v0.5.18). On 0.5.18 a refused connection gets there after about 7 seconds, so a Litestream
@@ -456,6 +456,12 @@ These insert times are not sale times. The existing route-based loop and forced-
 rigs also passed with both pinned binaries. This leaves the real-network outage question above
 open: frozen/refused loopback connections do not qualify dropped attempts, unreachable hosts,
 DNS, Linux or venue conditions, and this measured no bound on the local level-0 folder.
+
+Update, 2026-11-16: the already-streaming Linux unreachable-host case is now
+[measured](../developers/testing-guide.md#a-real-unreachable-bucket-on-linux-already-streaming).
+The 201.471-second network disconnection produced no natural pause; all 7,958 rows matched after
+restore and integrity was `ok`. This is Docker Desktop's Linux VM and a numeric-IP outage, not
+physical box storage, DNS or venue-rate qualification. Local level-0 growth remains unbounded.
 
 ## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 
