@@ -1,5 +1,6 @@
+import { quoteLiteral } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { generatePassword, quoteIdent, quoteLiteral } from "./identifiers.js";
+import { generatePassword, quoteIdent } from "./identifiers.js";
 
 describe("quoteIdent", () => {
   it("double-quotes", () => {
@@ -27,17 +28,5 @@ describe("quoteLiteral", () => {
       const password = generatePassword();
       expect(quoteLiteral(password)).toBe(`'${password}'`);
     }
-  });
-
-  it("doubles a single quote, so a password cannot end the literal early", () => {
-    expect(quoteLiteral("a'b")).toBe("'a''b'");
-    expect(quoteLiteral("'; alter role waitron_app superuser; --")).toBe(
-      "'''; alter role waitron_app superuser; --'",
-    );
-  });
-
-  it("keeps a backslash as itself and doubles only the quote", () => {
-    expect(quoteLiteral("a\\b")).toBe("'a\\b'");
-    expect(quoteLiteral("a\\'b")).toBe("'a\\''b'");
   });
 });

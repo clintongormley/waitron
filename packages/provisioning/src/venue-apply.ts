@@ -241,8 +241,7 @@ export async function applyVenue(
                 email: action.email,
                 // Without the folded twin, login falls back on an ASCII-only key and an address
                 // with a non-ASCII character stops matching at sign-in.
-                emailFolded:
-                  action.email === undefined ? undefined : foldForUniqueness(action.email),
+                emailFolded: foldForUniqueness(action.email),
                 displayNameFolded: foldForUniqueness(action.displayName),
               })
               .returning({ id: persons.id });
