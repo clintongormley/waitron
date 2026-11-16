@@ -540,16 +540,13 @@ it("selects the Spain time-record exporter only from enabled contributions", () 
   ]);
 });
 
-it("Start again may discard only activity history and the fiscal activation", () => {
+it("Start again explicitly exempts only the fiscal activation from append-only holdings", () => {
   expect(
     ALL_MODULES.filter((m) => m.startAgainDeletable !== undefined).map((m) => [
       m.name,
       m.startAgainDeletable,
     ]),
-  ).toEqual([
-    ["core", ["activity_log"]],
-    ["fiscal-verifactu", ["fiscal_allocations", "fiscal_certificate_installs"]],
-  ]);
+  ).toEqual([["fiscal-verifactu", ["fiscal_allocations", "fiscal_certificate_installs"]]]);
   expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
 });
 

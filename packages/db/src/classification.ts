@@ -75,7 +75,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("purchase_invoices", "ledger", LEDGER),
   classify("purchase_invoice_vat", "ledger", LEDGER),
-  appendOnly(
+  classify(
     "activity_log",
     "ledger",
     "who did what, for people to read; product logic never decides from it; an entry is never corrected",

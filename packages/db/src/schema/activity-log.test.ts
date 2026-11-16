@@ -87,21 +87,21 @@ describe("activity log storage", () => {
     expect(restrictRefused(error)).toBe(true);
     expect(await suite.db.select().from(devices).where(eq(devices.id, deviceId))).toHaveLength(1);
   });
-  it("refuses any change to or removal of an entry", async () => {
+  it("refuses changing an entry while allowing retention deletion", async () => {
     const [row] = await insert();
     const changed = await captureError(() =>
       suite.db.update(activityLog).set({ subjectId: "other" }).where(eq(activityLog.id, row!.id)),
     );
-    const removed = await captureError(() =>
-      suite.db.delete(activityLog).where(eq(activityLog.id, row!.id)),
-    );
     expect(triggerRaised(changed, "activity_log is append-only")).toBe(true);
-    expect(triggerRaised(removed, "activity_log is append-only")).toBe(true);
     expect(
       await suite.db
         .select()
         .from(activityLog)
         .where(eq(activityLog.kind, "membership.node_removed")),
     ).toEqual([row]);
+    await suite.db.delete(activityLog).where(eq(activityLog.id, row!.id));
+    expect(await suite.db.select().from(activityLog).where(eq(activityLog.id, row!.id))).toEqual(
+      [],
+    );
   });
 });

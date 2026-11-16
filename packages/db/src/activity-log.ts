@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   ACTIVITY_KINDS,
@@ -12,7 +12,7 @@ import { activityLog } from "./schema/activity-log.js";
 import { persons } from "./schema/identity/persons.js";
 
 export interface ActivityInput<K extends ActivityKind> {
-  /** An explicit id identifies one immutable event across retries. */
+  /** An explicit id identifies one event across retries while the entry is retained. */
   readonly id?: string;
   readonly kind: K;
   readonly subjectId: string;
@@ -51,6 +51,24 @@ export async function recordActivity<K extends ActivityKind>(
     .from(activityLog)
     .where(eq(activityLog.id, id));
   return original!;
+}
+
+export async function pruneActivityLog(
+  tx: Transaction,
+  cutoff: Date,
+  limit: number,
+): Promise<number> {
+  const expired = tx
+    .select({ id: activityLog.id })
+    .from(activityLog)
+    .where(lt(activityLog.at, cutoff))
+    .orderBy(activityLog.at, activityLog.id)
+    .limit(limit);
+  const removed = await tx
+    .delete(activityLog)
+    .where(inArray(activityLog.id, expired))
+    .returning({ id: activityLog.id });
+  return removed.length;
 }
 
 export type ActivityEntry = {

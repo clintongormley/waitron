@@ -1,6 +1,12 @@
 import { setImmediate as turn } from "node:timers/promises";
 import { inArray, sql } from "drizzle-orm";
-import { invoiceDeliveries, printJobs, withTransaction, type Database } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  printJobs,
+  pruneActivityLog,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import type { BusinessDayClock } from "@waitron/shared";
 import { nextFireMs } from "./backup-schedule.js";
@@ -55,6 +61,25 @@ export async function clearOldPrintPayloads(
   return cleared;
 }
 
+export async function clearOldActivityLog(
+  db: Database,
+  now: Date,
+  signal: AbortSignal,
+  batchSize = HOUSEKEEPING_BATCH,
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - 30 * 86400000);
+  let removed = 0;
+  while (!signal.aborted) {
+    const count = await withTransaction(db, (tx) =>
+      signal.aborted ? Promise.resolve(0) : pruneActivityLog(tx, cutoff, batchSize),
+    );
+    removed += count;
+    if (count < batchSize) break;
+    await turn();
+  }
+  return removed;
+}
+
 export function housekeepingJob(deps: {
   db: Database;
   isPrimary(): boolean;
@@ -78,6 +103,7 @@ export function housekeepingJob(deps: {
       due ??= ctx.now.getTime();
       if (ctx.now.getTime() >= due) {
         await clearOldPrintPayloads(deps.db, ctx.now, ctx.signal);
+        await clearOldActivityLog(deps.db, ctx.now, ctx.signal);
         due = nextFireMs(schedule, clock, deps.now(), deps.jitterSeed);
       }
       return { nextDueAt: new Date(due) };
