@@ -2101,10 +2101,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the recursive-trigger check remain open.
   [Detail](backlog/architecture.md#loose-ends-left-by-a483-1544).
 
-- **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
-  are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
-  test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
-  transaction while another is still running.
+- **Guard asynchronous work sharing one transaction.** The driver's statements are synchronous,
+  so a native in-flight flag does not catch `Promise.all`. Await helpers in turn; the adapter warns
+  that overlapping asynchronous nested transactions can release savepoints out of order
+  (`packages/store/src/node-sqlite-adapter.ts`). The enforcement gap remains open; see
+  `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction".
 
 - **A module this server runs with no transfer declaration, or no recorded version, is refused as
   `setup.request_invalid` field `module:<name>`** (`packages/provisioning/src/configuration-transfer.ts`),

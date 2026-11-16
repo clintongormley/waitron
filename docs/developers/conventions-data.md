@@ -2263,6 +2263,8 @@ timing — 2026-09-22: two reads and two `create table`s issued with `Promise.al
 **No test or guard enforces this rule anywhere.** The `fireLines` single-call test and the
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
 The missing guard is an item in `docs/backlog.md`, under "Modules, data and code health".
+Await asynchronous helpers in turn too; the adapter warns that overlapping nested transactions
+can release savepoints out of order (`packages/store/src/node-sqlite-adapter.ts`).
 
 ## A zone's floor plan: sets, layouts and today's plan
 
