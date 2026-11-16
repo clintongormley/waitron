@@ -946,15 +946,6 @@ runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
 `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
 would cost has not been timed. Owner's call.
 
-
-## Task 2's review found no test that fails when `device_profile_admission_roles` is left out of `apps/server/src/testing/clear-provision-fixture.ts`
-
-The remaining table's key into `device_profiles` cascades on delete
-(`packages/db/src/schema/identity/profile-admission.ts`; `pnpm --filter @waitron/identity exec vitest run src/profile-admission.test.ts`, 9 passed on 2026-11-13). The per-person exception table was removed by A1002 PR7. Left open by W97
-(#1311).
-
-
-
 ## drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it
 
 The schema-conformance suite compares declared
