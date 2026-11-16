@@ -1,6 +1,6 @@
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import {
   DOTS_PER_COLUMN,
@@ -230,6 +230,30 @@ describe("renderTicketPdf", () => {
     const [logo] = imagesOf(bytes, widthDots);
     expect(logo!.align).toBe("right");
     expect(sameDots(page, logo!, margin + widthDots - LOGO.widthDots, margin)).toBeGreaterThan(100);
+  });
+
+  it("paints each picture the ticket prints as one image, and no shapes", async () => {
+    const bytes = ticket(PRINTER_80);
+    const loading = getDocument({
+      data: Uint8Array.from(await renderTicketPdf(bytes, PRINTER_80)),
+      useSystemFonts: false,
+    });
+    try {
+      const page = await (await loading.promise).getPage(1);
+      const { fnArray } = await page.getOperatorList();
+      expect(fnArray.filter((op) => op === OPS.paintImageXObject)).toHaveLength(
+        imagesOf(bytes, widthDotsOf(PRINTER_80)).length,
+      );
+      expect(fnArray).not.toContain(OPS.constructPath);
+    } finally {
+      await loading.destroy();
+    }
+  });
+
+  it("refuses a ticket laid out wider than the printer's print area", async () => {
+    await expect(renderTicketPdf(ticket(PRINTER_80), PRINTER_58)).rejects.toThrow(
+      "wider than the print area",
+    );
   });
 
   it("refuses bytes the preview cannot read whole", async () => {

@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { crc32, deflateSync } from "node:zlib";
 import PDFDocument from "pdfkit";
 import {
   DOTS_PER_COLUMN,
@@ -26,8 +27,10 @@ export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): P
   const { blocks } = preview;
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index]!;
-    if (block.kind === "image") images.push(block);
-    else if (block.kind === "text") throw new Error("the ticket sends bytes as text");
+    if (block.kind === "image") {
+      if (block.width > widthDots) throw new Error("the ticket draws wider than the print area");
+      images.push(block);
+    } else if (block.kind === "text") throw new Error("the ticket sends bytes as text");
     else if (block.kind === "feed" && blocks[index + 1]?.kind !== "cut") {
       throw new Error("the ticket feeds paper other than before its cut");
     } else if (block.kind === "cut" && index !== blocks.length - 1) {
@@ -62,21 +65,10 @@ export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): P
         : image.align === "right"
           ? widthDots - image.width
           : 0);
-    const data = Buffer.from(image.data, "base64");
-    const stride = Math.ceil(image.width / 8);
-    for (let row = 0; row < image.height; row++) {
-      let start = -1;
-      for (let col = 0; col <= image.width; col++) {
-        const set =
-          col < image.width && (data[row * stride + (col >> 3)]! & (0x80 >> (col & 7))) !== 0;
-        if (set && start < 0) start = col;
-        else if (!set && start >= 0) {
-          pdf.rect((left + start) * dot, (top + row) * dot, (col - start) * dot, dot);
-          start = -1;
-        }
-      }
-    }
-    pdf.fill("black");
+    pdf.image(pngOf(image), left * dot, top * dot, {
+      width: image.width * dot,
+      height: image.height * dot,
+    });
     const text = image.text?.trimStart() ?? "";
     if (text !== "") {
       // The text holds one character a grid cell from the first, trailing blanks dropped.
@@ -98,4 +90,35 @@ export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): P
   pdf.end();
   await ended;
   return Buffer.concat(chunks);
+}
+
+/** One image block as a greyscale PNG of one bit a dot, where 0 is black. */
+function pngOf(image: ImageBlock): Buffer {
+  const data = Buffer.from(image.data, "base64");
+  const stride = Math.ceil(image.width / 8);
+  const rows = Buffer.alloc((stride + 1) * image.height);
+  for (let row = 0; row < image.height; row++) {
+    for (let index = 0; index < stride; index++) {
+      rows[row * (stride + 1) + 1 + index] = ~data[row * stride + index]! & 0xff;
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(image.width, 0);
+  header.writeUInt32BE(image.height, 4);
+  header[8] = 1;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function chunk(type: string, body: Buffer): Buffer {
+  const typed = Buffer.concat([Buffer.from(type, "latin1"), body]);
+  const framed = Buffer.alloc(typed.length + 8);
+  framed.writeUInt32BE(body.length, 0);
+  typed.copy(framed, 4);
+  framed.writeUInt32BE(crc32(typed), typed.length + 4);
+  return framed;
 }

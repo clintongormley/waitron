@@ -44,8 +44,10 @@ export type SaleCopy = { fileName: string } & (
 
 /**
  * Any issued sale as a duplicate in its original format, with the download recorded: a sale naming
- * no customer (an F2 or R5) as its selling device's receipt printer lays it out now, any other on
- * A4. An unknown id is `invoice_delivery.not_found`.
+ * no customer (an F2 or R5) as its selling device's receipt printer lays it out now (80 mm at
+ * 180 dpi when it has no device, the device no receipt printer, or that printer is switched off or
+ * deleted), or on A4 past the decoder's limits; any other on A4. An unknown id is
+ * `invoice_delivery.not_found`.
  */
 export async function readSaleCopy(
   tx: Transaction,
