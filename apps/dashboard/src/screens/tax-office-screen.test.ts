@@ -6,7 +6,7 @@ import type {
   TaxOfficePageDto,
   TaxOfficeQuery,
 } from "../api/client.js";
-import { en } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TaxOfficeScreen } from "./tax-office-screen.js";
@@ -78,28 +78,82 @@ const tableText = async (el: TaxOfficeScreen) => {
 };
 const lastQuery = (list: ReturnType<typeof vi.fn>) => list.mock.calls.at(-1)![0] as TaxOfficeQuery;
 
-it("lists the route's rows, one sub-row per VAT rate, with the kind, customer and total", async () => {
+it("lists the route's rows, one line per VAT rate, with the kind, customer and total", async () => {
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice(), twoRates]));
   const el = await mount({ listTaxOfficeInvoices });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
-  expect(table(el).rows).toHaveLength(4);
+  expect(table(el).rows).toHaveLength(2);
   const text = await tableText(el);
   expect(text).toContain("A/12");
-  expect(text).toContain(`F2 ${en["tax_office.kind.F2"]}`);
-  expect(text).toContain(`F1 ${en["tax_office.kind.F1"]}`);
   expect(text).toContain("Comidas Ruiz SL");
   expect(text).toContain("B12345678");
   expect(text).toContain("34.10");
-  expect(text).toContain("2.10");
-  expect(text).toContain("21 %");
-  const lines = [...table(el).shadowRoot!.querySelectorAll("[role=row]")].map((row) =>
-    row.textContent!.replace(/\s+/g, " "),
+  const kinds = [...table(el).shadowRoot!.querySelectorAll("abbr")].map((kind) => [
+    kind.textContent!.trim(),
+    kind.title,
+  ]);
+  expect(kinds).toEqual([
+    ["F2", en["tax_office.kind.F2"]],
+    ["F1", en["tax_office.kind.F1"]],
+  ]);
+  const row = table(el).shadowRoot!.querySelector('[data-row-key="sale-2"]')!;
+  const lines = (part: string) =>
+    [...row.querySelectorAll(`[part~="${part}"]`)].map((line) => line.textContent!.trim());
+  expect(lines("base")).toEqual([
+    expect.stringContaining("20.00"),
+    expect.stringContaining("10.00"),
+  ]);
+  expect(lines("rate")).toEqual(["10%", "21%"]);
+  expect(lines("tax")).toEqual([expect.stringContaining("2.00"), expect.stringContaining("2.10")]);
+});
+
+it("writes each rate as Spanish writes a percentage, under the Spanish headings", async () => {
+  setLocale("es-ES");
+  const el = await mount({ listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([twoRates])) });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+
+  await table(el).updateComplete;
+  const rates = [...table(el).shadowRoot!.querySelectorAll('[part~="rate"]')].map(
+    (line) => line.textContent,
   );
-  const first = lines.findIndex((line) => line.includes("B/7"));
-  expect(lines[first + 1]).toContain("20.00");
-  expect(lines[first + 1]).not.toContain("B/7");
-  expect(lines[first + 2]).toContain("2.10");
+  expect(rates).toEqual([
+    new Intl.NumberFormat("es-ES", { style: "percent" }).format(0.1),
+    new Intl.NumberFormat("es-ES", { style: "percent" }).format(0.21),
+  ]);
+  expect(rates[1]).toMatch(/^21\s%$/);
+  const headings = [...table(el).shadowRoot!.querySelectorAll("th")].map((th) =>
+    th.textContent!.trim(),
+  );
+  expect(headings).toEqual(
+    (["number", "kind", "issued", "customer", "total", "base", "rate", "tax"] as const).map(
+      (column) => es[`tax_office.col.${column}`],
+    ),
+  );
+});
+
+it("links to the guide page on showing invoices to the tax office", async () => {
+  const el = await mount({ listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) });
+
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a.guide")!;
+  expect(link.getAttribute("href")).toBe("/help/en/invoices");
+  expect(link.textContent).toBe(en["tax_office.guide"]);
+});
+
+it("dates an invoice on the venue's calendar, not the browser's", async () => {
+  const el = await mount({
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue({
+      rows: [invoice({ issuedAt: "2026-11-05T02:30:00.000Z", issueDate: "2026-11-04" })],
+      next: null,
+      timeZone: "America/New_York",
+    }),
+  });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+
+  const text = await tableText(el);
+  expect(text).toContain("4 Nov 2026");
+  expect(text).toContain("21:30");
+  expect(text).not.toContain("5 Nov 2026");
 });
 
 it("defaults the issue range to the current month", async () => {
@@ -240,15 +294,42 @@ it("Open asks the PDF route for the invoice and opens the PDF in a new tab", asy
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([twoRates])),
     downloadTaxOfficeInvoicePdf,
   });
-  await vi.waitFor(() => expect(table(el).rows).toHaveLength(3));
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
   await table(el).updateComplete;
 
   const button = table(el).shadowRoot!.querySelector<HTMLElement>("[data-test=open]")!;
+  expect(button.localName).toBe("button");
+  expect(button.textContent!.trim()).toBe("B/7");
+  expect(button.getAttribute("aria-label")).toBe(
+    en["tax_office.open_label"].replace("{number}", "B/7"),
+  );
   await userEvent.click(button);
 
   await vi.waitFor(() => expect(open).toHaveBeenCalledWith("blob:the-pdf", "_blank"));
   expect(downloadTaxOfficeInvoicePdf).toHaveBeenCalledWith("sale-2");
   expect(table(el).shadowRoot!.querySelectorAll("[data-test=open]")).toHaveLength(1);
+});
+
+it("lets the opened PDF go a minute after opening it, not before", async () => {
+  vi.spyOn(window, "open").mockReturnValue({} as Window);
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:the-pdf");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const el = await mount({
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([twoRates])),
+    downloadTaxOfficeInvoicePdf: vi.fn().mockResolvedValue(new Blob(["%PDF"])),
+  });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+  await table(el).updateComplete;
+  // Only the timer the revoke waits on is faked: no animation frame is paused.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  table(el).shadowRoot!.querySelector<HTMLElement>("[data-test=open]")!.click();
+  await vi.waitFor(() => expect(window.open).toHaveBeenCalled());
+  vi.advanceTimersByTime(59_000);
+  expect(revoke).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1_000);
+  expect(revoke).toHaveBeenCalledWith("blob:the-pdf");
+  vi.useRealTimers();
 });
 
 it("downloads the PDF when the browser refuses a new tab", async () => {
@@ -264,7 +345,7 @@ it("downloads the PDF when the browser refuses a new tab", async () => {
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([twoRates])),
     downloadTaxOfficeInvoicePdf: vi.fn().mockResolvedValue(new Blob(["%PDF"])),
   });
-  await vi.waitFor(() => expect(table(el).rows).toHaveLength(3));
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
   await table(el).updateComplete;
 
   await userEvent.click(table(el).shadowRoot!.querySelector<HTMLElement>("[data-test=open]")!);
@@ -289,7 +370,7 @@ it("says why an invoice could not be opened, and keeps the list", async () => {
   expect(table(el).rows).toHaveLength(1);
 });
 
-it("marks a cancelled invoice Cancelled, with its date", async () => {
+it("marks a cancelled invoice Cancelled, with its date on the next line", async () => {
   const el = await mount({
     listTaxOfficeInvoices: vi
       .fn()
@@ -297,8 +378,9 @@ it("marks a cancelled invoice Cancelled, with its date", async () => {
   });
   await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
 
-  const text = await tableText(el);
-  expect(text).toContain(en["tax_office.cancelled_on"].replace("{date}", "6 Nov 2026"));
+  const cancelled = table(el).shadowRoot!.querySelector('[part~="cancelled"]')!;
+  expect(cancelled.textContent!.trim()).toBe(en["tax_office.cancelled"]);
+  expect(cancelled.nextElementSibling!.textContent!.trim()).toBe("6 Nov 2026");
 });
 
 it("names the invoice a corrective corrects, and an operation date that differs", async () => {
@@ -313,7 +395,16 @@ it("names the invoice a corrective corrects, and an operation date that differs"
 
   const text = await tableText(el);
   expect(text).toContain(en["tax_office.corrects"].replace("{numbers}", "A/3"));
-  expect(text).toContain("1 Nov 2026");
+  expect(text).toContain(en["tax_office.operation_on"].replace("{date}", "1 Nov 2026"));
+});
+
+it("draws no operation line for an invoice whose operation was on its issue day", async () => {
+  const el = await mount({
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([invoice()])),
+  });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+
+  expect(await tableText(el)).not.toContain(en["tax_office.operation_on"].replace(" {date}", ""));
 });
 
 it("names the simplified invoices a full invoice replaces", async () => {
@@ -358,3 +449,47 @@ it.each([
   await vi.waitFor(() => expect(field(el, control).error).not.toBe(""));
   expect(table(el).errorMessage).toBe(en["form.fix_fields"]);
 });
+
+it("clears an earlier field refusal once a read succeeds", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30/rate/x");
+  const listTaxOfficeInvoices = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "rate" } })
+    .mockResolvedValueOnce(page([invoice()]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(field(el, "rate").error).not.toBe(""));
+
+  field(el, "kind").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "F2" }, bubbles: true, composed: true }),
+  );
+
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+  await el.updateComplete;
+  expect(field(el, "rate").error).toBe("");
+  expect(table(el).errorMessage).toBe("");
+});
+
+it.each(["from", "to"] as const)(
+  "marks a cleared %s date as needed, and reads again once it is filled",
+  async (name) => {
+    history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+    const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice()]));
+    const el = await mount({ listTaxOfficeInvoices });
+    await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+    const change = (value: string) =>
+      field(el, name).dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+
+    change("");
+    await el.updateComplete;
+    expect(field(el, name).error).toBe(en["tax_office.date_required"]);
+    expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(1);
+    expect(table(el).rows).toHaveLength(1);
+
+    change(name === "from" ? "2026-10-01" : "2026-12-31");
+    await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(2));
+    await el.updateComplete;
+    expect(field(el, name).error).toBe("");
+  },
+);

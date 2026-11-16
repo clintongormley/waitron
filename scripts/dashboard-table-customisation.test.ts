@@ -84,6 +84,10 @@ const allowed = new Map<string, Reason>([
   ],
   ['apps/dashboard/src/screens/printers-screen.ts | ${t("printers.discovered_title")}', "picker"],
   ['apps/dashboard/src/screens/servers-screen.ts | ${t("servers.title")}', "owner decision"],
+  [
+    'apps/dashboard/src/screens/tax-office-screen.ts | ${t("tax_office.title")}',
+    "nothing to offer",
+  ],
   ['apps/dashboard/src/screens/units-screen.ts | ${t("units.in_use_title")}', "dialog"],
   [
     'apps/dashboard/src/widgets/invoice-customer-dialog.ts | ${t("invoice_customer.heading")}',

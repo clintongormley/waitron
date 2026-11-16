@@ -24,14 +24,12 @@ import {
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
 import { pdfFileName } from "../widgets/order-detail-dialog.js";
 
 type Filter = Omit<TaxOfficeQuery, "after">;
 type TextField = "q" | "rate" | "amount";
-type Row =
-  | { key: string; invoice: TaxOfficeInvoiceDto; vat?: TaxOfficeInvoiceDto["vat"][number] }
-  | { key: string; parent: string; vat: TaxOfficeInvoiceDto["vat"][number] };
 
 const FILTER_KEYS = [
   "from",
@@ -68,21 +66,6 @@ function currentMonth(): { from: string; to: string } {
   };
 }
 
-function rowsOf(invoices: readonly TaxOfficeInvoiceDto[]): Row[] {
-  return invoices.flatMap((invoice): Row[] =>
-    invoice.vat.length === 1
-      ? [{ key: invoice.id, invoice, vat: invoice.vat[0] }]
-      : [
-          { key: invoice.id, invoice },
-          ...invoice.vat.map((vat, index) => ({
-            key: `${invoice.id}:${index}`,
-            parent: invoice.id,
-            vat,
-          })),
-        ],
-  );
-}
-
 /** Every invoice the venue issued, for the tax office: find, open, download and print any one. */
 @customElement("dashboard-tax-office-screen")
 export class TaxOfficeScreen extends LitElement {
@@ -95,6 +78,12 @@ export class TaxOfficeScreen extends LitElement {
         min-width: 0;
       }
       h1 {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .guide {
+        color: var(--wt-color-primary-text);
+      }
+      .guide-line {
         margin: 0 0 var(--wt-space-4);
       }
       .filters {
@@ -118,13 +107,42 @@ export class TaxOfficeScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-top: var(--wt-space-4);
       }
-      wt-data-table::part(number) {
+      wt-data-table::part(open) {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: var(--wt-color-primary-text);
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      wt-data-table::part(open):focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      wt-data-table::part(opening) {
+        cursor: progress;
+        opacity: var(--wt-opacity-disabled);
+      }
+      wt-data-table::part(mark),
+      wt-data-table::part(line) {
         display: block;
       }
       wt-data-table::part(mark) {
-        display: block;
-        white-space: normal;
         color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(customer),
+      wt-data-table::part(refs) {
+        display: block;
+        max-width: var(--wt-cell-name-max-width);
+        white-space: normal;
+      }
+      wt-data-table::part(line) {
+        white-space: nowrap;
       }
       wt-data-table::part(cancelled) {
         display: block;
@@ -147,6 +165,8 @@ export class TaxOfficeScreen extends LitElement {
   /** An Open that failed; kept apart from a read's message so neither clears the other. */
   @state() private actionError = "";
   @state() private opening: ReadonlySet<string> = new Set();
+  /** Issue dates emptied by the person; the read waits until both are filled again. */
+  @state() private missing: ReadonlySet<"from" | "to"> = new Set();
   #read = 0;
   /** The filter of the read last sent, so the address change an apply writes does not send it twice. */
   #requested?: string;
@@ -159,6 +179,7 @@ export class TaxOfficeScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "invoices") return;
       this.filter = this.#readAddress();
+      this.missing = new Set();
       void this.#load();
     },
     dashboardPath,
@@ -203,6 +224,10 @@ export class TaxOfficeScreen extends LitElement {
     if (value === "") delete next[key];
     else (next as Record<string, string>)[key] = value;
     if (key === "from" || key === "to") {
+      const missing = new Set(this.missing);
+      if (value === "") missing.add(key);
+      else missing.delete(key);
+      this.missing = missing;
       if (next.from === undefined || next.to === undefined) {
         this.filter = next;
         return;
@@ -297,7 +322,7 @@ export class TaxOfficeScreen extends LitElement {
     }
   }
 
-  #columns(): DataTableColumn<Row>[] {
+  #columns(): DataTableColumn<TaxOfficeInvoiceDto>[] {
     const locale = currentLocale();
     const money = (value: string) => formatMoney(value, locale);
     const day = (value: string) =>
@@ -308,117 +333,100 @@ export class TaxOfficeScreen extends LitElement {
       new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: this.timeZone }).format(
         new Date(instant),
       );
-    const percent = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
-    const of = (render: (invoice: TaxOfficeInvoiceDto) => unknown) => (row: Row) =>
-      "invoice" in row ? render(row.invoice) : "";
-    const vat = (render: (line: TaxOfficeInvoiceDto["vat"][number]) => unknown) => (row: Row) =>
-      row.vat === undefined ? "" : render(row.vat);
+    const percent = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 2 });
+    const lines = (
+      invoice: TaxOfficeInvoiceDto,
+      part: string,
+      value: (line: TaxOfficeInvoiceDto["vat"][number]) => string,
+    ) => invoice.vat.map((line) => html`<span part="line ${part}">${value(line)}</span>`);
     return [
       {
         key: "number",
         label: t("tax_office.col.number"),
-        cell: of(
-          (invoice) =>
-            html`<span part="number"
-              >${invoice.number}${
-                invoice.corrects.length === 0
-                  ? nothing
-                  : html`<span part="mark"
-                      >${fill(
-                        invoice.kind === "F3" ? "tax_office.replaces" : "tax_office.corrects",
-                        {
-                          numbers: invoice.corrects.join(", "),
-                        },
-                      )}</span
-                    >`
-              }${
-                invoice.cancelledAt === null
-                  ? nothing
-                  : html`<span part="cancelled"
-                      >${fill("tax_office.cancelled_on", { date: venueDay(invoice.cancelledAt) })}</span
-                    >`
-              }</span
-            >`,
-        ),
+        cell: (invoice) => {
+          const busy = this.opening.has(invoice.id);
+          return html`<button
+              type="button"
+              part=${busy ? "open opening" : "open"}
+              data-test="open"
+              aria-label=${fill("tax_office.open_label", { number: invoice.number })}
+              aria-busy=${busy ? "true" : nothing}
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                void this.#open(invoice);
+              }}
+            >
+              ${invoice.number}</button
+            >${
+              invoice.corrects.length === 0
+                ? nothing
+                : html`<span part="mark refs"
+                    >${fill(invoice.kind === "F3" ? "tax_office.replaces" : "tax_office.corrects", {
+                      numbers: invoice.corrects.join(", "),
+                    })}</span
+                  >`
+            }${
+              invoice.cancelledAt === null
+                ? nothing
+                : html`<span part="cancelled">${t("tax_office.cancelled")}</span
+                    ><span part="mark">${venueDay(invoice.cancelledAt)}</span>`
+            }`;
+        },
       },
       {
         key: "kind",
         label: t("tax_office.col.kind"),
-        cell: of(
-          (invoice) =>
-            html`${invoice.kind} <span part="mark">${t(`tax_office.kind.${invoice.kind}`)}</span>`,
-        ),
+        cell: (invoice) =>
+          html`<abbr title=${t(`tax_office.kind.${invoice.kind}`)}>${invoice.kind}</abbr>`,
       },
       {
         key: "issued",
         label: t("tax_office.col.issued"),
-        cell: of(
-          (invoice) =>
-            html`${venueDay(invoice.issuedAt)}<span part="mark"
-                >${new Intl.DateTimeFormat(locale, {
-                  timeStyle: "short",
-                  timeZone: this.timeZone,
-                }).format(new Date(invoice.issuedAt))}</span
-              >`,
-        ),
-      },
-      {
-        key: "operation",
-        label: t("tax_office.col.operation"),
-        choosable: "shown",
-        cell: of((invoice) => (invoice.operationDate === null ? "" : day(invoice.operationDate))),
+        cell: (invoice) =>
+          html`${venueDay(invoice.issuedAt)}<span part="mark"
+              >${new Intl.DateTimeFormat(locale, {
+                timeStyle: "short",
+                timeZone: this.timeZone,
+              }).format(new Date(invoice.issuedAt))}</span
+            >${
+              invoice.operationDate === null
+                ? nothing
+                : html`<span part="mark"
+                    >${fill("tax_office.operation_on", { date: day(invoice.operationDate) })}</span
+                  >`
+            }`,
       },
       {
         key: "customer",
         label: t("tax_office.col.customer"),
-        cell: of(
-          (invoice) =>
-            html`${invoice.customerName ?? ""}${invoice.customerTaxId === null ? nothing : html`<span part="mark">${invoice.customerTaxId}</span>`}`,
-        ),
+        cell: (invoice) =>
+          html`<span part="customer">${invoice.customerName ?? ""}</span
+            >${invoice.customerTaxId === null ? nothing : html`<span part="mark">${invoice.customerTaxId}</span>`}`,
       },
       {
         key: "total",
         label: t("tax_office.col.total"),
         align: "end",
-        cell: of((invoice) => money(invoice.total)),
+        cell: (invoice) => money(invoice.total),
       },
       {
         key: "base",
         label: t("tax_office.col.base"),
         align: "end",
-        cell: vat((line) => money(line.base)),
+        cell: (invoice) => lines(invoice, "base", (line) => money(line.base)),
       },
       {
         key: "rate",
         label: t("tax_office.col.rate"),
         align: "end",
-        cell: vat((line) => `${percent.format(Number(line.rate))} %`),
+        cell: (invoice) =>
+          lines(invoice, "rate", (line) => percent.format(Number(line.rate) / 100)),
       },
       {
         key: "tax",
         label: t("tax_office.col.tax"),
         align: "end",
-        cell: vat((line) => money(line.tax)),
-      },
-      {
-        key: "actions",
-        label: t("tax_office.col.actions"),
-        pinned: "end",
-        align: "end",
-        cell: of(
-          (invoice) =>
-            html`<wt-button
-              data-test="open"
-              size="sm"
-              aria-label=${fill("tax_office.open_label", { number: invoice.number })}
-              ?loading=${this.opening.has(invoice.id)}
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                void this.#open(invoice);
-              }}
-              >${t("tax_office.open")}</wt-button
-            >`,
-        ),
+        cell: (invoice) => lines(invoice, "tax", (line) => money(line.tax)),
       },
     ];
   }
@@ -433,7 +441,13 @@ export class TaxOfficeScreen extends LitElement {
       name=${key}
       label=${t(label)}
       ?required=${required}
-      .error=${this.refusal?.field === key ? this.refusal.message : ""}
+      .error=${
+        (key === "from" || key === "to") && this.missing.has(key)
+          ? t("tax_office.date_required")
+          : this.refusal?.field === key
+            ? this.refusal.message
+            : ""
+      }
       .value=${this.filter[key] ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#set(key, event.detail.value)}
     ></wt-input>`;
@@ -458,6 +472,9 @@ export class TaxOfficeScreen extends LitElement {
   override render() {
     const error = (field: string) => (this.refusal?.field === field ? this.refusal.message : "");
     return html`<h1>${t("tax_office.title")}</h1>
+      <p class="guide-line">
+        <a class="guide" href=${guideHref("invoices.tax-office")}>${t("tax_office.guide")}</a>
+      </p>
       <div class="filters">
         ${this.#dateField("from", "tax_office.issued_from", true)}
         ${this.#dateField("to", "tax_office.issued_to", true)}
@@ -493,24 +510,9 @@ export class TaxOfficeScreen extends LitElement {
       }
       <wt-data-table
         aria-label=${t("tax_office.title")}
-        viewKey="waitron.tax-office.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        .rows=${rowsOf(this.invoices)}
+        .rows=${this.invoices}
         .columns=${this.#columns()}
-        .rowKey=${(row: Row) => row.key}
-        .rowParent=${(row: Row) => ("parent" in row ? row.parent : null)}
-        .rowJoinsParent=${(row: Row) => "parent" in row}
-        .rowCollapsible=${() => false}
-        .rowKeepsChildOrder=${() => true}
+        .rowKey=${(invoice: TaxOfficeInvoiceDto) => invoice.id}
         .loading=${this.loading}
         .loadingMessage=${t("tax_office.loading")}
         .emptyMessage=${tableNoMatches()}

@@ -17,7 +17,7 @@ narrow the list by:
 - **Kind**
 - **Operation from** and **Operation to**
 
-Choose **Open** to see the invoice as a PDF, then print or save it from there. A cancelled
+Choose an invoice's number to see it as a PDF, then print or save it from there. A cancelled
 invoice stays in the list, marked with the day it was cancelled. If the list ends with
 **Show more invoices**, choose it to see the rest.
 

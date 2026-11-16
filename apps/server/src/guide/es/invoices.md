@@ -16,7 +16,7 @@ La lista se abre con el mes actual. Para encontrar una factura, cambia **Emitida
 - **Tipo de factura**
 - **Operación desde** y **Operación hasta**
 
-Elige **Abrir** para ver la factura en PDF y, desde ahí, imprimirla o guardarla. Una factura
+Elige el número de una factura para verla en PDF y, desde ahí, imprimirla o guardarla. Una factura
 anulada sigue en la lista, marcada con el día en que se anuló. Si la lista termina con
 **Mostrar más facturas**, elígelo para ver el resto.
 

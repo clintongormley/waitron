@@ -4,6 +4,7 @@
 
 Status: **draft for the watcher**. Written at main `e98aaa981d`.
 2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
+2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
 **Amended 2026-11-16 (owner's Q2 answer, 09:10):** a simplified ticket opens as a ticket-width PDF
 drawn by the till's own ticket layout (D2, Task 3b, PR 1b); full invoices keep the A4 PDF.
@@ -88,7 +89,7 @@ write.
 - **D3. Search fields** (RIVA art. 63.3, quoted in the research): one text box matching series and
   number (`SERIES/N` exactly, or a bare number), customer name (the house text search,
   `packages/shared/src/text-search.ts`: accents and case ignored, every word but the last must match
-  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, default the current month, venue calendar days);
+  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, venue calendar days); the default is the browser's current month, which differs from the venue's only near midnight at a month's end when the browser is in another time zone;
   operation date from–to (optional): the sale's `supply_day` where set, otherwise its issue day,
   since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (typed
   as a number); amount (exact euros compared as numbers, not text, matching the
@@ -97,7 +98,7 @@ write.
   name search cannot scan years of rows; Task 2 times that worst case and shortens the cap if it
   holds the lock too long.
 - **D4. Columns:** number, kind, issue date and time, operation date (when it differs), customer
-  name and tax id, base, VAT rate and amount per rate (one sub-row per rate, as the book has it),
+  name and tax id, base, VAT rate and amount per rate (one line per rate inside those cells, lined up rate by rate),
   total, corrected invoice, cancelled.
 - **D5. The month's export:** one calendar month per download, a ZIP of `README.txt`,
   `invoices.csv` (D4's columns, one row per VAT rate, the person's language) and
@@ -221,7 +222,7 @@ for every other sale and for Task 3b's fallback.)
 `.a11y.test.ts`; `dashboard-app.ts` (`CORE_SCREENS`, `NAV_GROUPS` under Reports,
 `requiresPermission: "invoice.inspect"`), `navigation.ts`, `api/client.ts`, i18n strings.
 
-- [ ] Failing tests: the screen lists the route's rows, one sub-row per VAT rate; each filter
+- [ ] Failing tests: the screen lists the route's rows, one line per VAT rate; each filter
   sends its query parameter; the issue range defaults to the current month; next page uses the
   keyset; "Open" POSTs to the PDF route, as the Orders download does, and opens the returned PDF
   in a new tab (the browser's viewer prints and saves it); a
