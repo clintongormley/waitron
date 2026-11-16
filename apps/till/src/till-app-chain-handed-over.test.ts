@@ -192,6 +192,10 @@ it.each(["en-GB", "es-ES"])(
     emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
     await flush(el);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("handover.stepping_down"));
+    expect(inDialog(el, "wt-form-actions")!.error).toMatch(
+      locale === "es-ES" ? /traspasando el local/ : /handing over/,
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(false);
     expect(write).toHaveBeenCalledOnce();
   },
 );
@@ -226,6 +230,47 @@ it.each(["en-GB", "es-ES"])(
     expect(new Set(ids).size).toBe(1);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
     expect(dialog(el)!.confirmationLocked).toBe(true);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "says a card reader bill payment was refused by a box handing over in %s",
+  async (locale) => {
+    const reader = { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra" };
+    const write = vi.fn().mockRejectedValue({ code: "handover.stepping_down", status: 503 });
+    const { el } = await mount(locale, {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        locale,
+        cardProvider: "stripe_terminal",
+        capabilities: ["take-cash", "integrated-card-payment"],
+        activeReaders: [{ ...reader, provider: "stripe_terminal" }],
+        defaultReaderId: reader.id,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue({
+        kind: "allocated",
+        choice: null,
+        applied: "40.00",
+        tip: "0.00",
+        change: null,
+        charged: "40.00",
+      }),
+      takeBillPayment: write,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+    expect(write).toHaveBeenCalledOnce();
+    expect(write.mock.calls[0]![1]).toMatchObject({ method: "card", entry: "reader" });
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("handover.stepping_down"));
+    expect(inDialog(el, "wt-form-actions")!.error).toMatch(
+      locale === "es-ES" ? /traspasando el local/ : /handing over/,
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(false);
   },
 );
 

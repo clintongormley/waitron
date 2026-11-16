@@ -7373,6 +7373,24 @@ describe("till-app: giving back a bill payment", () => {
     );
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "says a refund was refused by a box handing over, in %s",
+    async (locale) => {
+      const refundBillPayment = vi
+        .fn()
+        .mockRejectedValue({ code: "handover.stepping_down", status: 503 });
+      const el = await askRefund(
+        { getTill: vi.fn().mockResolvedValue({ ...till, locale }), refundBillPayment },
+        cashPaid,
+      );
+
+      expect(refundBillPayment).toHaveBeenCalledOnce();
+      const error = inRefund(el, "wt-form-actions")!.error;
+      expect(error).toBe(codeMessage("handover.stepping_down"));
+      expect(error).toMatch(locale === "es-ES" ? /traspasando el local/ : /handing over/);
+    },
+  );
+
   it("asks once who can approve for two presses, and sends once for two approvals", async () => {
     let approvers: (list: typeof manager) => void = () => {};
     const listRefundAuthorizers = vi.fn(
