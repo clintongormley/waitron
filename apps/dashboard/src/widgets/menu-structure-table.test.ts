@@ -3518,6 +3518,31 @@ describe("Select mode while a search or filter hides rows", () => {
     expect([...el.shownSelectableKeys()]).toEqual([]);
   });
 
+  it("keeps sections out of selection when the Available filter was restored", async () => {
+    sessionStorage.setItem(
+      "waitron.menu-structure.table",
+      JSON.stringify({ filters: { available: "no" } }),
+    );
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) =>
+        each.id === "p-lemonade" ? { ...each, available: false } : each,
+      ),
+    });
+    expect(table(el).filterValues("available")).toEqual(["no"]);
+    const availableOnly = [
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ];
+    expect(boxKeys(el)).toEqual(availableOnly);
+    expect([...el.shownSelectableKeys()]).toEqual(availableOnly);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "");
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav", "included-wine"]);
+  });
+
   it("gives no section or included menu a box while the Available filter is on", async () => {
     const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
     const el = await mount({
