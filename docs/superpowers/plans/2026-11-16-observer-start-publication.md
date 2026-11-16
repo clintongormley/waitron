@@ -8,7 +8,7 @@ Watcher directive, `~/waitron-campaign-i/questions.md`, 2026-11-16 16:17:
 Change only the fixture stub at `scripts/waitron-box-sh.test.mjs:90–94`: read and increment count, publish `start.$count` with the PID, then publish count.
 Reuse the existing files and all `observer.count` consumers in that test file; preserve count values and every assertion.
 Add no helper, wait, timeout, source-spelling test, gate, product change, runtime object, cache, record or migration.
-Expected size: production 0; test fixture +3/-2; this plan about 20 lines; total about 25 lines.
+Expected size: production 0; test fixture +2/-1; this plan about 20 lines; total about 25 lines.
 
 Receipt: main run 43892006088 at ff362ded24 failed root job 133386464614 with missing `observer/start.2` at test line 775; 22,151 other cases passed.
 Supplied blame dates lines 91/92 to 983a3908ee; the driver's health repair changed neither this file nor `deploy/box/waitron-box.sh`.
