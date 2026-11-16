@@ -239,7 +239,7 @@ art. 89.Cinco asks for?
 
 Yes / No / Note: ____________________________________________
 
-**8. Who receives the corrective (T1).**
+**8. Who receives the corrective (T1; follows answer 1.7).**
 
 *The situation.* A corrective invoice is normally sent to the customer of the invoice it corrects.
 But most ticket customers are unknown: a ticket doesn't name its customer. Example: a ticket must be
@@ -247,9 +247,17 @@ corrected because the server's clock gave it the wrong date, and nobody knows wh
 
 *What Waitron does.* The restaurant issues the corrective, keeps it and sends its record to AEAT.
 The corrective reaches the customer only when the restaurant knows who they are. Tickets are never
-cancelled and issued again instead. We found no source covering this case.
+cancelled and issued again instead. For a card refund when the customer is not present, the
+adviser answered (1.7) that the venue issues the corrective anyway and keeps it linked to the
+evidence of the refund, and that the risk of not having delivered it remains. A corrective for a
+wrong date differs in one way: it changes no amount, so the customer paid the same and the venue
+owes the same VAT.
 
-*We ask:* Is that acceptable?
+*We ask:*
+
+- (a) Does answer 1.7 apply here too: issue the corrective, keep it, and deliver it only to a
+  customer the venue knows?
+- (b) When the corrective changes nothing the customer paid, does not delivering it carry any risk?
 
 Yes / No / Note: ____________________________________________
 
@@ -740,7 +748,7 @@ propuesta para su IVA: las reducciones en el trimestre en curso y los aumentos e
 
 Sí / No / Nota: ____________________________________________
 
-**8. A quién llega la rectificativa.**
+**8. A quién llega la rectificativa (a partir de su respuesta 1.7).**
 
 *Situación.* La rectificativa se remite normalmente al destinatario de la factura que corrige. Pero
 la mayoría de los clientes de tique son desconocidos: el tique no identifica al cliente. Ejemplo:
@@ -749,9 +757,18 @@ lo pagó.
 
 *Lo que hace Waitron.* El restaurante expide la rectificativa, la conserva y remite su registro a la
 AEAT; solo llega al cliente cuando el restaurante sabe quién es. No se anulan ni se vuelven a expedir
-tiques. No hemos encontrado norma sobre este caso.
+tiques. Para una devolución con tarjeta sin el cliente presente, indica (su respuesta 1.7) que el
+local expide igualmente la rectificativa y la conserva vinculada al justificante de la devolución,
+y que subsiste el riesgo de no haberla entregado. La rectificativa por fecha errónea se diferencia en
+una cosa: no cambia ningún importe, de modo que el cliente pagó lo mismo y el local debe el mismo
+IVA.
 
-*Preguntamos:* ¿Es aceptable?
+*Preguntamos:*
+
+- (a) ¿Vale aquí también su respuesta 1.7: expedir la rectificativa, conservarla y entregarla solo a
+  un cliente que el local conozca?
+- (b) Si la rectificativa no cambia nada de lo que pagó el cliente, ¿supone algún riesgo no
+  entregarla?
 
 Sí / No / Nota: ____________________________________________
 
