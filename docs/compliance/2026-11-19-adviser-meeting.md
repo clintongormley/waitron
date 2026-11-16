@@ -105,13 +105,14 @@ when staff record that the table has left with part unpaid. It carries the date 
   Monday, still unpaid, or may it wait until Thursday and show Monday as the date of the meal? His
   answer 1.4 mentions invoices issued after payment by bank transfer; his answer 1.3 says issuing
   cannot wait for full payment.
-- (c) An invoice issued after the VAT period of its meal has ended. Waitron counts it in the VAT
-  return of the meal's period (LIVA 75.Uno.2.º), as question 7 does for a wrong date, and the
-  accountant's export lists it in that period too, showing both dates. Example: a meal on 28 March,
-  paid by bank transfer, is invoiced on 25 April, after the first quarter's return was filed on
-  20 April. Is it right to count it in the first quarter and file a complementary return for it
-  (LGT art. 122), or does it count in the period it was issued? And may the accountant's export list
-  it by the date of the meal rather than the date of issue?
+- (c) An invoice issued after the VAT period of its meal has ended. The three ways of question 7
+  apply here too. Example: a meal on 28 March, paid by bank transfer, is invoiced on 25 April,
+  after the first quarter's return was filed on 20 April. Way 1 counts it in the second quarter,
+  when it was issued, and leaves the first quarter as filed (the owner's preference). Way 2 counts
+  it in the first quarter, with a complementary return (LGT art. 122); the change built for this,
+  not yet released, works this way (LIVA 75.Uno.2.º). Way 3 leaves the first quarter as filed and
+  shows a "correction for the first quarter" line for the accountant. Which is right? And should
+  the accountant's export list it by the date of the meal or by the date of issue?
 
 Yes / No / Note: ____________________________________________
 
@@ -170,7 +171,7 @@ Yes / No / Note: ____________________________________________
 
 ### Confirmations: when the clock was wrong
 
-**7. A wrong date on an invoice (T7, and the owner's answer of 14 November on the VAT period).**
+**7. A wrong date on an invoice, and the VAT period of a correction (T7).**
 
 *The situation.* The server dates every invoice from its own clock, which internet time keeps
 right. If the clock was wrong, an invoice can carry the wrong day. Example: after a power cut the
@@ -179,13 +180,29 @@ dated in the future, which is one way such an error comes to light.
 
 *What Waitron does.* It puts the error right with a corrective invoice, dated the day it is issued,
 stating the real date of the sale and changing no amount (DGT V1665-22; V0305-24). The corrective is
-numbered in a series that holds only ticket correctives. VAT counts in the period of the real date
-(LIVA 75.Uno.2.º); if that period's return is already filed, a complementary return fixes it (LGT
-art. 122). One corrective may cover several invoices (RD 1619/2012 art. 15.4). This is built for a
-ticket that AEAT refused as dated in the future; the version for full invoices is built but
-switched off.
+numbered in a series that holds only ticket correctives. One corrective may cover several invoices
+(RD 1619/2012 art. 15.4). This is built for a ticket that AEAT refused as dated in the future; the
+version for full invoices is built but switched off.
 
-*We ask:* Is that the right way to correct a wrong date?
+*The VAT period: three ways.* Example: the ticket for a meal on 28 March is dated 2 April because
+the clock was wrong; the first quarter's return is filed on 20 April; the error comes to light, and
+the corrective is issued, in May.
+
+1. Count the change in the period the corrective is issued, and never change a report already
+   filed. The owner prefers this. In the example, the ticket's VAT stays in the second quarter,
+   where its wrong date put it, and the first quarter stays as filed.
+2. Count it in the period of the sale by changing that period's report: the VAT moves to the first
+   quarter, which a complementary return corrects (LGT art. 122). This is what Waitron does today
+   (LIVA 75.Uno.2.º).
+3. Never change a filed report, and show the difference as a separate line, "correction for the
+   first quarter", for the accountant to file as a complementary return (LGT art. 122).
+
+AEAT lists filed records by the period of their operation date, or of their issue date when they
+have none (service description v1.0.3, §6.4, p. 30). So under way 1, Waitron's figures for a
+quarter can differ from what AEAT's records show for it.
+
+*We ask:* Is a corrective the right way to correct a wrong date? Which of the three ways is right
+for its VAT? Does AEAT listing records by their operation date make way 1 a problem?
 
 Yes / No / Note: ____________________________________________
 
@@ -553,14 +570,16 @@ momento.
   lunes, aún sin cobrar, o puede esperar al jueves indicando el lunes como fecha de la operación? Su
   respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la
   expedición no puede quedar condicionada al cobro total.
-- (c) Una factura expedida después de terminar el periodo de liquidación de la comida. Waitron la
-  computa en la autoliquidación del periodo de la comida (LIVA art. 75.Uno.2.º), como en la pregunta
-  7 para una fecha errónea, y la exportación para el gestor también la incluye en ese periodo, con
-  las dos fechas. Ejemplo: una comida del 28 de marzo, pagada por transferencia, se factura el 25 de
-  abril, después de presentar el 20 de abril la autoliquidación del primer trimestre. ¿Es correcto
-  computarla en el primer trimestre y presentar por ella una autoliquidación complementaria (LGT
-  art. 122), o se computa en el periodo de su expedición? ¿Y puede la exportación para el gestor
-  incluirla por la fecha de la operación, en lugar de la fecha de expedición?
+- (c) Una factura expedida después de terminar el periodo de liquidación de la comida. Valen aquí
+  las tres opciones de la pregunta 7. Ejemplo: una comida del 28 de marzo, pagada por
+  transferencia, se factura el 25 de abril, después de presentar el 20 de abril la autoliquidación
+  del primer trimestre. Con la opción 1 se computa en el segundo trimestre, el de su expedición, y
+  el primer trimestre queda como se presentó (la preferencia del titular). Con la opción 2 se
+  computa en el primer trimestre, con una autoliquidación complementaria (LGT art. 122); así
+  funciona el cambio hecho para este caso, aún no publicado (LIVA art. 75.Uno.2.º). Con la opción 3
+  el primer trimestre queda como se presentó y se muestra una línea «corrección del primer
+  trimestre» para el gestor. ¿Cuál es la correcta? ¿Y debe la exportación para el gestor incluirla
+  por la fecha de la operación o por la fecha de expedición?
 
 Sí / No / Nota: ____________________________________________
 
@@ -620,7 +639,7 @@ Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: cuando el reloj estaba mal
 
-**7. Fecha errónea en una factura.**
+**7. Fecha errónea en una factura, y periodo del IVA de una corrección.**
 
 *Situación.* El servidor fecha cada factura con su propio reloj, que mantiene en hora mediante
 internet. Si el reloj estaba mal, una factura puede llevar un día equivocado. Ejemplo: tras un corte
@@ -630,13 +649,33 @@ AEAT rechaza un registro con fecha futura, y así suele descubrirse el error.
 *Lo que hace Waitron.* Lo corrige con una rectificativa fechada el día en que se expide, que indica
 la fecha real de la operación y no cambia ningún importe (DGT V1665-22: «será necesaria la
 expedición de una factura rectificativa»; V0305-24). La rectificativa va en una serie que solo
-contiene rectificativas de tiques. El IVA se imputa al periodo de la fecha real (LIVA art.
-75.Uno.2.º); si esa declaración ya se presentó, se corrige con una complementaria (LGT art. 122).
-Una rectificativa puede corregir varias facturas (RD 1619/2012, art. 15.4). Ya funciona para un tique
-que la AEAT rechazó por fecha futura; la versión para facturas completas está hecha pero
-desactivada.
+contiene rectificativas de tiques. Una rectificativa puede corregir varias facturas (RD 1619/2012,
+art. 15.4). Ya funciona para un tique que la AEAT rechazó por fecha futura; la versión para facturas
+completas está hecha pero desactivada.
 
-*Preguntamos:* ¿Es esta la forma correcta de corregir una fecha errónea?
+*El periodo del IVA: tres opciones.* Ejemplo: el tique de una comida del 28 de marzo sale fechado
+el 2 de abril porque el reloj estaba mal; la autoliquidación del primer trimestre se presenta el
+20 de abril; el error se descubre, y la rectificativa se expide, en mayo.
+
+1. Imputar el cambio al periodo en que se expide la rectificativa, sin modificar nunca una
+   declaración ya presentada. Es la preferencia del titular. En el ejemplo, el IVA del tique sigue
+   en el segundo trimestre, donde lo llevó la fecha errónea, y el primer trimestre queda como se
+   presentó.
+2. Imputarlo al periodo de la operación modificando la declaración de ese periodo: el IVA pasa al
+   primer trimestre, que se corrige con una autoliquidación complementaria (LGT art. 122). Es lo
+   que hace hoy Waitron (LIVA art. 75.Uno.2.º).
+3. No modificar nunca una declaración presentada, y mostrar la diferencia en una línea aparte,
+   «corrección del primer trimestre», para que el gestor presente la complementaria (LGT art. 122).
+
+La AEAT consulta los registros presentados por periodo: las consultas «se realizan por
+ejercicio/periodo “de imputación”, dato obtenido a partir de la fecha de operación o en su defecto
+de la fecha de expedición» (descripción del servicio web v1.0.3, §6.4, p. 30). Con la opción 1, las
+cifras de Waitron para un trimestre pueden no coincidir con lo que los registros de la AEAT muestran
+para ese trimestre.
+
+*Preguntamos:* ¿Es la rectificativa la forma correcta de corregir una fecha errónea? ¿Cuál de las
+tres opciones es la correcta para su IVA? ¿Supone un problema para la opción 1 que la AEAT ordene
+los registros por la fecha de operación?
 
 Sí / No / Nota: ____________________________________________
 
