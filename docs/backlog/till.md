@@ -770,16 +770,15 @@ A238 (landed as #1164) and A239.
 
 ## Other till surfaces have not been checked against the forms rule
 
-Left open by C47 (#838/#839/#840/#841). The schedule screen's two request forms now follow the
-rule; C47 did not check the till's other surfaces against it, and whether a number pad or a
-choice picker counts as a form under it is open: the payment and weighing steps
+Left open by C47 (#838/#839/#840/#841). The till's other surfaces have not been checked against
+the rule, and whether a number pad or a choice picker counts as a form under it is open: the payment and weighing steps
 (`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
 below the total and Add disabled while the weight is invalid, before any press, with no message;
 the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
 until its required choices are made, and shows changed or unavailable choices as `role="alert"`
 paragraphs rather than beside a field; and the supervisor override dialog
 (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
-empty and shows a refusal as a `role="alert"` paragraph.
+empty, before any press.
 
 ## A card payment stuck `attempting` holds its device's profile switch
 
