@@ -3,7 +3,16 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { menus, categories, optionLabels, products, sections, type Transaction } from "@waitron/db";
+import {
+  menus,
+  categories,
+  optionLabels,
+  optionLists,
+  extraLists,
+  products,
+  sections,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
@@ -515,6 +524,7 @@ interface LiveRows {
   products: Map<string, LiveProductRow>;
   /** Each option label the offers name that still exists, with its availability. */
   labels: Map<string, boolean>;
+  missingLists: Set<string>;
 }
 
 /** A product can be sold now. */
@@ -524,7 +534,11 @@ const sellable = (row: LiveProductRow) => row.active && row.available;
 const labelAvailable = (rows: LiveRows, labelId: string) => rows.labels.get(labelId) === true;
 
 /** One read of each table, however many offers, each id list split into {@link batches}. */
-async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Promise<LiveRows> {
+async function readLiveRows(
+  tx: Transaction,
+  offers: readonly FrozenOffer[],
+  checkLists = true,
+): Promise<LiveRows> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
   for (const offer of offers) {
@@ -563,15 +577,40 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
       .from(optionLabels)
       .where(inArray(optionLabels.id, batch)))
       labels.set(row.id, row.available);
-  return { products: productRows, labels };
+  const missingLists = new Set<string>();
+  if (checkLists) {
+    for (const [kind, table] of [
+      ["options", optionLists],
+      ["extras", extraLists],
+    ] as const) {
+      const ids = new Set(
+        offers.flatMap((offer) =>
+          offer.offeredModifiers.filter((entry) => entry.kind === kind).map((entry) => entry.id),
+        ),
+      );
+      for (const batch of batches([...ids]))
+        for (const row of await tx
+          .select({ id: table.id })
+          .from(table)
+          .where(inArray(table.id, batch)))
+          ids.delete(row.id);
+      for (const id of ids) missingLists.add(`${kind}:${id}`);
+    }
+  }
+  return { products: productRows, labels, missingLists };
 }
 
-/** Digest of current declarations, course and category, excluding availability. */
-function liveFieldsDigest(products: ReadonlyMap<string, LiveProductRow>): string {
+/** Availability changes do not require reloading offers; deleted list membership does. */
+function liveFieldsDigest(
+  products: ReadonlyMap<string, LiveProductRow>,
+  missingLists: ReadonlySet<string> = new Set(),
+): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([id, row]) => [id, row.courseId, row.category, productDeclarationValues(row)]);
-  return createHash("sha256").update(canonicalJson(rows)).digest("hex");
+  return createHash("sha256")
+    .update(canonicalJson(missingLists.size === 0 ? rows : [rows, [...missingLists].sort()]))
+    .digest("hex");
 }
 
 /** The digest of no rows, which every read of no documents answers. */
@@ -579,7 +618,7 @@ export const NO_LIVE_FIELDS = liveFieldsDigest(new Map());
 
 /**
  * Each product, variant or extras item's product the documents' offers name that is Inactive or
- * Unavailable, each option label they name that is unavailable or deleted, and the digest
+ * Unavailable, each option label in a surviving list that is unavailable or deleted, and the digest
  * {@link applyLiveFields} answers for the same documents.
  */
 export async function readLiveState(
@@ -597,17 +636,19 @@ export async function readLiveState(
   for (const offer of offers) {
     unsellable(offer.productId);
     for (const variant of offer.variants) unsellable(variant.id);
-    for (const entry of offer.offeredModifiers)
+    for (const entry of offer.offeredModifiers) {
+      if (rows.missingLists.has(`${entry.kind}:${entry.id}`)) continue;
       if (entry.kind === "options") {
         for (const label of entry.labels) if (!labelAvailable(rows, label.id)) labels.add(label.id);
       } else
         for (const item of entry.items) {
           unsellable(item.productId);
         }
+    }
   }
   return {
     unavailable: { products: [...unsellableProducts], optionLabels: [...labels] },
-    liveFields: liveFieldsDigest(rows.products),
+    liveFields: liveFieldsDigest(rows.products, rows.missingLists),
   };
 }
 
@@ -617,7 +658,7 @@ export async function readLiveState(
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.
  *
- * An item whose product row no longer exists is left out, as is an offer whose product is gone.
+ * Deleted modifier lists and missing products are left out.
  */
 export async function applyLiveFields(
   tx: Transaction,
@@ -663,47 +704,49 @@ export async function applyLiveFields(
                     },
                   ];
             }),
-            offeredModifiers: offer.offeredModifiers.map((entry): LiveOfferedModifier => {
-              if (entry.kind === "options") {
-                const withAvailability = entry.labels.map((label) => ({
-                  ...label,
-                  available: labelAvailable(rows, label.id),
-                }));
+            offeredModifiers: offer.offeredModifiers
+              .filter((entry) => !rows.missingLists.has(`${entry.kind}:${entry.id}`))
+              .map((entry): LiveOfferedModifier => {
+                if (entry.kind === "options") {
+                  const withAvailability = entry.labels.map((label) => ({
+                    ...label,
+                    available: labelAvailable(rows, label.id),
+                  }));
+                  return {
+                    ...entry,
+                    labels: withAvailability,
+                    defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
+                    publishedDefaultLabelId: entry.defaultLabelId,
+                  };
+                }
                 return {
                   ...entry,
-                  labels: withAvailability,
-                  defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
-                  publishedDefaultLabelId: entry.defaultLabelId,
+                  items: entry.items.flatMap((item) => {
+                    const row = rows.products.get(item.productId);
+                    return row === undefined
+                      ? []
+                      : [
+                          {
+                            ...item,
+                            ...extraDeclarationValues(row),
+                            available: sellable(row),
+                          },
+                        ];
+                  }),
                 };
-              }
-              return {
-                ...entry,
-                items: entry.items.flatMap((item) => {
-                  const row = rows.products.get(item.productId);
-                  return row === undefined
-                    ? []
-                    : [
-                        {
-                          ...item,
-                          ...extraDeclarationValues(row),
-                          available: sellable(row),
-                        },
-                      ];
-                }),
-              };
-            }),
+              }),
           },
         ];
       }),
     );
-  return { offers: live, liveFields: liveFieldsDigest(rows.products) };
+  return { offers: live, liveFields: liveFieldsDigest(rows.products, rows.missingLists) };
 }
 
 export async function hydrateDeclarationDocument(
   tx: Transaction,
   document: MenuDocument,
 ): Promise<DeclarationDocument> {
-  const rows = await readLiveRows(tx, documentOffers(document));
+  const rows = await readLiveRows(tx, documentOffers(document), false);
   return {
     ...document,
     offers: Object.fromEntries(

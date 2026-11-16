@@ -490,10 +490,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
-- **A884. Deleting an options or extras list leaves it on the published menus until they are
-  republished.**
-  [Detail](backlog/menu.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
-
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
   Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
   Customer names fall back through guest language, venue default, then internal name; never kitchen.

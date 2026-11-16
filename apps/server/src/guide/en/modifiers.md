@@ -102,12 +102,7 @@ products before you confirm. Deleting cannot be undone.
 
 **An open order does not block a delete, and you are not told to finish or void one.** The delete
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
-answer is stored as the wording that was chosen. Each published menu keeps the list until you
-publish that menu again. For an options list this matters, because its options are gone: until you
-publish, the till cannot add a dish that carried the list, and saving changes to a parked order that
-holds such a dish is refused. Publish your menus again straight after deleting an options list.
-After that, the next change saved to a parked counter order takes off any extra picked from a deleted
-list, and its charge with it, and drops any answer to a deleted options list.
+answer is stored as the wording that was chosen.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes

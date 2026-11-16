@@ -51,6 +51,7 @@ import {
   createMenu,
   createCategory,
   createExtraList,
+  deleteExtraList,
   createOptionList,
   createProduct,
   units,
@@ -6326,5 +6327,51 @@ describe("A773 request kind of an edit's and an inserted group", () => {
     ).groups[0]!.id;
     expect(inserted).not.toBe(first);
     expect(await groupRow(inserted)).toMatchObject({ state: "held", requestKind: "next_course" });
+  });
+});
+
+describe("A884 deleted lists", () => {
+  it("keeps the submitted extra and charge on whole saves and note edits, refusing quantity rises before and after republish", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const extras = [
+      { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+    ];
+    const placed = await submit(v, s.partyId, [
+      { release: "now", lines: [{ ...line(v, "steak"), extras }] },
+    ]);
+    const [dish] = await linesIn(s.partyId, placed.groups[0]!.id);
+    const rows = () =>
+      db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, s.tabId))
+        .orderBy(asc(workingOrderLines.lineNo));
+    const before = await rows();
+    const notices = await inTx((tx) => listStationNotices(tx, v.stationId));
+    await inTx((tx) => deleteExtraList(tx, v.extrasListId));
+    for (const republish of [false, true]) {
+      if (republish) await inTx((tx) => republishMenus(tx));
+      await saveWhole(
+        v,
+        s.tabId,
+        [{ workingOrderLineId: dish!.id, menuItemId: v.offer("steak"), quantity: "1", extras }],
+        MIA,
+      );
+      expect(await rows()).toEqual(before);
+      expect(before.map((row) => [row.productId, row.lineTotal])).toEqual([
+        [v.productId.steak, 2200],
+        [v.productId.sauce, 150],
+      ]);
+      expect(await inTx((tx) => listStationNotices(tx, v.stationId))).toEqual(notices);
+      await expect(
+        changeLine(v, s.tabId, dish!.lineNo, { portionLineNos: [], quantity: "2" }, MIA),
+      ).rejects.toMatchObject({ code: "extras.invalid" });
+      expect(await rows()).toEqual(before);
+    }
+    await changeLine(v, s.tabId, dish!.lineNo, { portionLineNos: [], note: "no pepper" }, MIA);
+    const afterNote = await rows();
+    expect(afterNote[0]).toMatchObject({ id: dish!.id, note: "no pepper", lineTotal: 2200 });
+    expect(afterNote[1]).toEqual(before[1]);
   });
 });

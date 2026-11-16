@@ -2034,7 +2034,8 @@ sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
 in a zone already held shows that menu at once and sends one `/api/menu-state` check for the zone
 (`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
 published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and
-options) is applied in place. `liveFields` is a digest of the course and reporting category of each dish, variant and extras item
+options) is applied in place. `liveFields` digests current declarations, course and reporting category
+of each dish, variant and extras item, plus deleted modifier-list identities
 (`liveFieldsDigest`, `packages/menu/src/menu-document.ts`); without it a dish moved to another
 course would not be noticed. The held menus are forgotten on every start (`#boot`, which a server
 switch runs again) and when the till is given a new `api`. Two limits:

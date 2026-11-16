@@ -10820,3 +10820,37 @@ describe("line release on an order with no service context", () => {
     ]);
   });
 });
+
+describe("A884 deleted lists", () => {
+  it.each(["options", "extras"] as const)(
+    "adds a dish after its %s list is deleted without republishing",
+    async (kind) => {
+      const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
+      const listId = await withTransaction(db, async (tx) => {
+        const list =
+          kind === "options"
+            ? await addOptionList(tx, coffeeId, "Cooking")
+            : await addExtraList(tx, coffeeId, "Side", { minPicks: 1 });
+        await republishMenus(tx);
+        return list.listId;
+      });
+      await withTransaction(db, (tx) =>
+        kind === "options" ? menu.deleteOptionList(tx, listId) : menu.deleteExtraList(tx, listId),
+      );
+      for (const republish of [false, true]) {
+        if (republish) await withTransaction(db, (tx) => republishMenus(tx));
+        const id = randomUUID();
+        await parkOrder({ db }, cfg, {
+          id,
+          zoneId,
+          lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
+        });
+        const lines = await db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id));
+        expect(lines.map((line) => [line.productId, line.lineTotal])).toEqual([[coffeeId, 325]]);
+      }
+    },
+  );
+});
