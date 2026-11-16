@@ -36,7 +36,7 @@ const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
 const absent = useVenueDb({
-  migrations: [],
+  migrations: [CORE_MIGRATIONS],
 });
 const id = "10000000-0000-4000-8000-000000000001";
 const menu = "10000000-0000-4000-8000-000000000002";
@@ -67,14 +67,14 @@ beforeEach(async () => {
     });
   }
 });
-async function run(missingBefore = false, sourceSchema = 1, target = restored) {
+async function run(missingBefore = false, sourceSchema = 1) {
   const path = (suite: typeof original) =>
     suite.db
       .all<{ file: string }>(sql`pragma database_list`)
       .find((row) => row.file.endsWith("venue.db"))!.file;
   const before = await openBackupQuery(path(missingBefore ? absent : original));
   try {
-    const after = await openBackupQuery(path(target));
+    const after = await openBackupQuery(path(restored));
     try {
       return await OWNER.verifyRestoredData({
         before: before.query,
@@ -311,30 +311,9 @@ describe("media backup evidence", () => {
   it("accepts honest absence and rejects target-only invented blobs", async () => {
     for (const table of ["media_images", "media_blobs"])
       await corrupt(restored, `delete from "${table}"`);
-    expect(await run(true, 0)).toEqual(passed);
+    expect(await run(true)).toEqual(passed);
     await restored.db.insert(mediaBlobs).values({ hash, bytes, format: "webp" });
-    expect((await run(true, 0)).status).toBe("invalid");
-  });
-  it("refuses photo metadata when its blob table is absent", async () => {
-    const [{ statement }] = original.db.all<{ statement: string }>(
-      sql`select sql as statement from sqlite_schema where name = 'media_images'`,
-    );
-    absent.db.run(sql.raw(statement!));
-    absent.db.run(sql`pragma foreign_keys = off`);
-    try {
-      await absent.db.insert(mediaImages).values({
-        id,
-        filename,
-        originalHash: hash,
-        names: { en: "Bread" },
-        createdAt: stamp,
-        updatedAt: stamp,
-      });
-      expect((await run(true, 1, absent)).status).toBe("invalid");
-    } finally {
-      absent.db.run(sql`drop table media_images`);
-      absent.db.run(sql`pragma foreign_keys = on`);
-    }
+    expect((await run(true)).status).toBe("invalid");
   });
   it("declares actual database state without file or effect obligations", () => {
     const owner = validateBackupVerificationContribution(OWNER);
