@@ -1133,6 +1133,7 @@ export interface VenueServiceContribution {
       menuId: string;
       menuVersionId: string | null;
       menuName: string;
+      departmentId: string;
       categoryName: string;
       unitId: string;
       unitName: Readonly<Record<string, string>>;

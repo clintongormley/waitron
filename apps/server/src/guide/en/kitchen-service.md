@@ -335,6 +335,8 @@ the till has marked it.
 
 A dish saved before its period ended, on a parked counter order or as a set lunch's later course,
 asks the same when you place, send or fire it after the period; **Don't send them** leaves it unsent.
+An extra added to a parked dish after its period asks the same when you place it, even when the
+station already agreed to the dish.
 
 Adding an extra to a sent dish after its period ended opens the same window:
 **Station agreed — send** adds the extra (from **Lunch choices** it reads **Station agreed — save**),
@@ -343,10 +345,10 @@ and **Don't add them** leaves the dish as it was.
 If the till says a dish's period has ended without listing dishes, review the order and remove
 dishes from ended periods before sending again.
 
-A dish that the period now running also sells is not marked and is sent as usual. A dish left from
-an earlier business day shows **Last orders have ended** and cannot be sent: at a table, **Remove**
-takes it off and **Keep** leaves it in the order unsent, and at the counter you can take payment
-only once it is removed.
+A dish that the period now running also sells is not marked and is sent as usual. A dish added on
+an earlier business day and never parked or sent shows **Last orders have ended** and cannot be
+sent: at a table, **Remove** takes it off and **Keep** leaves it in the order unsent, and at the
+counter you can take payment only once it is removed.
 
 A dish sent after its period ended earlier the same business day, once the station agreed, carries a mark
 with its period's name. On its station ticket a line above it reads `** AFTER LUNCH — AGREED **`.

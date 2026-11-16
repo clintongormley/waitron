@@ -1243,6 +1243,7 @@ export async function listWorkingLineContexts(
     menuId: string;
     menuVersionId: string | null;
     menuName: string;
+    departmentId: string;
     categoryName: string;
     unitId: string;
     unitName: Record<string, string>;
@@ -1261,6 +1262,7 @@ export async function listWorkingLineContexts(
       menuId: workingLineContexts.menuId,
       menuVersionId: workingLineContexts.menuVersionId,
       menuName: workingLineContexts.menuName,
+      departmentId: workingLineContexts.departmentId,
       categoryName: workingLineContexts.categoryName,
       unitId: workingLineContexts.unitId,
       unitName: workingLineContexts.unitName,

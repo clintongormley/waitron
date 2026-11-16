@@ -2013,26 +2013,28 @@ async function lateUnsentDishesOf(
     const confirmedBy =
       mode === "mark"
         ? null
-        : await confirmLateDishes(
-            tx,
-            departmentId,
-            late,
-            mode.ask,
-            late.map(({ line }) => line.id),
-          );
+        : await confirmLateDishes(tx, departmentId, late, mode.ask, [
+            ...new Set(late.map(({ namedId }) => namedId)),
+          ]);
     await VENUE_SERVICE.recordLateSendMarks(
       tx,
-      late.map(({ line, periodName }) => ({ lineId: line.id, periodName, confirmedBy })),
+      late.map(({ lineId, periodName }) => ({ lineId, periodName, confirmedBy })),
     );
   }
 }
 
 interface LateUnsentDish {
-  line: FireableLine;
+  lineId: string;
+  /** The stored line a refusal names: an extra's dish when the extra is judged without it. */
+  namedId: string;
+  /** The line whose product the also-sold rule reads: a lunch course's lunch, an extra's dish. */
+  dishId: string;
   menuId: string;
   menuItemId: string;
   periodName: string;
 }
+
+type LineContext = Awaited<ReturnType<typeof VENUE_SERVICE.listLineContexts>>[number];
 
 async function judgeLateUnsent(
   tx: Transaction,
@@ -2042,25 +2044,52 @@ async function judgeLateUnsent(
   if (lines.length === 0) return null;
   const order = await VENUE_SERVICE.findOrderContext(tx, orderId);
   if (order === null) return null;
-  const marked = await VENUE_SERVICE.readLateSendMarks(
-    tx,
-    lines.map((line) => line.id),
-  );
-  const pending = lines.filter((line) => !marked.has(line.id));
+  const extras = await tx
+    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.parentLineId,
+        lines.map((line) => line.id),
+      ),
+    );
+  const marked = await VENUE_SERVICE.readLateSendMarks(tx, [
+    ...lines.map((line) => line.id),
+    ...extras.map((extra) => extra.id),
+  ]);
+  // A marked dish was judged with the extras it had then, which carry its mark; one stored on it
+  // since is judged on its own.
+  const pending = [
+    ...lines
+      .filter((line) => !marked.has(line.id))
+      .map((line) => ({ lineId: line.id, namedId: line.id, dishId: line.parentLineId ?? line.id })),
+    ...extras
+      .filter((extra) => !marked.has(extra.id) && marked.has(extra.parentLineId!))
+      .map((extra) => ({
+        lineId: extra.id,
+        namedId: extra.parentLineId!,
+        dishId: extra.parentLineId!,
+      })),
+  ];
   if (pending.length === 0) return null;
+  const now = new Date();
   const zone = await VENUE_SERVICE.resolveZoneContext(tx, order.zoneId);
-  const service = await VENUE_SERVICE.resolveDepartmentService(tx, zone.departmentId, new Date());
+  const service = await VENUE_SERVICE.resolveDepartmentService(tx, zone.departmentId, now);
   const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
   const contexts = await VENUE_SERVICE.listLineContexts(tx, orderId);
   const contextOf = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
-  const ended = pending.flatMap((line) => {
-    const context = contextOf.get(line.id);
-    const periodName = context === undefined ? undefined : periodOf.get(context.menuId);
-    if (periodName === undefined || service.orderableMenuIds.includes(context!.menuId)) return [];
-    return [{ line, menuId: context!.menuId, menuItemId: context!.menuItemId, periodName }];
-  });
+  const ended: LateUnsentDish[] = [];
+  const unplaced: { line: (typeof pending)[number]; context: LineContext }[] = [];
+  for (const line of pending) {
+    const context = contextOf.get(line.lineId);
+    if (context === undefined || service.orderableMenuIds.includes(context.menuId)) continue;
+    const periodName = periodOf.get(context.menuId);
+    if (periodName === undefined) unplaced.push({ line, context });
+    else
+      ended.push({ ...line, menuId: context.menuId, menuItemId: context.menuItemId, periodName });
+  }
+  ended.push(...(await unplacedLateDishes(tx, orderId, service, unplaced, now)));
   if (ended.length === 0) return null;
-  const dishIdOf = (line: FireableLine) => line.parentLineId ?? line.id;
   const dishes = await tx
     .select({
       id: workingOrderLines.id,
@@ -2069,7 +2098,7 @@ async function judgeLateUnsent(
     })
     .from(workingOrderLines)
     .innerJoin(products, eq(products.id, workingOrderLines.productId))
-    .where(inArray(workingOrderLines.id, [...new Set(ended.map(({ line }) => dishIdOf(line)))]));
+    .where(inArray(workingOrderLines.id, [...new Set(ended.map(({ dishId }) => dishId))]));
   const soldAs = new Map(
     dishes.map((dish) => [
       dish.id,
@@ -2084,11 +2113,89 @@ async function judgeLateUnsent(
     service.orderableMenuIds,
     [...soldAs.values()],
   );
-  const late = ended.filter(({ line }) => {
-    const sold = soldAs.get(dishIdOf(line))!;
+  const late = ended.filter(({ dishId }) => {
+    const sold = soldAs.get(dishId)!;
     return !alsoSold.has(offeredKey(sold.productId, sold.variantId));
   });
-  return late.length === 0 ? null : { departmentId: service.departmentId, late };
+  if (late.length === 0) return null;
+  // A late dish's extras are judged with it, as entry marks them with it.
+  const lateDish = new Map(late.map((dish) => [dish.lineId, dish]));
+  for (const extra of extras) {
+    const dish = lateDish.get(extra.parentLineId!);
+    if (dish !== undefined && !marked.has(extra.id)) late.push({ ...dish, lineId: extra.id });
+  }
+  return { departmentId: service.departmentId, late };
+}
+
+/**
+ * The late ones of stored lines whose menu the order's department neither sells nor ended today,
+ * judged by the department they were stored in. A menu neither department sells now or ended today
+ * was taken off its period since: no row names that period, so such a line is late under its menu's
+ * name, and only on the business day its order was opened, as no line records when it was added.
+ */
+async function unplacedLateDishes(
+  tx: Transaction,
+  orderId: string,
+  orderService: DepartmentServiceOf,
+  unplaced: readonly {
+    line: Omit<LateUnsentDish, "menuId" | "menuItemId" | "periodName">;
+    context: LineContext;
+  }[],
+  now: Date,
+): Promise<LateUnsentDish[]> {
+  const services = new Map<string, DepartmentServiceOf | null>([
+    [orderService.departmentId, orderService],
+  ]);
+  let storedToday: boolean | undefined;
+  const late: LateUnsentDish[] = [];
+  for (const { line, context } of unplaced) {
+    if (!services.has(context.departmentId))
+      services.set(
+        context.departmentId,
+        await activeDepartmentService(tx, context.departmentId, now),
+      );
+    const own = services.get(context.departmentId)!;
+    if (own?.orderableMenuIds.includes(context.menuId) === true) continue;
+    const ownPeriod = own?.endedMenus.find((menu) => menu.menuId === context.menuId)?.periodName;
+    if (ownPeriod === undefined && !(storedToday ??= await openedToday(tx, orderId, now))) continue;
+    late.push({
+      ...line,
+      menuId: context.menuId,
+      menuItemId: context.menuItemId,
+      periodName: ownPeriod ?? context.menuName,
+    });
+  }
+  return late;
+}
+
+type DepartmentServiceOf = Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>>;
+
+/** The department's service now, or null when it has been removed. */
+async function activeDepartmentService(
+  tx: Transaction,
+  departmentId: string,
+  now: Date,
+): Promise<DepartmentServiceOf | null> {
+  try {
+    return await VENUE_SERVICE.resolveDepartmentService(tx, departmentId, now);
+  } catch (error) {
+    if (error instanceof AppError && error.code === "department.not_found") return null;
+    throw error;
+  }
+}
+
+/** Whether the order was opened on the business day `now` falls in. */
+async function openedToday(tx: Transaction, orderId: string, now: Date): Promise<boolean> {
+  const [order] = await tx
+    .select({ openedAt: workingOrders.openedAt })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  if (order === undefined) return false;
+  const today = (await VENUE_SERVICE.readServiceDay(tx, now)).businessDay;
+  return (
+    today !== null &&
+    (await VENUE_SERVICE.readServiceDay(tx, new Date(order.openedAt))).businessDay === today
+  );
 }
 
 /**

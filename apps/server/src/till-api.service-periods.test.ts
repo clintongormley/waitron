@@ -34,6 +34,7 @@ import {
   updateProduct,
 } from "@waitron/menu";
 import {
+  configureZone,
   createServiceZone,
   departments,
   menuPeriods,
@@ -55,6 +56,7 @@ import { createPrinter } from "@waitron/printing";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
+import { lateUnsentDishes, unsentDishLines } from "./working-order.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -1923,9 +1925,10 @@ describe("a dish whose period ended earlier today", () => {
     const parkedAtLunch = async (
       parkedAt = "13:50",
       extra: (v: Venue) => Record<string, unknown> = () => ({}),
+      weekdays: readonly number[] = [1],
     ) => {
       at(mondayAt(parkedAt));
-      const v = await mealVenue();
+      const v = await mealVenue(weekdays);
       const { printerId, stationId } = await withTransaction(suite.db, async (tx) => {
         const stationId = (await createStation(tx, { name: "Kitchen" })).id;
         const printer = await createPrinter(tx, {
@@ -2090,6 +2093,203 @@ describe("a dish whose period ended earlier today", () => {
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
       ]);
+    });
+
+    /** Gives Lunch the Deli takeaway menu in place of the Midday menu its dish was parked from. */
+    const replaceLunchMenu = (v: Venue) =>
+      withTransaction(suite.db, async (tx) => {
+        const periods = await tx
+          .select()
+          .from(menuPeriods)
+          .where(eq(menuPeriods.departmentId, v.restaurant));
+        const lunch = periods.find((period) => period.menuId === v.menus["Midday menu"])!;
+        await updateMenuPeriod(tx, lunch.id, { menuId: v.menus["Deli takeaway"] });
+      });
+
+    it("asks when placed at 14:05 after Lunch's menu was replaced, naming the dish's menu, and marks it once confirmed", async () => {
+      const { v, printerId, id, lineId } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      await replaceLunchMenu(v);
+      expect(await place(v, id)).toEqual({
+        status: 409,
+        body: {
+          error: {
+            code: "menu_period.ended",
+            params: {
+              departmentId: v.restaurant,
+              menus: [{ menuId: v.menus["Midday menu"], periodName: "Midday menu" }],
+              menuItemIds: [v.toast.midday],
+              needsManager: false,
+              workingOrderLineIds: [lineId],
+            },
+          },
+        },
+      });
+      expect(await sentState(id)).toEqual({ order: { status: "open" }, lines: [{ sentAt: null }] });
+      expect(await printed(printerId)).toEqual([]);
+      const placed = await place(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      expect(placed).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: v.personId },
+      ]);
+    });
+
+    it("is marked with no confirmer when paid at 14:05 after Lunch's menu was replaced", async () => {
+      const { v, id } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      await replaceLunchMenu(v);
+      const paid = await sendAsTill(v, "POST", "/api/sales", {
+        workingOrderId: id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      });
+      expect(paid.status).toBe(200);
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: null },
+      ]);
+    });
+
+    it("is placed at 19:30 without asking after Lunch's menu was replaced, while Dinner sells the Toast", async () => {
+      const { v, id } = await parkedAtLunch();
+      at(mondayAt("19:30"));
+      await replaceLunchMenu(v);
+      expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    });
+
+    it("is not judged late at 13:55 after its zone moved to a department not selling its menu, while its own Lunch runs", async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const held = await park(v, v.terraceZone, v.toast.midday);
+      expect(held.status).toBe(200);
+      at(mondayAt("13:55"));
+      await withTransaction(suite.db, async (tx) => {
+        await configureZone(tx, { zoneId: v.terraceZone, departmentId: v.deli });
+        await lateUnsentDishes(tx, held.id, await unsentDishLines(tx, held.id), "mark");
+      });
+      expect(await marksOf(held.id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    });
+
+    it.each([
+      ["its own department's Lunch", true, "Lunch"],
+      ["its menu, its own department being gone,", false, "Midday menu"],
+    ])(
+      "is marked after %s at 14:05 when its zone moved to a department not selling its menu",
+      async (_, ownActive, periodName) => {
+        at(mondayAt("13:50"));
+        const v = await mealVenue();
+        const held = await park(v, v.terraceZone, v.toast.midday);
+        expect(held.status).toBe(200);
+        at(mondayAt("14:05"));
+        await withTransaction(suite.db, async (tx) => {
+          await configureZone(tx, { zoneId: v.terraceZone, departmentId: v.deli });
+          if (!ownActive)
+            await tx
+              .update(departments)
+              .set({ active: false })
+              .where(eq(departments.id, v.restaurant));
+          await lateUnsentDishes(tx, held.id, await unsentDishLines(tx, held.id), "mark");
+        });
+        expect(await marksOf(held.id)).toEqual([
+          { unitPriceGross: 400, latePeriodName: periodName, lateConfirmedBy: null },
+        ]);
+      },
+    );
+
+    it.each([
+      ["before Tuesday's Lunch", [1, 2]],
+      ["with no period on Tuesday", [1]],
+    ])(
+      "parked at Lunch on Monday is placed on Tuesday at 10:00 %s without asking, unmarked, and reaches its station",
+      async (_, weekdays) => {
+        const { v, printerId, id } = await parkedAtLunch(undefined, undefined, weekdays);
+        at(new Date("2026-10-06T10:00:00+02:00"));
+        expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+        expect(await marksOf(id)).toEqual([
+          { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+        ]);
+        expect((await sentState(id)).lines).toEqual([{ sentAt: expect.any(String) }]);
+        expect(await printed(printerId)).toEqual([expect.not.stringContaining("**")]);
+      },
+    );
+
+    it("marks the extras stored with a dish parked at 13:50 and placed confirmed at 14:05", async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const { extraId, listId } = await butterOnMiddayToast(v);
+      const held = await parkWith(v, v.toast.midday, {
+        lines: [
+          {
+            menuItemId: v.toast.midday,
+            quantity: "1",
+            extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
+          },
+        ],
+      });
+      expect(held.status).toBe(200);
+      at(mondayAt("14:05"));
+      const placed = await place(v, held.id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      expect(placed).toEqual({ status: 200, body: { id: held.id, status: "placed" } });
+      expect(await marksOf(held.id)).toEqual(
+        expect.arrayContaining([
+          { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+        ]),
+      );
+      expect(await marksOf(held.id)).toHaveLength(2);
+    });
+
+    it("asks at Place for an extra added at 14:10 to a dish confirmed late at 14:05, and marks the extra once confirmed", async () => {
+      at(mondayAt("14:05"));
+      const v = await mealVenue();
+      const { extraId, listId } = await butterOnMiddayToast(v);
+      const lateSend = { lateSend: { menuIds: [v.menus["Midday menu"]] } };
+      const held = await parkWith(v, v.toast.midday, lateSend);
+      expect(held.status).toBe(200);
+      at(mondayAt("14:10"));
+      const read = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
+      const order = read.body as {
+        revision: number;
+        lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
+      };
+      const dishId = order.lines[0]!.workingOrderLineId;
+      const added = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        revision: order.revision,
+        lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
+          workingOrderLineId,
+          menuItemId,
+          quantity,
+          extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
+        })),
+      });
+      expect(added.status).toBe(200);
+      const asked = await place(v, held.id);
+      expect(asked).toMatchObject({
+        status: 409,
+        body: {
+          error: {
+            code: "menu_period.ended",
+            params: {
+              menus: [{ menuId: v.menus["Midday menu"], periodName: "Lunch" }],
+              workingOrderLineIds: [dishId],
+            },
+          },
+        },
+      });
+      expect((await sentState(held.id)).lines).toEqual([{ sentAt: null }, { sentAt: null }]);
+      const placed = await place(v, held.id, lateSend);
+      expect(placed).toEqual({ status: 200, body: { id: held.id, status: "placed" } });
+      expect(await marksOf(held.id)).toEqual(
+        expect.arrayContaining([
+          { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+        ]),
+      );
+      expect(await marksOf(held.id)).toHaveLength(2);
     });
   });
 
