@@ -411,7 +411,8 @@ describe("till-lock-screen", () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     const status = () => query(el, '[role="status"]')?.textContent?.trim();
-    const submit = () => query(el, "wt-button.submit") as HTMLElement & { disabled: boolean };
+    const submit = () =>
+      query(el, "wt-button.submit") as HTMLElement & { disabled: boolean; loading: boolean };
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     await type(el, "1234");
@@ -419,13 +420,15 @@ describe("till-lock-screen", () => {
     click(el, ".submit");
     await el.updateComplete;
     expect(status()).toBe(t("login.loading"));
-    expect(submit().disabled).toBe(true);
+    expect(submit().loading).toBe(true);
+    expect(submit().disabled).toBe(false);
     click(el, ".submit");
     await el.updateComplete;
     expect(login).toHaveBeenCalledTimes(1);
     refuse({ code: "pin.invalid" });
     await flush(el);
     expect(status()).toBeUndefined();
+    expect(submit().loading).toBe(false);
     expect(query(el, '[role="alert"]')?.textContent?.trim()).toBe(t("pin.invalid"));
     await type(el, "1");
     click(el, ".submit");
@@ -824,6 +827,32 @@ describe("till-lock-screen", () => {
     resolveLogin({ personId: "p1" });
     await flush(el);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("is not left loading when it is put back after disconnecting mid-login", async () => {
+    let resolveLogin!: (value: { personId: string }) => void;
+    const login = vi.fn(() => new Promise<{ personId: string }>((r) => (resolveLogin = r)));
+    const api = stubApi({ login });
+    const { el, host } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "1234");
+    click(el, ".submit");
+    el.remove();
+    host.appendChild(el);
+    resolveLogin({ personId: "p1" });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "1234");
+    const submit = query(el, "wt-button.submit") as HTMLElement & {
+      disabled: boolean;
+      loading: boolean;
+    };
+    expect(query(el, '[role="status"]')).toBeNull();
+    expect(submit.disabled).toBe(false);
+    expect(submit.loading).toBe(false);
   });
 
   it("no longer renders the device set-up affordances (the front door moved to boot)", async () => {

@@ -6234,7 +6234,8 @@ export class TillApp extends LitElement {
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
     const requestedTab = this.#requestedTab();
-    // A sign-in holds no table, so an order tab left in the address (a reload) would open empty.
+    // Nothing in the address says which table was open (after a reload, say), so an order tab
+    // there would open empty.
     this.#setActiveTab(
       switched || requestedTab === this.#tableOrderTabKey() ? this.#homeScreen() : requestedTab,
       true,

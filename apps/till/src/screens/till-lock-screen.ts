@@ -98,6 +98,10 @@ export class TillLockScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .pin-status {
+        margin: 0 0 var(--wt-space-3);
+      }
+
       .servers,
       .clock {
         margin-top: var(--wt-space-4);
@@ -247,6 +251,7 @@ export class TillLockScreen extends LitElement {
     this.selected = undefined;
     this.staff = undefined;
     this.errorKey = undefined;
+    this.signingIn = false;
     this.throttleRemaining = 0;
     this.#clearThrottle();
   }
@@ -543,7 +548,7 @@ export class TillLockScreen extends LitElement {
               ${t("login.throttled").replace("{n}", String(this.throttleRemaining))}
             </p>`
           : this.signingIn
-            ? html`<p class="status" role="status">${t("login.loading")}</p>`
+            ? html`<p class="status pin-status" role="status">${t("login.loading")}</p>`
             : this.errorKey
               ? html`<p class="error" role="alert">
                   ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
@@ -564,7 +569,8 @@ export class TillLockScreen extends LitElement {
         <wt-button
           class="submit"
           variant="primary"
-          ?disabled=${this.pin === "" || throttled || this.signingIn}
+          ?disabled=${this.pin === "" || throttled}
+          .loading=${this.signingIn}
           @click=${() => void this.#submit()}
         >
           ${t("action.login")}

@@ -6366,6 +6366,8 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
   "signs in on the Floor, not a table-less order page, after a reload on a %s's order",
   async (formFactor) => {
     history.replaceState(null, "", "/tabs/order");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
     try {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -6377,8 +6379,11 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
       expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
       expect(location.pathname).toBe("/tabs/floor");
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).toHaveBeenCalled();
     } finally {
-      history.replaceState(null, "", "/");
+      push.mockRestore();
+      replace.mockRestore();
     }
   },
 );
