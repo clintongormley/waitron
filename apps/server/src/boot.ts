@@ -1473,8 +1473,9 @@ async function bootServer(
     now: () => Date.now(),
   });
   const handoverGate = createHandoverGate({ cors: corsForVenue(allowOrigin) });
-  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs; its own
-  // refusal carries the venue's CORS headers, which the layer behind it would otherwise have added.
+  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs; its refusals
+  // under /api/ carry the venue's CORS headers, which the /api/* layer behind it would otherwise
+  // have added.
   app.use("*", handoverGate.middleware);
   // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
   // start that never fills it.

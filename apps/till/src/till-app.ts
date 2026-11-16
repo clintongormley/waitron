@@ -3584,7 +3584,9 @@ export class TillApp extends LitElement {
    * a reader that did not answer; on the bill path, a send left unanswered or answered `not_checked`.
    * Neither path learns that card's fate later, so a bill stays marked for the page. */
   readonly #unknownCardOutcome = new Set<string>();
-  /** Orders whose last sale send through `recordSale`, `collectOrder` or `pay` got no answer. */
+  /** Orders whose last counter sale send (pay, collect, the reader on the counter or the presented
+   * sheet) left the outcome unknown: no answer, or a handover refusal after one. Whole payments keep
+   * theirs in `#unansweredWholePayments`. */
   readonly #unansweredSales = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
