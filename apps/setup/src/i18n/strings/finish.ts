@@ -58,7 +58,9 @@ export const finishEn = {
   "done.clock.set_refused":
     "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
   "done.clock.key_refused":
-    "The server did not accept the node recovery key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the selected backup's node recovery key there.",
+    "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the server key from the selected backup's paper there.",
+  "done.clock.unanswered":
+    "This page could not get an answer from the server, so the two times are not shown, and Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
   "done.description.dashboard":
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
@@ -152,7 +154,9 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.clock.set_refused":
     "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
   "done.clock.key_refused":
-    "El servidor no ha aceptado la clave de recuperación del nodo que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave de recuperación del nodo de la copia elegida.",
+    "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor del papel de la copia elegida.",
+  "done.clock.unanswered":
+    "Esta página no ha podido obtener respuesta del servidor, así que no se muestran las dos horas, y Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
   "done.description.dashboard":
     "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
   "done.description.till": "Toma pedidos y cobra.",
