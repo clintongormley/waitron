@@ -214,7 +214,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "en-GB": {
       title: "Waitron could not read this backup's manifest.",
       action:
-        "Choose another complete backup, or install a supported Waitron version if this backup uses a different format. Then retry the restore.",
+        "Choose another complete backup, or install a Waitron version that can read this backup if it uses a different format. Then retry the restore.",
     },
     "es-ES": {
       title: "Waitron no ha podido leer el manifiesto de esta copia.",

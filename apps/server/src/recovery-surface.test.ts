@@ -56,7 +56,7 @@ describe("recoveryApp", () => {
     const body = await (await app.request("/")).text();
     expect(body).toContain("Waitron could not read this backup&#39;s manifest.");
     expect(body).toContain("Choose another complete backup");
-    expect(body).toContain("supported Waitron version");
+    expect(body).toContain("a Waitron version that can read this backup");
   });
   it("serves exactly the same facts as JSON — no extra field leaks", async () => {
     const app = recoveryApp({
