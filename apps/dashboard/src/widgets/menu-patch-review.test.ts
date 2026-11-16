@@ -312,6 +312,6 @@ it("words a bottom refusal, naming the version that went live and saying when a 
     "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   );
   expect(refusalWords({ code: "menu_patch.invalid", params: { change: 0, field: "target" } })).toBe(
-    "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
+    "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu and content languages again and checks each change: it drops each one that does not fit, says how many, and keeps the rest.",
   );
 });

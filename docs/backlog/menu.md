@@ -811,41 +811,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   2026-10-15).**
   [Detail](menu.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
 
-## Bundle: The menu patch window: split the file first
-
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The menu patch window's Reload re-reads the live menu but not the venue's content languages
-  (left open by A1151).**
-- **The menu patch window's "no longer fit" count is a running total since the window opened (left
-  open by A1151).** A change the live version already holds is removed without being counted.
-- **A field typed equal to the live value can be redrawn in the live value's spelling (left open
-  by A1151).** After a content-language change, or a Reload onto the version already shown, the
-  menu patch window redraws a typed "3" as "3.00". Found by reading the code, not run.
-- **Owner question: the menu patch window's locked section name says why on a line under the field
-  (left open by A1151).** "The included folder sets this name." is a muted line under a disabled
-  field (`apps/dashboard/src/widgets/form-fields.ts`, `optionalTextFields`). The house rule makes a
-  field's hint its placeholder, never a line under it, and puts an explanation for a filled field
-  in a help-mode `wt-help-tooltip`, which would hide the reason while help is off. No rule names a
-  disabled field's reason; decide whether this line is the pattern or the tooltip is.
-- **Split the menu patch window's file before adding to it (left open by A1151).**
-  `apps/dashboard/src/widgets/menu-patch-dialog.ts` is large; split it before more is added to it.
-- **After Remove image, or a pick from the image library, focus drops to the page instead of
-  returning to "Choose image" (found in the menu patch window, A1151).** `dashboard-image-upload`
-  (`apps/dashboard/src/widgets/image-upload.ts`, `#setOpen`) returns focus when the picker closes
-  only in its logo modes; the plain chooser every product form uses has no such step. The logo
-  step came from main (A841 slice 8a, #2035); A1151 did not change it.
-- **While the content-languages read is slow, a refused send in the menu patch window can show
-  "Enter text for each translation." under a Spanish name field that has text (left open by
-  A1151).** Seen with a forced 4-second delay on that read; in normal use it would flash for about
-  a tenth of a second at most.
-- **A server refusal under a name language that a newer version's folder then sets stays under the
-  disabled field until the next send (left open by A1151).** The window's own check is let go in
-  that case (524413e12); a refusal the server sent is not. It never disables Review.
-- **A dish's variant link, when its name wraps, puts its price and VAT class 8 px left of the
-  name's text (left open by A1151).** The link button has its own inside padding; seen only with a
-  name lengthened in the open page, since the demo's variant names are short.
-
 ## Bundle: Extras list forms
 
 3 entries, size M. The remaining deliberate limits, wording and variant-warning wrapping.

@@ -6,6 +6,8 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import {
   baseStyles,
+  ChangeObserver,
+  subscribeContentLanguages,
   pageTitleStyles,
   leaveCoordinatorFor,
   draftScopeFor,
@@ -880,6 +882,14 @@ export class MenusScreen extends LitElement {
     table.sortDirection = "ascending";
   }
 
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeContentLanguages, () => {
+      this.#forgetStaleRefusals();
+      this.requestUpdate();
+    });
+  }
+
   protected override willUpdate(changed: PropertyValues): void {
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
     // replaces the link a person may already have focused.
@@ -1043,7 +1053,6 @@ export class MenusScreen extends LitElement {
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           setContentLanguages(value);
-          this.#forgetStaleRefusals();
         }),
       ]);
     } catch {

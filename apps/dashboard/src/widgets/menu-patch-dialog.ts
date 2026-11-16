@@ -1,14 +1,13 @@
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
-  baseStyles,
   currentContentLanguages,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
+  setContentLanguages,
   subscribeContentLanguages,
-  visuallyHiddenStyles,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -16,12 +15,10 @@ import {
 import {
   MONEY_SCALE,
   decimal,
-  foldForSearch,
   formatMoney,
   textSearch,
   toScale,
   type AppError,
-  type TextSearch,
   VAT_CLASSES,
   localToday,
   vatRateOn,
@@ -55,7 +52,7 @@ import {
 } from "./form-fields.js";
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
-import { MenuPatchDraft, patchTree, targetKey, type PatchTreeNode } from "./menu-patch-draft.js";
+import { MenuPatchDraft, patchTree, targetKey } from "./menu-patch-draft.js";
 import {
   changeLines,
   itemNames,
@@ -66,6 +63,8 @@ import {
 } from "./menu-patch-review.js";
 import { conjunctionList } from "../i18n/list.js";
 import { localTimeWords } from "./menu-publications.js";
+import { menuPatchDialogStyles } from "./menu-patch-dialog-styles.js";
+import { matching, findNode, renderPatchTree } from "./menu-patch-tree.js";
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
 
@@ -102,24 +101,21 @@ interface Typed {
   refused: boolean;
 }
 
-/** The first language whose text alone the patch's parser refuses, else the first language: a
- * refusal from merging with the stored text names no language. */
+/** A merge refusal can name no language whose text fails the patch parser. */
 function refusedLanguage(
   target: MenuPatchTarget,
   field: string,
   value: Record<string, string>,
-): string {
+): string | undefined {
   const languages = Object.keys(value);
-  return (
-    languages.find((language) => {
-      try {
-        parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
-        return false;
-      } catch {
-        return true;
-      }
-    }) ?? languages[0]!
-  );
+  return languages.find((language) => {
+    try {
+      parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
+      return false;
+    } catch {
+      return true;
+    }
+  });
 }
 
 /** One edited field, as the draft scope compares them. */
@@ -133,23 +129,6 @@ const changeKey = (change: MenuPatchChange) => `${targetKey(change.target)}/${ch
 /** The target key of a `changeKey`; field names hold no "/". */
 const targetOf = (key: string) => key.slice(0, key.lastIndexOf("/"));
 
-function matching(nodes: readonly PatchTreeNode[], search: TextSearch): PatchTreeNode[] {
-  return nodes.flatMap((node) => {
-    if (search.rank(foldForSearch(node.label)) !== undefined) return [node];
-    const children = matching(node.children, search);
-    return children.length === 0 ? [] : [{ ...node, children }];
-  });
-}
-
-function findNode(nodes: readonly PatchTreeNode[], key: string): PatchTreeNode | undefined {
-  for (const node of nodes) {
-    if (node.target !== null && targetKey(node.target) === key) return node;
-    const found = findNode(node.children, key);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-}
-
 /**
  * Patches the live version of one menu: a tree of what the version holds, a search narrowing it,
  * and the picked item's form, which shows only the fields a patch may change. Each value is
@@ -159,172 +138,7 @@ function findNode(nodes: readonly PatchTreeNode[], key: string): PatchTreeNode |
  */
 @customElement("dashboard-menu-patch-dialog")
 export class MenuPatchDialog extends LitElement {
-  static override styles = [
-    baseStyles,
-    css`
-      .layout {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: var(--wt-space-5);
-      }
-      wt-modal[wide-edit]::part(body) {
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .layout.wide {
-        flex: 1;
-        min-height: 0;
-        flex-wrap: nowrap;
-        align-items: stretch;
-      }
-      .wide .side {
-        grid-template-rows: auto minmax(0, 1fr);
-      }
-      .wide nav {
-        min-height: 0;
-        max-block-size: none;
-      }
-      .wide .form {
-        overflow: auto;
-        align-content: start;
-        scrollbar-gutter: stable;
-        /* Keep keyboard rings and help badges inside the scrolling box. */
-        padding: var(--wt-space-2) calc(var(--wt-help-badge-target) / 2);
-        scroll-padding: var(--wt-space-2);
-        margin-block: calc(-1 * var(--wt-space-2));
-        margin-inline: calc(-1 * var(--wt-help-badge-target) / 2);
-      }
-      .side {
-        display: grid;
-        gap: var(--wt-space-3);
-        flex: 1 1 calc(var(--wt-field-max-width) / 2);
-        min-width: 0;
-      }
-      .form {
-        display: grid;
-        gap: var(--wt-space-4);
-        flex: 2 1 var(--wt-field-max-width);
-        min-width: 0;
-        /* Scrolled to with its heading focused, whose focus ring would otherwise sit on the
-           scrolling area's edge and lose its top line. */
-        scroll-margin-block-start: var(--wt-space-2);
-      }
-      h3 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-      }
-      h4 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-      }
-      ul {
-        list-style: none;
-        margin: 0;
-        padding-inline-start: var(--wt-space-4);
-      }
-      nav > ul {
-        padding-inline-start: 0;
-      }
-      nav {
-        max-block-size: calc(var(--wt-tap-min) * 12);
-        overflow: auto;
-        scrollbar-gutter: stable;
-        /* Room for a row's focus ring, which the scrolling box would otherwise clip, also when a
-           row is scrolled to its edge. */
-        padding: var(--wt-space-1);
-        scroll-padding: var(--wt-space-1);
-        margin-inline: calc(-1 * var(--wt-space-1));
-      }
-      .group {
-        display: block;
-        padding: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
-        font-weight: var(--wt-font-weight-medium);
-      }
-      .node,
-      .link {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        padding: 0 var(--wt-space-2);
-        border: 0;
-        border-radius: var(--wt-radius-sm);
-        background: none;
-        color: var(--wt-color-text);
-        font: inherit;
-        text-align: start;
-        cursor: pointer;
-      }
-      .node {
-        width: 100%;
-      }
-      .node[aria-current="true"] {
-        background: var(--wt-color-surface-sunken);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .link {
-        color: var(--wt-color-primary-text);
-        text-decoration: underline;
-      }
-      .variant {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--wt-space-2);
-      }
-      .variant-values {
-        color: var(--wt-color-text-muted);
-      }
-      .dot {
-        flex: none;
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-primary);
-      }
-      .flag {
-        color: var(--wt-color-danger);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .hidden {
-        ${visuallyHiddenStyles}
-      }
-      .note,
-      .message {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
-      .locked {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      .locked-note {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .review {
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      .changes {
-        display: grid;
-        gap: var(--wt-space-2);
-        padding-inline-start: var(--wt-space-5);
-        list-style: disc;
-      }
-      .error {
-        display: grid;
-        justify-items: start;
-        gap: var(--wt-space-3);
-        margin: 0;
-        color: var(--wt-color-danger);
-      }
-    `,
-  ];
+  static override styles = menuPatchDialogStyles;
 
   @property({ attribute: false }) api!: DashboardApi;
   @property() menuId = "";
@@ -354,7 +168,6 @@ export class MenuPatchDialog extends LitElement {
   @state() private refusal: Refusal | null = null;
   /** Why the last Reload failed, shown beside the refusal that offered it. */
   @state() private reloadFailure: string | null = null;
-  /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
   /** The `changeKey`s of the edited fields, staged or failing their own check, that have let go of
    * text typed in a language removed since the dialog opened. */
@@ -370,7 +183,7 @@ export class MenuPatchDialog extends LitElement {
   #draft: MenuPatchDraft | null = null;
   /** Whether Review has been pressed since the dialog opened: until then no field shows its own
    * check's error. */
-  #pressed = false;
+  readonly #feedback = new FormFeedback(this);
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it, with its
    * error and, for a translated field, the language the error belongs under. A refresh never
    * replaces text the person typed; in a translated field, a language they left alone shows the
@@ -481,7 +294,7 @@ export class MenuPatchDialog extends LitElement {
     this.#held = null;
     this.#refusedKey = null;
     this.#draft = null;
-    this.#pressed = false;
+    this.#feedback.reset();
     this.#typed = new Map();
     this.#releaseScope();
     if (wanted !== null) void this.#load(wanted);
@@ -505,7 +318,7 @@ export class MenuPatchDialog extends LitElement {
    * once it commits. */
   #discard(): void {
     this.#draft = new MenuPatchDraft(this.live!.document, currentContentLanguages());
-    this.#pressed = false;
+    this.#feedback.reset();
     this.#typed = new Map();
     this.step = "edit";
     this.requestUpdate();
@@ -576,19 +389,19 @@ export class MenuPatchDialog extends LitElement {
       this.live = newest;
     } else if (!reload) return;
     // Reload checks the draft again even on the version shown: the venue's languages may differ.
-    this.#revalidate();
+    this.#revalidate(reload);
   }
 
   /** Checks the draft against the shown version with the venue's content languages as they are. */
-  #revalidate(): void {
+  #revalidate(clearIfEmpty = false): void {
     const { document } = this.live!;
     const { dropped, trimmed, fixed } = this.#draft!.rebase(document, currentContentLanguages());
-    this.dropped += dropped;
     if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
     if (fixed.length > 0) this.refixed = new Set([...this.refixed, ...fixed]);
     this.#typeSettled();
     this.#followHeld();
-    this.dropped += this.#forgetSettled(document);
+    const losses = dropped + this.#forgetSettled(document);
+    if (losses > 0 || clearIfEmpty) this.dropped = losses;
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
@@ -657,7 +470,7 @@ export class MenuPatchDialog extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** After a rebase, a field neither staged nor failing its check shows the newer live value again.
+  /** An unstaged field keeps its typed spelling while it still means the live value.
    * A failing field whose failing language is removed, or now set by every folder, is checked again
    * in the text `#followHeld` has left it, which counted what that took. A failing field the form
    * can no longer draw is forgotten too, or nothing could clear it; returns how many of those there
@@ -689,18 +502,25 @@ export class MenuPatchDialog extends LitElement {
       if (typed.refused) {
         // A refused change is staged, so the rebase does any counting.
         if (!staged) forget(key, typed, field);
-        else if (!drawn) Object.assign(typed, { error: "", language: null, refused: false });
+        else if (!shown || !editable(typed))
+          Object.assign(typed, { error: "", language: null, refused: false });
         continue;
       }
       if (typed.error !== "" && !drawn) lost += 1;
-      if (!staged && (!drawn || typed.error === "")) forget(key, typed, field);
+      if (
+        !staged &&
+        (!drawn ||
+          (typed.error === "" &&
+            !this.#draft!.isLive({ target: typed.target, field, value: typed.value })))
+      )
+        forget(key, typed, field);
     }
     return lost;
   }
 
   /** The sentence a field shows: a refusal's at once, its own check's once Review was pressed. */
   #shownError(typed: Typed | undefined): string {
-    return typed !== undefined && (typed.refused || this.#pressed) ? typed.error : "";
+    return typed !== undefined && (typed.refused || this.#feedback.attempted) ? typed.error : "";
   }
 
   /** The target keys of the items holding a field that shows an error, in the order edited. */
@@ -731,19 +551,21 @@ export class MenuPatchDialog extends LitElement {
 
   /** Review is held back only by an unchanged draft or, once pressed, by the form's own checks. */
   #reviewBlocked(): boolean {
-    return saveActionState(this.#scope).unchanged || (this.#pressed && this.#hasErrors());
+    return (
+      saveActionState(this.#scope).unchanged || (this.#feedback.attempted && this.#hasErrors())
+    );
   }
 
   async #review(): Promise<void> {
     if (this.#reviewBlocked()) return;
-    this.#pressed = true;
+    this.#feedback.attempted = true;
     this.requestUpdate();
     if (!this.#hasErrors()) return this.#toStep("review", "h3");
     const failing = this.#failing();
     if (!failing.some(([key]) => targetOf(key) === this.picked))
       this.picked = targetOf(failing[0]![0]);
     await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="form"]')!);
+    await this.#feedback.focus(this.renderRoot.querySelector('[data-test="form"]')!);
   }
 
   /** The button pressed to change step is gone afterwards; without a new focus inside the dialog,
@@ -776,10 +598,11 @@ export class MenuPatchDialog extends LitElement {
       const onField = await this.#refused(outcome.error, sent);
       const held = this.#held;
       this.#held = null;
-      if (held?.languages) this.#revalidate();
-      if (held?.answer === undefined) return;
-      if (held.reload) await this.#reloaded(held.answer, !onField);
-      else this.#applyLive(held.answer);
+      if (held?.reload && held.answer !== undefined) await this.#reloaded(held.answer, !onField);
+      else {
+        if (held?.languages) this.#revalidate();
+        if (held?.answer !== undefined) this.#applyLive(held.answer);
+      }
       return;
     }
     this.#scope?.commit(submitted);
@@ -794,6 +617,20 @@ export class MenuPatchDialog extends LitElement {
    * A failed read draws no form; the refusal stays under its field for when the read succeeds. */
   async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<boolean> {
     const placed = placeRefusal(error, sent);
+    if ("change" in placed && TRANSLATED.has(placed.change.field)) {
+      const { target, field, value } = placed.change;
+      if (
+        (error as AppError<"menu_patch.invalid">).params.reason === "content.translation_invalid" &&
+        refusedLanguage(target, field, value as Record<string, string>) === undefined
+      ) {
+        this.refusal = {
+          code: "menu_patch.invalid",
+          params: (error as AppError<"menu_patch.invalid">).params,
+        };
+        this.#refusedKey = changeKey(placed.change);
+        return false;
+      }
+    }
     if ("refusal" in placed) {
       this.refusal = placed.refusal;
       const named = sent[placed.refusal.params.change as number];
@@ -808,7 +645,8 @@ export class MenuPatchDialog extends LitElement {
     Object.assign(this.#typed.get(changeKey(change))!, {
       error: message,
       language: TRANSLATED.has(change.field)
-        ? refusedLanguage(change.target, change.field, change.value as Record<string, string>)
+        ? (refusedLanguage(change.target, change.field, change.value as Record<string, string>) ??
+          Object.keys(change.value as Record<string, string>)[0]!)
         : null,
       refused: true,
     });
@@ -816,7 +654,7 @@ export class MenuPatchDialog extends LitElement {
     this.step = "edit";
     await this.updateComplete;
     const form = this.renderRoot.querySelector('[data-test="form"]');
-    if (form !== null) await focusFirstInvalid(form);
+    if (form !== null) await this.#feedback.focus(form);
     return true;
   }
 
@@ -824,8 +662,11 @@ export class MenuPatchDialog extends LitElement {
    * subscription delivered while the read was out. */
   async #reload(): Promise<void> {
     const session = this.#session;
-    const read = await this.api.getLiveMenu(this.menuId).then(
-      (answer) => ({ answer }),
+    const read = await Promise.all([
+      this.api.getLiveMenu(this.menuId),
+      this.api.getContentLanguages(),
+    ]).then(
+      ([answer, languages]) => ({ answer, languages }),
       (error: unknown) => ({ error }),
     );
     if (session !== this.#session) return;
@@ -833,6 +674,7 @@ export class MenuPatchDialog extends LitElement {
       this.reloadFailure = codeOf(read.error);
       return;
     }
+    setContentLanguages(read.languages);
     // A read answered during a send waits for the send's answer, still as a Reload.
     if (this.busy) this.#applyLive(read.answer, true);
     else {
@@ -934,7 +776,8 @@ export class MenuPatchDialog extends LitElement {
         value: raw,
         error: refusalText(field, error),
         language: TRANSLATED.has(field)
-          ? refusedLanguage(target, field, value as Record<string, string>)
+          ? (refusedLanguage(target, field, value as Record<string, string>) ??
+            Object.keys(value as Record<string, string>)[0]!)
           : null,
         refused: false,
       });
@@ -1160,7 +1003,7 @@ export class MenuPatchDialog extends LitElement {
           shown.length === 0
             ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
             : html`<nav aria-label=${t("menu_patch.tree")} data-test="tree">
-                ${this.#renderNodes(shown, marked)}
+                ${renderPatchTree(shown, { picked: this.picked, marked, changed: (target) => this.#draft!.changed(target), pick: (target) => this.#pick(target) })}
               </nav>`
         }
       </div>
@@ -1170,50 +1013,6 @@ export class MenuPatchDialog extends LitElement {
           : this.#renderForm(picked.target!, picked.label)
       }
     </div>`;
-  }
-
-  /** `marked` holds the target keys of the items with a field to correct. */
-  #renderNodes(nodes: readonly PatchTreeNode[], marked: ReadonlySet<string>): TemplateResult {
-    return html`<ul>
-      ${nodes.map(
-        (node) =>
-          html`<li>
-            ${
-              node.target === null
-                ? html`<span class="group" data-test="label">${node.label}</span>`
-                : this.#renderNode(node.target, node.label, marked)
-            }
-            ${node.children.length === 0 ? nothing : this.#renderNodes(node.children, marked)}
-          </li>`,
-      )}
-    </ul>`;
-  }
-
-  #renderNode(target: MenuPatchTarget, label: string, marked: ReadonlySet<string>): TemplateResult {
-    const current = targetKey(target) === this.picked;
-    return html`<button
-      type="button"
-      class="node"
-      aria-current=${current ? "true" : nothing}
-      @click=${() => void this.#pick(target)}
-    >
-      <span data-test="label">${label}</span>
-      ${
-        this.#draft!.changed(target)
-          ? html`<span class="dot" data-test="changed"
-              ><span class="hidden">${t("menu_patch.changed")}</span></span
-            >`
-          : nothing
-      }
-      ${
-        marked.has(targetKey(target))
-          ? html`<span class="flag" data-test="needs-correcting"
-              ><span aria-hidden="true">!</span
-              ><span class="hidden">${t("menu_patch.needs_correcting")}</span></span
-            >`
-          : nothing
-      }
-    </button>`;
   }
 
   #renderForm(target: MenuPatchTarget, label: string): TemplateResult {
