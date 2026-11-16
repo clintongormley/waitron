@@ -900,21 +900,16 @@ The automatic catch-up decides whether a table's new place is taken in `catchUpP
 across the two (`apps/server/src/reset-row-moves.test.ts`). Next: share or test the exclusions too.
 Manual actions no longer apply this rule. Left open by A504.
 
-## A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's re-read; the same with the service-step code before that slice's fix).
-
-A course-served or all-served step
-cleared with Done at the old table is back at the new one, already due, because Done stays with the
-old party, so the waiter is asked again for something done. A repeating step counts afresh from the
-arrival instead.
-
-
 ## A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice 4b).
 
 A table that sent its own order keeps those order times after every bill has left, so the step
 stays. Run at `c11d7ff0c3`, before 4b's service-step fix, a party moving its one fired bill to a
 free table left its old table on "Another order?". Decide whether that is wrong: the people may
 still be sitting there. See #2454's "Left open". Since A803 4c, Split anyway (everything ticked
-goes) reaches this state more easily; it stays the owner's question.
+goes) reaches this state more easily; it stays the owner's question. The same holds for a step
+that follows a Done ("Coffee?"), including a Done copied with a bill that has since moved on again
+(#3507's re-read: a bill moved from table 1 to free table 2, then on to free table 3, left table 2
+showing "Coffee?").
 
 
 ## A Spanish invoice recipient's locality or province holding a comma is refused only at the server.
@@ -1717,26 +1712,15 @@ Printer identity is separate from the till route inventory.
 - **A wider till gives the bill line's name less room.** Left open by A841 slice 10b.
   [Detail](till.md#a-wider-till-gives-the-bill-lines-name-less-room)
 
-## Bundle: Service steps after a bill moves or tables combine
+## Bundle: Service steps after a bill moves
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. A1333's text is unchanged from the index it came from (backlog review,
+2026-11-06).
 
-- **A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's
-  re-read; the same with the service-step code before that slice's fix).** A repeating step counts
-  afresh from the arrival instead.
-  [Detail](till.md#a1330-a-step-started-by-a-serving-comes-back-after-its-bill-moves-seen-in-a803-slice-4bs-re-read-the-same-with-the-service-step-code-before-that-slices-fix)
-- **A1331. A party seated later that takes in an older party keeps "Take order" (seen in A803 slice
-  4b's re-read; the same with the service-step code before that slice's fix).** The first order it
-  inherits is earlier than its own seating, and a first order clears only steps that started before
-  it, so the step stays although the table has ordered.
 - **A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice
   4b).** A table that sent its own order keeps those order times after every bill has left, so the
   step stays.
   [Detail](till.md#a1333-a-table-with-no-dishes-left-can-still-show-another-order-left-open-by-a803-slice-4b)
-- **A1005. A till a few seconds ahead cannot clear an every-N-minutes repeat that follows a Done
-  (left open by A757 slice 8).** Its Done answers `{ cleared: [] }` until the server's clock
-  reaches that repeat. A Done now carries the `dueAt` the till showed, so the server could accept a
-  shown repeat a few seconds ahead (the plan's Decision 5: "A live step not yet due is accepted").
 
 ## Bundle: The till top bar fits at phone width, 1024 and 1280
 
@@ -2082,6 +2066,13 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
+
+- **A step done before a bill moves onto a seated table, or before two parties combine, is asked
+  again at the receiving table (watcher, 2026-11-16, #3507, not the owner; the owner may
+  overrule).** "Asking twice is a small annoyance; a missed step is a lost sale." A Done is copied
+  only to the party a move to a free table or a split opens, and only when a dish comes with it
+  (`carryDoneWithBill`,
+  `apps/server/src/service-step-done.ts`).
 
 - **A dragged table keeps its square when the map refits mid-drag (A766 decision 4, kept by the
   watcher 2026-11-16, not the owner).** After a refit the drawn table is no longer under the

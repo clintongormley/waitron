@@ -31,6 +31,7 @@ import {
   readPartiesSentWork,
 } from "./kitchen-print.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
+import { carryDoneWithBill } from "./service-step-done.js";
 import {
   copyHeldGroups,
   copyWaitingGroups,
@@ -324,9 +325,10 @@ export interface SplitSelection {
  * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
  * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
  * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives
- * ({@link groupArrivingDishes}). A staying party whose family is left with no bill that is not
- * abandoned is given a new empty one. The answer's `billIds` are the new party's bills in number
- * order, and `looseSourceIds` the bills that lost loose dishes.
+ * ({@link groupArrivingDishes}). When a dish comes with it, the new party also takes the staying
+ * party's latest Done of each step a serving starts ({@link carryDoneWithBill}). A staying party whose family is left with no
+ * bill that is not abandoned is given a new empty one. The answer's `billIds` are the new party's
+ * bills in number order, and `looseSourceIds` the bills that lost loose dishes.
  */
 export async function splitTable(
   tx: Transaction,
@@ -456,6 +458,7 @@ export async function splitTable(
   }
   await copyWaitingGroups(tx, partyId, newParty, waitingLineIds, options.operatorId, activity);
   await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
+  await carryDoneWithBill(tx, partyId, newParty, tableId);
   await printHoldTickets(tx, cfg, heldGroups);
   if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);
   await leaveMergesRestoring(tx, [tableId]);

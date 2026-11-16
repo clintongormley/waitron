@@ -24,6 +24,7 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
+import { carryDoneWithBill } from "./service-step-done.js";
 import {
   copyHeldGroups,
   copyWaitingGroups,
@@ -278,6 +279,7 @@ async function moveBillOnce(
     if (source !== null) {
       await copyWaitingGroups(tx, source.id, partyId, waitingLineIds, options.operatorId, activity);
       await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
+      await carryDoneWithBill(tx, source.id, partyId, destination.tableId);
     }
     result = { partyId, billId };
   } else {

@@ -36,6 +36,22 @@ export interface DishServing {
 
 const MINUTE_MS = 60_000;
 
+/**
+ * Below the shortest repeat interval (one minute, `service_steps_minutes_ck`), so a Done accepted
+ * early can only be for the repeat the server shows next, never one beyond it.
+ */
+export const CLOCK_AHEAD_MS = 30_000;
+
+/**
+ * Whether a repeating step's Done at `done` counts as made after the order at `last`. A Done on a
+ * repeat shown early is recorded at the repeat's due time, so an order sent meanwhile can precede
+ * it by up to {@link CLOCK_AHEAD_MS}; a till shows a repeat counted from an order only once its own
+ * clock reaches it, a minute or more after that order.
+ */
+function doneAfterOrder(done: number | undefined, last: number): done is number {
+  return done !== undefined && done - last > CLOCK_AHEAD_MS;
+}
+
 function triggerOf(
   rules: readonly StepRule[],
   index: number,
@@ -58,7 +74,7 @@ function triggerOf(
       const every = rule.minutes * MINUTE_MS;
       const repeat = repeatShownAt(last, every, nowMs);
       const done = facts.doneAt.get(rule.id);
-      if (done === undefined || done <= last) return repeat;
+      if (!doneAfterOrder(done, last)) return repeat;
       return Math.max(repeat, repeatShownAt(last, every, done) + every);
     }
   }
@@ -78,22 +94,23 @@ function ordersClear(rule: StepRule, facts: StepFacts): boolean {
 }
 
 /**
- * A bill arriving at a free table opens the party and records its order in one transaction, so the
- * two times can be equal.
+ * A party that takes in an older one brings that party's first order, which can be earlier than
+ * its own seating, so any first order clears a seated step.
  */
 function firstOrderClears(rule: StepRule, firstOrderAt: number, triggeredAt: number): boolean {
-  return rule.start === "seated" ? firstOrderAt >= triggeredAt : firstOrderAt > triggeredAt;
+  return rule.start === "seated" || firstOrderAt > triggeredAt;
 }
 
 /**
  * A step's trigger is the moment its start happened. For `since_last_order` it is the repeat
  * showing now — the latest reached, or the first, which is ahead, while none has come — or the one
- * after it when the step's own Done was tapped while that same repeat was showing. It is due at its
- * trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
- * is later than its trigger, an order is sent later than its due time, the party's first order is
- * later than its trigger, or — before the first order — the party has an open draft. A seated step
- * also clears at a first order at the same instant. Arrival times do not clear steps that start
- * from a serving. Live steps come soonest due first, ties in list order.
+ * after it when the step's own Done was recorded while that same repeat was showing, more than
+ * {@link CLOCK_AHEAD_MS} after the last order. It is due at its trigger plus its minutes, or at the
+ * repeat itself. A triggered step stays live until its own Done is later than its trigger, an order
+ * is sent later than its due time, the party's first order is later than its trigger, or — before
+ * the first order — the party has an open draft. A seated step clears at any first order, whenever
+ * it was sent. Arrival times do not clear steps that start from a serving. Live steps come soonest
+ * due first, ties in list order.
  */
 export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[] {
   const live: LiveStep[] = [];
@@ -119,8 +136,10 @@ export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: n
 /**
  * Whether the occurrence of `rule` due at `dueAt` has already been cleared: by an order sent once
  * it was due (arrival times do not clear steps that start from a serving), or by the step's own
- * Done. A repeat of a step every N minutes comes after the order it counts from, and a Done clears
- * the repeat showing when it was tapped, or the first.
+ * Done. A repeat of a step every N minutes comes a whole interval or more after the order it counts
+ * from, so one shown due sooner belongs to an earlier order; a Done recorded more than
+ * {@link CLOCK_AHEAD_MS} after that order clears the repeat showing when it was recorded, or the
+ * first.
  */
 function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boolean {
   const done = facts.doneAt.get(rule.id);
@@ -129,13 +148,13 @@ function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boo
     if (ordersClear(rule, facts) && last !== null && last > dueAt) return true;
     return done !== undefined && done > dueAt - rule.minutes * MINUTE_MS;
   }
-  if (last === null || dueAt <= last) return true;
   const every = rule.minutes * MINUTE_MS;
-  return done !== undefined && done > last && repeatShownAt(last, every, done) >= dueAt;
+  if (last === null || dueAt < last + every) return true;
+  return doneAfterOrder(done, last) && repeatShownAt(last, every, done) >= dueAt;
 }
 
 /**
- * What a Done arriving at `nowMs` records for the occurrence of `shown.stepId` the till showed as
+ * What a Done reckoned at `nowMs` records for the occurrence of `shown.stepId` the till showed as
  * due at `shown.dueAt`: nothing when that occurrence is already cleared, the step is not live, or
  * a Done now would leave it as it is (a second tap on a repeat already done), else the step and
  * every live step due no later that a Done now would clear, the ones it was hiding.
@@ -159,7 +178,7 @@ export function stepsClearedByDone(
     const done = Math.max(facts.doneAt.get(step.stepId) ?? nowMs, nowMs);
     if (rule.start !== "since_last_order") return done > step.triggeredAt;
     const last = facts.lastOrderAt!;
-    if (done <= last) return false;
+    if (!doneAfterOrder(done, last)) return false;
     const every = rule.minutes * MINUTE_MS;
     const next = Math.max(
       repeatShownAt(last, every, nowMs),

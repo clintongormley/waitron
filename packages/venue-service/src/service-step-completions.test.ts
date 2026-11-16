@@ -170,10 +170,10 @@ describe("step completions", () => {
       `${row.partyId}|${row.doneAt}`;
     expect([...read].sort((x, y) => order(x).localeCompare(order(y)))).toEqual(
       [
-        { partyId: one, stepId: first!, doneAt: "2026-10-22T20:33:00.000Z" },
-        { partyId: one, stepId: second!, doneAt: "2026-10-22T20:40:00.000Z" },
-        { partyId: one, stepId: first!, doneAt: "2026-10-22T21:00:00.000Z" },
-        { partyId: two, stepId: first!, doneAt: "2026-10-22T20:35:00.000Z" },
+        { partyId: one, stepId: first!, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "p1" },
+        { partyId: one, stepId: second!, doneAt: "2026-10-22T20:40:00.000Z", doneBy: "p1" },
+        { partyId: one, stepId: first!, doneAt: "2026-10-22T21:00:00.000Z", doneBy: "p3" },
+        { partyId: two, stepId: first!, doneAt: "2026-10-22T20:35:00.000Z", doneBy: "p2" },
       ].sort((x, y) => order(x).localeCompare(order(y))),
     );
   });

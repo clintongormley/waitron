@@ -1,7 +1,7 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -268,6 +268,80 @@ describe("markServiceStepDone", () => {
       [setUp, water].sort(),
     );
     expect(await liveAt(v, partyId, tableId, at + MINUTE)).toEqual([bread, coffee]);
+  });
+
+  describe("a till whose clock is a few seconds ahead of the server's", () => {
+    /** A party whose first every-20-minutes repeat was done; the next falls due at `next`. */
+    async function repeatAfterDone(v: PartyVenue) {
+      const [drinks] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+        { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
+      ]);
+      const { tableId, partyId } = await seatedAtTable1(v);
+      await orderForParty(v, partyId, ["Caña"]);
+      const ordered = await lastOrderAt(v, partyId);
+      await done(v, partyId, drinks!, ordered + 20 * MINUTE, ordered + 21 * MINUTE);
+      return { drinks: drinks!, tableId, partyId, ordered, next: ordered + 40 * MINUTE };
+    }
+
+    it("clears a repeat it shows 5 seconds before the server reaches it, as done when it fell due", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, tableId, partyId, ordered, next } = await repeatAfterDone(v);
+
+      expect(await done(v, partyId, drinks, next, next - 5_000)).toEqual({ cleared: [drinks] });
+
+      expect((await completions(v, partyId)).map((row) => row.doneAt).sort()).toEqual([
+        new Date(ordered + 21 * MINUTE).toISOString(),
+        new Date(next).toISOString(),
+      ]);
+      expect(await dueMinutesAt(v, partyId, tableId, next + MINUTE, ordered)).toEqual([
+        { stepId: drinks, dueMinutes: 60 },
+      ]);
+    });
+
+    it("an order sent between an early Done and the time it was recorded at still starts the next repeat", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, tableId, partyId, next } = await repeatAfterDone(v);
+      expect(await done(v, partyId, drinks, next, next - 20_000)).toEqual({ cleared: [drinks] });
+
+      vi.useFakeTimers({ toFake: ["Date"], now: next - 10_000 });
+      try {
+        await orderForParty(v, partyId, ["Caña"]);
+      } finally {
+        vi.useRealTimers();
+      }
+      const reordered = await lastOrderAt(v, partyId);
+      expect(reordered).toBe(next - 10_000);
+
+      const repeat = reordered + 20 * MINUTE;
+      expect(await dueMinutesAt(v, partyId, tableId, repeat, reordered)).toEqual([
+        { stepId: drinks, dueMinutes: 20 },
+      ]);
+      expect(await done(v, partyId, drinks, repeat, repeat)).toEqual({ cleared: [drinks] });
+    });
+
+    it("clears nothing for a repeat it shows 31 seconds before the server reaches it", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, partyId, next } = await repeatAfterDone(v);
+
+      expect(await done(v, partyId, drinks, next, next - 31_000)).toEqual({ cleared: [] });
+
+      expect(await completions(v, partyId)).toHaveLength(1);
+    });
+
+    it("records Done on a step that does not repeat at the server's time", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const [water] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
+        seated("Water?", 5),
+      ]);
+      const { partyId } = await seatedAtTable1(v);
+      const dueAt = OPENED_MS + 5 * MINUTE;
+
+      expect(await done(v, partyId, water!, dueAt, dueAt - 5_000)).toEqual({ cleared: [water] });
+
+      expect((await completions(v, partyId)).map((row) => row.doneAt)).toEqual([
+        new Date(dueAt - 5_000).toISOString(),
+      ]);
+    });
   });
 
   it("Done on a step not yet due is accepted", async () => {
