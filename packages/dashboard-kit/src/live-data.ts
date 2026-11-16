@@ -116,6 +116,10 @@ export class LiveData {
     this.#paused = true;
   }
 
+  get connected(): boolean {
+    return this.#connected;
+  }
+
   setConnected(up: boolean): void {
     this.#connected = up;
   }

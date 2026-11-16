@@ -47,16 +47,12 @@ const rows: TaxOfficeInvoiceDto[] = [
   },
 ];
 
-const api = (
-  answer: () => Promise<unknown>,
-  view: MonthDownloadDto = { status: "none" },
-): DashboardApi =>
+const api = (answer: () => Promise<unknown>): DashboardApi =>
   ({
     liveData: new LiveData(),
     listTaxOfficeInvoices: vi
       .fn()
       .mockImplementation(answer) as DashboardApi["listTaxOfficeInvoices"],
-    getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(view),
   }) as Partial<DashboardApi> as DashboardApi;
 const tableOf = (el: TaxOfficeScreen) =>
   el.shadowRoot!.querySelector("wt-data-table") as HTMLElement & {
@@ -98,13 +94,28 @@ describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (t
         expiresAt: "2026-11-30T15:45:00.000Z",
       },
     ],
-    ["a failed month file", { status: "failed", id: "b1", month: "2026-11" }],
+    ["a failed month file", { status: "failed", id: "b1", month: "2026-11", refusal: null }],
+    [
+      "a month file stopped for want of disk space",
+      {
+        status: "failed",
+        id: "b1",
+        month: "2026-11",
+        refusal: {
+          code: "tax_office.space_low",
+          params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
+        },
+      },
+    ],
   ] as const)("keeps %s accessible", async (_state, view: MonthDownloadDto) => {
     setLocale("en-GB");
     history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
     const { el, host } = await mountWidget<TaxOfficeScreen>(
       "dashboard-tax-office-screen",
-      { api: api(() => Promise.resolve({ rows, next: null, timeZone: "Europe/Madrid" }), view) },
+      {
+        api: api(() => Promise.resolve({ rows, next: null, timeZone: "Europe/Madrid" })),
+        monthFile: view,
+      },
       theme,
     );
     await vi.waitFor(() =>

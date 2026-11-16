@@ -136,7 +136,7 @@ import "./widgets/alerts-bell.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
-import { markAlertHandled, wholeTimesText } from "./widgets/alert-format.js";
+import { goToLabel, markAlertHandled, wholeTimesText } from "./widgets/alert-format.js";
 import type {
   AlertView,
   AlertsResponse,
@@ -147,9 +147,7 @@ import type {
 } from "./api/client.js";
 import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
-  announceMonthSaved,
   clockTime,
-  MONTH_SAVED_EVENT,
   monthName,
   paramsOf,
   saveTaxOfficeFile,
@@ -1082,11 +1080,20 @@ export class DashboardApp extends LitElement {
   );
   @state() private taxOfficeToast:
     | { kind: "ready"; id: string; month: string; expiresAt: string }
-    | { kind: "failed" | "restarted"; month: string }
+    | {
+        kind: "failed";
+        month: string;
+        refusal: Extract<MonthDownloadDto, { status: "failed" }>["refusal"];
+      }
+    | { kind: "restarted"; month: string }
     | { kind: "refused"; code: string; params?: Parameters<typeof codeMessage>[2] }
     | null = null;
-  /** The last view of the person's month file this sign-in; null until the first read answers. */
-  #taxOfficeSeen: MonthDownloadDto | null = null;
+  /** The last view of the person's month file this sign-in, which the Invoices screen shows; null
+   * until the first read answers. */
+  @state() private taxOfficeFile: MonthDownloadDto | null = null;
+  /** A file saved or found gone, whose Invoices line no longer applies. */
+  @state() private taxOfficeSettled: string | null = null;
+  #taxOfficePoll?: ReturnType<typeof setInterval>;
   readonly #taxOfficeQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -1256,14 +1263,13 @@ export class DashboardApp extends LitElement {
     // would otherwise be taken as old news, and it can be the only sight of a build a restart ends.
     this.addEventListener("tax-office-month-requested", (event) => {
       const view = (event as CustomEvent<MonthDownloadDto>).detail;
-      const seen = this.#taxOfficeSeen;
+      const seen = this.taxOfficeFile;
       // A read that already saw this build is newer than the answer that started it.
       if (seen !== null && "id" in seen && "id" in view && seen.id === view.id) return;
-      this.#taxOfficeSeen = view;
+      this.#setTaxOfficeFile(view);
     });
-    this.addEventListener(MONTH_SAVED_EVENT, (event) => {
-      if ((event as CustomEvent<{ id: string }>).detail.id === this.#readyNoticeId())
-        this.#closeReadyNotice();
+    this.addEventListener("tax-office-month-settled", (event) => {
+      this.#settleTaxOfficeFile((event as CustomEvent<{ id: string }>).detail.id);
     });
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
@@ -1297,6 +1303,8 @@ export class DashboardApp extends LitElement {
     this.#coreSettingDestinations = [];
     this.sessionEpoch.advance();
     this.#permissionContinuation.disconnect();
+    clearInterval(this.#taxOfficePoll);
+    this.#taxOfficePoll = undefined;
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
@@ -1502,13 +1510,32 @@ export class DashboardApp extends LitElement {
 
   #clearTaxOfficeDownload(): void {
     this.#taxOfficeQueries.release("getTaxOfficeMonthDownload");
-    this.#taxOfficeSeen = null;
+    this.#setTaxOfficeFile(null);
+    this.taxOfficeSettled = null;
     this.taxOfficeToast = null;
   }
 
+  #setTaxOfficeFile(view: MonthDownloadDto | null): void {
+    this.taxOfficeFile = view;
+    // A session without the live stream would otherwise learn of the end only at the minute's read.
+    if (view?.status !== "building") {
+      clearInterval(this.#taxOfficePoll);
+      this.#taxOfficePoll = undefined;
+    } else
+      this.#taxOfficePoll ??= setInterval(() => {
+        if (!this.api.liveData.connected)
+          this.api.liveData.invalidate([{ type: "tax_office_download" }]);
+      }, 10_000);
+  }
+
+  #settleTaxOfficeFile(id: string): void {
+    this.taxOfficeSettled = id;
+    if (id === this.#readyNoticeId()) this.#closeReadyNotice();
+  }
+
   #applyTaxOfficeView(view: MonthDownloadDto): void {
-    const last = this.#taxOfficeSeen;
-    this.#taxOfficeSeen = view;
+    const last = this.taxOfficeFile;
+    this.#setTaxOfficeFile(view);
     // The sign-in's first read is not news: a reload must not repeat a notice.
     if (last === null) return;
     // Saved elsewhere, out of time or replaced: Save the file would only refuse.
@@ -1518,21 +1545,22 @@ export class DashboardApp extends LitElement {
       this.taxOfficeToast =
         view.status === "ready"
           ? { kind: "ready", id: view.id, month: view.month, expiresAt: view.expiresAt }
-          : { kind: "failed", month: view.month };
+          : { kind: "failed", month: view.month, refusal: view.refusal };
     } else if (view.status === "none" && last.status === "building") {
       this.taxOfficeToast = { kind: "restarted", month: last.month };
     }
   }
 
-  async #saveTaxOfficeFile(month: string): Promise<void> {
+  async #saveTaxOfficeFile(file: { id: string; month: string }): Promise<void> {
     const generation = this.sessionGeneration;
     try {
-      const id = await saveTaxOfficeFile(this.api, month, this.startDownload);
+      const id = await saveTaxOfficeFile(this.api, file.month, this.startDownload);
       if (generation !== this.sessionGeneration) return;
       this.#replaceTaxOfficeToast(null);
-      announceMonthSaved(this, id);
+      this.taxOfficeSettled = id;
     } catch (error) {
       if (generation !== this.sessionGeneration) return;
+      if (codeOf(error) === "tax_office.download_missing") this.taxOfficeSettled = file.id;
       this.#replaceTaxOfficeToast({
         kind: "refused",
         code: codeOf(error),
@@ -1552,11 +1580,15 @@ export class DashboardApp extends LitElement {
   /** Save the file goes with either answer and the close button with the toast, so focus held in
    * the toast returns to where it was rather than dropping to the page. */
   #replaceTaxOfficeToast(next: DashboardApp["taxOfficeToast"]): void {
-    const hadFocus =
-      this.renderRoot
-        .querySelector<WtToast>("[data-test=tax-office-toast]")
-        ?.matches(":focus-within") === true;
-    this.taxOfficeToast = next;
+    this.#closeToast(this.renderRoot.querySelector("[data-test=tax-office-toast]"), () => {
+      this.taxOfficeToast = next;
+    });
+  }
+
+  /** Runs `close`; focus that was inside `toast` goes back to where it was before the toast. */
+  #closeToast(toast: Element | null, close: () => void): void {
+    const hadFocus = toast?.matches(":focus-within") === true;
+    close();
     const previous = this.#focusBeforeToast;
     if (hadFocus && previous?.isConnected) previous.focus();
   }
@@ -1565,6 +1597,8 @@ export class DashboardApp extends LitElement {
     const notice = this.taxOfficeToast;
     if (notice === null) return "";
     if (notice.kind === "refused") return codeMessage(notice.code, currentLocale(), notice.params);
+    if (notice.kind === "failed" && notice.refusal !== null)
+      return codeMessage(notice.refusal.code, currentLocale(), notice.refusal.params);
     const month = monthName(notice.month);
     if (notice.kind === "ready")
       return fill("tax_office.notice_ready", { month, time: clockTime(notice.expiresAt) });
@@ -1748,10 +1782,9 @@ export class DashboardApp extends LitElement {
 
   #onToastClose(event: Event): void {
     if (event.target !== event.currentTarget) return;
-    const hadFocus = (event.currentTarget as WtToast).matches(":focus-within");
-    this.alertToast = null;
-    const previous = this.#focusBeforeToast;
-    if (hadFocus && previous?.isConnected) previous.focus();
+    this.#closeToast(event.currentTarget as Element, () => {
+      this.alertToast = null;
+    });
   }
 
   #scheduleSessionExpiry(seconds: number): void {
@@ -2340,13 +2373,41 @@ export class DashboardApp extends LitElement {
               data-test="tax-office-save"
               @click=${(event: Event) => {
                 event.stopPropagation();
-                void this.#saveTaxOfficeFile(notice.month);
+                void this.#saveTaxOfficeFile(notice);
               }}
               >${t("tax_office.save_file")}</wt-button
             >`
-          : nothing
+          : notice?.kind === "failed" && notice.refusal !== null
+            ? this.#taxOfficeSpaceStep()
+            : nothing
       }</wt-toast
     >`;
+  }
+
+  /** Space is freed on Backups; a session that cannot open it is offered an administrator's sign-in. */
+  #taxOfficeSpaceStep(): TemplateResult {
+    return this.#canOpenScreen("backup")
+      ? html`<wt-button
+          slot="action"
+          variant="secondary"
+          data-test="tax-office-go-to-backups"
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.#replaceTaxOfficeToast(null);
+            this.#selectScreen("backup");
+          }}
+          >${goToLabel("backup")}</wt-button
+        >`
+      : html`<wt-button
+          slot="action"
+          variant="secondary"
+          data-test="tax-office-admin-sign-in"
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            void this.#onLogout("backup");
+          }}
+          >${t("staff.sign_in_as_admin")}</wt-button
+        >`;
   }
 
   #diskStopBar(slot?: string): TemplateResult | typeof nothing {
@@ -3401,7 +3462,18 @@ export class DashboardApp extends LitElement {
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
       case "invoices":
-        return html`<dashboard-tax-office-screen .api=${this.api}></dashboard-tax-office-screen>`;
+        return html`<dashboard-tax-office-screen
+          .api=${this.api}
+          .startDownload=${this.startDownload}
+          .monthFile=${this.taxOfficeFile ?? { status: "none" }}
+          .settledFile=${this.taxOfficeSettled}
+          .canOpenBackups=${this.#canOpenScreen("backup")}
+          @admin-sign-in=${() => void this.#onLogout("backup")}
+          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
+            e.stopPropagation();
+            this.#selectScreen(e.detail.screen);
+          }}
+        ></dashboard-tax-office-screen>`;
       case "orders":
         return html`<dashboard-orders-screen
           .api=${this.api}

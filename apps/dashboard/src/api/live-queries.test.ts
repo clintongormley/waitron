@@ -27,10 +27,10 @@ it("quiets only the audited database queries while connected", () => {
   expect(quiet.sort()).toEqual(expected.sort());
 });
 
-it("reads the person's tax-office month file on its own event, and every 10 seconds without the stream", () => {
+it("reads the person's tax-office month file on its own event, and every minute without the stream", () => {
   const query = dashboardQuery(new DashboardApi(), "getTaxOfficeMonthDownload", []);
   expect(query.dependencies).toEqual([{ type: "tax_office_download" }]);
-  expect(query.refreshMs).toBe(10_000);
+  expect(query.refreshMs).toBe(60_000);
 });
 
 it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {

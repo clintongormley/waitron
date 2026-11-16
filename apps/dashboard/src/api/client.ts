@@ -1695,7 +1695,16 @@ export type MonthDownloadDto =
   | { status: "none" }
   | { status: "building"; id: string; month: string }
   | { status: "ready"; id: string; month: string; bytes: number; expiresAt: string }
-  | { status: "failed"; id: string; month: string };
+  | {
+      status: "failed";
+      id: string;
+      month: string;
+      /** Set when the build stopped because the disk was running out. */
+      refusal: null | {
+        code: "tax_office.space_low";
+        params: { freeBytes: number; neededBytes: number };
+      };
+    };
 
 /** Issue dates are venue calendar days; the other filters are left out when not given. */
 export interface TaxOfficeQuery {
@@ -4844,8 +4853,8 @@ export class DashboardApi {
   }
 
   /** The browser downloads this address itself, so the file never passes through the page. */
-  taxOfficeMonthFileUrl(): string {
-    return `${this.#baseUrl}/management-api/tax-office/month-download/file`;
+  taxOfficeMonthFileUrl(id: string): string {
+    return `${this.#baseUrl}/management-api/tax-office/month-download/${encodeURIComponent(id)}/file`;
   }
 
   downloadDeferredPayments(range: { from: string; to: string }): Promise<Blob> {

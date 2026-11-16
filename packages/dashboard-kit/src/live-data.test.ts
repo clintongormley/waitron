@@ -312,6 +312,15 @@ describe("observed resources", () => {
     }
   });
 
+  it("says whether the live stream is connected", () => {
+    const data = new LiveData();
+    expect(data.connected).toBe(false);
+    data.setConnected(true);
+    expect(data.connected).toBe(true);
+    data.setConnected(false);
+    expect(data.connected).toBe(false);
+  });
+
   it.each([undefined, false])(
     "keeps an unmarked timer running when connected (%s)",
     async (mark) => {

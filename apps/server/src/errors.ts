@@ -41,7 +41,7 @@ declare module "@waitron/shared" {
     "invoice_delivery.not_found": Record<string, never>;
     /** The invoice customer download's tax number is on no issued invoice. */
     "invoice_customer.not_found": Record<string, never>;
-    /** Another month's export for the tax office is still being built; one runs at a time. */
+    /** A tax-office month file is still being built, for this person or another; one builds at a time. */
     "tax_office.export_running": Record<string, never>;
     /** Building the month's file would take the disk below the low-space line, room included. */
     "tax_office.space_low": { freeBytes: number; neededBytes: number };

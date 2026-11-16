@@ -4,16 +4,6 @@ import { currentLocale } from "./i18n/t.js";
 
 export type StartDownload = (url: string) => void;
 
-/** Fired, bubbling out of every shadow root, with `{ id }` of the file a Save the file started, so
- * the shell's notice and the Invoices screen's line both stand down for it. */
-export const MONTH_SAVED_EVENT = "tax-office-month-saved";
-
-export function announceMonthSaved(from: EventTarget, id: string): void {
-  from.dispatchEvent(
-    new CustomEvent(MONTH_SAVED_EVENT, { detail: { id }, bubbles: true, composed: true }),
-  );
-}
-
 /** The words' values a refusal carries, for `codeMessage`. */
 export const paramsOf = (error: unknown) =>
   (error as { params?: Parameters<typeof codeMessage>[2] } | null)?.params;
@@ -53,6 +43,6 @@ export async function saveTaxOfficeFile(
   const view = await api.getTaxOfficeMonthDownload();
   if (view.status !== "ready" || view.month !== month)
     throw { code: "tax_office.download_missing" };
-  start(api.taxOfficeMonthFileUrl());
+  start(api.taxOfficeMonthFileUrl(view.id));
   return view.id;
 }

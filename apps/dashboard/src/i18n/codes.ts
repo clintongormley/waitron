@@ -78,8 +78,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya no es el servidor principal, así que no puede añadir registros nuevos para Hacienda. Abre esta página en el servidor principal.",
   },
   "tax_office.export_running": {
-    en: "Another month of invoices is already downloading. Try again once that download finishes.",
-    es: "Ya se está descargando otro mes de facturas. Vuelve a intentarlo cuando termine esa descarga.",
+    en: "Invoices for a month are already being prepared on the server. Try again once that file is ready.",
+    es: "Ya se están preparando las facturas de un mes en el servidor. Vuelve a intentarlo cuando ese archivo esté listo.",
   },
   "tax_office.space_low": {
     en: "The server's disk is nearly full: it has {free} free, and preparing this file needs {needed}. Keeping fewer backups on the server, under Backups, frees space; then try again.",

@@ -500,7 +500,8 @@ export const QUERY_DEPENDENCIES = {
   // The stop is process state no table reports, so the timer reads it; `incidents` holds the
   // deletion it names.
   getDiskStop: ["incidents"],
-  // In-memory build state, published on each change; the timer covers a session refused the stream.
+  // In-memory build state, published on each change. The shell reads it faster while a file of the
+  // person's is being prepared and the stream is down.
   getTaxOfficeMonthDownload: ["tax_office_download"],
 } as const;
 
@@ -629,10 +630,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
           ? 5_000
           : name === "getBoxHealth" || name === "listRecentJobs"
             ? 15_000
-            : name === "getEmailInbox" ||
-                name === "getBackupStatus" ||
-                name === "getStreamSettings" ||
-                name === "getTaxOfficeMonthDownload"
+            : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
               ? 10_000
               : 60_000,
   };

@@ -10,7 +10,7 @@ import { setLocale } from "./i18n/t.js";
 import { es } from "./i18n/strings.js";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 
-const FILE_URL = "/management-api/tax-office/month-download/file";
+const fileUrl = (id: string) => `/management-api/tax-office/month-download/${id}/file`;
 // Built from local clock parts: the toast shows the browser's local time.
 const EXPIRES_AT = new Date(2026, 10, 16, 19, 42).toISOString();
 
@@ -27,11 +27,20 @@ const ready = (id = "b1", month = "2026-03"): MonthDownloadDto => ({
   bytes: 1024,
   expiresAt: EXPIRES_AT,
 });
-const failed = (id = "b1", month = "2026-03"): MonthDownloadDto => ({
+const failed = (
+  id = "b1",
+  month = "2026-03",
+  refusal: Extract<MonthDownloadDto, { status: "failed" }>["refusal"] = null,
+): MonthDownloadDto => ({
   status: "failed",
   id,
   month,
+  refusal,
 });
+const spaceLow = {
+  code: "tax_office.space_low" as const,
+  params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
+};
 
 const READY_EN = "The invoices for March 2026 are ready to save until 19:42.";
 const READY_ES = es["tax_office.notice_ready"]
@@ -42,6 +51,8 @@ const FAILED_EN =
 const RESTARTED_EN =
   "The server restarted before the invoices for March 2026 were ready. Choose Download March 2026 on Invoices to prepare them again.";
 const MISSING_EN = "This file is no longer on the server. Choose Download again to prepare it.";
+const SPACE_LOW_EN =
+  "The server's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.";
 
 function me(permissions: string[], locale: string) {
   return {
@@ -99,7 +110,7 @@ function shellApi(
     liveData,
     background: { ...common, getTaxOfficeMonthDownload: background },
     getTaxOfficeMonthDownload: foreground,
-    taxOfficeMonthFileUrl: () => FILE_URL,
+    taxOfficeMonthFileUrl: fileUrl,
   } as unknown as DashboardApi;
   return { api, liveData, foreground };
 }
@@ -131,6 +142,13 @@ const requested = (el: DashboardApp, view: MonthDownloadDto) =>
       composed: true,
     }),
   );
+const screen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-tax-office-screen");
+const screenSave = (el: DashboardApp) =>
+  screen(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=save-month-file]") ?? null;
+const monthLine = (el: DashboardApp) =>
+  screen(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=month-file]") ?? null;
+const monthButton = (el: DashboardApp) =>
+  screen(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=download-month]") ?? null;
 const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
 const signIn = (el: DashboardApp) =>
   login(el)!.dispatchEvent(
@@ -190,7 +208,7 @@ describe("the shell's notice for the tax office's month file", () => {
     expect(toast(el).duration).toBe(0);
     expect(saveButton(el)!.textContent!.trim()).toBe("Save the file");
     saveButton(el)!.click();
-    await expect.poll(() => startDownload.mock.calls).toEqual([[FILE_URL]]);
+    await expect.poll(() => startDownload.mock.calls).toEqual([[fileUrl("b1")]]);
     await expect.poll(() => toast(el).open).toBe(false);
   });
 
@@ -436,7 +454,7 @@ describe("the shell's notice for the tax office's month file", () => {
     const { el } = await openReadyNotice(background);
     const saved = (id: string) =>
       el.shadowRoot!.querySelector(".shell")!.dispatchEvent(
-        new CustomEvent("tax-office-month-saved", {
+        new CustomEvent("tax-office-month-settled", {
           detail: { id },
           bubbles: true,
           composed: true,
@@ -449,18 +467,157 @@ describe("the shell's notice for the tax office's month file", () => {
     await expect.poll(() => toast(el).open).toBe(false);
   });
 
-  it("tells the page which file the notice's Save the file saved", async () => {
-    const told: unknown[] = [];
-    const listen = (event: Event) => told.push((event as CustomEvent).detail);
-    document.addEventListener("tax-office-month-saved", listen);
-    try {
-      const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
-      const { el } = await openReadyNotice(background);
-      saveButton(el)!.click();
-      await expect.poll(() => told).toEqual([{ id: "b1" }]);
-    } finally {
-      document.removeEventListener("tax-office-month-saved", listen);
-    }
+  it("takes the Invoices screen's ready line away once the notice's Save the file saved it", async () => {
+    history.replaceState(null, "", "/manage/invoices");
+    const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+    const { el } = await openReadyNotice(background);
+    await expect.poll(() => screenSave(el)).not.toBeNull();
+    saveButton(el)!.click();
+    await expect.poll(() => monthLine(el)).toBeNull();
+  });
+
+  it("names the low disk when the file stopped for want of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
+    const background = vi
+      .fn()
+      .mockResolvedValueOnce(building())
+      .mockResolvedValue(failed("b1", "2026-03", spaceLow));
+    const { api, liveData } = shellApi(background);
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    changed(liveData);
+    await expect.poll(() => toast(el).open).toBe(true);
+    expect(toast(el).message).toBe(SPACE_LOW_EN);
+    expect(toast(el).tone).toBe("error");
+    expect(toast(el).querySelector("[data-test=tax-office-go-to-backups]")).toBeNull();
+    const signInButton = toast(el).querySelector<HTMLElement>(
+      "[data-test=tax-office-admin-sign-in]",
+    )!;
+    expect(signInButton.textContent!.trim()).toBe("Sign in as an administrator");
+    signInButton.click();
+    await expect.poll(() => login(el)).not.toBeNull();
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(location.pathname).toBe("/manage/backup");
+  });
+
+  it("offers Backups itself on the low-disk notice to a session that can open it", async () => {
+    const background = vi
+      .fn()
+      .mockResolvedValueOnce(building())
+      .mockResolvedValue(failed("b1", "2026-03", spaceLow));
+    const { api, liveData } = shellApi(
+      background,
+      ["venue.view", "invoice.inspect", "system.manage"],
+      undefined,
+      "en-GB",
+      {
+        getBackupStatus: vi.fn().mockResolvedValue({
+          enabled: false,
+          isPrimary: true,
+          loadErrorCode: null,
+          destinations: [],
+          backupStatus: { configured: false },
+          archiveUnderCurrentKey: false,
+          recoveryKeySet: true,
+          recoveryKeyTooShort: false,
+        }),
+        getStreamSettings: vi.fn().mockResolvedValue({
+          isPrimary: true,
+          configured: false,
+          bucket: null,
+          status: { state: "off" },
+          recoveryKeySet: true,
+          keyFingerprint: null,
+        }),
+      },
+    );
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    changed(liveData);
+    await expect.poll(() => toast(el).open).toBe(true);
+    expect(toast(el).querySelector("[data-test=tax-office-admin-sign-in]")).toBeNull();
+    const goTo = toast(el).querySelector<HTMLElement>("[data-test=tax-office-go-to-backups]")!;
+    expect(goTo.textContent!.trim()).toBe("Go to Backups");
+    goTo.click();
+    await expect.poll(() => location.pathname).toBe("/manage/backup");
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("keeps Save on the Invoices screen when the file turns ready before the request's own answer arrives", async () => {
+    history.replaceState(null, "", "/manage/invoices/from/2026-03-01/to/2026-03-31");
+    let answer!: (view: MonthDownloadDto) => void;
+    const requestTaxOfficeMonth = vi.fn(
+      () => new Promise<MonthDownloadDto>((resolve) => (answer = resolve)),
+    );
+    const background = vi.fn().mockResolvedValueOnce(none).mockResolvedValue(ready());
+    const { api, liveData } = shellApi(background, ["invoice.inspect"], undefined, "en-GB", {
+      requestTaxOfficeMonth,
+    });
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    await expect.poll(() => monthButton(el)).not.toBeNull();
+    monthButton(el)!.click();
+    await expect.poll(() => requestTaxOfficeMonth.mock.calls.length).toBe(1);
+    changed(liveData);
+    await expect.poll(() => screenSave(el)).not.toBeNull();
+    answer(building());
+    await flush(el);
+    await screen(el)!.updateComplete;
+    expect(screenSave(el)).not.toBeNull();
+    expect(toast(el).message).toBe(READY_EN);
+  });
+
+  it("reads the month file once for the notice and the Invoices screen, and the screen shows what it read", async () => {
+    history.replaceState(null, "", "/manage/invoices");
+    const background = vi.fn().mockResolvedValue(building());
+    const { api, foreground } = shellApi(background);
+    const { el } = await mount(api);
+    await expect
+      .poll(() => monthLine(el)?.textContent?.trim())
+      .toBe(
+        "Preparing the invoices for March 2026. You can leave this page: a notice appears when they are ready.",
+      );
+    await flush(el);
+    expect(background).toHaveBeenCalledOnce();
+    expect(foreground).not.toHaveBeenCalled();
+  });
+
+  it("reads a session's month file only at the slow pace while nothing of theirs is being prepared", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const background = vi.fn().mockResolvedValue(ready());
+    const { api } = shellApi(background);
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    vi.advanceTimersByTime(59_999);
+    await flush(el);
+    expect(background).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(1);
+    await expect.poll(() => background.mock.calls.length).toBe(2);
+  });
+
+  it("stops the quick reads once the file being prepared is ready", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+    const { api } = shellApi(background);
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    vi.advanceTimersByTime(10_000);
+    await expect.poll(() => toast(el).open).toBe(true);
+    vi.advanceTimersByTime(40_000);
+    await flush(el);
+    expect(background).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a building file to the live stream while it is connected", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const background = vi.fn().mockResolvedValue(building());
+    const { api, liveData } = shellApi(background);
+    liveData.setConnected(true);
+    const { el } = await mount(api);
+    await expect.poll(() => background.mock.calls.length).toBe(1);
+    vi.advanceTimersByTime(30_000);
+    await flush(el);
+    expect(background).toHaveBeenCalledOnce();
   });
 
   it("never reads the file's state for a session without invoice.inspect", async () => {

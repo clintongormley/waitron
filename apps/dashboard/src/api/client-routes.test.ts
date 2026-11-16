@@ -1615,13 +1615,13 @@ it("reads the person's tax-office month file as a GET", async () => {
   ]);
 });
 
-it("names the tax-office month file's address under the client's base, without fetching it", () => {
+it("names the tax-office month file's address by its build id under the client's base, without fetching it", () => {
   const fetchImpl = vi.fn();
-  expect(new DashboardApi("", fetchImpl).taxOfficeMonthFileUrl()).toBe(
-    "/management-api/tax-office/month-download/file",
+  expect(new DashboardApi("", fetchImpl).taxOfficeMonthFileUrl("b1")).toBe(
+    "/management-api/tax-office/month-download/b1/file",
   );
-  expect(new DashboardApi("https://box.test", fetchImpl).taxOfficeMonthFileUrl()).toBe(
-    "https://box.test/management-api/tax-office/month-download/file",
+  expect(new DashboardApi("https://box.test", fetchImpl).taxOfficeMonthFileUrl("b/1 2")).toBe(
+    "https://box.test/management-api/tax-office/month-download/b%2F1%202/file",
   );
   expect(fetchImpl).not.toHaveBeenCalled();
 });
