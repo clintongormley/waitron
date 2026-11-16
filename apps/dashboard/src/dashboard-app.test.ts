@@ -229,6 +229,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     putLocale: vi.fn().mockResolvedValue(undefined),
     listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
     listStaff: vi.fn().mockResolvedValue(people),
+    listTaxOfficeInvoices: vi
+      .fn()
+      .mockResolvedValue({ rows: [], next: null, timeZone: "Europe/Madrid" }),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     inspectAccountAction: vi
@@ -4459,7 +4462,7 @@ describe("dashboard-app", () => {
   });
 
   it.each(["/manage", "/manage/orders"])(
-    "a session holding only invoice.inspect lands on neither Orders nor My schedule from %s",
+    "a session holding only invoice.inspect lands on Invoices, and sees no other venue screen, from %s",
     async (path) => {
       history.replaceState(null, "", path);
       const api = stubApi({
@@ -4480,8 +4483,13 @@ describe("dashboard-app", () => {
       expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).toBeNull();
       expect(mySchedule(el)).toBeNull();
       expect(["/manage/orders", "/manage/my-schedule"]).not.toContain(location.pathname);
-      expect(location.pathname).toMatch(/^\/manage\/alerts(\/|$)/);
-      expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).not.toBeNull();
+      expect(location.pathname).toMatch(/^\/manage\/invoices(\/|$)/);
+      expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
+      expect(
+        [...sidebarNav(el)!.querySelectorAll("[data-test^=nav-]")]
+          .map((item) => item.getAttribute("data-test"))
+          .filter((id) => !/^nav-(search|group-)/.test(id!)),
+      ).toEqual(["nav-invoices"]);
     },
   );
 

@@ -94,6 +94,7 @@ import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
 import "./screens/handover-intervals-screen.js";
 import "./screens/vat-return-screen.js";
+import "./screens/tax-office-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/access-roles-screen.js";
@@ -162,6 +163,7 @@ const CORE_SCREENS = [
   "sales",
   "vat-return",
   "handover-intervals",
+  "invoices",
   "orders",
   "staff",
   "access-roles",
@@ -265,6 +267,7 @@ const NAV_GROUPS: NavGroup[] = [
         labelKey: "nav.handover_intervals",
         requiresPermission: "report.view",
       },
+      { screen: "invoices", labelKey: "nav.invoices", requiresPermission: "invoice.inspect" },
     ],
     itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
@@ -2456,7 +2459,7 @@ export class DashboardApp extends LitElement {
     const fallback =
       NAV_GROUPS.flatMap(coreItems).find((entry) => this.#mayOpen(entry))?.screen ??
       [...this.#activeScreens.values()].find(({ screen }) => this.#mayRead(screen))?.screen.id ??
-      (this.#confinedToInvoices() ? "alerts" : "my-schedule");
+      "my-schedule";
     if (
       requested === "demo-printer" &&
       this.onboardingIntent !== "demo" &&
@@ -3201,6 +3204,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-handover-intervals-screen>`;
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
+      case "invoices":
+        return html`<dashboard-tax-office-screen .api=${this.api}></dashboard-tax-office-screen>`;
       case "orders":
         return html`<dashboard-orders-screen
           .api=${this.api}

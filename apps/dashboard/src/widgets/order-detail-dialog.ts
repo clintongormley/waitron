@@ -137,7 +137,7 @@ function emailLabel(status: OrderDeliveries): StringKey {
 }
 
 /** The name `readInvoiceForDownload` gives the file (`apps/server/src/orders-invoice-pdf.ts`). */
-function pdfFileName(invoiceNumber: string): string {
+export function pdfFileName(invoiceNumber: string): string {
   const cut = invoiceNumber.lastIndexOf("/");
   const series = invoiceNumber.slice(0, cut).replace(/[^A-Za-z0-9_.-]/g, "_");
   return `${series}-${invoiceNumber.slice(cut + 1)}.pdf`;

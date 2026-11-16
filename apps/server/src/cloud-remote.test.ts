@@ -203,6 +203,20 @@ it("the staff entrance forwards only dashboard requests and marks their source r
       .status,
   ).toBe(404);
 });
+it("the staff entrance lets the tax office's invoice list and PDF through", async () => {
+  const app = new Hono();
+  app.all("*", (c) => c.json({ path: c.req.path, method: c.req.method }));
+  const staff = createStaffApp(app, "https://staff.example.test");
+  for (const [method, path] of [
+    ["GET", "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30"],
+    ["POST", "/management-api/tax-office/invoices/0b0e6d0c-56a4-4c3e-9b0e-1b2b3c4d5e6f/pdf"],
+  ] as const) {
+    const response = await staff.request(`https://staff.example.test${path}`, { method });
+    expect(response.status, path).toBe(200);
+    expect(await response.json()).toEqual({ path: path.split("?")[0], method });
+  }
+});
+
 it("refuses another venue hostname and does not accept a remote marker from HTTP headers", async () => {
   const { requestFromBox } = await import("./request-from-box.js");
   const app = new Hono();

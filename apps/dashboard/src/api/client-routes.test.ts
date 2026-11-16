@@ -1531,6 +1531,48 @@ it("downloads a bill's full invoice PDF as a POST, bytes untouched", async () =>
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
 });
 
+it("lists the tax office's invoices with only the filters given, and the keyset after a page", async () => {
+  const page = { rows: [], next: null, timeZone: "Europe/Madrid" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.listTaxOfficeInvoices({ from: "2026-11-01", to: "2026-11-30" })).toEqual(page);
+  await api.listTaxOfficeInvoices({
+    from: "2026-11-01",
+    to: "2026-11-30",
+    q: "A/12",
+    rate: "21",
+    amount: "12.10",
+    operationFrom: "2026-10-01",
+    operationTo: "2026-10-31",
+    kind: "R5",
+    after: { at: "2026-11-02T10:00:00.000Z", id: "sale-1" },
+  });
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30", "GET", undefined],
+    [
+      "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30&q=A%2F12&rate=21&amount=12.10&operationFrom=2026-10-01&operationTo=2026-10-31&kind=R5&afterAt=2026-11-02T10%3A00%3A00.000Z&afterId=sale-1",
+      "GET",
+      undefined,
+    ],
+  ]);
+});
+
+it("downloads one of the tax office's invoices as a POST, bytes untouched", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), { status: 200 }));
+  const api = new DashboardApi("", fetchImpl);
+
+  const file = await api.downloadTaxOfficeInvoicePdf("sale/1");
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/invoices/sale%2F1/pdf", "POST", undefined],
+  ]);
+  expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
+});
+
 it("downloads the accountant workbook for the chosen calendar dates as a POST, bytes untouched", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([0x50, 0x4b, 3, 4])));
   const api = new DashboardApi("", fetchImpl);
