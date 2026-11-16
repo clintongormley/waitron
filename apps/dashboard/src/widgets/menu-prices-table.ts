@@ -133,14 +133,9 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
         .replace("{low}", format(span.low))
         .replace("{high}", format(span.high));
 
-/**
- * As typed into a price field, which draws no sign. The field writes a lone amount with the
- * locale's decimal mark itself, but leaves a range as given.
- */
+/** As typed into a price field, which draws no sign, in the locale's decimal mark. */
 const placeholderOf = (span: Span): string =>
-  oneAmount(span)
-    ? span.low
-    : spanText(span, (amount) => formatDecimalInput(amount, currentLocale()));
+  spanText(span, (amount) => formatDecimalInput(amount, currentLocale()));
 
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active variants
