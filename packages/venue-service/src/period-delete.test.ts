@@ -158,8 +158,34 @@ it("a replacement joins each season weekday separately, and no replacement remov
       seasonId: v.seasons.summer,
     }),
   );
+  const untouched = await db
+    .insert(openingHours)
+    .values([
+      {
+        departmentId: v.restaurant,
+        seasonId: v.seasons.winter,
+        weekday: 4,
+        kind: "period",
+        periodId: v.afternoon,
+        startsAt: "12:00:00",
+        endsAt: "14:00:00",
+      },
+      {
+        departmentId: v.restaurant,
+        seasonId: v.seasons.winter,
+        weekday: 4,
+        kind: "period",
+        periodId: v.afternoon,
+        startsAt: "14:00:00",
+        endsAt: "16:00:00",
+      },
+    ])
+    .returning();
   await scoped((tx) => deletePeriod(tx, v.lunch, v.dinner, WRITE_AT, 1));
   const rows = await db.select().from(openingHours);
+  expect(rows.filter((row) => row.periodId === v.afternoon)).toEqual(
+    expect.arrayContaining(untouched),
+  );
   expect(
     rows.filter((row) => row.departmentId === v.restaurant && row.seasonId === v.seasons.autumn),
   ).toMatchObject([{ weekday: 3, periodId: v.dinner, startsAt: "12:00:00", endsAt: "16:00:00" }]);
