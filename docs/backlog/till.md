@@ -7,10 +7,6 @@ their full text.
 
 - The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.
-- A walk-up counter sale delivered to a table in a table-service zone may become a table tab
-  whose payment sends nothing to the kitchen (unverified, read only): `createOpenOrder`
-  (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
-  table's. Whether the till can offer such a table was not checked.
 - Nothing at boot level tests that the till API receives the table-removal seats (each enabled
   module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
   API's wiring.
