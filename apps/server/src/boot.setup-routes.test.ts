@@ -26,6 +26,7 @@ import {
   openVenueDatabase,
   readDeploymentEnvironment,
   stampDeployment,
+  taxpayer,
   withTransaction,
   type Database,
   type VenueDatabase,
@@ -2596,6 +2597,169 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(source.directory, { recursive: true, force: true });
       await rm(target.directory, { recursive: true, force: true });
       await rm(sourceStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it.each(["demo", "prepare"] as const)(
+    "a configuration staged in Live is not imported when the person switches to %s, and is gone once setup finishes",
+    async (mode) => {
+      const TAX_ID = "60000011A";
+      const PASSPHRASE = "a long enough export passphrase";
+      const modules = enabledModules(ALL_MODULES, ES_MODULE_CONFIG);
+      const source = await freshVenue();
+      const target = await freshVenue();
+      const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-config-switch-"));
+      try {
+        const sourceIds = await provisionVenue(
+          {
+            ownerDb: source.store.venue,
+            moduleConfig: ES_MODULE_CONFIG,
+            database: source.directory,
+            stateDir: sourceStateDir,
+          },
+          { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
+        );
+        await withTransaction(source.store.venue, async (tx) => {
+          await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] });
+          await savePrivacyContact(
+            tx,
+            {
+              privacyNoticeUrl: "https://example.com/privacy",
+              privacyEmail: "privacy@example.com",
+            },
+            null,
+          );
+        });
+        const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
+        const artifact = encodeConfigurationBundle(
+          await buildConfigurationBundle(
+            source.store.venue,
+            { ...sourceIds, sourceOperatorId: exporter!.id },
+            modules,
+            new Date(),
+            await schemaVersionsByModule(source.store, modules),
+          ),
+          PASSPHRASE,
+        );
+
+        await withSetupBoot(
+          target.directory,
+          { WAITRON_ENV: "dev" },
+          async ({ post, kills, stateDir }) => {
+            const staged = await post("/setup-api/configuration", {
+              headers: {
+                "content-type": "application/octet-stream",
+                "x-waitron-export-passphrase": PASSPHRASE,
+              },
+              body: new Uint8Array(artifact),
+            });
+            expect(staged.status).toBe(200);
+            const marker = join(stateDir, "flows/setup/import/marker.json");
+            await readFile(marker);
+
+            const provisioned = await post("/setup-api/provision", {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ mode, venue: provisionVenueBody(TAX_ID) }),
+            });
+            expect(provisioned.status, await provisioned.clone().text()).toBe(200);
+            await poll(() => (kills.length > 0 ? kills.length : undefined));
+            expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+            expect(await readdir(join(stateDir, "flows/setup/import"))).toEqual([]);
+          },
+        );
+
+        const languages = await withTransaction(target.store.venue, (tx) =>
+          readContentLanguages(tx, "es"),
+        );
+        expect(languages.languages).not.toContain("fr");
+        expect(
+          target.store.venue.all(
+            sql`select json_extract(doc, '$.privacyEmail') as privacy_email from settings where module = 'venue'`,
+          ),
+        ).not.toContainEqual({ privacy_email: "privacy@example.com" });
+      } finally {
+        await source.store.close();
+        await target.store.close();
+        await rm(source.directory, { recursive: true, force: true });
+        await rm(target.directory, { recursive: true, force: true });
+        await rm(sourceStateDir, { recursive: true, force: true });
+      }
+    },
+    120_000,
+  );
+
+  it("a Live first setup left claimed refuses Demo and Prepare until it is abandoned, and its tax ID never reaches the venue", async () => {
+    const LIVE_TAX_ID = "60000011A";
+    const PREPARE_TAX_ID = "60000012G";
+    const target = await freshVenue();
+    try {
+      await withSetupBoot(
+        target.directory,
+        { WAITRON_ENV: "dev" },
+        async ({ post, kills, stateDir }) => {
+          const json = { "content-type": "application/json" };
+          const claimed = await post("/setup-api/first-setup/claim", {
+            headers: json,
+            body: JSON.stringify({ venue: provisionVenueBody(LIVE_TAX_ID) }),
+          });
+          expect(claimed.status, await claimed.clone().text()).toBe(200);
+          const owner = (await claimed.json()) as {
+            capability: string;
+            state: { attemptId: string; revision: number; ownerGeneration: number };
+          };
+
+          for (const [mode, taxId] of [
+            ["demo", "B00000000"],
+            ["prepare", PREPARE_TAX_ID],
+          ] as const) {
+            const refused = await post("/setup-api/provision", {
+              headers: json,
+              body: JSON.stringify({ mode, venue: provisionVenueBody(taxId) }),
+            });
+            expect({ mode, status: refused.status, body: await refused.json() }).toEqual({
+              mode,
+              status: 409,
+              body: { error: { code: "setup.attempt_conflict", params: {} } },
+            });
+          }
+          expect(await target.store.venue.select().from(taxpayer)).toEqual([]);
+
+          const abandoned = await post("/setup-api/first-setup/abandon", {
+            headers: {
+              ...json,
+              "X-Waitron-Setup-Owner": owner.capability,
+              "X-Waitron-Setup-Attempt": owner.state.attemptId,
+              "X-Waitron-Setup-Revision": String(owner.state.revision),
+              "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
+            },
+            body: JSON.stringify({}),
+          });
+          expect(abandoned.status, await abandoned.clone().text()).toBe(200);
+
+          const prepared = await post("/setup-api/provision", {
+            headers: json,
+            body: JSON.stringify({ mode: "prepare", venue: provisionVenueBody(PREPARE_TAX_ID) }),
+          });
+          expect(prepared.status, await prepared.clone().text()).toBe(200);
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+          const kept = JSON.parse(
+            await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+          ) as { attempt: { status: string; frozen: { request: { taxId: string } } } };
+          expect({ status: kept.attempt.status, taxId: kept.attempt.frozen.request.taxId }).toEqual(
+            {
+              status: "abandoned",
+              taxId: LIVE_TAX_ID,
+            },
+          );
+        },
+      );
+      expect((await target.store.venue.select().from(taxpayer)).map(({ taxId }) => taxId)).toEqual([
+        PREPARE_TAX_ID,
+      ]);
+    } finally {
+      await target.store.close();
+      await rm(target.directory, { recursive: true, force: true });
     }
   }, 120_000);
 });

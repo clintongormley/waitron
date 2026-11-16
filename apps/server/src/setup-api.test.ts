@@ -20,6 +20,7 @@ import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
+import { mountSetupSpa } from "./setup-spa.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import {
@@ -1591,6 +1592,36 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     const app = new Hono();
     mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
     const res = await app.request(path, { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it.each([
+    ["a missing asset with no extension", "GET", "/assets/missing", "text/html"],
+    ["a POST to an unknown path", "POST", "/anything/else", "text/html"],
+    ["a request that does not accept HTML", "GET", "/anything/else", "application/json"],
+  ])("does not redirect %s", async (_label, method, path, accept) => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request(path, { method, headers: { Accept: accept } });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("serves the wizard at the root to a browser navigation rather than redirecting it", async () => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request("/", { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+    expect(await res.text()).toContain("setup-wizard-spa");
+  });
+
+  // mountSetup answers /api/* before the SPA's middleware runs; the first-setup resolution app does not.
+  it("keeps a missing /api path as 404 where nothing answers /api/* before the setup app", async () => {
+    const app = new Hono();
+    mountSetupSpa(app, wizardDir!, noopLog);
+    const res = await app.request("/api/missing", { headers: { Accept: "text/html" } });
     expect(res.status).toBe(404);
     expect(res.headers.get("location")).toBeNull();
   });

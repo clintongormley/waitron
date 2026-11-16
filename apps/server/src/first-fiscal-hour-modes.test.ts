@@ -9,7 +9,8 @@ import { invoiceSeries, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { parseModuleConfig } from "@waitron/module";
-import { mountSetup } from "./setup-api.js";
+import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { createSetupOperationStore } from "./setup-operation.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
@@ -59,47 +60,51 @@ async function fixture() {
     database: () => venue.db,
   });
   const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 29).toString("base64") });
-  const app = new Hono();
-  mountSetup(
-    app,
-    {
-      environment: "preproduction",
-      devMode: true,
-      firstFiscal: host,
-      db: venue.db,
-      node: venue.node,
-      ring,
-      provision: (req, beforeTransaction) =>
-        provisionVenue(
-          {
-            ownerDb: venue.db,
-            beforeTransaction,
-            stateDir,
-            database: "owned-mode",
-            moduleConfig: venueModuleConfig(
-              parseModuleConfig({}, host.modules),
-              req.venue.fiscalTerritory,
-            ),
-          },
-          req,
-          host.modules,
-        ),
-      recoverProvision: (req) => recoverProvisionedVenue(venue.db, req, host.modules),
-      seedDemo: async () => {},
-      establishIdentity: (id) =>
-        establishNodeIdentity({ ownerDb: venue.db, node: venue.node, ring }, id),
-      seedMembership: (id) =>
-        seedTermZeroMembership(
-          { db: venue.db, node: venue.node, ring },
-          id,
-          "https://test.example",
-        ),
-      persistTrading: async () => {},
-      requestRestart: () => {},
-    },
-    () => {},
-  );
-  return { app, stateDir };
+  const mount = (overrides: Partial<SetupDeps> = {}) => {
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        devMode: true,
+        firstFiscal: host,
+        db: venue.db,
+        node: venue.node,
+        ring,
+        provision: (req, beforeTransaction) =>
+          provisionVenue(
+            {
+              ownerDb: venue.db,
+              beforeTransaction,
+              stateDir,
+              database: "owned-mode",
+              moduleConfig: venueModuleConfig(
+                parseModuleConfig({}, host.modules),
+                req.venue.fiscalTerritory,
+              ),
+            },
+            req,
+            host.modules,
+          ),
+        recoverProvision: (req) => recoverProvisionedVenue(venue.db, req, host.modules),
+        seedDemo: async () => {},
+        establishIdentity: (id) =>
+          establishNodeIdentity({ ownerDb: venue.db, node: venue.node, ring }, id),
+        seedMembership: (id) =>
+          seedTermZeroMembership(
+            { db: venue.db, node: venue.node, ring },
+            id,
+            "https://test.example",
+          ),
+        persistTrading: async () => {},
+        requestRestart: () => {},
+        ...overrides,
+      },
+      () => {},
+    );
+    return app;
+  };
+  return { app: mount(), stateDir, mount };
 }
 
 it.each([false, true])(
@@ -192,4 +197,37 @@ it("owned development Live consumes its durable hour through publication without
   expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
     before,
   );
+});
+
+it("a Demo stopped after its venue committed is not resumed by a Prepare request, so the demo tax ID never becomes a Prepare venue's", async () => {
+  const { mount, stateDir } = await fixture();
+  const demo = JSON.stringify({ mode: "demo", venue: { ...request, taxId: "B00000000" } });
+  const post = (app: Hono, body: string) =>
+    app.request("/setup-api/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  const stopped = mount({
+    operations: createSetupOperationStore(stateDir),
+    persistTrading: async () => {
+      throw new Error("disk unavailable");
+    },
+  });
+  expect((await post(stopped, demo)).status).toBe(500);
+  expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("secret_sealed");
+
+  const persistTrading = vi.fn<NonNullable<SetupDeps["persistTrading"]>>(async () => {});
+  const restarted = mount({ operations: createSetupOperationStore(stateDir), persistTrading });
+  const prepare = await post(restarted, JSON.stringify({ mode: "prepare", venue: request }));
+  expect({ status: prepare.status, body: await prepare.json() }).toEqual({
+    status: 409,
+    body: { error: { code: "setup.operation_conflict", params: {} } },
+  });
+  expect(persistTrading).not.toHaveBeenCalled();
+  expect((await venue.db.select().from(taxpayer)).map(({ taxId }) => taxId)).toEqual(["B00000000"]);
+
+  expect((await post(restarted, demo)).status).toBe(200);
+  expect(persistTrading).toHaveBeenCalledOnce();
+  expect(persistTrading.mock.calls[0]![0].onboardingIntent).toBe("demo");
 });
