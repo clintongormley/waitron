@@ -7497,8 +7497,9 @@ export class TillApp extends LitElement {
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
         ) {
           this.#commitBasket(payload);
-          // As the server answers (`packages/db/src/order-dining.ts`): only a till-choice department
-          // switches, and a timeout leaves the payment attempt standing, which locks the way.
+          // As the server answers (`readOrderDinings`, `apps/server/src/order-dining.ts`): only a
+          // till-choice department switches, and a timeout leaves the payment attempt standing,
+          // which locks the way.
           this.counterDiningChoice = {
             orderId: id,
             choice:

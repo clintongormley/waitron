@@ -1517,7 +1517,7 @@ export const en = {
   "dining.switch_to_eat_in": "Switch to eat here",
   "dining.switch_failed": "Could not switch the order between eat here and take away, try again",
   "dining.switch_to_eat_in_explained":
-    "Switch to eat here changes the whole order to eat here and keeps the set lunch; then pay or send again",
+    "Switch to eat here changes the whole order to eat here and keeps its dishes; then pay or send again",
   "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",

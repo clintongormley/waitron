@@ -48,7 +48,6 @@ import type {
   ChangesAfterSending,
   ContentLanguages,
   Dining,
-  DiningPolicy,
   JoinSide,
   ExtraSelection,
   KitchenSignal,
@@ -65,6 +64,7 @@ import type {
   MenuState,
   MenuUnavailable,
   ServedMenu,
+  DiningStart,
 } from "@waitron/shared";
 import { readEventStream } from "./transfer-events.js";
 import type {
@@ -441,11 +441,7 @@ export type TillZoneMenu = ServedMenu;
  * longer (something is sent or paid). */
 export type DiningChoice = "none" | "open" | "locked";
 
-/** How a zone's department sells, and the way a new order there starts. */
-export interface ZoneDining {
-  policy: DiningPolicy;
-  startsAs: Dining;
-}
+export type ZoneDining = DiningStart;
 
 export interface ZoneOffers {
   service: MenuState["service"];

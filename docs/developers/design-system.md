@@ -1171,7 +1171,8 @@ the screen cases mount the screen without `till-app`; `till-app-open-table.test.
 case opens a real table.
 
 **Table screen: bill switcher and ⋮ (A803 slice 3).** The Order screen's panel head holds, after the
-status, the bill switcher and then the ⋮ (`billSwitcher` and `tableMenu`,
+status, the bill switcher, the bill's Eat here / Take away switch or label (`diningControl`,
+`apps/till/src/widgets/dining-choice.ts`) and then the ⋮ (`billSwitcher` and `tableMenu`,
 `apps/till/src/screens/table-bill-controls.ts`), on every width, a handheld included; there is no
 Tab button and no side drawer.
 
@@ -6496,7 +6497,9 @@ dishes moved in) make one card per station and bill (`kitchenCards`,
 held dish counting as Waiting; within a column the card whose oldest fired dish was queued first
 comes first, a card with no fired dish after every timed one, then the read's order of each card's
 first bill, then the group's position with the no-group card first (`kitchen-cards.ts`). Its
-heading holds each bill's number with any former numbers, "Counter" before the number of a bill
+heading holds each bill's number with any former numbers, a **Take away** mark after a takeaway
+bill's number (`takeAwayMark`, `apps/till/src/widgets/take-away-mark.ts`; the pass card's heading
+has it too), "Counter" before the number of a bill
 with no party and no table (`isCounterOrder`), the allergy marker, each distinct place of its bills
 (a bill's tables by their short names, in number order joined with "+", else the name a let-go
 delivery table kept, else its label;
