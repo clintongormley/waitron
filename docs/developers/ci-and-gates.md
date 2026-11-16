@@ -1110,8 +1110,7 @@ Its weights sum tested mutants' recorded milliseconds per file, excluding `NoCov
 `CompileError` and `RuntimeError`, rounded to tenths of a second and clamped to 0.1. These are
 ranking weights, not elapsed job predictions. Keep the four whole-file shards and the 25-minute
 limit. New files use the same seconds-per-byte fallback as db. Do not regenerate this table with
-the db-calibrated `scripts/mutation-costs.mjs`: its extra 82.2 seconds per timeout is not fitted
-to these browser reports, whose timeout durations are already recorded. Refresh from four complete
+the db-calibrated `scripts/mutation-costs.mjs`. Refresh from four complete
 reports downloaded under `<scratch>` using this recipe from the repository root:
 
 ```js
