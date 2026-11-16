@@ -1661,7 +1661,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Reopening a held order keeps its lines right
 
-3 entries, size S.
+2 entries, size S.
 
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
@@ -1674,9 +1674,6 @@ Printer identity is separate from the till route inventory.
   variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
   `setLineModifiers` has to carry the product.
   [Detail](till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
-- **A held order brought back to the till shows a variant line with its PARENT's VAT class,
-  category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
-  unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
 
 ## Bundle: One count of items everywhere
 

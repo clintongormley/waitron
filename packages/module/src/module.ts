@@ -1161,6 +1161,12 @@ export interface VenueServiceContribution {
     lines: readonly {
       workingOrderLineId: string;
       menuItemId: string;
+      /**
+       * The variant the line sells, as listed in its offer's `variants`: its VAT class, allergens
+       * and diet are recorded in place of the dish's. A variant the offer does not list records the
+       * dish's.
+       */
+      variantId?: string;
       recorded?: { offer: ZoneMenuOffer; versionId: string };
       unit?: {
         id: string;
