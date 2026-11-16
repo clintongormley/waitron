@@ -101,8 +101,8 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 /**
  * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
  * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive
- * <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive and restores it as the first form does;
- * either file may instead be the venue's recovery pack PDF. The recovery key comes from
+ * <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive and restores it as the
+ * first form does. The recovery key comes from
  * `WAITRON_BACKUP_RECOVERY_KEY`, the kit file, the archive pack file or the recovery pack PDF,
  * never argv: an argv element leaks into `ps`.
  *
