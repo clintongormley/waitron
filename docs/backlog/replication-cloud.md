@@ -587,8 +587,8 @@ Slice 3.
   opened accepted copy by its signed size and empty summaries alone” in `handover-place-copy.test.ts`
   confirms the refusal for the placed file and a different valid file with the same signed size
   and empty summaries. In this fixture, opening changes only bytes 18, 19, 27 and 95; replacing
-  those bytes with the accepted file's bytes recovers its signed digest. Recognition using those
-  fields remains to be qualified through a real start and its WAL; the fixture alone does not
+  those bytes with the accepted file's bytes recovers its signed digest. Recognition after normalizing the
+  header remains to be qualified through a real start and its WAL; the fixture alone does not
   establish what may be ignored after a killed start.
   Left open by A1018 Slice 5 (Ruling R53).
 

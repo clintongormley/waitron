@@ -1326,6 +1326,7 @@ describe("placeAcceptedCopyAtStart", () => {
       const before = readFileSync(b.accepted);
       const after = readFileSync(b.live);
       const changed = [...before.keys()].filter((offset) => before[offset] !== after[offset]);
+      // These offsets characterize this fixture; ignoring a real start's WAL remains unqualified.
       expect(changed).toEqual([18, 19, 27, 95]);
       const normalized = Buffer.from(after);
       for (const offset of changed) normalized[offset] = before[offset]!;
