@@ -14,6 +14,9 @@
 
 ## Certificate reproduction and correction
 
+**16 November 2026:** the [cleanup repair](2026-11-16-certificate-child-deadline.md) supersedes
+the 200 ms cache exception below with 2,000 ms cleanup and a 2,500 ms loader control.
+
 - [ ] Before changing the test, retain 44 loaded whole-file attempts on the original tree, with `DIAGNOSIS_PROCESS_TRACE=1` and `AI_AGENT`/`CLAUDECODE` unset. Use two owned Node CPU workers as the recorded load. Capture memory headroom and existing processes first; browser work requires well above 15% free and no background whole-workspace coverage. This sample may reproduce the sighting; absence does not establish its cause.
 - [ ] In `apps/server/src/testing/certificate-diagnosis-child.ts`, retain an input-controlled delay in module scope and await 300 ms after entry/channel closure. The existing “resolves only after its exact child exits and permits the next attempt” and “does not forward credential environments…” cases request it, in `fiscal-certificate-diagnosis-process.test.ts`. With its current 200 ms cleanup, observe the completed-result assertion fail and retain signal timing. This proves the delay mechanism, not the historical run's cause.
 - [ ] Give both naturally exiting cases 2,000 ms, matching production. Keep selected-result equality, exact PID disappearance and next-attempt admission; add an assertion for no recorded kill. Reverse the allowance once to prove the control fails. Keep every other case unchanged, including the 200 ms cache regression. No claim that all naturally exiting cases are repaired; no speculative backlog entry for an unseen failure.

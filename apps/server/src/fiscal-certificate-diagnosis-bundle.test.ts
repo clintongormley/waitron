@@ -273,7 +273,7 @@ describe("local certificate diagnosis dispatcher", () => {
           entry: fixture.entry,
           execArgv: [],
           workMs: 5_000,
-          cleanupMs: 200,
+          cleanupMs: 2_000,
         });
         const abort = new AbortController();
         const pending = runner.attempt(
