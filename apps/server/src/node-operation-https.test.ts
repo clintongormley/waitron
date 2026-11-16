@@ -35,7 +35,11 @@ async function request(headers: Record<string, string> = {}, tls: boolean | "for
 }
 
 it("refuses a plain object claiming encryption instead of an actual TLS socket", async () => {
-  expect((await request({}, "forged")).status).toBe(403);
+  const response = await request({}, "forged");
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "node.operation_page_required", params: {} },
+  });
 });
 it.each<Record<string, string>>([
   {},
