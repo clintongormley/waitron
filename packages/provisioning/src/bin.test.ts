@@ -9,7 +9,7 @@ import { modulesSettings } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { FIRST_SETUP_FILE } from "@waitron/store";
 import { describe, expect, it } from "vitest";
-import { ask, main, writeModuleConfigTo, type BinProcess } from "./bin.js";
+import { ask, runBin, writeModuleConfigTo, type BinProcess } from "./bin.js";
 import type { CliDeps } from "./cli.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -32,20 +32,20 @@ function fakeProcess(
   };
 }
 
-/** The dependencies `main` hands the command, for checks made outside `main`'s own catch. */
+/** The dependencies `runBin` hands the command, for checks made outside `runBin`'s own catch. */
 async function depsOf(env: NodeJS.ProcessEnv = {}): Promise<CliDeps> {
   let deps: CliDeps | undefined;
-  await main(fakeProcess(env), async (_argv, given) => {
+  await runBin(fakeProcess(env), async (_argv, given) => {
     deps = given;
     return 0;
   });
   return deps!;
 }
 
-describe("main", () => {
+describe("runBin", () => {
   it("prints a domain refusal by its code and returns 1", async () => {
     const proc = fakeProcess();
-    const code = await main(proc, async () => {
+    const code = await runBin(proc, async () => {
       throw new AppError("setup.not_ready", {});
     });
     expect(code).toBe(1);
@@ -54,7 +54,7 @@ describe("main", () => {
 
   it("prints only the class name of any other failure, never its message, and returns 1", async () => {
     const proc = fakeProcess();
-    const code = await main(proc, async () => {
+    const code = await runBin(proc, async () => {
       throw new TypeError("insert into persons values ('secret')");
     });
     expect(code).toBe(1);
@@ -63,7 +63,7 @@ describe("main", () => {
 
   it("hands the command the arguments after the script name and its own output lines", async () => {
     const proc = fakeProcess();
-    const code = await main(proc, async (argv, deps) => {
+    const code = await runBin(proc, async (argv, deps) => {
       deps.io.stdout("to out");
       deps.io.stderr("to err");
       deps.io.clearScreen();
@@ -77,7 +77,7 @@ describe("main", () => {
   it("answers both kinds of prompt from the given stdin", async () => {
     const proc = fakeProcess();
     const answers: string[] = [];
-    await main(proc, async (_argv, deps) => {
+    await runBin(proc, async (_argv, deps) => {
       proc.stdin.write("Ana\n");
       answers.push(await deps.io.prompt("Name? "));
       proc.stdin.write("1234\n");

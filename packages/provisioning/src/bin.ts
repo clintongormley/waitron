@@ -39,11 +39,8 @@ export interface BinProcess {
   stderr: NodeJS.WritableStream;
 }
 
-/**
- * The only file in this package that touches the process. No storage is opened here: `venue` opens
- * its own directory and `keyring` needs none.
- */
-export async function main(proc: BinProcess, run: typeof runCli = runCli): Promise<number> {
+/** No storage is opened here: `venue` opens its own directory and `keyring` needs none. */
+export async function runBin(proc: BinProcess, run: typeof runCli = runCli): Promise<number> {
   let database: Database | undefined;
   try {
     return await run(proc.argv.slice(2), {
@@ -174,5 +171,5 @@ if (
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
   setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
-  process.exitCode = await main(process);
+  process.exitCode = await runBin(process);
 }

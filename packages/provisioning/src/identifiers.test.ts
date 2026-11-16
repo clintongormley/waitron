@@ -20,10 +20,8 @@ describe("generatePassword", () => {
   it("does not repeat", () => {
     expect(generatePassword()).not.toBe(generatePassword());
   });
-});
 
-describe("quoteLiteral", () => {
-  it("leaves a generated password byte-identical to the naive form", () => {
+  it("passes through quoteLiteral unchanged", () => {
     for (let i = 0; i < 50; i += 1) {
       const password = generatePassword();
       expect(quoteLiteral(password)).toBe(`'${password}'`);
