@@ -1766,7 +1766,7 @@ _2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b 
 `google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as
 open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` now holds a
 `restrict` key to `devices`, and `sessions` still has none to `persons`
-(`packages/db/src/schema/identity/sessions.ts`).
+([schema before pp1](https://github.com/clintongormley/waitron/blob/a086eedfb75b77796f0cbd58095a2ddf66365b83/packages/db/src/schema/identity/sessions.ts)).
 
 _2026-11-16 (A1308 pp1):_ `sessions` and `management_sessions` are now `till_sessions`
 and `dashboard_sessions`; both declare a person key that restricts deletion.
