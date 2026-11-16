@@ -2405,7 +2405,15 @@ export class DashboardApp extends LitElement {
     return this.#sessionPermissions.includes(item.requiresPermission ?? "venue.view");
   }
 
+  /** A session holding `invoice.inspect` alone sees the tax office's invoices and no venue page. */
+  #confinedToInvoices(): boolean {
+    return (
+      this.#sessionPermissions.length === 1 && this.#sessionPermissions[0] === "invoice.inspect"
+    );
+  }
+
   #ownPagesOnly(): boolean {
+    if (this.#confinedToInvoices()) return false;
     return (
       !NAV_GROUPS.flatMap(coreItems).some(
         (item) => item.screen !== "orders" && this.#mayOpen(item),
@@ -2438,7 +2446,8 @@ export class DashboardApp extends LitElement {
   }
 
   #permittedScreen(requested: string | null): ScreenId {
-    if (requested === "orders" || requested === "my-schedule") return requested;
+    if (requested === "my-schedule" || (requested === "orders" && !this.#confinedToInvoices()))
+      return requested;
     const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
@@ -2447,7 +2456,7 @@ export class DashboardApp extends LitElement {
     const fallback =
       NAV_GROUPS.flatMap(coreItems).find((entry) => this.#mayOpen(entry))?.screen ??
       [...this.#activeScreens.values()].find(({ screen }) => this.#mayRead(screen))?.screen.id ??
-      "my-schedule";
+      (this.#confinedToInvoices() ? "alerts" : "my-schedule");
     if (
       requested === "demo-printer" &&
       this.onboardingIntent !== "demo" &&
@@ -2611,7 +2620,9 @@ export class DashboardApp extends LitElement {
             this.onboardingIntent === "prepare" ||
             this.onboardingIntent === "live",
         )
-        .filter((item) => item.screen === "orders" || this.#mayOpen(item))
+        .filter((item) =>
+          item.screen === "orders" ? !this.#confinedToInvoices() : this.#mayOpen(item),
+        )
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
       const among = [...(this.#navGroups.get(group.id) ?? [])]

@@ -56,6 +56,25 @@ it.each(["en-GB", "es-ES"])("offers permission help and role-page links (%s)", a
     false,
   );
 });
+it.each([
+  ["en-GB", "Reports and tax", "See invoices for the tax office"],
+  ["es-ES", es["access_roles.reports"], es["permission.invoice.inspect"]],
+])("lists invoice.inspect under reports with its label (%s)", async (locale, area, label) => {
+  const { el } = await mount(
+    {
+      listAccessRoles: vi
+        .fn()
+        .mockResolvedValue([roles[0], { ...roles[1], permissions: ["invoice.inspect"] }, roles[2]]),
+    },
+    ["person.admin", "invoice.inspect"],
+    locale,
+  );
+  q(el, "create").click();
+  await el.updateComplete;
+  const toggle = q(el, "permission-invoice.inspect");
+  expect(toggle.getAttribute("label")).toBe(label);
+  expect(toggle.closest("section")!.getAttribute("aria-label")).toBe(area);
+});
 it("does not offer Job roles when the viewer cannot open it", async () => {
   const { el } = await mount({}, ["person.admin"]);
   expect(el.shadowRoot!.querySelector('a[href="/manage/staff-roles"]')).toBeNull();

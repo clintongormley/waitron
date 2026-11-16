@@ -29,6 +29,7 @@ export const CORE_PERMISSIONS = [
   { permission: "node.manage", defaultHolders: [] },
   { permission: "system.box_admin", defaultHolders: [] },
   { permission: "fiscal.view", defaultHolders: ["manager"] },
+  { permission: "invoice.inspect", defaultHolders: ["manager"] },
 ] as const satisfies readonly PermissionDeclaration[];
 
 export type Permission = (typeof CORE_PERMISSIONS)[number]["permission"];

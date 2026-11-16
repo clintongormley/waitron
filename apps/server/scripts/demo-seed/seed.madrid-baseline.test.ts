@@ -901,6 +901,7 @@ for (const locale of ["en", "es"] as const) {
           "hardware.manage",
           "cash.drawer",
           "fiscal.view",
+          "invoice.inspect",
           "workforce.correct",
           "booking.manage",
           "adjustment.manage",

@@ -1,0 +1,107 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { randomUUID } from "node:crypto";
+import { beforeAll, describe, expect, it } from "vitest";
+import { startManagementSession } from "@waitron/identity";
+import { personRoles, roles } from "@waitron/db";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { eq } from "drizzle-orm";
+import { inTx, send } from "./testing/bill-venue.js";
+import { placedIssuedBill, provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
+
+let venue: OrderVenue;
+useVenueDb({
+  resetPerTest: false,
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+  setup: async (db) => {
+    venue = await provisionOrderVenue(db);
+  },
+});
+
+/** A dashboard session for a new person whose one role is a custom role granting `permissions`. */
+async function sessionHolding(permissions: string[]): Promise<string> {
+  return inTx(venue, async (tx) => {
+    const name = `Only ${randomUUID()}`;
+    const [person] = await seedPersons(tx, { displayName: name });
+    await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
+    const [role] = await tx
+      .insert(roles)
+      .values({ name, nameFolded: name.toLowerCase(), permissions })
+      .returning({ id: roles.id });
+    await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
+    const session = await startManagementSession(tx, { personId: person!.id });
+    return `${MANAGEMENT_COOKIE}=${session.token}`;
+  });
+}
+
+describe("a session holding only invoice.inspect", () => {
+  let inspector: string;
+  let nobody: string;
+  let billId: string;
+  beforeAll(async () => {
+    inspector = await sessionHolding(["invoice.inspect"]);
+    nobody = await sessionHolding([]);
+    billId = await placedIssuedBill(venue, "Paella");
+  });
+
+  const routes: [
+    string,
+    "GET" | "POST",
+    () => string,
+    () => Record<string, unknown> | undefined,
+  ][] = [
+    ["the list", "GET", () => "/management-api/orders", () => undefined],
+    ["the staff filter", "GET", () => "/management-api/orders/staff", () => undefined],
+    ["the printers", "GET", () => "/management-api/orders/printers", () => undefined],
+    ["a bill's detail", "GET", () => `/management-api/orders/${billId}`, () => undefined],
+    [
+      "a reprint",
+      "POST",
+      () => `/management-api/orders/${billId}/reprint`,
+      () => ({ printerId: venue.printerId }),
+    ],
+    [
+      "a printed invoice delivery",
+      "POST",
+      () => `/management-api/orders/${billId}/invoice-deliveries`,
+      () => ({ medium: "print", requestKey: randomUUID(), printerId: venue.printerId }),
+    ],
+    [
+      "an emailed invoice delivery",
+      "POST",
+      () => `/management-api/orders/${billId}/invoice-deliveries`,
+      () => ({ medium: "email", requestKey: randomUUID(), recipient: "guest@example.com" }),
+    ],
+    [
+      "a delivery retry",
+      "POST",
+      () => `/management-api/orders/${billId}/invoice-deliveries/${randomUUID()}/retry`,
+      () => ({ requestKey: randomUUID() }),
+    ],
+    ["the invoice PDF", "POST", () => `/management-api/orders/${billId}/invoice-pdf`, () => ({})],
+  ];
+
+  it.each(routes)("is refused %s", async (_name, method, path, body) => {
+    const answer = await send(venue.orders, inspector, method, path(), body());
+    expect(answer).toMatchObject({
+      status: 403,
+      json: { code: "authorization.not_permitted" },
+    });
+  });
+
+  it("leaves a session with no permission at all seeing today's bills and reprinting one", async () => {
+    const list = await send(venue.orders, nobody, "GET", "/management-api/orders");
+    expect(list.status).toBe(200);
+    expect((list.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(billId);
+    const reprint = await send(
+      venue.orders,
+      nobody,
+      "POST",
+      `/management-api/orders/${billId}/reprint`,
+      { printerId: venue.printerId },
+    );
+    expect(reprint.status).toBe(202);
+  });
+});

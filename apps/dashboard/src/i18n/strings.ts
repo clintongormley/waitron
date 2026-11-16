@@ -25,6 +25,8 @@ export const en = {
     "Download accountant exports, invoices and other staff’s working-time records, and email invoices from Orders. Open the VAT return and Fiscal filing pages too.",
   "permission.fiscal.view.help":
     "Read tax-certificate details and see fiscal alerts. Installing or replacing a certificate needs Manage the system.",
+  "permission.invoice.inspect.help":
+    "Find, open, download and print every invoice the venue has issued, for the tax office.",
   "permission.fiscal.remedy.help":
     "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in. Also accept returned fiscal records during a server handover.",
   "permission.personal_data.export.help":
@@ -99,6 +101,7 @@ export const en = {
   "permission.report.view": "View reports",
   "permission.report.export": "Export reports",
   "permission.fiscal.view": "View fiscal records",
+  "permission.invoice.inspect": "See invoices for the tax office",
   "permission.fiscal.remedy": "Correct fiscal filing",
   "permission.personal_data.export": "Export personal data",
   "permission.person.manage": "Manage staff details",
@@ -4362,6 +4365,8 @@ export const es: Record<StringKey, string> = {
     "Descarga exportaciones contables, facturas y registros horarios de otros empleados, y envía facturas por correo desde Pedidos. También abre las páginas de declaración de IVA y Remisión a la AEAT.",
   "permission.fiscal.view.help":
     "Consulta los datos del certificado fiscal y las alertas fiscales. Para instalar o sustituir un certificado necesitas Gestionar el sistema.",
+  "permission.invoice.inspect.help":
+    "Busca, abre, descarga e imprime cualquier factura emitida por el local, para Hacienda.",
   "permission.fiscal.remedy.help":
     "Autoriza las acciones de corrección que ofrece Remisión a la AEAT. Para abrir esa página también necesitas Exportar informes, y las correcciones protegidas te piden confirmar tu acceso. También acepta registros fiscales devueltos durante un traspaso entre servidores.",
   "permission.personal_data.export.help":
@@ -4435,6 +4440,7 @@ export const es: Record<StringKey, string> = {
   "permission.report.view": "Ver informes",
   "permission.report.export": "Exportar informes",
   "permission.fiscal.view": "Ver registros fiscales",
+  "permission.invoice.inspect": "Ver facturas para Hacienda",
   "permission.fiscal.remedy": "Corregir envíos fiscales",
   "permission.personal_data.export": "Exportar datos personales",
   "permission.person.manage": "Gestionar datos del personal",

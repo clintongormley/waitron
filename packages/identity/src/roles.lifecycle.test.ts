@@ -77,6 +77,13 @@ it.each([
   expect(await suite.db.select().from(activityLog)).toEqual([]);
 });
 
+it("accepts a custom role holding only invoice.inspect", async () => {
+  const { actor } = await fixture();
+  const { id } = await create(actor.token, "Tax inspector", ["invoice.inspect"]);
+  const [row] = await suite.db.select().from(roles).where(eq(roles.id, id));
+  expect(row).toMatchObject({ name: "Tax inspector", permissions: ["invoice.inspect"] });
+});
+
 it("requires person.admin even when every proposed grant is held", async () => {
   const { token } = await openFreshManagementSession(suite.db, "supervisor");
   expect(await refusalOf(() => create(token, "Viewer", ["report.view"]))).toMatchObject({

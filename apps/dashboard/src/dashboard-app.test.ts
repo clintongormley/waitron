@@ -4458,6 +4458,31 @@ describe("dashboard-app", () => {
     ).toEqual(["nav-my-schedule", "nav-orders"]);
   });
 
+  it.each(["/manage", "/manage/orders"])(
+    "a session holding only invoice.inspect lands on neither Orders nor My schedule from %s",
+    async (path) => {
+      history.replaceState(null, "", path);
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "inspector",
+          roleIds: ["tax-inspector"],
+          locale: null,
+          venueLocale: "es-ES",
+          sessionDefault: "es-ES",
+          permissions: ["invoice.inspect"],
+          modules: [],
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=nav-orders]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=nav-my-schedule]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).toBeNull();
+      expect(mySchedule(el)).toBeNull();
+      expect(["/manage/orders", "/manage/my-schedule"]).not.toContain(location.pathname);
+    },
+  );
+
   it("does not show the nav on the login screen", async () => {
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),

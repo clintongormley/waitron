@@ -58,6 +58,11 @@ export const PERMISSION_TEXT: Readonly<Record<string, PermissionText>> = {
     label: "permission.fiscal.view",
     help: "permission.fiscal.view.help",
   },
+  "invoice.inspect": {
+    area: "reports",
+    label: "permission.invoice.inspect",
+    help: "permission.invoice.inspect.help",
+  },
   "fiscal.remedy": {
     area: "reports",
     label: "permission.fiscal.remedy",
