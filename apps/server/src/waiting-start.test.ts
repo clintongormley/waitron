@@ -375,7 +375,7 @@ describe("the waiting start", () => {
     });
 
     it("once stepping down, answers another venue origin's API preflight and gives its refusal that origin", async () => {
-      const h = harness(() => new Promise<StartPeerCheckOutcome>(() => {}), {
+      const h = harness(async () => WAIT, {
         node: suite.node,
         routes: [stepRoute],
       });
