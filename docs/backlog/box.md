@@ -1734,16 +1734,6 @@ below records the gap that prompted the design, not a new runtime measurement.
   processor time (A751); see
   [the timing receipt](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-## `src/bin.ts` in `packages/provisioning` is still left out of coverage
-
-- `bin.ts` can now be imported without running the command, and `src/bin.test.ts` covers its two
-  failure prints, both `setup.not_ready` refusals, the prompts and the venue it opens. Taking
-  `src/bin.ts` out of `vitest.config.ts`'s coverage `exclude` still leaves the package at 97.96%
-  statements against 98%: the uncovered lines are the `firstSetupDeployment` and successful
-  `configureFirstSetup` closures in `main`, the rethrow of a non-abort readline error in `ask`, and
-  the run-when-invoked-directly block at the foot. Covering the first two needs a test that builds a
-  first-setup runtime and deployment, which so far would assert little beyond their construction.
-
 ## Backup data verification and Cloud release
 
 The A850 interface checks a private restored copy without running ordinary restore hooks or

@@ -1,12 +1,13 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, readSettings, runMigrations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { modulesSettings } from "@waitron/module";
 import { AppError } from "@waitron/shared";
+import { FIRST_SETUP_FILE } from "@waitron/store";
 import { describe, expect, it } from "vitest";
 import { ask, main, writeModuleConfigTo, type BinProcess } from "./bin.js";
 import type { CliDeps } from "./cli.js";
@@ -116,6 +117,21 @@ describe("main", () => {
       expect.objectContaining({ code: "setup.not_ready" }),
     );
   });
+
+  it("builds first setup over the state folder WAITRON_STATE_DIR names", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-provision-state-"));
+    try {
+      const runtime = (await depsOf({ WAITRON_STATE_DIR: stateDir })).configureFirstSetup!(
+        join(stateDir, "venue"),
+      );
+      expect(await runtime.store.read()).toBeNull();
+      await mkdir(dirname(join(stateDir, FIRST_SETUP_FILE)), { recursive: true });
+      await writeFile(join(stateDir, FIRST_SETUP_FILE), JSON.stringify({ version: 2 }));
+      await expect(runtime.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("writeModuleConfigTo", () => {
@@ -158,6 +174,17 @@ describe("ask", () => {
     input.write("1234\n");
     expect(await answer).toBe("1234");
     expect(written.join("")).toBe("PIN: \n");
+  });
+
+  it("throws a failure other than Ctrl+D rather than reading it as an empty answer", async () => {
+    const broken = Object.assign(new PassThrough(), {
+      write: () => {
+        throw Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      },
+    });
+    await expect(ask("Name? ", true, new PassThrough(), broken)).rejects.toMatchObject({
+      code: "EPIPE",
+    });
   });
 
   it("returns an empty answer when stdin ends before one", async () => {

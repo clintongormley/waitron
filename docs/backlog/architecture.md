@@ -1051,7 +1051,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-20 entries, size M.
+21 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
@@ -1081,9 +1081,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   option should go is open.
   [Detail](box.md#server-comment-pruning-notes)
 
-- **`src/bin.ts` in `packages/provisioning` is still left out of coverage.** Six of its
-  statements stay untested; bringing it in leaves the package just under 98% statements.
-  [Detail](box.md#srcbints-in-packagesprovisioning-is-still-left-out-of-coverage)
 - **Schema files keep `v8 ignore` pairs with no stated reason.**
   [Detail](ci.md#schema-files-keep-v8-ignore-pairs-with-no-stated-reason).
 - **Fiscal source comments still describe the migration sets A760 retired.**
