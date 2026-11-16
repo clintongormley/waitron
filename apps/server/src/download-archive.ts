@@ -91,7 +91,8 @@ export async function zipArchiveInTurns(
 }
 
 /** `zipArchiveInTurns`' ZIP as a stream that takes the next entry only when the reader asks for
- * more, so no more than one entry's bytes wait in memory. */
+ * more, so no more than one entry's bytes wait in memory. It gives the event loop no turn of its
+ * own between entries: a source whose entries are slow to make must give those turns itself. */
 export function zipStream(
   entries: AsyncIterable<{ name: string; content: string | Uint8Array }>,
   at: Date,
@@ -107,20 +108,26 @@ export function zipStream(
   return new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
-        // A pull that enqueues nothing is not called again, so keep going until a chunk is out.
-        while (chunks.length === 0) {
+        try {
           const next = await iterator.next();
-          if (next.done) {
-            zip.end();
-            for (const chunk of chunks) controller.enqueue(chunk);
-            controller.close();
-            return;
+          if (next.done) zip.end();
+          else {
+            addEntry(zip, next.value.name, next.value.content, mtime);
+            if (failure) throw failure;
           }
-          addEntry(zip, next.value.name, next.value.content, mtime);
-          if (failure) throw failure;
+          for (const chunk of chunks) controller.enqueue(chunk);
+          chunks = [];
+          if (next.done) controller.close();
+        } catch (error) {
+          // An erroring stream does not call `cancel`, and the source's `finally` may release
+          // something only it holds.
+          try {
+            await iterator.return?.();
+          } catch {
+            // The reader needs the first failure, not this one.
+          }
+          throw error;
         }
-        for (const chunk of chunks) controller.enqueue(chunk);
-        chunks = [];
       },
       async cancel() {
         await iterator.return?.();

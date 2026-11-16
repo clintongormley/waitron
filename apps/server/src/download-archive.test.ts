@@ -253,6 +253,24 @@ describe("zipStream", () => {
     return { state, iterable };
   }
 
+  /** A generator over `items`, as the tax-office export's source is one, that records whether
+   * its `finally` ran. `before(index)` runs ahead of each entry and may wait. */
+  function generated(items: readonly Entry[], before?: (index: number) => Promise<void>) {
+    const state = { pulled: 0, finished: false };
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        for (const [index, item] of items.entries()) {
+          await before?.(index);
+          state.pulled++;
+          yield item;
+        }
+      } finally {
+        state.finished = true;
+      }
+    }
+    return { state, iterable: source() };
+  }
+
   async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
     const chunks: Uint8Array[] = [];
     for await (const chunk of stream) chunks.push(chunk);
@@ -289,16 +307,19 @@ describe("zipStream", () => {
     const { state, iterable } = counting(many);
     const reader = zipStream(iterable, AT).getReader();
     for (let turn = 0; turn < 5; turn++) await nextTurn();
-    expect(state.pulled).toBeLessThanOrEqual(1);
+    expect(state.pulled).toBe(0);
     const chunks: Uint8Array[] = [];
-    let reads = 0;
+    // An entry's bytes begin with a chunk holding its local header.
+    let headersRead = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
-      reads++;
+      if (new DataView(value.buffer, value.byteOffset).getUint32(0, true) === 0x04034b50) {
+        headersRead++;
+      }
       for (let turn = 0; turn < 5; turn++) await nextTurn();
-      expect(state.pulled).toBeLessThanOrEqual(reads + 1);
+      expect(state.pulled).toBe(headersRead);
     }
     expect(state.pulled).toBe(many.length);
     expect(Object.keys(unzipSync(Buffer.concat(chunks)))).toHaveLength(many.length);
@@ -323,10 +344,59 @@ describe("zipStream", () => {
     ).rejects.toThrow("the month's sales could not be read");
   });
 
-  it("errors the stream on an entry fflate refuses", async () => {
-    const long = [{ name: `${"a".repeat(70_000)}.json`, content: "{}" }];
-    await expect(readAll(zipStream(counting(long).iterable, AT))).rejects.toThrow(
-      "filename too long",
+  it("errors the stream on an entry fflate refuses, and stops the source", async () => {
+    const long = [{ name: `${"a".repeat(70_000)}.json`, content: "{}" }, entries[0]!];
+    const { state, iterable } = generated(long);
+    await expect(readAll(zipStream(iterable, AT))).rejects.toThrow("filename too long");
+    expect(state.finished).toBe(true);
+    expect(state.pulled).toBe(1);
+  });
+
+  it("errors the stream on an entry with no content, and stops the source", async () => {
+    const empty = [{ name: "a.json" } as Entry, entries[0]!];
+    const { state, iterable } = generated(empty);
+    await expect(readAll(zipStream(iterable, AT))).rejects.toThrow(TypeError);
+    expect(state.finished).toBe(true);
+    expect(state.pulled).toBe(1);
+  });
+
+  it("still errors with the entry's refusal when stopping the source fails too", async () => {
+    const long = { name: `${"a".repeat(70_000)}.json`, content: "{}" };
+    const iterable: AsyncIterable<Entry> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => ({ done: false, value: long }),
+        return: () => {
+          throw new Error("the source could not stop");
+        },
+      }),
+    };
+    await expect(readAll(zipStream(iterable, AT))).rejects.toThrow("filename too long");
+  });
+
+  it("finishes a cancel once the entry being prepared arrives, and stops the source", async () => {
+    let arrive!: () => void;
+    const second = new Promise<void>((resolve) => (arrive = resolve));
+    const { state, iterable } = generated(entries, (index) =>
+      index === 1 ? second : Promise.resolve(),
     );
+    const reader = zipStream(iterable, AT).getReader();
+    // Read the first entry's bytes until a read waits on the second entry.
+    let waiting: Promise<ReadableStreamReadResult<Uint8Array>> | undefined;
+    while (waiting === undefined) {
+      const read = reader.read();
+      const settled = await Promise.race([read.then(() => true), nextTurn().then(() => false)]);
+      if (!settled) waiting = read;
+    }
+    expect(state.pulled).toBe(1);
+    let cancelled = false;
+    const cancel = reader.cancel().then(() => (cancelled = true));
+    for (let turn = 0; turn < 5; turn++) await nextTurn();
+    expect(cancelled).toBe(false);
+    expect(state.finished).toBe(false);
+    arrive();
+    await cancel;
+    expect(state.finished).toBe(true);
+    expect(state.pulled).toBe(2);
+    await expect(waiting).resolves.toEqual({ done: true, value: undefined });
   });
 });
