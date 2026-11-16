@@ -91,7 +91,6 @@ export function createLinuxDevices(
   // Counted rather than timed, so a forget made after a backward step still follows every listing
   // started before it.
   let forgets = 0;
-  // A repeating scan failure is logged once; a successful Bluetooth scan forgets it.
   let lastScanFailure: string | undefined;
 
   const record = (next: BluetoothAvailability): void => {
