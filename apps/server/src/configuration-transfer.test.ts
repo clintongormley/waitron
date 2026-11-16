@@ -7086,7 +7086,10 @@ describe("a deleted printer in a configuration transfer", () => {
           ring,
           encodeConfigurationBundle(forged, "a strong passphrase"),
           "a strong passphrase",
-          async (decoded) => validateConfigurationBundle(decoded, ALL_MODULES, versions),
+          async (decoded) => {
+            validateConfigurationBundle(decoded, ALL_MODULES, versions);
+            return ALL_MODULES;
+          },
         ),
       ).rejects.toMatchObject(refusal);
       expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([

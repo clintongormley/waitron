@@ -26,25 +26,38 @@ const preview: ConfigurationPreview = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
-  counts: { products: 4, persons: 3 },
-  reconnect: ["printers"],
+  modules: ["core", "identity"],
+  reconnectModules: ["core"],
 };
+const terms = (el: SetupConfigurationPreviewScreen, selector: string) =>
+  [...el.shadowRoot!.querySelectorAll(selector)].map((node) => node.textContent);
+const reconnectLine = (el: SetupConfigurationPreviewScreen) =>
+  el.shadowRoot!.querySelector("[data-test=reconnect]")?.textContent?.trim();
 
 describe("SetupConfigurationPreviewScreen", () => {
-  it("shows copied counts, reconnect work and what is not copied", async () => {
+  it("shows what each part copies in operator words, what to reconnect and what is not copied", async () => {
     const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
       "setup-configuration-preview-screen",
       { preview },
     );
     expect(el.shadowRoot!.textContent).toContain("Prepared SL");
-    expect([...el.shadowRoot!.querySelectorAll("dt")].map((node) => node.textContent)).toContain(
-      "products",
-    );
-    expect([...el.shadowRoot!.querySelectorAll("dd")].map((node) => node.textContent)).toContain(
-      "4",
-    );
-    expect(el.shadowRoot!.textContent).toContain("printers");
+    expect(terms(el, "li")).toEqual([
+      "Menus, products, courses, prep stations, floor plans, printers, device profiles and appearance",
+      "Users, access roles and staff roles",
+    ]);
+    expect(reconnectLine(el)).toBe("Printers");
+    expect(el.shadowRoot!.textContent).not.toMatch(/\bcore\b|identity|persons|print_agents/);
     expect(el.shadowRoot!.textContent).toContain("Sales and fiscal records are not copied.");
+  });
+
+  it("shows a part this page has no words for by the name the server sent", async () => {
+    const unknown = ["newer-part", "__proto__", "constructor", "toString"];
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview: { ...preview, modules: unknown, reconnectModules: unknown } },
+    );
+    expect(terms(el, "li")).toEqual(unknown);
+    expect(reconnectLine(el)).toBe("newer-part, __proto__, constructor, toString");
   });
 
   it("offers the export's own taxpayer by legal name and tax ID, beside a new one", async () => {
@@ -117,16 +130,16 @@ describe("SetupConfigurationPreviewScreen", () => {
     );
     expect(el.shadowRoot!.textContent).toBe(expected);
     expect(el.shadowRoot!.textContent).toContain("Prepared SL (B12345678)");
-    expect(el.shadowRoot!.textContent).toContain("printers");
+    expect(reconnectLine(el)).toBe("Printers");
     expect(el.shadowRoot!.textContent).not.toContain("null");
   });
 
   it("says so when no hardware needs reconnecting", async () => {
     const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
       "setup-configuration-preview-screen",
-      { preview: { ...preview, reconnect: [] } },
+      { preview: { ...preview, reconnectModules: [] } },
     );
-    expect(el.shadowRoot!.textContent).toContain("No hardware reconnection is listed.");
+    expect(reconnectLine(el)).toBe("No hardware reconnection is listed.");
   });
 
   it("steps back to the live source choice", async () => {
@@ -146,11 +159,11 @@ describe("SetupConfigurationPreviewScreen", () => {
 describe("SetupConfigurationPreviewScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 
-  it("describes the copy in Spanish and leaves the server's names as they came", async () => {
+  it("describes the copy in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
       "setup-configuration-preview-screen",
-      { preview: { ...preview, reconnect: [] } },
+      { preview: { ...preview, reconnectModules: [] } },
     );
     expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe("Revisar la configuración");
     expect(el.shadowRoot!.textContent).toContain("No hay ningún hardware que reconectar.");
@@ -160,9 +173,19 @@ describe("SetupConfigurationPreviewScreen in Spanish", () => {
     expect(
       el.shadowRoot!.querySelector("wt-choice-row[data-test=new-tax-id]")?.getAttribute("heading"),
     ).toBe("NIF nuevo");
-    expect([...el.shadowRoot!.querySelectorAll("dt")].map((node) => node.textContent)).toContain(
-      "products",
+    expect(terms(el, "li")).toEqual([
+      "Cartas, productos, cursos, estaciones de preparación, planos de sala, impresoras, perfiles de dispositivo y apariencia",
+      "Usuarios, roles de acceso y roles de personal",
+    ]);
+  });
+
+  it("names what to reconnect in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview },
     );
+    expect(reconnectLine(el)).toBe("Impresoras");
   });
 
   it("switches language live", async () => {

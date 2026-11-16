@@ -249,8 +249,8 @@ type PreviewNullableVenueField = (typeof PREVIEW_NULLABLE_VENUE_FIELDS)[number];
 export interface ConfigurationPreview {
   venue: Omit<VenueDraft, "admin" | PreviewNullableVenueField> &
     Record<PreviewNullableVenueField, string | null>;
-  counts: Record<string, number>;
-  reconnect: string[];
+  modules: string[];
+  reconnectModules: string[];
 }
 
 export type FiscalReadinessResult =

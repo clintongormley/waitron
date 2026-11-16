@@ -462,10 +462,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   option is a product call, not a wording one.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
-- **The configuration preview names what it will copy by database table** — left open by C42
-  (#837). Give them operator words, grouped, or keep the table names.
-  [Detail](backlog/setup.md#the-configuration-preview-names-what-it-will-copy-by-database-table)
-
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
 - **Starter courses for Italy.** When its country pack is built, add the four courses and settle

@@ -111,6 +111,7 @@ describe("required languages before configuration replacement", () => {
     const valid = bundleFor("ES", "Barcelona", ["en", "ca", "es"]);
     const validate = async (bundle: typeof valid) => {
       validateConfigurationBundle(bundle, [menu], bundle.modules);
+      return [menu];
     };
     const artifact = encodeConfigurationBundle(valid, passphrase);
     await stageConfigurationImport(root, ring, artifact, passphrase, validate);

@@ -68,6 +68,7 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
       stageConfiguration: (bytes, passphrase) =>
         stageConfigurationImport(stateDir, ring, bytes, passphrase, async (candidate) => {
           validateConfigurationBundle(candidate, ALL_MODULES, versions);
+          return ALL_MODULES;
         }),
     },
     () => {},

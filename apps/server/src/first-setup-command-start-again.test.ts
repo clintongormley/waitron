@@ -461,7 +461,7 @@ async function filesBeforeActivation(stateDir: string) {
     ring,
     encodeConfigurationBundle(bundle, passphrase),
     passphrase,
-    async () => {},
+    async () => [],
   );
 }
 

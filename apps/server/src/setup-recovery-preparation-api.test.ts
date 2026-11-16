@@ -469,7 +469,7 @@ it("refuses an upload before the setup queue while configuration staging is busy
   });
   const stageConfiguration = vi.fn(async () => {
     await waiting;
-    return { venue: {} as never, counts: {}, reconnect: [] };
+    return { venue: {} as never, modules: [], reconnectModules: [] };
   });
   const { app } = fixture({ stageConfiguration, stageRecovery: async () => ({ stagedId }) });
   const first = app.request("/setup-api/configuration", {
