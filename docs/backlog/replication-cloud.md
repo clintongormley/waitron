@@ -501,13 +501,6 @@ If it does fill, M2 fails to activate after the old box has given up filing, wit
 file's owner clearing it. The cure is a format change: stop repeating the earlier entries, or lift
 the cap. The owner sees this in Slice 5's PR.
 
-## A waiting spare still retries an invalid source copy
-
-A rejected copy is fetched again with a delay capped at sixty seconds. A check on the old box before
-it stops selling could avoid a handover waiting on a dangling row; that check is not built.
-The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
-is available when the copy keeps failing its checks.
-
 ## A1185: a venue not yet connected sees no prices
 
 The Cloud services screen shows the plan
@@ -575,12 +568,10 @@ Slice 3.
 
 ## Bundle: The spare's wait loop: back-off, reasons, stop signals
 
-3 entries, size M.
+2 entries, size M.
 
 - **A chart post's yes/no answer cannot distinguish a refusal from an already-held chart.**
   The route's answer needs a ruling. Left open by A1018 Slice 5 (Ruling R53).
-- **A waiting spare still retries an invalid source copy.** Source-side preflight remains open.
-  [Detail](replication-cloud.md#a-waiting-spare-still-retries-an-invalid-source-copy)
 - **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
   after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
   the start refuses `handover.accepted_copy_missing`. The real placement case “cannot identify an

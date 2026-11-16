@@ -1649,6 +1649,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The spare has a missing or different encryption key needed for this venue. Choose Stop and join the spare again before handing over.",
     es: "Al servidor de reserva le falta una clave de cifrado necesaria para este local o tiene una distinta. Elige Parar y vuelve a unirlo al local antes de traspasarlo.",
   },
+  "handover.source_check_failed": {
+    en: "The venue data did not pass the handover check. This box keeps selling. Choose Stop and follow the handover guide before trying again.",
+    es: "Los datos del local no han superado la comprobación del traspaso. Este servidor sigue vendiendo. Elige Parar y sigue la guía de traspaso antes de volver a intentarlo.",
+  },
   "handover.settings_unreadable": {
     en: "This box could not read the settings needed for handover. Choose Stop, restart this box and check its start page before trying again.",
     es: "Este servidor no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",

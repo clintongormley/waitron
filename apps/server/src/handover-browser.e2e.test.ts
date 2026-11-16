@@ -2,7 +2,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createServer as createHttpsServer } from "node:https";
 import { sql } from "drizzle-orm";
 import { generateSync } from "otplib";
@@ -336,6 +336,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
       {
         ...mainDeps,
         stateDir: dirs.mainState,
+        venueDir: dirname(mainBox.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file),
         migrationsRoot: null,
         advertisedOrigin: sourceUrl,
         venueCanPromote: true,
