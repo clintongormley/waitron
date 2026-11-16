@@ -4,12 +4,12 @@ Measure the question in `docs/backlog.md` A1544 and A1531's [aim 2](../specs/202
 
 ## Build one real history
 
-Use the owned host `root@2.29.240.15`, reserving `/srv/waitron-bench/a1544-j-20261116-<unique>` and unique transient systemd units. Driver-supplied facts report no surviving dataset, native Node 26.13.0 with SQLite 3.54.0/STAT4=0, and no Docker. Recheck these; compare native runtime output with one check of the exact `node:26-slim` image/digest on a Docker-equipped machine before claiming equivalence. Record HEAD, lockfile, runtime and filesystem. Install frozen dependencies in an exclusive remote clone pinned to `30c1c1c56498d3adeb7c8065cc6f03eb63dfdfb4`; verify its clean tree.
+Use the owned host `root@2.29.240.15`, reserving `/srv/waitron-bench/a1544-j-20261116-<unique>` and unique transient systemd units. Driver-supplied facts report no surviving dataset, native Node 26.13.0 with SQLite 3.54.0/STAT4=0, and no Docker. The driver then checked locally cached `node:26-slim` digest `e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc`: Node 26.13.1, SQLite 3.54.1, STAT4=0, so that cache differs from the host. Before building, pin the box-base image and verify its runtime. If needed, use the matching official Linux x64 Node release in the owned run folder, checking its published checksum and actual SQLite/STAT4; never replace the host Node. A mismatch blocks timing. Record HEAD, lockfile, runtime and filesystem. Install frozen dependencies in an exclusive remote clone pinned to `30c1c1c56498d3adeb7c8065cc6f03eb63dfdfb4`; verify its clean tree.
 
 Reuse `apps/server/scripts/bench/{cli,build-year,bench-venue,profile,runtime}.ts` unchanged. Build 540 days, 250 bills/day, seed 1 through real routes. Do not pad files, fabricate `volume.json`, gather planner statistics or change caches. With `SRC` the clone and `RUN` the reserved folder:
 
 ```sh
-NODE=/usr/local/bin/node
+NODE=/absolute/path/to/the/verified/node
 B=("$NODE" "$SRC/apps/server/node_modules/tsx/dist/cli.mjs" "$SRC/apps/server/scripts/bench/cli.ts")
 "${B[@]}" build --out "$RUN/history" --days 540 --bills-per-day 250 --seed 1
 ```
