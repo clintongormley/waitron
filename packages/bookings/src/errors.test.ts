@@ -1,5 +1,3 @@
-// These cases fail under `tsc --noEmit`, not at runtime: `AppError` does no runtime validation of
-// the code, so only errors.ts's `declare module` augmentation (the import below) makes them typecheck.
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./errors.js";

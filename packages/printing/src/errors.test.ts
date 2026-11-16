@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./index.js";
 
-// The construction typechecks ONLY because errors.ts's `declare module "@waitron/shared"`
-// augmentation is loaded — index.js imports it.
 describe("the printer / agent error codes carry their declared params", () => {
   it("constructs printer.not_found with the printer id", () => {
     const error = new AppError("printer.not_found", { id: "prn_123" });

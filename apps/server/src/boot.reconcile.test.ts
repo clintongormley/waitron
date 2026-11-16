@@ -485,7 +485,7 @@ describe("returned-box membership reconciliation at boot", () => {
     }
   }, 60_000);
 
-  it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
+  it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales", async () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
     await writeMirrorLink(proceedsNode, TILL_ENV.WAITRON_NODE_ID, {

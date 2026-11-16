@@ -285,8 +285,8 @@ jobs:
             # it leaves the FIRST one: `$PACKAGES` is unquoted here on purpose (the classifier
             # separates names with a single space), and an unquoted expansion undergoes PATHNAME
             # EXPANSION as well as field splitting. `set -f` turns that off for the loop and
-            # `set +f` turns it back on; the receipt, run in three shells including bash 5.3.15, is
-            # in .husky/pre-push beside the same loop.
+            # `set +f` turns it back on. Receipt: docs/developers/ci-and-gates.md, "`pnpm --filter ""`
+            # is a hard error".
             #
             # It matters more here than in the hook, because here NOTHING catches it. Measured end
             # to end on 2026-08-01 in a throwaway pnpm workspace holding a member named `pack*`

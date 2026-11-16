@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import type { StreamStatus, StreamView } from "@waitron/stream";
+import type { DrainResult } from "@waitron/fiscal";
+import type { TickResult } from "@waitron/payments";
 import { DEFAULT_DUTY_TIMINGS, DEFAULT_MAX_TICK_MS } from "./config.js";
-import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
+import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
 import {
   createHealthState,
@@ -49,6 +51,49 @@ function report(drainOkOrEntries: boolean | DutyReport[], reconcileOk = true): P
     ],
     nextDueAt: null,
   };
+}
+
+/** A real pass whose reconcile ran one run that ended `failed` and none `parked`. */
+async function failedOnlyReconcilePass(at: Date): Promise<PassReport> {
+  const drain: DrainResult = {
+    nextDueAt: null,
+    tenantsWithWork: 0,
+    batchesSent: 0,
+    recordsSubmitted: 0,
+    recordsAccepted: 0,
+    recordsHalted: 0,
+    incidentsRaised: 0,
+    skipped: [],
+  };
+  const reconcile: TickResult = {
+    ran: [
+      {
+        duty: RECONCILE_DUTY,
+        period: { from: new Date("2026-07-25T00:00:00Z"), to: new Date("2026-07-26T00:00:00Z") },
+        generation: 1,
+        outcome: "failed",
+        errorCode: "server.unavailable",
+      },
+    ],
+    deferred: 0,
+    beyondHorizon: 0,
+    skipped: [],
+    nextDueAt: null,
+  };
+  const lines: string[] = [];
+  let ticks = 0;
+  const pass = await runPass(
+    {
+      drain: () => Promise.resolve(drain),
+      reconcile: () => Promise.resolve(reconcile),
+      awaitingCert: { current: false },
+      monotonicMs: () => (ticks += 10),
+      log: collect(lines),
+    },
+    at,
+  );
+  expect(lines.filter((line) => line.startsWith("warn reconcile.run_failed"))).toHaveLength(1);
+  return pass;
 }
 
 function collect(lines: string[]): Logger {
@@ -106,7 +151,7 @@ describe("health state", () => {
     expect(healthSnapshot(state, new Date(AT.getTime() + budget + 60_000)).ok).toBe(false);
   });
 
-  it("gives drain a budget with slack over the default max tick (I1)", () => {
+  it("gives drain a budget with slack over the default max tick", () => {
     // An idle host sleeps exactly maxTickMs, so a budget at or below it flips 503 once per cycle.
     expect(DUTY_BUDGET_MS[DRAIN_DUTY]).toBeGreaterThan(DEFAULT_MAX_TICK_MS);
   });
@@ -173,7 +218,7 @@ describe("health state", () => {
   });
 
   // `ok` is false only on a throw, so a duty that skipped work still reports `ok: true`.
-  describe("a duty that reports ok:true with a non-empty skipped count (C2)", () => {
+  describe("a duty that reports ok:true with a non-empty skipped count", () => {
     it("does not refresh lastOkAt and increments consecutiveFailures for drain", () => {
       const state = createHealthState(BOOT);
       const withSkip: PassReport = {
@@ -236,7 +281,7 @@ describe("health state", () => {
 
   // A parked run is never claimed again, yet `runDue` returns normally, so the duty reports
   // `ok: true`.
-  describe("a duty that reports ok:true with a non-empty parked count (pre-merge review)", () => {
+  describe("a duty that reports ok:true with a non-empty parked count", () => {
     it("does not refresh lastOkAt and increments consecutiveFailures for reconcile", () => {
       const state = createHealthState(BOOT);
       const withParked: PassReport = {
@@ -287,21 +332,13 @@ describe("health state", () => {
       expect(healthSnapshot(state, later).ok).toBe(true);
     });
 
-    // A still-retrying `failed` run must not look like a park; `pass.ts` keeps it out of `parked`
-    // (pinned in pass.test.ts), so it arrives here as `parked: 0`.
-    it("does not flip health for a failed-only run (parked stays 0)", () => {
+    it("does not flip health for a failed-only run (parked stays 0)", async () => {
       const state = createHealthState(BOOT);
-      const failedOnly: PassReport = {
-        duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
-        ],
-        nextDueAt: null,
-      };
-      recordPass(state, failedOnly, AT);
-      recordPass(state, failedOnly, new Date(AT.getTime() + 60_000));
-      expect(state.duties[RECONCILE_DUTY]?.consecutiveFailures).toBe(0);
-      expect(healthSnapshot(state, AT).ok).toBe(true);
+      const later = new Date(AT.getTime() + 60_000);
+      recordPass(state, await failedOnlyReconcilePass(AT), AT);
+      recordPass(state, await failedOnlyReconcilePass(later), later);
+      expect(state.duties[RECONCILE_DUTY]).toMatchObject({ consecutiveFailures: 0, parked: 0 });
+      expect(healthSnapshot(state, later).ok).toBe(true);
     });
   });
 });
@@ -405,11 +442,10 @@ describe("healthApp", () => {
     expect(body.duties[RECONCILE_DUTY]?.parked).toBe(1);
   });
 
-  // A failed-only reconcile arrives as `parked: 0` (pinned in pass.test.ts).
   it("stays 200 when reconcile has failed runs but nothing parked", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
-    recordPass(state, report(true), AT);
+    recordPass(state, await failedOnlyReconcilePass(AT), AT);
     const res = await app.request("/health");
     expect(res.status).toBe(200);
   });
