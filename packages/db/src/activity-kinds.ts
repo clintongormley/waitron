@@ -14,7 +14,7 @@ export interface ActivityKindData {
   readonly "dashboard.signed_in": {
     readonly method: "password" | "passkey" | "google" | "invitation" | "setup";
   };
-  /** person_id is the person signing out, the access-removing administrator, or null for break-glass. */
+  /** person_id identifies the person whose request ended the sign-in, or null for a terminal break-glass reset. */
   readonly "dashboard.signed_out": {
     readonly reason:
       | "signed_out"

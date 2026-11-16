@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   readActivityForPerson,
+  withTransaction,
   nowIso,
   openVenueDatabase,
   signInChallenges,
@@ -17,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { verifyPassword, webauthnCredentials } from "@waitron/identity";
+import { verifyPassword, webauthnCredentials, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
@@ -125,6 +126,9 @@ function baseEnv(password: string | null = NEW_PASSWORD) {
 describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("resets the admin's password: the new one verifies, the old one fails (login restored)", async () => {
     const { adminId } = await setupVenue();
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: adminId, method: "password" }),
+    );
 
     const { code, out, closes } = await run(baseEnv());
 
@@ -140,7 +144,9 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
       [],
     );
     expect(
-      await readActivityForPerson(suite.db, adminId, { kinds: ["dashboard.signed_out"] }),
+      (await readActivityForPerson(suite.db, adminId, { kinds: ["dashboard.signed_out"] })).filter(
+        (entry) => entry.data.reason === "break_glass",
+      ),
     ).toEqual([
       expect.objectContaining({
         personId: null,

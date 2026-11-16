@@ -33,6 +33,7 @@ import {
   listAdminHolders,
   persons,
   startManagementSession,
+  endManagementSession,
 } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
@@ -572,4 +573,5 @@ async function seedDeviceProfiles(
       inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds,
     });
   }
+  await endManagementSession(tx, session.token, "operation_finished");
 }

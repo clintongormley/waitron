@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { openFreshManagementSession, refusalOf } from "../test/fixtures.js";
 import { seedPersons } from "../test/person-rows.js";
@@ -63,7 +63,10 @@ it("adds an allowed role despite the target's stronger role, logging and queuing
   expect((await identity.readPersonAuthority(suite.db, target.id)).roleIds).toEqual(
     expect.arrayContaining(input.roleIds),
   );
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({
     kind: "access_role.member_added",
@@ -182,7 +185,12 @@ it.each([
       withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input)),
     ),
   ).toMatchObject({ code, params });
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 
@@ -194,7 +202,12 @@ it("reordered sets leave memberships, history and queue unchanged", async () => 
   );
   expect(new Set(result.roleIds)).toEqual(new Set(input.expectedRoleIds));
   expect(await suite.db.select().from(personRoles)).toEqual(before);
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 
@@ -206,7 +219,10 @@ it("allows no roles and records each removal", async () => {
     ),
   ).toEqual({ roleIds: [] });
   expect((await identity.readPersonAuthority(suite.db, input.personId)).roleIds).toEqual([]);
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries).toHaveLength(2);
   expect(
     entries.map((row) => ({
@@ -249,7 +265,12 @@ it("backs out memberships, log and mail when removing the last usable Admin", as
     ),
   ).toMatchObject({ code: "person.last_admin", params: {} });
   expect((await identity.readPersonAuthority(suite.db, actor.personId)).admin).toBe(true);
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 
@@ -276,7 +297,12 @@ it("still records a membership when the recipient has no email", async () => {
   const { target, input } = await fixture();
   await suite.db.update(persons).set({ email: null }).where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input));
-  expect(await suite.db.select().from(activityLog)).toHaveLength(1);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toHaveLength(1);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 
@@ -284,7 +310,12 @@ it("records a pending person's role change without emailing them", async () => {
   const { target, input } = await fixture();
   await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input));
-  expect(await suite.db.select().from(activityLog)).toHaveLength(1);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toHaveLength(1);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, readActivityForPerson, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
@@ -87,6 +87,12 @@ describe("Google OpenID Connect state", () => {
     ).toBe("google.already_linked");
     const session = await run((tx) => loginWithGoogle(tx, { subject: "google-123" }));
     expect(session.personId).toBe(first);
+    expect(
+      await readActivityForPerson(suite.db, first, { kinds: ["dashboard.signed_in"] }),
+    ).toEqual([
+      expect.objectContaining({ subjectId: first, personId: first, data: { method: "google" } }),
+    ]);
+
     await run((tx) => completeGoogleLink(tx, { personId: first, subject: "google-123" }));
     expect(
       suite.db.all(

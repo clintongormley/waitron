@@ -1,6 +1,7 @@
 import {
   captureError,
   CORE_MIGRATIONS,
+  readActivityForPerson,
   NOT_NULL_VIOLATION,
   refusalOn,
   withTransaction,
@@ -561,6 +562,16 @@ describe("passkey authentication", () => {
 
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     expect(session.personId).toBe(personId);
+    expect(
+      await readActivityForPerson(suite.db, personId, { kinds: ["dashboard.signed_in"] }),
+    ).toEqual([
+      expect.objectContaining({
+        subjectId: personId,
+        personId,
+        data: { method: "passkey" },
+      }),
+    ]);
+
     expect(session.token).toBeTruthy();
 
     const [cred] = await run((tx) =>

@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, activityLog, roles, withTransaction } from "@waitron/d
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ensureBuiltInRoles } from "@waitron/identity";
 import { openFreshManagementSession } from "@waitron/identity/test/fixtures.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { mountManagementApi } from "./management-api.js";
@@ -112,7 +112,12 @@ it.each(operations)("%s refuses an actor without person.admin", async (operation
   expect(await response.json()).toMatchObject({
     error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
   });
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
 });
 
 it.each(operations)("%s requires a session and fresh proof", async (operation) => {
@@ -169,5 +174,10 @@ it.each([
   const response = await send(method, method === "POST" ? "" : `/${role.id}${suffix}`, body);
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
 });

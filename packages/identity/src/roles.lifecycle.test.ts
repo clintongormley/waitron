@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import * as identity from "./index.js";
 import { declaredPermissions, registerModulePermissions } from "./permissions.js";
@@ -49,7 +49,10 @@ it("creates a trimmed custom role with only its declared grants and one activity
     builtInKey: null,
     permissions: ["report.view", "report.export", "fiscal.view"],
   });
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({
     kind: "access_role.created",
@@ -74,7 +77,12 @@ it.each([
     params: permission === "node.manage" ? {} : { permission },
     reason: undefined,
   });
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
 });
 
 it("accepts a custom role holding only invoice.inspect", async () => {
@@ -103,7 +111,10 @@ it("copies the current source grants without its holders and refuses a Manager c
   expect(row!.builtInKey).toBeNull();
   expect(row!.permissions).toEqual(declaredPermissions());
   expect(await suite.db.select().from(personRoles).where(eq(personRoles.roleId, id))).toEqual([]);
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries[0]!.data).toMatchObject({ copiedFromRoleId: builtIns.admin });
   await suite.db
     .update(roles)
@@ -158,7 +169,10 @@ it("renames with an expected-name comparison, logging only a real change", async
     params: {},
   });
   expect((await suite.db.select().from(roles).where(eq(roles.id, id)))[0]!.name).toBe("Bookkeeper");
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries.map((e) => e.kind)).toEqual(["access_role.created", "access_role.renamed"]);
   expect(entries[1]!.data).toEqual({ from: "Accountant", to: "Bookkeeper" });
 });
@@ -186,9 +200,14 @@ it.each(["rename", "permissions", "delete"])(
       code: "role.not_permitted",
       params: { roleId: id },
     });
-    expect((await suite.db.select().from(activityLog)).map((e) => e.kind)).toEqual([
-      "access_role.created",
-    ]);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(activityLog)
+          .where(sql`${activityLog.kind} like 'access_role.%'`)
+      ).map((e) => e.kind),
+    ).toEqual(["access_role.created"]);
   },
 );
 
@@ -248,7 +267,10 @@ it("edits built-in grants by set value, logs each difference and changes live au
     identity.holds(await identity.readPersonAuthority(suite.db, target), "report.export"),
   ).toBe(true);
   expect(await refusalOf(() => edit([], ["payment.take"]))).toMatchObject({ code: "role.changed" });
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries.map((e) => [e.kind, e.data])).toEqual([
     ["access_role.permission_removed", { permission: "payment.take" }],
     ["access_role.permission_added", { permission: "report.export" }],
@@ -282,7 +304,12 @@ it("refuses adding an unheld or undeclared permission while allowing retired sto
   await edit([], ["report.view"]);
   expect((await suite.db.select().from(roles).where(eq(roles.id, id)))[0]!.permissions).toEqual([]);
   expect(
-    (await suite.db.select().from(activityLog)).map((entry) => [entry.kind, entry.data]),
+    (
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(sql`${activityLog.kind} like 'access_role.%'`)
+    ).map((entry) => [entry.kind, entry.data]),
   ).toEqual([
     [
       "access_role.created",
@@ -309,7 +336,10 @@ it("deletes the custom role and every membership, logs each removal and queues o
   ).toEqual({ removedFrom: 3 });
   expect(await suite.db.select().from(roles).where(eq(roles.id, id))).toEqual([]);
   expect(await suite.db.select().from(personRoles).where(eq(personRoles.roleId, id))).toEqual([]);
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} like 'access_role.%'`);
   expect(entries.map((e) => e.kind)).toEqual([
     "access_role.created",
     "access_role.member_removed",
@@ -385,7 +415,12 @@ it("requires fresh proof for lifecycle changes", async () => {
   expect(await refusalOf(() => create(token))).toMatchObject({
     code: "management_session.proof_required",
   });
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} like 'access_role.%'`),
+  ).toEqual([]);
   expect(await suite.db.select().from(dashboardSessions)).toHaveLength(1);
 });
 

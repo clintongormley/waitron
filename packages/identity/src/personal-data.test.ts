@@ -427,7 +427,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       accountEmails: [
         {
           purpose: "invitation",
-
           createdAt: t(20),
           expiresAt: t(21),
           usedAt: t(23),
@@ -436,7 +435,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         },
         {
           purpose: "password_reset",
-
           createdAt: t(24),
           expiresAt: t(29),
           usedAt: null,
@@ -445,7 +443,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         },
         {
           purpose: "email_change",
-
           createdAt: t(26),
           expiresAt: t(27),
           usedAt: null,

@@ -327,6 +327,12 @@ describe("management account actions", () => {
     expect(completion.personId).toBe(personId);
     expect(completion.session).not.toBeNull();
     const session = completion.session!;
+    expect(
+      (await readActivityForPerson(suite.db, personId, { kinds: ["dashboard.signed_in"] })).map(
+        (entry) => entry.data,
+      ),
+    ).toEqual([{ method: "password" }, { method: "invitation" }]);
+
     await expect(
       run((tx) =>
         loginManager(tx, {

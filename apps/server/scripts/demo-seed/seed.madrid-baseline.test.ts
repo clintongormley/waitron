@@ -889,7 +889,21 @@ for (const locale of ["en", "es"] as const) {
           device_id: null,
           data,
         };
-        phases[phase]!.activity_log! += 1;
+        const endData = { reason: "operation_finished" };
+        const endId = `@activity_log:${stable(["dashboard.signed_out", subject, at, JSON.stringify(endData)])}`;
+        expected[phase].tables.activity_log!.rows[endId] = {
+          id: endId,
+          at,
+          kind: "dashboard.signed_out",
+          subject_kind: "person",
+          subject_id: subject,
+          person_id: subject,
+          device_id: null,
+          data: endData,
+        };
+        expected[phase].tables.dashboard_sessions!.rows = {};
+        phases[phase]!.dashboard_sessions = 0;
+        phases[phase]!.activity_log! += 2;
       }
 
       for (const name of ADDED_TABLES) {
