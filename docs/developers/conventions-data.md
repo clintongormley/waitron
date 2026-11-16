@@ -799,7 +799,7 @@ A different authored or demo schedule is not described as that first weekday sch
 
 **2026-11-16, A1308 vb7:** zone paint uses `opening_hours`; the earlier season and special-day
 storage accounts below name the retired `zone_days` and `zone_day_ranges` tables.
-Configuration format 43 carries the new table and refuses format 42 as outdated.
+Configuration format 44 carries the new table and refuses format 43 as outdated.
 
 You subtract a zone's closed times from its department's service day, rather than writing another
 opening schedule. A zone's week of closed times is in the season tables (see "Seasons and season
