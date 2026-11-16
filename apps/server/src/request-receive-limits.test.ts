@@ -1,4 +1,5 @@
 import { createServer, request as httpsRequest, Agent } from "node:https";
+import type { RequestListener } from "node:http";
 import { connect, type TLSSocket } from "node:tls";
 import { once } from "node:events";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
@@ -29,18 +30,20 @@ async function fixture(
   handle: (request: Request, dir: string) => Promise<Response> = async (request) =>
     new Response(await request.arrayBuffer()),
   limits: Partial<typeof SHORT> = {},
+  native?: RequestListener,
 ) {
   const dir = await mkdtemp(join(tmpdir(), "receive-limits-"));
   closes.push(() => rm(dir, { recursive: true, force: true }));
   const server = createServer(
     { key: material.serverKeyPem, cert: material.serverCertPem, connectionsCheckingInterval: 5 },
-    getRequestListener(async (request) => {
-      try {
-        return await handle(request, dir);
-      } catch {
-        return new Response(null, { status: 400 });
-      }
-    }),
+    native ??
+      getRequestListener(async (request) => {
+        try {
+          return await handle(request, dir);
+        } catch {
+          return new Response(null, { status: 400 });
+        }
+      }),
   );
   attachRequestReceiveLimits(server, { ...SHORT, ...limits });
   const bound = await retainHttpListener("127.0.0.1", server);
@@ -101,9 +104,10 @@ async function paced(
   path: string,
   method = "POST",
   width = 2048,
+  count = 20,
 ) {
-  const { client, answer } = f.start(path, method, 20 * width);
-  const chunks = Array.from({ length: 20 }, (_, index) => Buffer.alloc(width, index));
+  const { client, answer } = f.start(path, method, count * width);
+  const chunks = Array.from({ length: count }, (_, index) => Buffer.alloc(width, index));
   for (const chunk of chunks) {
     if (client.destroyed) break;
     client.write(chunk);
@@ -153,13 +157,19 @@ it("stalled uploads abort the receiver and remove partial staging", async () => 
   });
   const { client, answer } = f.start("/setup-api/restore");
   client.write(Buffer.alloc(64));
-  expect((await answer).status).toBe(408);
+  const interrupted = await Promise.race([
+    answer,
+    delay(400).then(() => {
+      throw new Error("stalled upload reached the outer ceiling instead");
+    }),
+  ]);
+  expect(interrupted.status).toBe(408);
   await received;
   expect(await readdir(f.dir)).toEqual([]);
 });
 
 it("a trickle below the progress floor still times out", async () => {
-  const result = await paced(await fixture(), "/setup-api/restore", "POST", 1);
+  const result = await paced(await fixture(), "/setup-api/restore", "POST", 1, 40);
   expect(result.status).toBe(408);
 });
 
@@ -169,13 +179,16 @@ it("continued progress cannot evade the native upload ceiling", async () => {
 });
 
 it("an early response does not remove protection from its incomplete body", async () => {
-  const f = await fixture(async () => new Response(null, { status: 409 }));
+  const f = await fixture(undefined, { uploadMs: 60_000 }, (_request, response) => {
+    response.writeHead(409);
+    response.end();
+  });
   const { client, answer } = f.start("/ordinary");
   client.write("partial");
   expect((await answer).status).toBe(409);
   await Promise.race([
     once(client.socket!, "close"),
-    delay(1000).then(() => {
+    delay(400).then(() => {
       throw new Error("early response removed receive protection");
     }),
   ]);
@@ -218,12 +231,37 @@ it("incomplete headers retain their native deadline", async () => {
 
 it("completed bodies permit delayed responses and keepalive gets fresh ordinary limits", async () => {
   const f = await fixture(async (request) => {
-    const bytes = await request.arrayBuffer();
     await delay(200);
-    return new Response(bytes);
+    return new Response(await request.arrayBuffer());
   });
   const first = f.start("/setup-api/restore", "POST", 1);
   first.client.end("a");
   expect((await first.answer).bytes.toString()).toBe("a");
+  const quick = f.start("/ordinary", "POST", 20);
+  quick.client.write("a".repeat(10));
+  await delay(30);
+  quick.client.end("b".repeat(10));
+  const answered = await quick.answer;
+  expect(quick.client.socket).toBe(first.client.socket);
+  expect(answered.status).toBe(200);
+  expect(answered.bytes.toString()).toBe("a".repeat(10) + "b".repeat(10));
   expect((await paced(f, "/ordinary")).status).toBe(408);
+});
+
+it("quick completed requests do not accumulate connection-close listeners", async () => {
+  const f = await fixture();
+  const sockets = new Set();
+  const counts: number[] = [];
+  f.server.on("request", (request) => {
+    sockets.add(request.socket);
+    counts.push(request.socket.listenerCount("close"));
+  });
+  for (let index = 0; index < 15; index++) {
+    const { client, answer } = f.start("/ordinary", "GET", 0);
+    client.end();
+    expect((await answer).status).toBe(200);
+  }
+  expect(sockets.size).toBe(1);
+  expect(counts).toHaveLength(15);
+  expect(counts.at(-1)).toBeLessThanOrEqual(counts[0]!);
 });

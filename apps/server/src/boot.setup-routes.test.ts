@@ -103,6 +103,28 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
+const receiveTiming = vi.hoisted(() => ({ scaleOrdinary: 1 }));
+vi.mock("./request-receive-limits.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./request-receive-limits.js")>();
+  return {
+    ...actual,
+    attachRequestReceiveLimits: (
+      server: HttpsServer,
+      overrides?: Partial<typeof actual.SETUP_RECEIVE_LIMITS>,
+    ) => {
+      if (receiveTiming.scaleOrdinary === 1)
+        return actual.attachRequestReceiveLimits(server, overrides);
+      return actual.attachRequestReceiveLimits(server, {
+        ...overrides,
+        ordinaryMs:
+          (overrides?.ordinaryMs ?? actual.SETUP_RECEIVE_LIMITS.ordinaryMs) *
+          receiveTiming.scaleOrdinary,
+        checkMs: 5,
+      });
+    },
+  };
+});
+
 const MAIN_NODE_ID = "44444444-4444-4444-8444-444444444444";
 
 /** A main box's answer to an adopt, with the parts a test varies given. */
@@ -1183,9 +1205,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   it("the setup HTTPS listener gives backup uploads a bounded longer receive window", async () => {
     beforeServerStarts();
+    receiveTiming.scaleOrdinary = 1 / 1000;
     const venue = await freshVenue();
     try {
-      await withSetupBoot(venue.directory, {}, async ({ get }) => {
+      await withSetupBoot(venue.directory, {}, async ({ get, post }) => {
         const raw = listener.current;
         expect(raw).toBeInstanceOf(HttpsServer);
         expect((raw as import("node:https").Server).requestTimeout).toBe(43_200_000);
@@ -1196,8 +1219,22 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           minProgressBytes: 65_536,
         });
         expect((await get("/setup-api/status")).status).toBe(200);
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{"));
+          },
+        });
+        const response = await post("/setup-api/email-test", {
+          headers: { "Content-Type": "application/json" },
+          body,
+          duplex: "half",
+          signal: AbortSignal.timeout(2000),
+        } as RequestInit);
+        expect(response.status).toBe(408);
+        await response.arrayBuffer();
       });
     } finally {
+      receiveTiming.scaleOrdinary = 1;
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }

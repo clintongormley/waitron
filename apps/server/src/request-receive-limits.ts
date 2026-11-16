@@ -40,7 +40,7 @@ export function attachRequestReceiveLimits(
     });
     const clean = () => {
       clearInterval(timer);
-      socket.off("close", clean);
+      request.off("close", clean);
     };
     const expire = () => {
       clean();
@@ -66,6 +66,6 @@ export function attachRequestReceiveLimits(
       }
     }, limits.checkMs);
     timer.unref();
-    socket.once("close", clean);
+    request.once("close", clean);
   });
 }
