@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../../test/module-settings.js";
+import { sealFixtureArtifact } from "../../test/fixture-salt.js";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +24,6 @@ import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
 import { packArchive } from "../backup-archive.js";
-import { encryptArtifact } from "../artifact-cipher.js";
 import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
@@ -37,6 +37,28 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./hour-test-clock.js";
+
+// Load this fixture before recovery-key consumers so they receive its memoised verifier.
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/identity")>();
+  const answers = new Map<string, Map<string, Promise<boolean>>>();
+  return {
+    ...actual,
+    async verifySecretAsync(secret: string, stored: string): Promise<boolean> {
+      let bySecret = answers.get(stored);
+      if (bySecret === undefined) answers.set(stored, (bySecret = new Map()));
+      const remembered = bySecret.get(secret);
+      if (remembered !== undefined) {
+        await new Promise((resolve) => setImmediate(resolve));
+        return remembered;
+      }
+      const answer = actual.verifySecretAsync(secret, stored);
+      bySecret.set(secret, answer);
+      answer.catch(() => bySecret.delete(secret));
+      return answer;
+    },
+  };
+});
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -175,7 +197,7 @@ export async function stagedHourRestore(
       },
     ];
     await db.archiveTo(databasePath);
-    const artifact = encryptArtifact(
+    const artifact = sealFixtureArtifact(
       packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
       encryptionKey,
     );

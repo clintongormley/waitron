@@ -299,7 +299,14 @@ describe("apps/server's wiring", () => {
     const paths = serverTestFiles();
     expect(paths.length).toBeGreaterThan(0);
     const sorted = [...paths].sort();
-    for (let count = 2; count <= 24; count += 1) {
+    const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+    const job = workflow.split("\n  test-server:\n")[1]?.split(/\n {2}[\w-]+:/)[0];
+    const matrix = job?.match(/^\s+shard: \[([^\]]+)\]/m);
+    expect(matrix).toBeDefined();
+    expect(matrix).not.toBeNull();
+    const maximum = matrix[1].split(",").filter((value) => value.trim() !== "").length;
+    expect(maximum).toBeGreaterThan(0);
+    for (let count = 2; count <= maximum; count += 1) {
       const packed = balancedShards(paths, wired, count).flat();
       expect(new Set(packed).size).toBe(packed.length);
       expect([...packed].sort()).toEqual(sorted);
