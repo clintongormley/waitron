@@ -302,10 +302,7 @@ const lastSeen = async (token: string) =>
   ).rows[0]!.last_seen_at;
 
 describe("a session holding invoice.inspect alone", () => {
-  const refusal = {
-    code: "authorization.not_permitted",
-    params: { permission: "invoice.inspect" },
-  };
+  const refusal = { code: "authorization.inspection_only", params: {} };
 
   it("is refused by an ordinary resolve, without stamping its activity", async () => {
     const { token } = await sessionHolding(["invoice.inspect"]);
@@ -327,7 +324,7 @@ describe("a session holding invoice.inspect alone", () => {
     await expect(run((tx) => resolveManagementSession(tx, token))).rejects.toMatchObject(refusal);
   });
 
-  it("passes authorizeManager for invoice.inspect only, and is refused naming invoice.inspect for any other", async () => {
+  it("passes authorizeManager for invoice.inspect only, and is refused as inspection-only for any other", async () => {
     const { token, personId } = await sessionHolding(["invoice.inspect"]);
     await expect(
       run((tx) =>

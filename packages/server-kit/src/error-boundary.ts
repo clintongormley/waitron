@@ -15,7 +15,7 @@ declare module "hono" {
 
 // A session resolve can throw this on any route, whether or not the route's own map lists it.
 const UNMAPPED_STATUS: Record<string, ContentfulStatusCode> = {
-  "authorization.not_permitted": 403,
+  "authorization.inspection_only": 403,
 };
 
 /**
@@ -23,7 +23,7 @@ const UNMAPPED_STATUS: Record<string, ContentfulStatusCode> = {
  *    params } }` at the status `status` assigns it, or 507, logged at `error`; `params` is the
  *    thrown `AppError("storage.disk_full")`'s own, and `{}` for any other full disk.
  *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
- *    or, when the map omits it, 403 for `authorization.not_permitted` and 400 for the rest, logged
+ *    or, when the map omits it, 403 for `authorization.inspection_only` and 400 for the rest, logged
  *    at `warn` — a mapped 5xx included. Its log-only `reason`, if
  *    any, goes to the log as `logReason` and never into the answer.
  *  - Anything else → logged at `error` under `tag` with only `codeOf`'s classification (never its

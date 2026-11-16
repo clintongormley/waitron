@@ -197,6 +197,15 @@ it("has a sentence for each staff self-service code (my-schedule portal)", () =>
   }
 });
 
+it("says an inspection-only sign-in reaches Invoices alone, in both languages", () => {
+  expect(codeMessage("authorization.inspection_only", "en")).toBe(
+    "This sign-in can only see Invoices for the tax office.",
+  );
+  expect(codeMessage("authorization.inspection_only", "es")).toBe(
+    "Esta sesión solo puede ver Facturas para Hacienda.",
+  );
+});
+
 it("has a sentence for each gate and request-screen code the management routes answer", () => {
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
@@ -205,6 +214,7 @@ it("has a sentence for each gate and request-screen code the management routes a
     "management_session.expired",
     "person.suspended",
     "authorization.not_permitted",
+    "authorization.inspection_only",
     "management.request_invalid",
     "shared.invalid_id",
   ]) {

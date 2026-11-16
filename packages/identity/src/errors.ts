@@ -77,6 +77,9 @@ declare module "@waitron/shared" {
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
+    /** A sign-in holding only `invoice.inspect` reached a route that does not admit it (see
+     * `resolveManagementSession`). */
+    "authorization.inspection_only": Record<string, never>;
     /** A passkey sign-in whose response has no string id or whose credential id has no row, a check
      * of the signed-in person's own passkey when they hold none, or removing one of their passkeys
      * by an id not found among them. */

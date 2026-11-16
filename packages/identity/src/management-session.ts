@@ -88,7 +88,7 @@ export async function resolveManagementSession(
     options.admitInspector !== true &&
     inspectorAdmitted.getStore() !== true
   )
-    throw new AppError("authorization.not_permitted", { permission: "invoice.inspect" });
+    throw new AppError("authorization.inspection_only", {});
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
     await tx

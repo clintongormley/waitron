@@ -16,6 +16,7 @@ declare module "@waitron/shared" {
     "recovery.state_incomplete": { missing: string };
     "test.with_reason": { reason: string };
     "authorization.not_permitted": { permission: string };
+    "authorization.inspection_only": Record<string, never>;
   }
 }
 
@@ -57,24 +58,25 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(lines).toEqual([{ level: "warn", event: "test.not_found", fields: { id } }]);
   });
 
-  it("answers authorization.not_permitted 403 where the map omits it, and the map still wins", async () => {
-    const answer = async (status: Record<string, ContentfulStatusCode>) => {
+  it("answers authorization.inspection_only 403 where the map omits it, and the map still wins", async () => {
+    const answer = async (status: Record<string, ContentfulStatusCode>, error: AppError) => {
       const app = new Hono();
       app.get("/refused", (c) =>
-        createErrorBoundary(status, "widget.failed")(c, collect([]), () =>
-          Promise.reject(
-            new AppError("authorization.not_permitted", { permission: "invoice.inspect" }),
-          ),
-        ),
+        createErrorBoundary(status, "widget.failed")(c, collect([]), () => Promise.reject(error)),
       );
       const res = await app.request("/refused");
       return { status: res.status, body: await res.json() };
     };
-    const body = {
-      error: { code: "authorization.not_permitted", params: { permission: "invoice.inspect" } },
-    };
-    expect(await answer({})).toEqual({ status: 403, body });
-    expect(await answer({ "authorization.not_permitted": 404 })).toEqual({ status: 404, body });
+    const inspectionOnly = new AppError("authorization.inspection_only", {});
+    const body = { error: { code: "authorization.inspection_only", params: {} } };
+    expect(await answer({}, inspectionOnly)).toEqual({ status: 403, body });
+    expect(await answer({ "authorization.inspection_only": 404 }, inspectionOnly)).toEqual({
+      status: 404,
+      body,
+    });
+    expect(
+      await answer({}, new AppError("authorization.not_permitted", { permission: "report.view" })),
+    ).toMatchObject({ status: 400 });
   });
 
   it("maps an AppError whose code is mapped to 500 to that status but still logs it at warn", async () => {

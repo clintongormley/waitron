@@ -485,14 +485,7 @@ const INSPECTOR_ROUTES = [
   "POST /management-api/tax-office/invoices/:saleId/pdf",
 ];
 
-/** Refuses every caller without `system.manage` with its params stripped, by design. */
-const PARAMS_STRIPPED = ["POST /management-api/fiscal-certificate/diagnose"];
-
-const INSPECTOR_REFUSAL = {
-  status: 403,
-  code: "authorization.not_permitted",
-  params: { permission: "invoice.inspect" },
-};
+const INSPECTOR_REFUSAL = { status: 403, code: "authorization.inspection_only", params: {} };
 
 describe("a session holding invoice.inspect alone, in the running server", () => {
   /** Status and error of every route the app registers for `methods`, sent with `cookie`. */
@@ -559,10 +552,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           // A route answering a cookie that names no session as it answers the inspector's gives the
           // inspector nothing: it is public, or it refuses the request before reading the session.
           const sameAsStranger = stranger.status === answer.status && stranger.code === answer.code;
-          const stripped =
-            PARAMS_STRIPPED.includes(route) &&
-            JSON.stringify(answer) === JSON.stringify({ ...INSPECTOR_REFUSAL, params: {} });
-          if (!refusesInspector(answer) && !stripped && !sameAsStranger)
+          if (!refusesInspector(answer) && !sameAsStranger)
             leaks.push(`${route}: ${JSON.stringify(answer)}`);
         }
         expect(leaks).toEqual([]);
@@ -671,10 +661,12 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
         const manager = await sweep(app, venue.managerCookie, ["GET"]);
         expect([...manager].filter(([, answer]) => refusesInspector(answer))).toEqual([]);
         const empty = await sweep(app, nobody, ["GET"]);
-        // Only the tax office's list names invoice.inspect: a session without it is refused there.
-        expect(
-          [...empty].filter(([, answer]) => refusesInspector(answer)).map(([route]) => route),
-        ).toEqual(["GET /management-api/tax-office/invoices"]);
+        expect([...empty].filter(([, answer]) => refusesInspector(answer))).toEqual([]);
+        expect(empty.get("GET /management-api/tax-office/invoices")).toEqual({
+          status: 403,
+          code: "authorization.not_permitted",
+          params: { permission: "invoice.inspect" },
+        });
         for (const route of [
           "GET /management-api/orders",
           "GET /management-api/me/schedule/shifts",

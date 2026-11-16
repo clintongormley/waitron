@@ -107,8 +107,9 @@ data → 409; a file or copy that cannot be opened → 422. So one code can righ
 route and 400 on another: `service_zone.not_found` for `GET /api/service-zones/:zoneId/offers`,
 and for a zone a body names. A boundary (`createErrorBoundary`,
 `packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
-for a code its table leaves out, except `authorization.not_permitted`, which answers 403 because a
-session read can throw it on any route, and a full disk anywhere in the error's causes, which answers
+for a code its table leaves out, except `authorization.inspection_only`, which answers 403 because
+`resolveManagementSession` throws it on any route that does not admit a sign-in holding only
+`invoice.inspect`, whether or not the route's table lists it, and a full disk anywhere in the error's causes, which answers
 `storage.disk_full`, at 507 unless the table names it; a route that needs another status for one code gets a second
 boundary over a spread of the table, as `runVariant` in `apps/server/src/menu-api.ts` does.
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three

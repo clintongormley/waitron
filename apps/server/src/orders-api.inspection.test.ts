@@ -67,7 +67,7 @@ describe("a session holding only invoice.inspect", () => {
     const answer = await send(venue.orders, inspector, method, path(), body());
     expect(answer).toMatchObject({
       status: 403,
-      json: { code: "authorization.not_permitted" },
+      json: { code: "authorization.inspection_only" },
     });
   });
 

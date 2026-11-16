@@ -115,6 +115,7 @@ export function mountFiscalCertificateApi(
     "management_session.expired": 401,
     "person.suspended": 403,
     "authorization.not_permitted": 403,
+    "authorization.inspection_only": 403,
     "fiscal.certificate_not_used": 409,
     "fiscal.certificate_changed": 409,
     "fiscal.certificate_request_invalid": 400,
