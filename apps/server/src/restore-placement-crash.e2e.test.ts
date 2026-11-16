@@ -148,9 +148,9 @@ it.each([
       venuePresent,
       nodePresent,
     ]);
-    // Resume the saved selection with the same fixed pair of clocks as the child.
+    // Restart after the child's advancing clock, so its retained intent is not in the future.
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
-    vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+    vi.setSystemTime(new Date("2026-10-16T12:41:00Z"));
     expect(await f.run()).toBe(true);
     const placed = await openVenueDatabase(f.venueDir);
     try {
