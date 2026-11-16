@@ -10,7 +10,7 @@ describe("new customer text", () => {
     [{ fr: "French coffee" }, "es", "Staff coffee"],
     [{ en: "English coffee", fr: "French coffee" }, "es", "English coffee"],
     [{ en: "English coffee", es: "ES coffee" }, "es", "ES coffee"],
-    [{ "es-ES": "Spanish coffee" }, "es", "Spanish coffee"],
+    [{ "es-ES": "Spanish coffee" }, "es", "Staff coffee"],
     [{ es: "ES coffee" }, "es-MX", "ES coffee"],
     [{ en: "English coffee", fr: "French coffee" }, "fr", "English coffee"],
     [{ fr: "French coffee" }, "invalid_!", "Staff coffee"],
@@ -87,4 +87,27 @@ describe("new extra presentation", () => {
       "Staff double",
     );
   });
+});
+
+it("uses a regional override only for its exactly enabled request", () => {
+  const config = { defaultLanguage: "en", languages: ["en", "en-US", "es"] };
+  const names = { en: "chips", "en-US": "fries" };
+  for (const language of ["en", "en-GB", "es", "en-CA"]) {
+    expect(newCustomerText(names, "Staff potatoes", language, config)).toBe("chips");
+    expect(newCustomerText({ "en-US": "fries" }, "chips", language, config)).toBe("chips");
+  }
+  expect(newCustomerText(names, "Staff potatoes", "EN-us", config)).toBe("fries");
+  expect(newCustomerText({ en: "chips" }, "Staff potatoes", "en-US", config)).toBe("chips");
+  expect(
+    newCustomerText(names, "Staff potatoes", "en-US", {
+      ...config,
+      languages: ["en", "es"],
+    }),
+  ).toBe("chips");
+  expect(
+    newCustomerText({ "en-US": "fries" }, "chips", "en-US", {
+      ...config,
+      languages: ["en", "es"],
+    }),
+  ).toBe("chips");
 });

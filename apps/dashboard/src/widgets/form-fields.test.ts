@@ -166,10 +166,10 @@ describe("namesLine", () => {
     expect(namesLine(["es", "en"], {})).toEqual([]);
   });
 
-  it("lists a language whose name is stored under a regional code", () => {
-    expect(namesLine(["es", "en"], { "es-ES": "Pan", "en-GB": "Bread" })).toEqual([
-      { label: "ES", value: "Pan" },
-      { label: "EN", value: "Bread" },
+  it("lists an explicitly selected regional name", () => {
+    expect(namesLine(["es-ES", "en-GB"], { "es-ES": "Pan", "en-GB": "Bread" })).toEqual([
+      { label: "ES-ES", value: "Pan" },
+      { label: "EN-GB", value: "Bread" },
     ]);
   });
 });
@@ -262,7 +262,7 @@ describe("effectiveNamesLine", () => {
     expect(effectiveNamesLine(["es", "en"], {}, "es", "")).toEqual([]);
   });
 
-  it("shows a language's regional name as its own, and a regional default-language name as the fallback", () => {
+  it("keeps regional-only names out of main-language summaries", () => {
     expect(
       effectiveNamesLine(
         ["es", "en", "ca"],
@@ -271,9 +271,9 @@ describe("effectiveNamesLine", () => {
         "Extras",
       ),
     ).toEqual([
-      { label: "ES", value: "Añádele algo" },
-      { label: "EN", value: "Make it yours" },
-      { label: "CA", value: "Añádele algo", placeholder: true },
+      { label: "ES", value: "Extras", placeholder: true },
+      { label: "EN", value: "Extras", placeholder: true },
+      { label: "CA", value: "Extras", placeholder: true },
     ]);
   });
 });
@@ -473,7 +473,7 @@ describe("optionalTextFields", () => {
 
   const stored = { "en-GB": "Bread", "en-US": "Bread roll", "es-ES": "Pan", "pt-BR": "Pão" };
 
-  it("shows each language's name stored under a regional code", async () => {
+  it("leaves main-language inputs blank for regional-only saved names", async () => {
     const inputs = await renderAll<WtInput>(
       optionalTextFields(
         context({ locales: ["es", "en", "ca"] }),
@@ -487,9 +487,9 @@ describe("optionalTextFields", () => {
       "wt-input",
     );
     expect(inputs.map((input) => [input.name, input.value, input.placeholder])).toEqual([
-      ["customer-es", "Pan", "Pan staff"],
-      ["customer-en", "Bread", "Pan"],
-      ["customer-ca", "", "Pan"],
+      ["customer-es", "", "Pan staff"],
+      ["customer-en", "", "Pan staff"],
+      ["customer-ca", "", "Pan staff"],
     ]);
   });
 
@@ -507,14 +507,14 @@ describe("optionalTextFields", () => {
     expect(inputs.map((input) => input.value)).toEqual(["", "Loaf"]);
   });
 
-  it("saves an edited language under its plain code alone, keeping every other language's keys as stored", async () => {
+  it("keeps every regional name when editing a main language", async () => {
     const change = vi.fn();
     const inputs = await renderAll<WtInput>(
       optionalTextFields(context(), "customer", "Menu name", stored, change),
       "wt-input",
     );
     changeFrom(inputs[1]!, { value: "Loaf" });
-    expect(change).toHaveBeenCalledExactlyOnceWith({ "es-ES": "Pan", "pt-BR": "Pão", en: "Loaf" });
+    expect(change).toHaveBeenCalledExactlyOnceWith({ ...stored, en: "Loaf" });
   });
 });
 
@@ -629,7 +629,7 @@ describe("priceField", () => {
 });
 
 describe("separate Catalan and Valencian edits", () => {
-  it("keeps Valencian when Catalan replaces its regional keys", () => {
+  it("keeps regional Catalan and Valencian when Catalan is edited", () => {
     expect(
       withLanguageText(
         {
@@ -641,7 +641,12 @@ describe("separate Catalan and Valencian edits", () => {
         "ca",
         "New Catalan",
       ),
-    ).toEqual({ ca: "New Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" });
+    ).toEqual({
+      ca: "New Catalan",
+      "ca-ES": "Regional Catalan",
+      "ca-ES-valencia": "Valencian",
+      es: "Spanish",
+    });
   });
   it("keeps Catalan when Valencian is edited", () => {
     expect(
@@ -657,7 +662,7 @@ describe("separate Catalan and Valencian edits", () => {
 it("retains deletion of legacy malformed regional keys when their language is edited", () => {
   expect(
     withLanguageText({ "en-invalid!": "Legacy", "en-GB": "Regional" }, "en", "English"),
-  ).toEqual({ en: "English" });
+  ).toEqual({ en: "English", "en-GB": "Regional" });
 });
 
 it("replaces alternate Valencian keys without deleting Catalan", () => {
@@ -672,4 +677,41 @@ it("replaces alternate Valencian keys without deleting Catalan", () => {
       "New Valencian",
     ),
   ).toEqual({ ca: "Catalan", "ca-ES-valencia": "New Valencian" });
+});
+
+it("keeps regional name edits sparse and hints their own main language before the venue default", async () => {
+  const change = vi.fn();
+  const inputs = await renderAll<WtInput>(
+    optionalTextFields(
+      context({ locales: ["en", "en-US"] }),
+      "customer",
+      "Name",
+      { es: "Default potatoes", en: "chips" },
+      change,
+      "Staff potatoes",
+      "es",
+    ),
+    "wt-input",
+  );
+  expect(inputs.map((input) => [input.value, input.placeholder])).toEqual([
+    ["chips", "Default potatoes"],
+    ["", "chips"],
+  ]);
+  expect(withLanguageText({ en: "chips", "en-US": "fries" }, "en", "potatoes")).toEqual({
+    en: "potatoes",
+    "en-US": "fries",
+  });
+  const blank = await renderAll<WtInput>(
+    optionalTextFields(
+      context({ locales: ["en", "en-US"] }),
+      "customer",
+      "Name",
+      { "en-US": "fries" },
+      change,
+      "chips",
+      "en",
+    ),
+    "wt-input",
+  );
+  expect(blank.map((input) => input.value)).toEqual(["", "fries"]);
 });

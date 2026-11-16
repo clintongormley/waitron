@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { GuestMenuPreview } from "./guest-menu-preview.js";
 import "./guest-menu-preview.js";
 function deferred<T>() {
@@ -10,6 +11,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 it("lets a manager open the rendered page and change its language", async () => {
+  const previousLocale = currentLocale();
+  setLocale("en-GB");
   const { DashboardApi } = await import("../api/client.js");
   const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
   const translated = deferred<void>();
@@ -30,7 +33,7 @@ it("lets a manager open the rendered page and change its language", async () => 
       JSON.stringify({
         html: `<!doctype html><html lang="${language}"><title>The Restaurant</title><h1>${language === "es" ? "Spanish key" : "Allergen key"}</h1><a href="#last">Last section</a><section id="last">Last dish</section></html>`,
         language,
-        languages: ["en", "es"],
+        languages: ["en", "es", "en-US"],
       }),
       { headers: { "content-type": "application/json" } },
     );
@@ -57,6 +60,9 @@ it("lets a manager open the rendered page and change its language", async () => 
     expect(frame.contentWindow!.location.protocol).toBe("blob:");
     expect(frame.contentDocument!.querySelector("h1")?.textContent).toBe("Allergen key");
     const choose = el.shadowRoot!.querySelector("wt-combobox")!;
+    expect(choose.options.find((option) => option.value === "en-US")!.label).toBe(
+      "English (United States)",
+    );
     const trigger = choose.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
     trigger.focus();
     choose.dispatchEvent(
@@ -89,6 +95,7 @@ it("lets a manager open the rendered page and change its language", async () => 
     translated.resolve();
     earlier.resolve(new Response("null"));
     cleanupWidgets();
+    setLocale(previousLocale);
   }
 });
 

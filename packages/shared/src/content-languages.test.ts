@@ -317,3 +317,15 @@ it("matches a Valencian map stored with another valid variant tag", () => {
     "Spanish",
   );
 });
+
+it("keeps regional overrides out of live main/default fallback and removed-region requests", () => {
+  const config = { defaultLanguage: "en", languages: ["en", "en-US", "es"] };
+  const map = { "en-US": "fries" };
+  expect(resolveEnabledContentText(map, "en-US", config)).toBe("fries");
+  for (const language of ["en", "en-GB", "es", "en-CA"]) {
+    expect(resolveEnabledContentText(map, language, config)).toBe("");
+  }
+  expect(resolveEnabledContentText(map, "en-US", { ...config, languages: ["en", "es"] })).toBe("");
+  expect(resolveSnapshotText(map, "en", "en")).toBe("fries");
+  expect(resolveContentText(map, "en", "en")).toBe("fries");
+});

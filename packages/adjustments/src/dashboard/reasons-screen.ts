@@ -4,7 +4,13 @@ import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
-import { formatMoney, languageDisplayName, searchBy, type DeleteImpact } from "@waitron/shared";
+import {
+  mainContentLanguages,
+  formatMoney,
+  languageDisplayName,
+  searchBy,
+  type DeleteImpact,
+} from "@waitron/shared";
 import {
   baseStyles,
   pageTitleStyles,
@@ -1283,7 +1289,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #reasonForm(errors: FieldErrors) {
     const draft = this.draft!;
     const editor = this.editor!;
-    const languages = currentContentLanguages().languages;
+    const languages = mainContentLanguages(currentContentLanguages().languages);
     const isVoid = draft.kind === "void";
     return html`<wt-segmented-control
         name="kind"

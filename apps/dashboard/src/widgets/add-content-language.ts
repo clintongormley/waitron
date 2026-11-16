@@ -1,7 +1,12 @@
 import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
-import { baseStyles } from "@waitron/ui";
+import {
+  contentLanguageChoices,
+  contentLanguageDisplayName,
+  type ContentLanguages,
+} from "@waitron/shared";
+import { RECIPIENT_COUNTRY_CODES } from "@waitron/country-packs";
+import { baseStyles, FormFeedback } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -13,10 +18,12 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 export class AddContentLanguageDialog extends LitElement {
   static override styles = [baseStyles];
   @property({ type: Boolean }) open = false;
+  @property() baseLanguage = "";
   @property({ attribute: false }) config!: ContentLanguages;
   @property({ attribute: false }) save!: (config: ContentLanguages) => Promise<void>;
   /** Offered first, in a group of their own, when any is not yet enabled. */
   @property({ attribute: false }) official: readonly string[] = [];
+  readonly #feedback = new FormFeedback(this);
   @state() private language = "";
   @state() private busy = false;
   @state() private error: string | null = null;
@@ -25,6 +32,7 @@ export class AddContentLanguageDialog extends LitElement {
     if (changed.has("open") && this.open) {
       this.language = "";
       this.error = null;
+      this.#feedback.reset();
     }
     if (changed.has("config") && this.config.languages.includes(this.language)) {
       this.language = "";
@@ -40,6 +48,7 @@ export class AddContentLanguageDialog extends LitElement {
   async #add(): Promise<void> {
     if (this.busy) return;
     this.error = null;
+    this.#feedback.press();
     if (this.config.languages.includes(this.language)) this.language = "";
     if (this.language === "") return;
     this.busy = true;
@@ -53,15 +62,21 @@ export class AddContentLanguageDialog extends LitElement {
       this.dispatchEvent(new CustomEvent("languages-saved", { bubbles: true, composed: true }));
     } catch (error) {
       this.error = codeOf(error);
+      this.#feedback.newRefusal();
     } finally {
       this.busy = false;
     }
   }
 
   override render() {
-    const choices = contentLanguageChoices(currentLocale()).filter(
-      ({ code }) => !this.config.languages.includes(code),
-    );
+    const choices = (
+      this.baseLanguage
+        ? RECIPIENT_COUNTRY_CODES.map((region) => {
+            const code = `${this.baseLanguage}-${region}`;
+            return { code, name: contentLanguageDisplayName(code, currentLocale()) };
+          }).sort((a, b) => a.name.localeCompare(b.name, currentLocale()))
+        : contentLanguageChoices(currentLocale())
+    ).filter(({ code }) => !this.config.languages.includes(code));
     const official = choices.filter(({ code }) => this.official.includes(code));
     const grouped = official.length > 0;
     const options = [
@@ -82,7 +97,7 @@ export class AddContentLanguageDialog extends LitElement {
       size="compact"
       .open=${this.open}
       .dismissible=${!this.busy}
-      heading=${t("content_languages.add")}
+      heading=${t(this.baseLanguage ? "content_languages.add_version" : "content_languages.add")}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#close();
@@ -108,7 +123,10 @@ export class AddContentLanguageDialog extends LitElement {
           if (this.language) void this.#add();
         }}
       ></wt-combobox>
-      <wt-form-actions slot="footer" .error=${this.error ? codeMessage(this.error) : ""}>
+      <wt-form-actions
+        slot="footer"
+        .error=${this.#feedback.message({ _form: this.error ? codeMessage(this.error) : "" }, new Set(), "")}
+      >
         <wt-button
           slot="cancel"
           variant="secondary"

@@ -2332,3 +2332,15 @@ it.each([
 
 const receivedLocale = currentLocale();
 afterEach(() => setLocale(receivedLocale));
+
+it("keeps image name fields in main languages when regional versions are enabled", async () => {
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "en-US", "es"] });
+  await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(
+    [...el.shadowRoot!.querySelectorAll('wt-input[name^="name-"]')].map((input) =>
+      input.getAttribute("name"),
+    ),
+  ).toEqual(["name-en", "name-es"]);
+});

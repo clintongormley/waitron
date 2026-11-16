@@ -2509,3 +2509,12 @@ describe("permission-based limits", () => {
     expect(api.saveSettings).toHaveBeenCalledWith({ maxBillComp: "0.00", revision: 4 });
   });
 });
+
+it("keeps adjustment name fields in main languages when regional versions are enabled", async () => {
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "en-US", "es"] });
+  const el = await mount(fakeApi());
+  await press(el, "edit-c");
+  expect(find(el, '[name="names-en"]')).not.toBeNull();
+  expect(find(el, '[name="names-es"]')).not.toBeNull();
+  expect(find(el, '[name="names-en-US"]')).toBeNull();
+});

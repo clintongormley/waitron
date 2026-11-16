@@ -1,6 +1,6 @@
 import {
   contentLanguageCode,
-  resolveContentText,
+  contentLanguageTag,
   type ContentLanguages,
 } from "../content-languages.js";
 import { compareDecimal, decimal } from "../money.js";
@@ -19,11 +19,9 @@ function textInLanguage(
   locale: string,
 ): { text: string; language: string } | null {
   const language = contentLanguageCode(locale);
-  const keys = [locale, language, ...Object.keys(map).sort()];
-  for (const key of keys) {
-    if (!Object.hasOwn(map, key)) continue;
-    const text = resolveContentText({ [key]: map[key]! }, locale, locale);
-    if (text !== "") return { text, language: key };
+  for (const key of [locale, language]) {
+    if (Object.hasOwn(map, key) && map[key]!.trim() !== "")
+      return { text: map[key]!, language: key };
   }
   return null;
 }
@@ -39,10 +37,13 @@ export function resolveMenuText(
   let requested: string | null = config.defaultLanguage;
   if (view.kind === "customer") {
     try {
-      const locale = new Intl.Locale(view.language);
-      requested = config.languages.includes(contentLanguageCode(view.language))
-        ? locale.toString()
-        : null;
+      const tag = contentLanguageTag(view.language);
+      const main = contentLanguageCode(tag);
+      requested = config.languages.includes(tag)
+        ? tag
+        : config.languages.includes(main)
+          ? main
+          : null;
     } catch {
       requested = null;
     }

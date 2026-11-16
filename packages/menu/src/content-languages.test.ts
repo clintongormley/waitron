@@ -646,20 +646,16 @@ describe("site content languages", () => {
     it("refuses a first save that never held the required language", async () => {
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeContentLanguages(
-            tx,
-            { defaultLanguage: "en", languages: ["en", "es-ES"] },
-            REQUIRED,
-          ),
+          writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }, REQUIRED),
         ),
       ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     });
 
-    it("accepts a required language sent with a region, and removing one that is not required", async () => {
+    it("keeps a required main beside its regional version and removes optional languages", async () => {
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(
           tx,
-          { defaultLanguage: "es", languages: ["es", "ca-ES", "fr"] },
+          { defaultLanguage: "es", languages: ["es", "ca", "ca-ES", "fr"] },
           REQUIRED,
         );
         await writeContentLanguages(
@@ -689,11 +685,37 @@ describe("site content languages", () => {
   it.each([
     { defaultLanguage: "en", languages: [] },
     { defaultLanguage: "en", languages: ["fr"] },
-    { defaultLanguage: "en", languages: ["en", "en-GB"] },
+    { defaultLanguage: "en", languages: ["en", "en-US", "EN-us"] },
     { defaultLanguage: "zz", languages: ["zz"] },
   ])("refuses an invalid configuration %j", async (config) => {
     await expect(
       withTransaction(suite.db, (tx) => writeContentLanguages(tx, config)),
     ).rejects.toThrow();
+  });
+});
+
+it("keeps canonical regional versions beside their main language", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "EN-us", "es"] });
+    expect(await readContentLanguages(tx, "en")).toEqual({
+      defaultLanguage: "en",
+      languages: ["en", "en-US", "es"],
+    });
+    await expect(
+      writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en-US"] }),
+    ).rejects.toMatchObject({ code: "content.languages_invalid" });
+    await expect(
+      writeContentLanguages(tx, { defaultLanguage: "en-US", languages: ["en", "en-US"] }),
+    ).rejects.toMatchObject({ code: "content.languages_invalid" });
+  });
+});
+
+it("does not count a regional override as a main-language translation", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+    await expect(findContentTranslationGap(tx, [{ "en-US": "fries" }], "en")).resolves.toEqual({
+      index: 0,
+      language: "en",
+    });
   });
 });

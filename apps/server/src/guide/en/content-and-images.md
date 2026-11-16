@@ -4,7 +4,7 @@ You can add French text to a Spanish menu without changing the language of the d
 or your receipts. Start by choosing the languages your content supports, then add translations as
 you need them. Customer-facing translations are optional, including in your default language.
 Your products, sections, [modifiers](modifiers.md) and units share these language choices.
-The image library uses them too, but a photo still needs a name in your default language when
+The image library uses the main languages, but a photo still needs a name in your default language when
 you upload or edit it.
 
 The regional demo's photograph library keeps customer-language labels. In Catalonia
@@ -34,6 +34,14 @@ the language to add it. The choices show your country's official languages first
 **Official languages**, while any of them is not yet added. The added language's translation fields are then available throughout your content editors.
 To change the default, open that language's ⋮ menu and select **Make default**.
 
+For regional wording, open a main language's ⋮ menu and choose **Add regional version**.
+For example, keep **English** for your London menu, add **English (United States)**, and write
+**chips** in English and **fries** in the US field for one dish. Leave its other US fields blank:
+they use their English names. The guest menu uses the US wording only when US English is selected;
+British English and plain English keep **chips**. Edit regional names in the product and menu
+editors. **Edit translations** and **Translate all** cover the main languages.
+
+
 A language Waitron keeps enabled for your region is marked **Required** and has no **Delete**, and
 if it is ever missing, your next save on this page adds it back. Where the region also asks for
 foreign languages, the page shows a notice while you have fewer than it asks for.
@@ -53,7 +61,7 @@ Give each unit a staff name and abbreviation, such as **Kilogram** and **kg**. I
 names and abbreviations are optional and independent. The missing-name count includes a unit
 when either field is blank in that language, counting it once when both are blank.
 
-**Edit translations** opens the same editor from every language row. **Missing in** starts with
+**Edit translations** opens the same editor from every main-language row. **Missing in** starts with
 the language you chose; select **All names** to include items that already have text. Use **Kind**
 and search to narrow the rows. The report includes missing default-language names and names
 with no translations at all. Archived products and disabled lists are excluded. An extras
@@ -93,7 +101,7 @@ correction to a staff name takes you to its existing editor. Use **All names** t
 on items that have no missing translations. When Translate all stops, even part-way through,
 the alerts bell tells you how many suggestions are waiting for review. The
 box asks you to reduce your enabled content languages before starting Translate all if you
-have more than 20. Choose **Delete** in a language's menu to remove it from the enabled list.
+have more than 20 main languages. Choose **Delete** in a language's menu to remove it from the enabled list.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.

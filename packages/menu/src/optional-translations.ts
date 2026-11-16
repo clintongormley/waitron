@@ -1,4 +1,4 @@
-import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
+import { AppError, contentLanguageTag, type ContentLanguages } from "@waitron/shared";
 import "./errors.js";
 
 export function validateOptionalTranslations(value: unknown): Record<string, string> {
@@ -13,7 +13,7 @@ export function validateOptionalTranslations(value: unknown): Record<string, str
   for (const [language, text] of Object.entries(value)) {
     let canonical: string;
     try {
-      canonical = contentLanguageCode(language);
+      canonical = contentLanguageTag(language);
     } catch {
       throw new AppError("content.translation_invalid", {});
     }

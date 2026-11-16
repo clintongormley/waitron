@@ -380,7 +380,7 @@ describe("content languages screen", () => {
 
   it("gives every language Edit translations and every other language Make default and Delete", async () => {
     const el = await mount(api());
-    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(1);
+    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(2);
     for (const [index, code] of [
       [1, "de"],
       [2, "en"],
@@ -389,16 +389,19 @@ describe("content languages screen", () => {
       expect(buttons.map((button) => button.dataset.test)).toEqual([
         `set-default-${code}`,
         `remove-${code}`,
+        `add-version-${code}`,
         `edit-translations-${code}`,
       ]);
       expect(buttons.map((button) => button.textContent!.trim())).toEqual([
         t("content_languages.set_default"),
         t("content_languages.remove"),
+        t("content_languages.add_version"),
         t("content_languages.edit_translations"),
       ]);
       expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
         `${t("content_languages.set_default")}: ${name(code)}`,
         `${t("content_languages.remove")}: ${name(code)}`,
+        `${t("content_languages.add_version")}: ${name(code)}`,
         null,
       ]);
     }
@@ -434,7 +437,7 @@ describe("content languages screen", () => {
     await vi.waitFor(() => expect(shown(el)).toEqual(["Inglés", "Alemán", "Catalán"]));
     expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
     expect(currentContentLanguages()).toEqual(saved);
-    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(1);
+    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(2);
   });
 
   it("removes a language, keeping the default, and saves", async () => {
@@ -889,7 +892,7 @@ describe("A420 content language table", () => {
     expect(menu.label).toBe("Actions: English");
     expect(
       [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-    ).toEqual(["Make default", "Delete", "Edit translations"]);
+    ).toEqual(["Make default", "Delete", "Add regional version", "Edit translations"]);
     expect(rows[0]!.querySelector("[data-test=set-default-ca]")).toBeNull();
     expect(rows[0]!.querySelector("[data-test=remove-ca]")).toBeNull();
     expect(rows[0]!.querySelector("[data-test=edit-translations-ca]")).not.toBeNull();
@@ -1352,5 +1355,63 @@ it.each([
   await vi.waitFor(() => expect(q(el, `[data-test="required-gaps-${language}"]`)).not.toBeNull());
   expect(q(el, `[data-test="required-gaps-${language}"]`)!.textContent!.trim()).toBe(
     t("content_gaps.required_warning_one").replace("{language}", name),
+  );
+});
+
+it("offers a version on a main row and keeps regional names distinct with inheritance instead of translation actions", async () => {
+  setLocale("en-GB");
+  const client = api({
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en", "en-US"] }),
+  });
+  const el = await mount(client);
+  expect(shown(el)).toContain("English (United States)");
+  expect(q(el, "[data-test=set-default-en-US]")).toBeNull();
+  expect(q(el, "[data-test=edit-translations-en-US]")).toBeNull();
+  expect(
+    rows(el).find((row) => row.textContent!.includes("English (United States)"))!.textContent,
+  ).toContain("Blank names use English");
+  expect(q(el, "[data-test=add-version-en]")).not.toBeNull();
+  expect(q(el, "[data-test=add-version-en]")!.getAttribute("aria-label")).toBe(
+    "Add regional version: English",
+  );
+  q(el, "[data-test=add-version-en]")!.click();
+  await flush(el);
+  expect(dialog(el).open).toBe(true);
+  expect(dialog(el).baseLanguage).toBe("en");
+});
+
+it("explains which regional versions to remove before removing their main language", async () => {
+  setLocale("en-GB");
+  const client = api({
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en", "en-US"] }),
+  });
+  const el = await mount(client);
+  q(el, "[data-test=remove-en]")!.click();
+  await flush(el);
+  expect(client.updateContentLanguages).not.toHaveBeenCalled();
+  expect(saveMessage(el)!.textContent).toContain("English (United States)");
+});
+
+it("does not count a regional version as another foreign language", async () => {
+  const client = api({
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en", "en-US"] }),
+    getContentLanguageRules: vi.fn().mockResolvedValue({
+      required: [],
+      official: ["es", "en"],
+      foreignLanguageNotice: {
+        minimumForeign: 1,
+        text: { en: "Offer another language", es: "Offer another language" },
+      },
+    }),
+  });
+  const el = await mount(client);
+  expect(q(el, '[data-test="foreign-language-notice"]')?.textContent).toBe(
+    "Offer another language",
   );
 });

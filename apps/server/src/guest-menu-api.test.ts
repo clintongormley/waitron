@@ -565,3 +565,31 @@ it("keeps guest sharing separate from saved menu defaults", async () => {
     defaultColor: null,
   });
 });
+
+it("serves the London regional names and distinct language links from the published menu", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "en-US", "es"] });
+    await updateProduct(tx, f.soup, { customerName: { en: "chips", "en-US": "fries" } });
+    await setVenueDefaultMenu(tx, f.lunch);
+    const preview = await previewMenu(tx, f.lunch);
+    await publishMenu(tx, f.lunch, preview.hash, f.cookies.managerId);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+  });
+  const response = await f.app.request("/public/menu?language=en-US");
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  expect(html).toContain("fries");
+  expect(html).toContain("English (United States)");
+  for (const language of ["en", "en-GB", "es", "en-CA"]) {
+    const answer = await f.app.request(`/public/menu?language=${language}`);
+    expect(answer.status).toBe(200);
+    const body = await answer.text();
+    expect(body).toContain("chips");
+    expect(body).not.toContain("fries");
+  }
+});

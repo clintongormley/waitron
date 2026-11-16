@@ -80,3 +80,7 @@ it.each([null, "XX"])(
     });
   },
 );
+
+it("keeps the offered receipt languages when English gains a US regional version", async () => {
+  expect((await read("es-ES", ["en", "en-US", "es"])).languages).toEqual(["es-ES"]);
+});

@@ -75,8 +75,9 @@ starts open:
 - A **customer-facing name**, under **Descriptors**, with one field per content language. This is
   what a diner reads: the receipt and the invoice. A receipt and an invoice show the default
   language's customer-facing name whatever language they print in, or the staff name when you leave
-  every language blank. Once you fill in one language, fill in the default language too, or the
-  product will not save.
+  that default name blank. A regional field such as **English (United States)** is optional:
+  leave it blank to use English, or enter only the wording that differs for the guest menu.
+  Regional names do not replace the default name on a receipt.
 - A **prep station name**, under **Prep station**. This is what the station ticket prints and what the station
   screens show. It is useful when the short label a cook needs differs from the name you sell under.
   Leave it blank and the station sees the staff name instead.

@@ -4,7 +4,7 @@ Puedes añadir texto en francés a una carta en español sin cambiar el idioma d
 el de tus tickets. Elige primero los idiomas del contenido y añade las traducciones cuando las
 necesites. Los nombres para el cliente son opcionales, también en el idioma predeterminado.
 Tus productos, secciones, [modificadores](modifiers.md) y unidades comparten estos idiomas.
-La biblioteca de imágenes también los usa, pero una fotografía necesita un nombre en el idioma
+La biblioteca de imágenes usa los idiomas principales, pero una fotografía necesita un nombre en el idioma
 predeterminado al subirla o editarla.
 
 La biblioteca de fotografías de demostración conserva los nombres para el cliente.
@@ -37,6 +37,15 @@ Los idiomas oficiales que aún no has añadido aparecen primero, bajo **Idiomas 
 Al añadirlo, sus campos de traducción quedan disponibles en los editores del contenido.
 Para cambiar el predeterminado, elige **Hacer predeterminado** en el menú ⋮ de ese idioma.
 
+Para usar palabras regionales, elige **Añadir versión regional** en el menú ⋮ de un idioma principal.
+Por ejemplo, conserva **Inglés** para tu carta de Londres y añade **Inglés (Estados Unidos)**.
+Escribe **chips** en inglés y **fries** en el campo estadounidense de un plato. Deja los demás campos
+estadounidenses vacíos para que usen sus nombres en inglés. La carta para clientes usa esas palabras
+solo cuando se elige el inglés estadounidense; el inglés británico y el inglés sin región conservan
+**chips**. Edita estos nombres en los editores de productos y cartas. **Editar traducciones** y
+**Traducir todo** incluyen los idiomas principales.
+
+
 Un idioma que Waitron mantiene activado para tu región aparece como **Obligatorio** y no tiene
 **Eliminar**. Si falta, el siguiente guardado en esta página lo vuelve a añadir. Donde la región
 pide también idiomas extranjeros, aparece un aviso mientras tengas menos de los que pide.
@@ -55,7 +64,7 @@ Da a cada unidad un nombre del personal y una abreviatura, como **Kilogramo** y 
 Sus nombres y abreviaturas traducidos son opcionales e independientes. Una unidad cuenta como
 pendiente en un idioma cuando falta cualquiera de los dos campos, y cuenta una sola vez si faltan ambos.
 
-**Editar traducciones** abre el mismo editor desde cualquier fila de idioma. **Falta en** empieza
+**Editar traducciones** abre el mismo editor desde cualquier fila de idioma principal. **Falta en** empieza
 con el idioma que elegiste. Selecciona **Todos los nombres** para incluir los que ya tienen texto.
 Usa **Tipo** y la búsqueda para reducir las filas. El informe incluye nombres que faltan en el
 idioma predeterminado y nombres sin ninguna traducción. Los productos archivados y las listas
@@ -94,7 +103,7 @@ antes de incorporar la corrección al editor. Una corrección desactualizada no 
 cambio tuyo. Una corrección del nombre del personal te lleva a su editor. Usa **Todos los nombres**
 para encontrar correcciones de elementos sin traducciones pendientes. Cuando Traducir todo termina,
 aunque sea a medias, la campana de avisos indica cuántas sugerencias esperan revisión.
-Si tienes más de 20 idiomas de contenido activados, la caja te pide reducirlos antes de iniciar
+Si tienes más de 20 idiomas principales de contenido activados, la caja te pide reducirlos antes de iniciar
 Traducir todo. Elige **Eliminar** en el menú de un idioma para retirarlo de la lista de activados.
 
 **Eliminar**, en el menú ⋮ de un idioma adicional, oculta sus campos pero conserva su texto.

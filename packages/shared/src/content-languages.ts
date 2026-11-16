@@ -78,6 +78,23 @@ export function contentLanguageCode(value: string): string {
   return language;
 }
 
+export function isRegionalContentLanguage(tag: string): boolean {
+  try {
+    return contentLanguageTag(tag) !== contentLanguageCode(tag);
+  } catch {
+    return false;
+  }
+}
+
+export function mainContentLanguages(languages: readonly string[]): string[] {
+  return languages.filter((language) => !isRegionalContentLanguage(language));
+}
+
+export function contentLanguageTag(value: string): string {
+  const language = contentLanguageCode(value);
+  return language === VALENCIAN ? language : new Intl.Locale(value).baseName;
+}
+
 /** A tag's language named in `locale`, capitalised when it stands alone rather than inside a
  * sentence. A tag that is not a language, or that `locale` has no name for, comes back as it is. */
 export function languageDisplayName(tag: string, locale: string, standalone = true): string {
@@ -96,6 +113,14 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
       : languageNamesFor(locale).of(code);
   if (name === undefined) return tag;
   return standalone ? capitaliseFirst(name, locale) : name;
+}
+
+export function contentLanguageDisplayName(tag: string, locale: string): string {
+  const name = languageDisplayName(tag, locale);
+  if (!isRegionalContentLanguage(tag)) return name;
+  const region = new Intl.Locale(tag).region;
+  if (region === undefined) return name;
+  return `${name} (${new Intl.DisplayNames([locale], { type: "region" }).of(region)})`;
 }
 
 /**
@@ -148,13 +173,18 @@ export function resolveEnabledContentText(
 ): string {
   let requested = config.defaultLanguage;
   try {
-    const locale = new Intl.Locale(requestedLanguage);
-    if (config.languages.includes(contentLanguageCode(requestedLanguage)))
-      requested = locale.toString();
+    const tag = contentLanguageTag(requestedLanguage);
+    const main = contentLanguageCode(tag);
+    if (config.languages.includes(tag)) requested = tag;
+    else if (config.languages.includes(main)) requested = main;
   } catch {
     // A malformed display preference uses the same fallback as an unavailable language.
   }
-  return resolveContentText(translations, requested, config.defaultLanguage);
+  for (const key of [requested, contentLanguageCode(requested), config.defaultLanguage]) {
+    if (Object.hasOwn(translations, key) && translations[key]!.trim() !== "")
+      return translations[key]!;
+  }
+  return "";
 }
 
 /** Receipt snapshots retain their stored languages independently of current content settings. */

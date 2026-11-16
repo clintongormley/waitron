@@ -283,3 +283,45 @@ describe("future order customer fallback", () => {
     expect(priced.gross.total).toBe("14.00");
   });
 });
+
+it("freezes the main staff name and unit when only an enabled US override has text", async () => {
+  const setup = await arrange();
+  await withTransaction(venue.db, async (tx) => {
+    await writeContentLanguages(tx, {
+      defaultLanguage: "en",
+      languages: ["en", "en-US", "es", "fr"],
+    });
+    await tx
+      .update(products)
+      .set({ customerName: { "en-US": "fries" } })
+      .where(eq(products.id, setup.dish.id));
+    await tx
+      .update(units)
+      .set({ name: { "en-US": "US portion" }, abbreviation: { "en-US": "US" } })
+      .where(eq(units.id, setup.unit.id));
+    await republishMenus(tx);
+  });
+  const id = randomUUID();
+  await recordTillSaleOrchestration(
+    { db: venue.db, backend: venue.backend, clock: venue.clock, admission: testTradingAdmission() },
+    venue.cfg,
+    {
+      workingOrderId: id,
+      expectedEdit: null,
+      zoneId: setup.offers.zoneId,
+      lines: [{ menuItemId: setup.offers.offerFor(setup.dish.id), quantity: "1" }],
+      tender: { method: "cash", amount: "12.00" },
+    },
+    venue.operatorId,
+  );
+  const ticket = await withTransaction(venue.db, (tx) =>
+    readSettledTicket(venue.backend, tx, venue.cfg, id),
+  );
+  expect(ticket.lines[0]!.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id));
+  expect(line!.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
+  expect(line!.unitName).toEqual({ en: "sp" });
+});

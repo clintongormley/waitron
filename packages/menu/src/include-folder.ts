@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
-  contentLanguageCode,
+  contentLanguageTag,
   FALLBACK_LOCALE,
   type ContentLanguages,
   isStoredColor,
@@ -53,7 +53,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 
 function isLanguageCode(key: string): boolean {
   try {
-    return contentLanguageCode(key) === key;
+    return contentLanguageTag(key) === key;
   } catch {
     return false;
   }

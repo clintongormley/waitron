@@ -12,7 +12,7 @@ import { MenuDocumentTree } from "./menu-document-tree.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { formatMoney, languageDisplayName } from "@waitron/shared";
+import { formatMoney, contentLanguageDisplayName } from "@waitron/shared";
 import type {
   DashboardApi,
   MenuChange,
@@ -923,7 +923,7 @@ export class MenuPreviewPanel extends LitElement {
             { value: "internal", fixed: true, label: t("customer_menu.internal") },
             ...config.languages.map((language) => ({
               value: language,
-              label: languageDisplayName(language, currentLocale()),
+              label: contentLanguageDisplayName(language, currentLocale()),
             })),
           ]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
