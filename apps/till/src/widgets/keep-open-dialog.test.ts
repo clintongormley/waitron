@@ -115,6 +115,13 @@ it("busy and disconnected dialogs refuse both save and stop host presses", async
     el.shadowRoot!.querySelector<HTMLElement>(`[data-${name}]`)!.click();
   expect(heard).toEqual([]);
 });
+it("draws nothing until it is handed a zone", async () => {
+  const { el } = await mountWidget<TillKeepOpenDialog>("till-keep-open-dialog", {});
+  expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  el.zone = zone;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
+});
 it("localizes the heading, choices and refusal in Spanish", async () => {
   try {
     setLocale("es");

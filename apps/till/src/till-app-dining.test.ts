@@ -221,6 +221,43 @@ describe("the counter's way of selling (A1522)", () => {
     expect(segmented(counter())).toBeNull();
   });
 
+  it("a second choice while a switch is out sends nothing more", async () => {
+    const reply = deferred<{ revision: number }>();
+    const { el, api, counter } = await counterApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(savedOrder("open")),
+      switchDining: vi.fn(() => reply.promise),
+    });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    emit(counter(), "dining-change", { dining: "takeaway" });
+    emit(counter(), "dining-change", { dining: "eat_in" });
+    reply.resolve({ revision: 3 });
+    await flush(el);
+
+    expect(api.switchDining).toHaveBeenCalledExactlyOnceWith("wo-1", "takeaway", 2, null);
+    expect(counter().store.dining).toBe("takeaway");
+  });
+
+  it("a refusal arriving after the basket was cleared says nothing and reads nothing", async () => {
+    const reply = deferred<{ revision: number }>();
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue(savedOrder("open"));
+    const { el, counter } = await counterApp({
+      retrieveWorkingOrder,
+      switchDining: vi.fn(() => reply.promise),
+    });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    emit(counter(), "dining-change", { dining: "takeaway" });
+    counter().store.clear();
+    reply.reject({ code: "order.dining_locked", reason: "sent" });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+    expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
+  });
+
   it("a set lunch refused on a takeaway sale offers Switch to eat here, which keeps the set lunch", async () => {
     const recordSale = vi
       .fn()
@@ -401,6 +438,70 @@ describe("a table bill's way of selling (A1522)", () => {
     ]);
   });
 
+  it("a second choice while a switch is out sends nothing more", async () => {
+    const reply = deferred<{ revision: number }>();
+    const { el, api } = await tableApp({ switchDining: vi.fn(() => reply.promise) });
+
+    emit(tableOrder(el), "dining-change", { dining: "takeaway" });
+    emit(tableOrder(el), "dining-change", { dining: "eat_in" });
+    reply.resolve({ revision: 6 });
+    await flush(el);
+
+    expect(api.switchDining).toHaveBeenCalledExactlyOnceWith(
+      "wo-4",
+      "takeaway",
+      5,
+      expect.objectContaining({ billId: "wo-4" }),
+    );
+  });
+
+  it("a refusal arriving after leaving the table says nothing and reads no bills", async () => {
+    const reply = deferred<{ revision: number }>();
+    const { el, getPartyBills } = await tableApp({ switchDining: vi.fn(() => reply.promise) });
+    emit(tableOrder(el), "dining-change", { dining: "takeaway" });
+    emit(tableOrder(el), "back-to-floor");
+    await flush(el);
+    const reads = getPartyBills.mock.calls.length;
+
+    reply.reject({ code: "order.dining_locked", reason: "paid" });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+    expect(getPartyBills).toHaveBeenCalledTimes(reads);
+  });
+
+  it("a switch refused because the bill's draft changed elsewhere says so and reads the draft again", async () => {
+    const { el, api, getPartyBills } = await tableApp({
+      switchDining: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
+    });
+    const listDrafts = vi.spyOn(api, "listDrafts");
+
+    await chooseWay(el, tableOrder(el), "Take away");
+    await flush(el);
+
+    expect(banner(el)?.textContent?.trim()).toBe(t("table.draft_changed_elsewhere"));
+    const refused = vi.mocked(api.switchDining).mock.invocationCallOrder[0]!;
+    const billsRead = getPartyBills.mock.invocationCallOrder.find((order) => order > refused)!;
+    expect(
+      listDrafts.mock.invocationCallOrder.filter((order) => order > refused && order < billsRead),
+    ).toHaveLength(1);
+    expect(tableOrder(el).dining).toBe("eat_in");
+  });
+
+  it("a switch while the bill's draft could not be read sends nothing and says the draft is out of date", async () => {
+    const { el, api } = await tableApp({
+      listDrafts: vi.fn().mockRejectedValue(new Error("network")),
+    });
+    expect(banner(el)?.textContent?.trim()).toBe(t("table.draft_read_failed"));
+
+    await chooseWay(el, tableOrder(el), "Take away");
+    await flush(el);
+
+    expect(api.switchDining).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    expect(segmented(tableOrder(el))!.value).toBe("eat_in");
+  });
+
   it("dishes moved to a bill sold the other way are refused in their own words", async () => {
     const { el } = await tableApp({
       getPartyBills: vi.fn().mockResolvedValue([
@@ -441,3 +542,13 @@ describe("a table bill's way of selling (A1522)", () => {
     expect(segmented(tableOrder(el))!.value).toBe("eat_in");
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}

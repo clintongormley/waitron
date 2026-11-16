@@ -2202,6 +2202,87 @@ describe("A768 the order screen shows at once", () => {
     expect(server.submitDraft).toHaveBeenCalledOnce();
     expect(server.submitDraft.mock.calls[0]![2].dining).toBe("takeaway");
   });
+
+  it("leaving while Take away is being switched on the new bill stays on the floor (A1522)", async () => {
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    const newBill = partyBillOf("v-new", "wo-new", 1, { diningChoice: "open", revision: 0 });
+    const switched = deferred<{ revision: number }>();
+    const tillChoice = {
+      ...menu("v1"),
+      context: { ...menu("v1").context, dining: { policy: "till_choice", startsAs: "eat_in" } },
+    };
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(tillChoice),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
+      seatTable: vi.fn(async () => {
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+      getPartyBills: vi.fn(async (partyId: string) => (partyId === "v-new" ? [newBill] : [])),
+      switchDining: vi.fn(() => switched.promise),
+      listStations: vi.fn().mockResolvedValue([]),
+    });
+    await openTable(el, "t9");
+    emit(tableOrder(el)!, "dining-change", { dining: "takeaway" });
+    await flush(el);
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    expect(api.switchDining).toHaveBeenCalledOnce();
+
+    await back(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    switched.resolve({ revision: 1 });
+    await flush(el, 6);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+  });
+
+  it("a server switch while Take away is being switched on the new bill reads no stations and stays locked (A1522)", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    const newBill = partyBillOf("v-new", "wo-new", 1, { diningChoice: "open", revision: 0 });
+    const switched = deferred<{ revision: number }>();
+    api.listZoneOffers.mockResolvedValue({
+      ...menu("v1"),
+      context: { ...menu("v1").context, dining: { policy: "till_choice", startsAs: "eat_in" } },
+    });
+    api.getTablesState.mockResolvedValue([table4, table7, free]);
+    api.seatTable = vi.fn(async () => {
+      api.getTablesState.mockResolvedValue([table4, table7, seated]);
+      return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+    });
+    api.getPartyBills = vi.fn(async (partyId: string) => (partyId === "v-new" ? [newBill] : []));
+    api.switchDining = vi.fn(() => switched.promise);
+    api.listStations = vi.fn().mockResolvedValue([]);
+    await openTable(el, "t9");
+    emit(tableOrder(el)!, "dining-change", { dining: "takeaway" });
+    await flush(el);
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    expect(api.switchDining).toHaveBeenCalledOnce();
+
+    await switchServer();
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+    const stationReads = api.listStations.mock.calls.length;
+    switched.resolve({ revision: 1 });
+    await flush(el, 6);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(lock(el)).not.toBeNull();
+  });
 });
 
 describe("A803 opening bill", () => {

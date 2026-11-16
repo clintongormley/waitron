@@ -116,6 +116,16 @@ it("downloads the visible edited preview, without a request or storage write, an
   expect(data(preview(reopened)).id).not.toBe(first.id);
 });
 
+it("asked to open again while open, keeps the report and its description", async () => {
+  const { el } = await clockApp();
+  const dialog = await openStrip(el);
+  const opened = data(preview(dialog)).id;
+  await editReport(dialog, "Printer jammed");
+  reportOf(el).show(document.body);
+  await reportOf(el).updateComplete;
+  expect(dialog.description).toBe("Printer jammed");
+  expect(data(preview(dialog)).id).toBe(opened);
+});
 it("hides both entry points without a secure context", async () => {
   vi.stubGlobal("isSecureContext", false);
   const { el } = await clockApp({ enabled: false });

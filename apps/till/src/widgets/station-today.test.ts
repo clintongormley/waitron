@@ -218,6 +218,17 @@ it.each(["pin.invalid", "pin.throttled"])(
     ]);
   },
 );
+it("a closed close-for-today dialog goes away, writes nothing and frees the action", async () => {
+  const { el, calls } = await mount();
+  act(el);
+  const d = await dialog(el);
+  d.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+  const action = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-action]")!;
+  expect([action.variant, action.disabled]).toEqual(["primary", false]);
+  expect(calls.map((call) => call.method)).toEqual(["GET"]);
+});
 it("closing also retries its chosen destination with manager approval", async () => {
   let writes = 0;
   const { el, calls } = await mount({}, (path, init) =>
