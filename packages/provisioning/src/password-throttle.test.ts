@@ -176,7 +176,7 @@ describe("password login backoff under a flood of made-up addresses", () => {
     expect(() => throttle.begin(REAL)).toThrowError(refusal(4));
   });
 
-  it("lets a different address with more wrong tries take the counter, and the one it displaces comes back fresh", () => {
+  it("retains real-first history when another address has more wrong tries", () => {
     let now = 0;
     const throttle = createPasswordThrottle(() => now, SECRET);
     const [other] = neighbours();
@@ -190,8 +190,102 @@ describe("password login backoff under a flood of made-up addresses", () => {
 
     now = 4000;
     expect(() => throttle.begin(other!)).toThrowError(refusal(3));
+    fail(throttle, REAL, 1);
+    expect(() => throttle.begin(REAL)).toThrowError(refusal(4));
+  });
+
+  it("retains spray-first history when the real address is forgotten into an occupied counter", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other] = neighbours();
+    fail(throttle, other!, 4);
+    forgetAll(throttle, "a");
     fail(throttle, REAL, 3);
-    expect(() => throttle.begin(REAL)("error")).not.toThrow();
+    forgetAll(throttle, "b");
+
+    fail(throttle, REAL, 1);
+    expect(() => throttle.begin(REAL)).toThrowError(refusal(2));
+    now = 2000;
+    fail(throttle, REAL, 1);
+    expect(() => throttle.begin(REAL)).toThrowError(refusal(4));
+    fail(throttle, other!, 1);
+    expect(() => throttle.begin(other!)).toThrowError(refusal(4));
+  });
+
+  it("shares overflow with a newcomer without raising its named owner's count", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other, newcomer] = neighbours();
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "a");
+    fail(throttle, other!, 4);
+    forgetAll(throttle, "b");
+    expect(() => throttle.begin(newcomer!)).toThrowError(refusal(2));
+
+    now = 2000;
+    fail(throttle, other!, 1);
+    forgetAll(throttle, "c");
+    expect(() => throttle.begin(newcomer!)).toThrowError(refusal(4));
+    fail(throttle, REAL, 1);
+    expect(() => throttle.begin(REAL)).toThrowError(refusal(4));
+  });
+
+  it("starts a successful overflow address fresh while cached without clearing another address's history", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other, newcomer] = neighbours();
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "a");
+    fail(throttle, other!, 4);
+    forgetAll(throttle, "b");
+
+    now = 2000;
+    throttle.begin(other!)("success");
+    fail(throttle, other!, 3);
+    expect(() => throttle.begin(other!)("error")).not.toThrow();
+    fail(throttle, newcomer!, 1);
+    expect(() => throttle.begin(newcomer!)).toThrowError(refusal(4));
+  });
+
+  it("starts overflow fresh after it has been idle", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    const [other, newcomer] = neighbours();
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "a");
+    fail(throttle, other!, 4);
+    forgetAll(throttle, "b");
+
+    now = PIN_THROTTLE_IDLE_MS;
+    fail(throttle, newcomer!, 3);
+    expect(() => throttle.begin(newcomer!)("error")).not.toThrow();
+  });
+
+  it("skips a lapsed fold when the clock steps backward after its idle sweep", () => {
+    let now = 0;
+    let stepBack = false;
+    const throttle = createPasswordThrottle(() => {
+      if (stepBack) {
+        stepBack = false;
+        return 100_000;
+      }
+      return now;
+    }, SECRET);
+    const [other, future] = neighbours();
+    fail(throttle, other!, 4);
+    forgetAll(throttle, "a");
+    fail(throttle, REAL, 4);
+    forgetAll(throttle, "b");
+    now = 100_000;
+    throttle.begin(future!)("error");
+    const held = madeUp(999, "held", [REAL]).map((email) => throttle.begin(email));
+
+    now = 0;
+    stepBack = true;
+    const finish = throttle.begin(madeUp(1, "trigger", [REAL])[0]!);
+    expect(() => throttle.begin(REAL)).toThrowError(refusal(2));
+    finish("error");
+    for (const release of held) release("error");
   });
 
   it("escalates further when the same address is forgotten again with more wrong tries", () => {
@@ -381,9 +475,9 @@ describe("password login backoff under a flood of made-up addresses", () => {
       let now = 0;
       const asked = createPasswordThrottle(() => now, SECRET);
       const control = createPasswordThrottle(() => now, SECRET);
-      const [neighbour] = neighbours();
+      const [neighbour, overflowed] = neighbours();
       const IDLE = "goes-idle@example.com";
-      const emails = [REAL, neighbour!, IDLE];
+      const emails = [REAL, neighbour!, overflowed!, IDLE];
       const ask = () => {
         const before = asked.tracked();
         for (const email of [...emails, "never-seen@example.com"]) asked.wouldRefuse(email);
@@ -421,6 +515,7 @@ describe("password login backoff under a flood of made-up addresses", () => {
       onBoth((throttle) => fail(throttle, REAL, 4));
       onBoth((throttle) => forgetAll(throttle, "a"));
       onBoth((throttle) => fail(throttle, neighbour!, 1));
+      onBoth((throttle) => forgetAll(throttle, "b"));
       ask();
 
       const askedHistory = history(asked);

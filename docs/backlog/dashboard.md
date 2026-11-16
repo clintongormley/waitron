@@ -85,14 +85,7 @@ Review #559 also recorded no test reaching `management_session.required` in
     existing test pins that), while Reset and the dashboard sign-in move it to the password; the
     owner's rule covers marking fields, not the cursor, so whether Connect should match is the
     owner's call (left by A153, #952).
-  - The password throttle (A154, #977) still loses an address's count under collisions in both
-    arrival orders: a forgotten real address with four failures is displaced when a made-up
-    address with five failures claims its counter; a made-up address holding the counter first
-    can instead keep the real address's count out when the real address is forgotten. The
-    2026-11-16 review's proposed rule protected counters after their fourth failure, but reduced
-    the spray-first cost to `min(g, 4)` wrong tries per made-up address, versus `g` today, for a
-    cycle of `g` real-address failures. The watcher kept the counter unchanged and referred a
-    redesign to the owner; no redesign is cleared here. The PIN back-off
+  - The PIN back-off
     (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
     one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
   - Password-reset timing (A147, #942; A159, #986): the real mail-server conversation, which only a
@@ -344,6 +337,13 @@ Size M.
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+- **Password-throttle saturation:** a crowded fallback counter keeps one named address and a shared
+  count for other addresses. During an address spray, a new address can inherit a wait of up to a
+  minute. A successful sign-in keeps a zero-count entry in the bounded cache; after eviction it can
+  inherit the shared count again. Success never clears another address’s shared protection. The
+  watcher cleared this availability trade-off on 2026-11-16 at 09:40, within the owner’s request to
+  fix count loss in both arrival orders.
 
 - **Deployment colour overrides:** set each related hover, text and disabled token explicitly so stylesheet authors choose a complete colour family. Semantic danger colours stay outside generated venue themes (watcher, 2026-11-16).
 
