@@ -182,7 +182,15 @@ could invoice for several taxpayers (owner, 14 November). A venue that moves bet
 and Waitron Cloud keeps Waitron's system code, gets a new installation number and needs no new
 declaration.
 
-*We ask:* Are those answers right?
+*We ask:*
+
+- (a) Are those answers right? Does item f) look at one installation, or at the product as sold to
+  many customers? We read it as one installation: almost every till system is sold to many
+  businesses, so the number of customers would tell AEAT nothing.
+- (b) In Waitron Cloud, Waitron runs a separate installation, database and certificate for each
+  venue. Does that make Waitron one user supporting the invoicing of several taxpayers, in item
+  f)'s words (*un mismo usuario para dar soporte a la facturación de varios obligados
+  tributarios*), so that item f) must say S?
 
 Yes / No / Note: ____________________________________________
 
@@ -671,7 +679,14 @@ puede facturar por varios obligados. Un local que pasa de su propio equipo a Wai
 revés, conserva el código de sistema de Waitron, recibe un nuevo número de instalación y no necesita
 nueva declaración.
 
-*Preguntamos:* ¿Son correctas esas respuestas?
+*Preguntamos:*
+
+- (a) ¿Son correctas esas respuestas? ¿El apartado f) se refiere a una instalación, o al producto
+  vendido a muchos clientes? Lo entendemos referido a una instalación: casi todos los sistemas de
+  caja se venden a muchos negocios, de modo que el número de clientes no diría nada a la AEAT.
+- (b) En Waitron Cloud, Waitron gestiona para cada local una instalación, una base de datos y un
+  certificado propios. ¿Convierte eso a Waitron en un mismo usuario que da soporte a la facturación
+  de varios obligados tributarios, en el sentido del apartado f), de modo que este deba decir S?
 
 Sí / No / Nota: ____________________________________________
 
