@@ -2,7 +2,7 @@
 
 **Authority:** watcher queue `/Users/clintongormley/waitron-campaign-d/queue.md`, ROTA-STAFF-ROLES-READ-AND-LINK-BUTTON, 2026-11-16 15:39: “Give the painters a read without the names (a query parameter or a second route), keeping the Staff roles list's.” “Add the variant (with its Windows contrast-theme style, as the shared pieces now have), switch both Rota widgets to it and drop their local rules.”
 
-**Finish line:** painters receive role names, colours and holder ids without holder names; Staff roles still displays holders’ names. Both Rota actions use its shared `link` variant. One PR, executed inline after Claude approach review and watcher clearance; neither constitutes owner design approval.
+**Finish line:** painters receive role names, colours and holder ids without holder names; Staff roles still displays holders’ names. Both Rota actions use its shared `link` variant. One PR, executed inline. Claude reviewed the approach (190 seconds); the watcher cleared this corrected plan in `~/waitron-campaign-d/questions.md` at 16:16 on 2026-11-16, with about 90 test lines and existing axe matrices. Build after Extras. Neither is owner design approval.
 
 - [ ] **Role read.** In `packages/staffing/src/routes.ts`, select existing `listStaffRoles` from `staff-roles.ts` only for `GET /management-api/staffing/staff-roles?holderNames=false`; absent/other values retain `listStaffRolesWithHolderNames`. Keep the existing session and `gatedBy(VIEW_VENUE, …)` unchanged around both branches. In `dashboard/client.ts` (same package), send that option only for `painter-staff-roles`; preserve passive reads, subscriptions and call shape. Type painter callbacks as `StaffRole[]`, ordinary callbacks as `ListedStaffRole[]`, without weakening the latter.
 
