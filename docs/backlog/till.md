@@ -701,14 +701,15 @@ is not forced later, and nothing in the code rules out the two sharing a millise
 
 ## What W106 left open (the battery on the Devices list, #1240)
 
-Left OPEN by W106 (battery, #1240): dashboard places still showing a bare `YYYY-MM-DD HH:MM`
-(`formatIsoMinute`), not changed: the Devices "Last
-seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
+Left OPEN by W106 (battery, #1240): (1) dashboard places still showing a bare `YYYY-MM-DD HH:MM`
+(`formatIsoMinute`), not changed: the Devices "Last seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
 printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
 queue's Created and Delivered columns; the menu status and preview's "published {time}"
 (`apps/dashboard/src/widgets/menu-preview.ts`); and the adjustments report's time column
 (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`). Whether any of them should
-use `wt-relative-time` is the owner's call.
+use `wt-relative-time` is the owner's call. (2) `wt-relative-time`'s words are an inline button
+below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a sentence
+([design-system.md](../developers/design-system.md)); whether that may stay is the owner's call.
 
 ## What W105 left open (#1235)
 
@@ -720,12 +721,11 @@ Pair repeat some request-body building; seven unread `devices.*` strings.
 
 ## What W104 left open (#1225)
 
-Left OPEN by W104, not acted on: (2) leaving
-the Devices page with Back while a Pair save is in flight still sends a deny for that request
-(`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
-device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
+Left OPEN by W104, not acted on: (1) leaving the Devices page with Back while a Pair save is in
+flight still sends a deny for that request (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`),
+and what then happens to the device is untested; (2) the Add a device and Pair dialogs were looked at only through the browser
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
-address has not been looked at. (4) a device's knock is refused if the window shut while its body was
+address has not been looked at; (3) a device's knock is refused if the window shut while its body was
 arriving, but open periods are told apart only by their start time, to the millisecond
 (`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
 
@@ -2268,9 +2268,9 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   number pad or a choice picker counts as a form under it is open.
   [Detail](till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
 
-## Bundle: Reads and saves with no time limit
+## Bundle: Add a device: loose ends from A268
 
-1 entry, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
@@ -2278,6 +2278,14 @@ except that it no longer waits on the retired split and transfer routes (A1196).
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W105 (#1235): review suggestions #1235 did not take.
     [Detail](till.md#what-w105-left-open-1235)
+  - W104 (#1225), not acted on: leaving Devices with Back during a Pair save still sends a deny;
+    the dialogs were never looked at on a box; a device's request to join that was still arriving
+    when the window shut is not refused if the window reopened within the same millisecond.
+    [Detail](till.md#what-w104-left-open-1225)
+  - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
+    preview and the adjustments report should use `wt-relative-time`, and whether its inline
+    words may stay below `--wt-tap-min`, are the owner's call.
+    [Detail](till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
 
 ## Bundle: Nothing covers the order screen's bar
 
