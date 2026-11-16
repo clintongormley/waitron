@@ -5180,6 +5180,14 @@ followed by an unquoted report count, not composite actions, external reusable w
 anchors or alternative shell commands. A matching cleanup string does not prove that it ran or
 removed a file.
 
+### A rerun till report reaches the merge
+
+On 16 November 2026, [probe run 43918392231](https://github.com/clintongormley/waitron/actions/runs/43918392231), source/workflow `259a27287c2c6ce6347f4604725f8065584330d6`, ran the seven real till shards on hosted runners. Shard 1 job `133478776063` passed 2,219 tests, uploaded artifact `14252137434`, then failed at an inserted post-upload step. Its one job-specific rerun, job `133482557575` in attempt 2, passed the same 2,219 tests and uploaded `14254565996`; the first upload succeeded and its retry stayed unused.
+
+Both artifacts named `till-blob-1` remained visible. Merge job `133484686915` logged the new, higher ID before downloading it. The original report hash was `485efe8717d12eedec4f8ab15f6267246958404d065f88c011b0a7a0d4f5b9cb`; the rerun and downloaded report both hashed to `168bac8b1de7876765b478bbbce101bc436d0c47d743e7766333328c30eb1ad5`. This is one observed ID ordering, with distinct content identifying the rerun.
+
+The helper downloaded seven reports. Their 621 file/project pairs cover all 620 physical till test files plus its configured fallback-browser pair; the merge reported 18,744 passed and 44 skipped tests. The unchanged coverage gate **refused** 97.95% statements against 98%; branches/functions/lines were 95.42/99.02/99.21%. The till source and coverage settings match main's `a0316db9bcf2c18790a38b5ce46583039243c401` tree. This receipt qualifies report delivery; it is not a green coverage result.
+
 ### A completed transfer can still leave the download action alive
 
 On 26 October 2026, main run `40349323088`, job `121693827853`, printed completion for all
@@ -5276,6 +5284,22 @@ with `12612460480`. Downloading the final artifact returned the replacement file
 rather than `before`). This measured a complete artifact already present under the name,
 not a network timeout or a cancellation during upload. The temporary probe workflow was removed
 after collecting its run log and downloaded payload.
+
+**16 November 2026: deadline and partial-transfer interruption.** The same [hosted probe](https://github.com/clintongormley/waitron/actions/runs/43918392231) used unmodified upload v7 `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, with the production one-minute first attempt and failure-only overwrite retry. A first-action-only preload observed the first acknowledged 8 MiB block of a 32 MiB payload, then froze that process for the deadline case or killed it for the interruption case. `ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'` applied only to each first action; retries used the default.
+
+| Mode; attempt-1 job | First outcome / conclusion | Retry | Final artifact |
+| --- | --- | --- | --- |
+| Control; `133478776006` | success / success | skipped | `14250762477` |
+| Deadline; `133478775903` | failure / success | success | `14250747687` |
+| Interruption; `133478776463` | failure / success | success | `14251267126` |
+
+The deadline log says the first action timed out after one minute. The interruption followed its acknowledged block before that deadline. The between-attempt REST listings exposed no artifact under either failed upload's name; the retries recovered without a visible replacement. This does not establish absence of incomplete server state. The earlier collision probe supplies the separate complete-artifact replacement receipt.
+
+Control and interruption jobs downloaded payloads matching their original SHA-256 values. The deadline job's immediate verification download returned 404 after its successful retry; a later direct read of that exact artifact matched payload `25c79bad681706961d4dd725dfc9acb6c77b4dbd7de3bd41efffbdd9fbdd17a4` and archive digest `87197a0fda85ae3d30a32f91d07f3573c6be2c461f9f3529ceb1a3c5ac664ebd`. Its job remains failed on that verification step. No repeat fault dispatch was made. These observations cover a frozen process reaching its step limit and a killed partial transfer, not a socket reset, a live network stall or a CreateArtifact timeout. The disposable workflow and logging preload are discarded.
+
+| Source, checked 16 November 2026 | Source words | Use here |
+| --- | --- | --- |
+| [Pinned upload bundle](https://github.com/actions/upload-artifact/blob/cf430e030ddbb5b0abf93d22962f4752f3646cd9/dist/upload/index.js#L119966) | “Update progress after block is successfully uploaded to server” | The preload acts at the subsequent progress message, after one block has been accepted. |
 
 The artifact-upload cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never run an upload. They recognise literal action names, conditions, step

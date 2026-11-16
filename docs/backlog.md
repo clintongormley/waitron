@@ -1637,7 +1637,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   opening a repair.
   [Detail](backlog/ci.md#a1251-finish-qualifying-and-reviewing-historical-prs-that-skipped-the-claude-run-it-review).
 
-- **One throwaway branch that interrupts an upload and re-runs a shard** (bundle of 2, size S). Holds A1251, A1213. [Detail](backlog/ci.md#bundle-one-throwaway-branch-that-interrupts-an-upload-and-re-runs-a-shard)
 
 
 For package distribution and the four-minute target, use the

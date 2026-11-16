@@ -67,20 +67,6 @@ An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts
 Align the inline instruction with the available action when reworking this refusal; preserve its
 cause and the distinction between a failed write and a successful write whose reload failed.
 
-## A1251: qualify artifact-upload retries after a step timeout
-
-Before treating artifact-upload retries as qualified for stalled connections, run a bounded
-hosted probe whose first attempt reaches its step time limit. Observe the first attempt's
-recorded outcome and whether the failure-only retry runs. Check recovery from an interrupted
-upload separately, including replacement of an artifact left by that attempt.
-
-The retrospective review of [PR #2069](https://github.com/clintongormley/waitron/pull/2069)
-left both paths unverified. Its existing
-[collision probe](../developers/ci-and-gates.md#every-artifact-upload-is-bounded) recovered from
-a duplicate name after a complete upload. Neither that result nor the workflow text checks
-establishes recovery after a timeout, cancellation or interruption. Preserve the distinction
-when reporting the next experiment.
-
 ## What the per-push CI concurrency groups (#384) left open
 
 - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
@@ -368,17 +354,6 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **Dependency optimizer:** qualify the remaining Vite 8 behavior; the setup control was inconclusive and dashboard, till and UI remain unmeasured.
   [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured).
 
-
-## Bundle: One throwaway branch that interrupts an upload and re-runs a shard
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1251: qualify artifact-upload retries after a step timeout.**
-  Check the first attempt's recorded outcome and whether its retry runs; the existing collision
-  probe does not cover a timeout or an interrupted upload. [Detail](ci.md#a1251-qualify-artifact-upload-retries-after-a-step-timeout).
-- **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
-  A1125's CI (#2238, 2026-10-29), while the merge still used the download action.
-  [Detail](ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
 
 ## Decisions and deliberate limits
 
@@ -1149,12 +1124,4 @@ Keep the IPP clock-driver limit explicit when
 changing the polling continuation, and check that a failed fixture’s print call settles after
 teardown. Align the archive-settings inline instruction with its available action.
 [Inline advice](#archive-settings-inline-advice-must-name-its-available-action).
-
-## A1213. Does a re-run till shard's report reach `test-till-merge`?
-
-Seen once, not proven, in A1125's CI (#2238, 2026-10-29), while the merge still used the download
-action. Since A1216 the merge runs `scripts/download-coverage-blobs.mjs`, which keeps the
-highest-id copy of each report name. Check on a throwaway branch (fail one shard on purpose,
-re-run it, read which artifact id the helper downloads) that the highest id is the re-run's. If
-it is, delete this entry; if not, make the helper keep the re-run's copy.
 
