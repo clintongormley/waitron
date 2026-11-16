@@ -841,7 +841,7 @@ lock_managed_box() {
   # Docker requires this service, which takes the same lock: started under our lock, it would fail.
   if ! as_root systemctl start waitron-upgrade-recovery.service; then
     flock -n 9 || die "another host operation is running"
-    die "the upgrade recovery service failed to start — see 'systemctl status waitron-upgrade-recovery.service'"
+    die "the upgrade recovery service did not start, so nothing was refreshed or reset — run 'systemctl status waitron-upgrade-recovery.service' to see why"
   fi
   flock -n 9 || die "another host operation is running"
   refuse_pending_upgrade

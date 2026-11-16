@@ -53,7 +53,7 @@ afterEach(() => {
 // `docker image inspect` reports a sha256:old-* id absent; the default models the classic store,
 // which keeps it. `docker image rm` fails when WT_RMI_FAIL=1.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
-// no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
+// no-op (except under WT_RECOVERY_UNIT=1, below) and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl). `timedatectl` is stubbed so no case reaches a real one on a Linux machine,
 // and fails when WT_TIMEDATECTL_FAIL=1. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
@@ -73,8 +73,9 @@ afterEach(() => {
 // curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_RECOVERY_UNIT=1 models Docker's dependency on
 // the upgrade recovery service, which takes the host lock itself: once a `flock -n 9` has succeeded
 // in the case, `systemctl start waitron-upgrade-recovery.service` and `systemctl enable --now docker`
-// fail until that service has run; with WT_UPGRADE_BUSY=1 as well, that start exits 75 as the
-// service does while another host operation holds the lock. Each case runs its OWN copy of the script
+// fail until that service has run; with WT_UPGRADE_BUSY=1 as well, the service exits 75, as it does
+// while another host operation holds the lock, and `systemctl start` then fails (status 1).
+// WT_RECOVERY_FAIL=1 makes that start fail whatever the lock's state. Each case runs its OWN copy of the script
 // (`sb.script`), because install may replace the copy it runs from.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
@@ -322,8 +323,11 @@ case "$*" in
     find "\${WAITRON_TEST_HOST_ROOT}/etc/systemd/system/bluetooth.service.d" -maxdepth 1 -name '*.conf' 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' ;;
   "enable --now waitron-box.socket") [ "\${WT_BOX_ENABLE_FAIL}" = "1" ] && exit 1 ;;
   "start waitron-upgrade-recovery.service")
+    if [ "\${WT_RECOVERY_FAIL}" = "1" ]; then
+      echo "Job for waitron-upgrade-recovery.service failed because the control process exited with error code." >&2; exit 1
+    fi
     if [ "\${WT_RECOVERY_UNIT}" = "1" ] && [ "\${WT_UPGRADE_BUSY:-0}" = "1" ]; then
-      echo "Waitron start held: another host operation is running" >&2; exit 75
+      echo "Job for waitron-upgrade-recovery.service failed because the control process exited with error code." >&2; exit 1
     fi
     if [ "\${WT_RECOVERY_UNIT}" = "1" ] && [ -e "\${WT_LOG}.locked" ] && [ ! -e "\${WT_LOG}.recovered" ]; then
       echo "Job for waitron-upgrade-recovery.service failed because the control process exited with error code." >&2; exit 1
@@ -2965,14 +2969,35 @@ it.each([
   expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
 });
 
-it("names the busy lock, not the recovery service, when the service has not run and the lock is held", () => {
+it.each([
+  ["reset", "--yes"],
+  ["--reset", "--yes", "install"],
+])(
+  "names the busy lock, not the recovery service, when %j finds the service not run and the lock held",
+  (...args) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed gate");
+    const result = run(sb, args, { WT_RECOVERY_UNIT: "1", WT_UPGRADE_BUSY: "1" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("another host operation is running");
+    expect(result.stderr).not.toContain("upgrade recovery service");
+    expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+  },
+);
+
+it.each([
+  ["reset", "--yes"],
+  ["--reset", "--yes", "install", "my-branch"],
+])("names the recovery service when it fails to start for %j while the lock is free", (...args) => {
   const sb = sandbox({ systemd: true });
   installedBox(sb);
   writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed gate");
-  const result = run(sb, ["reset", "--yes"], { WT_RECOVERY_UNIT: "1", WT_UPGRADE_BUSY: "1" });
+  const result = run(sb, args, { WT_RECOVERY_FAIL: "1" });
   expect(result.status).toBe(1);
-  expect(result.stderr).toContain("another host operation is running");
-  expect(result.stderr).not.toContain("upgrade recovery service failed");
+  expect(result.stderr).toContain("upgrade recovery service did not start");
+  expect(result.stderr).not.toContain("another host operation is running");
+  expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
 });
 
 describe("the installed practice inbox", () => {
