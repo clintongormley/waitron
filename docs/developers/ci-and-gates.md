@@ -56,8 +56,10 @@ push, scheduled or manual main ancestor among the latest 100 runs. Queued, runni
 cancelled runs do not become baselines. Missing history or an unreadable API selects global change
 scope; failed, partial, unsafe or oversized path output does the same. Main uses that scope for quick
 checks, not package tests. A successful docs run cannot hide a failed quick check on earlier code:
-that code is included in its range before the docs run can succeed. Failures caused only by combining
-branches wait for the next full package run; the owner accepted this delay on 8 November 2026.
+that code is included in its range before the docs run can succeed. Apart from what the fourth
+landing check in [workflow-guide.md](workflow-guide.md#commits-pull-requests-and-merging) catches,
+failures caused only by combining branches wait for the next full package run; the owner accepted
+this delay on 8 November 2026.
 
 For immediate full verification, run `gh workflow run ci.yml --ref main`, record the selected SHA
 and run ID, then read the final result. A failed nightly needs a fix followed by this manual run;
