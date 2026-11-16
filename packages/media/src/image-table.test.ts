@@ -40,6 +40,8 @@ it("keeps the table's indexes", async () => {
   expect(indexes.rows.map((index) => index.name)).toEqual([
     "media_images_date_idx",
     "media_images_filename_key",
+    "media_images_original_hash_idx",
+    "media_images_source_hash_idx",
   ]);
 });
 
