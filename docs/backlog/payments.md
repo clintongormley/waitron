@@ -73,10 +73,12 @@ Each stays open until the owner answers it. "The picture" was a mock-up, removed
 ## The SumUp Solo experiments
 
 The [sandbox checks and owner settlement script](../research/2026-11-15-a949-sandbox-and-settlement-check.md)
-record the successful €10 integrated Virtual A control on 16 November: Waitron captured the
-payment and settled its bill; SumUp returned `SUCCESSFUL` for EUR 10. Simulated declines and
-the same-account second reader still need a coordinated session. The paired-reader gross-charge
-match needs an owner real-card session and later read-only venue evidence. Those checks remain unrun.
+record the successful €10 Virtual A control and the later virtual-reader session on 16 November.
+The €11 late decline needed a manager-confirmed release after the provider reported `FAILED`;
+€42.51 returned a generic decline within the till's wait. A separate €10 Virtual B payment settled
+its own bill and matched SumUp's `SUCCESSFUL` transaction. Physical-card qualification and the
+paired-reader gross-charge match still need an owner real-card session and later read-only venue
+evidence.
 
 **9 November continuation:** the owner's cross-account session accepted Waitron's new affiliate
 block with the restaurant's credential. A reference read changed from 404 to PENDING before the
@@ -110,7 +112,7 @@ complete detail through the real adapter matched its refund; the raw 19-row hist
 omits foreign-reference keys, while the two detail responses carry them. See the runbook's
 §10.7.
 
-Still open: declined-card behavior, signature-required cards, the statement/fee
+Still open: physical declined-card behavior, signature-required cards, the statement/fee
 check, the SIM-only/offline/busy-reader/termination probes, and a second standalone machine's
 matching sample. The phone-app samples below do not establish the latter. No further paid
 request is authorised unattended, and a distinct authorisation void has not been measured.

@@ -1054,9 +1054,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
   full payment, but its request bytes were not saved and the cause is unknown.
   [Sandbox checks and the owner’s 15-minute settlement script](research/2026-11-15-a949-sandbox-and-settlement-check.md)
-  record a successful €10 Virtual A control on 16 November. Declines and the second reader still
-  need a coordinated sandbox session; the real-card settlement check needs the owner. No further
-  paid request unattended.
+  record the successful €10 Virtual A control, two virtual decline scenarios and a separate
+  successful €10 Virtual B payment on 16 November. The €11 late result needed manager confirmation;
+  €42.51 used generic decline wording. Physical-card qualification and the real-card settlement check
+  still need the owner. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
 - **The deli's outage card machine.** Buy the standalone machine and

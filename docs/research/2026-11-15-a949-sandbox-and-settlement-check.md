@@ -14,6 +14,10 @@ tapping a card and saw **Approved**. Waitron received €10, settled the bill an
 SumUp reported `SUCCESSFUL` for the same amount. The decline and second-reader checks
 still need a coordinated session. Your real-card settlement check remains separate.
 
+**Later on 16 November 2026:** the two virtual decline scenarios and the separate Virtual B
+payment ran with you at the reader tabs. See [the later session](#reader-checks-16-november)
+for the results and the €11 late-response limit. The real-card settlement check is still pending.
+
 ## Sandbox checks
 
 Use a separate preproduction venue, a confirmed sandbox merchant and two Virtual Solos on
@@ -24,9 +28,9 @@ references for each attempt. Keep raw receipts outside git.
 | Check | Expected observation | Actual result |
 | --- | --- | --- |
 | Virtual A, €10 successful control | Final success pays the correct order; accepting the checkout is insufficient. | Passed, 16 November: €10 received, bill settled, provider `SUCCESSFUL`. |
-| Virtual A, €11 decline | Order stays unpaid; record the exact message and available retry/other-payment choices. | Pending: next coordinated reader session. |
-| Virtual A, €42.51 insufficient funds | Order stays unpaid; record whether Waitron uses a generic decline or names insufficient funds. | Pending: next coordinated reader session. |
-| Same-account Virtual B | Pay a separate order through the till and real client; verify final success and correct routing to B. | Pending: next coordinated reader session. |
+| Virtual A, €11 decline | Order stays unpaid; record the exact message and available retry/other-payment choices. | Confirmed late decline: provider `FAILED`; till initially pending, then manager recorded not charged. |
+| Virtual A, €42.51 insufficient funds | Order stays unpaid; record whether Waitron uses a generic decline or names insufficient funds. | Passed: returned `declined` within the till wait; generic decline wording, no specific insufficient-funds text. |
+| Same-account Virtual B | Pay a separate order through the till and real client; verify final success and correct routing to B. | Passed: separate €10 order received and settled; provider `SUCCESSFUL`. |
 
 After a definite decline, verify that a retry has a new reference and reaches the intended
 order and reader. An unknown outcome needs checking before another attempt. Virtual readers
@@ -64,6 +68,51 @@ at 16:31. This control qualifies the integrated sandbox success path only. The e
 transaction in the retained provider reads; the watcher closed it as an unattended timeout
 based on the owner's late arrival, without a provider failure reason. No decline is inferred
 from it. The €11 form was prepared but no checkout was sent after the owner left.
+
+## Reader checks, 16 November
+
+You completed three more checkouts through the real SumUp client on the sandbox merchant
+Foo Bar / M1Z03T0H. Waitron sent each once. The two Virtual A attempts used the same unpaid
+order, with different payment and submission references; Virtual B paid a separate order.
+
+**Virtual A, €11.00:** the checkout started at 18:54:01 CET. At 18:56:31, Waitron's
+150-second wait ended without a final outcome. The till kept €11 reserved and
+said the payment was still in progress, with **Close** available and the route to **Check card
+payments**. You reported **Failed**; SumUp's later lookup returned `FAILED`, EUR 11, with the
+saved client reference and Waitron payment reference. The provider row became failed, but the
+bill remained pending. The existing manager **Record not charged** action released it only
+after that evidence was checked. The reopened bill listed it as **Failed** and reserved €0.
+This checks the late-decline recovery, not an immediate decline response on this amount.
+
+**Virtual A, €42.51:** the next checkout started at 19:00:20 and returned at 19:01:49, inside
+the till's wait. Waitron answered `declined`, left the €44 bill unpaid and reserved €0.
+Its Spanish message was “La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo
+con la tarjeta, o vuelve atrás y elige otra forma de pago.” It offered **Atrás** and **Cobrar**.
+You reported **failed**, without separate insufficient-funds wording. SumUp's lookup returned
+`FAILED`, EUR 42.51, matching the new references. The retained provider status fields and the
+till did not distinguish insufficient funds; the amount identifies the documented test scenario.
+
+**Virtual B, €10.00:** the separate order started at 19:04:15 and completed at 19:05:09.
+The payment preview named Virtual B and the real `sumup_cloud` client. Waitron answered
+`received`, with €10 received, €0 reserved and €0 outstanding. The bill settled and issued
+receipt `A-0E1M8/396`; the till opened **Documento para el cliente**. SumUp returned
+`SUCCESSFUL`, EUR 10, for the same payment and order. The customer-document step was closed
+without another payment. The final local read held exactly these three provider-payment rows:
+two failed and one captured, with just one sale, for B.
+
+| Check | Waitron payment reference | Checkout client reference | Final provider transaction |
+| --- | --- | --- | --- |
+| A, €11 | `28d5708e-7581-41ba-bbfb-dba9a80d5188` | `e1d56345-e2a3-4b39-b2aa-055b93605850` | `e3e122cb-4b0d-465f-a84a-5e1425dc9196` |
+| A, €42.51 | `dda59b3b-ec70-4131-b4e9-4914079d05ed` | `15c85efb-febd-497c-8c5c-d2cd7003e85b` | `e66db114-1d0f-4b06-907b-b6ceba4a9894` |
+| B, €10 | `c4f2597b-a0e7-4b51-a370-ef9c62726c48` | `66706f35-e2ff-4d1a-acf3-e0a5753511b3` | `6b6c0f5d-7398-4156-b560-d0f85163b687` |
+
+The A order was `12740d0f-9d99-449d-8fb3-9fd6aabdcb10`; B was
+`f8f2c0d2-24e0-4e9e-b686-47d24ad5d6e2`. Small, redacted provider/local/UI receipts are retained
+outside git under Lane F's `receipts/a949-sandbox-qualification-20261115/session-1843-*`.
+Your reader reports are recorded in Lane F questions at 18:57 and 19:02; at 19:06 you reported
+**done** for B. Its final result above is matched by Waitron and SumUp. Physical cards, PIN entry, signature handling, standalone
+backup-machine matching and the real-card settlement check remain unqualified. No further
+checkout is authorised by this record.
 
 ## Your one real-card check: ten minutes now
 
