@@ -6611,14 +6611,7 @@ describe("alerts in the shell", () => {
     const api = alertsApi({
       listAlerts,
       liveData,
-      getProfile: vi.fn().mockResolvedValue({
-        displayName: "Alex",
-        email: "alex@example.com",
-        locale: "en-GB",
-        hasPassword: true,
-        hasTotp: false,
-        passkeys: [],
-      }),
+      getProfile: vi.fn().mockResolvedValue(ownProfile),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -6632,7 +6625,7 @@ describe("alerts in the shell", () => {
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await expect.poll(() => profile.open).toBe(false);
-    await toast(el).updateComplete;
+    await expect.poll(() => toastButton(el, "close")).not.toBeNull();
     await userEvent.click(toastButton(el, "close"));
     await expect.poll(() => toast(el).open).toBe(false);
   });
