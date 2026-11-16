@@ -571,12 +571,12 @@ Check the bill balance before taking another payment, so you collect only what i
 ## A card-payment check failed {#card-check-failed}
 
 If **Check with the card provider** fails, keep the order and payment details shown on Card
-payments and check the payment in the provider's dashboard. Do not charge again. Waitron does
-not repeat this check automatically. If the payment stays listed, choose **Check with the card
-provider** again after checking the provider.
+payments and check the payment in the provider's dashboard. Do not charge again. If the payment
+stays listed, Waitron may still check it automatically. You can choose **Check with the card provider** again after checking the provider.
 
-If it is no longer listed, that alone does not confirm a charge. If the provider confirms payment,
-find the original order at the **Counter** and choose **Card** using the same provider. Waitron
+If it is no longer listed, that alone does not confirm a charge. If the check confirmed the charge
+but recording failed, Waitron does not retry that recording automatically. If the provider confirms
+payment and this was a Counter order, find the original order at the **Counter** and choose **Card** using the same provider. Waitron
 records a matching saved charge. If the reader asks for the card, cancel without presenting it.
 Keep the payment details if you cannot finish this step.
 

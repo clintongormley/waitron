@@ -20,7 +20,7 @@ import {
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
-import type { PaymentsScreen } from "./payments-screen.js";
+import { PaymentsScreen } from "./payments-screen.js";
 import { formatEquipmentCode } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
 
@@ -209,6 +209,19 @@ const qCell = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("payments-screen", () => {
+  it("opens without a secure-context random UUID API", async () => {
+    const own = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
+    Object.defineProperty(crypto, "randomUUID", { configurable: true, value: undefined });
+    try {
+      expect(() => new PaymentsScreen()).not.toThrow();
+      const { el } = await mount();
+      expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online");
+    } finally {
+      if (own) Object.defineProperty(crypto, "randomUUID", own);
+      else Reflect.deleteProperty(crypto, "randomUUID");
+    }
+  });
+
   it.each([
     ["en", "In use by"],
     ["es-ES", "En uso por"],
@@ -1549,7 +1562,7 @@ describe("card payments stuck after a restart", () => {
     ],
     [
       { code: "server.internal", status: 500 },
-      "The payment check failed and the payment is still listed. This check is not retried automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
+      "The payment check failed and the payment is still listed. Waitron may still check an unresolved payment automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
     ],
   ])("shows the curated text for a %o refusal and refreshes the list", async (refusal, text) => {
     const listStuckPayments = vi.fn().mockResolvedValue(STUCK);
@@ -1592,7 +1605,13 @@ describe("card payments stuck after a restart", () => {
         );
         expect(q(el, "[data-test=stuck-pay-1]") !== null).toBe(listed);
         const evidence = q(el, "[data-test=stuck-failed-evidence]")!.textContent!;
-        for (const value of ["pay-1", "wo-1", "Acme Pay", "Bar till", "12", "50"])
+        for (const value of [
+          "pay-1",
+          "wo-1",
+          "Acme Pay",
+          "Bar till",
+          locale === "es" ? "12,50\u00a0€" : "€12.50",
+        ])
           expect(evidence).toContain(value);
         expect(q(el, "[data-test=stuck-failed-evidence] time")!.getAttribute("datetime")).toBe(
           STUCK[0]!.startedAt,
@@ -1622,6 +1641,35 @@ describe("card payments stuck after a restart", () => {
     expect(q(el, "[data-test=stuck-failed-evidence]")!.textContent).toContain("pay-1");
     expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
   });
+
+  it.each([false, true])(
+    "keeps partial-refund action failures separate from payment checks (retain=%s)",
+    async (retain) => {
+      const row = {
+        ...STUCK[0]!,
+        retention: { remaining: "8.50", applied: "8.00", tip: "0.50", outstanding: "2.00" },
+        partialRefund: {
+          paymentId: "pay-1",
+          captured: "12.50",
+          refunded: "4.00",
+          remaining: "8.50",
+        },
+      };
+      const { el } = await mountChecks(
+        stubApi({
+          listStuckPayments: vi.fn().mockResolvedValue([row]),
+          releasePartialRefund: vi.fn().mockRejectedValue({ code: "server.internal" }),
+          retainPartialRefund: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        }),
+      );
+      q(el, `[data-test=${retain ? "retain-partial-pay-1" : "release-partial-pay-1"}]`)!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-partial-refund]")!.click();
+      await flush(el);
+      expect(result(el)!.textContent).toContain(t("payments.partial.failed"));
+      expect(result(el)!.textContent).not.toContain(t("payments.stuck.failed"));
+    },
+  );
 
   it("names a full disk the check met rather than the section's generic failure", async () => {
     expect(codeMessage("storage.disk_full")).not.toBe(codeMessage("server.internal"));
@@ -1857,6 +1905,7 @@ describe("the providers and readers once the server answers again", () => {
       expect(background.readerStatus).toHaveBeenCalledTimes(3);
       expect(api.readerStatus).toHaveBeenCalledTimes(openingCalls);
       el.remove();
+      expect(vi.getTimerCount()).toBe(0);
       await vi.advanceTimersByTimeAsync(120_000);
       expect(background.readerStatus).toHaveBeenCalledTimes(3);
     } finally {

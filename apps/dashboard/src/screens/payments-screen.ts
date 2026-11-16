@@ -77,7 +77,7 @@ function stuckRefusalText(error: unknown): string {
     if (reason === "ambiguous") return t("payments.stuck.unknown_ambiguous");
   }
   if (code === "reader.provider_disconnected") return t("payments.stuck.provider_disconnected");
-  if (code === "server.internal") return t("payments.stuck.failed");
+  if (code === "server.internal") return t("payments.partial.failed");
   return codeMessage(code);
 }
 
@@ -169,6 +169,7 @@ function billRefusalText(error: unknown): string {
 // Two status reads can wait on the card provider; keep other browser connections
 // available, including in browsers without Web Locks.
 let statusSlotsFree = 2;
+let nextStatusQueryKey = 0;
 const statusSlotWaiters: (() => void)[] = [];
 
 async function takeLocalStatusSlot(): Promise<void> {
@@ -429,7 +430,7 @@ export class PaymentsScreen extends LitElement {
   #statusVersion = 0;
   #statusPasses = 0;
   #statusCompletedAt = -Infinity;
-  readonly #statusQueryKey = `reader-status:${crypto.randomUUID()}`;
+  readonly #statusQueryKey = `reader-status:${++nextStatusQueryKey}`;
   readonly #statusQueries = new QueryController(
     this,
     () => this.api.liveData,
@@ -1987,7 +1988,7 @@ export class PaymentsScreen extends LitElement {
     } catch (error) {
       failedCheck = codeOf(error) === "server.internal";
       this.stuckResult = {
-        text: `${order}: ${stuckRefusalText(error)}`,
+        text: `${order}: ${failedCheck ? t("payments.stuck.failed") : stuckRefusalText(error)}`,
         refused: true,
         ...(failedCheck ? { evidence: row } : {}),
       };

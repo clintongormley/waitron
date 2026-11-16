@@ -3189,12 +3189,14 @@ export const en = {
     "The card provider's answer is unclear; the order stays locked. Check the payment in the provider's dashboard.",
   "payments.stuck.provider_disconnected":
     "This card provider is no longer connected. Connect it again, then check the payment.",
+  "payments.partial.failed":
+    "Waitron could not confirm this action. Check the payment in the provider's dashboard.",
   "payments.stuck.failed":
-    "The payment check failed. This check is not retried automatically. Do not charge again. Keep these details and check the payment in the provider's dashboard.",
+    "The payment check failed. Do not charge again. Check the payment in the provider's dashboard.",
   "payments.stuck.failed_listed":
-    "The payment check failed and the payment is still listed. This check is not retried automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
+    "The payment check failed and the payment is still listed. Waitron may still check an unresolved payment automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
   "payments.stuck.failed_removed":
-    "The payment check failed and the payment is no longer listed; that alone does not confirm a charge. This check is not retried automatically. Do not charge again. Check the provider's dashboard. If it confirms payment, find this order at the Counter and choose Card using the same provider. Waitron records a matching saved charge. If the reader asks for the card, cancel without presenting it.",
+    "The payment check failed and the payment is no longer listed; that alone does not confirm a charge. If this check confirmed the charge but recording failed, Waitron does not retry the recording automatically. Do not charge again. Check the provider's dashboard. If it confirms payment and this was a Counter order, find the original order at the Counter and choose Card using the same provider. Waitron records a matching saved charge. If the reader asks for the card, cancel without presenting it.",
   "payments.tender.heading": "Refunds after invoicing",
   "payments.tender.completed": "Refund completed. The original invoice is unchanged.",
   "payments.tender.failed": "Refund not made. The original invoice is unchanged.",
@@ -7576,12 +7578,14 @@ export const es: Record<StringKey, string> = {
     "La respuesta del proveedor de pagos no es clara; el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",
   "payments.stuck.provider_disconnected":
     "Este proveedor de pagos ya no está conectado. Vuelve a conectarlo y consulta de nuevo el cobro.",
+  "payments.partial.failed":
+    "Waitron no pudo confirmar esta acción. Consulta el cobro en el panel del proveedor.",
   "payments.stuck.failed":
-    "Falló la comprobación del cobro. Esta comprobación no se repite automáticamente. No vuelvas a cobrar. Conserva estos datos y consulta el cobro en el panel del proveedor.",
+    "Falló la comprobación del cobro. No vuelvas a cobrar. Consulta el cobro en el panel del proveedor.",
   "payments.stuck.failed_listed":
-    "Falló la comprobación y el cobro sigue en la lista. Esta comprobación no se repite automáticamente. No vuelvas a cobrar. Consulta el cobro en el panel del proveedor y después elige Consultar con el proveedor de pagos de nuevo.",
+    "Falló la comprobación y el cobro sigue en la lista. Waitron puede seguir consultando un cobro sin resolver automáticamente. No vuelvas a cobrar. Consulta el cobro en el panel del proveedor y después elige Consultar con el proveedor de pagos de nuevo.",
   "payments.stuck.failed_removed":
-    "Falló la comprobación y el cobro ya no está en la lista; eso por sí solo no confirma que se haya cobrado. Esta comprobación no se repite automáticamente. No vuelvas a cobrar. Consulta el panel del proveedor. Si confirma el cobro, busca este pedido en Mostrador y elige Tarjeta con el mismo proveedor. Waitron registra un cobro guardado que coincida. Si el lector pide la tarjeta, cancela sin presentarla.",
+    "Falló la comprobación y el cobro ya no está en la lista; eso por sí solo no confirma que se haya cobrado. Si esta comprobación confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. No vuelvas a cobrar. Consulta el panel del proveedor. Si confirma el cobro y era un pedido del Mostrador, busca el pedido original en Mostrador y elige Tarjeta con el mismo proveedor. Waitron registra un cobro guardado que coincida. Si el lector pide la tarjeta, cancela sin presentarla.",
   "payments.tender.heading": "Devoluciones después de facturar",
   "payments.tender.completed": "Devolución realizada. La factura original no cambia.",
   "payments.tender.failed": "Devolución no realizada. La factura original no cambia.",

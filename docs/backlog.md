@@ -1088,7 +1088,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
-- **A1089: persistent payment-recording failures and the shared unknown-outcome fallback need a recovery route.** Keep the existing reason-specific handling and confirmed-charge Counter recovery. Diagnose a recording failure that survives retries and exercise the shared unknown-outcome fallback before adding an action. Never retry a charge or unlock an unknown outcome.
+- **A1089: persistent payment-recording failures and the shared unknown-outcome fallback need a recovery route.** Keep the existing reason-specific handling and confirmed-charge Counter recovery. Table-order recovery guidance remains open. Diagnose a recording failure that survives retries and exercise the shared unknown-outcome fallback before adding an action. Never retry a charge or unlock an unknown outcome.
   [Audit](backlog/self-service-refusals.md#payments).
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).

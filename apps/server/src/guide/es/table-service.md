@@ -612,11 +612,12 @@ Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo q
 
 Si falla **Consultar con el proveedor de pagos**, conserva los datos del pedido y del cobro
 que muestra Pagos con tarjeta y consulta el cobro en el panel del proveedor. No vuelvas a cobrar.
-Waitron no repite esta comprobación automáticamente. Si el cobro sigue en la lista, elige
-**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor.
+Si el cobro sigue en la lista, Waitron puede seguir consultándolo automáticamente. Puedes elegir **Consultar con el proveedor de pagos** de
+nuevo después de consultar al proveedor.
 
-Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si el proveedor
-confirma el cobro, busca el pedido original en **Mostrador** y elige **Tarjeta** con el mismo
+Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si la comprobación
+confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. Si el
+proveedor confirma el cobro y era un pedido del Mostrador, busca el pedido original en **Mostrador** y elige **Tarjeta** con el mismo
 proveedor. Waitron registra un cobro guardado que coincida. Si el lector pide la tarjeta, cancela
 sin presentarla. Conserva los datos del cobro si no puedes completar este paso.
 

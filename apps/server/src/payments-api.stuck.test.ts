@@ -1,3 +1,4 @@
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -1216,6 +1217,34 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       externalRef: piId,
     });
     expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(v.client.processedReaders).toEqual([]);
+  });
+
+  it("continues provider recovery after a manual check failed before confirming the charge", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    const spy = vi
+      .spyOn(v.provider, "resolveAbandonedAttempt")
+      .mockRejectedValueOnce(new Error("check unavailable"));
+    try {
+      const failed = await send(v, "POST", resolvePath(paymentId));
+      expect(failed.status).toBe(500);
+      expect((await errorOf(failed)).code).toBe("server.internal");
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await paymentRow(paymentId)).state).toBe("attempting");
+    expect(await resolutionsFor(paymentId)).toEqual([]);
+    expect(
+      await v.provider.resolvePending(new Date(), await ownsEveryPayment(suite.db)),
+    ).toMatchObject({ forwarded: 1 });
+    expect(await paymentRow(paymentId)).toMatchObject({ state: "captured", saleId: null });
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
     expect(v.client.lastCreateIntent).toBeUndefined();
     expect(v.client.processedReaders).toEqual([]);
   });
