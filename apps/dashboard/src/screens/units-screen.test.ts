@@ -417,6 +417,7 @@ describe("units-screen", () => {
     expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
       ["abbreviation", true],
       ["precision", true],
+      ["measure", true],
     ]);
     const headerTexts = () =>
       [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
@@ -1604,3 +1605,25 @@ it.each(
     }
   },
 );
+
+it.each([
+  ["en-GB", "Measure", "Yes", "No"],
+  ["es-ES", "Medida", "Sí", "No"],
+])("shows and sorts measures in Units (%s)", async (locale, heading, yes, no) => {
+  setLocale(locale);
+  const el = await mountWith([{ ...units[0]!, measure: true }, units[1]!]);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const column = table.columns.find((c) => c.key === "measure");
+  expect(column).toMatchObject({ label: heading, choosable: "shown" });
+  const cell = (id: string) =>
+    table
+      .shadowRoot!.querySelector(`tr[data-row-key="${id}"]`)
+      ?.querySelectorAll("td")[3]
+      ?.textContent?.trim();
+  expect(cell("u1")).toBe(yes);
+  expect(cell("u2")).toBe(no);
+  table.shadowRoot!.querySelector<HTMLElement>('[data-sort="measure"]')!.click();
+  await table.updateComplete;
+  expect(listedKeys(el)).toEqual(["u2", "u1"]);
+});

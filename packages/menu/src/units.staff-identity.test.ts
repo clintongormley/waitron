@@ -30,7 +30,7 @@ describe("explicit unit staff identity", () => {
 
   it("stores and returns independent staff fields with no translations", async () => {
     const saved = await run((tx) => createUnit(tx, input(), "en"));
-    expect(saved).toEqual({ id: expect.any(String), ...input() });
+    expect(saved).toEqual({ id: expect.any(String), hardwareUnit: null, ...input() });
     expect(await run((tx) => getUnit(tx, saved.id))).toEqual(saved);
     const [stored] = await suite.db.select().from(units);
     expect(stored).toMatchObject(input());
@@ -140,7 +140,12 @@ describe("explicit unit staff identity", () => {
         "en",
       ),
     );
-    expect(saved).toEqual({ id: expect.any(String), ...input(), staffName: "é".repeat(2048) });
+    expect(saved).toEqual({
+      id: expect.any(String),
+      hardwareUnit: null,
+      ...input(),
+      staffName: "é".repeat(2048),
+    });
   });
 
   it.each(["name", "abbreviation"] as const)(

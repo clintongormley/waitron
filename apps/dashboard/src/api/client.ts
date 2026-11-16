@@ -605,6 +605,7 @@ export type ShownFolderCounts = Pick<
   "id" | "folders" | "products" | "activeProducts" | "routes" | "ownRoutes"
 >;
 export interface Unit {
+  hardwareUnit?: string | null;
   id: string;
   staffName: string;
   staffAbbreviation: string;

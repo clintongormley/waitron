@@ -245,6 +245,26 @@ const readyHere = {
 } as const;
 
 describe("dishCounts", () => {
+  it.each([
+    [0, 3, 2],
+    [3, 0, 1],
+  ] as const)(
+    "counts by saved precision %s despite current precision %s",
+    (unitPrecision, precision, ordered) => {
+      expect(
+        dishCounts(
+          dish({
+            quantity: 2000,
+            unitPrecision,
+            unit: { hardwareUnit: null, precision, measure: false },
+          }),
+          [],
+          false,
+        ),
+      ).toEqual({ ...zero, ordered, waiting: ordered });
+    },
+  );
+
   it("counts a dish with no kitchen item, group or send as unsent", () => {
     expect(dishCounts(dish({ sentAt: null, ticket: null }), [], false)).toEqual({
       ...zero,

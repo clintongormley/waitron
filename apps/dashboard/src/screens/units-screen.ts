@@ -502,6 +502,13 @@ export class UnitsScreen extends LitElement {
         },
       },
       {
+        key: "measure",
+        label: t("units.measure_column"),
+        choosable: "shown",
+        cell: (unit) => t(unit.measure === true ? "units.yes" : "units.no"),
+        sortValue: (unit) => (unit.measure === true ? 1 : 0),
+      },
+      {
         key: "actions",
         label: t("units.actions"),
         pinned: "end",

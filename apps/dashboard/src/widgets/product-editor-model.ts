@@ -116,6 +116,9 @@ export interface EditorChoice {
   name: LocalizedText;
 }
 export interface UnitChoice extends EditorChoice {
+  precision?: number;
+  hardwareUnit?: string | null;
+  measure?: boolean;
   staffName: string;
   staffAbbreviation: string;
   abbreviation: LocalizedText;
