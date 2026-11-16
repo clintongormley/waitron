@@ -1173,13 +1173,6 @@ client. No screen calls them yet.
 - Open: whether a fenced physical box needs Red (today the read-only gate refuses its network
   changes; an exemption would be a row in `READ_ONLY_EXEMPTIONS`). The SMTP and bucket settings
   routes take credentials over any connection, where the join refuses one that is not encrypted.
-- Open, optional: the encrypted-connection test on the socket (a `TLSSocket` whose `encrypted` is
-  true) is still written out at each site that needs it: `box-host-api.ts`'s `insecureJoin`,
-  `backup-recovery-pack-api.ts`'s `requireSecurePackRequest`, `node-operation-https.ts`,
-  `setup-recovery-preparation-api.ts`'s `assertOwnerTransport`, `recovery-start-again.ts`'s
-  `isSecure` and several routes in `setup-first-fiscal-api.ts`; one shared helper would stop them
-  drifting apart. The page half is already shared, through `sentFromThisOrigin` in
-  `apps/server/src/own-page.ts`.
 - Decisions recorded for review: reads under `system.manage`, with the person as actor (D2); the
   answer table (D4); the protocol owning the password rules, with the route naming the field (D5);
   the join's encrypted same-page connection (D6); two places, refused rather than queued (D7); no
@@ -1206,11 +1199,6 @@ approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/ma
 after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent in Waitron),
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
-
-## A1187: encrypted-connection checks
-
-The encrypted-connection check is copied across several routes, and `promote-api.ts` still answers
-plain-HTTP or cross-site requests with `authorization.not_permitted`.
 
 ## A1187: looks nobody has taken.
 
@@ -1892,9 +1880,6 @@ landed in pull requests from #2250 to setup's first pack (PR E). What their revi
 pull request that left it:
 
 - **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-- **#2263 (the server makes and records the pack).** The encrypted-connection check is copied across
-  several routes; `promote-api.ts` still answers a plain-HTTP or cross-site request with
-  `authorization.not_permitted`, the answer the plan calls untruthful.
 - **#2274 (the Backups card).** The card's "ready" line dates a just-made pack from the browser's
   clock until the next status read names it; it is wrong only when the browser's clock and the
   box's fall on different days in the venue's zone. The card and the fresh sign-in widget read the

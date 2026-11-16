@@ -484,6 +484,7 @@ it("focuses the first missing field after an empty clock-check submission", asyn
 
 it.each([
   [{ code: "password.throttled", params: {} }, "Wait before trying your password again"],
+  [{ code: "node.operation_page_required", params: {} }, "Open the box's HTTPS address"],
   [
     { code: "authorization.not_permitted", params: {} },
     "Use an administrator account allowed to hand over",

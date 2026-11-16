@@ -106,6 +106,8 @@ export const handoverEn = {
     "Your authenticator code may have expired. Enter its current code and try again.",
   "handover.emergency.sign_in_failed":
     "Sign-in could not be confirmed. Check your password and enter your current authenticator code, if set up, then try again.",
+  "handover.emergency.connection":
+    "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
   "handover.emergency.permission":
     "This sign-in cannot start the venue. Sign in with an administrator account here.",
   "handover.emergency.throttled": "Too many sign-in attempts. Wait a moment, then try again.",
@@ -235,6 +237,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Puede que tu código de autenticador haya caducado. Introduce el código actual y vuelve a intentarlo.",
   "handover.emergency.sign_in_failed":
     "No se pudo confirmar tu identidad. Comprueba la contraseña e introduce el código actual del autenticador, si está configurado, y vuelve a intentarlo.",
+  "handover.emergency.connection":
+    "Esta operación necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
   "handover.emergency.permission":
     "Esta cuenta no puede iniciar el local. Identifícate aquí con una cuenta de administrador.",
   "handover.emergency.throttled":

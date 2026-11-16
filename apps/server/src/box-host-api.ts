@@ -1,4 +1,4 @@
-import { TLSSocket } from "node:tls";
+import { isSecure } from "./encrypted-connection.js";
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -134,8 +134,7 @@ const psk = (value: unknown): value is string => typeof value === "string";
 const hidden = (value: unknown): value is boolean => typeof value === "boolean";
 
 function insecureJoin(c: Context): "unencrypted" | "other_origin" | null {
-  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  if (!(socket instanceof TLSSocket) || !socket.encrypted) return "unencrypted";
+  if (!isSecure(c)) return "unencrypted";
   return sentFromThisOrigin(c) ? null : "other_origin";
 }
 

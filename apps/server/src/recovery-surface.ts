@@ -1,3 +1,4 @@
+import { isSecure } from "./encrypted-connection.js";
 import {
   mountBookingsRecovery,
   renderBookingsRecovery,
@@ -34,7 +35,6 @@ import { redactSecrets } from "./redact-secrets.js";
 import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 import {
-  isSecure,
   mountStartAgainChoice,
   renderStartAgainSection,
   type StartAgainView,

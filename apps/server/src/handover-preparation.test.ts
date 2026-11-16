@@ -957,7 +957,7 @@ describe("the handover's preparation route", () => {
     });
   });
 
-  it("a plain-HTTP or cross-origin request is refused authorization.not_permitted, before anything else", async () => {
+  it("a plain-HTTP or cross-origin request is refused node.operation_page_required, before anything else", async () => {
     const s = service();
     await controlledAtFilingAssumed();
     const app = route(s);
@@ -968,7 +968,7 @@ describe("the handover's preparation route", () => {
     });
     expect([plain.status, await plain.json()]).toEqual([
       403,
-      { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
+      { error: { code: "node.operation_page_required", params: {} } },
     ]);
     for (const headers of [
       { Origin: "https://elsewhere.test" },
@@ -976,7 +976,7 @@ describe("the handover's preparation route", () => {
     ]) {
       expect(await post(app, request({ action: "clock-challenge" }), { headers })).toMatchObject({
         status: 403,
-        body: { error: { code: "authorization.not_permitted" } },
+        body: { error: { code: "node.operation_page_required" } },
       });
     }
     expect(

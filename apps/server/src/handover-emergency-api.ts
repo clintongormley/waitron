@@ -149,6 +149,7 @@ const STATUS = {
   ...SWITCH_SIGN_IN_STATUS,
   "totp.required": 401,
   "authorization.not_permitted": 403,
+  "node.operation_page_required": 403,
   "handover.request_invalid": 400,
   "handover.copy_damaged": 409,
   "handover.chain_broken": 409,

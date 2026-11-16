@@ -95,6 +95,18 @@ describe("local browser report", () => {
     ]);
     expect(JSON.stringify(base)).not.toMatch(/john\.smith|secret|private/);
   });
+  it("keeps the node connection refusal in the exported problem report", () => {
+    const snapshot = capture([event({ status: 403, code: "node.operation_page_required" })]);
+    const report = diagnostics.renderClientReport!(snapshot, "The box asks me to reopen HTTPS.")!;
+    expect(parsed(report.text).trail).toEqual([
+      {
+        at: NOW.toISOString(),
+        level: "warn",
+        event: "api",
+        fields: { status: 403, code: "node.operation_page_required" },
+      },
+    ]);
+  });
   it("normalizes report metadata without copying extra client fields", () => {
     const client = Object.assign(
       { ...CLIENT },

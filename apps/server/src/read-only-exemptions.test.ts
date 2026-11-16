@@ -450,7 +450,7 @@ async function handEmptyChart(base: string): Promise<{ status: number; body: unk
 
 const GATED = { status: 403, code: "node.read_only" };
 // Preparation's own HTTPS check refuses a plain-HTTP call before it reads the body.
-const PREPARATION_REFUSAL = { status: 403, code: "authorization.not_permitted" };
+const PREPARATION_REFUSAL = { status: 403, code: "node.operation_page_required" };
 
 describe("each listed route is reached on a real read-only start, and nothing else is", () => {
   it("on a mirror", async () => {

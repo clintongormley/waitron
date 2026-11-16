@@ -862,7 +862,7 @@ describe("signing in against the placed copy", () => {
     });
     expect([plain.status, await plain.json()]).toEqual([
       403,
-      { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
+      { error: { code: "node.operation_page_required", params: {} } },
     ]);
     for (const headers of [
       { Origin: "https://elsewhere.test" },
@@ -870,7 +870,7 @@ describe("signing in against the placed copy", () => {
     ]) {
       expect(await request(app, "activate", {}, { headers })).toMatchObject({
         status: 403,
-        body: { error: { code: "authorization.not_permitted" } },
+        body: { error: { code: "node.operation_page_required" } },
       });
     }
     expect(external.hashes).toBe(0);

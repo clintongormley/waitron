@@ -451,7 +451,7 @@ describe("the open-operation refusal comes after the sign-in", () => {
     await openOperation();
     const { "module operation, noParallelRecovery, password": promote } = rightCredentials();
     const { "preparation, password": preparation } = rightCredentials();
-    const refused = refusal(403, "authorization.not_permitted", { permission: "node.manage" });
+    const refused = refusal(403, "node.operation_page_required");
 
     expect({
       promote: await attempt({ ...promote!, https: false }),

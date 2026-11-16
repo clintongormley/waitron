@@ -1,4 +1,4 @@
-import { TLSSocket } from "node:tls";
+import { isSecure } from "./encrypted-connection.js";
 import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
@@ -106,10 +106,8 @@ function invalid(reason: "shape" | "unknown_pack"): never {
   throw new AppError("recovery.pack_invalid", { reason });
 }
 
-/** An encrypted connection, from the dashboard's own page, carrying JSON. */
 function requireSecurePackRequest(c: Context): void {
-  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  if (!(socket instanceof TLSSocket) || !socket.encrypted) {
+  if (!isSecure(c)) {
     throw new AppError("recovery.pack_connection_insecure", {});
   }
   if (!sentFromThisOrigin(c)) {

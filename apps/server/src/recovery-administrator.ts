@@ -1,3 +1,4 @@
+import { isSecure } from "./encrypted-connection.js";
 import { escapeHtml } from "./html-page.js";
 import { ENVIRONMENT_RECOVERY_WORDS } from "./i18n/recovery-page.js";
 import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
@@ -14,7 +15,6 @@ import {
 import type { Logger } from "./logger.js";
 import { errnoOf } from "./errno.js";
 import {
-  isSecure,
   formBody,
   movedPage,
   bottomText,

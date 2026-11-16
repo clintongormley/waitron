@@ -50,7 +50,7 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
           ) => {
             const body = raw as ConflictRequest;
             if (mode === "not-primary") throw { code: "node.read_only" };
-            if (mode === "connection-refused") throw { code: "authorization.not_permitted" };
+            if (mode === "connection-refused") throw { code: "node.operation_page_required" };
             if (mode === "isolation-refused" && body.command.kind === "prepare")
               throw { code: "sif.allocation_invalid", params: { reason: "old_machine_active" } };
             if (mode === "key-refused") throw { code: "promotion.break_glass_invalid" };

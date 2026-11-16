@@ -257,6 +257,9 @@ it.each([false, "forged"] as const)(
       { tls, raw: "not-json", headers: { "X-Forwarded-Proto": "https", Forwarded: "proto=https" } },
     );
     expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "node.operation_page_required", params: {} },
+    });
     expect(m.parses).toBe(0);
   },
 );

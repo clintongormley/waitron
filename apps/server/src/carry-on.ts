@@ -27,7 +27,7 @@ import type { NewerBucketMain } from "./stream-host.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
-import { isSecure } from "./recovery-start-again.js";
+import { isSecure } from "./encrypted-connection.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
 import { knownHandoverSuccessor, type StartPeerCheckOutcome } from "./start-peer-check.js";
 import {

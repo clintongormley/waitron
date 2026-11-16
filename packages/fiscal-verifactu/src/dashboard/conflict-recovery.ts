@@ -251,7 +251,7 @@ export class ConflictRecovery extends LitElement {
         this.refusal = this.t("conflict_recovery.confirm");
       } else
         this.refusal = this.t(
-          code === "authorization.not_permitted"
+          code === "node.operation_page_required"
             ? "conflict_recovery.connection_refused"
             : code === "node.read_only"
               ? "conflict_recovery.not_primary"

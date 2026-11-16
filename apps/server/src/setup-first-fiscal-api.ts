@@ -9,7 +9,7 @@ import type { SetupDeps } from "./setup-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
-import { TLSSocket } from "node:tls";
+import { isSecure } from "./encrypted-connection.js";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import { VENUE_FIELDS, type StartAgainSummary, type VenueRequest } from "@waitron/provisioning";
@@ -278,9 +278,7 @@ export function mountSetupFirstFiscalApi(
     });
   app.post(`${root}/node-key-reissue`, (c) =>
     boundary(c, log, async () => {
-      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-      if (!(socket instanceof TLSSocket) || !socket.encrypted)
-        throw new AppError("setup.owner_required", {});
+      if (!isSecure(c)) throw new AppError("setup.owner_required", {});
       const owner = firstFiscalOwner(c);
       await host.owner.authorize(owner);
       const body = exact(await readFirstFiscalBody(c), ["password"]);
@@ -697,9 +695,7 @@ export function mountFirstSetupResolutionApi(
     }),
   );
   const assertHttps = (c: Context) => {
-    const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-    if (!(socket instanceof TLSSocket) || !socket.encrypted)
-      throw new AppError("setup.connection_insecure", {});
+    if (!isSecure(c)) throw new AppError("setup.connection_insecure", {});
   };
   if (options.summary !== undefined)
     app.post(START_AGAIN_ROUTES.summary.path, (c) =>

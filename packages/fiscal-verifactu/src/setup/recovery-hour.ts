@@ -83,9 +83,10 @@ const strings = {
     promotionHeading: "Start the venue on this box",
     promotionFailed:
       "Check your password and code, then try again. Use a fresh authenticator code.",
+    promotionConnection:
+      "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
     promotionThrottled: "Wait before trying your password again.",
-    promotionPermission:
-      "Use an administrator account allowed to hand over the venue. Open this box at its own HTTPS address, then try again.",
+    promotionPermission: "Use an administrator account allowed to hand over the venue.",
     promotionClock: "The clock check is too old. Check the clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
@@ -111,9 +112,10 @@ const strings = {
     promotionHeading: "Iniciar el local en este servidor",
     promotionFailed:
       "Revisa la contraseña y usa un código nuevo del autenticador. Después, vuelve a intentarlo.",
+    promotionConnection:
+      "Esta operación necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
     promotionThrottled: "Espera antes de volver a probar la contraseña.",
-    promotionPermission:
-      "Usa una cuenta de administrador con permiso para traspasar el local y abre la dirección HTTPS de este servidor. Después, vuelve a intentarlo.",
+    promotionPermission: "Usa una cuenta de administrador con permiso para traspasar el local.",
     promotionClock:
       "La comprobación del reloj ha caducado. Vuelve a comprobar los relojes antes de iniciar el local.",
     deviceInvoices: "Facturas vistas en este dispositivo",
@@ -317,6 +319,7 @@ export class RecoveryHourEntry extends LitElement {
   refusalMessage(cause: unknown): string {
     const words = strings[this.locale];
     if (record(cause)) {
+      if (cause.code === "node.operation_page_required") return words.promotionConnection;
       if (cause.code === "password.throttled") return words.promotionThrottled;
       if (cause.code === "authorization.not_permitted") return words.promotionPermission;
       if (

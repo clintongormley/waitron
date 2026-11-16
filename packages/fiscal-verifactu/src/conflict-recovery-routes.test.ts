@@ -70,7 +70,7 @@ function mount(
     node,
     requireHttps(c) {
       if (c.req.header("x-test-refuse-transport"))
-        throw new AppError("module.operation_invalid", { module: "fiscal-verifactu" });
+        throw new AppError("node.operation_page_required", {});
     },
     client: () => ({ onBox: false }),
     withAdmission:
@@ -204,8 +204,10 @@ it("refuses transport before parsing or authenticating", async () => {
     headers: { "x-test-refuse-transport": "yes" },
     body: "not json",
   });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "module.operation_invalid" } });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "node.operation_page_required", params: {} },
+  });
   expect(m.authenticated).not.toHaveBeenCalled();
 });
 it("admission refuses before body parsing and authentication on an accepted transport", async () => {

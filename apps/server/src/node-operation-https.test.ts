@@ -11,7 +11,7 @@ async function request(headers: Record<string, string> = {}, tls: boolean | "for
   try {
     const app = new Hono();
     const boundary = createErrorBoundary(
-      { "authorization.not_permitted": 403 },
+      { "node.operation_page_required": 403 },
       "promotion.failed",
     );
     app.post("/operation", (c) =>
@@ -34,8 +34,12 @@ async function request(headers: Record<string, string> = {}, tls: boolean | "for
   }
 }
 
-it("refuses a plain object claiming encryption instead of an actual TLS socket", async () => {
-  expect((await request({}, "forged")).status).toBe(403);
+it("names the connection problem for a refused node operation", async () => {
+  const response = await request({}, "forged");
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "node.operation_page_required", params: {} },
+  });
 });
 it.each<Record<string, string>>([
   {},
@@ -53,10 +57,4 @@ it.each<Record<string, string>>([
   { "Sec-Fetch-Site": "cross-site" },
 ])("refuses incompatible browser context %j", async (headers) => {
   expect((await request(headers)).status).toBe(403);
-});
-it.each<Record<string, string>>([
-  {},
-  { "X-Forwarded-Proto": "https", Forwarded: "proto=https", Origin: "https://box.test" },
-])("refuses a cleartext socket despite proxy headers %j", async (headers) => {
-  expect((await request(headers, false)).status).toBe(403);
 });

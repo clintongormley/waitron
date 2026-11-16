@@ -316,7 +316,7 @@ it.each(["https", "password", "operation", "source"])(
     );
     expect(answer.body.error?.code).toBe(
       {
-        https: "authorization.not_permitted",
+        https: "node.operation_page_required",
         password: "password.invalid",
         operation: "handover.controlled_unresolved",
         source: "handover.source_not_established",
@@ -394,7 +394,7 @@ it("previews no joining date for a box whose pair link is the main box's side", 
 
 it.each([
   [{ email: ADMIN_EMAIL, password: "wrong" }, true, "password.invalid"],
-  [request.signIn, false, "authorization.not_permitted"],
+  [request.signIn, false, "node.operation_page_required"],
 ])("protects preview before exposing the copy or saved reason %#", async (signIn, https, code) => {
   const s = service();
   expect((await s.post()).status).toBe(200);
@@ -458,9 +458,18 @@ it.each([
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });
 
+it.each(["backup", "passkey-challenge"])(
+  "refuses insecure %s before reading input",
+  async (step) => {
+    const answer = await service().post({}, false, step);
+    expect(answer.status).toBe(403);
+    expect(answer.body).toEqual({ error: { code: "node.operation_page_required", params: {} } });
+  },
+);
+
 it("requires HTTPS on the box's own origin", async () => {
   expect((await service().post(request, false)).body.error?.code).toBe(
-    "authorization.not_permitted",
+    "node.operation_page_required",
   );
 });
 
