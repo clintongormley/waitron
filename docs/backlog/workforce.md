@@ -186,14 +186,6 @@ due), then build it. Also decide how a later paid-break policy change affects th
 - The dashboard live-query guard misses inline dependency lists: `scripts/live-subscriptions.test.ts`
   reads `live-queries.ts` declarations, not inline lists in `client.ts`. Add a guard that refuses inline lists and a failing control.
 
-## A700. A failed Opening hours read also hides the Calendar's other views
-
-A module view draws
-only once the page's own model loads (`render` in
-`packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
-Staffing view sees the switch and the Opening hours error instead. Next: decide whether a
-module view draws without that model.
-
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
 When the

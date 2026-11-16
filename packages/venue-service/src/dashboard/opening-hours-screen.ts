@@ -382,11 +382,10 @@ export class OpeningHoursScreen extends LitElement {
     }
     return params;
   }
-  /** Read only by a view's host, which exists only once the model has loaded. */
   private moduleMonth() {
     return (
       parseCalendarMonth(this.moduleView?.params["month"]) ??
-      (businessDateToday(this.model!) || browserToday()).slice(0, 7)
+      ((this.model && businessDateToday(this.model)) || browserToday()).slice(0, 7)
     );
   }
   private openCalendarView(view: string, params: Record<string, string>) {
@@ -1575,11 +1574,11 @@ export class OpeningHoursScreen extends LitElement {
   }
   override render() {
     return html`${this.calendarHeading()}
-    ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
-      !this.model
-        ? nothing
-        : this.moduleView
-          ? this.moduleContent(this.moduleView)
+    ${this.readError && !this.moduleView ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
+      this.moduleView && (this.model || this.readError)
+        ? this.moduleContent(this.moduleView)
+        : !this.model
+          ? nothing
           : this.view === "year"
             ? html`${this.yearReadError ? html`<p role="alert" data-test="year-read-error">${this.yearReadError}</p>` : nothing}
                 <opening-hours-year
