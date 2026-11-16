@@ -343,6 +343,29 @@ describe("mkdirDurable", () => {
 });
 
 describe("create-only durable files", () => {
+  it("flushes a published copy even when removing its staging name fails", async () => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    const failure = Object.assign(new Error("cannot remove staging"), { code: "EIO" });
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rm).mockImplementation(async (path, options) => {
+      if (path === `${target}.tmp`) throw failure;
+      return real.rm(path, options);
+    });
+    try {
+      const events = await syncsAndRenames(async () => {
+        await expect(writeFileDurable(target, "ring", 0o600, { overwrite: false })).rejects.toBe(
+          failure,
+        );
+      });
+      expect(events).toEqual([`sync ${target}.tmp`, `link ${target}.tmp ${target}`, `sync ${d}`]);
+      expect(await readFile(target, "utf8")).toBe("ring");
+      expect(await readFile(`${target}.tmp`, "utf8")).toBe("ring");
+    } finally {
+      vi.mocked(fs.rm).mockReset();
+    }
+  });
+
   it("sets the exact mode before publishing despite a restrictive umask", async () => {
     const d = await newDir();
     const target = join(d, "secrets.env");

@@ -428,7 +428,11 @@ async function keepRingCopy(
     await publish(copy, ring.bytes, ring.mode);
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw failed(codeOf(error), label);
+    const code = codeOf(error);
+    throw failed(
+      code,
+      code === "EEXIST" ? `${label} (or staging file ${stagedPath(RING)})` : label,
+    );
   }
 }
 

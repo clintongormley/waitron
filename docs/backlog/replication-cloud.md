@@ -1029,6 +1029,9 @@ restructuring wider than a review fix:
 - "Opening a staged folder must not create an empty `node.db`" is enforced by about fifteen
   callers (`writeStagedNodeCopy`, `openStagedCopy` and `assertStagedNodeCopy`). Let
   `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
+- Matching lock nests use `withVenueAndNodeTransaction`; the remaining sites do work before or
+  between venue transactions. Keep their separate commit/check stages when consolidating them:
+  credential rotation, spare join, recovery-pack replacement, first setup and return records.
 
 ## A1279: a local secondary promotes only over a chart it signed itself
 

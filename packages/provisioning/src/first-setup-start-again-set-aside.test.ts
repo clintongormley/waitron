@@ -1768,7 +1768,7 @@ it("an exclusive ring publication preserves stale staging until resume sweeps it
   await writeFile(staging, "earlier attempt");
   await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
-    reason: `set-aside failed: EEXIST state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/secrets.env`,
+    reason: `set-aside failed: EEXIST state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/secrets.env (or staging file secrets.env.tmp)`,
   });
   expect(await readFile(staging, "utf8")).toBe("earlier attempt");
   expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");

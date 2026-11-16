@@ -94,18 +94,20 @@ export async function writeFileDurable(
 ): Promise<void> {
   const tmp = await stageFileDurable(path, data, mode, options);
   try {
-    if (options.overwrite === false) {
-      await link(tmp, path);
-      await rm(tmp);
-    } else await rename(tmp, path);
+    if (options.overwrite === false) await link(tmp, path);
+    else await rename(tmp, path);
   } catch (error) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
   try {
-    await syncFolderHolding(path);
-  } catch (error) {
-    if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
-    throw error;
+    if (options.overwrite === false) await rm(tmp);
+  } finally {
+    try {
+      await syncFolderHolding(path);
+    } catch (error) {
+      if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
+      throw error;
+    }
   }
 }
