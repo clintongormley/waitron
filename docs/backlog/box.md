@@ -197,11 +197,8 @@ carry none.
 
 ## Server comment pruning notes
 
-- `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
-  things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
-  `restore.unexpected_entry` ("the cold-recovery path (CLAUDE.md §5)"). Test titles that still say
-  "R3" or "rejoin", though rejoin no longer calls `restore.ts` (`rejoin-command.ts` does not import
-  it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
+- Test titles that still say "R3" or "rejoin", though rejoin no longer calls `restore.ts`
+  (`rejoin-command.ts` does not import it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
   `restore steps (R3 composition)` describes and its three `skipSecrets` "rejoin" cases, and
   `restore-fiscal-e2e.test.ts`'s "skipSecrets:true (the rejoin shape)" control. No production
   caller sets `skipSecrets` any more, so whether the option should go is open. **Decided (owner,
@@ -209,17 +206,14 @@ carry none.
   key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
   status can test a guessed key against it.
 
-The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
+The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. A note #653's prune
 deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
 `database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
 a busy wait on the server's own thread,
-[testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
-and nothing proves `startServer` itself survives a backup duty that cannot start — only
-`backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
+[testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
+Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
 list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
 (`background-duties.ts`), whose order `background-duties.test.ts` pins.
-Test titles #653 could not touch in `boot.test.ts` carry the history tags
-"(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
 
 ## A deleted bucket pointer can still look like another writer
 

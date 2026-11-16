@@ -53,8 +53,8 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
     throw new AppError("node.retire_not_fenced", {});
   }
 
-  // Never evict the last node that knows the venue (CLAUDE.md §5). `held` is non-null here: a null
-  // one has no standing, refused above.
+  // Never evict the last node that knows the venue. `held` is non-null here: a null one has no
+  // standing, refused above.
   if (servingPrimaryNodeId(held!) === undefined) {
     throw new AppError("node.retire_no_carrier", {});
   }

@@ -595,7 +595,7 @@ describe("startServer, against a migrated venue directory", () => {
   });
 
   it.each([false, true])(
-    "A1188 serves the first till read with locally warmed hints (corrupt=%s)",
+    "serves the first till read with locally warmed hints (corrupt=%s)",
     async (corrupt) => {
       const f = await installationFixture(undefined, {
         emergency: async (_v, saved, _q, res) => {
@@ -1158,7 +1158,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("setup mode migrates every module set from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
+  it("setup mode migrates every module set from an EMPTY database — boot is the sole migrator", async () => {
     // Boot alone must migrate every module set. The other boot tests share a directory this suite
     // migrated, so their journals are populated whether or not boot's migration ran; this one starts
     // from an empty directory. Setup mode needs no seeded venue, so it is the mode that can boot a
@@ -1273,7 +1273,7 @@ describe("startServer, against a migrated venue directory", () => {
     expect(outcome).toMatchObject({ code: "module.fiscal_slot_ambiguous" });
   }, 60_000);
 
-  it("trading mode logs module.reconcile drift naming a soft-disabled module (SP-1b spec §3)", async () => {
+  it("trading mode logs module.reconcile drift naming a soft-disabled module", async () => {
     // A module the database has migrated but module settings no longer enables is `softDisabled`, and
     // boot logs it at `info`. The shared directory is migrated for every module and seeded, so this
     // boot succeeds.
@@ -1613,7 +1613,7 @@ describe("startServer, against a migrated venue directory", () => {
     },
   );
 
-  it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS (slice 3)", async () => {
+  it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS", async () => {
     // Requests trust the persisted box CA, exercising the real listener and boot route mounting.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-disc-"));
@@ -3143,7 +3143,7 @@ describe("MAX_UPLOAD_BYTES", () => {
   });
 });
 
-describe("SP-C dev override reaches the live device routes only under devMode", () => {
+describe("the dev-device header reaches the live device routes only under devMode", () => {
   // `config.devMode` must reach the live device routes: under devMode the `x-waitron-dev-device`
   // header authenticates as the named device, and a non-dev boot must ignore it (fail closed). Two
   // devices with different names show the header selects a specific device.
@@ -3165,8 +3165,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       const dev = await enrolDeviceForTest(sharedDb, cfg, { name, profileId: profile!.id });
       return dev.deviceId;
     };
-    deviceId1 = await enrolDevice("SP-C dev override device 1");
-    deviceId2 = await enrolDevice("SP-C dev override device 2");
+    deviceId1 = await enrolDevice("Dev override device 1");
+    deviceId2 = await enrolDevice("Dev override device 2");
   }, 60_000);
 
   it("under devMode, staff schedule writes use header-only device proof through boot", async () => {
@@ -3263,7 +3263,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         expect(res.status).toBe(200);
         const body = (await res.json()) as { deviceId: string; name: string };
         expect(body.deviceId).toBe(deviceId2);
-        expect(body.name).toBe("SP-C dev override device 2");
+        expect(body.name).toBe("Dev override device 2");
       } finally {
         await server.close();
       }

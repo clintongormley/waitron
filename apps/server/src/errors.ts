@@ -1513,7 +1513,7 @@ declare module "@waitron/shared" {
      * A supplied recovery key cannot be stored verbatim in `backup.env`: it carries a control
      * character or leading/trailing whitespace, or does not survive the env-file round-trip
      * byte-for-byte. A key that round-trips to a different string would encrypt archives under one
-     * the operator never recorded — unrecoverable (CLAUDE.md §5). `reason` is a short machine tag,
+     * the operator never recorded — unrecoverable. `reason` is a short machine tag,
      * never the key. */
     "backup.recovery_key_unstorable": { reason: string };
     /**
@@ -1820,7 +1820,7 @@ declare module "@waitron/shared" {
     "restore.archive_resource_limit": Record<string, never>;
     /**
      * The restore met a top-level archive entry it does not know how to route. Fails loud rather
-     * than drop data on the cold-recovery path (CLAUDE.md §5); the fix is to teach the restore to
+     * than drop data on the cold-recovery path; the fix is to teach the restore to
      * route the new entry, never to widen this. `name` is attacker-influenced but not a secret.
      */
     "restore.unexpected_entry": { name: string };
