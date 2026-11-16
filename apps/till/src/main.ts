@@ -25,11 +25,11 @@ const watchedFetch = watchBuild(fetch, {
   onFirstBuild: setReportBuild,
   onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
 });
+const router = new ServerRouter({ origin: location.origin, fetchImpl: watchedFetch });
 applyTokens(document.documentElement);
-// `/api/theme` reads no session or device and is asked of the page's own origin, so its fetch
-// skips the router and the dev device header.
+// `/api/theme` reads no session or device, so its fetch skips the dev device header.
 startVenueTheme(document.documentElement, {
-  fetchImpl: createInstrumentedFetch(watchedFetch, diag),
+  fetchImpl: createInstrumentedFetch(withServerTarget(watchedFetch, router), diag),
 });
 startThemeChoice(document.documentElement);
 startThemedFavicon();
@@ -53,7 +53,6 @@ async function bootTill(): Promise<void> {
     render(trustInstructions(), app);
     return;
   }
-  const router = new ServerRouter({ origin: location.origin, fetchImpl: watchedFetch });
   const fetchImpl = createInstrumentedFetch(
     withDevDeviceHeader(withServerTarget(watchedFetch, router)),
     diag,

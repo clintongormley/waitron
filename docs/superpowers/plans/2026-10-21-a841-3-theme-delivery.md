@@ -131,7 +131,8 @@ the hashes agree, and retries a theme fetch that failed: without it, a till whos
 after a switch would keep the old colours until its next restart, because the revision it applied
 already names the new theme. The fetch goes to the page's own origin, not through the till's
 `ServerRouter`: a venue has one node today (CLAUDE.md §5, "TODAY a venue has ONE node"), so the
-origin is the primary.
+origin is the primary. (Changed 2026-11-16 by "Fetch the till's theme from the server it follows":
+the fetch now goes through the till's `ServerRouter`; see `docs/developers/conventions-ui.md`.)
 
 **D8. An older fetch never undoes a newer answer.** Every fetch is numbered when sent; its answer
 applies only if nothing was applied after it was sent (a later fetch's answer, or an answer the

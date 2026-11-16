@@ -1688,14 +1688,9 @@ Not in any track until the standalone primary is done.
   Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November; the locked-start build and production qualification remain open.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
-- **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
-  `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
-  would keep the theme it has, or take the old server's while that one still answers, so failover
-  work must route it ([conventions-ui.md](developers/conventions-ui.md)).
-
 - **Recheck that a spare gets later charts** (bundle of 2, 1 important, size S, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 
-- **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
+- **Remaining setup and failover gaps** (bundle of 7, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 
 **The on-prem mirror.** Joining and local takeover are built and exercised on separate databases;
 this section records the remaining build and real-box qualification.
