@@ -14149,6 +14149,51 @@ describe("searching and filtering the printer tables", () => {
     expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
   });
 
+  // The tables keep each row's search text while their rows and column lists stay the same, and
+  // these searches read a name from outside the row.
+  it("finds a job by its printer's new name when only the printers are read again", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    const found = tableOf(el, "jobs-table") as HTMLElement & { rows: unknown[] };
+    await searchTable(el, "jobs-table", "bar");
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+    await searchTable(el, "jobs-table", "");
+    const rows = found.rows;
+    (el as unknown as { printers: Printer[] }).printers = printers.map((p) =>
+      p.id === "p3" ? { ...p, name: "Terrace USB" } : p,
+    );
+    await flush(el);
+    expect(found.rows).toBe(rows);
+    expect(text(el, "[data-test=job-printer-j3]")).toBe("Terrace USB");
+    await searchTable(el, "jobs-table", "terrace");
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+  });
+
+  it("finds a printer by its agent's new name when only the agents are read again", async () => {
+    const el = await mountTables({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue(
+          printers.map((p) =>
+            p.id === "p3"
+              ? { ...p, lastPrintAgentId: "a1", lastPrintAt: "2026-09-26T13:00:00.000Z" }
+              : p,
+          ),
+        ),
+    });
+    await searchTable(el, "printers-table", "kitchen agent");
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+    await searchTable(el, "printers-table", "");
+    (el as unknown as { agents: PrintAgentRow[] }).agents = [
+      { ...activeAgents[0]!, name: "Grill agent" },
+      activeAgents[1]!,
+    ];
+    await flush(el);
+    expect(text(el, "[data-test=printer-agent-p3]")).toBe("Grill agent");
+    await searchTable(el, "printers-table", "grill agent");
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+  });
+
   it("narrows the print queue to the printer chosen", async () => {
     const el = await mountTables();
     await selectTab(el, "queue");
