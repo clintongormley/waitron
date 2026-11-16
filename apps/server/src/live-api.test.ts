@@ -9,6 +9,8 @@ import {
   CORE_MIGRATIONS,
   menus,
   diningTables,
+  personRoles,
+  roles,
   installChangeFeed,
   subscribeToChanges,
   withTransaction,
@@ -232,6 +234,35 @@ it("closes the stream with session-invalid when the person is suspended while it
       'event: session-invalid\ndata: {"code":"person.suspended"}\n\n',
     );
     expect((await reader.read()).done).toBe(true);
+  } finally {
+    await reader.cancel();
+  }
+});
+
+it("closes the stream with session-invalid when the person is cut to invoice.inspect alone while it is open", async () => {
+  const { app, path, cookie, bus, session } = await fixture();
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    await withTransaction(suite.db, async (tx) => {
+      const [role] = await tx
+        .insert(roles)
+        .values({
+          name: "Tax inspector",
+          nameFolded: "tax inspector",
+          permissions: ["invoice.inspect"],
+        })
+        .returning({ id: roles.id });
+      await tx.delete(personRoles).where(eq(personRoles.personId, session.personId));
+      await tx.insert(personRoles).values({ personId: session.personId, roleId: role!.id });
+    });
+    bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      'event: session-invalid\ndata: {"code":"authorization.inspection_only"}\n\n',
+    );
+    expect((await reader.read()).done).toBe(true);
+    expect(bus.subscriberCount).toBe(0);
   } finally {
     await reader.cancel();
   }

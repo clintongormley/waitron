@@ -1,5 +1,5 @@
 import "./errors.js";
-import { inspectsInvoicesOnly, readPersonAuthority } from "./authority.js";
+import { inspectsInvoicesOnly, readPersonAuthority, type PersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
 import { nowIso, managementSessions, persons } from "@waitron/db";
@@ -74,6 +74,15 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
   return row;
 }
 
+function refuseUnadmittedInspector(authority: PersonAuthority, admitInspector?: boolean): void {
+  if (
+    inspectsInvoicesOnly(authority) &&
+    admitInspector !== true &&
+    inspectorAdmitted.getStore() !== true
+  )
+    throw new AppError("authorization.inspection_only", {});
+}
+
 /** Refuses a session holding `invoice.inspect` alone unless `admitInspector` or
  * `withInspectorAdmitted` admits it, so a route that does not opt in is closed to it. */
 export async function resolveManagementSession(
@@ -83,12 +92,7 @@ export async function resolveManagementSession(
 ) {
   const row = await readManagementSession(tx, token);
   const authority = await readPersonAuthority(tx, row.personId);
-  if (
-    inspectsInvoicesOnly(authority) &&
-    options.admitInspector !== true &&
-    inspectorAdmitted.getStore() !== true
-  )
-    throw new AppError("authorization.inspection_only", {});
+  refuseUnadmittedInspector(authority, options.admitInspector);
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
     await tx
@@ -120,6 +124,9 @@ export async function endManagementSession(tx: Transaction, token: string): Prom
   return updated.length > 0;
 }
 
+/** Refuses what `resolveManagementSession` refuses, a session holding `invoice.inspect` alone
+ * included, without stamping its activity. */
 export async function checkManagementSession(db: Database, token: string): Promise<void> {
-  await readManagementSession(db, token);
+  const row = await readManagementSession(db, token);
+  refuseUnadmittedInspector(await readPersonAuthority(db, row.personId));
 }

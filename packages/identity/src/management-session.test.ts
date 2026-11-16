@@ -315,6 +315,16 @@ describe("a session holding invoice.inspect alone", () => {
     expect(await lastSeen(token)).toBe(at);
   });
 
+  it("is refused by the live stream's re-check, without stamping its activity", async () => {
+    const { token } = await sessionHolding(["invoice.inspect"]);
+    const at = minutesAgo(10);
+    await run((tx) => tx.execute(agedTo(at, token)));
+    await expect(checkManagementSession(suite.db, token)).rejects.toMatchObject(refusal);
+    expect(await lastSeen(token)).toBe(at);
+    const other = await sessionHolding(["invoice.inspect", "report.view"]);
+    await expect(checkManagementSession(suite.db, other.token)).resolves.toBeUndefined();
+  });
+
   it("is served inside a route that admits it", async () => {
     const { token, personId } = await sessionHolding(["invoice.inspect"]);
     const session = await withInspectorAdmitted(() =>
