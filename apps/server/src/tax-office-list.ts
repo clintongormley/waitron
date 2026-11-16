@@ -53,7 +53,7 @@ export interface TaxOfficePage {
 
 const BARE_NUMBER = /^\d{1,9}$/;
 
-// The filed fecha de expedición: the issue instant moved by the offset filed with it.
+// The issue date as filed: the issue instant moved by the offset filed with it.
 const ISSUE_DATE = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
 
 // As the filing types each record: a corrective is R4 when it names a customer, else R5; a full

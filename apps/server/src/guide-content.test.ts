@@ -44,6 +44,19 @@ describe("the user guides", () => {
   );
 
   it.each(GUIDE_LANGUAGES)(
+    "serves the tax office invoices guide and its sections in %s",
+    (lang) => {
+      expect(GUIDE_PAGES).toContain("invoices");
+      const markdown = readGuide(root, lang, "invoices");
+      expect(markdown).toBeDefined();
+      expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+        "show-invoices",
+        "inspector-sign-in",
+      ]);
+    },
+  );
+
+  it.each(GUIDE_LANGUAGES)(
     "the kitchen guide in %s registers its allergy and service sections",
     (lang) => {
       expect(GUIDE_PAGES).toContain("kitchen-service");

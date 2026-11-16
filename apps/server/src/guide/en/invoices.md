@@ -1,0 +1,34 @@
+# Invoices
+
+When the tax office asks to see the venue's invoices, show them from **Invoices** in
+**Reporting**.
+
+## Show invoices yourself {#show-invoices}
+
+Open **Invoices** on your own sign-in. You need an access role that includes
+**See invoices for the tax office**. At the venue it works without the internet.
+
+The list opens on this month. To find an invoice, change **Issued from** and **Issued to**, or
+narrow the list by:
+
+- **Search**: the invoice number, the customer's name or their tax ID
+- **Amount**: an invoice's total, base or VAT
+- **VAT rate (%)**
+- **Kind**
+- **Operation from** and **Operation to**
+
+Choose **Open** to see the invoice as a PDF, then print or save it from there. A cancelled
+invoice stays in the list, marked with the day it was cancelled. If the list ends with
+**Show more invoices**, choose it to see the rest.
+
+## Give an inspector their own sign-in {#inspector-sign-in}
+
+An inspector can have their own sign-in when the box's email is set up
+([Email](email.md#set-up)), because their first password arrives by email.
+
+- In **Access roles**, create a role that holds only **See invoices for the tax office**.
+- In **Users**, add the inspector with their email and that role. Waitron emails them an
+  invitation; see [Account access](staff.md#account-access).
+- They sign in at the venue or, with [remote access](servers.md#remote-access) on, through
+  Waitron Cloud.
+- When the visit ends, disable their account in **Users**.

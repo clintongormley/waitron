@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { invoiceSeries, sales, saleSubstitutions, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
-import { envios, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { seedTenantWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { filedKindsBySale, refuseRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, jobOrigin, saleId, stringToCents, type SaleId } from "@waitron/shared";
@@ -107,10 +108,7 @@ it("lists each sale with the kind its fiscal record was filed as", async () => {
   // A full invoice is replaced only once AEAT has refused every record of it.
   const refused = await sale(customer, "12.10");
   const { recordId } = await file((tx) => backend.recordSale(tx, refused));
-  await suite.db
-    .update(envios)
-    .set({ estado: "rechazado", codigoError: "1100" })
-    .where(eq(envios.registroId, recordId));
+  await refuseRecord(suite.db, recordId, "1100");
   const r4 = await sale(customer, "12.10", { correctsSaleId: refused.saleId, replaces: true });
   await file((tx) =>
     backend.recordCorrection(tx, r4, { correctsSaleId: refused.saleId, replaces: true }),
@@ -122,17 +120,11 @@ it("lists each sale with the kind its fiscal record was filed as", async () => {
       limit: 50,
     }),
   );
-  const filed = await suite.db
-    .select({ saleId: registrosFacturacion.saleId, tipo: registrosFacturacion.tipoFactura })
-    .from(registrosFacturacion)
-    .where(
-      inArray(
-        registrosFacturacion.saleId,
-        page.rows.map((row) => row.id),
-      ),
-    );
-  const tipoOf = new Map(filed.map((row) => [row.saleId, row.tipo]));
-  expect(page.rows.map((row) => [row.kind, tipoOf.get(row.id)])).toEqual(
+  const filed = await filedKindsBySale(
+    suite.db,
+    page.rows.map((row) => row.id),
+  );
+  expect(page.rows.map((row) => [row.kind, filed.get(row.id)])).toEqual(
     page.rows.map((row) => [row.kind, row.kind]),
   );
   expect(new Set(page.rows.map((row) => row.kind))).toEqual(

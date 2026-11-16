@@ -27,6 +27,7 @@ export const GUIDE_LINKS = {
   "printers.add-printer": { page: "printers", section: "add-printer" },
   "printers.calibrate": { page: "printers", section: "calibrate" },
   "printers.printer-details": { page: "printers", section: "printer-details" },
+  "invoices.tax-office": { page: "invoices" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;
