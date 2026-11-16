@@ -1939,7 +1939,6 @@ describe("a start on a real full disk", () => {
         "/api/menu-state",
         "/api/working-orders",
         "/api/default-service-zone/offers",
-        "/api/tables",
         "/api/tables/state",
         "/api/zones",
         "/api/stations",

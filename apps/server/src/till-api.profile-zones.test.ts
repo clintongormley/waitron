@@ -157,7 +157,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
- * | GET  /api/tables, /api/tables/state, /api/zones         | list, by table or zone | "lists only the profile's zones, tables and orders"  |
+ * | GET  /api/tables/state, /api/zones                      | list, by table or zone | "lists only the profile's zones, tables and orders"  |
  * | POST /api/tables/:id/seat                               | table                  | refuses POST /api/tables/:id/seat                    |
  * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |
  * | POST /api/tables/:id/cleared                            | table                  | refuses POST /api/tables/:id/cleared                 |
@@ -1797,12 +1797,10 @@ describe("a profile with no department row", () => {
     expect((zones.body as unknown as { id: string }[]).map((zone) => zone.id)).toEqual(
       expect.arrayContaining([f.deliTables, f.deliCounter, f.restTables]),
     );
-    for (const path of ["/api/tables", "/api/tables/state"]) {
-      const tables = await send(plain, "GET", path);
-      expect((tables.body as unknown as { id: string }[]).map((table) => table.id)).toEqual(
-        expect.arrayContaining([f.deliTable, f.restTable]),
-      );
-    }
+    const tables = await send(plain, "GET", "/api/tables/state");
+    expect((tables.body as unknown as { id: string }[]).map((table) => table.id)).toEqual(
+      expect.arrayContaining([f.deliTable, f.restTable]),
+    );
     const orders = await send(plain, "GET", "/api/working-orders");
     expect((orders.body as unknown as { id: string }[]).map((order) => order.id)).toEqual(
       expect.arrayContaining([f.deliOrder, f.restOrder]),
@@ -1854,12 +1852,10 @@ describe("a Restaurant profile in its own zones", () => {
     expect(zoneIds).toEqual(expect.arrayContaining([f.restTables, f.bar]));
     expect(zoneIds).not.toContain(f.deliTables);
     expect(zoneIds).not.toContain(f.deliCounter);
-    for (const path of ["/api/tables", "/api/tables/state"]) {
-      const tables = await send(restaurant, "GET", path);
-      const tableIds = (tables.body as unknown as { id: string }[]).map((table) => table.id);
-      expect(tableIds).toContain(f.restTable);
-      expect(tableIds).not.toContain(f.deliTable);
-    }
+    const tables = await send(restaurant, "GET", "/api/tables/state");
+    const tableIds = (tables.body as unknown as { id: string }[]).map((table) => table.id);
+    expect(tableIds).toContain(f.restTable);
+    expect(tableIds).not.toContain(f.deliTable);
     const orders = await send(restaurant, "GET", "/api/working-orders");
     const orderIds = (orders.body as unknown as { id: string }[]).map((order) => order.id);
     expect(orderIds).toContain(f.restOrder);
