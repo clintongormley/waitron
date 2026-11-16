@@ -687,6 +687,21 @@ describe("content-language configuration", () => {
     );
   });
 
+  it("saves menu-root names in the venue language when content languages are unset", async () => {
+    const app = mountApp("es-ES");
+    const menuId = await createMenuVia(app, "Venue fallback menu");
+    const response = await send(app, "PATCH", `/management-api/menus/${menuId}`, {
+      body: { names: { es: "Spanish menu" } },
+    });
+    expect(response.status).toBe(204);
+    const root = await menuRootVia(app, menuId);
+    expect(await (await send(app, "GET", `/management-api/sections/${root}`)).json()).toMatchObject(
+      {
+        names: { es: "Spanish menu" },
+      },
+    );
+  });
+
   it("starts from the configured site language and saves additional content languages", async () => {
     const app = mountApp("en-GB");
     const initial = await send(app, "GET", "/management-api/content-languages");

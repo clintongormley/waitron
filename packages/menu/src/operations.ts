@@ -830,6 +830,7 @@ export async function updateMenuDetails(
     image?: string | null;
     color?: string | null;
   },
+  fallbackLanguage?: string,
 ): Promise<void> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
@@ -847,7 +848,7 @@ export async function updateMenuDetails(
       image: patch.image,
       color: patch.color,
     },
-    undefined,
+    fallbackLanguage,
     stored?.names,
   );
   if (internalName !== undefined) {

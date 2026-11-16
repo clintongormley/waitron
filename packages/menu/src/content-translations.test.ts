@@ -628,12 +628,14 @@ describe("atomic content translations", () => {
         expect(member!.folderNames).toEqual({ ca: "CA only" });
       }
       if (mode === "unset") {
-        await expect(
-          app((tx) => updateMenuDetails(tx, ids.menuId, { names: { es: "Español" } })),
-        ).rejects.toMatchObject({
-          code: "content.translation_invalid",
-          params: {},
-        });
+        await app((tx) =>
+          updateMenuDetails(tx, ids.menuId, { names: { es: "Spanish menu" } }, "es"),
+        );
+        const [root] = await suite.db
+          .select({ names: sections.names })
+          .from(sections)
+          .where(eq(sections.id, ids.menu));
+        expect(root!.names).toEqual({ es: "Spanish menu" });
         await app((tx) => updateSection(tx, ids.section, { names: { es: "Español" } }, "es"));
         await app((tx) =>
           setIncludeFolder(

@@ -1016,12 +1016,17 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       if (presentation.internalName !== undefined && presentation.internalName.trim() === "")
         throw new AppError("management.request_invalid", { field: "name" });
       await gated(c, sessionId, (tx) =>
-        updateMenuDetails(tx, menuId, {
-          name: presentation.internalName,
-          names: presentation.names,
-          image: presentation.image,
-          color: presentation.color,
-        }),
+        updateMenuDetails(
+          tx,
+          menuId,
+          {
+            name: presentation.internalName,
+            names: presentation.names,
+            image: presentation.image,
+            color: presentation.color,
+          },
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        ),
       );
       return c.body(null, 204);
     }),
