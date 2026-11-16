@@ -110,7 +110,10 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 
 async function mount(status: BackupStatusView, overrides: Partial<DashboardApi> = {}) {
   const api = stubApi(status, overrides);
-  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    api,
+    onboardingIntent: "live",
+  });
   await vi.waitFor(() => expect(q(el, "[data-test=status]")).not.toBeNull());
   await el.updateComplete;
   return { el, api };

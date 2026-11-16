@@ -28,6 +28,7 @@ async function mount(
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
+        onboardingIntent: "live",
         permissions,
         modules: [],
       }),
