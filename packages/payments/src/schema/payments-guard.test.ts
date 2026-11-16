@@ -123,16 +123,19 @@ const outcome = {
   hold_decided_at: AT,
 };
 
-it.each<[Record<string, string | number>, string, string | number]>([
+it.each<[Record<string, string | number | null>, string, string | number]>([
   [resolution, "resolution_outcome", "captured"],
   [resolution, "resolution_cancelled_at_provider", 1],
   [resolution, "resolution_provider_status", "later"],
   [resolution, "resolved_by", "22222222-2222-4222-8222-222222222222"],
   [resolution, "resolved_at", "later"],
+  [{ ...resolution, resolved_by: null }, "resolved_by", "11111111-1111-4111-8111-111111111111"],
+  [{ ...resolution, resolution_provider_status: null }, "resolution_provider_status", "later"],
   [hold, "held_at", "later"],
   [hold, "hold_provider_amount", 1211],
   [outcome, "hold_outcome", "refunded_at_provider"],
   [outcome, "hold_note", "Later decision"],
+  [{ ...outcome, hold_note: null }, "hold_note", "Later decision"],
   [outcome, "hold_decided_by", "22222222-2222-4222-8222-222222222222"],
   [outcome, "hold_decided_at", "later"],
 ])("writes the follow-up group once, keeping %s / %s", async (group, column, replacement) => {
@@ -151,7 +154,7 @@ it.each<[Record<string, string | number>, string, string | number]>([
   await suite.db.execute(sql`update payments set ${fields} where id = ${paymentId}`);
   const saved = await suite.db.execute(sql`select * from payments where id = ${paymentId}`);
   expect(saved.rows[0]).toMatchObject(group);
-  for (const value of [replacement, null]) {
+  for (const value of group[column] === null ? [replacement] : [replacement, null]) {
     const error = await captureError(() =>
       suite.db.execute(
         sql`update payments set ${sql.identifier(column)} = ${value} where id = ${paymentId}`,

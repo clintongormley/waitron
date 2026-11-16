@@ -456,9 +456,12 @@ pnpm --filter @waitron/payments-sumup test
 pnpm --filter @waitron/server exec vitest run src/till-sale-reconciliation.test.ts src/bill-payments.test.ts src/bill-payments.card.test.ts src/bill-payments-loop.test.ts src/bill-payments-api.test.ts src/payments-api.test.ts src/payments-api.stuck.test.ts src/pending-card-recovery.test.ts src/pending-card-loop.test.ts src/card-charged-not-recorded.test.ts src/placed-order-one-payment.test.ts src/parked-table-payments.test.ts src/attendance-integrated-payments.test.ts src/attendance-whole-payments.test.ts src/till-api.fiscal-sale-paths.test.ts
 ```
 
-  Control (proves the probe can see a failure): temporarily change `associatePaymentWithSale` to
-  set `readerId: "00000000-0000-4000-8000-000000000000"` unconditionally, rerun
-  `src/store.test.ts`, see the refusal, revert.
+  Control (corrected after Claude's run-it review, 16 November): temporarily replace the
+  reader-preserving `coalesce` in `associatePaymentWithSale` with this request's `readerId`.
+  Run `pnpm --filter @waitron/server exec vitest run src/till-sale-integrated.db.test.ts -t
+  "a recovery Pay on another reader settles and keeps reader A"`, observe
+  `a payment cannot make that change`, then revert. The old invented-reader/store control
+  fails only a foreign key and does not measure this guard; the real-reader/store run passes.
   Run the set-up suites in **Files**' table too. **Pass:** no product writer is refused. A refusal
   raised by a test's own set-up statement is not the measurement's result: rewrite it with
   `liftPaymentGuard` and list it (stop point 1). **Failing result:** a product writer is refused →
