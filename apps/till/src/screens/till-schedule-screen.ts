@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -6,12 +6,15 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   draftScopeFor,
+  focusFirstInvalid,
   saveActionState,
   submitOnEnter,
   baseStyles,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { screenCardStyles } from "../widgets/screen-card-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -33,6 +36,10 @@ const sameCover = (a: CoverDraft, b: CoverDraft) =>
   a.fromShiftId === b.fromShiftId && a.toPersonId === b.toPersonId && a.toShiftId === b.toShiftId;
 const sameAbsence = (a: AbsenceDraft, b: AbsenceDraft) =>
   a.kind === b.kind && a.startsOn === b.startsOn && a.endsOn === b.endsOn && a.note === b.note;
+
+type CoverErrors = { shift: string; colleague: string };
+type AbsenceErrors = { from: string; to: string };
+const hasError = (errors: Record<string, string>) => Object.values(errors).some((e) => e !== "");
 
 const NONE: ComboboxOption = { value: "", label: "—" };
 
@@ -178,6 +185,18 @@ export class TillScheduleScreen extends LitElement {
       .form wt-combobox[name="cover-shift"] {
         flex-basis: calc(var(--wt-space-6) * 10);
       }
+
+      .form wt-form-actions {
+        margin-top: var(--wt-space-3);
+        --wt-form-actions-surface: var(--wt-color-surface);
+      }
+
+      /* The card's frame goes at phone width, so the row sits on the page instead. */
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .form wt-form-actions {
+          --wt-form-actions-surface: var(--wt-color-bg);
+        }
+      }
     `,
   ];
 
@@ -202,6 +221,10 @@ export class TillScheduleScreen extends LitElement {
   @state() private absFrom = "";
   @state() private absTo = "";
   @state() private absNote = "";
+  @state() private coverAttempted = false;
+  @state() private absAttempted = false;
+  @state() private coverRefusal = "";
+  @state() private absRefusal = "";
 
   #coverScope?: DraftScope<CoverDraft>;
   #absenceScope?: DraftScope<AbsenceDraft>;
@@ -267,6 +290,10 @@ export class TillScheduleScreen extends LitElement {
     this.absFrom = "";
     this.absTo = "";
     this.absNote = "";
+    this.coverAttempted = false;
+    this.absAttempted = false;
+    this.coverRefusal = "";
+    this.absRefusal = "";
     this.busy = false;
     super.disconnectedCallback();
   }
@@ -354,7 +381,7 @@ export class TillScheduleScreen extends LitElement {
     ]);
   }
 
-  async #act(fn: () => Promise<void>): Promise<void> {
+  async #act(fn: () => Promise<void>, refused: (code: string) => void): Promise<void> {
     if (!this.isConnected || this.busy) return;
     const connection = this.#connection;
     this.busy = true;
@@ -365,47 +392,102 @@ export class TillScheduleScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (!this.isConnected || connection !== this.#connection) return;
-      this.noticeCode = (error as { code?: string }).code ?? "server.internal";
+      refused((error as { code?: string }).code ?? "server.internal");
     } finally {
       if (this.isConnected && connection === this.#connection) this.busy = false;
     }
   }
 
   #accept(swapId: string): void {
-    void this.#act(() => this.api.acceptSwap(swapId));
+    void this.#act(
+      () => this.api.acceptSwap(swapId),
+      (code) => (this.noticeCode = code),
+    );
+  }
+
+  #coverErrors(): CoverErrors {
+    return {
+      shift: this.coverShiftId === "" ? t("schedule.cover_shift_required") : "",
+      colleague: this.coverColleagueId === "" ? t("schedule.cover_colleague_required") : "",
+    };
+  }
+
+  #absenceErrors(): AbsenceErrors {
+    return {
+      from: this.absFrom === "" ? t("schedule.absence_from_required") : "",
+      to:
+        this.absTo === ""
+          ? t("schedule.absence_to_required")
+          : this.absFrom !== "" && this.absTo < this.absFrom
+            ? t("schedule.absence_to_before_from")
+            : "",
+    };
+  }
+
+  async #focusFirstInvalid(form: string): Promise<void> {
+    await this.updateComplete;
+    const container = this.shadowRoot?.querySelector(`.${form} .form`);
+    if (container) await focusFirstInvalid(container);
   }
 
   #submitCover(): void {
-    if (!this.isConnected || this.coverShiftId === "" || this.coverColleagueId === "") return;
+    if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#coverScope).unchanged) return;
+    this.coverAttempted = true;
+    this.coverRefusal = "";
+    if (hasError(this.#coverErrors())) {
+      void this.#focusFirstInvalid("cover");
+      return;
+    }
     const submitted = this.#coverDraft();
     const connection = this.#connection;
-    void this.#act(async () => {
-      await this.api.requestSwap(submitted);
-      if (!this.isConnected || connection !== this.#connection) return;
-      if (sameCover(this.#coverDraft(), submitted)) {
-        this.coverShiftId = "";
-        this.coverColleagueId = "";
-        this.#coverScope?.commit(this.#coverDraft());
-      } else this.#coverScope?.commit(submitted);
-    });
+    void this.#act(
+      async () => {
+        await this.api.requestSwap(submitted);
+        if (!this.isConnected || connection !== this.#connection) return;
+        this.coverAttempted = false;
+        if (sameCover(this.#coverDraft(), submitted)) {
+          this.coverShiftId = "";
+          this.coverColleagueId = "";
+          this.#coverScope?.commit(this.#coverDraft());
+        } else this.#coverScope?.commit(submitted);
+      },
+      (code) => (this.coverRefusal = code),
+    );
   }
 
   #submitAbsence(): void {
-    if (!this.isConnected || this.absFrom === "" || this.absTo === "") return;
+    if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#absenceScope).unchanged) return;
+    this.absAttempted = true;
+    this.absRefusal = "";
+    if (hasError(this.#absenceErrors())) {
+      void this.#focusFirstInvalid("request-absence");
+      return;
+    }
     const submitted = this.#absenceDraft();
     const connection = this.#connection;
-    void this.#act(async () => {
-      await this.api.requestAbsence(submitted);
-      if (!this.isConnected || connection !== this.#connection) return;
-      if (sameAbsence(this.#absenceDraft(), submitted)) {
-        this.absFrom = "";
-        this.absTo = "";
-        this.absNote = "";
-        this.#absenceScope?.commit(this.#absenceDraft());
-      } else this.#absenceScope?.commit(submitted);
-    });
+    void this.#act(
+      async () => {
+        await this.api.requestAbsence(submitted);
+        if (!this.isConnected || connection !== this.#connection) return;
+        this.absAttempted = false;
+        if (sameAbsence(this.#absenceDraft(), submitted)) {
+          this.absFrom = "";
+          this.absTo = "";
+          this.absNote = "";
+          this.#absenceScope?.commit(this.#absenceDraft());
+        } else this.#absenceScope?.commit(submitted);
+      },
+      (code) => (this.absRefusal = code),
+    );
+  }
+
+  /** The bottom message: the correction sentence while a field is marked, then any refusal. */
+  #bottomMessage(marked: boolean, refusal: string): string {
+    return [marked ? t("form.fix_fields") : "", refusal === "" ? "" : codeMessage(refusal)]
+      .filter((message) => message !== "")
+      .join(" ");
   }
 
   #back(): void {
@@ -555,6 +637,10 @@ export class TillScheduleScreen extends LitElement {
     const shifts = this.shifts ?? [];
     const colleagues = this.#colleagues();
     const save = saveActionState(this.#coverScope);
+    const errors: CoverErrors = this.coverAttempted
+      ? this.#coverErrors()
+      : { shift: "", colleague: "" };
+    const marked = hasError(errors);
     return html`<section class="cover">
       <h2>${t("schedule.cover_title")}</h2>
       <div class="form">
@@ -567,6 +653,7 @@ export class TillScheduleScreen extends LitElement {
             this.coverShiftId = value;
             this.#coverScope?.changed();
           },
+          errors.shift,
         )}
         ${this.#dropdown(
           "cover-colleague",
@@ -583,17 +670,18 @@ export class TillScheduleScreen extends LitElement {
             this.coverColleagueId = value;
             this.#coverScope?.changed();
           },
+          errors.colleague,
         )}
-        <wt-button
-          class="cover-submit"
-          variant=${save.variant}
-          ?disabled=${
-            save.unchanged || this.busy || this.coverShiftId === "" || this.coverColleagueId === ""
-          }
-          @click=${() => this.#submitCover()}
-        >
-          ${t("schedule.cover_submit")}
-        </wt-button>
+        <wt-form-actions .error=${this.#bottomMessage(marked, this.coverRefusal)}>
+          <wt-button
+            class="cover-submit"
+            variant=${save.variant}
+            ?disabled=${save.unchanged || this.busy || marked}
+            @click=${() => this.#submitCover()}
+          >
+            ${t("schedule.cover_submit")}
+          </wt-button>
+        </wt-form-actions>
       </div>
     </section>`;
   }
@@ -605,9 +693,12 @@ export class TillScheduleScreen extends LitElement {
     options: ComboboxOption[],
     value: string,
     onPick: (value: string) => void,
+    error?: string,
   ) {
     return html`<wt-combobox
       name=${name}
+      ?required=${error !== undefined}
+      .error=${error ?? ""}
       label=${label}
       search="auto"
       searchPlaceholder=${t("form.combobox_search")}
@@ -651,6 +742,8 @@ export class TillScheduleScreen extends LitElement {
 
   #absenceForm() {
     const save = saveActionState(this.#absenceScope);
+    const errors: AbsenceErrors = this.absAttempted ? this.#absenceErrors() : { from: "", to: "" };
+    const marked = hasError(errors);
     return html`<section class="request-absence">
       <h2>${t("schedule.absence_title")}</h2>
       <div class="form">
@@ -669,6 +762,8 @@ export class TillScheduleScreen extends LitElement {
           class="abs-from"
           name="abs-from"
           type="date"
+          required
+          .error=${errors.from}
           .label=${t("schedule.absence_from")}
           .value=${this.absFrom}
           @wt-change=${(e: Event) => {
@@ -683,6 +778,8 @@ export class TillScheduleScreen extends LitElement {
           class="abs-to"
           name="abs-to"
           type="date"
+          required
+          .error=${errors.to}
           .label=${t("schedule.absence_to")}
           .value=${this.absTo}
           @wt-change=${(e: Event) => {
@@ -705,14 +802,16 @@ export class TillScheduleScreen extends LitElement {
             this.#absenceScope?.changed();
           }}
         ></wt-input>
-        <wt-button
-          class="abs-submit"
-          variant=${save.variant}
-          ?disabled=${save.unchanged || this.busy || this.absFrom === "" || this.absTo === ""}
-          @click=${() => this.#submitAbsence()}
-        >
-          ${t("schedule.absence_submit")}
-        </wt-button>
+        <wt-form-actions .error=${this.#bottomMessage(marked, this.absRefusal)}>
+          <wt-button
+            class="abs-submit"
+            variant=${save.variant}
+            ?disabled=${save.unchanged || this.busy || marked}
+            @click=${() => this.#submitAbsence()}
+          >
+            ${t("schedule.absence_submit")}
+          </wt-button>
+        </wt-form-actions>
       </div>
     </section>`;
   }

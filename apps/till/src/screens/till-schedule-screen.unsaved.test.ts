@@ -4,6 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { MyShift, TillApi } from "../api/client.js";
 import "./till-schedule-screen.js";
 
@@ -217,7 +218,14 @@ for (const saved of ["cover", "absence"]) {
     if (saved === "cover") await cover(screen);
     else await absence(screen);
     click(screen, saved === "cover" ? ".cover-submit" : ".abs-submit");
-    await expect.poll(() => screen.shadowRoot!.querySelector('[role="alert"]')).toBeTruthy();
+    await expect
+      .poll(
+        () =>
+          screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+            `${saved === "cover" ? ".cover" : ".request-absence"} wt-form-actions`,
+          )!.error,
+      )
+      .toBe(codeMessage("absence.overlaps"));
     expect(unload()).toBe(true);
     click(screen, ".back");
     await choose(app, "keep");
