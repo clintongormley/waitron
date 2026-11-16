@@ -204,12 +204,13 @@ for every other sale and for Task 3b's fallback.)
 
 **Files:** `apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.
 
-- [ ] Failing tests: `GET /management-api/tax-office/invoices/:saleId/pdf` answers
+- [ ] Failing tests: `POST /management-api/tax-office/invoices/:saleId/pdf` answers
   `application/pdf` named by `invoicePdfFileName` for an F2, an F1, an F3 and an R5 (the PDF starts
   `%PDF` and its text holds the invoice number); an unknown id answers `invoice_delivery.not_found`
   (what `readDocument` already throws, `invoice-document.ts:74`); no permission answers
   `authorization.not_permitted`; one `invoice_pdf_downloads` row names the person and the sale;
-  `Cache-Control: no-store`.
+  `Cache-Control: no-store`. (POST, as the Orders download, so the download record sits behind
+  the own-page check — Task 3 review 2026-11-16)
 - [ ] Implement `readSaleForDownload(tx, deps, saleId, personId)` beside `readInvoiceForDownload`,
   with `readReceiptEmailDocument` and the same insert, inside `withTransaction` (it writes); render
   with `renderInvoicePdf` after the transaction.
@@ -222,7 +223,8 @@ for every other sale and for Task 3b's fallback.)
 
 - [ ] Failing tests: the screen lists the route's rows, one sub-row per VAT rate; each filter
   sends its query parameter; the issue range defaults to the current month; next page uses the
-  keyset; "Open" opens the PDF in a new tab (the browser's viewer prints and saves it); a
+  keyset; "Open" POSTs to the PDF route, as the Orders download does, and opens the returned PDF
+  in a new tab (the browser's viewer prints and saves it); a
   cancelled invoice shows "Cancelled"; a person holding only `invoice.inspect` lands on this
   screen and sees no other venue screen, Orders included (D8); a read failure shows the load message, not an empty list.
   Fields come from field primitives (`scripts/native-form-fields.test.ts`), dates through the

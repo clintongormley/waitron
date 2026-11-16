@@ -1,28 +1,18 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  personRoles,
-  readVenueClock,
-  roles,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, readVenueClock, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { startManagementSession } from "@waitron/identity";
 import {
   seedSale,
   seedSubstitution,
   seedVenueWithSeries,
   seedVoid,
 } from "@waitron/reporting/test/fixtures.js";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { SaleId } from "@waitron/shared";
 import { mountTaxOfficeApi } from "./tax-office-api.js";
+import { sessionHolding } from "./testing/session-holding.js";
 import {
   listTaxOfficeInvoices,
   type TaxOfficeFilter,
@@ -153,22 +143,6 @@ let app: Hono;
 let inspector: string;
 let reporter: string;
 
-/** A dashboard session for a new person whose one role is a custom role granting `permissions`. */
-function sessionHolding(permissions: string[]): Promise<string> {
-  return withTransaction(db, async (tx) => {
-    const name = `Only ${randomUUID()}`;
-    const [person] = await seedPersons(tx, { displayName: name });
-    await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
-    const [role] = await tx
-      .insert(roles)
-      .values({ name, nameFolded: name.toLowerCase(), permissions })
-      .returning({ id: roles.id });
-    await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
-    const session = await startManagementSession(tx, { personId: person!.id });
-    return `${MANAGEMENT_COOKIE}=${session.token}`;
-  });
-}
-
 beforeAll(async () => {
   db = suite.db;
   app = new Hono();
@@ -178,8 +152,8 @@ beforeAll(async () => {
     { db, cfg: { nodeId }, backend: {} as FiscalBackend, tradingContext: {} as TradingContext },
     () => {},
   );
-  inspector = await sessionHolding(["invoice.inspect"]);
-  reporter = await sessionHolding(["report.view", "report.export"]);
+  inspector = (await sessionHolding(db, ["invoice.inspect"])).cookie;
+  reporter = (await sessionHolding(db, ["report.view", "report.export"])).cookie;
 });
 
 const NOVEMBER = "from=2026-11-01&to=2026-11-30";

@@ -33,7 +33,6 @@ export interface TaxOfficeApiDeps {
   tradingContext: TradingContext;
 }
 
-/** Client faults only; anything else reaches `run` as a server fault. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -106,7 +105,7 @@ function readFilter(
   };
 }
 
-/** Every invoice the venue issued, for the tax office, under `invoice.inspect`. Read-only. */
+/** Every invoice the venue issued, for the tax office, under `invoice.inspect`. */
 export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger): void {
   app.get("/management-api/tax-office/invoices", (c) =>
     run(c, log, async () => {
@@ -127,7 +126,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       return c.json(result);
     }),
   );
-  app.get("/management-api/tax-office/invoices/:saleId/pdf", (c) =>
+  app.post("/management-api/tax-office/invoices/:saleId/pdf", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const saleId = c.req.param("saleId").toLowerCase();

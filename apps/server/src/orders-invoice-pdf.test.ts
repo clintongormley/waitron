@@ -32,6 +32,7 @@ import {
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import { mountTaxOfficeApi } from "./tax-office-api.js";
+import { sessionHolding } from "./testing/session-holding.js";
 
 let venue: OrderVenue;
 let managerDashboard = "";
@@ -319,6 +320,7 @@ const numberOf = async (saleId: string) => {
 
 async function saleDownload(cookie: string, saleId: string) {
   const response = await taxOffice.request(`/management-api/tax-office/invoices/${saleId}/pdf`, {
+    method: "POST",
     headers: { cookie },
   });
   const bytes = new Uint8Array(await response.arrayBuffer());
@@ -416,6 +418,26 @@ describe("tax office invoice PDF", () => {
     expect(await saleDownload(managerDashboard, randomUUID())).toMatchObject({
       status: 404,
       code: "invoice_delivery.not_found",
+    });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it("gives a session holding only invoice.inspect the PDF, recording that person", async () => {
+    const saleId = await kinds.F2!();
+    const inspector = await sessionHolding(venue.db, ["invoice.inspect"]);
+    expect((await saleDownload(inspector.cookie, saleId)).status).toBe(200);
+    expect(await downloadsOf(saleId)).toEqual([
+      expect.objectContaining({ saleId, personId: inspector.personId }),
+    ]);
+  });
+
+  it("refuses a session holding the report permissions but not invoice.inspect", async () => {
+    const saleId = await kinds.F2!();
+    const reporter = await sessionHolding(venue.db, ["report.view", "report.export"]);
+    const before = await rowCounts();
+    expect(await saleDownload(reporter.cookie, saleId)).toMatchObject({
+      status: 403,
+      code: "authorization.not_permitted",
     });
     expect(await rowCounts()).toEqual(before);
   });

@@ -1,13 +1,9 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { startManagementSession } from "@waitron/identity";
-import { personRoles, roles } from "@waitron/db";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
-import { inTx, send } from "./testing/bill-venue.js";
+import { send } from "./testing/bill-venue.js";
+import { sessionHolding } from "./testing/session-holding.js";
 import { placedIssuedBill, provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
 
 let venue: OrderVenue;
@@ -20,29 +16,13 @@ useVenueDb({
   },
 });
 
-/** A dashboard session for a new person whose one role is a custom role granting `permissions`. */
-async function sessionHolding(permissions: string[]): Promise<string> {
-  return inTx(venue, async (tx) => {
-    const name = `Only ${randomUUID()}`;
-    const [person] = await seedPersons(tx, { displayName: name });
-    await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
-    const [role] = await tx
-      .insert(roles)
-      .values({ name, nameFolded: name.toLowerCase(), permissions })
-      .returning({ id: roles.id });
-    await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
-    const session = await startManagementSession(tx, { personId: person!.id });
-    return `${MANAGEMENT_COOKIE}=${session.token}`;
-  });
-}
-
 describe("a session holding only invoice.inspect", () => {
   let inspector: string;
   let nobody: string;
   let billId: string;
   beforeAll(async () => {
-    inspector = await sessionHolding(["invoice.inspect"]);
-    nobody = await sessionHolding([]);
+    inspector = (await sessionHolding(venue.db, ["invoice.inspect"])).cookie;
+    nobody = (await sessionHolding(venue.db, [])).cookie;
     billId = await placedIssuedBill(venue, "Paella");
   });
 
@@ -106,7 +86,7 @@ describe("a session holding only invoice.inspect", () => {
   });
 
   it("leaves a session holding invoice.inspect beside report.view seeing the list", async () => {
-    const manager = await sessionHolding(["invoice.inspect", "report.view"]);
+    const manager = (await sessionHolding(venue.db, ["invoice.inspect", "report.view"])).cookie;
     const list = await send(venue.orders, manager, "GET", "/management-api/orders");
     expect(list.status).toBe(200);
     expect((list.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(billId);
