@@ -321,17 +321,16 @@ export class DevicesScreen extends LitElement {
       }
       wt-data-table::part(being-paired),
       wt-data-table::part(battery-stale),
-      wt-data-table::part(profile-retired) {
+      wt-data-table::part(profile-retired),
+      wt-data-table::part(returning-hint) {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(battery-updated),
       wt-data-table::part(returning-hint) {
         display: block;
       }
-      /* The table is as wide as its content, so the hint wraps only under a width of its own. */
-      wt-data-table::part(returning-hint) {
-        max-width: 50vw;
-        color: var(--wt-color-text-muted);
+      wt-data-table::part(waiting-name) {
+        overflow-wrap: anywhere;
       }
       wt-data-table::part(visually-hidden) {
         ${visuallyHiddenStyles}
@@ -489,6 +488,8 @@ export class DevicesScreen extends LitElement {
   @state() private fieldRefusal: FieldRefusal = null;
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
+  /** A Pair save not yet answered; its claim stands only while the hold it was checked under does. */
+  #pairSave: Promise<unknown> | undefined;
   #pairEpoch = 0;
   #joinVersion = 0;
   #pairLeave?: LeaveCoordinator;
@@ -826,8 +827,10 @@ export class DevicesScreen extends LitElement {
     if (!this.addingDevice) return;
     this.#addEpoch++;
     this.addingDevice = false;
+    const save = this.#pairSave;
+    this.#pairSave = undefined;
     this.#closePair();
-    this.#hold.stop();
+    this.#hold.stop(save);
     this.added = null;
     this.askedAgain = null;
     this.addError = null;
@@ -845,11 +848,12 @@ export class DevicesScreen extends LitElement {
    * Closing Pair before the server settled the request discards it, so the device can ask again. A
    * discard that fails leaves the request pending, and claimed by this login if its number was
    * checked, so the Add dialog that is still open says so; one closing with Add needs no message:
-   * the dialog that would show it is gone.
+   * the dialog that would show it is gone. While a save is unanswered, closing sends no discard.
    */
   #closePair(): void {
     const request = this.pairRequest;
     if (request === null) return;
+    const saving = this.submitting;
     this.#pairEpoch++;
     this.#pairScope?.dispose();
     this.#pairScope = undefined;
@@ -857,7 +861,7 @@ export class DevicesScreen extends LitElement {
     this.pairRequest = null;
     this.checking = false;
     this.submitting = false;
-    if (this.#pairSettled) return;
+    if (this.#pairSettled || saving) return;
     const addEpoch = this.#addEpoch;
     void this.api
       .denyJoinRequest(request.id, { createdAt: request.createdAt })
@@ -1016,8 +1020,10 @@ export class DevicesScreen extends LitElement {
     this.pairError = null;
     this.fieldRefusal = null;
     let result: { name: string };
+    const save = (async () => this.api.acceptDeviceJoinRequest(request.id, submitted))();
+    this.#pairSave = save;
     try {
-      result = await this.api.acceptDeviceJoinRequest(request.id, submitted);
+      result = await save;
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
@@ -1025,6 +1031,8 @@ export class DevicesScreen extends LitElement {
       if (field === null) this.pairError = codeOf(error);
       else this.fieldRefusal = { field, code: codeOf(error) };
       return;
+    } finally {
+      if (this.#pairSave === save) this.#pairSave = undefined;
     }
     if (epoch !== this.#pairEpoch) return;
     scope?.commit(submitted);
@@ -1834,7 +1842,9 @@ export class DevicesScreen extends LitElement {
         key: "name",
         label: t("devices.name"),
         cell: (request) =>
-          html`<span data-test=${`waiting-row-${request.id}`}>${waitingName(request)}</span>${
+          html`<span part="waiting-name" data-test=${`waiting-row-${request.id}`}
+              >${waitingName(request)}</span
+            >${
               request.returning
                 ? html`<span part="returning-hint" data-test=${`returning-hint-${request.id}`}
                     >${t(
@@ -1868,6 +1878,7 @@ export class DevicesScreen extends LitElement {
     ];
     return html`<wt-data-table
       data-test="waiting-table"
+      wrap-to-fit
       aria-label=${t("devices.waiting_title")}
       .rows=${this.pendingJoins}
       .columns=${columns}

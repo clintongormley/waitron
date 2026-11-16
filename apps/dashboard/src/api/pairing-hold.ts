@@ -14,9 +14,11 @@ const FINAL = new Set([
 ]);
 
 /**
- * Holds the venue's join window open for as long as one dashboard dialog is open. `onChange` is told
- * of each status change; a change to `held` carries the taken hold's lapse, so a screen can show it
- * before its own read of the window answers.
+ * Holds the venue's join window open while one dashboard dialog is open. When `stop` is handed an
+ * unanswered save, the hold is not renewed but is released only once that save answers. `status`
+ * goes to `idle` at `stop` either way.
+ * `onChange` is told of each status change; a change to `held` carries the taken hold's lapse, so a
+ * screen can show it before its own read of the window answers.
  */
 export class PairingHold {
   #holdId: string | null = null;
@@ -49,9 +51,7 @@ export class PairingHold {
     try {
       const { holdId, openUntil } = await this.api().takePairingHold();
       if (epoch !== this.#epoch) {
-        void this.api()
-          .releasePairingHold(holdId)
-          .catch(() => undefined);
+        this.#release(holdId);
         return;
       }
       this.#holdId = holdId;
@@ -62,18 +62,31 @@ export class PairingHold {
     }
   }
 
-  /** A failed release is ignored: the server lets an unrenewed hold lapse on its own. */
-  stop(): void {
+  /**
+   * Given `until`, the hold is released once `until` settles, not before, since releasing it ends
+   * every claim checked under it. A failed release is ignored: the server lets an unrenewed hold
+   * lapse on its own.
+   */
+  stop(until?: Promise<unknown>): void {
     this.#epoch++;
     clearInterval(this.#timer);
     this.#timer = undefined;
     const holdId = this.#holdId;
     this.#holdId = null;
-    if (holdId !== null)
-      void this.api()
-        .releasePairingHold(holdId)
-        .catch(() => undefined);
+    if (holdId !== null) {
+      if (until === undefined) this.#release(holdId);
+      else {
+        const release = (): void => this.#release(holdId);
+        void until.then(release, release);
+      }
+    }
     if (this.#status !== "idle") this.#set("idle", null);
+  }
+
+  #release(holdId: string): void {
+    void this.api()
+      .releasePairingHold(holdId)
+      .catch(() => undefined);
   }
 
   async #renew(epoch: number): Promise<void> {

@@ -3909,6 +3909,50 @@ describe("add a device", () => {
     expect(q(el, "[data-test=waiting-empty]")).toBeNull();
   });
 
+  it("keeps a long waiting name and its Pair inside the Add dialog at 400 px", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(400, 844);
+      const asks: JoinRequestRow[] = [
+        {
+          ...pending[0]!,
+          returning: {
+            name: "CashTillByTheTerraceDoorNearTheRearGardenGateWestSideCounter1",
+            profileId: "dp1",
+            kitchenScreens: [],
+            profileRetired: false,
+          },
+        },
+        { ...pending[1]!, label: "Cash till by the terrace door near the rear garden gate west" },
+      ];
+      const el = await openAdd(stubApi({ joinRequests: vi.fn().mockResolvedValue(asks) }));
+      const dialog = q(el, "[data-test=add-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!
+        .getBoundingClientRect();
+      expect(dialog.right).toBeLessThanOrEqual(400);
+      const table = q(el, "[data-test=waiting-table]") as HTMLElementTagNameMap["wt-data-table"];
+      await table.updateComplete;
+      expect(d(el, "[data-test=returning-hint-r1]")).not.toBeNull();
+      for (const node of [table, ...table.shadowRoot!.querySelectorAll<HTMLElement>("*")])
+        expect(node.scrollWidth, node.className || node.tagName).toBeLessThanOrEqual(
+          node.clientWidth || node.scrollWidth,
+        );
+      for (const id of ["r1", "r2"])
+        for (const sel of [
+          `waiting-row-${id}`,
+          `pair-${id}`,
+          ...(id === "r1" ? ["returning-hint-r1"] : []),
+        ])
+          expect(
+            d(el, `[data-test=${sel}]`)!.getBoundingClientRect().right,
+            sel,
+          ).toBeLessThanOrEqual(dialog.right);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   // The list must never show the answer beside the question.
   it("never shows a request's number in the waiting list", async () => {
     const api = stubApi();
@@ -4561,6 +4605,32 @@ describe("add a device", () => {
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
   });
 
+  it("a Pair save that throws before sending shows its refusal and leaves both dialogs closable", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockImplementation(() => {
+        throw { code: "connection.failed" };
+      }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(codeMessage("connection.failed")),
+    );
+    const submit = q(el, "[data-test=pair-submit]") as HTMLElement & {
+      disabled: boolean;
+      loading: boolean;
+    };
+    expect([submit.loading, submit.disabled]).toEqual([false, false]);
+    const dismissible = (id: string): boolean =>
+      (q(el, `[data-test=${id}]`) as HTMLElement & { dismissible: boolean }).dismissible;
+    expect([dismissible("pair-modal"), dismissible("add-device-modal")]).toEqual([true, true]);
+  });
+
   it("lets a Pair save that is under way decide the outcome: Escape and Cancel wait for it", async () => {
     let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
     const api = stubApi({
@@ -4590,6 +4660,77 @@ describe("add a device", () => {
     expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
       t("devices.added").replace("{name}", "Bar 1"),
     );
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
+
+  /** Opens Add on `api`, checks r1's number, and presses Save on a save that answers only when told. */
+  async function saveUnanswered(api: DashboardApi): Promise<DevicesScreen> {
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+    return el;
+  }
+
+  // The server refuses an accept whose claim's hold was released, so the release waits for the answer.
+  it("leaving the screen while a Pair save is under way sends no discard and keeps the hold until it answers", async () => {
+    let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
+    });
+    const el = await saveUnanswered(api);
+
+    el.remove();
+    await flush(el);
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+
+    answer({ deviceId: "d9", name: "Bar 1", formFactor: "till" });
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
+
+  it("a Pair save refused after the screen went away still releases the hold once, and discards nothing", async () => {
+    let refuse!: (error: unknown) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((_, r) => (refuse = r))),
+    });
+    const el = await saveUnanswered(api);
+
+    el.remove();
+    await flush(el);
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+
+    refuse({ code: "connection.timed_out" });
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+    await flush(el);
+    expect(api.releasePairingHold).toHaveBeenCalledTimes(1);
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
+
+  it("Add opened again before a left Pair save answers keeps its new hold and releases only the old one", async () => {
+    let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
+    });
+    const el = await saveUnanswered(api);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.appendChild(el);
+    await flush(el);
+    vi.mocked(api.takePairingHold).mockResolvedValue({ holdId: "h2", openUntil: TAKEN_UNTIL });
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+
+    answer({ deviceId: "d9", name: "Bar 1", formFactor: "till" });
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+    await flush(el);
+    expect(api.releasePairingHold).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
   });
 
