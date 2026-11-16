@@ -1,25 +1,27 @@
 # Adviser meeting, Thursday 19 November 2026
 
 Written 15 November 2026 for the owner, and rewritten the same day so that each question can be
-read on its own. Nothing here has been sent.
+read on its own. Updated 16 November: questions 3 and 7 now carry the owner's decisions on when a
+ticket is issued and on changes to a quarter already filed, and the Spanish question 12 now matches
+the English. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question explains the situation, says what Waitron
 does or proposes and why, and ends with what we ask, so it can be read without the others. Questions
 1 and 2 need the adviser's judgement. Questions 3 to 14 are confirmations, ordered by what is filed
-or signed from the first day of trading. Questions 15 to 22 follow up his answers of 15 November.
+or signed from the first day of trading. Questions 15 to 22 follow up the adviser's answers of 15 November.
 
 **What the adviser already has.** S1 to S19 and R1 to R6, the
-[shortened list](asesor-questions.md#the-shortened-list-2026-10-09), went to him around 15 October
-(the owner's estimate). **He answered S1 to S16 and R1 to R6 on 15 November**, in a draft whose
-numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What his answers change is in
+[shortened list](asesor-questions.md#the-shortened-list-2026-10-09), went to the adviser around 15 October
+(the owner's estimate). **The adviser answered S1 to S16 and R1 to R6 on 15 November**, in a draft whose
+numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What the adviser's answers change is in
 [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md). Questions 3 and 4 were rewritten
-that day as follow-ups to his answers, and questions 15 to 22 were added; question 22 chases S17 to
-S19, which he has not answered.
+that day as follow-ups to the adviser's answers, and questions 15 to 22 were added; question 22 chases S17 to
+S19, which the adviser has not answered.
 
 **Where the questions come from.** The [6 November list](2026-11-06-adviser-questions.md), whose
 T numbers are given in brackets in Part 1, cut to what is still open on 15 November, plus the
-questions the owner's decisions of 14 and 15 November call for, plus the follow-ups to his answers.
+questions the owner's decisions of 14 and 15 November call for, plus the follow-ups to the adviser's answers.
 What was dropped, and why, is at the end. The reasoning and the full sources are in the 6 November
 list, the research files it links, and the answers document above.
 
@@ -31,8 +33,10 @@ AEAT's developer FAQ v1.3, the PDF kept in [sources/](sources/). As a control, t
 phrase «deberá constar en serie específica de factura» was confirmed absent from V2884-16. The
 downloads are not committed; fetch them again from those sites to re-check. The annex is copied
 from the repository's declaration template, not from a law. The rewrite of 15 November kept those
-quotations unchanged where they remain, and added none: the other words in « » are ours,
-and "where applicable" in question 19 is the adviser's own English.
+quotations unchanged where they remain. One was added on
+16 November and was not checked by the script: question 7's quotation of AEAT's web service
+description v1.0.3 (§6.4, p. 30). Every other word in « » is ours, and "where applicable" in
+question 19 is the adviser's own English.
 
 ## Part 1: English (for the owner)
 
@@ -79,47 +83,48 @@ Yes / No / Note: ____________________________________________
 
 ### Confirmations: what is filed or signed from the first day
 
-**3. When the meal ends, and whether the ticket may wait for payment (follows his 1.1, 1.3 and
-1.4).**
+**3. When the meal ends, a ticket issued before payment, and an invoice issued late (follows
+answers 1.1, 1.3 and 1.4).**
 
 *The situation.* A ticket (a simplified invoice) must be issued when the transaction is carried out
 (RD 1619/2012 art. 11.1), and VAT on a meal falls due when the service is supplied (LIVA
-75.Uno.2.º). In his answers of 15 November he said that a meal is one service, supplied when it
+75.Uno.2.º). In answers of 15 November the adviser said that a meal is one service, supplied when it
 ends; that a ticket issued at the end of the meal, in the same visit, carries one date; that an
 invoice issued on a later day must also show the date of the meal; and that the ticket is due when
 the meal ends, not held back until the bill is fully paid.
 
-*What Waitron proposes.* The ticket is issued when the table's visit ends: at the last payment, or
-when staff record that the table has left with part unpaid. It carries the date of that moment.
+*What Waitron proposes.* The ticket is issued when the meal ends, even if the bill is paid much
+later: at the last payment, or when staff record that the table has left with part unpaid. It
+carries the date of that moment.
 
 *We ask:*
 
 - (a) Does the meal end when the last dish is served, or when the guests finish and leave?
   Example: the last dish is served at 23:40 on the 1st; the guests have coffee, then pay and leave
-  at 00:30 on the 2nd. We would date the ticket the 2nd, with no separate date of the meal. Is that
-  right, or is the date of the meal the 1st? Waitron decides this by the venue's trading day, which
-  ends at the start-of-day time the venue sets: with 05:00, a meal paid at 00:30 belongs to the
-  evening's service and its ticket carries one date; a venue whose day starts at midnight would get
-  the 1st as a separate date of the meal. Is dating by the venue's trading day acceptable?
-- (b) A regular eats on Monday and, by arrangement, pays on Thursday. Must the ticket be issued on
-  Monday, still unpaid, or may it wait until Thursday and show Monday as the date of the meal? His
-  answer 1.4 mentions invoices issued after payment by bank transfer; his answer 1.3 says issuing
-  cannot wait for full payment.
-- (c) An invoice issued after the VAT period of its meal has ended. The three ways of question 7
-  apply here too. Example: a meal on 28 March, paid by bank transfer, is invoiced on 25 April,
-  after the first quarter's return was filed on 20 April. Way 1 counts it in the second quarter,
-  when it was issued, and leaves the first quarter as filed (the owner's preference). Way 2 counts
-  it in the first quarter, with a complementary return (LGT art. 122); the change built for this,
-  not yet released, works this way (LIVA 75.Uno.2.º). Way 3 leaves the first quarter as filed and
-  shows a "correction for the first quarter" line for the accountant. Which is right? And should
+  at 00:30 on the 2nd. Waitron decides by the venue's trading day, which ends at the start-of-day
+  time the venue sets. With 05:00, the meal belongs to the evening's service: the ticket is dated
+  the 2nd, with no separate date of the meal. With midnight, the ticket is dated the 2nd and shows
+  the 1st as the date of the meal. Is dating by the venue's trading day acceptable, or is the date
+  of the meal always the day the guests leave?
+- (b) A regular eats on Monday and, by arrangement, pays on Thursday. Waitron issues the ticket on
+  Monday, when the meal ends, still unpaid, and records Thursday's payment against it. Is that
+  right? Answer 1.4 mentions invoices issued after payment by bank transfer; answer 1.3 says
+  issuing cannot wait for full payment.
+- (c) An invoice issued after its meal's VAT period has ended. With tickets issued when the meal
+  ends this should be rare, for example a bill left open by mistake. Example: the bill for a meal
+  on 28 March is left open by mistake and invoiced on 25 April, after the first quarter's return
+  was filed on 20 April. The VAT fell due when the meal ended (LIVA 75.Uno.2.º; answer 1.4), so it
+  belongs to the first quarter. Waitron proposes to leave the first quarter's report as filed and
+  show the meal's VAT on a separate "correction for the first quarter" line, which the accountant
+  files as a complementary return (LGT art. 122): way 3 of question 7. Is that right? And should
   the accountant's export list it by the date of the meal or by the date of issue?
 
 Yes / No / Note: ____________________________________________
 
-**4. A series for correctives of a wrong date (follows his 1.14).**
+**4. A series for correctives of a wrong date (follows answer 1.14).**
 
 *The situation.* Corrective invoices (facturas rectificativas) are numbered in series of their own.
-He confirmed on 15 November that correctives of tickets (AEAT's type R5) and correctives of full
+The adviser confirmed on 15 November that correctives of tickets (AEAT's type R5) and correctives of full
 invoices (R1 to R4) need separate series. A ticket can also carry the wrong date, for example when
 the server's clock was a day ahead; it is put right with a corrective that states the real date and
 changes no amount.
@@ -146,7 +151,7 @@ Linux and Docker) as part of the system, says the producer answers for them, and
 of the Veri\*Factu library used and what it does. We think it is enough with two additions: what the
 print agent does (the program that sends documents to the venue's printers), and that the
 terminals (tills, order-taking devices, kitchen screens) ask the server for invoices and display
-them without producing invoice records themselves. The sentence about a standby server would appear
+them (the draft already says they produce no invoice records). The sentence about a standby server would appear
 only in a version that can actually switch to one.
 
 *We ask:* With those two additions, is item d) sufficient?
@@ -189,7 +194,7 @@ the clock was wrong; the first quarter's return is filed on 20 April; the error 
 the corrective is issued, in May.
 
 1. Count the change in the period the corrective is issued, and never change a report already
-   filed. The owner prefers this. In the example, the ticket's VAT stays in the second quarter,
+   filed. In the example, the ticket's VAT stays in the second quarter,
    where its wrong date put it, and the first quarter stays as filed.
 2. Count it in the period of the sale by changing that period's report: the VAT moves to the first
    quarter, which a complementary return corrects (LGT art. 122). This is what Waitron does today
@@ -199,10 +204,18 @@ the corrective is issued, in May.
 
 AEAT lists filed records by the period of their operation date, or of their issue date when they
 have none (service description v1.0.3, §6.4, p. 30). So under way 1, Waitron's figures for a
-quarter can differ from what AEAT's records show for it.
+quarter can differ from what AEAT's records show for it, which is one reason not to propose it.
 
-*We ask:* Is a corrective the right way to correct a wrong date? Which of the three ways is right
-for its VAT? Does AEAT listing records by their operation date make way 1 a problem?
+*What Waitron proposes.* A report already filed never changes. A change that lowers a quarter's VAT
+counts in the current quarter, as answer 1.12 allows for a cancellation. A change that adds VAT to
+a filed quarter is shown on a separate corrections line, as in way 3, for the accountant to file as
+a complementary return, in line with answer 1.13 for a wrong VAT rate. In the example: the first
+quarter stays as filed, the second-quarter report (not yet filed in May) no longer counts the
+ticket, and a "correction for the first quarter" line shows its VAT.
+
+*We ask:* Is a corrective the right way to correct a wrong date? Is the proposal right for its VAT:
+reductions in the current quarter, additions on a separate corrections line? Is that what LIVA
+art. 89.Cinco asks for?
 
 Yes / No / Note: ____________________________________________
 
@@ -318,12 +331,12 @@ common six-year schedule for a restaurant's records. No source sets a period.
 
 Yes / No / Note: ____________________________________________
 
-### Follow-ups on his answers of 15 November
+### Follow-ups on the adviser's answers of 15 November
 
-**15. A payment on account during the meal (his 1.3).**
+**15. A payment on account during the meal (answer 1.3).**
 
 *The situation.* At a table, one guest sometimes pays part of the bill before the meal is over and
-leaves. He answered that money paid before the table has been fully served is an advance payment:
+leaves. The adviser answered that money paid before the table has been fully served is an advance payment:
 VAT is due on it at once, so it needs its own ticket (LIVA 75.Dos; RD 1619/2012 art. 2.1), provided
 what it pays for is clearly identified (European Court of Justice, C‑419/02, BUPA).
 
@@ -338,14 +351,14 @@ on the final ticket the whole bill less Ana's advance, the way a deposit is dedu
 - (a) Are Ana's €30 an advance payment, when they are an amount rather than particular dishes and
   the table may still order more?
 - (b) If so, may her ticket list the dishes ordered so far as paid on account, and the final ticket
-  show the total less the advance's amount before VAT and its VAT, as he described for a deposit
-  (his 1.8)?
+  show the total less the advance's amount before VAT and its VAT, as the adviser described for a deposit
+  (answer 1.8)?
 
 Yes / No / Note: ____________________________________________
 
-**16. Delivering the ticket in practice (his 1.11).**
+**16. Delivering the ticket in practice (answer 1.11).**
 
-*The situation.* He answered that the ticket must be delivered and the customer cannot waive it.
+*The situation.* The adviser answered that the ticket must be delivered and the customer cannot waive it.
 Printing it only on request, or never, breaches the rule; showing it on a screen is not delivery;
 email or a download link needs the customer's informed consent (RD 1619/2012 art. 9), given after
 being told how the ticket will arrive and that paper is available.
@@ -363,10 +376,10 @@ ask for a paper copy at any time." and records that it was shown.
 
 Yes / No / Note: ____________________________________________
 
-**17. A whole table, or a staff meal, given free (his 1.10).**
+**17. A whole table, or a staff meal, given free (answer 1.10).**
 
 *The situation.* Sometimes a restaurant charges a table nothing: the owner invites regulars or
-friends, or staff eat a meal on the house. He answered that the risk-free treatment is a
+friends, or staff eat a meal on the house. The adviser answered that the risk-free treatment is a
 self-supply (autoconsumo) valued at cost, not at the menu price (DGT V2347-24; LIVA 79.Cuatro), with
 an invoice and a record. The alternative, treating a business invitation as outside VAT, is
 defensible but goes against V2347-24. Each venue chooses with its own adviser.
@@ -386,10 +399,10 @@ pays.
 
 Yes / No / Note: ____________________________________________
 
-**18. A deposit kept after a no-show (his 1.7 and 1.8).**
+**18. A deposit kept after a no-show (answers 1.7 and 1.8).**
 
-*The situation.* He answered that a deposit for an identified booking is an advance payment with
-its own ticket (his 1.8), and cited DGT V0839-20: money kept as compensation when a booking is
+*The situation.* The adviser answered that a deposit for an identified booking is an advance payment with
+its own ticket (answer 1.8), and cited DGT V0839-20: money kept as compensation when a booking is
 cancelled is outside VAT. To reduce the VAT already declared, though, LIVA 89.Cinco.b asks for the
 VAT to be refunded to the customer.
 
@@ -401,10 +414,10 @@ the deposit's ticket stand?
 
 Yes / No / Note: ____________________________________________
 
-**19. Money given back as goodwill after the ticket (his 1.5).**
+**19. Money given back as goodwill after the ticket (answer 1.5).**
 
 *The situation.* A guest complains after paying, and the manager gives some money back. The ticket
-was already issued for the full price. He answered that a price reduction after the ticket "will,
+was already issued for the full price. The adviser answered that a price reduction after the ticket "will,
 where applicable, require" a corrective invoice (LIVA 80.Uno.2.º; DGT V1493-26).
 
 *Example.* A guest complains after paying €62 and the manager gives €10 back. Without a corrective,
@@ -415,10 +428,10 @@ declaring VAT on the full €62?
 
 Yes / No / Note: ____________________________________________
 
-**20. Who is the third party for copies held outside Spain (his 1.15).**
+**20. Who is the third party for copies held outside Spain (answer 1.15).**
 
 *The situation.* Waitron keeps a continuous copy of the venue's data away from the restaurant, as a
-backup. He answered that a copy abroad, while the original stays on the server in Spain, is not in
+backup. The adviser answered that a copy abroad, while the original stays on the server in Spain, is not in
 itself keeping invoices outside Spain; that whoever holds the copy for the venue is a third party
 (RD 1619/2012 art. 19.3); and that a third party established outside the EU must be notified to
 AEAT beforehand through procedure GZ05 (art. 19.4).
@@ -436,10 +449,10 @@ a storage provider of its own choosing.
 
 Yes / No / Note: ____________________________________________
 
-**21. Invoice copies rebuilt from AEAT's records after a restore (his 1.16).**
+**21. Invoice copies rebuilt from AEAT's records after a restore (answer 1.16).**
 
 *The situation.* If the venue's server has to be restored from an old backup, the invoices issued
-after that backup are missing from it, although their records reached AEAT. He answered that the
+after that backup are missing from it, although their records reached AEAT. The adviser answered that the
 venue should retrieve those records from AEAT's record query service to rebuild the invoice copies,
 which it must keep (RD 1619/2012 art. 19).
 
@@ -454,12 +467,12 @@ Yes / No / Note: ____________________________________________
 
 **22. Three questions from October still awaited.**
 
-*The situation.* His answers of 15 November did not cover three questions of the October list:
+*The situation.* The adviser's answers of 15 November did not cover three questions of the October list:
 
 - **S17, selling by weight.** A certified scale weighs the goods; either it sends weight, price per
   kilo and total to the till, or staff type the weight into the till, which prices it. Does that
   meet the legal metrology rules, does our software need certification, and who signs the
-  declaration of conformity? If this is outside his field, whom should we ask?
+  declaration of conformity? If this is outside the adviser's field, whom should we ask?
 - **S18, a change of the company's legal name, keeping its tax number.** Which name goes on a
   record written before the change but sent after it, and on a cancellation, written after the
   change, of an invoice issued before it?
@@ -469,7 +482,7 @@ Yes / No / Note: ____________________________________________
   says no record may be left unsent. May Waitron hold them back, for how long, and what must it
   keep?
 
-*We ask:* When can we expect his answers?
+*We ask:* When can we expect the adviser's answers?
 
 Note: ____________________________________________
 
@@ -543,8 +556,8 @@ Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: lo que se remite o se firma desde el primer día
 
-**3. Cuándo termina la comida, y si el tique puede esperar al cobro (a partir de sus respuestas
-1.1, 1.3 y 1.4).**
+**3. Cuándo termina la comida, el tique expedido antes del cobro, y la factura expedida tarde (a
+partir de sus respuestas 1.1, 1.3 y 1.4).**
 
 *Situación.* La factura simplificada (el tique) se expide en el momento de realizarse la operación
 (RD 1619/2012, art. 11.1), y el IVA de una comida se devenga «cuando se presten, ejecuten o efectúen
@@ -554,34 +567,33 @@ misma visita, lleva una sola fecha; que la factura expedida un día posterior de
 fecha de la operación; y que el tique se expide al terminar el servicio, sin quedar condicionado al
 cobro total.
 
-*Propuesta de Waitron.* El tique se expide al terminar la visita de la mesa: con el último pago, o
-cuando el personal registra que la mesa se ha marchado sin pagarlo todo. Lleva la fecha de ese
-momento.
+*Propuesta de Waitron.* El tique se expide al terminar la comida, aunque la cuenta se pague mucho
+después: con el último pago, o cuando el personal registra que la mesa se ha marchado sin pagarlo
+todo. Lleva la fecha de ese momento.
 
 *Preguntamos:*
 
 - (a) ¿Termina la comida al servirse el último plato, o cuando los clientes acaban y se marchan?
   Ejemplo: el último plato se sirve a las 23:40 del día 1; después toman café, y pagan y se marchan
-  a las 00:30 del día 2. Fecharíamos el tique el día 2, sin otra fecha de operación. ¿Es correcto, o
-  la fecha de la operación es el día 1? Waitron lo decide según la jornada comercial del local, que
-  termina a la hora de inicio del día que el local fija: con las 05:00, una comida pagada a las 00:30
-  pertenece al servicio de la noche y su tique lleva una sola fecha; un local cuyo día empiece a
-  medianoche indicaría el día 1 como fecha de la operación. ¿Es aceptable fechar según la jornada
-  comercial del local?
-- (b) Un cliente habitual come el lunes y, por acuerdo, paga el jueves. ¿Debe expedirse el tique el
-  lunes, aún sin cobrar, o puede esperar al jueves indicando el lunes como fecha de la operación? Su
-  respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la
-  expedición no puede quedar condicionada al cobro total.
-- (c) Una factura expedida después de terminar el periodo de liquidación de la comida. Valen aquí
-  las tres opciones de la pregunta 7. Ejemplo: una comida del 28 de marzo, pagada por
-  transferencia, se factura el 25 de abril, después de presentar el 20 de abril la autoliquidación
-  del primer trimestre. Con la opción 1 se computa en el segundo trimestre, el de su expedición, y
-  el primer trimestre queda como se presentó (la preferencia del titular). Con la opción 2 se
-  computa en el primer trimestre, con una autoliquidación complementaria (LGT art. 122); así
-  funciona el cambio hecho para este caso, aún no publicado (LIVA art. 75.Uno.2.º). Con la opción 3
-  el primer trimestre queda como se presentó y se muestra una línea «corrección del primer
-  trimestre» para el gestor. ¿Cuál es la correcta? ¿Y debe la exportación para el gestor incluirla
-  por la fecha de la operación o por la fecha de expedición?
+  a las 00:30 del día 2. Waitron lo decide según la jornada comercial del local, que termina a la
+  hora de inicio del día que el local fija. Con las 05:00, la comida pertenece al servicio de la
+  noche: el tique se fecha el día 2, sin otra fecha de operación. Con la medianoche, el tique se
+  fecha el día 2 e indica el día 1 como fecha de la operación. ¿Es aceptable fechar según la jornada
+  comercial del local, o la fecha de la operación es siempre el día en que se marchan los clientes?
+- (b) Un cliente habitual come el lunes y, por acuerdo, paga el jueves. Waitron expide el tique el
+  lunes, al terminar la comida, aún sin cobrar, y registra sobre él el pago del jueves. ¿Es
+  correcto? Su respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que
+  la expedición no puede quedar condicionada al cobro total.
+- (c) Una factura expedida después de terminar el periodo de liquidación de su comida. Si el tique
+  se expide al terminar la comida, debería ser raro; por ejemplo, una cuenta que se dejó abierta por
+  error. Ejemplo: la cuenta de una comida del 28 de marzo queda abierta por error y se factura el
+  25 de abril, después de presentar el 20 de abril la autoliquidación del primer trimestre. El IVA se
+  devengó al terminar la comida (LIVA art. 75.Uno.2.º; su respuesta 1.4), por lo que corresponde al
+  primer trimestre. Waitron propone dejar el informe del primer trimestre como se presentó y mostrar
+  el IVA de la comida en una línea aparte, «corrección del primer trimestre», para que el gestor
+  presente una autoliquidación complementaria (LGT art. 122): la opción 3 de la pregunta 7. ¿Es
+  correcto? ¿Y debe la exportación para el gestor incluirla por la fecha de la operación o por la
+  fecha de expedición?
 
 Sí / No / Nota: ____________________________________________
 
@@ -616,7 +628,7 @@ Linux y Docker) como parte del sistema, dice que el productor responde de ellos,
 de la biblioteca Veri\*Factu que se usa y lo que hace. Creemos que basta con dos añadidos: qué hace el
 agente de impresión (el programa que envía los documentos a las impresoras del local), y que los
 terminales (cajas, comanderos y pantallas de cocina) solicitan las facturas al servidor y las
-muestran, sin generar registros de facturación. La frase sobre un servidor de reserva solo figurará
+muestran (el texto ya dice que no generan registros de facturación). La frase sobre un servidor de reserva solo figurará
 en una versión que pueda pasar a él.
 
 *Preguntamos:* Con esos dos añadidos, ¿es suficiente el apartado d)?
@@ -646,7 +658,7 @@ Sí / No / Nota: ____________________________________________
 *Situación.* El servidor fecha cada factura con su propio reloj, que mantiene en hora mediante
 internet. Si el reloj estaba mal, una factura puede llevar un día equivocado. Ejemplo: tras un corte
 de luz el reloj va un día adelantado y un tique de una venta del 3 de marzo sale fechado el 4. La
-AEAT rechaza un registro con fecha futura, y así suele descubrirse el error.
+AEAT rechaza un registro con fecha futura, y es una de las formas en que sale a la luz el error.
 
 *Lo que hace Waitron.* Lo corrige con una rectificativa fechada el día en que se expide, que indica
 la fecha real de la operación y no cambia ningún importe (DGT V1665-22: «será necesaria la
@@ -660,7 +672,7 @@ el 2 de abril porque el reloj estaba mal; la autoliquidación del primer trimest
 20 de abril; el error se descubre, y la rectificativa se expide, en mayo.
 
 1. Imputar el cambio al periodo en que se expide la rectificativa, sin modificar nunca una
-   declaración ya presentada. Es la preferencia del titular. En el ejemplo, el IVA del tique sigue
+   declaración ya presentada. En el ejemplo, el IVA del tique sigue
    en el segundo trimestre, donde lo llevó la fecha errónea, y el primer trimestre queda como se
    presentó.
 2. Imputarlo al periodo de la operación modificando la declaración de ese periodo: el IVA pasa al
@@ -673,11 +685,19 @@ La AEAT consulta los registros presentados por periodo: las consultas «se reali
 ejercicio/periodo “de imputación”, dato obtenido a partir de la fecha de operación o en su defecto
 de la fecha de expedición» (descripción del servicio web v1.0.3, §6.4, p. 30). Con la opción 1, las
 cifras de Waitron para un trimestre pueden no coincidir con lo que los registros de la AEAT muestran
-para ese trimestre.
+para ese trimestre, y es una de las razones para no proponerla.
 
-*Preguntamos:* ¿Es la rectificativa la forma correcta de corregir una fecha errónea? ¿Cuál de las
-tres opciones es la correcta para su IVA? ¿Supone un problema para la opción 1 que la AEAT ordene
-los registros por la fecha de operación?
+*Propuesta de Waitron.* Un informe ya presentado no cambia nunca. Un cambio que reduce el IVA de un
+trimestre se imputa al trimestre en curso, como permite su respuesta 1.12 para una anulación. Un
+cambio que añade IVA a un trimestre ya presentado se muestra en una línea aparte, como en la
+opción 3, para que el gestor presente la complementaria, en línea con su respuesta 1.13 para un tipo
+de IVA erróneo. En el ejemplo: el primer trimestre queda como se presentó, el informe del segundo
+trimestre (aún sin presentar en mayo) deja de incluir el tique, y una línea «corrección del primer
+trimestre» muestra su IVA.
+
+*Preguntamos:* ¿Es la rectificativa la forma correcta de corregir una fecha errónea? ¿Es correcta la
+propuesta para su IVA: las reducciones en el trimestre en curso y los aumentos en una línea aparte?
+¿Es lo que exige el art. 89.Cinco LIVA?
 
 Sí / No / Nota: ____________________________________________
 
@@ -754,7 +774,16 @@ injustificada consultar, buscar, copiar o descargar e imprimir todas las factura
 conexión permanente ni dirección pública (Orden EHA/962/2007, art. 5.3; DGT 0289-04). Si la AEAT lo
 pide desde su oficina, basta una copia del periodo en USB o un enlace temporal de descarga.
 
-*Preguntamos:* ¿Es correcto?
+*Cómo es una copia.* En la página de Facturas del inspector, una factura completa se descarga como
+su PDF en A4, y un tique (factura simplificada) como un PDF del ancho del tique, con la misma
+disposición que el tique impreso en caja; ambos llevan la marca «DUPLICADO». Un tique anulado, o
+sustituido después por una factura completa, se descarga exactamente como se expidió. La lista
+marca un tique anulado como «Anulada» y muestra la factura completa que sustituye tiques como
+«Sustituye a ‹números de tique›»; la fila del tique sustituido no indica qué factura lo sustituyó.
+La exportación prevista recoge las columnas de la lista.
+
+*Preguntamos:* ¿Es correcto? ¿Y debería la propia copia indicar también «Anulada el ‹fecha›» o
+«Sustituida por la factura ‹número›»?
 
 Sí / No / Nota: ____________________________________________
 
@@ -994,6 +1023,6 @@ Texto de la plantilla de la declaración (`packages/fiscal-verifactu/declaration
 | T13, the long-term archive | Owner, 15 November: "Agree, no archive now" (A1531) | `~/waitron-campaign-l/questions.md:1783-1785`; [backlog.md:2235](../backlog.md) |
 | T16, a change of producer | Owner, 11 November, "Later": A993 is built only once a change is scheduled. Its venue-move half is now in question 6 | commit `e59fac8c94`; [backlog.md:246-249](../backlog.md) |
 | T9 and T10, tips | Held by the owner on 6 November until A793 is revived, and A793 is still not approved | [2026-11-06-adviser-questions.md:71-72](2026-11-06-adviser-questions.md); [backlog.md:1283-1286](../backlog.md) |
-| S14's second half: may R5 and R1 to R4 share one series? | Owner, 15 November: they will not share; the adviser agreed the same day (his 1.14). Question 4 asks the narrower point | `~/waitron-campaign-shared/desk/done/20261115-1018-L-r5-series-date-rulings.md` |
-| S4's last part: may the issue date stand as the date VAT falls due? | Owner, 12 and 15 November: one date when invoiced at the meal's end, the sale day when invoiced later. The adviser agreed on 15 November (his 1.4); question 3 now asks when the meal ends, whether the ticket may wait, and where an invoice issued after its meal's VAT period counts | [backlog/fiscal.md:1103-1116](../backlog/fiscal.md); `desk/done/20261115-0530-L-later-sale-date-rule.md`, `20261115-1113-L-later-sale-q1-open-bill.md`, `20261115-1113-L-later-sale-q2-vat-period.md` |
+| S14's second half: may R5 and R1 to R4 share one series? | Owner, 15 November: they will not share; the adviser agreed the same day (answer 1.14). Question 4 asks the narrower point | `~/waitron-campaign-shared/desk/done/20261115-1018-L-r5-series-date-rulings.md` |
+| S4's last part: may the issue date stand as the date VAT falls due? | Owner, 12 and 15 November: one date when invoiced at the meal's end, the sale day when invoiced later. The adviser agreed on 15 November (answer 1.4); question 3 now asks when the meal ends, whether the ticket may wait, and where an invoice issued after its meal's VAT period counts | [backlog/fiscal.md:1103-1116](../backlog/fiscal.md); `desk/done/20261115-0530-L-later-sale-date-rule.md`, `20261115-1113-L-later-sale-q1-open-bill.md`, `20261115-1113-L-later-sale-q2-vat-period.md` |
 | The 6 November background on AEAT's time (decision 2b and "How a wrong clock is known") | Owner, 10 to 13 November: Waitron reads AEAT's time only to warn of drift, and a refusal for a future date no longer stops a box whose internet time is synchronised | [CLAUDE.md:958-967 and 995](../../CLAUDE.md) |
