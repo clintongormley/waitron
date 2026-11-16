@@ -277,6 +277,35 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   expect((await read()).status).toBe(200);
 });
 
+it("serves a French venue's Spanish menu to a guest asking in Mexican Spanish", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "fr-FR", languages: ["fr-FR", "es-ES"] });
+    await updateProduct(tx, f.soup, {
+      customerName: { fr: "Soupe du jour", es: "Sopa del día" },
+    });
+    await publishMenu(tx, f.lunch, (await previewMenu(tx, f.lunch)).hash, f.cookies.managerId);
+    await setVenueDefaultMenu(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+  });
+  const mexican = await f.app.request("/public/menu?language=es-MX");
+  expect(mexican.status).toBe(200);
+  const spanish = await mexican.text();
+  expect(spanish).toContain('<html lang="es"');
+  expect(spanish).toContain("Sopa del día");
+  expect(spanish).not.toContain("Soupe du jour");
+  const german = await f.app.request("/public/menu?language=de-DE");
+  expect(german.status).toBe(200);
+  const french = await german.text();
+  expect(french).toContain('<html lang="fr"');
+  expect(french).toContain("Soupe du jour");
+  expect(french).not.toContain("Sopa del día");
+});
+
 it("answers public reads from committed rows while a write is open", async () => {
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
