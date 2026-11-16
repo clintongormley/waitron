@@ -66,8 +66,9 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
               .find(({ id }) => id === departmentId)!
               .seasonWeeks.find(({ seasonId }) => seasonId === "winter")!;
             for (const day of days) {
-              const at = season.week.findIndex(({ weekday }) => weekday === day.weekday);
-              season.week[at] = structuredClone(day);
+              season.week = season.week.map((stored) =>
+                stored.weekday === day.weekday ? structuredClone(day) : stored,
+              );
             }
           }
         },
