@@ -91,24 +91,6 @@ Left open:
   inset. A shared presentation boundary would need adapters for the till's ordering state and
   the dashboard's shortcut controls; the MENU-HOME-TAB plan explains the deferred extraction.
 
-## Two copies of the tree pointer drag — OPEN (W88)
-
-W88 moved what Products and the Menus tree
-draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
-the click blocked after a release), but each widget still has its own copy of the drag itself: the
-press, the 5 px start, the target under the pointer, Escape, the release and the clean-up
-(`#pointerDown` to `#gap` in `apps/dashboard/src/widgets/product-list.ts`, `#gripDown` to `#gap` in
-`apps/dashboard/src/widgets/menu-structure-table.ts`). A shared helper, told how to map a row to a
-target, would serve both.
-
-## The Menus Structure tree notices silent branch closure by watching its table redraw — OPEN (W88)
-
-`wt-data-table.setExpanded` is silent. Structure's table controller checks whether a silent closure
-hid the current path; it also refits paths, restores focus after redraws and moves, and repaints an
-active drag. A462 replaces the bulk button with root closure but retains those duties. A shared
-notification for programmatic branch changes could replace the current-path check, rather than
-the whole controller.
-
 ## An included menu can show its sections directly (A322, #1372): left open
 
 Left open:
@@ -862,17 +844,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   selected tab.
   [Detail](menu.md#modifiers-spanish-opciones-tab-is-cut-at-a-310-px-screen-on-cis-linux-fonts)
 
-## Bundle: Tree drag shared
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Two copies of the tree pointer drag — OPEN (W88).** Each widget still has its own copy of the
-  drag itself. A shared helper, told how to map a row to a target, would serve both.
-  [Detail](menu.md#two-copies-of-the-tree-pointer-drag--open-w88)
-- **The Menus Structure tree notices silent branch closure by watching its table redraw — OPEN (W88).**
-  An event from the table for "these branches changed" would be cleaner; it means a change in
-  `packages/ui`.
-  [Detail](menu.md#the-menus-structure-tree-notices-silent-branch-closure-by-watching-its-table-redraw--open-w88)
 
 ## Bundle: Each unit literal
 
@@ -899,6 +870,8 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- **Structure branch changes (watcher, 2026-11-16).** Keep the current-path redraw check: no production code needs a new expansion event, and the controller remains for fitting, focus and paint.
 
 - Two active products of one parent may not share a staff name, checked in code by folding each
   name (`foldName`); no unique index holds it, because the fold is Unicode-aware and this engine's

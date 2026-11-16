@@ -524,8 +524,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **Tree drag shared** (bundle of 2, size M). [Detail](backlog/menu.md#bundle-tree-drag-shared)
-
 - **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
 
 - **Translate all followups** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)

@@ -1,3 +1,8 @@
+import {
+  holdPageCursor,
+  pointerElementsAt,
+  releasePageCursor,
+} from "@waitron/ui/src/reorder-table.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -178,4 +183,144 @@ export function blockClickAfterDrag(untilRelease: boolean): void {
   const lift = () => setTimeout(() => document.removeEventListener("click", blockClick, true), 0);
   if (untilRelease) document.addEventListener("pointerup", lift, { once: true, capture: true });
   else lift();
+}
+
+interface PointerSnapshot<D, T> {
+  data: D;
+  over: string | undefined;
+  point: { x: number; y: number };
+  target: T | undefined;
+  changed: boolean;
+  starting: boolean;
+}
+
+export class TreePointerDrag<D, T> {
+  state: {
+    pointerId: number;
+    key: string;
+    x: number;
+    y: number;
+    active: boolean;
+    data?: D;
+  } | null = null;
+  point = { x: 0, y: 0 };
+  target: T | undefined;
+  #over: string | undefined;
+
+  constructor(
+    private readonly hooks: {
+      activate(key: string): D | undefined;
+      targetFor(data: D, over: string, point: { x: number; y: number }): T | undefined;
+      sameTarget(a: T | undefined, b: T | undefined): boolean;
+      moved(snapshot: PointerSnapshot<D, T>): void;
+      ended(wasActive: boolean): void;
+      drop(data: D, target: T): void;
+    },
+  ) {}
+
+  start(event: PointerEvent, key: string): boolean {
+    if (this.state || event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey))
+      return false;
+    this.state = {
+      pointerId: event.pointerId,
+      key,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
+    document.addEventListener("pointermove", this.#move);
+    document.addEventListener("pointerup", this.#end);
+    document.addEventListener("pointercancel", this.#end);
+    document.addEventListener("keydown", this.#key, true);
+    return true;
+  }
+
+  readonly #move = (event: PointerEvent): void => {
+    const drag = this.state;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
+    event.preventDefault();
+    this.point = { x: event.clientX, y: event.clientY };
+    const starting = !drag.active;
+    if (starting) {
+      const data = this.hooks.activate(drag.key);
+      if (data === undefined) {
+        this.finish();
+        return;
+      }
+      drag.data = data;
+      drag.active = true;
+      holdPageCursor();
+    }
+    this.#track(starting);
+  };
+
+  repaint(): void {
+    if (this.state?.active) this.#track(false);
+  }
+
+  #track(starting: boolean): void {
+    this.#over = pointerElementsAt(this.point.x, this.point.y).find(
+      (item): item is HTMLElement =>
+        item instanceof HTMLElement && item.matches("tr[data-row-key]"),
+    )?.dataset.rowKey;
+    this.#refresh(starting);
+  }
+
+  revalidate(): void {
+    if (this.state?.active) this.#refresh(false);
+  }
+
+  #currentTarget(): T | undefined {
+    return this.#over === undefined
+      ? undefined
+      : this.hooks.targetFor(this.state!.data!, this.#over, this.point);
+  }
+
+  #refresh(starting: boolean): void {
+    const target = this.#currentTarget();
+    const changed = !this.hooks.sameTarget(target, this.target);
+    this.target = target;
+    this.hooks.moved({
+      data: this.state!.data!,
+      over: this.#over,
+      point: this.point,
+      target,
+      changed,
+      starting,
+    });
+  }
+
+  readonly #end = (event: PointerEvent): void => {
+    const drag = this.state;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const target = drag.active && this.target !== undefined ? this.#currentTarget() : undefined;
+    const data = drag.data;
+    const active = this.finish();
+    if (!active || event.type !== "pointerup") return;
+    blockClickAfterDrag(false);
+    if (target !== undefined) this.hooks.drop(data!, target);
+  };
+
+  readonly #key = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.state?.active) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.finish();
+    blockClickAfterDrag(true);
+  };
+
+  finish(): boolean {
+    const active = this.state?.active ?? false;
+    document.removeEventListener("pointermove", this.#move);
+    document.removeEventListener("pointerup", this.#end);
+    document.removeEventListener("pointercancel", this.#end);
+    document.removeEventListener("keydown", this.#key, true);
+    this.state = null;
+    this.target = undefined;
+    this.#over = undefined;
+    if (active) releasePageCursor();
+    this.hooks.ended(active);
+    return active;
+  }
 }

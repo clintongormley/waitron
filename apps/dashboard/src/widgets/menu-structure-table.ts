@@ -14,14 +14,10 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import {
-  holdPageCursor,
-  pointerElementsAt,
-  releasePageCursor,
-} from "@waitron/ui/src/reorder-table.js";
 import { memberKindLabel, memberName } from "./member-names.js";
 import {
   blockClickAfterDrag,
+  TreePointerDrag,
   clearDragMarks,
   dragGhost,
   lastShownRow,
@@ -290,16 +286,37 @@ export class MenuStructureTable extends LitElement {
    * then, the one it left if the move did not happen, and whether new nodes have arrived. */
   #movedFocus: { key: string; fallback: string; read: boolean } | null = null;
   @state() private announcement = "";
-  #drag: {
-    pointerId: number;
-    key: string;
-    x: number;
-    y: number;
-    active: boolean;
-    keys?: string[];
-  } | null = null;
-  #target: Drop | undefined = undefined;
-  #pointer = { x: 0, y: 0 };
+  get #drag() {
+    const state = this.#pointerDrag.state;
+    return state ? { ...state, ...state.data } : null;
+  }
+  get #target() {
+    return this.#pointerDrag.target;
+  }
+  get #pointer() {
+    return this.#pointerDrag.point;
+  }
+  readonly #pointerDrag = new TreePointerDrag<{ key: string; keys?: string[] }, Drop>({
+    activate: (key) => this.#activateDrag(key),
+    targetFor: (data, over) => this.#dropFor(data, over),
+    sameTarget: sameDrop,
+    moved: ({ data, starting }) => {
+      if (starting) {
+        const origin = shownRow(this.#table()!.shadowRoot!, data.key);
+        if (origin)
+          this.#edgeScroll.start(origin, this.#pointer, () => this.#pointerDrag.repaint());
+      }
+      this.#edgeScroll.update(this.#pointer);
+      placeDragGhost(this.renderRoot, this.#pointer);
+      this.#paint();
+    },
+    ended: () => {
+      this.#edgeScroll.stop();
+      this.ghost = null;
+      this.#paint();
+    },
+    drop: (data, target) => this.#drop(data, target),
+  });
   @state() private ghost: DragGhost | null = null;
 
   #fitFrame = 0;
@@ -513,113 +530,52 @@ export class MenuStructureTable extends LitElement {
   }
 
   #gripDown(event: PointerEvent, row: Row): void {
-    if (
-      this.#drag ||
-      this.busy ||
-      !this.#reorderable ||
-      event.button !== 0 ||
-      (event.pointerType === "mouse" && event.ctrlKey)
-    )
-      return;
+    if (this.busy || !this.#reorderable) return;
     // Keep the press from selecting text or starting the browser's own drag.
-    event.preventDefault();
-    this.#drag = {
-      pointerId: event.pointerId,
-      key: row.key,
-      x: event.clientX,
-      y: event.clientY,
-      active: false,
-    };
-    document.addEventListener("pointermove", this.#moveDrag);
-    document.addEventListener("pointerup", this.#endDrag);
-    document.addEventListener("pointercancel", this.#endDrag);
-    document.addEventListener("keydown", this.#dragKey, true);
+    if (this.#pointerDrag.start(event, row.key)) event.preventDefault();
   }
 
   readonly #edgeScroll = new DragEdgeScroll();
 
-  readonly #moveDrag = (event: PointerEvent): void => {
-    const drag = this.#drag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
-    event.preventDefault();
-    this.#pointer = { x: event.clientX, y: event.clientY };
-    const starting = !drag.active;
-    if (starting) {
-      const row = this.#movable(drag.key);
-      if (!row) {
-        this.#finishDrag();
-        return;
-      }
-      if (this.selected.includes(this.#selectionKey(drag.key)) && this.dragSelection) {
-        const visible = new Set(
-          [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
-            (row) => row.dataset.rowKey!,
-          ),
-        );
-        const visibleBySelection = new Map<string, string>();
-        for (const key of visible)
-          if (!visibleBySelection.has(this.#selectionKey(key)))
-            visibleBySelection.set(this.#selectionKey(key), key);
-        visibleBySelection.set(this.#selectionKey(drag.key), drag.key);
-        drag.keys = [
-          ...new Set(
-            this.dragSelection(this.#selectionKey(drag.key), new Set(visibleBySelection.keys())),
-          ),
-        ].flatMap((key) => {
-          const shown = visibleBySelection.get(key);
-          return shown ? [shown] : [];
-        });
-        if (!this.#dragRows(drag.keys)) {
-          this.#finishDrag();
-          return;
-        }
-      }
-      drag.active = true;
-      holdPageCursor();
-      const ref = row.node.ref;
-      this.ghost = {
-        label:
-          (drag.keys?.length ?? 0) > 1
-            ? t("folders.drag_count").replace("{count}", String(drag.keys!.length))
-            : row.name,
-        image:
-          ref.kind === "product" ? (this.#productById.get(ref.productId)?.image ?? null) : null,
-        folder: ref.kind === "section",
-      };
-      void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
+  #activateDrag(key: string): { key: string; keys?: string[] } | undefined {
+    const drag: { key: string; keys?: string[] } = { key };
+    const row = this.#movable(drag.key);
+    if (!row) return undefined;
+    if (this.selected.includes(this.#selectionKey(drag.key)) && this.dragSelection) {
+      const visible = new Set(
+        [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+          (row) => row.dataset.rowKey!,
+        ),
+      );
+      const visibleBySelection = new Map<string, string>();
+      for (const key of visible)
+        if (!visibleBySelection.has(this.#selectionKey(key)))
+          visibleBySelection.set(this.#selectionKey(key), key);
+      visibleBySelection.set(this.#selectionKey(drag.key), drag.key);
+      drag.keys = [
+        ...new Set(
+          this.dragSelection(this.#selectionKey(drag.key), new Set(visibleBySelection.keys())),
+        ),
+      ].flatMap((key) => {
+        const shown = visibleBySelection.get(key);
+        return shown ? [shown] : [];
+      });
+      if (!this.#dragRows(drag.keys)) return undefined;
     }
-    if (starting) {
-      const origin = shownRow(this.#table()!.shadowRoot!, drag.key);
-      if (origin) this.#edgeScroll.start(origin, this.#pointer, () => this.#trackDrop());
-    }
-    this.#edgeScroll.update(this.#pointer);
-    this.#trackDrop();
-    if (starting) this.#paint();
-  };
-
-  #trackDrop(): void {
-    placeDragGhost(this.renderRoot, this.#pointer);
-    const over = pointerElementsAt(this.#pointer.x, this.#pointer.y).find(
-      (item): item is HTMLElement =>
-        item instanceof HTMLElement && item.matches("tr[data-row-key]"),
-    )?.dataset.rowKey;
-    const target = over === undefined ? undefined : this.#dropFor(this.#drag!, over);
-    if (sameDrop(target, this.#target)) {
-      this.#paint();
-      return;
-    }
-    this.#target = target;
-    this.#paint();
+    const ref = row.node.ref;
+    this.ghost = {
+      label:
+        (drag.keys?.length ?? 0) > 1
+          ? t("folders.drag_count").replace("{count}", String(drag.keys!.length))
+          : row.name,
+      image: ref.kind === "product" ? (this.#productById.get(ref.productId)?.image ?? null) : null,
+      folder: ref.kind === "section",
+    };
+    void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
+    return drag;
   }
 
-  readonly #endDrag = (event: PointerEvent): void => {
-    const drag = this.#drag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    const target = this.#target && this.#dropFor(drag, this.#target.key);
-    this.#finishDrag();
-    if (!drag.active || event.type !== "pointerup") return;
-    blockClickAfterDrag(false);
+  #drop(drag: { key: string; keys?: string[] }, target: Drop): void {
     const row = this.#movable(drag.key);
     const at = target && this.#rowByKey.get(target.key);
     if (row === undefined || this.busy || !target || !at) return;
@@ -670,28 +626,10 @@ export class MenuStructureTable extends LitElement {
     const position =
       this.#siblings(at).indexOf(at.node.memberId) + (target.side === "after" ? 1 : 0);
     this.#send("wt-member-move-into", { from, memberId, to: at.path.slice(0, -1), position });
-  };
-
-  readonly #dragKey = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || !this.#drag?.active) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.#finishDrag();
-    blockClickAfterDrag(true);
-  };
+  }
 
   #finishDrag(): void {
-    this.#edgeScroll.stop();
-    const drag = this.#drag;
-    document.removeEventListener("pointermove", this.#moveDrag);
-    document.removeEventListener("pointerup", this.#endDrag);
-    document.removeEventListener("pointercancel", this.#endDrag);
-    document.removeEventListener("keydown", this.#dragKey, true);
-    this.#drag = null;
-    this.#target = undefined;
-    this.ghost = null;
-    if (drag?.active) releasePageCursor();
-    this.#paint();
+    this.#pointerDrag.finish();
   }
 
   #dragRows(keys: readonly string[]): Row[] | undefined {
