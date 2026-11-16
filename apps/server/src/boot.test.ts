@@ -27,7 +27,6 @@ import { bookings } from "@waitron/bookings";
 import { absences } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
-import { createServer } from "node:net";
 import {
   chmod,
   lstat,
@@ -121,6 +120,8 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { freePort } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { peerCertificate } from "./testing/box-tls.js";
 import {
@@ -692,7 +693,9 @@ describe("startServer, against a migrated venue directory", () => {
     }
   });
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
-    const port = await freePort();
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
     // Read back below to show the rotating file sink is wired into `startServer`.
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
@@ -715,9 +718,14 @@ describe("startServer, against a migrated venue directory", () => {
       const event = await waitForEvent(lines, "loop.sleeping");
       const listeningEvent = await waitForEvent(lines, "server.listening");
       return [started, event, listeningEvent] as const;
+    }).catch(async (error: unknown) => {
+      adoption.restore();
+      if (held.server.listening) await held.close();
+      throw error;
     });
 
     try {
+      await adoption.bound;
       // With nothing due, both duties report `nextDueAt: null`, for which `sleepMsFor` returns
       // `maxTickMs` verbatim.
       expect(sleeping.sleepMs).toBe(94327);
@@ -800,7 +808,9 @@ describe("startServer, against a migrated venue directory", () => {
         expect(await appliedSchemaVersion(sharedStore, set)).toBe(expected);
       }
     } finally {
+      adoption.restore();
       await server.close();
+      if (held.server.listening) await held.close();
       await rm(logDir, { recursive: true, force: true });
     }
 
@@ -1118,7 +1128,9 @@ describe("startServer, against a migrated venue directory", () => {
   // (`box-secrets.test.ts` injects its own `listIpv4`): the override must reach both the leaf on disk
   // and `mountDiscovery`'s deps.
   it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES and serves it as the discovery address", async () => {
-    const port = await freePort();
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-box-addresses-"));
     // A private address inside the box CA's permitted name space that this host is unlikely to hold,
     // so the negative assertion below shows the override, not a resolved interface, is in the SAN.
@@ -1131,8 +1143,13 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_ENV: "preproduction",
       WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
       WAITRON_BOX_ADDRESSES: override,
+    }).catch(async (error: unknown) => {
+      adoption.restore();
+      if (held.server.listening) await held.close();
+      throw error;
     });
     try {
+      await adoption.bound;
       const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.pem"), "utf8"));
       const san = leaf.subjectAltName ?? "";
       const ca = await readFile(join(stateDir, "tls", "ca.crt"));
@@ -1156,7 +1173,9 @@ describe("startServer, against a migrated venue directory", () => {
         await close();
       }
     } finally {
+      adoption.restore();
       await server.close();
+      if (held.server.listening) await held.close();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
@@ -1574,7 +1593,9 @@ describe("startServer, against a migrated venue directory", () => {
   ] as const)(
     "%s setup boot gates the Cloud recovery seat",
     async (environment, expectedStatus) => {
-      const port = await freePort();
+      const held = await retainHttpListener();
+      const port = held.port;
+      const adoption = adoptRetainedListeners([held]);
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-state-"));
       const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-venue-"));
       let server: StartedServer | undefined;
@@ -1594,6 +1615,7 @@ describe("startServer, against a migrated venue directory", () => {
               }
             : {}),
         });
+        await adoption.bound;
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
           const response = await fetch(
@@ -1609,7 +1631,9 @@ describe("startServer, against a migrated venue directory", () => {
           await close();
         }
       } finally {
+        adoption.restore();
         await server?.close();
+        if (held.server.listening) await held.close();
         await rm(stateDir, { recursive: true, force: true });
         await rm(venueDir, { recursive: true, force: true });
       }
@@ -2678,12 +2702,9 @@ describe("startServer, against a migrated venue directory", () => {
   // non-zero; and `WAITRON_HTTP_HOST` must reach `serve()`'s `hostname` option.
   describe("a listener that fails to bind", () => {
     it("logs server.listen_failed and exits(1) on EADDRINUSE — the common case, a fixed port already taken", async () => {
-      const port = await freePort();
-      const occupied = createServer();
-      await new Promise<void>((resolve, reject) => {
-        occupied.once("error", reject);
-        occupied.listen(port, "127.0.0.1", () => resolve());
-      });
+      const held = await retainHttpListener();
+      const port = held.port;
+      const occupied = held.server;
 
       await withMockedExit(async (exits) => {
         let started: StartedServer | undefined;

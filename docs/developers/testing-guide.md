@@ -622,6 +622,12 @@ naming that port and the rows there, and checks before discovery that the delete
 only row at the address. With the collision forced, the file passed; with the redraw also removed,
 it failed at that check; with every draw forced to collide, it failed at once with that error. Nothing checks other suites for the same shape.
 
+17 November 2026: the port-ownership fixture change replaces that redraw step. In
+`portsNoPrinterNames`, bind the recording printer first, then check whether a saved row names its
+actual port. Close and retry a named candidate, keeping the existing 20-attempt bound, and keep
+the selected listener open through discovery. The earlier control above describes the former
+released-port fixture.
+
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and

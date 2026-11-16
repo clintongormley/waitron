@@ -56,7 +56,8 @@ import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSpa } from "./spa-api.js";
-import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { startServer, type StartedServer } from "./boot.js";
 import { httpsVia, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -215,7 +216,8 @@ it("hands over from built Servers through a real copy, placement restart and clo
   const fixture = placedSpareFixture({ mainBox, spareBefore, dirs: () => dirs });
   const seeded = await fixture.setupBoxes();
 
-  const [bootPort] = await freePorts(1);
+  let held: RetainedHttpListener | undefined;
+  let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   const secret = await enrolAuthenticator(mainBox.db, ADMIN, TOTP_KEY_RING);
   const session = await withTransaction(mainBox.db, (tx) =>
@@ -533,6 +535,8 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await page.getByText("This box has taken over the venue.", { exact: true }).waitFor();
     await placed.close();
     placed = undefined;
+    held = await retainHttpListener();
+    const bootPort = held.port;
     const bootUrl = `https://127.0.0.1:${bootPort}`;
     const bootCert = join(root!, "boot.crt");
     const bootKey = join(root!, "boot.key");
@@ -566,7 +570,10 @@ it("hands over from built Servers through a real copy, placement restart and clo
       }),
       waitingStart: { intervalMs: 60_000 },
     };
+    adoption = adoptRetainedListeners([held]);
     booted = await startServer(bootEnv, {}, bootSeams);
+    await adoption.bound;
+    adoption.restore();
     await page.goto(`${bootUrl}/handover/${operationId}`);
     await page.getByText("This box has taken over the venue.", { exact: true }).waitFor();
     await page.getByRole("link", { name: "Continue to this box" }).click();
@@ -580,6 +587,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await waitingActivation.dispose();
     await booted.close();
     booted = undefined;
+    if (held.server.listening) await held.close();
     const copied = await openVenueDatabase(dirs.spareVenue);
     try {
       const held = (await readNodeMembership(copied.venue))!;
@@ -611,7 +619,9 @@ it("hands over from built Servers through a real copy, placement restart and clo
     console.error(JSON.stringify({ notes, error: String(error) }));
     throw error;
   } finally {
+    adoption?.restore();
     await booted?.close();
+    if (held?.server.listening) await held.close();
     await duty?.stop();
     await context.close();
     await trust.close();

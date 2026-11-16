@@ -47,6 +47,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
 import { connect as connectTcp } from "node:net";
 import { boxHostnameFor } from "./box-name.js";
@@ -376,7 +378,10 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 
 describe("mirror-mode boot (box.mode = 'mirror')", () => {
   it("issues no session locally and keeps the remote staff entrance closed", async () => {
-    const [localPort, staffPort] = await freePorts(2);
+    const [staffPort] = await freePorts(1);
+    const held = await retainHttpListener();
+    const localPort = held.port;
+    const adoption = adoptRetainedListeners([held]);
     const certificate = mintSelfSignedServerCert({
       hostnames: ["staff.example.test"],
       ipAddresses: [],
@@ -392,8 +397,13 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       WAITRON_STAFF_ORIGIN: "https://staff.example.test",
       WAITRON_STAFF_PORT: String(staffPort),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    }).catch(async (error: unknown) => {
+      adoption.restore();
+      if (held.server.listening) await held.close();
+      throw error;
     });
     try {
+      await adoption.bound;
       const local = await fetch(`http://127.0.0.1:${localPort}/management-api/menus`);
       expect(local.headers.get("set-cookie")).toBeNull();
       expect(local.status).toBe(403);
@@ -417,7 +427,9 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       });
       await expect(remote).rejects.toMatchObject({ code: "ECONNREFUSED" });
     } finally {
+      adoption.restore();
       await server.close();
+      if (held.server.listening) await held.close();
     }
   });
 
@@ -933,7 +945,10 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
   it("a spare's full start runs its store on loopback with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
     const fake = await fakeVersitygw();
     const removePair = await servePair("mirror");
-    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    const [httpPortNumber, loopbackPort] = await freePorts(2);
+    const held = await retainHttpListener();
+    const storePort = held.port;
+    const adoption = adoptRetainedListeners([held]);
     await writeTlsSet(STATE_ROOT, BOX_TLS);
     let pid: number | undefined;
     try {
@@ -946,6 +961,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
         WAITRON_SPARE_STORE_PORT: String(storePort),
       });
+      await adoption.bound;
       try {
         pid = await expectStoreRan(fake.dir, STATE_ROOT, loopbackPort!);
         expect(running(pid)).toBe(true);
@@ -953,10 +969,13 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
+        if (held.server.listening) await held.close();
       }
       expect(running(pid)).toBe(false);
       expect(await accepts(storePort!)).toBe(false);
     } finally {
+      adoption.restore();
+      if (held.server.listening) await held.close();
       await removePair();
       await rm(fake.dir, { recursive: true, force: true });
       await rm(join(STATE_ROOT, "pair-store"), { recursive: true, force: true });
@@ -1129,7 +1148,10 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     );
     const fake = await fakeVersitygw();
     const removePair = await servePair("adopting");
-    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    const [httpPortNumber, loopbackPort] = await freePorts(2);
+    const held = await retainHttpListener();
+    const storePort = held.port;
+    const adoption = adoptRetainedListeners([held]);
     await writeTlsSet(stateDir, BOX_TLS);
     try {
       const server = await startServer({
@@ -1142,6 +1164,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
         WAITRON_SPARE_STORE_PORT: String(storePort),
       });
+      await adoption.bound;
       let pid: number;
       try {
         pid = await expectStoreRan(fake.dir, stateDir, loopbackPort!);
@@ -1150,10 +1173,13 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
+        if (held.server.listening) await held.close();
       }
       expect(running(pid)).toBe(false);
       expect(await accepts(storePort!)).toBe(false);
     } finally {
+      adoption.restore();
+      if (held.server.listening) await held.close();
       await removePair();
       await rm(fake.dir, { recursive: true, force: true });
       rmSync(stateDir, { recursive: true, force: true });

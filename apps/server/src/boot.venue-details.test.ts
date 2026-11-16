@@ -18,6 +18,8 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import type { VenueDetailsModel } from "./venue-detail-types.js";
 
@@ -131,13 +133,23 @@ type EmailPath = "invitation" | "password_reset" | "profile";
 
 async function startEmailBox(path: EmailPath, invitees: number) {
   const venue = await setupVenue(suite.db);
-  const [port, smtpPort] = await freePorts(2);
-  const smtp = await smtpReceiver(smtpPort!);
+  const [port] = await freePorts(1);
+  const held = await retainHttpListener();
+  const smtpPort = held.port;
+  const adoption = adoptRetainedListeners([held]);
+  const smtp = await smtpReceiver(smtpPort)
+    .catch(async (error: unknown) => {
+      if (held.server.listening) await held.close();
+      throw error;
+    })
+    .finally(adoption.restore);
+  await adoption.bound;
   let scratch: string | undefined;
   let server: StartedServer | undefined;
   const close = async () => {
     if (server !== undefined) await server.close();
     await smtp.close();
+    if (held.server.listening) await held.close();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   };
   const inviteeIds: string[] = [];

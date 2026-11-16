@@ -3,6 +3,8 @@ import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/s
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
@@ -64,7 +66,6 @@ import type { TradingContext } from "./trading-context.js";
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { freePorts } from "./testing/free-ports.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
@@ -472,9 +473,10 @@ async function deliveryDeviceRequest(v: Venue, kind: DeviceProofDelivery) {
 }
 
 async function deliveryOverHttp(v: Venue, path: string, body: unknown, cookie: string) {
-  const [port] = await freePorts(1);
-  const server = serve({ fetch: v.app.fetch, hostname: "127.0.0.1", port: port! });
+  const server = serve({ fetch: v.app.fetch, hostname: "127.0.0.1", port: 0 });
   try {
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
     const response = await fetch(`http://127.0.0.1:${port}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },

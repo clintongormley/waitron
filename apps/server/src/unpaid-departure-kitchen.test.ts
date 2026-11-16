@@ -1,6 +1,6 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
-import { createServer, type Socket } from "node:net";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -49,7 +49,6 @@ import { boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { computeOverdueOrders } from "@waitron/reporting";
 import { attachPrinterToStation } from "./station-printers.js";
 import { replaceStationPrinters } from "./station-printers.js";
-import { freePorts } from "./testing/free-ports.js";
 import {
   closingEditsForTest,
   readBillsOfParties,
@@ -431,7 +430,6 @@ describe("unpaid departure stops kitchen work", () => {
 
   it("delivers the actual departure cancellation slip through a TCP printer", async () => {
     const order = await billWith(venue, [{ name: "Burger" }]);
-    const [port] = await freePorts(1);
     let receive!: (bytes: Buffer) => void;
     let receiveFailure!: (error: Error) => void;
     const received = new Promise<Buffer>((resolve, reject) => {
@@ -450,14 +448,15 @@ describe("unpaid departure stops kitchen work", () => {
     try {
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
-        server.listen(port!, "127.0.0.1", resolve);
+        server.listen(0, "127.0.0.1", resolve);
       });
+      const { port } = server.address() as AddressInfo;
       const { printerId, agentId } = await inTx(venue, async (tx) => {
         const printer = await createPrinter(tx, {
           name: "Departure TCP sink",
           transport: "network_tcp",
           host: "127.0.0.1",
-          port: port!,
+          port,
         });
         const [agent] = await tx
           .insert(printAgents)

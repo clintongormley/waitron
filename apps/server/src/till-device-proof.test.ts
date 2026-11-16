@@ -15,7 +15,6 @@ import { createPrinter } from "@waitron/printing";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { freePorts } from "./testing/free-ports.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -94,11 +93,13 @@ beforeAll(async () => {
     role: "admin",
     pinHash: hashPin("5555"),
   });
-  const [port] = await freePorts(1);
-  await new Promise<void>((resolve) => {
-    server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: port! }, () => resolve());
+  await new Promise<void>((resolve, reject) => {
+    server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0 }, (info) => {
+      origin = `http://127.0.0.1:${info.port}`;
+      resolve();
+    });
+    server.once("error", reject);
   });
-  origin = `http://127.0.0.1:${port}`;
   const login = await fetch(`${origin}/api/session`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },

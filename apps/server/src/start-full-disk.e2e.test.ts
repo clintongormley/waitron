@@ -138,7 +138,8 @@ import { parkOrder } from "./working-order.js";
 import { kitchenScreenDevice, profile as kitchenProfile } from "./testing/kitchen-screen-device.js";
 import sharp from "sharp";
 import { prepareImage, uploadImage } from "@waitron/media";
-import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -1112,19 +1113,26 @@ describe("a start on a real full disk", () => {
     expect(small.free()).toBeLessThan(65_536);
     const stateBytes = readFileSync(join(stateDir, "recovery.json"));
 
-    const [port] = await freePorts(1);
+    const held = await retainHttpListener();
+    const port = held.port;
     let served: Awaited<ReturnType<typeof serveRecovery>> | undefined;
     const d = entryDeps(stateDir, {
       spareBytes: 0,
-      baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
+      baseEnv: {
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: held.host,
+      },
       serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
         served = await serveRecovery(app, opts);
         return served;
       }),
     });
+    const adoption = adoptRetainedListeners([held]);
     try {
       await runEntry(d);
+      await adoption.bound;
       expect(d.startServer).not.toHaveBeenCalled();
       expect(served).toBeDefined();
       const page = await pageOver(port!, ca);
@@ -1135,8 +1143,10 @@ describe("a start on a real full disk", () => {
       expect(readFileSync(join(stateDir, "recovery.json"))).toEqual(stateBytes);
       expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);
     } finally {
+      adoption.restore();
       const server = served;
       if (server !== undefined) await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (held.server.listening) await held.close();
     }
   });
 
@@ -2260,19 +2270,26 @@ describe("a Start again choice on a real full disk", () => {
     });
     const ca = readFileSync(join(stateDir, "tls", "ca.crt"));
 
-    const [port] = await freePorts(1);
+    const held = await retainHttpListener();
+    const port = held.port;
     let served: Awaited<ReturnType<typeof serveRecovery>> | undefined;
     const d = entryDeps(stateDir, {
       venueDir,
-      baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
+      baseEnv: {
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: held.host,
+      },
       serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
         served = await serveRecovery(app, opts);
         return served;
       }),
     });
+    const adoption = adoptRetainedListeners([held]);
     try {
       await runEntry(d);
+      await adoption.bound;
       expect(d.startServer).not.toHaveBeenCalled();
       const page = await pageOver(port!, ca);
       expect(page.body).toContain("<li>venue/venue.db</li>");
@@ -2317,8 +2334,10 @@ describe("a Start again choice on a real full disk", () => {
       expect(readFileSync(join(stateDir, "flows/setup/record.json"))).toEqual(setup);
       expect(d.exit).not.toHaveBeenCalled();
     } finally {
+      adoption.restore();
       const server = served;
       if (server !== undefined) await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (held.server.listening) await held.close();
     }
   });
 });
