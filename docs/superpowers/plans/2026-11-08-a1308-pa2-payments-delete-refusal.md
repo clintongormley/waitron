@@ -33,6 +33,31 @@ this area needs this one.
 **Pull request's first line:** "Every venue is reset: payments; backups and exports from before
 this cannot be restored or imported." (rules §2).
 
+## Required follow-through from pa1 — watcher, 16 November 2026 06:53
+
+Pa1 folds the append-only follow-up tables into `payments`. Its conditional
+`payments_guard_update` is created by the starting migration, but is not restored or checked
+by the existing boot/watch mechanism. The watcher cleared landing pa1 with that disclosure and
+required this protection in pa2 if it was not a small pa1 change. This is the watcher's clearance,
+not a new owner approval.
+
+The existing mechanism takes table names and generates unconditional update/delete refusals
+(`packages/store/src/append-only.ts:53-80,96-100`). Naming `payments` there would refuse legitimate
+capture updates. Its metadata currently carries only `appendOnlyTables`
+(`packages/migrations/src/manifest.ts:25-28,44-64`); migration application installs only those
+pairs (`packages/migrations/src/apply.ts:84-90`), and boot, upgrade checks and the runtime watch
+consume that same table list (`apps/server/src/append-only-watch.ts:16-34`). Supporting this
+conditional definition therefore exceeds a name-list change and pa1's remaining size allowance.
+
+Before pa2 is built, settle and have Claude review the smallest extension of that existing
+mechanism which restores a missing `payments_guard_update` and `payments_no_delete`, refuses
+altered definitions at boot, and detects missing or altered definitions while running. Cover both
+Payments On and Payments Off, preserve the existing generic restoration/refusal assertions, and
+prove that ordinary capture still succeeds. Do not duplicate SQL bodies or teach the generic
+server the payments module's name. Update this plan's files, tests and size for that extension;
+its original ~90-line estimate covers the delete refusal alone. The watcher asked for pa2 to be
+put before the owner as soon as it is green; the owner still lands it.
+
 ## Global Constraints
 
 - Rules §1–§9 apply. The trigger is added to `packages/payments/triggers/payments.sql` and the set
