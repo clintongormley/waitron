@@ -13,8 +13,6 @@ export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("payment_refunds", "ledger", LEDGER),
 
   classify("card_readers", "state", STATE),
-  classify("device_card_readers", "state", STATE),
-  classify("device_profile_card_readers", "state", STATE),
 ];
 
 /** Every table in payments' set: payments' own and the reconciliation schedule's. */

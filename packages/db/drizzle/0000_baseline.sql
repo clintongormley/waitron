@@ -714,6 +714,7 @@ CREATE TABLE `devices` (
 	`payment_slip_printer_id` text,
 	`cash_drawer_printer_id` text,
 	`invoice_printer_id` text,
+	`card_reader_id` text,
 	`invoice_page_printer_id` text,
 	`label` text NOT NULL,
 	`token_hash` text NOT NULL,
@@ -1091,10 +1092,12 @@ CREATE TABLE `device_profiles` (
 	`capabilities` text DEFAULT '[]' NOT NULL,
 	`inactivity_timeout_seconds` integer,
 	`starting_screen` text,
+	`card_readers` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`retired_at` text,
-	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds'))
+	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')),
+	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profiles_live_name_key` ON `device_profiles` (`name`) WHERE "device_profiles"."retired_at" is null;--> statement-breakpoint

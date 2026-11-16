@@ -16,6 +16,7 @@ import {
   deviceMadeHereStations,
   deviceProfilePrinters,
   devices,
+  deviceProfiles,
   joinRequests,
   printers,
   withTransaction,
@@ -31,7 +32,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { resolveDevicePrinterId } from "@waitron/layouts";
-import { cardReaders, deviceCardReaders, deviceProfileCardReaders } from "@waitron/payments";
+import { cardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -648,9 +649,13 @@ describe("a deleted device comes back as the same device", () => {
       .values({ provider: "fake", providerRef: "reader-1", name: "Lector 1" })
       .returning({ id: cardReaders.id });
     await suite.db
-      .insert(deviceProfileCardReaders)
-      .values({ deviceProfileId: profileId, readerId: reader!.id, position: 0 });
-    await suite.db.insert(deviceCardReaders).values({ deviceId, readerId: reader!.id });
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [reader!.id], defaultId: null } })
+      .where(eq(deviceProfiles.id, profileId));
+    await suite.db
+      .update(devices)
+      .set({ cardReaderId: reader!.id })
+      .where(eq(devices.id, deviceId));
     // Read once while active, so the old token is in the verified-token memory when it is refused.
     expect((await send(app, "GET", "/api/device/me", { cookie: oldJar })).status).toBe(200);
     await disable(app, venue, deviceId);
@@ -692,9 +697,9 @@ describe("a deleted device comes back as the same device", () => {
     ).toEqual([{ stationId: venue.defaultStationId }]);
     expect(
       await suite.db
-        .select({ readerId: deviceCardReaders.readerId })
-        .from(deviceCardReaders)
-        .where(eq(deviceCardReaders.deviceId, deviceId)),
+        .select({ readerId: devices.cardReaderId })
+        .from(devices)
+        .where(eq(devices.id, deviceId)),
     ).toEqual([{ readerId: reader!.id }]);
 
     const approved = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });

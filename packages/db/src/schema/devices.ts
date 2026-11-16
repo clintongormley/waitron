@@ -38,6 +38,8 @@ export const devices = table(
       onDelete: "restrict",
     }),
     /* v8 ignore stop */
+    // No key into the switchable payments set; selectDeviceReader checks it and reader deletion clears it.
+    cardReaderId: id("card_reader_id"),
     /* v8 ignore start */
     invoicePagePrinterId: id("invoice_page_printer_id").references(() => pagePrinters.id, {
       onDelete: "restrict",

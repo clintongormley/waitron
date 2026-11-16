@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
-import { CORE_MIGRATIONS, captureError, devices, withTransaction } from "@waitron/db";
+import { eq, inArray, sql } from "drizzle-orm";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  deviceProfiles,
+  devices,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { cardReaders } from "./schema/card-readers.js";
-import { deviceCardReaders } from "./schema/device-card-readers.js";
-import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
 import { payments } from "./schema/payments.js";
 import type { PaymentState } from "./provider.js";
 import { insertAttempting } from "./store.js";
@@ -93,9 +97,9 @@ async function holders(...readerIds: string[]) {
 
 async function chosen(deviceId: string) {
   const [row] = await suite.db
-    .select({ readerId: deviceCardReaders.readerId })
-    .from(deviceCardReaders)
-    .where(eq(deviceCardReaders.deviceId, deviceId));
+    .select({ readerId: devices.cardReaderId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
   return row?.readerId ?? null;
 }
 
@@ -208,12 +212,49 @@ describe("readerHeldBy", () => {
 });
 
 describe("a profile's reader list", () => {
+  it.each(["duplicate", "unknown", "deleted"] as const)(
+    "refuses a %s reader without changing the profile list",
+    async (kind) => {
+      const s = await seed();
+      if (kind === "deleted")
+        await suite.db
+          .update(cardReaders)
+          .set({ deletedAt: "2026-11-01T00:00:00.000Z" })
+          .where(eq(cardReaders.id, s.r2));
+      const before = await suite.db
+        .select()
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, s.profileId));
+      const readerIds =
+        kind === "duplicate" ? [s.r1, s.r1] : [s.r1, kind === "unknown" ? "missing" : s.r2];
+      expect(
+        await inTx((tx) =>
+          setProfileReaderList(tx, s.profileId, { readerIds, defaultReaderId: null }),
+        ),
+      ).toEqual(
+        kind === "duplicate"
+          ? { ok: false, refusal: "duplicate" }
+          : { ok: false, refusal: "unknown_reader", readerId: readerIds[1] },
+      );
+      expect(
+        await suite.db.select().from(deviceProfiles).where(eq(deviceProfiles.id, s.profileId)),
+      ).toEqual(before);
+    },
+  );
+
   it("stores the list in order with its default", async () => {
     const s = await seed();
     const result = await inTx((tx) =>
       setProfileReaderList(tx, s.profileId, { readerIds: [s.r2, s.r1], defaultReaderId: s.r1 }),
     );
     expect(result).toEqual({ ok: true });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select card_readers from device_profiles where id = ${s.profileId}`,
+        )
+      ).rows,
+    ).toEqual([{ card_readers: JSON.stringify({ ids: [s.r2, s.r1], defaultId: s.r1 }) }]);
     expect(await inTx((tx) => readProfileReaderList(tx, s.profileId))).toEqual({
       readerIds: [s.r2, s.r1],
       defaultReaderId: s.r1,
@@ -238,15 +279,15 @@ describe("a profile's reader list", () => {
 
 describe("appending a new reader to profiles", () => {
   async function rows(profileId: string) {
-    return suite.db
-      .select({
-        readerId: deviceProfileCardReaders.readerId,
-        position: deviceProfileCardReaders.position,
-        isDefault: deviceProfileCardReaders.isDefault,
-      })
-      .from(deviceProfileCardReaders)
-      .where(eq(deviceProfileCardReaders.deviceProfileId, profileId))
-      .orderBy(deviceProfileCardReaders.position);
+    const [row] = await suite.db
+      .select({ list: deviceProfiles.cardReaders })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    return (row!.list.ids ?? []).map((readerId, position) => ({
+      readerId,
+      position,
+      isDefault: row!.list.defaultId === readerId,
+    }));
   }
 
   it("appends at the end of an existing list, not as its default", async () => {
@@ -374,7 +415,7 @@ describe("a device's card reader", () => {
           provider: "sumup",
           providerRef: `deleted-${randomUUID()}`,
           name: "deleted",
-          disabledAt: new Date().toISOString(),
+          disabledAt: "2026-11-01T00:00:00.000Z",
           deletedAt: new Date().toISOString(),
         })
         .returning({ id: cardReaders.id });
@@ -420,7 +461,7 @@ describe("a device's card reader", () => {
     const s = await seed();
     await list(s, [s.r1]);
     await inTx((tx) =>
-      tx.insert(deviceCardReaders).values({ deviceId: s.deviceA, readerId: s.r1 }),
+      tx.update(devices).set({ cardReaderId: s.r1 }).where(eq(devices.id, s.deviceA)),
     );
     await hold(s.r1, s.deviceB);
     expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBeNull();
@@ -503,13 +544,9 @@ describe("a device's card reader", () => {
     await inTx((tx) => settleDeviceReader(tx, s.deviceB, { acquire: true }));
     expect(await holders(s.r1, s.r2)).toEqual({ [s.r1]: s.deviceA, [s.r2]: s.deviceB });
     await suite.db
-      .delete(deviceProfileCardReaders)
-      .where(
-        and(
-          eq(deviceProfileCardReaders.deviceProfileId, s.profileId),
-          eq(deviceProfileCardReaders.readerId, s.r1),
-        ),
-      );
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [s.r2], defaultId: s.r2 } })
+      .where(eq(deviceProfiles.id, s.profileId));
 
     const reads = await inTx(async (tx) => {
       const selects = vi.spyOn(tx, "select");
@@ -581,7 +618,7 @@ describe("a device's card reader", () => {
   it("a profile with no readers clears the device's choice", async () => {
     const s = await seed();
     await inTx((tx) =>
-      tx.insert(deviceCardReaders).values({ deviceId: s.deviceC, readerId: s.r1 }),
+      tx.update(devices).set({ cardReaderId: s.r1 }).where(eq(devices.id, s.deviceC)),
     );
     await inTx((tx) => clearUnlistedReaderChoice(tx, s.deviceC));
     expect(await chosen(s.deviceC)).toBeNull();

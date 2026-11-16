@@ -2016,6 +2016,48 @@ for (const locale of ["en", "es"] as const) {
       readerTable.foreignKeys[0]!.on_delete = "SET NULL";
       delete phases[phase]!.card_reader_holders;
 
+      const profileReaders = expected[phase].tables.device_profile_card_readers!;
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "device_card_readers",
+          into: "devices",
+          match: { from: "device_id", into: "id" },
+          columns: { reader_id: "card_reader_id" },
+        },
+      ]);
+      const deviceTable = expected[phase].tables.devices!;
+      const choiceColumn = deviceTable.columns.pop()!;
+      choiceColumn.notnull = 0;
+      deviceTable.columns.splice(
+        deviceTable.columns.findIndex((column) => column.name === "invoice_printer_id") + 1,
+        0,
+        choiceColumn,
+      );
+      deviceTable.foreignKeys = deviceTable.foreignKeys
+        .filter((key) => key.from !== "card_reader_id")
+        .map((key) => ({ ...key, id: key.id - 1 }));
+      const profileTable = expected[phase].tables.device_profiles!;
+      profileTable.columns.splice(
+        profileTable.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        { name: "card_readers", type: "TEXT", notnull: 1, dflt_value: "'{}'", pk: 0 },
+      );
+      for (const row of Object.values(profileTable.rows)) {
+        const listed = Object.values(profileReaders.rows)
+          .filter((link) => link.device_profile_id === row.id)
+          .sort((a, b) => Number(a.position) - Number(b.position));
+        row.card_readers =
+          listed.length === 0
+            ? {}
+            : {
+                ids: listed.map((link) => link.reader_id),
+                defaultId: listed.find((link) => link.is_default === 1)?.reader_id ?? null,
+              };
+      }
+      delete expected[phase].tables.device_profile_card_readers;
+      delete phases[phase]!.device_card_readers;
+      delete phases[phase]!.device_profile_card_readers;
+
       const staffMenuFold = {
         from: "menu_period_staff_menus",
         into: "menu_periods",

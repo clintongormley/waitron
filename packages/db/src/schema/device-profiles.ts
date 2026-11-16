@@ -6,6 +6,7 @@ import {
   enumType,
   id,
   json,
+  jsonShapeCheck,
   label,
   newId,
   nowIso,
@@ -18,6 +19,11 @@ import {
  * the type, this declaration is the storage.
  */
 export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
+
+export interface DeviceProfileCardReaders {
+  ids?: string[];
+  defaultId?: string | null;
+}
 
 /**
  * A reusable device profile: the binding bundle a device resolves against.
@@ -43,6 +49,7 @@ export const deviceProfiles = table(
     // NULL = the fixed home screen. No CHECK: one would make drizzle-kit rebuild this table. The
     // store (`validateStartingScreen`, @waitron/layouts) refuses a screen the profile does not show.
     startingScreen: label("starting_screen"),
+    cardReaders: json<DeviceProfileCardReaders>("card_readers").notNull().default({}),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
     retiredAt: tsString("retired_at"),
@@ -52,5 +59,6 @@ export const deviceProfiles = table(
       .on(t.name)
       .where(sql`${t.retiredAt} is null`),
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
+    check("device_profiles_card_readers_ck", jsonShapeCheck(t.cardReaders, "object")),
   ],
 );

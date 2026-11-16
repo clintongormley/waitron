@@ -34,6 +34,7 @@ describe("canvas retirement on a fresh venue", () => {
       "capabilities",
       "inactivity_timeout_seconds",
       "starting_screen",
+      "card_readers",
       "created_at",
       "updated_at",
       "retired_at",

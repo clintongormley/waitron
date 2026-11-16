@@ -91,11 +91,11 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     await admin.execute(sql`delete from printers where id = ${slipPrinter}`);
   });
 
-  it("has no card_provider / card_reader_id column (dropped in Task 13)", async () => {
+  it("has a reader choice column and no card provider column", async () => {
     const { rows } = await admin.execute<{ name: string }>(sql`
       select name from pragma_table_info('devices')
        where name in ('card_provider', 'card_reader_id')`);
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([{ name: "card_reader_id" }]);
   });
 
   it("accepts a real device_profile_id", async () => {

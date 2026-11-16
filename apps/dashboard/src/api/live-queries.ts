@@ -124,22 +124,14 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "device_approved_profiles",
     "device_profiles",
-    "device_card_readers",
   ],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
-  listReaders: ["card_readers", "device_card_readers", "device_profile_card_readers", "devices"],
+  listReaders: ["card_readers", "device_profiles", "devices"],
   // Its provider check also reads `venue_credentials`, which no module declares as a live resource.
-  getReaderDeleteImpact: [
-    "card_readers",
-    "payments",
-    "devices",
-    "device_profiles",
-    "device_card_readers",
-    "device_profile_card_readers",
-  ],
+  getReaderDeleteImpact: ["card_readers", "payments", "devices", "device_profiles"],
   listReaderHolders: ["card_readers", "payments"],
-  getProfileReaders: ["device_profile_card_readers", "card_readers"],
+  getProfileReaders: ["device_profiles", "card_readers"],
   // The route reads `venue_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   // Scheduled runs have no live resource; the query polls passively.
@@ -404,9 +396,7 @@ export const QUERY_DEPENDENCIES = {
     "device_approved_profiles",
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
     "printer_holders",
-    "device_card_readers",
     "device_profile_printers",
-    "device_profile_card_readers",
     "printers",
     "page_printers",
     "card_readers",

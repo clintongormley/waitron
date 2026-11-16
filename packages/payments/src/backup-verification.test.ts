@@ -32,13 +32,7 @@ const passed = {
     { code: "secret", status: "passed" },
   ],
 };
-const tables = [
-  "payments",
-  "payment_refunds",
-  "card_readers",
-  "device_card_readers",
-  "device_profile_card_readers",
-];
+const tables = ["payments", "payment_refunds", "card_readers"];
 
 beforeEach(() => {
   for (const db of [original.db, restored.db]) {
@@ -78,9 +72,9 @@ beforeEach(() => {
     db.run(
       sql`insert into payment_refunds (id,payment_id,amount,state,created_at) values ('refund','payment',100,'succeeded','2026-10-20T08:00:00.000Z')`,
     );
-    db.run(sql`insert into device_card_readers (device_id,reader_id) values ('device','reader')`);
+    db.run(sql`update devices set card_reader_id='reader' where id='device'`);
     db.run(
-      sql`insert into device_profile_card_readers (device_profile_id,reader_id,position,is_default) values ('profile','reader',0,1)`,
+      sql`update device_profiles set card_readers='{"ids":["reader"],"defaultId":"reader"}' where id='profile'`,
     );
     db.run(sql`update card_readers set held_by_device_id='device' where id='reader'`);
   }
@@ -247,8 +241,6 @@ it.each([
   ["payments", "hold_note='Changed note'"],
   ["payment_refunds", "amount=101"],
   ["card_readers", "name='Changed reader'"],
-  ["device_card_readers", "reader_id='other-reader'"],
-  ["device_profile_card_readers", "position=1"],
   ["card_readers", "held_by_device_id=null"],
 ])("detects a same-count value change in %s", async (table, change) => {
   expect(await run()).toEqual(passed);
@@ -270,10 +262,6 @@ it.each([
   ["payment_refunds", "authorized_by"],
   ["payments", "resolved_by"],
   ["payments", "hold_decided_by"],
-  ["device_card_readers", "device_id"],
-  ["device_card_readers", "reader_id"],
-  ["device_profile_card_readers", "device_profile_id"],
-  ["device_profile_card_readers", "reader_id"],
   ["card_readers", "held_by_device_id"],
 ])("checks the %s.%s reference in matching damaged copies", async (table, column) => {
   for (const db of [original.db, restored.db])
@@ -388,13 +376,9 @@ it.each([0, null])(
   async (sourceSchema) => {
     // Recreate only the schema; the existing helper still owns the database and teardown.
     for (const db of [restored.db]) {
-      for (const table of [
-        "device_profile_card_readers",
-        "device_card_readers",
-        "payment_refunds",
-        "payments",
-        "card_readers",
-      ])
+      db.run(sql`update devices set card_reader_id=null`);
+      db.run(sql`update device_profiles set card_readers='{}'`);
+      for (const table of ["payment_refunds", "payments", "card_readers"])
         corrupt(db, `delete from "${table}"`);
     }
     expect(await run({ absentBefore: true, sourceSchema })).toEqual(passed);
@@ -408,12 +392,12 @@ it("refuses a positive source schema with missing payment tables", async () => {
 });
 it("refuses a missing restored payment table", async () => {
   const definition = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type='table' and name='device_card_readers'`,
+    sql`select sql from sqlite_schema where type='table' and name='payment_refunds'`,
   )[0]!.sql;
   const triggers = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'device_card_readers'`,
+    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'payment_refunds'`,
   );
-  restored.db.run(sql`drop table device_card_readers`);
+  restored.db.run(sql`drop table payment_refunds`);
   try {
     expect(await run()).toMatchObject({ status: "invalid" });
   } finally {
@@ -429,4 +413,16 @@ it("refuses a payload the owning provider cannot use offline", async () => {
 it("does not certify present provider credentials without offline semantics", async () => {
   await credential("payments.stripe", stripe);
   expect(await run({ unsupportedProvider: true })).toMatchObject({ status: "unsupported" });
+});
+
+it.each([
+  ["devices", "card_reader_id='missing'"],
+  ["device_profiles", `card_readers='{"ids":["missing"],"defaultId":null}'`],
+  ["device_profiles", `card_readers='{"ids":["reader"],"defaultId":"missing"}'`],
+  ["device_profiles", `card_readers='{"ids":"reader"}'`],
+  ["device_profiles", `card_readers='{"ids":{"a":"missing"}}'`],
+  ["device_profiles", `card_readers='{"ids":["reader"],"defaultId":5}'`],
+])("checks plain reader ids in matching copies of %s", async (table, change) => {
+  for (const db of [original.db, restored.db]) corrupt(db, `update "${table}" set ${change}`);
+  expect(await run()).toMatchObject({ status: "invalid" });
 });

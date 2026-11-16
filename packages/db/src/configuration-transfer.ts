@@ -86,7 +86,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
     { name: "products" },
-    { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
+    { name: "device_profiles", omit: ["card_readers"], leaveBehindWhenSet: "retired_at" },
     {
       name: "floor_zones",
       leaveBehindWhenFalse: "active",

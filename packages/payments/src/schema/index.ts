@@ -5,8 +5,6 @@
 export { paymentState, payments } from "./payments.js";
 export { paymentRefundState, paymentRefunds } from "./payment-refunds.js";
 export { cardReaders } from "./card-readers.js";
-export { deviceCardReaders } from "./device-card-readers.js";
-export { deviceProfileCardReaders } from "./device-profile-card-readers.js";
 export { runState, reconciliationRuns } from "./reconciliation-runs.js";
 export type { RunState } from "./reconciliation-runs.js";
 

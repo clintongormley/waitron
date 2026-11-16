@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "51d38243-5489-4047-9360-aa2dcd6114d8",
+  "id": "ab247e3b-b7b1-42c7-afe8-32eb064844fb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4674,6 +4674,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "card_reader_id": {
+          "name": "card_reader_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "invoice_page_printer_id": {
           "name": "invoice_page_printer_id",
           "type": "text",
@@ -7248,6 +7255,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "card_readers": {
+          "name": "card_readers",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -7287,6 +7302,10 @@
         "device_profiles_form_factor_ck": {
           "name": "device_profiles_form_factor_ck",
           "value": "\"device_profiles\".\"form_factor\" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')"
+        },
+        "device_profiles_card_readers_ck": {
+          "name": "device_profiles_card_readers_ck",
+          "value": "json_valid(\"device_profiles\".\"card_readers\") and json_type(\"device_profiles\".\"card_readers\") = 'object'"
         }
       }
     },

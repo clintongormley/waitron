@@ -327,10 +327,9 @@ async function seedReader(
   return { id: r!.id, providerRef };
 }
 
-/** Set the device's chosen reader (`device_card_readers`), which it holds. */
 async function setChosenReader(deviceId: string, readerId: string): Promise<void> {
   await suite.db.execute(sql`
-    insert into device_card_readers (device_id, reader_id) values (${deviceId}, ${readerId})`);
+    update devices set card_reader_id = ${readerId} where id = ${deviceId}`);
   await holdReader(deviceId, readerId);
 }
 
@@ -1009,7 +1008,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
 });
 
 // POST /api/pay resolves the reader (request `readerId`, else the paying device's chosen reader in
-// `device_card_readers`, else its profile's default), pre-checks its provider is connected, and drives it through
+// `devices.card_reader_id`, else its profile's default), pre-checks its provider is connected, and drives it through
 // `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
 // ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
@@ -1280,7 +1279,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
+    // No chosen reader and no `readerId` in the body → nothing resolves.
 
     const payRes = await app.request("/api/pay", {
       method: "POST",

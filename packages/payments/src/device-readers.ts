@@ -1,18 +1,13 @@
-import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
-import { devices } from "@waitron/db";
+import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import { IN_PROGRESS_PAYMENT_STATES } from "./provider.js";
 import { cardReaders } from "./schema/card-readers.js";
-import { deviceCardReaders } from "./schema/device-card-readers.js";
-import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
 import { payments } from "./schema/payments.js";
 
-/** A profile's readers in display order and its default, which is on that list or `null`. */
 export type ProfileReaderList = { readerIds: string[]; defaultReaderId: string | null };
-
-/** The device's stored reader choice, its profile default and who holds each, with what it pays on. */
 export type ReaderRoleState = {
   chosenId: string | null;
   chosenHolderDeviceId: string | null;
@@ -20,14 +15,12 @@ export type ReaderRoleState = {
   defaultHolderDeviceId: string | null;
   resolvedId: string | null;
 };
-
 export type SelectDeviceReaderInput = {
   deviceId: string;
   selection: "default" | { id: string };
   via: EquipmentVia;
   takeOver?: boolean;
 };
-
 export type SelectDeviceReaderResult =
   | { ok: true; previousHolderDeviceId: string | null }
   | { ok: false; refusal: "not_permitted" }
@@ -39,86 +32,66 @@ export async function readProfileReaderList(
   tx: Transaction,
   profileId: string,
 ): Promise<ProfileReaderList> {
-  const rows = await tx
-    .select({
-      readerId: deviceProfileCardReaders.readerId,
-      isDefault: deviceProfileCardReaders.isDefault,
-    })
-    .from(deviceProfileCardReaders)
-    .where(eq(deviceProfileCardReaders.deviceProfileId, profileId))
-    .orderBy(asc(deviceProfileCardReaders.position));
-  return {
-    readerIds: rows.map((row) => row.readerId),
-    defaultReaderId: rows.find((row) => row.isDefault)?.readerId ?? null,
-  };
+  const [row] = await tx
+    .select({ list: deviceProfiles.cardReaders })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  return { readerIds: row?.list.ids ?? [], defaultReaderId: row?.list.defaultId ?? null };
 }
 
-/**
- * Replaces the profile's list and default, then clears each of its devices' choices the list no
- * longer offers, acquiring nothing. A default missing from the list is returned as a refusal,
- * writing nothing, because its code belongs to the caller's surface.
- */
+export async function isKnownReader(tx: Transaction, readerId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: cardReaders.id })
+    .from(cardReaders)
+    .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
+  return row !== undefined;
+}
+
 export async function setProfileReaderList(
   tx: Transaction,
   profileId: string,
   list: ProfileReaderList,
-): Promise<{ ok: true } | { ok: false; refusal: "default_not_listed" }> {
-  if (list.defaultReaderId !== null && !list.readerIds.includes(list.defaultReaderId)) {
+): Promise<
+  | { ok: true }
+  | { ok: false; refusal: "duplicate" | "default_not_listed" }
+  | { ok: false; refusal: "unknown_reader"; readerId: string }
+> {
+  if (new Set(list.readerIds).size !== list.readerIds.length)
+    return { ok: false, refusal: "duplicate" };
+  for (const readerId of list.readerIds) {
+    if (!(await isKnownReader(tx, readerId)))
+      return { ok: false, refusal: "unknown_reader", readerId };
+  }
+  if (list.defaultReaderId !== null && !list.readerIds.includes(list.defaultReaderId))
     return { ok: false, refusal: "default_not_listed" };
-  }
   await tx
-    .delete(deviceProfileCardReaders)
-    .where(eq(deviceProfileCardReaders.deviceProfileId, profileId));
-  if (list.readerIds.length > 0) {
-    await tx.insert(deviceProfileCardReaders).values(
-      list.readerIds.map((readerId, position) => ({
-        deviceProfileId: profileId,
-        readerId,
-        position,
-        isDefault: readerId === list.defaultReaderId,
-      })),
-    );
-  }
+    .update(deviceProfiles)
+    .set({ cardReaders: { ids: list.readerIds, defaultId: list.defaultReaderId } })
+    .where(eq(deviceProfiles.id, profileId));
   await settleProfileReaderDevices(tx, profileId);
   return { ok: true };
 }
 
-/**
- * Puts the reader at the end of each named profile's list, never as its default, skipping a
- * profile that already lists it. Writes no holder and no device choice.
- */
 export async function appendReaderToProfiles(
   tx: Transaction,
   readerId: string,
   profileIds: readonly string[],
 ): Promise<void> {
   if (profileIds.length === 0) return;
-  const existing = await tx
-    .select({
-      profileId: deviceProfileCardReaders.deviceProfileId,
-      readerId: deviceProfileCardReaders.readerId,
-      position: deviceProfileCardReaders.position,
-    })
-    .from(deviceProfileCardReaders)
-    .where(inArray(deviceProfileCardReaders.deviceProfileId, [...profileIds]));
-  const next = new Map<string, number>();
-  const listing = new Set<string>();
-  for (const row of existing) {
-    next.set(row.profileId, Math.max(next.get(row.profileId) ?? 0, row.position + 1));
-    if (row.readerId === readerId) listing.add(row.profileId);
+  const profiles = await tx
+    .select({ id: deviceProfiles.id, list: deviceProfiles.cardReaders })
+    .from(deviceProfiles)
+    .where(inArray(deviceProfiles.id, [...profileIds]));
+  for (const profile of profiles) {
+    const ids = profile.list.ids ?? [];
+    if (ids.includes(readerId)) continue;
+    await tx
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [...ids, readerId], defaultId: profile.list.defaultId ?? null } })
+      .where(eq(deviceProfiles.id, profile.id));
   }
-  const rows = [...new Set(profileIds)]
-    .filter((profileId) => !listing.has(profileId))
-    .map((profileId) => ({
-      deviceProfileId: profileId,
-      readerId,
-      position: next.get(profileId) ?? 0,
-      isDefault: false,
-    }));
-  if (rows.length > 0) await tx.insert(deviceProfileCardReaders).values(rows);
 }
 
-/** The device holding the reader, or `null` when nobody does. */
 export async function readerHeldBy(tx: Transaction, readerId: string): Promise<string | null> {
   const [row] = await tx
     .select({ deviceId: cardReaders.heldByDeviceId })
@@ -127,7 +100,6 @@ export async function readerHeldBy(tx: Transaction, readerId: string): Promise<s
   return row?.deviceId ?? null;
 }
 
-/** Whether a device other than `deviceId` has a payment still in progress on the reader. */
 export async function readerPaymentInProgress(
   tx: Transaction,
   readerId: string,
@@ -147,15 +119,17 @@ export async function readerPaymentInProgress(
   return row !== undefined;
 }
 
-/** The device's reader role; `null` for an unknown device. */
 export async function readReaderRole(
   tx: Transaction,
   deviceId: string,
 ): Promise<ReaderRoleState | null> {
-  return (await readReaderRolesOf(tx, [deviceId])).get(deviceId) ?? null;
+  const rows = await tx
+    .select({ id: devices.id, profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
+  return (await readReaderStates(tx, rows, false)).roles.get(deviceId) ?? null;
 }
 
-/** A reader a device's role or its profile's list names, and the device holding it, if any. */
 export type ReaderInfo = {
   id: string;
   name: string;
@@ -165,32 +139,13 @@ export type ReaderInfo = {
   printsOwnSlipAutomatically: boolean;
   holderDeviceId: string | null;
 };
-
 export type ListedReader = { profileId: string; id: string; isDefault: boolean };
-
-/** What {@link readReaderEquipment} reads; `listed`, empty without `lists`, is in list order. */
 export type ReaderEquipment = {
   roles: Map<string, ReaderRoleState>;
   readers: Map<string, ReaderInfo>;
   listed: ListedReader[];
 };
 
-async function readReaderRolesOf(
-  tx: Transaction,
-  deviceIds: readonly string[],
-): Promise<Map<string, ReaderRoleState>> {
-  if (deviceIds.length === 0) return new Map();
-  const deviceRows = await tx
-    .select({ id: devices.id, profileId: devices.deviceProfileId })
-    .from(devices)
-    .where(inArray(devices.id, [...deviceIds]));
-  return (await readReaderStates(tx, deviceRows, false)).roles;
-}
-
-/**
- * The reader role of each of `deviceRows`, with the readers their roles name and, with `lists`,
- * every reader their profiles list, read with three queries however many devices are given.
- */
 export async function readReaderEquipment(
   tx: Transaction,
   deviceRows: readonly { id: string; profileId: string }[],
@@ -199,7 +154,6 @@ export async function readReaderEquipment(
   return readReaderStates(tx, deviceRows, options.lists);
 }
 
-/** `withLists` also reads every reader the devices' profiles list, not only their defaults. */
 async function readReaderStates(
   tx: Transaction,
   deviceRows: readonly { id: string; profileId: string }[],
@@ -207,35 +161,32 @@ async function readReaderStates(
 ): Promise<ReaderEquipment> {
   if (deviceRows.length === 0) return { roles: new Map(), readers: new Map(), listed: [] };
   const choices = await tx
-    .select({ deviceId: deviceCardReaders.deviceId, readerId: deviceCardReaders.readerId })
-    .from(deviceCardReaders)
+    .select({ deviceId: devices.id, readerId: devices.cardReaderId })
+    .from(devices)
     .where(
       inArray(
-        deviceCardReaders.deviceId,
-        deviceRows.map((device) => device.id),
+        devices.id,
+        deviceRows.map((d) => d.id),
       ),
     );
-  const profileIds = [...new Set(deviceRows.map((device) => device.profileId))];
-  const listed = await tx
-    .select({
-      profileId: deviceProfileCardReaders.deviceProfileId,
-      id: deviceProfileCardReaders.readerId,
-      isDefault: deviceProfileCardReaders.isDefault,
-    })
-    .from(deviceProfileCardReaders)
-    .where(
-      withLists
-        ? inArray(deviceProfileCardReaders.deviceProfileId, profileIds)
-        : and(
-            inArray(deviceProfileCardReaders.deviceProfileId, profileIds),
-            eq(deviceProfileCardReaders.isDefault, true),
-          ),
-    )
-    .orderBy(asc(deviceProfileCardReaders.position));
+  const profiles = await tx
+    .select({ profileId: deviceProfiles.id, list: deviceProfiles.cardReaders })
+    .from(deviceProfiles)
+    .where(inArray(deviceProfiles.id, [...new Set(deviceRows.map((d) => d.profileId))]));
+  const listed = profiles.flatMap(({ profileId, list }) =>
+    (withLists ? (list.ids ?? []) : list.defaultId ? [list.defaultId] : []).map((id) => ({
+      profileId,
+      id,
+      isDefault: id === list.defaultId,
+    })),
+  );
   const readerIds = [
-    ...new Set([...choices.map((row) => row.readerId), ...listed.map((row) => row.id)]),
+    ...new Set([
+      ...choices.flatMap((c) => (c.readerId === null ? [] : [c.readerId])),
+      ...listed.map((r) => r.id),
+    ]),
   ];
-  const readerRows =
+  const rows =
     readerIds.length === 0
       ? []
       : await tx
@@ -250,38 +201,35 @@ async function readReaderStates(
           })
           .from(cardReaders)
           .where(inArray(cardReaders.id, readerIds));
-  const choiceOf = new Map(choices.map((row) => [row.deviceId, row.readerId]));
-  const defaultOf = new Map(
-    listed.filter((row) => row.isDefault).map((row) => [row.profileId, row.id]),
-  );
-  const readers = new Map(readerRows.map((row) => [row.id, row]));
+  const readers = new Map(rows.map((r) => [r.id, r]));
+  const choiceOf = new Map(choices.map((c) => [c.deviceId, c.readerId]));
+  const defaultOf = new Map(profiles.map((p) => [p.profileId, p.list.defaultId ?? null]));
   const holder = (id: string | null) =>
     id === null ? null : (readers.get(id)?.holderDeviceId ?? null);
   const roles = new Map(
-    deviceRows.map((device) => {
-      const chosenId = choiceOf.get(device.id) ?? null;
-      const defaultId = defaultOf.get(device.profileId) ?? null;
+    deviceRows.map((d) => {
+      const chosenId = choiceOf.get(d.id) ?? null;
+      const defaultId = defaultOf.get(d.profileId) ?? null;
       const chosenHolderDeviceId = holder(chosenId);
       const defaultHolderDeviceId = holder(defaultId);
-      // Every reader is portable: it pays only for the device holding it, chosen or the default.
+      // A portable reader pays only for the device holding it, chosen or the profile default.
       const resolvedId =
         chosenId !== null
-          ? chosenHolderDeviceId === device.id
+          ? chosenHolderDeviceId === d.id
             ? chosenId
             : null
-          : defaultHolderDeviceId === device.id
+          : defaultHolderDeviceId === d.id
             ? defaultId
             : null;
       return [
-        device.id,
-        { chosenId, chosenHolderDeviceId, defaultId, defaultHolderDeviceId, resolvedId },
+        d.id,
+        { chosenId, defaultId, chosenHolderDeviceId, defaultHolderDeviceId, resolvedId },
       ] as const;
     }),
   );
   return { roles, readers, listed: withLists ? listed : [] };
 }
 
-/** The reader the device pays on, enabled or not; `null` for none. */
 export async function resolveDeviceReaderId(
   tx: Transaction,
   deviceId: string,
@@ -289,25 +237,17 @@ export async function resolveDeviceReaderId(
   return (await readReaderRole(tx, deviceId))?.resolvedId ?? null;
 }
 
-/**
- * Sets the device to Use default or to a reader it may newly choose. A deleted reader is refused
- * first, whatever the device and its profile. A reader another device has a payment in progress on
- * is refused before the holder is considered, so nobody is asked to confirm a takeover
- * that would then be refused. A reader another device holds is refused unless taken by a scan or a
- * confirmed list choice, never by a manager; taking it clears the previous holder's choice of it,
- * and that device acquires nothing.
- */
 export async function selectDeviceReader(
   tx: Transaction,
   input: SelectDeviceReaderInput,
 ): Promise<SelectDeviceReaderResult> {
   const { deviceId, selection } = input;
   if (selection !== "default") {
-    const [target] = await tx
+    const [row] = await tx
       .select({ deletedAt: cardReaders.deletedAt })
       .from(cardReaders)
       .where(eq(cardReaders.id, selection.id));
-    if (target?.deletedAt != null) return { ok: false, refusal: "deleted" };
+    if (row?.deletedAt != null) return { ok: false, refusal: "deleted" };
   }
   const [device] = await tx
     .select({ profileId: devices.deviceProfileId })
@@ -316,29 +256,31 @@ export async function selectDeviceReader(
   if (device === undefined) return { ok: false, refusal: "not_permitted" };
   let previousHolderDeviceId: string | null = null;
   if (selection === "default") {
-    await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
+    await tx.update(devices).set({ cardReaderId: null }).where(eq(devices.id, deviceId));
   } else {
-    const [reader] = await tx
-      .select({ id: cardReaders.id })
-      .from(deviceProfileCardReaders)
-      .innerJoin(cardReaders, eq(cardReaders.id, deviceProfileCardReaders.readerId))
-      .where(
-        and(
-          eq(deviceProfileCardReaders.deviceProfileId, device.profileId),
-          eq(cardReaders.id, selection.id),
-          isNull(cardReaders.disabledAt),
-          isNull(cardReaders.unpairedAt),
-        ),
-      );
+    const listed = (await readProfileReaderList(tx, device.profileId)).readerIds.includes(
+      selection.id,
+    );
+    const [reader] = listed
+      ? await tx
+          .select({ id: cardReaders.id })
+          .from(cardReaders)
+          .where(
+            and(
+              eq(cardReaders.id, selection.id),
+              isNull(cardReaders.disabledAt),
+              isNull(cardReaders.unpairedAt),
+            ),
+          )
+      : [];
     if (reader === undefined) return { ok: false, refusal: "not_permitted" };
-    if (await readerPaymentInProgress(tx, reader.id, deviceId)) {
+    // Refuse busy before asking staff to confirm a takeover that would then be refused.
+    if (await readerPaymentInProgress(tx, reader.id, deviceId))
       return { ok: false, refusal: "busy" };
-    }
     const holder = await readerHeldBy(tx, reader.id);
     if (holder !== null && holder !== deviceId) {
-      if (!mayTakeOver(input.via, input.takeOver)) {
+      if (!mayTakeOver(input.via, input.takeOver))
         return { ok: false, refusal: "held", holderDeviceId: holder };
-      }
       previousHolderDeviceId = holder;
     }
     await tx
@@ -347,30 +289,17 @@ export async function selectDeviceReader(
       .where(eq(cardReaders.id, reader.id));
     if (previousHolderDeviceId !== null) {
       await tx
-        .delete(deviceCardReaders)
-        .where(
-          and(
-            eq(deviceCardReaders.deviceId, previousHolderDeviceId),
-            eq(deviceCardReaders.readerId, reader.id),
-          ),
-        );
+        .update(devices)
+        .set({ cardReaderId: null })
+        .where(and(eq(devices.id, previousHolderDeviceId), eq(devices.cardReaderId, reader.id)));
       await settleDeviceReader(tx, previousHolderDeviceId, { acquire: false });
     }
-    await tx
-      .insert(deviceCardReaders)
-      .values({ deviceId, readerId: reader.id })
-      .onConflictDoUpdate({ target: deviceCardReaders.deviceId, set: { readerId: reader.id } });
+    await tx.update(devices).set({ cardReaderId: reader.id }).where(eq(devices.id, deviceId));
   }
   await settleDeviceReader(tx, deviceId, { acquire: true });
   return { ok: true, previousHolderDeviceId };
 }
 
-/**
- * With `acquire`, takes the device's chosen reader, or on Use default the profile default, when it
- * is free: nobody holds it and no other device has a payment in progress on it; a chosen reader
- * that is not free puts the device back on Use default. Then lets go of every reader the device
- * holds but no longer uses.
- */
 export async function settleDeviceReader(
   tx: Transaction,
   deviceId: string,
@@ -388,7 +317,7 @@ export async function settleDeviceReader(
         .set({ heldByDeviceId: deviceId })
         .where(and(eq(cardReaders.id, state.chosenId), isNull(cardReaders.heldByDeviceId)));
     } else {
-      await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
+      await tx.update(devices).set({ cardReaderId: null }).where(eq(devices.id, deviceId));
       state.chosenId = null;
     }
   }
@@ -415,7 +344,6 @@ export async function settleDeviceReader(
     );
 }
 
-/** Lets go of every reader the device holds; keeps its choice. */
 export async function releaseDeviceReader(tx: Transaction, deviceId: string): Promise<void> {
   await tx
     .update(cardReaders)
@@ -423,30 +351,23 @@ export async function releaseDeviceReader(tx: Transaction, deviceId: string): Pr
     .where(eq(cardReaders.heldByDeviceId, deviceId));
 }
 
-/** Puts the device back on Use default when its profile no longer lists its chosen reader. */
 export async function clearUnlistedReaderChoice(tx: Transaction, deviceId: string): Promise<void> {
   const [device] = await tx
     .select({ profileId: devices.deviceProfileId })
     .from(devices)
     .where(eq(devices.id, deviceId));
   if (device === undefined) return;
-  const listed = (await readProfileReaderList(tx, device.profileId)).readerIds;
+  const list = (await readProfileReaderList(tx, device.profileId)).readerIds;
   await tx
-    .delete(deviceCardReaders)
+    .update(devices)
+    .set({ cardReaderId: null })
     .where(
-      listed.length === 0
-        ? eq(deviceCardReaders.deviceId, deviceId)
-        : and(
-            eq(deviceCardReaders.deviceId, deviceId),
-            notInArray(deviceCardReaders.readerId, listed),
-          ),
+      list.length === 0
+        ? eq(devices.id, deviceId)
+        : and(eq(devices.id, deviceId), notInArray(devices.cardReaderId, list)),
     );
 }
 
-/**
- * After the profile's list changes: clears each of its devices' choices no longer listed (a
- * disabled listed reader stays chosen) and lets go of what they no longer use, acquiring nothing.
- */
 export async function settleProfileReaderDevices(
   tx: Transaction,
   profileId: string,
@@ -456,38 +377,31 @@ export async function settleProfileReaderDevices(
     .from(devices)
     .where(eq(devices.deviceProfileId, profileId));
   if (onProfile.length === 0) return;
-  const deviceIds = onProfile.map((device) => device.id);
+  const ids = onProfile.map((d) => d.id);
   const list = await readProfileReaderList(tx, profileId);
   await tx
-    .delete(deviceCardReaders)
+    .update(devices)
+    .set({ cardReaderId: null })
     .where(
       list.readerIds.length === 0
-        ? inArray(deviceCardReaders.deviceId, deviceIds)
-        : and(
-            inArray(deviceCardReaders.deviceId, deviceIds),
-            notInArray(deviceCardReaders.readerId, list.readerIds),
-          ),
+        ? inArray(devices.id, ids)
+        : and(inArray(devices.id, ids), notInArray(devices.cardReaderId, list.readerIds)),
     );
-  const choiceOf = new Map(
-    (
-      await tx
-        .select({ deviceId: deviceCardReaders.deviceId, readerId: deviceCardReaders.readerId })
-        .from(deviceCardReaders)
-        .where(inArray(deviceCardReaders.deviceId, deviceIds))
-    ).map((row) => [row.deviceId, row.readerId]),
-  );
+  const choices = await tx
+    .select({ deviceId: devices.id, readerId: devices.cardReaderId })
+    .from(devices)
+    .where(inArray(devices.id, ids));
+  const choiceOf = new Map(choices.map((d) => [d.deviceId, d.readerId]));
   const held = await tx
     .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
     .from(cardReaders)
-    .where(inArray(cardReaders.heldByDeviceId, deviceIds));
-  // As settleDeviceReader without acquiring: a device keeps only the reader it uses.
-  const released = held
-    .filter((row) => row.readerId !== (choiceOf.get(row.deviceId!) ?? list.defaultReaderId))
-    .map((row) => row.readerId);
-  if (released.length > 0) {
+    .where(inArray(cardReaders.heldByDeviceId, ids));
+  const release = held
+    .filter((r) => r.readerId !== (choiceOf.get(r.deviceId!) ?? list.defaultReaderId))
+    .map((r) => r.readerId);
+  if (release.length > 0)
     await tx
       .update(cardReaders)
       .set({ heldByDeviceId: null })
-      .where(inArray(cardReaders.id, released));
-  }
+      .where(inArray(cardReaders.id, release));
 }

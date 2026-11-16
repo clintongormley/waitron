@@ -30,7 +30,7 @@ import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, sessions } from "@waitron/identity";
-import { cardReaders, deviceCardReaders, payments, type PaymentState } from "@waitron/payments";
+import { cardReaders, payments, type PaymentState } from "@waitron/payments";
 import { AppError, deviceOrigin, type DeleteImpact, type ResourceIdentity } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { VENUE_SERVICE } from "@waitron/venue-service";
@@ -323,10 +323,8 @@ async function seed() {
     .update(cardReaders)
     .set({ heldByDeviceId: pass })
     .where(eq(cardReaders.id, readerS));
-  await suite.db.insert(deviceCardReaders).values([
-    { deviceId: barTill, readerId: readerR },
-    { deviceId: pass, readerId: readerS },
-  ]);
+  await suite.db.update(devices).set({ cardReaderId: readerR }).where(eq(devices.id, barTill));
+  await suite.db.update(devices).set({ cardReaderId: readerS }).where(eq(devices.id, pass));
   await suite.db.insert(deviceMadeHereStations).values([
     { deviceId: barTill, stationId: grill },
     { deviceId: pass, stationId: grill },
@@ -671,7 +669,6 @@ describe("the device delete impact", () => {
       ["card_readers", "held_by_device_id"],
       ["device_made_here_stations", "device_id"],
       ["device_approved_profiles", "device_id"],
-      ["device_card_readers", "device_id"],
     ] as const) {
       expect(passRows(before, table, column).length, table).toBeGreaterThan(0);
       expect(passRows(after, table, column), table).toEqual(passRows(before, table, column));

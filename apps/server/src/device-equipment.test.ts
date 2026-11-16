@@ -23,7 +23,6 @@ import {
 import type { ProfilePrinterLists } from "@waitron/layouts";
 import {
   cardReaders,
-  deviceCardReaders,
   resolveDeviceReaderId,
   selectDeviceReader,
   setProfileReaderList,
@@ -150,9 +149,9 @@ async function columns(deviceId: string) {
 
 async function readerChoice(deviceId: string): Promise<string | null> {
   const [row] = await suite.db
-    .select({ readerId: deviceCardReaders.readerId })
-    .from(deviceCardReaders)
-    .where(eq(deviceCardReaders.deviceId, deviceId));
+    .select({ readerId: devices.cardReaderId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
   return row?.readerId ?? null;
 }
 
@@ -431,7 +430,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     await readerList(profile, [listed], listed);
     // Choices the profile does not list, as a device chosen before its lists named them keeps.
     await suite.db.update(devices).set({ paymentSlipPrinterId: bar }).where(eq(devices.id, a));
-    await suite.db.insert(deviceCardReaders).values({ deviceId: a, readerId: unlisted });
+    await suite.db.update(devices).set({ cardReaderId: unlisted }).where(eq(devices.id, a));
     await suite.db
       .update(cardReaders)
       .set({ heldByDeviceId: a })
