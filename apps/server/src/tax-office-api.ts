@@ -6,6 +6,7 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager, withInspectorAdmitted } from "@waitron/identity";
 import { resolveVenueClock } from "@waitron/reporting";
 import {
+  codeOf,
   createErrorBoundary,
   requireEnum,
   requireManagementSession,
@@ -246,9 +247,17 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
                 if (deps.closed?.aborted === true) throw new AppError("handover.stepping_down", {});
                 signal.throwIfAborted();
               },
+              log,
             },
             month,
           );
+        } catch (error) {
+          log("warn", "tax_office.export_stopped", {
+            month: raw,
+            errorCode: codeOf(error),
+            errorClass: error instanceof Error ? error.name : typeof error,
+          });
+          throw error;
         } finally {
           release();
         }

@@ -35,6 +35,8 @@ export interface TaxOfficeInvoice {
   kind: TaxOfficeKind;
   issuedAt: string;
   issueDate: string;
+  /** `HH:MM:SS`, as filed, as `issueDate` is. */
+  issueTime: string;
   /** Null when it is the issue date. */
   operationDate: string | null;
   customerName: string | null;
@@ -53,8 +55,10 @@ export interface TaxOfficePage {
 
 const BARE_NUMBER = /^\d{1,9}$/;
 
-// The issue date as filed: the issue instant moved by the offset filed with it.
-const ISSUE_DATE = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
+// The issue date and time as filed: the issue instant moved by the offset filed with it.
+const FILED_SHIFT = sql`printf('%+d minutes', s.issued_offset_minutes)`;
+const ISSUE_DATE = sql`date(s.issued_at, ${FILED_SHIFT})`;
+const ISSUE_TIME = sql`time(s.issued_at, ${FILED_SHIFT})`;
 
 // As the filing types each record: a corrective is R4 when it names a customer (only a replacement
 // of a full invoice does), else R5; a full invoice replacing tickets is F3; otherwise F1 when it
@@ -115,7 +119,8 @@ function filterClauses(filter: TaxOfficeFilter): SQL[] {
 export function taxOfficeInvoicesSql(filter: TaxOfficeFilter): SQL {
   return sql`
     select s.id as id, sr.code as series_code, s.invoice_number as invoice_number,
-      s.issued_at as issued_at, ${ISSUE_DATE} as issue_date, s.supply_day as supply_day,
+      s.issued_at as issued_at, ${ISSUE_DATE} as issue_date,
+      ${ISSUE_TIME} as issue_time, s.supply_day as supply_day,
       s.counterparty_legal_name as customer_name, s.counterparty_tax_id as customer_tax_id,
       s.vat_breakdown as vat_breakdown, cast(s.total as text) as total, ${KIND} as kind,
       cs.code as corrected_series, c.invoice_number as corrected_number,
@@ -143,6 +148,7 @@ interface RawRow extends Record<string, unknown> {
   invoice_number: number;
   issued_at: string;
   issue_date: string;
+  issue_time: string;
   supply_day: string | null;
   customer_name: string | null;
   customer_tax_id: string | null;
@@ -164,6 +170,7 @@ function toInvoice(row: RawRow): TaxOfficeInvoice {
     kind: row.kind,
     issuedAt: row.issued_at,
     issueDate: row.issue_date,
+    issueTime: row.issue_time,
     operationDate: operationDate === row.issue_date ? null : operationDate,
     customerName: row.customer_name,
     customerTaxId: row.customer_tax_id,

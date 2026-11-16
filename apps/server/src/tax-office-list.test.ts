@@ -206,6 +206,7 @@ describe("the tax office's invoice list", () => {
       kind: "F1",
       issuedAt: at("02"),
       issueDate: "2026-11-02",
+      issueTime: "12:00:00",
       operationDate: null,
       customerName: "Harbour Foods",
       customerTaxId: "B12345674",
@@ -267,6 +268,7 @@ describe("the tax office's invoice list", () => {
     const { json } = await list(DECEMBER);
     expect((json.rows as TaxOfficeInvoice[]).find((row) => row.number === "A/12")).toMatchObject({
       issueDate: "2026-12-05",
+      issueTime: "00:30:00",
       operationDate: null,
     });
     expect(await numbers(`${DECEMBER}&operationFrom=2026-12-05&operationTo=2026-12-05`)).toEqual([

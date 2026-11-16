@@ -3,7 +3,10 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import type { Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
+import { codeOf, type Logger } from "@waitron/server-kit";
+import { decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
+import { amountCell } from "./deferred-payment-export.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { uniquePdfPath } from "./invoice-customer-data.js";
 import { copyOfSale, type SaleCopy } from "./orders-invoice-pdf.js";
@@ -34,24 +37,16 @@ export interface TaxOfficeExportDeps {
   render: (copy: SaleCopy) => Promise<Uint8Array>;
   /** Throws when the export must stop: the request was aborted or a handover closed the gate. */
   stopIfAsked: () => void;
+  log: Logger;
 }
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
-/** Without the shared cell's formula guard, so a negative amount stays a number in a spreadsheet;
- * anything that is not a plain decimal goes through the guard. */
-function numberCell(text: string): string {
-  return DECIMAL.test(text) ? `"${text}"` : csvCell(text);
-}
-
-function timeOf(instant: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(instant));
+/** A rate as `amountCell` writes an amount, at its own scale; anything that is not a plain decimal
+ * goes through the shared cell's formula guard. */
+function rateCell(text: string, language: "en" | "es"): string {
+  if (!DECIMAL.test(text)) return csvCell(text);
+  return `"${language === "es" ? text.replace(".", ",") : text}"`;
 }
 
 function dayOf(instant: string, timeZone: string): string {
@@ -91,14 +86,14 @@ export function renderTaxOfficeCsv(
           csvCell(row.number),
           csvCell(row.kind),
           csvCell(row.issueDate),
-          csvCell(timeOf(row.issuedAt, timeZone)),
+          csvCell(row.issueTime),
           csvCell(row.operationDate ?? ""),
           csvCell(row.customerName ?? ""),
           csvCell(row.customerTaxId ?? ""),
-          rate === null ? csvCell("") : numberCell(rate.rate),
-          rate === null ? csvCell("") : numberCell(rate.base),
-          rate === null ? csvCell("") : numberCell(rate.tax),
-          numberCell(String(row.total)),
+          rate === null ? csvCell("") : rateCell(rate.rate, language),
+          rate === null ? csvCell("") : amountCell(decimal(rate.base), language),
+          rate === null ? csvCell("") : amountCell(decimal(rate.tax), language),
+          amountCell(row.total, language),
           csvCell(row.corrects.join(" ")),
           csvCell(row.cancelledAt === null ? "" : dayOf(row.cancelledAt, timeZone)),
         ].join(","),
@@ -112,7 +107,8 @@ export function renderTaxOfficeCsv(
  * The month's ZIP entries, oldest invoice first. The rows are read one page per lock turn; each
  * copy is read in a lock turn of its own and rendered outside it, with a turn of the event loop
  * after each render, since a render resolves without one and renders back to back would hold the
- * thread. Authority is checked again after the last copy.
+ * thread. A copy that cannot be made is logged, left out and named in `failed.txt`, unless the
+ * export was asked to stop. Authority is checked again after the last copy.
  */
 export async function* taxOfficeMonthEntries(
   deps: TaxOfficeExportDeps,
@@ -150,14 +146,31 @@ export async function* taxOfficeMonthEntries(
     content: renderTaxOfficeCsv(rows, month.language, month.issued.timeZone),
   };
   const taken = new Set<string>();
+  const failed: string[] = [];
   for (const row of rows) {
     deps.stopIfAsked();
-    const copy = await deps.db.withWriteLock(() => copyOfSale(tx, deps, row.id));
-    deps.stopIfAsked();
-    const content = await deps.render(copy);
+    let made: { copy: SaleCopy; content: Uint8Array };
+    try {
+      const copy = await deps.db.withWriteLock(() => copyOfSale(tx, deps, row.id));
+      deps.stopIfAsked();
+      made = { copy, content: await deps.render(copy) };
+    } catch (error) {
+      deps.stopIfAsked();
+      deps.log("error", "tax_office.copy_failed", {
+        saleId: row.id,
+        invoiceNumber: row.number,
+        errorCode: codeOf(error),
+        errorClass: error instanceof Error ? error.name : typeof error,
+      });
+      failed.push(row.number);
+      await nextTurn();
+      continue;
+    }
     await nextTurn();
-    yield { name: uniquePdfPath(taken, copy.code, copy.number), content };
+    yield { name: uniquePdfPath(taken, made.copy.code, made.copy.number), content: made.content };
   }
+  if (failed.length > 0)
+    yield { name: "failed.txt", content: TAX_OFFICE_EXPORT_WORDS[month.language].failed(failed) };
   await deps.db.withWriteLock(async () => {
     const again = await authorizeManager(tx, {
       managementSessionId: month.sessionId,

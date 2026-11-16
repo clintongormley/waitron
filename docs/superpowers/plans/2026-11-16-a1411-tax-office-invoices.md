@@ -366,6 +366,8 @@ test lines, the test helper included.
 **Files:** `tax-office-api.ts`, `tax-office-export.ts` (create), tests; the screen; i18n; the
 guide sections from Task 5.
 
+Amended 2026-11-16 (Task 8 review): the CSV writes money with the decimal mark of its language, a comma in Spanish, through `deferred-payment-export.ts`'s `amountCell`, not always a decimal point: LibreOffice set to Spanish (3082) read `"3.00"` as text and `"3,00"` and `"-3,00"` as numbers.
+
 Amended 2026-11-16 (Task 8a): the route is `POST /management-api/tax-office/months/:month`, not GET, because the download writes its activity entry and the own-page check covers POSTs, as Task 3's review made the single PDF a POST.
 
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,

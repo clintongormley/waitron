@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { unzipSync, strFromU8 } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -14,9 +14,9 @@ import {
   taxpayer,
   type Database,
 } from "@waitron/db";
-import { recordSale } from "@waitron/core";
+import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -45,7 +45,7 @@ let managerDashboard = "";
 let seriesIds: { full: string; standard: string; fA: string; fUnderA: string };
 const january: Record<string, string> = {};
 
-function mount(extra: Partial<TaxOfficeApiDeps> = {}): Hono {
+function mount(extra: Partial<TaxOfficeApiDeps> = {}, log: Logger = () => {}): Hono {
   const app = new Hono();
   mountTaxOfficeApi(
     app,
@@ -57,7 +57,7 @@ function mount(extra: Partial<TaxOfficeApiDeps> = {}): Hono {
       venueLocale: "es-ES",
       ...extra,
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -68,7 +68,7 @@ async function issueAt(
   series: string,
   opts: { customer?: boolean; lines?: { vatRate: string; lineTotal: string }[] } = {},
 ): Promise<{ billId: string; saleId: string }> {
-  const billId = await parked(venue, "Caña");
+  const billId = await parked(venue, "Croquettes");
   const lines = opts.lines ?? [{ vatRate: "10", lineTotal: "3.00" }];
   const total = lines
     .reduce((sum, line) => sum + Math.round(Number(line.lineTotal) * 100), 0)
@@ -86,17 +86,17 @@ async function issueAt(
         ? {
             counterparty: {
               taxId: "12345678Z",
-              legalName: "=Cliente Mayorista SL",
+              legalName: "=Wholesale Customer Ltd",
               countryCode: "ES",
             },
-            recipientAddress: "Calle Cliente 9, Madrid",
+            recipientAddress: "9 Customer Street, Madrid",
           }
         : {}),
       total: `${total.slice(0, -2) || "0"}.${total.slice(-2)}`,
       lines: lines.map((line, index) => ({
         lineNo: index + 1,
-        name: "Caña",
-        descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+        name: "Beer",
+        descriptions: { [venue.cfg.locale]: "Glass of beer" },
         quantity: "1",
         unitPrice: line.lineTotal,
         vatRate: line.vatRate,
@@ -175,6 +175,19 @@ const suite = useVenueDb({
 });
 
 const db = (): Database => suite.db;
+
+/** A sale's invoice number as the export writes it. */
+async function numberOf(saleId: string): Promise<string> {
+  const [sale] = await db()
+    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(eq(sales.id, saleId));
+  return formatInvoiceNumber(sale!.code, sale!.number);
+}
+
+const copyNumber = (copy: SaleCopy) => formatInvoiceNumber(copy.code, copy.number);
+const STUB_PDF = new TextEncoder().encode("%PDF-stub");
 
 function exportMonth(app: Hono, month: string, init: RequestInit & { cookie?: string } = {}) {
   const { cookie = managerDashboard, headers, ...rest } = init;
@@ -288,26 +301,39 @@ describe("the month's export", () => {
     });
   });
 
-  it("writes one CSV row per VAT rate, money with a decimal point, in the venue's language by default", async () => {
+  it("writes one CSV row per VAT rate, money with a decimal comma, in the venue's language by default", async () => {
     const lines = csvLines(await unzipped(await exportMonth(mount(), "2026-01")));
-    expect(lines[0]).toContain('"Número de factura"');
-    const twoRates = lines.filter((line) => line.includes("'=Cliente Mayorista SL"));
-    const ofTwoRates = twoRates.filter((line) => line.includes('"F1"') && line.includes('"15.40"'));
+    expect(lines[0]).toContain(`"${TAX_OFFICE_EXPORT_WORDS.es.columns.number}"`);
+    const twoRates = lines.filter((line) => line.includes("'=Wholesale Customer Ltd"));
+    const ofTwoRates = twoRates.filter((line) => line.includes('"F1"') && line.includes('"15,40"'));
     expect(ofTwoRates).toHaveLength(2);
-    expect(ofTwoRates.some((line) => line.includes('"10","3.30","0.33"'))).toBe(true);
-    expect(ofTwoRates.some((line) => line.includes('"21","12.10","2.54"'))).toBe(true);
+    expect(ofTwoRates.some((line) => line.includes('"10","3,30","0,33"'))).toBe(true);
+    expect(ofTwoRates.some((line) => line.includes('"21","12,10","2,54"'))).toBe(true);
     // Seven invoices less the one of February, plus one extra row for the second rate.
     expect(lines).toHaveLength(1 + 6 + 1);
     expect(lines.filter((line) => /"\d{4}-\d{2}-\d{2}"$/.test(line))).toHaveLength(1);
   });
 
-  it("writes the header in the person's language", async () => {
+  it("writes the header and the amounts in the person's language", async () => {
     const lines = csvLines(
       await unzipped(
         await exportMonth(mount(), "2026-01", { headers: { "Accept-Language": "en-GB" } }),
       ),
     );
     expect(lines[0]).toContain('"Invoice number"');
+    const ofTwoRates = lines.filter((line) => line.includes("'=Wholesale Customer Ltd"));
+    expect(ofTwoRates.some((line) => line.includes('"21","12.10","2.54","15.40"'))).toBe(true);
+  });
+
+  it("takes an invoice's issue date and time from the offset filed with it", async () => {
+    // 00:00 on 1 October in Madrid; the fixture's clock files an offset of one hour, so the record
+    // says 23:00 on 30 September, and the venue's zone puts the sale in October.
+    await issueAt("2026-09-30T22:00:00.000Z", seriesIds.standard);
+    const lines = csvLines(
+      await unzipped(await exportMonth(mount({ render: countingRender().render }), "2026-10")),
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('"2026-09-30","23:00:00"');
   });
 
   it("gives a README and a header-only CSV for a month with no invoices", async () => {
@@ -389,11 +415,17 @@ describe("the month's export", () => {
   });
 
   it("frees the export for the next once one errors or finishes", async () => {
+    const aborted = new AbortController();
     const app = mount({
-      render: () => Promise.reject(new Error("render failed")),
+      render: () => {
+        aborted.abort();
+        return Promise.reject(new Error("render failed"));
+      },
     });
-    const failed = (await exportMonth(app, "2026-01")).body!.getReader();
-    expect(await drain(failed)).toMatchObject({ message: "render failed" });
+    const failed = (
+      await exportMonth(app, "2026-01", { signal: aborted.signal })
+    ).body!.getReader();
+    expect(await drain(failed)).toMatchObject({ name: "AbortError" });
     const idle = await exportMonth(app, "2025-06");
     expect(idle.status).toBe(200);
     // A body nobody has read yet holds the export until it is cancelled.
@@ -402,6 +434,129 @@ describe("the month's export", () => {
     const finished = await exportMonth(app, "2025-06");
     expect(Object.keys(await unzipped(finished))).toHaveLength(2);
     expect((await exportMonth(app, "2025-06")).status).toBe(200);
+  });
+
+  it("leaves out a copy that cannot be drawn, names it in failed.txt and logs it", async () => {
+    const ticket = await numberOf(january.ticket!);
+    const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+    const drawn: string[] = [];
+    const app = mount(
+      {
+        render: (copy) => {
+          drawn.push(copyNumber(copy));
+          return copyNumber(copy) === ticket
+            ? Promise.reject(new Error("cannot draw"))
+            : Promise.resolve(STUB_PDF);
+        },
+      },
+      (level, event, fields) => logged.push({ level, event, ...(fields ? { fields } : {}) }),
+    );
+    const response = await exportMonth(app, "2026-01", {
+      headers: { "Accept-Language": "en-GB" },
+    });
+    const files = await unzipped(response);
+    expect(drawn).toHaveLength(6);
+    const pdfs = Object.keys(files).filter((name) => name.endsWith(".pdf"));
+    expect(pdfs).toHaveLength(5);
+    expect(Object.keys(files)).toContain("failed.txt");
+    expect(strFromU8(files["failed.txt"]!)).toBe(TAX_OFFICE_EXPORT_WORDS.en.failed([ticket]));
+    expect(csvLines(files)).toHaveLength(1 + 6 + 1);
+    expect(logged).toEqual([
+      {
+        level: "error",
+        event: "tax_office.copy_failed",
+        fields: {
+          saleId: january.ticket,
+          invoiceNumber: ticket,
+          errorCode: "unknown",
+          errorClass: "Error",
+        },
+      },
+    ]);
+  });
+
+  it("still stops when the request is aborted while a copy fails", async () => {
+    const aborted = new AbortController();
+    const logged: string[] = [];
+    const drawn: string[] = [];
+    const response = await exportMonth(
+      mount(
+        {
+          render: (copy) => {
+            drawn.push(copyNumber(copy));
+            aborted.abort();
+            return Promise.reject(new Error("cannot draw"));
+          },
+        },
+        (_level, event) => logged.push(event),
+      ),
+      "2026-01",
+      { signal: aborted.signal },
+    );
+    expect(await drain(response.body!.getReader())).toMatchObject({ name: "AbortError" });
+    expect(drawn).toHaveLength(1);
+    expect(logged).toEqual(["tax_office.export_stopped"]);
+  });
+
+  it("draws every copy outside the write lock, oldest first, with a turn of the event loop between", async () => {
+    const database = db();
+    const original = database.withWriteLock.bind(database);
+    let held = false;
+    let lockTurns = 0;
+    const lock = vi.spyOn(database, "withWriteLock").mockImplementation(((
+      body: () => Promise<unknown>,
+    ) =>
+      original(async () => {
+        held = true;
+        lockTurns++;
+        try {
+          return await body();
+        } finally {
+          held = false;
+        }
+      })) as typeof database.withWriteLock);
+    const drawnUnderLock: boolean[] = [];
+    const turnBefore: boolean[] = [];
+    const drawn: string[] = [];
+    let queued: { ran: boolean } | null = null;
+    try {
+      await unzipped(
+        await exportMonth(
+          mount({
+            render: (copy) => {
+              drawn.push(copyNumber(copy));
+              drawnUnderLock.push(held);
+              if (queued !== null) turnBefore.push(queued.ran);
+              const mark = { ran: false };
+              queued = mark;
+              setImmediate(() => {
+                mark.ran = true;
+              });
+              return Promise.resolve(STUB_PDF);
+            },
+          }),
+          "2026-01",
+        ),
+      );
+    } finally {
+      lock.mockRestore();
+    }
+    // The month's pages and each copy's read took the lock.
+    expect(lockTurns).toBeGreaterThan(6);
+    expect(drawnUnderLock).toEqual([false, false, false, false, false, false]);
+    expect(turnBefore).toEqual([true, true, true, true, true]);
+    expect(drawn).toEqual(
+      await Promise.all(
+        [
+          january.twoRates!,
+          january.ticket!,
+          january.voided!,
+          january.fA!,
+          january.fUnderA!,
+          january.lastEvening!,
+        ].map(numberOf),
+      ),
+    );
   });
 
   it("reads a month longer than one page whole, each invoice once", async () => {
@@ -440,6 +595,7 @@ it("errors when the last turn's authority names a different person from the firs
       tradingContext: venue.cfg,
       render: () => Promise.reject(new Error("no invoice to render")),
       stopIfAsked: () => {},
+      log: () => {},
     },
     {
       month: "2025-06",
@@ -467,6 +623,7 @@ describe("the month's CSV and README", () => {
     kind: "F2",
     issuedAt: "2026-01-12T11:00:00.000Z",
     issueDate: "2026-01-12",
+    issueTime: "12:00:00",
     operationDate: "2026-01-11",
     customerName: null,
     customerTaxId: null,
@@ -493,9 +650,37 @@ describe("the month's CSV and README", () => {
     expect(line).toContain('"\'=1+1","-1.00","-0.10"');
   });
 
+  it("writes a credit note's negative amounts with the language's decimal mark", () => {
+    const credit: TaxOfficeInvoice = {
+      ...row,
+      kind: "R5",
+      vat: [{ rate: "5.5", base: "-2.84", tax: "-0.16" }],
+      total: decimal("-3.00"),
+    };
+    const line = (language: "en" | "es") =>
+      new TextDecoder()
+        .decode(renderTaxOfficeCsv([credit], language, "Europe/Madrid"))
+        .split("\r\n")[1];
+    expect(line("en")).toContain('"5.5","-2.84","-0.16","-3.00"');
+    expect(line("es")).toContain('"5,5","-2,84","-0,16","-3,00"');
+  });
+
   it("leaves the venue's name out of the README when there is none", () => {
     const args = { venue: null, month: "2026-01", timeZone: "Europe/Madrid", date: "2026-02-01" };
+    const firstLine = (text: string) => text.split("\r\n")[0]!;
+    for (const words of [TAX_OFFICE_EXPORT_WORDS.en, TAX_OFFICE_EXPORT_WORDS.es]) {
+      const named = firstLine(words.readme({ ...args, venue: "Harbour Bar" }));
+      expect(named).toContain(" Harbour Bar ");
+      expect(firstLine(words.readme(args))).toBe(named.replace(/ \S+ Harbour Bar/, ""));
+    }
     expect(TAX_OFFICE_EXPORT_WORDS.en.readme(args)).toMatch(/^Invoices issued in 2026-01,/);
-    expect(TAX_OFFICE_EXPORT_WORDS.es.readme(args)).toMatch(/^Facturas expedidas en 2026-01,/);
+  });
+
+  it("says in the README what a failed.txt lists", () => {
+    const args = { venue: null, month: "2026-01", timeZone: "Europe/Madrid", date: "2026-02-01" };
+    for (const words of [TAX_OFFICE_EXPORT_WORDS.en, TAX_OFFICE_EXPORT_WORDS.es]) {
+      expect(words.readme(args)).toContain("failed.txt");
+      expect(words.failed(["A/1", "B/2"])).toMatch(/\r\nA\/1\r\nB\/2\r\n$/);
+    }
   });
 });
