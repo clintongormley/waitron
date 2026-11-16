@@ -197,6 +197,9 @@ hook, or how tests are scheduled. What named guards miss:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
+- **`pnpm test <file> -t "name"`, with or without `--filter <pkg>`, drops the `-t` and runs the
+  whole file, passing** (pnpm 9.15.0); a bare `--` before the `-t`, `pnpm run test` and
+  `exec vitest run` keep it. Nothing guards it. [Receipt](docs/developers/testing-guide.md#pnpm-test-drops-a-name-filter-without-a-bare-double-dash).
 - **Adding a workspace package requires naming it in the root guards' shard lists.**
   A missing entry can crash a guard rather than assert.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
@@ -813,6 +816,10 @@ passed while proving nothing.
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
   answered — never by a fixed sleep.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
+- **A test of two writers on one lock starts the waiting side only after the holding side signals
+  that it holds the lock.** Started one after the other, they race and the test proves nothing.
+  Cost: #456's first version passed locally and timed out on CI. Nothing guards it.
+  [Receipt](docs/developers/testing-guide.md#a-two-sided-concurrency-test-starts-the-waiting-side-after-the-holding-side-says-it-holds).
 - **Dispatch events when testing a `composedPath()` guard.** [Detail](docs/developers/testing-guide.md).
 - **A click whose outcome depends on whether an update one listener schedules has run before a later
   listener sees the click is tested with `userEvent.click`, not `element.click()`.** Nothing guards
@@ -856,6 +863,10 @@ passed while proving nothing.
   When a fixture describes something an authority will judge, run the real check over it.
 - **Treat “there is a test” as unfinished: name the assertion that fails if behaviour is deleted.**
   Coverage alone and “doesn't throw” do not answer it; `pnpm --filter @waitron/ui mutation` checks it.
+- **A test grid that varies two inputs separately never tests them together: list the pairs a
+  person meets, above all the screen's default load.** Cost: #339's image library answered every
+  first visit with a 500 after green CI. Nothing guards it.
+  [Receipt](docs/developers/testing-guide.md#a-matrix-that-varies-two-inputs-separately-never-tests-them-together).
 - **Rejected writes assert the domain error code.** A database constraint error also satisfies
   `toBeInstanceOf(Error)`.
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`**, weaker than

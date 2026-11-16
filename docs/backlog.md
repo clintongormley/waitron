@@ -1811,7 +1811,7 @@ under another key fall outside that check.
   transfer from indexing.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
-- **One small pull request for rule lines** (bundle of 5, size S). [Detail](backlog/ci.md#bundle-one-small-pull-request-for-rule-lines)
+- **One small pull request for rule lines** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-one-small-pull-request-for-rule-lines)
 
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
