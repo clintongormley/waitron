@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, ne, isNull, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
 import {
   openingHours,
   menuPeriods,
@@ -186,7 +186,7 @@ export async function deletePeriod(
       .update(openingHours)
       .set({ periodId: replacementId })
       .where(eq(openingHours.periodId, periodId));
-    await joinTouchingRanges(tx, dayKeys, clock, at);
+    await joinTouchingRanges(tx, period.departmentId, dayKeys, clock, at);
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
   await assertWaitingChangeFits(tx, at, clock);
@@ -201,6 +201,7 @@ const dayKey = (row: DayKey) =>
 
 async function joinTouchingRanges(
   tx: Transaction,
+  departmentId: string,
   days: readonly DayKey[],
   clock: BusinessDayClock,
   at: Date,
@@ -220,27 +221,12 @@ async function joinTouchingRanges(
     })
     .from(openingHours)
     .leftJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
-    .where(
-      or(
-        ...days.map((day) =>
-          and(
-            eq(openingHours.departmentId, day.departmentId!),
-            day.seasonId === null
-              ? isNull(openingHours.seasonId)
-              : eq(openingHours.seasonId, day.seasonId),
-            day.weekday === null
-              ? isNull(openingHours.weekday)
-              : eq(openingHours.weekday, day.weekday),
-            day.specialDayDateId === null
-              ? isNull(openingHours.specialDayDateId)
-              : eq(openingHours.specialDayDateId, day.specialDayDateId),
-          ),
-        ),
-      ),
-    );
+    .where(eq(openingHours.departmentId, departmentId));
+  const affected = new Set(days.map(dayKey));
   const undated = inForceClock(clock, at).dayCutover;
   const byDay = new Map<string, typeof rows>();
   for (const row of rows) {
+    if (!affected.has(dayKey(row))) continue;
     const day = byDay.get(dayKey(row));
     if (day === undefined) byDay.set(dayKey(row), [row]);
     else day.push(row);

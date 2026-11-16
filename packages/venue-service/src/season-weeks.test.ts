@@ -19,6 +19,7 @@ import {
   type Database,
   type Transaction,
   openingHours,
+  insertInChunks,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -347,6 +348,36 @@ it("a department week writes one opening_hours row per range and none for empty 
     writeDepartmentSeasonWeeks(tx, v.departmentId, [seasonId], [[], [], [], [], [], [], []]),
   );
   expect(await db.select().from(openingHours)).toEqual([]);
+});
+
+it("writes all ranges when a department's season weeks exceed one statement's bound values", async () => {
+  const v = await venue();
+  await db.delete(seasons);
+  const seasonRows = Array.from({ length: 300 }, (_, day) => ({
+    id: randomUUID(),
+    name: `Season ${day}`,
+    startsOn: new Date(Date.UTC(2025, 0, day + 1)).toISOString().slice(5, 10),
+  }));
+  await scoped(async (tx) => {
+    await insertInChunks(tx, seasons, seasonRows);
+    await writeDepartmentSeasonWeeks(
+      tx,
+      v.departmentId,
+      seasonRows.map(({ id }) => id),
+      Array.from({ length: 7 }, () => [
+        { periodId: v.lunch, startsAt: "12:00", endsAt: "14:00" },
+        { periodId: v.dinner, startsAt: "14:00", endsAt: "16:00" },
+      ]),
+    );
+  });
+  const rows = await db.select().from(openingHours);
+  expect(rows).toHaveLength(4200);
+  for (const season of seasonRows) {
+    const own = rows.filter((row) => row.seasonId === season.id);
+    expect(own).toHaveLength(14);
+    expect(own.filter((row) => row.periodId === v.lunch)).toHaveLength(7);
+    expect(own.filter((row) => row.periodId === v.dinner)).toHaveLength(7);
+  }
 });
 
 describe("replaceMenuWeek writes season weeks", () => {

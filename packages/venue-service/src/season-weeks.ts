@@ -1,5 +1,11 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { readVenueClock, seasons, openingHours, type Transaction } from "@waitron/db";
+import {
+  readVenueClock,
+  seasons,
+  openingHours,
+  insertInChunks,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -87,8 +93,6 @@ export async function writeDepartmentSeasonWeeks(
   week: readonly (readonly ServiceRange[])[],
 ): Promise<void> {
   assertWeek(week);
-  // A null period is Closed, which only a special-day date may hold
-  // (`packages/db/src/schema/venue-service/seasons.ts`).
   if (week.some((day) => day.some((range) => typeof range.periodId !== "string")))
     throw new Error("a season week takes periods only");
   if (seasonIds.length === 0) return;
@@ -113,7 +117,7 @@ export async function writeDepartmentSeasonWeeks(
       })),
     ),
   );
-  if (ranges.length > 0) await tx.insert(openingHours).values(ranges);
+  if (ranges.length > 0) await insertInChunks(tx, openingHours, ranges);
 }
 
 export async function writeZoneSeasonWeeks(
@@ -216,14 +220,11 @@ export async function readDepartmentSeasonWeeks(
       ownerId: row.departmentId!,
       seasonId: row.seasonId!,
       weekday: row.weekday!,
-      range:
-        row.startsAt === null
-          ? null
-          : {
-              periodId: row.periodId!,
-              startsAt: wireTime(row.startsAt),
-              endsAt: wireTime(row.endsAt!),
-            },
+      range: {
+        periodId: row.periodId!,
+        startsAt: wireTime(row.startsAt),
+        endsAt: wireTime(row.endsAt),
+      },
     })),
     dayCutover,
   );

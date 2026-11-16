@@ -6,6 +6,8 @@ import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@w
 import {
   CORE_MIGRATIONS,
   openingHours,
+  insertInChunks,
+  specialDays,
   categories,
   kitchenStations,
   menuPeriods,
@@ -140,7 +142,7 @@ const specialDay = (
       ).id,
   );
 
-it("a replacement joins only its own department and season weekday, and no replacement removes its ranges", async () => {
+it("a replacement joins each season weekday separately, and no replacement removes its ranges", async () => {
   const v = await venue();
   const week = (periodId: string) =>
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -152,7 +154,7 @@ it("a replacement joins only its own department and season weekday, and no repla
     replaceMenuWeek(tx, v.restaurant, week(v.lunch), WRITE_AT, 1, { seasonId: v.seasons.autumn }),
   );
   await scoped((tx) =>
-    replaceMenuWeek(tx, v.restaurant, week(v.afternoon), WRITE_AT, 1, {
+    replaceMenuWeek(tx, v.restaurant, week(v.lunch), WRITE_AT, 1, {
       seasonId: v.seasons.summer,
     }),
   );
@@ -163,12 +165,61 @@ it("a replacement joins only its own department and season weekday, and no repla
   ).toMatchObject([{ weekday: 3, periodId: v.dinner, startsAt: "12:00:00", endsAt: "16:00:00" }]);
   expect(
     rows.filter((row) => row.departmentId === v.restaurant && row.seasonId === v.seasons.summer),
-  ).toHaveLength(2);
-  expect(rows.filter((row) => row.departmentId === v.deli)).toEqual([]);
+  ).toMatchObject([{ weekday: 3, periodId: v.dinner, startsAt: "12:00:00", endsAt: "16:00:00" }]);
   await scoped((tx) => deletePeriod(tx, v.dinner, null, WRITE_AT, 1));
   expect(await db.select().from(openingHours).where(eq(openingHours.periodId, v.dinner))).toEqual(
     [],
   );
+});
+
+it("replaces a period across a thousand retained special-day dates", async () => {
+  const v = await venue();
+  const dates = Array.from({ length: 1000 }, (_, day) => ({
+    id: randomUUID(),
+    date: new Date(Date.UTC(2020, 0, day + 1)).toISOString().slice(0, 10),
+  }));
+  await scoped(async (tx) => {
+    const [event] = await tx.insert(specialDays).values({ name: "Private events" }).returning();
+    await insertInChunks(
+      tx,
+      specialDayDates,
+      dates.map((date) => ({ ...date, specialDayId: event!.id })),
+    );
+    await insertInChunks(
+      tx,
+      openingHours,
+      dates.flatMap(({ id }) => [
+        {
+          departmentId: v.restaurant,
+          specialDayDateId: id,
+          kind: "period" as const,
+          periodId: v.lunch,
+          startsAt: "12:00:00",
+          endsAt: "14:00:00",
+        },
+        {
+          departmentId: v.restaurant,
+          specialDayDateId: id,
+          kind: "period" as const,
+          periodId: v.dinner,
+          startsAt: "14:00:00",
+          endsAt: "16:00:00",
+        },
+      ]),
+    );
+    await deletePeriod(tx, v.lunch, v.dinner, WRITE_AT, 1);
+  });
+  const rows = await db
+    .select({
+      periodId: openingHours.periodId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
+    })
+    .from(openingHours)
+    .where(sql`${openingHours.specialDayDateId} is not null`);
+  expect(rows).toHaveLength(1000);
+  for (const row of rows)
+    expect(row).toEqual({ periodId: v.dinner, startsAt: "12:00:00", endsAt: "16:00:00" });
 });
 
 describe("where a period is painted", () => {

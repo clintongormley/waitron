@@ -1166,6 +1166,12 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).toThrowError(refusal("opening_hours"));
   });
 
+  it("refuses a department range whose kind does not match its period", () => {
+    const tables = seasonTables();
+    tables.opening_hours!.find((row) => row.department_id === RESTAURANT)!.kind = "open";
+    expect(() => validate(tables, clock)).toThrowError(refusal("opening_hours.kind"));
+  });
+
   it("refuses overlapping ranges on one season's day, but not the same hours in two seasons", () => {
     const tables = seasonTables();
     tables.opening_hours!.push(range("w-sat", LATE, "08:00:00", "10:00:00"));
