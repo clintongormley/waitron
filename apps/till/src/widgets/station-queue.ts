@@ -17,6 +17,7 @@ import {
 } from "@waitron/shared";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { nutritionIconStyles } from "./nutrition-icons.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, quantityText } from "./dish-format.js";
 import {
@@ -187,6 +188,7 @@ export class TillStationQueue extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    nutritionIconStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
     segmentedOptionStyles,
@@ -417,9 +419,6 @@ export class TillStationQueue extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* The dish's OWN allergen profile (modifier↔allergen), indented beneath the dish + modifiers:
-         localised "contains" chips. A flex-wrap row (chips flow), the same indent as
-         the modifiers list. */
       .line-allergens {
         display: flex;
         flex-wrap: wrap;
@@ -432,13 +431,6 @@ export class TillStationQueue extends LitElement {
 
       .allergen-label {
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .allergen-chip {
-        display: inline-block;
-        padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full, 999px);
       }
 
       /* The as-served DIET & contains row (dietary-classification, Task 7), indented like the allergen

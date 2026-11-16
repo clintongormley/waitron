@@ -1,9 +1,11 @@
 import { afterEach, expect, it } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { OrderLine } from "../state/working-order.js";
 import type { TillProduct } from "../api/client.js";
 import { TillLastAdded } from "./last-added.js";
+import { allergenLabel } from "../i18n/allergen-names.js";
+import { currentLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 const dish: TillProduct = {
@@ -143,4 +145,12 @@ it("A738 last-added follows a new store and ignores later old-store changes", as
   await el.updateComplete;
   expect(el.shadowRoot!.textContent).toContain("×5");
   expect(el.shadowRoot!.textContent).not.toContain("×9");
+});
+
+it("names the last-added dish's allergens in its detail button's accessible name", async () => {
+  const gluten = allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale());
+  const { el } = await mount("1", { ...dish, allergens: { gluten: { kinds: ["wheat"] } } });
+  await expect
+    .element(page.elementLocator(detail(el)))
+    .toHaveAccessibleName(new RegExp(`Staff soup\\s*${gluten.replace(/[()]/g, "\\$&")}\\s*×1`));
 });

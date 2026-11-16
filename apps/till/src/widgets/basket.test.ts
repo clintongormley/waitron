@@ -426,13 +426,13 @@ describe("till-basket", () => {
     // con gluten"/"Cereals containing gluten" both contain the word, so its presence proves it stayed).
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).toMatch(/gluten/i);
     // The base was reviewed, so nothing is pending: no "not fully reviewed" note.
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).not.toMatch(/review|pendiente/i);
   });
@@ -466,12 +466,12 @@ describe("till-basket", () => {
     const dishAllergens = el.shadowRoot!.querySelector(`.line > .name .nutrition-icons`);
     expect(
       [...dishAllergens!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).toMatch(/gluten/i);
     expect(
       [...dishAllergens!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).not.toContain(milkName);
 
@@ -570,12 +570,12 @@ describe("till-basket", () => {
     expect(asServed).not.toBeNull();
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).toMatch(/gluten/i);
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).not.toMatch(/review|pendiente/i);
   });
@@ -618,17 +618,17 @@ describe("till-basket", () => {
     // The dish's own gluten shows; the offered cheese's milk is NOT folded in (it was not picked).
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).toMatch(/gluten/i);
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).not.toMatch(/milk|leche/i);
     expect(
       [...asServed!.querySelectorAll("wt-icon")]
-        .map((icon) => icon.getAttribute("label"))
+        .map((icon) => icon.getAttribute("aria-label"))
         .join(" "),
     ).not.toMatch(/review|pendiente/i);
     // An unresolvable pick gets no nutrition chrome rather than an empty declaration.
@@ -1454,9 +1454,9 @@ describe("A668 nutrition beside the dish name", () => {
     );
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const name = el.shadowRoot!.querySelector(".line > .name")!;
-    expect(name.querySelector('wt-icon[name="allergen-nuts"]')?.getAttribute("label")).toMatch(
-      /almond|almendra/i,
-    );
+    const nuts = name.querySelector('wt-icon[name="allergen-nuts"]');
+    expect(nuts?.getAttribute("role")).toBe("img");
+    expect(nuts?.getAttribute("aria-label")).toMatch(/almond|almendra/i);
     expect(name.querySelector('wt-icon[name="diet-no_fish"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector(".line-allergens")).toBeNull();
     expect(el.shadowRoot!.querySelector(".line-diet")).toBeNull();

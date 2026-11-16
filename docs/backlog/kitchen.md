@@ -136,13 +136,6 @@ and now records its stations. Left open by A756 PR 6's review.
   supervisor gets a read-only view, which would now mean offering stations in a read-only
   Calendar's Show — left open by A506-12.
 
-## The earliest fire time is picked by comparing the stored times as text
-
-- Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
-  right only while every writer stores the same `toISOString()` form (every writer found uses
-  `nowIso()`; not proven for all). Left open by the table actions plan's Task 9 (#874, dishes arriving in a
-  party get a kitchen group).
-
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first (a bare raise of a started dish is not refused as started, A1382), but across a
@@ -181,13 +174,6 @@ listing only the burger.
 
 The owner chose to fix it (2026-11-06): a cook is not left with two tickets for one dish. It lands
 in A1308's orders and sales slice, which rebuilds the table anyway.
-
-## Bundle: What a kitchen card draws
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **The kitchen screens and the pass still show allergens as text chips.** A668 brings icons to the
-  editor, the till's buttons and its order list, not to these screens.
 
 ## Bundle: Held paper followups
 

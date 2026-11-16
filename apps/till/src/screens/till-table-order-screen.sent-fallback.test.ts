@@ -52,9 +52,9 @@ it.each([false, true])(
     const dish = fallback!.querySelector('[data-sent-fallback-line="stored-dish"]')!;
     expect(dish.textContent!.replace(/\s+/g, " ")).toContain("Recorded dish ×2");
     expect(dish.textContent).toContain("No salt $& $'");
-    expect(
-      dish.querySelector('wt-icon[name="allergen-gluten"]')?.getAttribute("label") ?? "",
-    ).toMatch(/rye|centeno/i);
+    const gluten = dish.querySelector('wt-icon[name="allergen-gluten"]');
+    expect(gluten?.getAttribute("role")).toBe("img");
+    expect(gluten?.getAttribute("aria-label") ?? "").toMatch(/rye|centeno/i);
     expect(dish.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
     expect(dish.querySelector("[data-sent-fallback-price]")!.textContent!.replace(/\s/g, "")).toBe(
       "Was€10.00€6.50",

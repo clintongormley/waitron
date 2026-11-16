@@ -2167,6 +2167,50 @@ describe("Sent panel read facts (A773)", () => {
     });
   });
 
+  it("picks the earliest fire and request and the latest ready time by time, not by how each is written", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [
+      {
+        ...line(v, "steak"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+    ]);
+    const rows = await linesByName(s.partyId);
+    const parent = rows.find((row) => row.parentLineId === null)!;
+    const extra = rows.find((row) => row.parentLineId === parent.id)!;
+    // Each extra time sorts the other way as text: 10:30+01:00 is 09:30Z, 11:20+01:00 is 10:20Z.
+    await inTx(async (tx) => {
+      const [ticket] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, parent.id));
+      await tx
+        .update(ticketItems)
+        .set({
+          state: "ready",
+          requestedAt: "2026-11-16T10:00:00.000Z",
+          firedAt: "2026-11-16T10:00:00.000Z",
+          readyAt: "2026-11-16T10:50:00.000Z",
+        })
+        .where(eq(ticketItems.id, ticket!.id));
+      await tx.insert(ticketItems).values({
+        ...ticket!,
+        id: randomUUID(),
+        workingOrderLineId: extra.id,
+        state: "ready",
+        requestedAt: "2026-11-16T10:30:00+01:00",
+        firedAt: "2026-11-16T10:30:00+01:00",
+        readyAt: "2026-11-16T11:20:00+01:00",
+      });
+    });
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      firedAt: "2026-11-16T10:30:00+01:00",
+      requestedAt: "2026-11-16T10:30:00+01:00",
+      readyAt: "2026-11-16T10:50:00.000Z",
+    });
+  });
+
   it("uses the sent time of a no-preparation dish without inventing kitchen readiness", async () => {
     const v = await setupVenue();
     const s = await seated(v);

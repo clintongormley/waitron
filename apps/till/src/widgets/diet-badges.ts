@@ -3,6 +3,7 @@ import { type TemplateResult, css, html, nothing } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import type { DietProfile } from "../api/client.js";
+import { nutritionIcons } from "./nutrition-icons.js";
 
 const SUITABILITY_KEYS = {
   vegan: "diet.vegan",
@@ -18,7 +19,8 @@ function dietBadge(key: string, label: string): TemplateResult {
 /**
  * An EXTRA's OWN nutrition, offered or selected. This is NOT a fold: the dish shows its figures and
  * each extra shows its own. Unlike {@link dietBadges}, an extra's suitability is a DIRECT positive
- * claim, so there is no pending/"not reviewed" state.
+ * claim, so there is no pending/"not reviewed" state. `icons` draws the allergens as the kitchen
+ * screens draw a dish's own; otherwise they are text chips.
  */
 export function extraNutrition(
   extra: {
@@ -27,22 +29,27 @@ export function extraNutrition(
   },
   allergensTest: string,
   dietTest: string,
-  locale?: string,
+  { icons = false }: { icons?: boolean } = {},
 ): TemplateResult | typeof nothing {
-  const codes = Object.keys(extra.addAllergens ?? {}).sort();
+  const allergens = extra.addAllergens ?? {};
+  const codes = Object.keys(allergens).sort();
   const diets = (extra.suitableFor ?? []).filter(
     (label): label is keyof typeof SUITABILITY_KEYS => label in SUITABILITY_KEYS,
   );
   if (codes.length === 0 && diets.length === 0) return nothing;
-  const loc = locale ?? currentLocale();
+  const loc = currentLocale();
   const tr = (key: Parameters<typeof t>[0]): string => t(key, loc);
   return html`<span class="extra-nutrition">
     ${
       codes.length > 0
         ? html`<span class="extra-allergens" data-test=${allergensTest}
-            >${codes.map(
-              (code) => html`<span class="allergen-chip">${allergenName(code, loc)}</span>`,
-            )}</span
+            >${
+              icons
+                ? nutritionIcons(allergens, [], { size: "lg" })
+                : codes.map(
+                    (code) => html`<span class="allergen-chip">${allergenName(code, loc)}</span>`,
+                  )
+            }</span
           >`
         : nothing
     }

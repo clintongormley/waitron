@@ -805,7 +805,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the as-served allergen board (contains chips, pending note) has no violations", async () => {
+  it("the as-served allergen board (allergen icons, a dish still pending review) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: allergenGroups, stationId: "st-1" },

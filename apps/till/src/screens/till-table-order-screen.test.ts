@@ -5744,9 +5744,9 @@ describe("A668 nutrition after table-order names", () => {
     el.style.width = "1280px";
     await resized(el);
     const name = el.shadowRoot!.querySelector("[data-sent-fallback-line] .sent-fallback-name")!;
-    expect(name.querySelector('wt-icon[name="allergen-gluten"]')?.getAttribute("label")).toMatch(
-      /rye|centeno/i,
-    );
+    const gluten = name.querySelector('wt-icon[name="allergen-gluten"]');
+    expect(gluten?.getAttribute("role")).toBe("img");
+    expect(gluten?.getAttribute("aria-label")).toMatch(/rye|centeno/i);
     expect(name.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
   });
 
@@ -5831,9 +5831,9 @@ describe("A668 nutrition after table-order names", () => {
     await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
     await panel.updateComplete;
     const row = panel.shadowRoot!.querySelector('[data-fired-line="other-bill-line"]')!;
-    expect(row.querySelector('wt-icon[name="allergen-nuts"]')?.getAttribute("label")).toMatch(
-      /hazelnut|avellana/i,
-    );
+    const nuts = row.querySelector('wt-icon[name="allergen-nuts"]');
+    expect(nuts?.getAttribute("role")).toBe("img");
+    expect(nuts?.getAttribute("aria-label")).toMatch(/hazelnut|avellana/i);
     expect(row.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
   });
 });

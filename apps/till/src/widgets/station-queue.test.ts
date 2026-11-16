@@ -3,8 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages, setHelpMode } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  namedIcons,
+  pageAt,
+  resetPage,
+  textRects,
+} from "./test-helpers.js";
+import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "../i18n/help-strings.js";
 import { es } from "../i18n/strings.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
@@ -509,17 +516,20 @@ describe("till-station-queue", () => {
       });
       const milkName = allergenName("milk", currentLocale());
       const optAllergens = el.shadowRoot!.querySelector(
-        '[data-test="item-modifier-allergens-ti-9-0"]',
-      );
-      expect(optAllergens).not.toBeNull();
-      expect(optAllergens!.textContent).toContain(milkName);
+        '.modifier [data-test="item-modifier-allergens-ti-9-0"]',
+      )!;
+      expect(await namedIcons(optAllergens)).toEqual([["allergen-milk", "img", milkName]]);
+      expect(optAllergens.querySelector(".allergen-chip")).toBeNull();
       const optDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-ti-9-0"]');
       expect(optDiet).not.toBeNull();
       expect(optDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
       // The dish's OWN allergen row shows its gluten, a node distinct from the extra's milk (no fold).
-      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]');
-      expect(dishAllergens!.textContent).toMatch(/gluten/i);
-      expect(dishAllergens!.textContent).not.toContain(milkName);
+      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]')!;
+      expect(await namedIcons(dishAllergens)).toEqual([
+        ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+      ]);
+      expect(dishAllergens.querySelector(".allergen-chip")).toBeNull();
+      expect(dishAllergens.textContent).toContain(t("allergens.contains"));
     });
     it("draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
       const item = {
@@ -617,7 +627,7 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
+  describe("as-served allergens: the dish's own allergen icons + not-reviewed note", () => {
     const withAllergens: StationQueueGroup = {
       kitchenNote: null,
       orderId: "wo-a",
@@ -676,13 +686,19 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("shows the dish's own localised 'Milk' contains chip", async () => {
+    it("shows the dish's own milk icon, named in the screen's language", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
         stationId: "st-a",
       });
       const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(item.textContent).toMatch(/milk/i);
+      const row = item.querySelector('[data-item-allergens="ti-a"]')!;
+      expect(await namedIcons(row)).toEqual([
+        ["allergen-milk", "img", allergenName("milk", currentLocale())],
+      ]);
+      expect(row.querySelector("wt-icon")!.getAttribute("aria-label")).toMatch(
+        currentLocale().startsWith("es") ? /leche/i : /milk/i,
+      );
     });
 
     it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {
@@ -2067,9 +2083,11 @@ describe("cross-station extra references", () => {
     expect(line.querySelector("[data-crossref]")!.textContent).toContain(
       "with CHIPS x2 from Fryer",
     );
-    expect(line.querySelector("[data-crossref]")!.textContent).toContain(
-      allergenName("gluten", currentLocale()),
-    );
+    const crossRefAllergens = line.querySelector("[data-crossref] .extra-allergens")!;
+    expect(await namedIcons(crossRefAllergens)).toEqual([
+      ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+    ]);
+    expect(crossRefAllergens.querySelector(".allergen-chip")).toBeNull();
     expect(line.textContent).not.toContain("+ CHIPS");
     expect(line.textContent).toContain("Queso");
   });

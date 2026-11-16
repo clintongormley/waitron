@@ -1151,6 +1151,22 @@ describe("each station's oldest ready time", () => {
     },
   );
 
+  it.each([
+    ["first", 1, "01"],
+    ["second", 2, "04"],
+  ])(
+    "a ready time that does not parse is never the oldest when the %s line holds it",
+    async (_place, badLine, oldest) => {
+      const { v, bar, table2, tabId } = await readyTable(["1", "1"]);
+      await setReadyAt(v, tabId, badLine, "not a time");
+      const barEntry = (await floorRow(v, table2)).signals
+        .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
+        .find((entry) => entry.stationId === bar);
+
+      expect(barEntry).toMatchObject({ count: 2, oldestReadyAt: at(oldest) });
+    },
+  );
+
   it("serving the oldest ready dish moves the oldest ready time to the next", async () => {
     const { v, bar, table2, partyId, tabId } = await readyTable(["2", "1"]);
     const barEntry = async () =>

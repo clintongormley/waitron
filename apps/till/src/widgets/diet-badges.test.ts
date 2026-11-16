@@ -1,8 +1,9 @@
 import { afterEach, expect, it } from "vitest";
 import { nothing, render } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { dietBadges, extraNutrition } from "./diet-badges.js";
+import { namedIcons } from "./test-helpers.js";
 
 const hosts: HTMLElement[] = [];
 afterEach(() => hosts.splice(0).forEach((host) => host.remove()));
@@ -31,6 +32,28 @@ it("shows an extra's allergens alone when it declares no suitability", () => {
   expect(host.querySelector('[data-test="allergens-x"]')!.textContent).toContain(
     allergenName("milk", currentLocale()),
   );
+  expect(host.querySelector(".allergen-chip")).not.toBeNull();
+  expect(host.querySelector("wt-icon")).toBeNull();
+});
+
+it("draws an extra's allergens as large named icons when a kitchen screen asks", async () => {
+  const host = draw(
+    extraNutrition(
+      { addAllergens: { gluten: { kinds: ["wheat"] }, milk: {} }, suitableFor: ["halal"] },
+      "allergens-x",
+      "diet-x",
+      { icons: true },
+    ),
+  );
+  const allergens = host.querySelector('[data-test="allergens-x"]')!;
+  expect(await namedIcons(allergens)).toEqual([
+    ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+    ["allergen-milk", "img", allergenName("milk", currentLocale())],
+  ]);
+  for (const icon of allergens.querySelectorAll("wt-icon"))
+    expect(icon.getAttribute("size")).toBe("lg");
+  expect(host.querySelector(".allergen-chip")).toBeNull();
+  expect(host.querySelector('[data-test="diet-x"] [data-diet="halal"]')).not.toBeNull();
 });
 
 it("adds no chrome for an extra declaring neither, ignoring a label outside the four", () => {

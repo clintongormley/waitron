@@ -105,9 +105,9 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
         `[data-${kind === "cancelled" ? "served" : kind}-line="dish"]`,
       )!;
       expect(icons(row)).toEqual(["allergen-gluten", "diet-kosher"]);
-      expect(row.querySelector('wt-icon[name="allergen-gluten"]')!.getAttribute("label")).toMatch(
-        locale === "en" ? /rye/i : /centeno/i,
-      );
+      const gluten = row.querySelector('wt-icon[name="allergen-gluten"]')!;
+      expect(gluten.getAttribute("role")).toBe("img");
+      expect(gluten.getAttribute("aria-label")).toMatch(locale === "en" ? /rye/i : /centeno/i);
     },
   );
 
@@ -133,9 +133,9 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
     await unfold(el, "held");
     const companion = el.shadowRoot!.querySelector('[data-companion="companion"]')!;
     expect(icons(companion)).toEqual(["allergen-nuts", "diet-halal"]);
-    expect(companion.querySelector('wt-icon[name="allergen-nuts"]')!.getAttribute("label")).toMatch(
-      locale === "en" ? /hazelnut/i : /avellana/i,
-    );
+    const nuts = companion.querySelector('wt-icon[name="allergen-nuts"]')!;
+    expect(nuts.getAttribute("role")).toBe("img");
+    expect(nuts.getAttribute("aria-label")).toMatch(locale === "en" ? /hazelnut/i : /avellana/i);
     expect(icons(el.shadowRoot!.querySelector('[data-held-line="dish"]')!)).toEqual([
       "allergen-gluten",
       "diet-kosher",

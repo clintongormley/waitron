@@ -684,9 +684,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **What a kitchen card draws** (bundle of 1, size S). [Detail](backlog/kitchen.md#bundle-what-a-kitchen-card-draws)
-
-
 - **Held paper followups** (bundle of 3, 1 important, size M). Holds A1066, A1369. [Detail](backlog/kitchen.md#bundle-held-paper-followups)
 
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
@@ -699,10 +696,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
-
-- Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
-  right only while every writer stores the same `toISOString()` form.
-  [Detail](backlog/kitchen.md#the-earliest-fire-time-is-picked-by-comparing-the-stored-times-as-text)
 
 - **A pass printer must be added to each new station by hand.** A pass printer is now a printer
   listed on every station; a watcher set to follow every station used to cover a new station at

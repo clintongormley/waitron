@@ -179,6 +179,34 @@ describe("A773 pass board: cards", () => {
     expect(narrowed.inProgress[0]!.allReady).toBe(false);
   });
 
+  it("picks the earliest request and the latest ready time by time, not by how each is written", () => {
+    // Each cold time sorts the other way as text: 12:30+01:00 is 11:30Z, 13:20+01:00 is 12:20Z.
+    const board = buildPassBoard(
+      [
+        released({
+          id: "grill-1",
+          state: "ready",
+          requestedAt: "2026-11-02T12:00:00.000Z",
+          readyAt: "2026-11-02T12:50:00.000Z",
+        }),
+        released({
+          id: "cold-1",
+          stationId: cold,
+          state: "ready",
+          requestedAt: "2026-11-02T12:30:00+01:00",
+          readyAt: "2026-11-02T13:20:00+01:00",
+          lineNo: 2,
+        }),
+      ],
+      HOT,
+    );
+    expect(board.ready).toHaveLength(1);
+    expect(board.ready[0]).toMatchObject({
+      requestedAt: "2026-11-02T12:30:00+01:00",
+      readyAt: "2026-11-02T12:50:00.000Z",
+    });
+  });
+
   it("3. shows a held group as held, informational by its station's setting now", () => {
     const heldGroup: Group = { ...groupG, id: "group-h", state: "held" };
     const board = buildPassBoard(
@@ -313,6 +341,73 @@ describe("A773 pass board: cards", () => {
     const facts = (c: PassCard) => [c.kind, c.allReady, c.requestedAt, c.readyAt];
     expect(facts(card)).toEqual(facts(shown.inProgress[0]!));
     expect(columnOf(hidden, card.key)).toBe(columnOf(shown, card.key));
+  });
+
+  it("orders cards by time, not by how each time is written", () => {
+    const a = "aaaaaaaa-0000-4000-8000-000000000000";
+    const b = "bbbbbbbb-0000-4000-8000-000000000000";
+    // b's times sort after a's as text but are earlier: 12:30+01:00 is 11:30Z, 13:20+01:00 is 12:20Z.
+    const toFire = buildPassBoard(
+      [
+        row({ id: "a", group: { ...groupG, id: a }, requestedAt: at("12:00") }),
+        row({ id: "b", group: { ...groupG, id: b }, requestedAt: "2026-11-02T12:30:00+01:00" }),
+      ],
+      EVERY,
+    );
+    expect(toFire.toFire.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
+
+    const ready = buildPassBoard(
+      [
+        released({ id: "a", group: { ...groupG, id: a }, state: "ready", readyAt: at("12:50") }),
+        released({
+          id: "b",
+          group: { ...groupG, id: b },
+          state: "ready",
+          readyAt: "2026-11-02T13:20:00+01:00",
+        }),
+      ],
+      EVERY,
+    );
+    expect(ready.ready.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
+  });
+
+  it("orders held cards, a card's items and its bills by time, not by how each is written", () => {
+    const a = "aaaaaaaa-0000-4000-8000-000000000000";
+    const b = "bbbbbbbb-0000-4000-8000-000000000000";
+    // Each later-written time sorts after the other as text but is earlier: 12:30+01:00 is 11:30Z.
+    const early = "2026-11-02T12:30:00+01:00";
+    const heldParty = (id: string, partyFirstCreatedAt: string): Group => ({
+      ...groupG,
+      id,
+      partyId: id,
+      state: "held",
+      createdAt: partyFirstCreatedAt,
+      position: 1,
+      partyFirstCreatedAt,
+    });
+    const heldCards = buildPassBoard(
+      [
+        held({ id: "pa", partyId: a, group: heldParty(a, at("12:00")) }),
+        held({ id: "pb", partyId: b, group: heldParty(b, early) }),
+      ],
+      EVERY,
+    );
+    expect(heldCards.held.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
+
+    const twoBills = buildPassBoard(
+      [
+        row({ id: "a-item", orderId: bill1 }),
+        row({
+          id: "b-item",
+          orderId: bill2,
+          order: { orderNumber: 2, kitchenNote: null, openedAt: early },
+        }),
+      ],
+      EVERY,
+    );
+    const card = cards(twoBills)[0]!;
+    expect(card.items.map((item) => item.id)).toEqual(["b-item", "a-item"]);
+    expect(card.orders.map((order) => order.orderId)).toEqual([bill2, bill1]);
   });
 
   it("10. sorts each column (D63)", () => {
