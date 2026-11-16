@@ -695,19 +695,6 @@ the new names answer supersedes that allowance only.
 and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 **2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
 
-## A refused early dashboard payment authorization becomes allowed before the PIN transaction
-
-`managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no credential when its early read
-refuses; `pinGated` then opens the transaction without a turn. Reproduced on 2026-11-16 through both
-real attestation routes: the denied control returns 403 with zero PIN derivations; granting the
-manager role at the write-lock request instead returns the missing-payment/refund 404 and derives
-once. The source's fallback verifies inside `gated`; the combined lock-watcher mock was unsuitable,
-so the run measured the response and derivation count, not lock ownership.
-
-Lane K's cleared key-derivation plan permits a separate conditional payment PR. Preserve the early
-refusal, final authorization, PIN turns and throttle. The existing branch's reproduction patch and
-red log are in the lane receipts; this point remains open until that fix lands.
-
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 
 The two staff forms turn the refusal into a field message inside the form, where other dashboard

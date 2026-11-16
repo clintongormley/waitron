@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -15,6 +15,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { systemClock } from "./till-backend.js";
 import {
   watchDerivations,
+  whileChangingOnLockRequest,
   watchedDerivationCount,
   watchedOrder,
 } from "./testing/watched-scrypt.js";
@@ -80,6 +81,7 @@ async function setup(role: "manager" | "staff" = "manager") {
   const id = randomUUID();
   return {
     id,
+    personId: person!.id,
     send: async (route: string, extra: Record<string, unknown>) =>
       app.request(`/management-api/payments/${route}/${id}/attest`, {
         method: "POST",
@@ -155,3 +157,30 @@ describe("dashboard payment PIN attempts take turns", () => {
     },
   );
 });
+
+it.each(targets)(
+  "$route keeps an early permission refusal when permission is granted at its write lock",
+  async ({ route }) => {
+    const v = await setup("staff");
+    watchDerivations("4321");
+    const control = await v.send(route, { pin: "4321" });
+    expect(control.status).toBe(403);
+    expect(watchedDerivationCount()).toBe(0);
+    await watchedOrder();
+    watchDerivations("4321", () => withTransaction(suite.db, async () => {}));
+    const response = await whileChangingOnLockRequest(
+      suite.db,
+      (tx) => setBuiltInRoleForTest(tx, v.personId, "manager"),
+      () => v.send(route, { pin: "4321" }),
+    );
+    const order = await watchedOrder();
+    expect({ status: response.status, derivations: watchedDerivationCount(), order }).toEqual({
+      status: 403,
+      derivations: 0,
+      order: [],
+    });
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
+    });
+  },
+);

@@ -422,17 +422,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const managerPinToCheck = async (
     sessionId: string,
     pin: unknown,
-  ): Promise<{ personId: string; pin: unknown } | undefined> => {
-    try {
-      const { authorizedBy } = await authorizeManager(deps.db, {
-        managementSessionId: sessionId,
-        permission: PAYMENTS_MANAGE,
-        touch: false,
-      });
-      return { personId: authorizedBy, pin };
-    } catch {
-      return undefined;
-    }
+  ): Promise<{ personId: string; pin: unknown }> => {
+    const { authorizedBy } = await authorizeManager(deps.db, {
+      managementSessionId: sessionId,
+      permission: PAYMENTS_MANAGE,
+      touch: false,
+    });
+    return { personId: authorizedBy, pin };
   };
 
   /** Re-checks the manager's own PIN, refusing `pin.throttled` after too many wrong ones. */
@@ -467,7 +463,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await verifyManagerPin(tx, personId, pin, checked);
         return fn(tx, personId);
       });
-    if (credential === undefined) return transaction(undefined);
     if (typeof credential.pin !== "string") {
       // Count malformed attempts after the earlier PIN checks have settled, without deriving a key.
       return inPinTurn(attempts, credential.personId, () => transaction(undefined));
