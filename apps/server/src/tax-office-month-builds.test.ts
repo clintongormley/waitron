@@ -168,7 +168,7 @@ it("records a build whose entries throw as failed, logs once, and accepts the ne
     [
       "error",
       "tax_office.build_failed",
-      { errorCode: "storage.disk_full", errorClass: "AppError" },
+      { errorCode: "storage.disk_full", errorClass: "AppError", errno: null },
     ],
   ]);
   expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
@@ -238,7 +238,7 @@ it("logs the system's error code of a failed build beside its error code and cla
     [
       "error",
       "tax_office.build_failed",
-      { errorCode: "unknown", errorClass: "Error", systemCode: "ENOSPC" },
+      { errorCode: "unknown", errorClass: "Error", errno: "ENOSPC" },
     ],
   ]);
 });
@@ -262,8 +262,36 @@ it.skipIf(process.getuid?.() === 0)(
       expect(t.files()).toHaveLength(1);
       expect(t.builds.view(ANA)).toMatchObject({ status: "failed" });
       expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
+      expect(t.log.mock.calls).toEqual([
+        [
+          "error",
+          "tax_office.build_failed",
+          { errorCode: "storage.disk_full", errorClass: "AppError", errno: null },
+        ],
+        ["warn", "tax_office.file_remove_failed", { errno: "EACCES" }],
+      ]);
     } finally {
       chmodSync(dir, 0o700);
+    }
+  },
+);
+
+it.skipIf(process.getuid?.() === 0)(
+  "forgets a sent file whose deletion fails, and logs only the system's error code",
+  async () => {
+    const t = setup();
+    await readyFor(t, ANA, "2026-01");
+    const { id, path } = t.builds.file(ANA)!;
+    chmodSync(t.dir, 0o500);
+    try {
+      t.builds.sent(ANA, id);
+      expect(existsSync(path)).toBe(true);
+      expect(t.builds.view(ANA)).toEqual({ status: "none" });
+      expect(t.log.mock.calls).toEqual([
+        ["warn", "tax_office.file_remove_failed", { errno: "EACCES" }],
+      ]);
+    } finally {
+      chmodSync(t.dir, 0o700);
     }
   },
 );

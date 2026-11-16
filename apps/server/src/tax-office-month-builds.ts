@@ -9,6 +9,7 @@ import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { zipStream } from "./download-archive.js";
+import { errnoOf } from "./errno.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { TaxOfficeMonth } from "./tax-office-export.js";
 
@@ -82,25 +83,20 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     }
   };
 
-  const systemCodeOf = (error: unknown): { systemCode?: string } => {
-    const code = (error as { code?: unknown } | null)?.code;
-    return typeof code === "string" && /^E[A-Z]+$/.test(code) ? { systemCode: code } : {};
-  };
-
   // Best-effort: a file that cannot be deleted is logged and left to the next start's scratch
   // sweep, never allowed to keep a record in `building`.
   const removeNow = (path: string): void => {
     try {
       rmSync(path, { force: true });
     } catch (error) {
-      deps.log("warn", "tax_office.file_remove_failed", systemCodeOf(error));
+      deps.log("warn", "tax_office.file_remove_failed", { errno: errnoOf(error) ?? null });
     }
   };
   const remove = async (path: string): Promise<void> => {
     try {
       await rm(path, { force: true });
     } catch (error) {
-      deps.log("warn", "tax_office.file_remove_failed", systemCodeOf(error));
+      deps.log("warn", "tax_office.file_remove_failed", { errno: errnoOf(error) ?? null });
     }
   };
 
@@ -156,7 +152,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         deps.log("error", "tax_office.build_failed", {
           errorCode: codeOf(error),
           errorClass: error instanceof Error ? error.name : typeof error,
-          ...systemCodeOf(error),
+          errno: errnoOf(error) ?? null,
         });
         outcome = {
           status: "failed",
