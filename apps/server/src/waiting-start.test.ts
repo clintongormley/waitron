@@ -374,6 +374,44 @@ describe("the waiting start", () => {
       expect(h.closeListeners).toHaveBeenCalledTimes(1);
     });
 
+    it("once stepping down, answers another venue origin's API preflight and gives its refusal that origin", async () => {
+      const h = harness(() => new Promise<StartPeerCheckOutcome>(() => {}), {
+        node: suite.node,
+        routes: [stepRoute],
+      });
+      const stepped = await h.app().request("/step", { method: "POST" });
+      expect(await stepped.json()).toEqual({ restarting: true, replayed: false });
+      const preflight = await h.app().request("/api/sales", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://m2.test",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+        },
+      });
+      const refused = await h.app().request("/api/sales", {
+        method: "POST",
+        headers: { origin: "https://m2.test", "content-type": "application/json" },
+        body: "{}",
+      });
+      expect({
+        preflight: [preflight.status, preflight.headers.get("access-control-allow-origin")],
+        refused: [
+          refused.status,
+          await refused.json(),
+          refused.headers.get("access-control-allow-origin"),
+        ],
+      }).toEqual({
+        preflight: [204, "https://m2.test"],
+        refused: [
+          503,
+          { error: { code: "handover.stepping_down", params: {} } },
+          "https://m2.test",
+        ],
+      });
+      await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
+    });
+
     it("a stepdown refused before it stops anything leaves the box waiting and asking again", async () => {
       await withNodeTransaction(suite.node, (tx) =>
         recordHandoverRestrictionTx(tx, {

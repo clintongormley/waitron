@@ -24,6 +24,7 @@ import type { StartedServer } from "./boot.js";
 import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
@@ -156,6 +157,9 @@ const KEY_ENV = {
 };
 const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** The venue's other box, whose page a till may be on: an origin the held chart admits. */
+const OTHER_BOX = "https://spare.example";
+const STRANGER = "https://stranger.example";
 
 /** Rejects naming `what` if `promise` has not settled within `ms`. */
 async function within<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
@@ -179,10 +183,17 @@ function hold() {
   return { release, wait };
 }
 
+interface CrossOrigin {
+  preflight: { status: number; allowOrigin: string | null };
+  payment: { status: number; body: unknown; allowOrigin: string | null };
+}
+
 interface Observed {
   stepdown: { status: number; body: unknown };
   refused: { status: number; body: unknown };
   billPayment: { status: number; body: unknown; collectCalls: number };
+  fromOtherBox: CrossOrigin & { collectCalls: number };
+  fromStranger: CrossOrigin;
   sale: { status: number; body: Record<string, unknown> };
   salesForOrder: number;
   restarts: number;
@@ -242,6 +253,11 @@ describe("a card sale in flight when the box steps down", () => {
       membership: { term: 3, digest: "a".repeat(64) },
     };
     await beginHandover({ node: suite.node, nodeId }, binding, "source");
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId, contactUrl: "https://dashboard.example" },
+      { nodeId: DESTINATION, contactUrl: OTHER_BOX },
+    );
 
     scratch = await mkdtemp(join(tmpdir(), "waitron-stepdown-real-"));
     const migrationsRoot = join(scratch, "migrations");
@@ -410,6 +426,47 @@ describe("a card sale in flight when the box steps down", () => {
       body: await billPaid.json(),
       collectCalls: card!.collectCalls.length,
     };
+    const crossOrigin = async (origin: string): Promise<CrossOrigin> => {
+      const path = `${base}/api/working-orders/${billId}/payments`;
+      const asked = await fetch(path, {
+        method: "OPTIONS",
+        headers: {
+          origin,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+        },
+      });
+      const paid = await fetch(path, {
+        method: "POST",
+        headers: { origin, cookie: venue.cookie2, "content-type": "application/json" },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "3.00",
+          method: "card",
+          entry: "reader",
+          applied: "3.00",
+          tip: "0.00",
+          expectedEdit,
+        }),
+      });
+      return {
+        preflight: {
+          status: asked.status,
+          allowOrigin: asked.headers.get("access-control-allow-origin"),
+        },
+        payment: {
+          status: paid.status,
+          body: await paid.json(),
+          allowOrigin: paid.headers.get("access-control-allow-origin"),
+        },
+      };
+    };
+    const fromOtherBox = {
+      ...(await crossOrigin(OTHER_BOX)),
+      collectCalls: card!.collectCalls.length,
+    };
+    const fromStranger = await crossOrigin(STRANGER);
 
     aeat.release();
     sweep.release();
@@ -429,6 +486,8 @@ describe("a card sale in flight when the box steps down", () => {
       stepdown,
       refused,
       billPayment,
+      fromOtherBox,
+      fromStranger,
       sale,
       salesForOrder: n,
       restarts,
@@ -477,6 +536,29 @@ describe("a card sale in flight when the box steps down", () => {
       status: 503,
       body: { error: { code: "handover.stepping_down", params: {} } },
       collectCalls: 1,
+    });
+  });
+
+  it("a till on the venue's other box gets its preflight answered and can read the bill payment's refusal, and no reader is asked", () => {
+    expect(seen().fromOtherBox).toEqual({
+      preflight: { status: 204, allowOrigin: OTHER_BOX },
+      payment: {
+        status: 503,
+        body: { error: { code: "handover.stepping_down", params: {} } },
+        allowOrigin: OTHER_BOX,
+      },
+      collectCalls: 1,
+    });
+  });
+
+  it("a page on an origin the venue does not admit is named no allowed origin, on the preflight or the refusal", () => {
+    expect(seen().fromStranger).toEqual({
+      preflight: { status: 204, allowOrigin: null },
+      payment: {
+        status: 503,
+        body: { error: { code: "handover.stepping_down", params: {} } },
+        allowOrigin: null,
+      },
     });
   });
 

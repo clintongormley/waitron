@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { corsForVenue } from "./cors.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 
 function hold() {
@@ -222,4 +223,103 @@ it("close aborts the closed signal", () => {
   expect(gate.closed.aborted).toBe(false);
   gate.close({ allowed: () => false });
   expect(gate.closed.aborted).toBe(true);
+});
+
+describe("a closed gate's refusal across origins", () => {
+  const ADMITTED = "https://other-box.example";
+  function crossOriginRig(allow: (origin: string) => Promise<boolean>) {
+    const gate = createHandoverGate({ cors: corsForVenue(allow) });
+    let handled = 0;
+    const app = new Hono();
+    app.use("*", gate.middleware);
+    app.post("/api/pay", (c) => {
+      handled += 1;
+      return c.json({ paid: true });
+    });
+    app.on("OPTIONS", "/api/pay", (c) => {
+      handled += 1;
+      return c.body(null, 204);
+    });
+    app.post("/setup/thing", (c) => c.json({ ok: true }));
+    gate.close({ allowed: () => false });
+    return { app, handled: () => handled };
+  }
+  const preflight = (origin: string) => ({
+    method: "OPTIONS",
+    headers: {
+      origin,
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    },
+  });
+  const post = (origin: string) => ({
+    method: "POST",
+    headers: { origin, "content-type": "application/json" },
+    body: "{}",
+  });
+
+  it("answers an admitted origin's API preflight and gives its refusal the venue's CORS headers, running no route", async () => {
+    const r = crossOriginRig((o) => Promise.resolve(o === ADMITTED));
+    const asked = await r.app.request("/api/pay", preflight(ADMITTED));
+    const refused = await r.app.request("/api/pay", post(ADMITTED));
+    expect({
+      preflight: {
+        status: asked.status,
+        allowOrigin: asked.headers.get("access-control-allow-origin"),
+        allowCredentials: asked.headers.get("access-control-allow-credentials"),
+        allowMethods: asked.headers.get("access-control-allow-methods"),
+      },
+      refused: {
+        status: refused.status,
+        body: await refused.json(),
+        allowOrigin: refused.headers.get("access-control-allow-origin"),
+        allowCredentials: refused.headers.get("access-control-allow-credentials"),
+        cacheControl: refused.headers.get("cache-control"),
+      },
+      handled: r.handled(),
+    }).toEqual({
+      preflight: {
+        status: 204,
+        allowOrigin: ADMITTED,
+        allowCredentials: "true",
+        allowMethods: expect.stringContaining("POST"),
+      },
+      refused: {
+        status: 503,
+        body: { error: { code: "handover.stepping_down", params: {} } },
+        allowOrigin: ADMITTED,
+        allowCredentials: "true",
+        cacheControl: "no-store",
+      },
+      handled: 0,
+    });
+  });
+
+  it("names no allowed origin to a stranger, on its preflight or its refusal", async () => {
+    const r = crossOriginRig((o) => Promise.resolve(o === ADMITTED));
+    const asked = await r.app.request("/api/pay", preflight("https://stranger.example"));
+    const refused = await r.app.request("/api/pay", post("https://stranger.example"));
+    expect(asked.headers.get("access-control-allow-origin")).toBeNull();
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get("access-control-allow-origin")).toBeNull();
+    expect(r.handled()).toBe(0);
+  });
+
+  it("adds no CORS headers to a refusal outside the API", async () => {
+    const r = crossOriginRig((o) => Promise.resolve(o === ADMITTED));
+    const refused = await r.app.request("/setup/thing", post(ADMITTED));
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("still refuses when the origin list cannot be read", async () => {
+    const r = crossOriginRig(() => Promise.reject(new Error("store closed")));
+    const refused = await r.app.request("/api/pay", post(ADMITTED));
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toEqual({
+      error: { code: "handover.stepping_down", params: {} },
+    });
+    expect(refused.headers.get("access-control-allow-origin")).toBeNull();
+    expect(r.handled()).toBe(0);
+  });
 });

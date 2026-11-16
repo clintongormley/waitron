@@ -21,12 +21,30 @@ export function steppingDownResponse(c: Context): Response {
  * Counts the requests inside while open; once closed, refuses every request `allowed` does not name.
  * A Hono middleware is not inside a route's error boundary, so the refusal is written in the
  * boundary's response shape directly rather than thrown.
+ *
+ * The gate runs ahead of the start's own CORS layer, so a closed gate applies `cors` itself to an
+ * `/api/*` refusal and answers that path's preflight: without them a till on another box's page
+ * cannot read the refusal and sees a failed request instead. An origin list that cannot be read
+ * leaves the refusal without CORS headers rather than turning it into an error.
  */
-export function createHandoverGate(): HandoverGate {
+export function createHandoverGate(deps: { cors?: MiddlewareHandler } = {}): HandoverGate {
   const closed = new AbortController();
   const inside = new Set<Context>();
   const atZero = new Set<() => void>();
   let allowed: ((c: Context) => boolean) | null = null;
+
+  const refuse = async (c: Context): Promise<Response> => {
+    const cors = deps.cors;
+    if (cors === undefined || !c.req.path.startsWith("/api/")) return steppingDownResponse(c);
+    try {
+      const preflight = await cors(c, async () => {
+        c.res = steppingDownResponse(c);
+      });
+      return preflight ?? c.res;
+    } catch {
+      return steppingDownResponse(c);
+    }
+  };
 
   const leave = (c: Context): void => {
     if (!inside.delete(c) || inside.size > 0) return;
@@ -38,7 +56,7 @@ export function createHandoverGate(): HandoverGate {
     middleware: async (c, next) => {
       if (allowed !== null) {
         if (allowed(c)) return next();
-        return steppingDownResponse(c);
+        return refuse(c);
       }
       inside.add(c);
       try {

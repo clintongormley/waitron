@@ -1459,10 +1459,8 @@ async function bootServer(
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
   seams.observeApp?.(app);
-  const handoverGate = createHandoverGate();
-  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
-  app.use("*", handoverGate.middleware);
-  // Used by the full, waiting and restricted starts, so all three answer the same origins.
+  // Used by the full, waiting and restricted starts and the stepdown gate, so all answer the same
+  // origins.
   const allowOrigin = createOriginAllowlist({
     advertisedOrigin: config.managementOrigin,
     readMembership: () => readNodeMembership(db),
@@ -1474,6 +1472,10 @@ async function bootServer(
     },
     now: () => Date.now(),
   });
+  const handoverGate = createHandoverGate({ cors: corsForVenue(allowOrigin) });
+  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs; its own
+  // refusal carries the venue's CORS headers, which the layer behind it would otherwise have added.
+  app.use("*", handoverGate.middleware);
   // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
   // start that never fills it.
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
