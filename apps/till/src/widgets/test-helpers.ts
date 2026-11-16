@@ -187,6 +187,21 @@ export function textRects(node: Node): DOMRect[] {
   return [...range.getClientRects()].filter((rect) => rect.width > 0);
 }
 
+/** Each `wt-icon` under `root` as `[name, role, aria-label]`, after checking that it draws a glyph:
+ * path data in its shadow root and an SVG with a nonzero box. */
+export async function namedIcons(root: ParentNode): Promise<(string | null)[][]> {
+  const icons = [...root.querySelectorAll("wt-icon")];
+  await Promise.all(icons.map((icon) => icon.updateComplete));
+  return icons.map((icon) => {
+    const name = icon.getAttribute("name");
+    const svg = icon.shadowRoot?.querySelector("svg");
+    expect(svg?.querySelector("path")?.getAttribute("d") ?? "", `${name}'s glyph`).not.toBe("");
+    const box = svg!.getBoundingClientRect();
+    expect(box.width * box.height, `${name}'s drawn size`).toBeGreaterThan(0);
+    return [name, icon.getAttribute("role"), icon.getAttribute("aria-label")];
+  });
+}
+
 export function formatViolations(violations: axe.Result[]): string {
   return violations
     .map((violation) => {

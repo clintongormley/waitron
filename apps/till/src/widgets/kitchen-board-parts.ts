@@ -2,8 +2,7 @@ import { registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { ExpoItem } from "../api/client.js";
-import { allergenLabel } from "../i18n/allergen-names.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import {
   type BoardMeasure,
   CARD_COLUMN_TEXT_WIDTHS,
@@ -12,6 +11,7 @@ import {
 import type { ColumnKey } from "../state/kitchen-columns.js";
 import type { OverviewRow } from "../state/kitchen-overview.js";
 import { extraNutrition } from "./diet-badges.js";
+import { nutritionIcons } from "./nutrition-icons.js";
 import { quantityText } from "./dish-format.js";
 import { PHONE_WIDTH } from "./chooser-styles.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -249,24 +249,10 @@ export function dishNote(item: DishLines, prefix: string): TemplateResult | type
 /** The dish's own allergen profile; each extra's own allergens are drawn beside the extra. */
 export function dishAllergens(item: DishLines, prefix: string): TemplateResult | typeof nothing {
   const allergens = item.asServed?.allergens ?? {};
-  const codes = Object.keys(allergens).sort();
-  if (codes.length === 0) return nothing;
-  const locale = currentLocale();
-  // wt-icon reads no label of its own; role and aria-label keep each allergen in the line's
-  // accessible name.
+  if (Object.keys(allergens).length === 0) return nothing;
   return html`<span class="${prefix}-allergens" data-item-allergens=${item.id}>
     <span class="allergen-label">${t("allergens.contains")}</span>
-    <span class="nutrition-icons">
-      ${codes.map(
-        (code) =>
-          html`<wt-icon
-            name=${`allergen-${code}`}
-            size="lg"
-            role="img"
-            aria-label=${allergenLabel(code, allergens[code]!, locale)}
-          ></wt-icon>`,
-      )}
-    </span>
+    ${nutritionIcons(allergens, [], { size: "lg" })}
   </span>`;
 }
 
@@ -285,6 +271,7 @@ export function dishModifiers(item: DishLines, prefix: string): TemplateResult |
             modifier,
             `item-modifier-allergens-${item.id}-${i}`,
             `item-modifier-diet-${item.id}-${i}`,
+            { icons: true },
           )}</span
         >`,
     )}

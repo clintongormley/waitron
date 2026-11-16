@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
-import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, namedIcons, resetPage } from "./test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { DietProfile, PassBoard, PassCard, PassCardItem } from "../api/client.js";
 import {
@@ -171,13 +171,7 @@ describe("A773 pass board widget: dishes", () => {
       passItem({ id: "plain" }),
     ]);
     const row = itemOf(el, "milk").querySelector('[data-item-allergens="milk"]')!;
-    expect(
-      [...row.querySelectorAll("wt-icon")].map((icon) => [
-        icon.getAttribute("name"),
-        icon.getAttribute("role"),
-        icon.getAttribute("aria-label"),
-      ]),
-    ).toEqual([
+    expect(await namedIcons(row)).toEqual([
       ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
       ["allergen-milk", "img", allergenName("milk", currentLocale())],
     ]);
@@ -228,9 +222,12 @@ describe("A773 pass board widget: dishes", () => {
       passItem({ id: "for", crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }] }),
       passItem({ id: "plain" }),
     ]);
-    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!.textContent!;
-    expect(withRef).toContain("with CHIPS x2 from Fryer");
-    expect(withRef).toContain(allergenName("gluten", currentLocale()));
+    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!;
+    expect(withRef.textContent).toContain("with CHIPS x2 from Fryer");
+    expect(await namedIcons(withRef.querySelector(".extra-allergens")!)).toEqual([
+      ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+    ]);
+    expect(withRef.querySelector(".allergen-chip")).toBeNull();
     expect(itemOf(el, "for").querySelector("[data-crossref]")!.textContent).toContain(
       "for BURG at Grill",
     );
@@ -582,16 +579,18 @@ describe("A773 pass board widget: dishes", () => {
     ]);
     const milk = allergenName("milk", currentLocale());
     const extraAllergens = el.shadowRoot!.querySelector(
-      '[data-test="item-modifier-allergens-burger-0"]',
+      '.modifier [data-test="item-modifier-allergens-burger-0"]',
     )!;
-    expect(extraAllergens.textContent).toContain(milk);
+    expect(await namedIcons(extraAllergens)).toEqual([["allergen-milk", "img", milk]]);
+    expect(extraAllergens.querySelector(".allergen-chip")).toBeNull();
+    for (const icon of extraAllergens.querySelectorAll("wt-icon"))
+      expect(icon.getBoundingClientRect().width).toBeGreaterThan(14);
     const extraDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-burger-0"]')!;
     expect(extraDiet.querySelector("[data-diet='halal']")).not.toBeNull();
     const dish = el.shadowRoot!.querySelector('[data-item-allergens="burger"]')!;
-    expect(
-      [...dish.querySelectorAll("wt-icon")].map((icon) => icon.getAttribute("aria-label")),
-    ).toEqual([allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())]);
-    expect(dish.textContent).not.toContain(milk);
+    expect(await namedIcons(dish)).toEqual([
+      ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+    ]);
   });
 
   it.each([

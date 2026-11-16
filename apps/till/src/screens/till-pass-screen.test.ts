@@ -2,10 +2,16 @@ import { es } from "../i18n/strings.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
-import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  namedIcons,
+  pageAt,
+  resetPage,
+} from "../widgets/test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
@@ -1622,9 +1628,11 @@ describe("A773 pass screen: a till's configured Pass, its extras and portions", 
         passItem({ id: "plain" }),
       ]),
     );
-    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!.textContent!;
-    expect(withRef).toContain("with CHIPS x2 from Fryer");
-    expect(withRef).toContain(allergenName("gluten", currentLocale()));
+    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!;
+    expect(withRef.textContent).toContain("with CHIPS x2 from Fryer");
+    expect(await namedIcons(withRef.querySelector(".extra-allergens")!)).toEqual([
+      ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+    ]);
     expect(itemOf(el, "for").querySelector("[data-crossref]")!.textContent).toContain(
       "for BURG at Grill",
     );

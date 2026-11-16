@@ -40,6 +40,7 @@ export function queueCrossRefs(
                 ref,
                 `${surface}-crossref-allergens-${item.id}-${i}`,
                 `${surface}-crossref-diet-${item.id}-${i}`,
+                { icons: true },
               )
             : nothing
         }</span

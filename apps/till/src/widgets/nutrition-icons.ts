@@ -1,5 +1,5 @@
 import { css, html, nothing } from "lit";
-import { NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import { NUTRITION_ICONS, registerIcons, type WtIconSize } from "@waitron/ui";
 import { expandDietaryDeclarations, type DietaryLabel } from "@waitron/shared";
 import type { ProductAllergens } from "@waitron/shared";
 import type { DietProfile } from "../api/client.js";
@@ -32,16 +32,22 @@ export function dietLabel(label: DietaryLabel): string {
   return t(DIET_KEYS[label]);
 }
 
+function namedIcon(name: string, label: string, size: WtIconSize) {
+  return html`<wt-icon name=${name} size=${size} role="img" aria-label=${label}></wt-icon>`;
+}
+
 export function nutritionIcons(
   allergens: ProductAllergens | null | undefined,
   labels: readonly DietaryLabel[],
+  { size = "md" }: { size?: WtIconSize } = {},
 ) {
   if (allergens == null) return nothing;
   const codes = Object.keys(allergens).sort();
   if (codes.length === 0 && labels.length === 0) return nothing;
+  const locale = currentLocale();
   return html`<span class="nutrition-icons">
-    ${codes.map((code) => html`<wt-icon name=${`allergen-${code}`} label=${allergenLabel(code, allergens[code]!, currentLocale())}></wt-icon>`)}
-    ${labels.map((label) => html`<wt-icon name=${`diet-${label}`} label=${dietLabel(label)}></wt-icon>`)}
+    ${codes.map((code) => namedIcon(`allergen-${code}`, allergenLabel(code, allergens[code]!, locale), size))}
+    ${labels.map((label) => namedIcon(`diet-${label}`, dietLabel(label), size))}
   </span>`;
 }
 
@@ -54,7 +60,6 @@ export const nutritionIconStyles = css`
     margin-inline-start: var(--wt-space-2);
   }
   .nutrition-icons wt-icon {
-    --wt-icon-size: var(--wt-font-size-md);
     color: var(--wt-color-text-muted);
   }
 `;

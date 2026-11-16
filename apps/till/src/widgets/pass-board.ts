@@ -334,13 +334,6 @@ export class TillPassBoard extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .allergen-chip {
-        display: inline-block;
-        padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-      }
-
       .fire,
       .lever {
         min-height: var(--wt-tap-min);

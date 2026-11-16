@@ -236,7 +236,6 @@ export class TillMenuBrowser extends LitElement {
         position: absolute;
         inset-block-start: var(--wt-space-1);
         inset-inline-end: var(--wt-space-1);
-        --wt-icon-size: var(--wt-font-size-md);
       }
       .tile[data-nutrition] .name {
         padding-inline-end: var(--wt-space-5);

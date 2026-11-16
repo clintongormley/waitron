@@ -71,7 +71,8 @@ function expectDishDetails(root: ShadowRoot): void {
   expect(root.querySelector(".item-modifiers .modifier")).not.toBeNull();
   expect(root.querySelector('[data-item-allergens] wt-icon[name="allergen-milk"]')).not.toBeNull();
   expect(root.querySelector("[data-item-allergens] .allergen-chip")).toBeNull();
-  expect(root.querySelector(".extra-allergens .allergen-chip")).not.toBeNull();
+  expect(root.querySelector('.extra-allergens wt-icon[name="allergen-gluten"]')).not.toBeNull();
+  expect(root.querySelector(".allergen-chip")).toBeNull();
   expect(root.querySelector('[data-diet="vegetarian"]')).not.toBeNull();
   expect(root.querySelector('[data-diet="halal"]')).not.toBeNull();
   expect(root.querySelector('[data-diet-contains="meat"]')).not.toBeNull();

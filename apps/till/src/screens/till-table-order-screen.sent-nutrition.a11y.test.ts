@@ -106,7 +106,8 @@ describe.each(["en", "es"] as const)("stored nutrition on the table in %s", (loc
       const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
       await dialog.updateComplete;
       const icon = dialog.querySelector('wt-icon[name="allergen-gluten"]')!;
-      expect(icon.getAttribute("label")).toMatch(locale === "en" ? /rye/i : /centeno/i);
+      expect(icon.getAttribute("role")).toBe("img");
+      expect(icon.getAttribute("aria-label")).toMatch(locale === "en" ? /rye/i : /centeno/i);
       expect(dialog.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
       const nutrition = dialog.querySelector("[data-line-nutrition]");
       expect(nutrition).not.toBeNull();
