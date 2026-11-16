@@ -52,7 +52,7 @@ import {
 } from "./form-fields.js";
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
-import { MenuPatchDraft, patchTree, targetKey, type PatchTreeNode } from "./menu-patch-draft.js";
+import { MenuPatchDraft, patchTree, targetKey } from "./menu-patch-draft.js";
 import {
   changeLines,
   itemNames,
