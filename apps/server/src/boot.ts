@@ -1661,7 +1661,7 @@ async function bootServer(
                     }),
                   pointId,
                 ),
-        previewBucketRestore: async ({ kit, environment, oldBoxGone }) =>
+        previewBucketRestore: async ({ kit, environment, oldBoxGone }, signal) =>
           previewRecoveryStream({
             kit: parseRecoveryKit(kit),
             stateDir: config.stateDir,
@@ -1671,6 +1671,7 @@ async function bootServer(
             environment,
             litestreamBin: config.litestreamBin,
             oldBoxGone,
+            signal,
             now,
             log,
             openStore: openBoundedBucket,
@@ -1706,15 +1707,18 @@ async function bootServer(
             }
           }),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
-        stageBucketRestore: async ({
-          kit,
-          environment,
-          oldBoxGone,
-          venueConfirmed,
-          recoveryOperation,
-          nodeRecoverySecret,
-          recoveryContext,
-        }) =>
+        stageBucketRestore: async (
+          {
+            kit,
+            environment,
+            oldBoxGone,
+            venueConfirmed,
+            recoveryOperation,
+            nodeRecoverySecret,
+            recoveryContext,
+          },
+          signal,
+        ) =>
           stageStreamRestore({
             kit: parseRecoveryKit(kit),
             stateDir: config.stateDir,
@@ -1728,6 +1732,7 @@ async function bootServer(
             recoveryOperation,
             nodeRecoverySecret,
             recoveryContext,
+            signal,
             now,
             log,
             openStore: openBoundedBucket,

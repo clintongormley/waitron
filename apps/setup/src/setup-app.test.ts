@@ -4466,7 +4466,7 @@ describe("restore from my bucket", () => {
     [
       "restore.stream_integrity_failed",
       undefined,
-      "The copy read from the bucket is damaged. Nothing on this server was changed.",
+      "The downloaded copy could not be checked. Try again, or choose another backup. Nothing on this server was changed.",
     ],
     [
       "restore.stream_state_missing",

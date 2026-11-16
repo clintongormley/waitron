@@ -56,7 +56,7 @@ export interface FirstCopyDeps {
   hold?: Promise<void>;
   openStore?: (bucket: BucketConfig) => ObjectStore;
   restoreGeneration?: typeof restoreGeneration;
-  checkIntegrity?: (databasePath: string) => Promise<boolean>;
+  checkIntegrity?: (databasePath: string, options: { signal?: AbortSignal }) => Promise<boolean>;
   intervalMs?: number;
 }
 
@@ -167,7 +167,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
       outPath: copyPath,
     });
     deps.signal.throwIfAborted();
-    if (!(await (deps.checkIntegrity ?? checkIntegrity)(copyPath)))
+    if (!(await (deps.checkIntegrity ?? checkIntegrity)(copyPath, { signal: deps.signal })))
       throw new NotYet("integrity_failed");
     // `copyNeededLink` relies on the placed copy holding this row; the main box writes it before it
     // streams, so a copy without it is only a late one.

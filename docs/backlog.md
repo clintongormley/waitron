@@ -1567,7 +1567,7 @@ Not in any track until the standalone primary is done.
   and the role, then killed, stays a mirror holding an activation row and its own SIF. Neither sold
   or filed in the runs, and no route clears them. Left open by A1018 Slice 5.
 
-- **The spare's wait loop: back-off, reasons, stop signals** (4 remaining entries, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
+- **The spare's wait loop: back-off, reasons, stop signals** (3 remaining entries: chart answers, source preflight and accepted-copy recognition, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
   [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)

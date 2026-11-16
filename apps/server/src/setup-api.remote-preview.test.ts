@@ -51,7 +51,7 @@ it.each(["bucket", "cloud"])(
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(selected);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    if (kind === "bucket") expect(f.readBucket).toHaveBeenCalledWith(body);
+    if (kind === "bucket") expect(f.readBucket).toHaveBeenCalledWith(body, expect.any(AbortSignal));
     else expect(f.readCloud).toHaveBeenCalledWith(pointId);
     expect(f.stage).not.toHaveBeenCalled();
     expect(f.restart).not.toHaveBeenCalled();

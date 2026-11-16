@@ -491,25 +491,38 @@ describe("takeFirstCopy", () => {
     await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
   });
 
-  it("discards a copy that fails the integrity check", async () => {
-    await writeKey();
-    const good = await fixture("good-damaged", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
-    const objectStore = await storeWithPointer(generation(1));
-    const restore = copyOf(good);
-    const checkIntegrity = vi.fn(async () => false);
-    const r = run({ objectStore, restoreGeneration: restore, checkIntegrity });
+  it.each([
+    ["damage", undefined, "integrity_failed"],
+    [
+      "timeout",
+      new AppError("handover.copy_check_failed", { module: "core" }, { reason: "timeout" }),
+      "handover.copy_check_failed",
+    ],
+  ] as const)(
+    "discards a copy after integrity %s without reporting it ready",
+    async (_kind, error, reason) => {
+      await writeKey();
+      const good = await fixture("good-damaged", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+      const objectStore = await storeWithPointer(generation(1));
+      const restore = copyOf(good);
+      const checkIntegrity = vi.fn(async () => {
+        if (error !== undefined) throw error;
+        return false;
+      });
+      const r = run({ objectStore, restoreGeneration: restore, checkIntegrity });
 
-    await vi.waitFor(() => expect(checkIntegrity.mock.calls.length).toBeGreaterThanOrEqual(2));
-    r.controller.abort();
-    await r.done.catch(() => {});
-    expect(checkIntegrity).toHaveBeenCalledWith(join(stateDir, "pair-copy", "venue.db"));
-    expect(events("spare.first_copy_waiting").map((e) => e.fields?.reason)).toEqual([
-      "integrity_failed",
-    ]);
-    expect(r.restart).not.toHaveBeenCalled();
-    expect(r.statuses.some((s) => s.copy === "ready")).toBe(false);
-    await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
-  });
+      await vi.waitFor(() => expect(checkIntegrity.mock.calls.length).toBeGreaterThanOrEqual(2));
+      r.controller.abort();
+      await r.done.catch(() => {});
+      expect(checkIntegrity).toHaveBeenCalledWith(join(stateDir, "pair-copy", "venue.db"), {
+        signal: r.controller.signal,
+      });
+      expect(events("spare.first_copy_waiting").map((e) => e.fields?.reason)).toEqual([reason]);
+      expect(r.restart).not.toHaveBeenCalled();
+      expect(r.statuses.some((s) => s.copy === "ready")).toBe(false);
+      await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
+    },
+  );
 
   it("never logs the recovery key it holds", async () => {
     await writeKey();

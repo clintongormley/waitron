@@ -398,6 +398,45 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
+  it("maps a timed-out check to a retryable restore refusal and discards its attempt", async () => {
+    const log = vi.fn();
+    const controller = new AbortController();
+    const check = vi.fn(async () => {
+      throw new AppError("handover.copy_check_failed", { module: "core" }, { reason: "timeout" });
+    });
+    const deps = await prepareDeps(await bucket(), {
+      log,
+      signal: controller.signal,
+      checkIntegrity: check,
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_integrity_failed",
+      params: {},
+    });
+    expect(check).toHaveBeenCalledExactlyOnceWith(expect.any(String), {
+      signal: controller.signal,
+    });
+    expect(log).toHaveBeenCalledWith("warn", "restore.stream_integrity_failed", {
+      reason: "timeout",
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("preserves cancellation of the integrity check and discards its attempt", async () => {
+    const controller = new AbortController();
+    const reason = new Error("request closed");
+    const deps = await prepareDeps(await bucket(), {
+      signal: controller.signal,
+      checkIntegrity: async (_path, options) => {
+        controller.abort(reason);
+        options.signal?.throwIfAborted();
+        return true;
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toBe(reason);
+    await expectStateUntouched(deps.stateDir);
+  });
+
   it("refuses the wrong recovery key", async () => {
     const deps = await prepareDeps(await bucket(), {
       kit: { ...KIT, recoveryKey: "a-different-key-entirely" },
@@ -1566,4 +1605,11 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     });
     expect(await leftovers(deps.stateDir)).toEqual([]);
   });
+});
+
+it("the default restored-copy check honors an already closed request", async () => {
+  const controller = new AbortController();
+  const reason = new Error("request closed");
+  controller.abort(reason);
+  await expect(checkIntegrity(fixtureDb, { signal: controller.signal })).rejects.toBe(reason);
 });

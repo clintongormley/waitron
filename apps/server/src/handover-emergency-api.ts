@@ -138,7 +138,7 @@ interface Deps {
 }
 
 export interface EmergencyHandover {
-  assertMayActivate(operation: HandoverOperation): Promise<void>;
+  assertMayActivate(operation: HandoverOperation, signal?: AbortSignal): Promise<void>;
   /** The switch's passkey challenges and proof, which preparation and activation take too. */
   switchSignIn: SwitchSignIn;
 }
@@ -314,8 +314,11 @@ export function mountHandoverEmergencyApi(
     ) as SignedHandoverEnvelope<Declaration>;
     return envelope.body;
   }
-  async function compareCopy(expected: EmergencyCopy): Promise<EmergencyCopy> {
-    const copy = await checkEmergencyCopy(deps);
+  async function compareCopy(
+    expected: EmergencyCopy,
+    signal?: AbortSignal,
+  ): Promise<EmergencyCopy> {
+    const copy = await checkEmergencyCopy({ ...deps, signal });
     if (!isDeepStrictEqual(copy, expected)) throw new AppError("handover.copy_mismatch", {});
     return copy;
   }
@@ -353,8 +356,8 @@ export function mountHandoverEmergencyApi(
       operation?.scenario === "emergency" ? await declarationFor(operation.operationId) : null;
     const copy =
       declaration === null
-        ? await checkEmergencyCopy(deps)
-        : await compareCopy(declaration.lastCopy);
+        ? await checkEmergencyCopy({ ...deps, signal: c.req.raw.signal })
+        : await compareCopy(declaration.lastCopy, c.req.raw.signal);
     await sourceSilent(sourceNodeId, declaration !== null);
     // The pair link turns `copied` when joining finishes, after the copy taken then is placed.
     const link = await readPairLink(deps.node, deps.nodeId);
@@ -412,6 +415,7 @@ export function mountHandoverEmergencyApi(
           await stageBackupAsCopy({
             ...deps,
             ...deps.backup,
+            signal: c.req.raw.signal,
             artifactPath,
             ...(payload.recoveryKey === undefined
               ? {}
@@ -508,7 +512,10 @@ export function mountHandoverEmergencyApi(
         stopping = false;
         return { state: "catching-up" as const };
       }
-      await stageFollowedAsCopy({ ...deps, migrationsRoot: follow.migrationsRoot }, stopped);
+      await stageFollowedAsCopy(
+        { ...deps, migrationsRoot: follow.migrationsRoot, signal: c.req.raw.signal },
+        stopped,
+      );
       try {
         await signInAgainstFollowed(c, signIn, stopped.path);
       } catch (error) {
@@ -571,7 +578,7 @@ export function mountHandoverEmergencyApi(
       )
         refuseRequest("operationId");
       if (!checked.has(request.operationId) && !ACTIVATED_OR_LATER.includes(stored.state)) {
-        await compareCopy(old.lastCopy);
+        await compareCopy(old.lastCopy, c.req.raw.signal);
         checked.add(request.operationId);
       }
       return { declaration };
@@ -586,7 +593,7 @@ export function mountHandoverEmergencyApi(
     );
     const previous = await readOpenHandoverOperation(deps.node, deps.nodeId);
     replaceable(previous, sourceNodeId);
-    const lastCopy = await compareCopy(request.expectedCopy);
+    const lastCopy = await compareCopy(request.expectedCopy, c.req.raw.signal);
     const body: Declaration = {
       binding,
       wordingVersion: "a1018-emergency-v1",
@@ -641,9 +648,9 @@ export function mountHandoverEmergencyApi(
   );
   return {
     switchSignIn,
-    async assertMayActivate(operation) {
+    async assertMayActivate(operation, signal) {
       if (!checked.has(operation.operationId)) {
-        await compareCopy((await declarationFor(operation.operationId)).lastCopy);
+        await compareCopy((await declarationFor(operation.operationId)).lastCopy, signal);
         checked.add(operation.operationId);
       }
       await sourceSilent(operation.sourceNodeId, true);

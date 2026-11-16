@@ -126,7 +126,7 @@ type Intercept = (url: string, handle: RequestListener) => RequestListener;
  * The two boxes share one database, as `handover-source-api.test.ts`'s do: every row here is keyed
  * by the box it belongs to. `listen` serves the real routes, and `routes` picks which are mounted.
  */
-async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
+async function rig({ mode = "mirror" as "mirror" | "primary", closedOperation = "" } = {}) {
   const db = suite.db;
   await seedVenue(db);
   await stampDeployment(db, "preproduction");
@@ -165,6 +165,10 @@ async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
   });
   const m1Store = { node: suite.node, nodeId: m1 };
   const m2Store = { node: suite.node, nodeId: m2 };
+  if (closedOperation) {
+    await beginHandover(m2Store, binding(closedOperation), "destination");
+    await advanceHandover(m2Store, closedOperation, "replaced", {});
+  }
   await beginHandover(m1Store, binding(OP), "source");
   await beginHandover(m2Store, binding(OP), "destination");
   await setNodeMode({ venue: db, node: suite.node }, m2, mode);
@@ -1836,4 +1840,58 @@ it("removes a closed folder on an ordinary pass after its busy thread exits", as
     thread.emit("exit", 1);
     await duty.stop();
   }
+});
+
+it("retries closed folders on its timer while another copy comparison is still pending, and stops sweeping on stop", async () => {
+  const r = await rig({ closedOperation: OTHER_OP });
+  await r.stepDownM1();
+  await r.listen(r.m1App({ restricted: true }));
+  const closed = join(r.stateDir, "handover", OTHER_OP);
+  await mkdir(closed, { recursive: true });
+  const busy = receivedCopyPath(r.stateDir, OTHER_OP);
+  const thread = Object.assign(new EventEmitter(), {
+    terminate: () => new Promise<number>(() => {}),
+    unref() {},
+  });
+  const stopping = new AbortController();
+  const pending = isCopyIntact(busy, {
+    signal: stopping.signal,
+    startWorker: () => thread as unknown as Worker,
+    stopWaitMs: 1,
+  }).catch(() => {});
+  stopping.abort();
+  await pending;
+  let release!: () => void;
+  let began!: () => void;
+  const started = new Promise<void>((resolve) => {
+    began = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const duty = (await r.start({
+    cleanupIntervalMs: 20,
+    compare: async () => {
+      began();
+      await held;
+      return { ok: true };
+    },
+  }))!;
+  try {
+    await started;
+    expect(existsSync(closed)).toBe(true);
+    vi.mocked(rm).mockRejectedValueOnce(new Error("closed folder still held"));
+    thread.emit("exit", 1);
+    await vi.waitFor(() => expect(existsSync(closed)).toBe(false));
+    expect(existsSync(r.received())).toBe(true);
+  } finally {
+    release();
+    await duty.stop();
+    thread.emit("exit", 1);
+  }
+  vi.mocked(readdir).mockClear();
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  expect(
+    vi.mocked(readdir).mock.calls.filter(([path]) => path === join(r.stateDir, "handover")),
+  ).toEqual([]);
 });

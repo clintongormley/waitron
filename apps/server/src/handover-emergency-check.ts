@@ -5,7 +5,7 @@ import { sha256Hex } from "@waitron/handover";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, VENUE_FILE } from "@waitron/store";
-import { isCopyIntact } from "./handover-integrity.js";
+import { checkCopyIntegrity } from "./handover-integrity.js";
 import { readSelectedCopy, readStagedCopy, type SelectedCopy } from "./handover-copy-selection.js";
 
 export type EmergencyCopy = ({ source: "mirror-copy" } | SelectedCopy) & {
@@ -18,12 +18,14 @@ export async function checkEmergencyCopy(deps: {
   venueDir: string;
   stateDir?: string;
   modules: readonly WaitronModule[];
+  signal?: AbortSignal;
 }): Promise<EmergencyCopy> {
   const selection = deps.stateDir === undefined ? null : await readSelectedCopy(deps.stateDir);
   if (deps.stateDir !== undefined && (await readStagedCopy(deps.stateDir)) !== null)
     throw new AppError("handover.copy_mismatch", {});
   const path = join(deps.venueDir, VENUE_FILE);
-  if (!(await isCopyIntact(path))) throw new AppError("handover.copy_damaged", {});
+  if (!(await checkCopyIntegrity(path, { signal: deps.signal })))
+    throw new AppError("handover.copy_damaged", {});
   const copy = await openBackupQuery(path);
   try {
     const checked = await checkHandoverCopy(deps.modules, copy.query);

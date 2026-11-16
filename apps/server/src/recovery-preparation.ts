@@ -483,7 +483,7 @@ export function createSetupRecoveryPreparation(
   const missingStaged = (): never => {
     throw new AppError("restore.staged_copy_missing", {});
   };
-  const prepare: PrepareRecovery = async (source, request, hold, client) => {
+  const prepare: PrepareRecovery = async (source, request, hold, client, signal) => {
     const archive = async (
       input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
     ) => {
@@ -527,6 +527,7 @@ export function createSetupRecoveryPreparation(
       ...options.bucket,
       kit,
       oldBoxGone: request.context.oldBoxGone,
+      signal,
     });
     try {
       const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, {

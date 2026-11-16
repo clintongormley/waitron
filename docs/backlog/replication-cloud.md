@@ -505,9 +505,7 @@ the cap. The owner sees this in Slice 5's PR.
 
 A rejected copy is fetched again with a delay capped at sixty seconds. A check on the old box before
 it stops selling could avoid a handover waiting on a dangling row; that check is not built.
-A closed operation's folder that cannot be removed, or whose check is still busy, is retried only at duty start or on a pass with
-no work, so another live operation can leave it on disk. A full disk can still prevent the waiting
-reason from being stored. The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
+The existing [emergency procedure](../../apps/server/src/guide/en/servers.md#emergency)
 is available when the copy keeps failing its checks.
 
 ## A1185: a venue not yet connected sees no prices
@@ -563,11 +561,6 @@ as its successor. Read, not run. Left open by A1018
 Slice 3.
 
 
-## The bucket restore's integrity check has no time limit
-
-The bucket restore calls `isCopyIntact` without a deadline or stop signal (`restore-stream.ts`).
-Only an answer or a thread exit ends its wait. The controlled-handover deadline does not cover it.
-
 ## Bundle: Series and module-preparation gaps at handover
 
 2 entries, size M.
@@ -582,18 +575,19 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
 
 ## Bundle: The spare's wait loop: back-off, reasons, stop signals
 
-4 entries, size M.
+3 entries, size M.
 
 - **A chart post's yes/no answer cannot distinguish a refusal from an already-held chart.**
   The route's answer needs a ruling. Left open by A1018 Slice 5 (Ruling R53).
-- **A waiting spare still retries an invalid source copy.** Source-side preflight, closed-folder
-  retry scheduling and full-disk reason persistence remain open.
+- **A waiting spare still retries an invalid source copy.** Source-side preflight remains open.
   [Detail](replication-cloud.md#a-waiting-spare-still-retries-an-invalid-source-copy)
-- **The bucket restore's integrity check has no time limit.**
-  [Detail](replication-cloud.md#the-bucket-restores-integrity-check-has-no-time-limit)
 - **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
   after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
-  the start refuses `handover.accepted_copy_missing` (run). Left open by A1018 Slice 5 (Ruling R53).
+  the start refuses `handover.accepted_copy_missing`. The real placement case “cannot identify an
+  opened accepted copy by its signed size and empty summaries alone” in `handover-place-copy.test.ts`
+  confirms the refusal for the placed file and a different valid file with the same signed size
+  and empty summaries. Those fields do not establish identity; recognition remains open.
+  Left open by A1018 Slice 5 (Ruling R53).
 
 ## Bundle: Remaining setup and failover gaps
 
@@ -672,6 +666,22 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 ## Decisions and deliberate limits
+
+### Integrity waits and waiting reasons
+
+Restore, spare-copy and emergency handover use the same provisional, unmeasured thirty-minute
+SQLite integrity budget as controlled handover, plus up to five seconds waiting for worker stop.
+This bounds the caller's wait, not native execution or file closure; other module checks and the
+backup download are outside it. A closed HTTP connection aborts its check; retry the request.
+Closed-folder cleanup retries independently every sixty seconds, skipping files whose integrity
+worker still runs. `handover-fetch.test.ts` covers a worker exit and failed removal while a live
+comparison remains pending, and stopping the timer.
+
+The same suite's “persists a reason after failed writes without repeating waiting and error log
+lines” injects a write refusal: `recordWait` calls the logger before trying the row write, and
+stores the reason after a retry succeeds. While node.db refuses writes, it cannot retain the new
+reason in that row. A log call does not establish that a log sink on a full disk retained it.
+
 
 **HANDOVER-WORDS, 16 November 2026:** the watcher cleared keeping a refused copy’s module name
 in the log only (`handover.chain_broken` and `handover.summary_mismatch`). The screen describes
