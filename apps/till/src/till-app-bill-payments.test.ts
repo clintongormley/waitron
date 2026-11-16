@@ -7391,6 +7391,69 @@ describe("till-app: giving back a bill payment", () => {
     },
   );
 
+  const refundUnconfirmedWords = (locale: string) =>
+    locale === "es-ES" ? /puede que se haya hecho/ : /may have been made/;
+
+  it.each(["en-GB", "es-ES"])(
+    "says a refund may have been made when its resend after no answer is refused by a box handing over, in %s",
+    async (locale) => {
+      const refundBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValue({ code: "handover.stepping_down", status: 503 });
+      const el = await askRefund(
+        { getTill: vi.fn().mockResolvedValue({ ...till, locale }), refundBillPayment },
+        cashPaid,
+      );
+
+      await expect.poll(() => refundBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(2);
+      await flush(el);
+      const error = inRefund(el, "wt-form-actions")!.error;
+      expect(error).not.toBe(codeMessage("handover.stepping_down"));
+      expect(error).not.toMatch(locale === "es-ES" ? /traspasando el local/ : /handing over/);
+      expect(error).toBe(t("bill_refund.unconfirmed"));
+      expect(error).toMatch(refundUnconfirmedWords(locale));
+      const ids = new Set(refunds().map(({ request }) => request.submissionId));
+      expect(ids.size).toBe(1);
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "says a refund that got no answer may have been made through a wrong PIN and a box handing over, in %s",
+    async (locale) => {
+      const withPin = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const el = await askRefund(
+        {
+          getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+          refundBillPayment: vi.fn(needsApproval(withPin)),
+        },
+        cashPaid,
+      );
+      await pinPad(el, "1234");
+      await expect
+        .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
+        .toBe(t("bill_refund.unconfirmed"));
+
+      withPin
+        .mockRejectedValueOnce({ code: "pin.invalid", status: 401 })
+        .mockRejectedValue({ code: "handover.stepping_down", status: 503 });
+      inRefund(el, "[data-refund-continue]")!.click();
+      await flush(el);
+      await pinPad(el, "0000");
+      expect(approval(el)!.error).toBe("pin.invalid");
+      emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
+      await flush(el);
+
+      const error = inRefund(el, "wt-form-actions")!.error;
+      expect(error).not.toBe(codeMessage("handover.stepping_down"));
+      expect(error).not.toMatch(locale === "es-ES" ? /traspasando el local/ : /handing over/);
+      expect(error).toBe(t("bill_refund.unconfirmed"));
+      expect(error).toMatch(refundUnconfirmedWords(locale));
+      const ids = new Set(refunds().map(({ request }) => request.submissionId));
+      expect(ids.size).toBe(1);
+    },
+  );
+
   it("asks once who can approve for two presses, and sends once for two approvals", async () => {
     let approvers: (list: typeof manager) => void = () => {};
     const listRefundAuthorizers = vi.fn(

@@ -215,7 +215,9 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   if (typeof code === "string" && FRESH_ID_AFTER.has(code)) return null;
   if ("billId" in sent && paymentNotRecorded(error)) return null;
   return isNetworkFailure(error) ||
-    ("billId" in sent && billPaymentUnconfirmed(error, earlierUnanswered))
+    ("billId" in sent
+      ? billPaymentUnconfirmed(error, earlierUnanswered)
+      : earlierUnanswered && code === "handover.stepping_down")
     ? { ...sent, unconfirmed: true }
     : sent;
 }

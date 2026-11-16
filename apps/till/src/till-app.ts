@@ -804,8 +804,8 @@ function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
-/** A box handing over refuses before any sale route runs, so after a send for the same order that
- * got no answer, that refusal leaves the sale's outcome unknown. */
+/** A box handing over refuses before any route runs, so after an earlier send of the same sale or
+ * refund that got no answer, that refusal leaves its outcome unknown. */
 function unknownAfterHandover(error: unknown, earlierUnanswered: boolean): boolean {
   return (
     earlierUnanswered && (error as { code?: unknown } | null)?.code === "handover.stepping_down"
@@ -21656,17 +21656,22 @@ export class TillApp extends LitElement {
     open: BillRefunding,
     override?: { personId: string; pin: string },
   ): Promise<void> {
-    const submission = refundSubmissionFor(
-      open.billId,
-      open.payment.id,
-      open.asked!,
-      this.#unansweredRefund,
-    );
+    const previous = this.#unansweredRefund;
+    const keyed = refundSubmissionFor(open.billId, open.payment.id, open.asked!, previous);
+    // Some refusals come before the server looks the submission id up, so only an answer ends the
+    // doubt over a send of this refund that got none.
+    const submission: RefundSubmission =
+      previous?.unconfirmed === true && previous.key === keyed.key
+        ? { ...keyed, unconfirmed: true }
+        : keyed;
     const turn = ++this.#refundSends;
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    const settle = (error?: unknown) => {
-      if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
+    let noAnswer = false;
+    const settle = (error?: unknown): boolean => {
+      const unanswered = unansweredAfter(submission, error, noAnswer);
+      if (turn === this.#refundSends) this.#unansweredRefund = unanswered;
+      return unanswered?.unconfirmed === true;
     };
     await this.#holdingReload(async () => {
       try {
@@ -21680,18 +21685,21 @@ export class TillApp extends LitElement {
             ),
           limit.signal,
           () => session === this.#operatorSession,
+          () => {
+            noAnswer = true;
+          },
         );
         settle();
         await this.#onRefunded(open, result);
       } catch (error) {
-        settle(error);
+        const unconfirmed = settle(error);
         if (
           override === undefined &&
           (error as { code?: unknown }).code === "authorization.not_permitted" &&
           this.#billRefundingNow(open.id) !== null
         )
           await this.#askRefundApprover(open.id);
-        else await this.#onRefundRefused(open, error);
+        else await this.#onRefundRefused(open, error, unknownAfterHandover(error, unconfirmed));
       } finally {
         limit.done();
       }
@@ -21730,10 +21738,10 @@ export class TillApp extends LitElement {
    * any other above the refund's action. The bill is read again after every refusal. A refusal
    * after the operator has logged out changes nothing.
    */
-  async #onRefundRefused(open: BillRefunding, error: unknown): Promise<void> {
+  async #onRefundRefused(open: BillRefunding, error: unknown, unconfirmed = false): Promise<void> {
     const now = this.#billRefundingNow(open.id);
     if (now === null) return;
-    const refusal = refusalOf(error);
+    const refusal = unconfirmed ? { code: "network" } : refusalOf(error);
     if (APPROVER_REFUSALS.has(refusal.code)) {
       this.refundApproverError = refusal.code;
       this.billRefunding = { ...now, busy: false };

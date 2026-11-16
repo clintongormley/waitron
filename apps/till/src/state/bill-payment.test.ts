@@ -685,4 +685,18 @@ describe("a payment's refunds", () => {
     expect(confirmed.request).toEqual({ ...ask, manualConfirmed: true, submissionId: "sub-2" });
     expect(otherPayment.request.submissionId).toBe("sub-3");
   });
+
+  it("holds a refund as unconfirmed after a handover refusal only when an earlier attempt of the same send got no answer", () => {
+    const refund = refundSubmissionFor(
+      "wo-1",
+      "pay-1",
+      { appliedAmount: "10.00", tipAmount: "0.00", reason: "Wrong bill" },
+      null,
+      () => "sub-1",
+    );
+    const steppingDown = { code: "handover.stepping_down", status: 503 };
+
+    expect(unansweredAfter(refund, steppingDown)).toEqual(refund);
+    expect(unansweredAfter(refund, steppingDown, true)).toEqual({ ...refund, unconfirmed: true });
+  });
 });
