@@ -29,7 +29,12 @@ export async function recoveryPackPdf(codes: {
   return renderRecoveryPack({
     locale: "en",
     timeZone: "Europe/Madrid",
-    loadFont: async () => font,
+    loadFonts: async () => ({
+      regular: font,
+      mono: new Uint8Array(
+        await readFile(new URL("../src/assets/invoice-noto-sans-mono.ttf", import.meta.url)),
+      ),
+    }),
     cover: {
       legalName: "Waitron SL",
       taxId: "89890001K",

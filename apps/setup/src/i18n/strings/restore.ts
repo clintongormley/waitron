@@ -76,11 +76,11 @@ export const restoreEn = {
     "A recovery pack or kit file is as sensitive as the recovery key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
   "restore_bucket.kit_file": "Recovery pack or kit file",
   "restore_bucket.pack_no_code":
-    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
   "restore_bucket.pack_not_a_pack":
-    "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the code.",
+    "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the kit.",
   "restore_bucket.pack_damaged":
-    "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
+    "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the kit.",
   "restore_bucket.kit": "Recovery kit",
   "restore_bucket.kit_hint":
     "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-2",
@@ -259,11 +259,11 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de recuperación: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
   "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
   "restore_bucket.pack_no_code":
-    "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",
+    "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
   "restore_bucket.pack_not_a_pack":
-    "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el código.",
+    "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el kit.",
   "restore_bucket.pack_damaged":
-    "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el código.",
+    "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el kit.",
   "restore_bucket.kit": "Kit de recuperación",
   "restore_bucket.kit_hint":
     "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-2",

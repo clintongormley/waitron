@@ -211,7 +211,10 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
           title: words.title,
           intro: words.intro,
           secret: { label: words.codeLabel, text: bucketCode, qr: true },
-          rows: [{ label: words.bucketRow, value: bucketPlace(settings.bucket) }, ...facts.rows],
+          rows: [
+            { label: words.bucketRow, value: bucketPlace(settings.bucket), mono: true },
+            ...facts.rows,
+          ],
           notes: [...words.steps],
         },
       },
@@ -271,7 +274,11 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
             intro: words.introBucket,
             secret: { label: words.codeLabel, text: archiveCode, qr: true },
             rows: [
-              { label: words.folderRow, value: `${bucket.bucket.bucket} / ${archivePrefix}` },
+              {
+                label: words.folderRow,
+                value: `${bucket.bucket.bucket} / ${archivePrefix}`,
+                mono: true,
+              },
               ...facts.rows,
             ],
             notes: [...words.stepsBucket],
@@ -288,7 +295,7 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
           title: words.title,
           intro: words.introFolder,
           secret: { label: words.keyLabel, text: recoveryKey, qr: true, exactSpaces: true },
-          rows: [{ label: words.folderRow, value: folder!.dir }, ...facts.rows],
+          rows: [{ label: words.folderRow, value: folder!.dir, mono: true }, ...facts.rows],
           notes: [...words.stepsFolder],
         },
       },

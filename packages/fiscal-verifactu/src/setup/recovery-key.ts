@@ -209,16 +209,16 @@ export class RecoveryKeyEntry extends LitElement {
     const en = this.locale === "en";
     const error = this.invalid
       ? en
-        ? "Check the key from your recovery sheet."
-        : "Revisa la clave de tu hoja de recuperación."
+        ? "Check the key from your recovery pack or older sheet."
+        : "Revisa la clave de tu paquete de recuperación o de la hoja antigua."
       : (this.errorMessage ?? "");
     const pdfError =
       this.pdfError instanceof RecoveryPackWithoutKeyError
         ? keyElsewhere(this.pdfError, en)
         : this.pdfError === "manual"
           ? en
-            ? "Enter the key from the sheet below."
-            : "Introduce abajo la clave de la hoja."
+            ? "Enter the key from the recovery pack or older sheet below."
+            : "Introduce abajo la clave del paquete de recuperación o de la hoja antigua."
           : this.pdfError === "mismatch"
             ? en
               ? "Choose the recovery PDF for this backup's named key."

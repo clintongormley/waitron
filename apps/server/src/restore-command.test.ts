@@ -812,7 +812,7 @@ describe("waitron-restore restore --from-bucket", () => {
     });
     expect(code).toBe(1);
     expect(out).toEqual([
-      "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery kit file saved for this venue",
+      "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery pack PDF or kit file saved for this venue",
     ]);
     expect(out.join("\n")).not.toContain("secret-0123456789");
   });
@@ -863,7 +863,7 @@ describe("waitron-restore restore --from-bucket", () => {
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
-    expect(out).toEqual(["cannot read kit file: /does/not/exist/kit.txt"]);
+    expect(out).toEqual(["cannot read recovery pack or kit file: /does/not/exist/kit.txt"]);
   });
 
   it("reports an invalid WAITRON_ENV by code and runs no restore", async () => {

@@ -109,6 +109,13 @@ The font is shipped at `/app/assets/invoice-noto-sans.ttf` under the SIL Open Fo
 `noto-sans/OFL.txt` is its unmodified upstream copyright and licence notice.
 `noto-sans/README.md` records the pinned font source, checksums and build paths.
 
+## Recovery pack mono font
+
+Recovery packs embed Noto Sans Mono for codes, addresses and key names. The server font ships
+at `/app/assets/invoice-noto-sans-mono.ttf`; browser builds carry the same bytes as a local asset.
+`noto-sans-mono/OFL.txt` carries the unmodified copyright and SIL Open Font License, Version 1.1.
+`noto-sans-mono/README.md` records the pinned source and checksums.
+
 ## Google Sans
 
 The dashboard web app, served from `/app/web/dashboard/` in the image, carries the font Google

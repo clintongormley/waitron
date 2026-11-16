@@ -1225,22 +1225,10 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
-## A1187: wording part 1's reviews left on the restore command and setup.
+## A1187: encrypted-connection checks
 
-- **A1187: wording part 1's reviews left on the restore command and setup.** `waitron-restore`'s
-  usage line still says `<pack-file>` for `--from-archive`, and its refusals for a file holding no
-  kit or no archive pack still name the kit file and the archive recovery pack file, though both
-  forms take the pack PDF; tests pin both word for word. Setup's pack refusals say "paste the code"
-  where the field's help says "paste the kit".
-  [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
-
-## A1187: code part 1 built twice.
-
-- **A1187: code part 1 built twice.** The encrypted-connection check is copied across several routes,
-  and `promote-api.ts` still answers a plain-HTTP or cross-site request with
-  `authorization.not_permitted`. The archive code, the backup-key check, the bucket recovery kit,
-  the server key's name and its created date are each built in more than one place.
-  [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
+The encrypted-connection check is copied across several routes, and `promote-api.ts` still answers
+plain-HTTP or cross-site requests with `authorization.not_permitted`.
 
 ## A1187: looks nobody has taken.
 
@@ -1296,16 +1284,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old
   Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
-- **A1187: wording part 1's reviews left on the restore command and setup.**
-  Setup's pack refusals say "paste the code" where the field's help says "paste the kit".
-  [Detail](box.md#a1187-wording-part-1s-reviews-left-on-the-restore-command-and-setup).
-- **A1187: code part 1 built twice.**
-  The archive code, the backup-key check, the bucket recovery kit, the server key's name and its created date are each built in more than one place.
-  [Detail](box.md#a1187-code-part-1-built-twice).
-- **A1187: the pack PDF's presentation.** It uses one regular-weight font: no bold, and codes not
-  in a fixed-width face, so l and I look alike. The cover says "The dashboard's Backups screen shows
-  the same checks" beside a check value (`key of <day> · rev <8 characters>`) that no part of the
-  Backups screen shows.
 - **A1187: the Backups card's reads and receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
 - **A1187: looks nobody has taken.**
   Nobody has looked at the card since #2276 lengthened its unreceived sentences.
@@ -1314,13 +1292,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `apps/server/src/recovery-pdf-source.test.ts` and `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`
   still draw the old recovery sheet through `recovery-pdf-node.ts`; the command path's real renderer,
   `renderSetupRecoveryPack`, is tested only inside Vitest.
-- **A1187: "sheet" wording left after the pack replaced the sheet.** Setup's key picker says "Enter
-  the key from the sheet below." (`packages/fiscal-verifactu/src/setup/recovery-key.ts`), and
-  `docs/operations/hour-recovery.md` is titled "Recover a box with its recovery sheet". Older sheets
-  are still read, so each needs the pack named beside the sheet, not in its place.
-- **A1187: the data-protection guide says a pack made on Backups "opens" the backups.** It does not
-  when the pack's bucket or archive page failed, nor for backups made under an older key (the guide
-  covers older keys further down). Narrow the sentence in English and Spanish.
 
 ## Bundle: Bucket copy: silent stops and a real outage
 
@@ -1994,20 +1965,9 @@ landed in pull requests from #2250 to setup's first pack (PR E). What their revi
 pull request that left it:
 
 - **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-- **#2250 (the pack format and its readers).** `waitron-restore`'s usage line still says
-  `<pack-file>` for `--from-archive`, which a test pins. The restore command's refusals for a file
-  holding no kit or no archive pack still name the kit file and the archive recovery pack file,
-  which tests pin word for word, where both forms now take the pack PDF. Setup's pack refusals say
-  "paste the code" where the field's help says "paste the kit".
 - **#2263 (the server makes and records the pack).** The encrypted-connection check is copied across
   several routes; `promote-api.ts` still answers a plain-HTTP or cross-site request with
-  `authorization.not_permitted`, the answer the plan calls untruthful. The archive code, the
-  backup-key check, the bucket recovery kit, the server key's name and the created date are each
-  built twice, once in an older route and once for the pack. PR D removed the older routes in
-  `backup-api.ts`, `stream-api.ts` and `recovery-document-api.ts`. The old recovery sheet's
-  renderer (`packages/fiscal-verifactu/src/recovery-pdf-content.ts`) still draws the key's name and
-  created date; since PR E only tests and `packages/fiscal-verifactu/test/recovery-pdf-node-runner.ts`
-  call it, and it stays because the reader's tests draw old sheets with it.
+  `authorization.not_permitted`, the answer the plan calls untruthful.
 - **#2274 (the Backups card).** The card's "ready" line dates a just-made pack from the browser's
   clock until the next status read names it; it is wrong only when the browser's clock and the
   box's fall on different days in the venue's zone. The card and the fresh sign-in widget read the

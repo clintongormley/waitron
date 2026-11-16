@@ -47,7 +47,7 @@ import {
 } from "./backup-recovery-pack-api.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
-import { invoiceFontBytes } from "./invoice-font.js";
+import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -145,7 +145,7 @@ function fixture(
     turns?: Turns;
     now?: () => Date;
     evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
-    loadFont?: () => Promise<Uint8Array>;
+    loadFonts?: typeof loadRecoveryPackFonts;
     readBoxEnv?: () => Promise<Record<string, string | undefined>>;
   } = {},
 ) {
@@ -188,7 +188,7 @@ function fixture(
         recoveryKey: loadedKey,
       }),
       documentEvidence: options.evidence ?? (async () => ({})),
-      loadFont: options.loadFont ?? (async () => invoiceFontBytes),
+      loadFonts: options.loadFonts ?? loadRecoveryPackFonts,
       now: options.now ?? (() => new Date("2026-10-30T09:00:00.000Z")),
     },
     (...values) => logs.push(values),
@@ -751,7 +751,7 @@ describe("a made pack", () => {
   it("a pack that cannot be drawn writes no record and keeps the key", async () => {
     const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
     const response = await fixture({
-      loadFont: async () => {
+      loadFonts: async () => {
         throw new Error("font missing");
       },
     }).make(true);

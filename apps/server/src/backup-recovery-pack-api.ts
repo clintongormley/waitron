@@ -77,7 +77,7 @@ export interface BackupRecoveryPackMakeDeps {
   /** What the backup supervisor holds now; the key never leaves the server. */
   backups: () => Pick<BackupRuntimeStatus, "schedule" | "retention" | "recoveryKey">;
   documentEvidence: RecoveryDocumentEvidence;
-  loadFont: () => Promise<Uint8Array>;
+  loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>;
   now: () => Date;
 }
 
@@ -343,7 +343,7 @@ async function makePack(
   const pdf = await renderRecoveryPack({
     locale: request.locale,
     timeZone: venue.timeZone,
-    loadFont: deps.loadFont,
+    loadFonts: deps.loadFonts,
     cover: {
       legalName: taxpayer.legalName,
       taxId: taxpayer.taxId,

@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import * as nodeFonts from "./recovery-pdf-node.js";
+import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -179,4 +181,21 @@ it("refuses a sheet that still carries an installation code", async () => {
       "Europe/Madrid",
     ),
   ).rejects.toThrow("Recovery PDF refused");
+});
+
+it.each(["inline", "source"])("loads the pack's mono bytes from %s", async (source) => {
+  const mono = await readFile(new URL("./assets/register-noto-sans-mono.ttf", import.meta.url));
+  vi.doMock("./assets/register-noto-sans-mono.ttf?inline", () => {
+    if (source === "source") throw new Error("No asset loader");
+    return { default: `data:font/ttf;base64,${mono.toString("base64")}` };
+  });
+  try {
+    const fonts = await nodeFonts.loadRecoveryPackFonts();
+    expect(Buffer.from(fonts.mono)).toEqual(mono);
+    expect(Buffer.from(fonts.regular)).toEqual(
+      await readFile(new URL("./assets/register-noto-sans.ttf", import.meta.url)),
+    );
+  } finally {
+    vi.doUnmock("./assets/register-noto-sans-mono.ttf?inline");
+  }
 });

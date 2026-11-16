@@ -1,3 +1,4 @@
+import monoUrl from "./assets/register-noto-sans-mono.ttf?url";
 import { describe, expect, it } from "vitest";
 import PDFKit from "pdfkit";
 import { PDFDocument, PDFName } from "pdf-lib";
@@ -64,7 +65,10 @@ async function pack(file: RecoveryPackFile): Promise<Uint8Array<ArrayBuffer>> {
   return renderRecoveryPack({
     locale: "en",
     timeZone: "Europe/Madrid",
-    loadFont: font,
+    loadFonts: async () => ({
+      regular: await font(),
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
     cover: {
       legalName: keyDocument.taxpayerName,
       taxId: keyDocument.scope.taxpayerNif,

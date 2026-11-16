@@ -17,3 +17,16 @@ export async function loadRecoveryFont(): Promise<Uint8Array> {
 export function renderRecoveryPdf(input: RecoveryDocument, locale: "en" | "es", timeZone: string) {
   return renderRecoveryPdfWithFont(input, locale, loadRecoveryFont, timeZone);
 }
+
+export async function loadRecoveryPackFonts() {
+  const { default: fontAsset } = await import("./assets/register-noto-sans-mono.ttf?inline", {
+    with: { type: "bytes" },
+  }).catch(async () => ({
+    default: await readFile(new URL("./assets/register-noto-sans-mono.ttf", import.meta.url)),
+  }));
+  const mono =
+    typeof fontAsset === "string"
+      ? new Uint8Array(Buffer.from(fontAsset.slice(fontAsset.indexOf(",") + 1), "base64"))
+      : new Uint8Array(fontAsset);
+  return { regular: await loadRecoveryFont(), mono };
+}

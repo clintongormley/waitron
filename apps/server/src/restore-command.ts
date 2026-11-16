@@ -112,7 +112,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-or-archive-code-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
@@ -507,7 +507,7 @@ async function runBucketRestore(
   try {
     source = await sourceText(await readFile(kitPath), "bucketCode");
   } catch {
-    deps.out(`cannot read kit file: ${kitPath}`);
+    deps.out(`cannot read recovery pack or kit file: ${kitPath}`);
     return 1;
   }
   if ("refused" in source) {
@@ -522,7 +522,7 @@ async function runBucketRestore(
     deps.out(
       hasCode(err as AppError, "backup.stream_kit_invalid") &&
         (err as AppError<"backup.stream_kit_invalid">).params.reason === "not_found"
-        ? "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery kit file saved for this venue"
+        ? "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery pack PDF or kit file saved for this venue"
         : hasCode(err as AppError, "backup.stream_kit_invalid") &&
             (err as AppError<"backup.stream_kit_invalid">).params.reason === "version"
           ? "restore failed: backup.stream_kit_invalid — this bucket recovery code was made before this version of Waitron and cannot be used; choose a newer recovery pack, or restore an archive backup"
@@ -659,7 +659,7 @@ async function runPackRestore(
       : undefined;
     deps.out(
       reason === "not_found"
-        ? "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue"
+        ? "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the recovery pack PDF or archive recovery pack file saved for this venue"
         : reason === "several"
           ? "restore failed: backup.archive_recovery_pack_invalid — the file holds more than one archive recovery pack; give a file holding only the pack for the archive you want"
           : "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",

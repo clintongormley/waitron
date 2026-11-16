@@ -346,21 +346,24 @@ describe("SetupRestoreBucketScreen", () => {
     [
       "a pack made with no bucket copy",
       () => recoveryPackPdf(null),
-      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
+      "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
     ],
     [
       "a PDF that is not a pack",
       plainPdf,
-      "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the code.",
+      "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the kit.",
+      "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el kit.",
     ],
     [
       "a pack whose attached file was changed",
       async () => damaged(await recoveryPackPdf(BUCKET_CODE)),
-      "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
+      "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the kit.",
+      "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el kit.",
     ],
   ])(
     "says so under the file field for %s and keeps the kit already there",
-    async (_, pdf, said) => {
+    async (_, pdf, said, saidEs) => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
       paste(el, "WAITRON-RECOVERY-KIT-2:kept");
       const refused = await pdf();
@@ -373,6 +376,14 @@ describe("SetupRestoreBucketScreen", () => {
       expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
         "WAITRON-RECOVERY-KIT-2:kept",
       );
+      setLocale("es-ES");
+      try {
+        await el.updateComplete;
+        await kitPicker(el).updateComplete;
+        expect(kitFileError(el)?.textContent).toBe(saidEs);
+      } finally {
+        setLocale("en-GB");
+      }
       paste(el, "WAITRON-RECOVERY-KIT-2:typed");
       await el.updateComplete;
       await kitPicker(el).updateComplete;

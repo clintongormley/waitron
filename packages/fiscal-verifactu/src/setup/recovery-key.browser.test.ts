@@ -139,7 +139,7 @@ it("offers manual fields when a printed PDF has no attachment", async () => {
   await upload(el, new Uint8Array(await stripped.save()));
   await vi.waitFor(() =>
     expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(
-      "Enter the key from the sheet below.",
+      "Enter the key from the recovery pack or older sheet below.",
     ),
   );
   expect(native(el, "printed-recovery-key").disabled).toBe(false);
@@ -329,8 +329,8 @@ it("groups pasted and middle-edited key text while preserving the native selecti
 });
 
 it.each([
-  ["en", "Check the key from your recovery sheet."],
-  ["es", "Revisa la clave de tu hoja de recuperación."],
+  ["en", "Check the key from your recovery pack or older sheet."],
+  ["es", "Revisa la clave de tu paquete de recuperación o de la hoja antigua."],
 ] as const)("shows a malformed key refusal once beside the %s field", async (locale, error) => {
   const el = await mount();
   el.locale = locale;
@@ -367,6 +367,7 @@ it.each(["en", "es"] as const)(
 async function recoveryPack(
   file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
 ): Promise<Uint8Array<ArrayBuffer>> {
+  const { default: monoUrl } = await import("../assets/register-noto-sans-mono.ttf?url");
   const { renderRecoveryPack } = await import("@waitron/recovery-pack");
   const fontUrl = (await import("../assets/register-noto-sans.ttf?url")).default;
   const { recoveryDocumentBytes } = await import("../recovery-document.js");
@@ -374,7 +375,10 @@ async function recoveryPack(
   return renderRecoveryPack({
     locale: "en",
     timeZone: "Europe/Madrid",
-    loadFont: async () => new Uint8Array(await (await fetch(fontUrl)).arrayBuffer()),
+    loadFonts: async () => ({
+      regular: new Uint8Array(await (await fetch(fontUrl)).arrayBuffer()),
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
     cover: {
       legalName: saved.taxpayerName,
       taxId: saved.scope.taxpayerNif,

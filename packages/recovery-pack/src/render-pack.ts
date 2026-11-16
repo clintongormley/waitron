@@ -16,7 +16,7 @@ export type { PackPart, RecoveryPackPage, ServerKeyLocation } from "./page.js";
 export type RenderPackInput = {
   locale: PackLocale;
   timeZone: string;
-  loadFont: () => Promise<Uint8Array>;
+  loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>;
   cover: {
     legalName: string;
     taxId: string;
@@ -118,12 +118,16 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     if (part.state === "failed" && !part.failure) refuse("parts");
   }
   const fileBytes = buildRecoveryPackFile(input.file);
-  const fontBytes = await input.loadFont();
-  const font = create(fontBytes as never) as Font;
+  const fontBytes = await input.loadFonts();
+  const fonts = {
+    regular: create(fontBytes.regular as never) as Font,
+    mono: create(fontBytes.mono as never) as Font,
+  };
+  let selected: "regular" | "mono" = "regular";
   const safe = (text: string) =>
-    Array.from(text, (c) => (font.hasGlyphForCodePoint(c.codePointAt(0)!) ? c : codePoint(c))).join(
-      "",
-    );
+    Array.from(text, (c) =>
+      fonts[selected].hasGlyphForCodePoint(c.codePointAt(0)!) ? c : codePoint(c),
+    ).join("");
 
   const pageOf = packPageNumbers(parts);
   const pageCount = pageOf.size + 1;
@@ -133,7 +137,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     size: "A4",
     autoFirstPage: false,
     margins: { top: TOP, bottom: BOTTOM, left: LEFT, right: LEFT },
-    font: fontBytes as unknown as string,
+    font: fontBytes.regular as unknown as string,
   };
   const real = new PDFDocument({
     ...layout,
@@ -145,7 +149,15 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   scratch.on("pageAdded", () => scratchPages++);
   let realPages = 0;
   real.on("pageAdded", () => realPages++);
+  for (const document of [real, scratch]) {
+    document.registerFont("regular", fontBytes.regular as never);
+    document.registerFont("mono", fontBytes.mono as never);
+  }
   let pdf = real;
+  const face = (mono = false) => {
+    selected = mono ? "mono" : "regular";
+    pdf.font(selected);
+  };
   const limit = input.maxBytes ?? MAX_PACK_PDF;
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -205,15 +217,23 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     if (shown !== safe(text)) cut = true;
     return shown;
   };
-  const write = (text: string, size = 10, colour = "black", gap = 6) => {
+  const write = (text: string, size = 10, colour = "black", gap = 6, bold = false) => {
+    face();
     pdf
       .fillColor(colour)
       .fontSize(size * scale)
-      .text(safe(text), LEFT + inset, pdf.y, { width: width() - 2 * inset });
+      .strokeColor(colour)
+      .lineWidth(0.35)
+      .text(safe(text), LEFT + inset, pdf.y, {
+        width: width() - 2 * inset,
+        fill: true,
+        stroke: bold,
+      });
     pdf.y += gap * scale;
   };
   let header: string | undefined;
   const chrome = (n: number) => {
+    face();
     const bottom = pdf.page.margins.bottom;
     pdf.page.margins.bottom = 0;
     const right = { width: width(), align: "right" as const, lineBreak: false };
@@ -265,7 +285,11 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     chrome(++drawn);
     draw();
   };
-  const table = (columns: number[], rows: string[][], options: { head?: boolean } = {}) => {
+  const table = (
+    columns: number[],
+    rows: string[][],
+    options: { head?: boolean; mono?: (row: number, column: number) => boolean } = {},
+  ) => {
     pdf.fontSize(9.5 * scale);
     const total = width();
     rows.forEach((cells, index) => {
@@ -275,16 +299,28 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
           ? total - columns.slice(0, i).reduce((a, b) => a + b, 0) - 16 * i
           : columns[i]!,
       );
-      const shown = cells.map((cell, i) => tallest(cell, widths[i]! - 12));
+      const shown = cells.map((cell, i) => {
+        face(options.mono?.(index, i));
+        return tallest(cell, widths[i]! - 12);
+      });
       const height =
-        Math.max(...shown.map((cell, i) => pdf.heightOfString(cell, { width: widths[i]! - 12 }))) +
+        Math.max(
+          ...shown.map((cell, i) => {
+            face(options.mono?.(index, i));
+            return pdf.heightOfString(cell, { width: widths[i]! - 12 });
+          }),
+        ) +
         14 * scale;
       const y = pdf.y;
       if (head) pdf.rect(LEFT, y, total, height).fill(FILL);
       let x = LEFT;
       shown.forEach((cell, i) => {
-        pdf.fillColor(head ? "black" : i === 0 ? GREY : "black");
-        pdf.text(cell, x + 6, y + 7 * scale, { width: widths[i]! - 12 });
+        face(options.mono?.(index, i));
+        pdf
+          .fillColor(head ? "black" : i === 0 ? GREY : "black")
+          .strokeColor("black")
+          .lineWidth(0.35);
+        pdf.text(cell, x + 6, y + 7 * scale, { width: widths[i]! - 12, fill: true, stroke: head });
         x += widths[i]! + 16;
       });
       pdf
@@ -295,6 +331,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       pdf.y = y + height;
     });
     pdf.y += 12 * scale;
+    face();
   };
   const boxed = (draw: () => void, padding = 12) => {
     const top = pdf.y;
@@ -323,6 +360,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf.rect(x, y, size, size).lineWidth(0.5).stroke(LINE);
   };
   const secret = (value: NonNullable<RecoveryPackPage["secret"]>, size = QR_SIZE) => {
+    face();
     // A drawn space cannot be counted, and one at either end cannot be seen; a passphrase may
     // hold either. The QR code still carries the text itself.
     const spaced = value.exactSpaces === true && value.text.includes(" ");
@@ -338,6 +376,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       .fontSize(8)
       .text(safe(value.label), LEFT + 12, top + 12, { width: textWidth });
     pdf.y += 4;
+    face(true);
     pdf
       .fillColor("black")
       .fontSize(10)
@@ -345,6 +384,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         width: textWidth,
         lineGap: 3,
       });
+    face();
     if (spaced) {
       pdf.y += 4;
       pdf
@@ -373,7 +413,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   };
 
   drawPage(() => {
-    write(words.title, 24, "black", 4);
+    write(words.title, 24, "black", 4, true);
     pdf.fontSize(10 * scale);
     write(
       cover.madeBy === null
@@ -393,7 +433,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       GREY,
       18,
     );
-    write(words.whichPage, 12, "black", 4);
+    write(words.whichPage, 12, "black", 4, true);
     table(
       [width() - 80],
       [
@@ -402,7 +442,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       ],
       { head: true },
     );
-    write(words.whatIsIn, 12, "black", 4);
+    write(words.whatIsIn, 12, "black", 4, true);
     table(
       [150, 110, width() - 150 - 110 - 80 - 48],
       [
@@ -424,11 +464,10 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
           return [words.part[part.kind], reason];
         }),
       ],
-      { head: true },
+      { head: true, mono: (row, column) => row > 0 && column === 2 },
     );
-    write(words.sameChecks, 9, GREY, 14);
     boxed(() => {
-      write(words.lockedAway, 12, "black", 2);
+      write(words.lockedAway, 12, "black", 2, true);
       const { bucketCode, archiveCode, backupKey, serverKey } = input.file;
       const backups = bucketCode !== null || archiveCode !== null || backupKey !== null;
       const opens = backups
@@ -459,14 +498,14 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   for (const [part] of pageOf)
     drawPage(() => {
       if (part.state === "failed") {
-        write(words.failedTitle(words.part[part.kind]), 18, "black", 10);
+        write(words.failedTitle(words.part[part.kind]), 18, "black", 10, true);
         write(part.failure!.what, 11);
         write(part.failure!.todo, 11, "black", 12);
         if (part.serverKeyLocation) location(part.serverKeyLocation);
         return;
       }
       const page = part.page!;
-      write(page.title, 18, "black", 8);
+      write(page.title, 18, "black", 8, true);
       if (page.intro) write(page.intro, 10, "black", 12);
       if (page.address) secret(page.address, 96);
       if (page.secret) secret(page.secret);
@@ -474,6 +513,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         table(
           [180],
           page.rows.map((row) => [row.label, row.value]),
+          { mono: (row, column) => column === 1 && page.rows[row]!.mono === true },
         );
       if (part.serverKeyLocation) location(part.serverKeyLocation);
       for (const note of page.notes) write(note, 10, "black", 3);

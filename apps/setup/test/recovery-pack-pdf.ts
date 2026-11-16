@@ -1,3 +1,4 @@
+import monoUrl from "../../../packages/fiscal-verifactu/src/assets/register-noto-sans-mono.ttf?url";
 import { PDFDocument } from "pdf-lib";
 import {
   buildRecoveryPackFile,
@@ -25,7 +26,10 @@ export async function recoveryPackPdf(bucketCode: string | null): Promise<File> 
   const bytes = await renderRecoveryPack({
     locale: "en",
     timeZone: "Europe/Madrid",
-    loadFont: async () => font,
+    loadFonts: async () => ({
+      regular: font,
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
     cover: {
       legalName: "Waitron SL",
       taxId: "89890001K",
