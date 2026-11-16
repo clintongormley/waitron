@@ -601,10 +601,10 @@ export class StreamSupervisor {
             if (!this.#sentPointers.includes(current.body)) return "pointer_changed";
             expected = current.etag;
           } else {
-            if (refused && expected === null) return "pointer_missing";
+            if (expected === null) return "pointer_missing";
             expected = null;
           }
-          if (refused && !retriedAtOnce) {
+          if (!retriedAtOnce) {
             retriedAtOnce = true;
             continue;
           }
