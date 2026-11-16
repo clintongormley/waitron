@@ -1,7 +1,6 @@
 import { ContentLanguageController, HelpModeController, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import type { TimingBand } from "@waitron/shared";
 import type { PassBoard } from "../api/client.js";
 import { helpText } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -26,6 +25,8 @@ import { dishLine } from "./dish-format.js";
 import { groupName } from "./group-name.js";
 import { helpBadge, kitchenHelpStyles } from "./help-badge.js";
 import {
+  BoardWidth,
+  ageAccentClasses,
   columnHeading,
   dishAllergens,
   dishModifiers,
@@ -87,6 +88,7 @@ export class TillPassBoard extends LitElement {
   constructor() {
     super();
     new ContentLanguageController(this);
+    new BoardWidth(this, () => this.#measured?.width);
   }
 
   static override styles = [
@@ -101,10 +103,6 @@ export class TillPassBoard extends LitElement {
     css`
       :host {
         display: block;
-      }
-
-      .width-probe {
-        height: 0;
       }
 
       .board-head {
@@ -214,39 +212,6 @@ export class TillPassBoard extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .items {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .item {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-left: var(--wt-space-1) solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-
-      .item.state-queued {
-        border-left-color: var(--wt-color-text-muted);
-      }
-
-      .item.state-preparing {
-        border-left-color: var(--wt-color-primary);
-      }
-
-      .item.state-ready {
-        border-left-color: var(--wt-color-success);
-      }
-
       /* Muted text and a dotted box, never opacity, which would fail the contrast sweep; the
          caption says why in words. */
       .item.dimmed {
@@ -259,12 +224,6 @@ export class TillPassBoard extends LitElement {
       }
 
       .item.dimmed .line-diet * {
-        color: var(--wt-color-text-muted);
-      }
-
-      .item.held {
-        border-style: dashed;
-        border-left-style: solid;
         color: var(--wt-color-text-muted);
       }
 
@@ -287,52 +246,6 @@ export class TillPassBoard extends LitElement {
       .item-forgotten-flag {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .item-modifiers,
-      .item-crossrefs,
-      .item-customisation {
-        display: flex;
-        flex-direction: column;
-        padding-left: var(--wt-space-3);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .item-modifiers,
-      .item-crossrefs,
-      .item-note {
-        color: var(--wt-color-text-muted);
-      }
-
-      .line-diet {
-        padding-left: var(--wt-space-3);
-      }
-
-      .extra-nutrition,
-      .extra-allergens,
-      .extra-diet {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-
-      .extra-nutrition {
-        margin-left: var(--wt-space-1);
-      }
-
-      .item-allergens {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1) var(--wt-space-2);
-        padding-left: var(--wt-space-3);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      .allergen-label {
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -386,7 +299,6 @@ export class TillPassBoard extends LitElement {
   #cardBadgeDrawn = false;
   #leverBadgeDrawn = false;
   #measured?: BoardMeasure;
-  #resizing?: ResizeObserver;
   /** The card views and their rows, rebuilt only when what they read changes; the locale is one,
    * since a card's kind word is worded when its view is built. */
   #viewsFrom?: readonly unknown[];
@@ -395,29 +307,6 @@ export class TillPassBoard extends LitElement {
   #overdue = 0;
   #overviewFrom?: PassBoard;
   #overview: OverviewRow[] = [];
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (this.hasUpdated) this.#observeWidth();
-  }
-
-  override firstUpdated(): void {
-    this.#observeWidth();
-  }
-
-  /** Watches a line of no height across the board, not the host, whose height the layout changes. */
-  #observeWidth(): void {
-    this.#resizing = new ResizeObserver((entries) => {
-      if (entries.at(-1)!.contentRect.width !== this.#measured?.width) this.requestUpdate();
-    });
-    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#resizing?.disconnect();
-    this.#resizing = undefined;
-  }
 
   override willUpdate(): void {
     this.#measured = measureBoard(this);
@@ -514,7 +403,11 @@ export class TillPassBoard extends LitElement {
   #card(view: CardView): TemplateResult {
     const { card } = view;
     const accent =
-      view.column === "held" ? "held" : view.band === null ? "" : this.#accentClasses(view.band);
+      view.column === "held"
+        ? "held"
+        : view.band === null
+          ? ""
+          : ageAccentClasses(view.band, this.reducedMotion);
     const badge = this.#help.on && !this.#cardBadgeDrawn;
     this.#cardBadgeDrawn = true;
     return html`<article class="ticket help-anchor help-inset ${accent}" data-card=${card.key}>
@@ -685,12 +578,6 @@ export class TillPassBoard extends LitElement {
 
   #emit(name: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
-  }
-
-  #accentClasses(band: TimingBand): string {
-    const reduced =
-      this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return `age-${band}${band === "forgotten" && !reduced ? " flash" : ""}`;
   }
 }
 

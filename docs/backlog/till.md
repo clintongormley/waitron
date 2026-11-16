@@ -1127,15 +1127,11 @@ element with a cursor rule of its own keeps it unless that rule reads `--reorder
 [Decision](till.md#decisions-and-deliberate-limits)
 
 
-## The pass board and the station board still carry copies of each other's code (left open by A773-2 B4a's finish review).
+## Pass screen stale refresh and unused values
 
-Two copies remain: the width watcher that switches between columns
-and one list, with the age colours (`apps/till/src/widgets/pass-board.ts` and `station-queue.ts`);
-and the styles of the dish lines both now draw through `kitchen-board-parts.ts`. Also from that
-review: when a newer refresh of the pass fails and an older one
-then answers, the screen clears its stale line (the old pass screen did the same);
-the server still works out each pass dish's age colour, which no screen reads (D68 keeps it); and
-the pass screen's `operatorSession` property is never read.
+When a newer refresh of the pass fails and an older one then answers, the screen clears its
+stale line. The server still works out each pass dish's age colour, which no screen reads
+(D68 keeps it); the pass screen's `operatorSession` property is never read.
 
 
 ## Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept (left open by A773-2 PR C's review).
@@ -2074,22 +2070,13 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
   per dish count the part carved off comes back as a row of its own.
 
-## Bundle: Pass board code and missing test pins
+## Bundle: Pass screen stale refresh and unused values
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S.
 
-- **The pass board and the station board still carry copies of each other's code (left open by
-  A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
-  and one list, with the age colours (`apps/till/src/widgets/pass-board.ts` and `station-queue.ts`);
-  and the styles of the dish lines both now draw through `kitchen-board-parts.ts`.
-  [Detail](till.md#the-pass-board-and-the-station-board-still-carry-copies-of-each-others-code-left-open-by-a773-2-b4as-finish-review)
-- **Pin a pass-board rule no test holds (left open by A773-2 B3's reviews; predates it).** No suite
-  fails if a pass screen's zone that is listed but switched off is still read (`passScopeOf`,
-  `apps/server/src/pass-board.ts`). Add a case.
-- **Pin the pass board's live-dish filter (left open by A773-2 B4a's reviews).** No case fails if
-  the board's card reader stops leaving out a dish made at the till, or a bill collected or
-  abandoned on a two-bill group card, and none has a ticket that survives with nothing left to make.
-  [Detail](till.md#pin-the-pass-boards-live-dish-filter)
+- **Pass screen stale refresh and unused values.** The stale line can clear after an older read;
+  `operatorSession` is unread, and the server still works out the unread age colour D68 keeps.
+  [Detail](till.md#pass-screen-stale-refresh-and-unused-values)
 
 ## Bundle: Floor plan editor at phone width
 
@@ -3304,17 +3291,6 @@ about 1228 px; the default layout keeps held cards inside Waiting, so a 1024 px 
 columns. The kitchen's tabs keep
 the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
 
-## Pin the pass board's live-dish filter
-
-Left open by A773-2 B4a's reviews (A13b, A15b). The board's card reader (`readCardRows`,
-`apps/server/src/pass-board.ts`) filters its own rows with `liveKitchenDish`
-(`apps/server/src/kitchen-print.ts`); with that filter removed from the card reader and from
-`readPassRows`' own read, the board suites the A13b review ran stayed green. A fully served dish stays off the board anyway, because `buildPassBoard` drops a
-row with nothing remaining. The filter's other conditions are the candidates a case could pin: a dish
-made at the till (`madeHere`), and one bill of a two-bill group card collected or abandoned while the
-other is not. That those would show on a card without the filter is reasoned, not measured. Also,
-`line-service-projections.test.ts`'s "3 cancelled" case pins nothing on the board, because cancelling
-a dish in full deletes its tickets; a case needs a ticket that survives with nothing left to make.
 
 ## A Ready card on the pass turns red, aged from when it was sent
 

@@ -794,7 +794,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The "Goes with" line** (bundle of 2, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
 
-- **Pass board code and missing test pins** (bundle of 3, size M). [Detail](backlog/till.md#bundle-pass-board-code-and-missing-test-pins)
+- **Pass screen stale refresh and unused values** (bundle of 1, size S). [Detail](backlog/till.md#bundle-pass-screen-stale-refresh-and-unused-values)
 
 - **Status words on the pass and beside it** (bundle of 5, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
 
