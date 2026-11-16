@@ -571,7 +571,7 @@ describe("A773 pass screen: Fire", () => {
     }));
 });
 
-describe("A773 pass screen: the refreshed line after a Fire low in a long column", () => {
+describe("A773 pass screen: a refusal line after a press low in a long column", () => {
   afterEach(resetPage);
 
   const longBoard = passBoard({
@@ -582,34 +582,108 @@ describe("A773 pass screen: the refreshed line after a Fire low in a long column
       }),
     ),
   });
+  /** In progress group cards of tables T1 to T12, each with its own order. */
+  const longReadyBoard = passBoard({
+    inProgress: Array.from({ length: 12 }, (_, index) =>
+      passCard({
+        key: `group:g-${index + 1}`,
+        target: { kind: "group", partyId: `p-${index + 1}`, groupId: `g-${index + 1}` },
+        kind: "next_course",
+        party: { id: `p-${index + 1}`, revision: 7 },
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: `order-${index + 1}`,
+            orderNumber: index + 1,
+            tableLabel: `T${index + 1}`,
+            kitchenNote: null,
+          },
+        ],
+        group: { displayNumber: 1, position: 1 },
+        items: [passItem({ id: `i-${index + 1}`, orderId: `order-${index + 1}` })],
+      }),
+    ),
+  });
+
+  const lowControl = (el: TillPassScreen, selector: string) =>
+    boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+  const scroller = () => document.scrollingElement!;
+
+  async function pressLow(el: TillPassScreen, selector: string): Promise<void> {
+    lowControl(el, selector).scrollIntoView({ block: "end" });
+    expect(scroller().scrollTop).toBeGreaterThan(0);
+    await userEvent.click(lowControl(el, selector));
+    await flush(el);
+  }
+
+  function expectInView(line: HTMLElement | null): void {
+    expect(line).not.toBeNull();
+    const box = line!.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(scroller().clientHeight);
+  }
 
   for (const [width, height] of [
     [1024, 768],
     [390, 844],
   ] as const) {
-    it(`at ${width} px, brings the line into view when a Fire scrolled down to is refused as changed`, async () => {
+    it(`at ${width} px, brings the refreshed line into view when a Fire scrolled down to is refused as changed, and an unrelated redraw scrolls nothing`, async () => {
       await pageAt(width, height);
       const api = fakeApi({
         getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
         releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
       });
       const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
-      const scroller = document.scrollingElement!;
-      fireButton(el, "group:g-12")!.scrollIntoView({ block: "end" });
-      expect(scroller.scrollTop).toBeGreaterThan(0);
-      await userEvent.click(fireButton(el, "group:g-12")!);
-      await flush(el);
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
-      const line = tableChanged(el)!.getBoundingClientRect();
-      expect(line.top).toBeGreaterThanOrEqual(0);
-      expect(line.bottom).toBeLessThanOrEqual(scroller.clientHeight);
+      expectInView(tableChanged(el));
 
       fireButton(el, "group:g-12")!.scrollIntoView({ block: "end" });
-      const scrolledBack = scroller.scrollTop;
+      const scrolledBack = scroller().scrollTop;
       el.requestUpdate();
       await flush(el);
       expect(tableChanged(el)).not.toBeNull();
-      expect(scroller.scrollTop).toBe(scrolledBack);
+      expect(scroller().scrollTop).toBe(scrolledBack);
+    });
+
+    it(`at ${width} px, brings a Fire's other refusal into view`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expect(tableChanged(el)).toBeNull();
+      expectInView(leverError(el));
+    });
+
+    it(`at ${width} px, brings the refreshed line naming the table into view when a group Ready is refused as out of date`, async () => {
+      await pageAt(width, height);
+      const ready = vi.fn().mockRejectedValue(refused("party.out_of_date"));
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longReadyBoard)),
+        bumpDeviceGroupReady: ready,
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longReadyBoard) });
+      await pressLow(el, '[data-group-ready="g-12"]');
+      expect(ready).toHaveBeenCalledOnce();
+      expect(tableChanged(el)!.textContent).toContain("T12");
+      expectInView(tableChanged(el));
+    });
+
+    it(`at ${width} px, brings a refused reprint into view`, async () => {
+      await pageAt(width, height);
+      const reprint = vi.fn().mockRejectedValue(refused("printer.not_found", 502));
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longReadyBoard)),
+        reprintOrder: reprint,
+      });
+      const el = await mountTill(api);
+      await pressLow(el, '[data-card="group:g-12"] [data-reprint="order-12"]');
+      expect(reprint).toHaveBeenCalledWith("order-12");
+      expectInView(el.shadowRoot!.querySelector<HTMLElement>("[data-reprint-error]"));
     });
   }
 });

@@ -23,7 +23,7 @@ import {
 import "../widgets/stale-since.js";
 import "../widgets/pass-board.js";
 import "../widgets/kitchen-columns-dialog.js";
-import { type TillPassBoard, passColumnNames } from "../widgets/pass-board.js";
+import { passColumnNames } from "../widgets/pass-board.js";
 import { type PassMode, passOrderPlace } from "../state/pass-view.js";
 import {
   type ColumnKey,
@@ -340,16 +340,15 @@ export class TillPassScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
-    if (changed.has("tableChanged") && changed.get("tableChanged") == null && this.tableChanged)
-      void this.#revealTableChanged();
+    if (changed.has("tableChanged") && this.tableChanged) this.#reveal("[data-table-changed]");
+    if (changed.has("leverError") && this.leverError) this.#reveal("[data-lever-error]");
+    if (changed.has("reprintErrorCode") && this.reprintErrorCode)
+      this.#reveal("[data-reprint-error]");
   }
 
-  /** The line sits above the columns, out of view after a press on a card low in a long one. */
-  async #revealTableChanged(): Promise<void> {
-    await this.renderRoot.querySelector<TillPassBoard>("till-pass-board")?.updateComplete;
-    this.renderRoot
-      .querySelector<HTMLElement>("[data-table-changed]")
-      ?.scrollIntoView({ block: "nearest" });
+  /** The status lines sit above the columns, out of view after a press on a card low in a long one. */
+  #reveal(selector: string): void {
+    this.renderRoot.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "nearest" });
   }
 
   #adoptBoard(read: DevicePassBoard): void {
