@@ -708,13 +708,11 @@ describe("a pay refused because the menu changed", () => {
       .mockRejectedValueOnce({ code: "menu.version_changed", status: 409, menus: [] })
       .mockRejectedValueOnce({ code: "bill.tip_not_allowed", status: 400 });
     const { el } = await mountApp({
-      getTill: vi
-        .fn()
-        .mockResolvedValue({
-          ...till,
-          tipsEnabled: true,
-          capabilities: [...till.capabilities, "hand-keyed-card-payment"],
-        }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        tipsEnabled: true,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       recordSale: write,
     });
