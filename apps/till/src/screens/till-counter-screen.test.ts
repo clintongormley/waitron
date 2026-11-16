@@ -799,10 +799,10 @@ describe("eaten here or taken away", () => {
     const { el } = await mount({ store });
     const changes: unknown[] = [];
     const outer: unknown[] = [];
-    el.addEventListener("dining-change", (event) =>
+    el.parentElement!.addEventListener("dining-change", (event) =>
       changes.push((event as CustomEvent<{ dining: string }>).detail),
     );
-    el.addEventListener("wt-change", (event) => outer.push(event));
+    el.parentElement!.addEventListener("wt-change", (event) => outer.push(event));
     const control = segmented(el)!;
     await control.updateComplete;
     await userEvent.click(

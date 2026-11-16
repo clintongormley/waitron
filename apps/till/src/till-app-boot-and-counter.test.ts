@@ -2601,6 +2601,51 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
     expect(c.shadowRoot!.querySelector("wt-segmented-control[name='dining']")).not.toBeNull();
   });
 
+  it.each([
+    [
+      "a declined card in a takeaway-only department",
+      "takeaway",
+      "declined",
+      "none",
+      "dining.takeaway",
+    ],
+    [
+      "a card timeout in a department that leaves the way to the till",
+      "till_choice",
+      "timeout",
+      "locked",
+      "dining.eat_in",
+    ],
+  ] as const)(
+    "%s labels the order instead of offering the switch",
+    async (_case, policy, outcome, choice, words) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "simulator",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        listDefaultZoneOffers: vi
+          .fn()
+          .mockResolvedValue(
+            offersSelling({ policy, startsAs: policy === "takeaway" ? "takeaway" : "eat_in" }),
+          ),
+        pay: vi.fn().mockResolvedValue({ outcome }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      await el.updateComplete;
+      emit(c, "collect-card", { readerId: "reader-2" });
+      await flush(el);
+      expect(c.store.persisted).toBe(true);
+      expect(c.diningChoice).toBe(choice);
+      expect(c.shadowRoot!.querySelector("wt-segmented-control[name='dining']")).toBeNull();
+      expect(c.shadowRoot!.querySelector("[data-dining-label]")?.textContent?.trim()).toBe(
+        t(words),
+      );
+    },
+  );
+
   it("a card payment of a takeaway draft sends takeaway", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({

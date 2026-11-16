@@ -7445,8 +7445,17 @@ export class TillApp extends LitElement {
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
         ) {
           this.#commitBasket(payload);
-          // The attempt saved the order but neither paid nor sent it, so its way may still change.
-          this.counterDiningChoice = { orderId: id, choice: "open" };
+          // As the server answers (`packages/db/src/order-dining.ts`): only a till-choice department
+          // switches, and a timeout leaves the payment attempt standing, which locks the way.
+          this.counterDiningChoice = {
+            orderId: id,
+            choice:
+              this.#store.diningStart?.policy !== "till_choice"
+                ? "none"
+                : out.outcome === "timeout"
+                  ? "locked"
+                  : "open",
+          };
         }
         if (session === this.#operatorSession) {
           this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
