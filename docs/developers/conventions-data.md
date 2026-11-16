@@ -5135,16 +5135,14 @@ touched the changed schema. Designed and built in #310.
 ## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
 
 > **Superseded 2026-09-14.** `authorizeManager` returns `{ authorizedBy, role }` and no tenant, and
-> there is no configured tenant to compare it with — one database, one taxpayer. Built in #378. The
-> two regression cases named below were deleted with the column. The route then still scoped its
-> queries by the deployed location; since A1301 S1 (2026-11-01) it reads the box's one venue
+> there is no configured tenant to compare it with — one database, one taxpayer. Built in #378. Its
+> two regression cases, the settings and printer routes', were deleted with the column. The route
+> then still scoped its queries by the deployed location; since A1301 S1 (2026-11-01) it reads the box's one venue
 > (`apps/server/src/venue-settings-api.ts`).
 
-The permission check returns the session's tenant; it does not compare it with the configured tenant.
+The permission check returned the session's tenant; it did not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
-them. Regression: the settings routes' test file, "refuses a manager session
-belonging to another tenant". Printer routes enforce the same check; their regression is
-`apps/server/src/print-api.printer-wiring.test.ts`, "refuses another tenant's manager…".
+them.
 
 ## `packages/fiscal` guards a different axis from the English-only rule
 

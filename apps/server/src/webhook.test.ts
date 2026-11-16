@@ -286,7 +286,7 @@ describe("the webhook shares the app with /health", () => {
 });
 
 describe("permanent client errors are 400 (a retry can never fix them)", () => {
-  it("answers 404 for the old per-taxpayer path — the segment is gone, not ignored", async () => {
+  it("answers 404 for a path with a segment after the provider — the segment is not ignored", async () => {
     const app = new Hono();
     mountWebhook(app, deps(suite.db), collect([]));
 
@@ -320,7 +320,7 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
 });
 
 describe("a transient failure is surfaced 5xx so Stripe retries — the distinction holds", () => {
-  it("answers 500 when the path taxpayer has no payments.stripe credential at all", async () => {
+  it("answers 500 when no payments.stripe credential is stored at all", async () => {
     // No Stripe credential yet can be a provisioning race that resolves on Stripe's retry. The
     // control for the 400 cases above.
     await seedTaxpayer(suite.db);

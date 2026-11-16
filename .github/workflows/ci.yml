@@ -634,7 +634,7 @@ jobs:
           fi
 
       # apps/server has the HARDER version of the problem above. Every *_MIGRATIONS descriptor
-      # computes its folder from its own import.meta.url, and esbuild collapses all five onto the
+      # computes its folder from its own import.meta.url, and esbuild collapses every one onto the
       # bundle's directory, so a mistake in the migrations-root resolution works in development and
       # fails only at boot, in the shipped artefact — the worst available failure mode. Nothing else
       # in this workflow builds this bundle: dist/ is gitignored, src/bin.ts is excluded from

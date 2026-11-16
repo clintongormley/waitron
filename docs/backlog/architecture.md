@@ -35,33 +35,12 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `packages/layouts/src/device-printers.db.test.ts` (near line 95) is wider than the reset, which
   leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
 
-## Other stale sentences and test titles from the comment-pruning sweeps
+## Payments test points and transfer lock cases left by the comment-pruning sweeps
 
-- `docs/developers/conventions-data.md` names a
-  `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
-  `docs/developers/testing-guide.md` says the concurrent Enable/unpair payments test "locks the
-  reader before deciding"; there are no row locks, the enable waits behind the unpair's write
-  transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
-  `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
-  Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`. The lock-ordering and
-  deadlock cases for transfers, merges and split bills went with PostgreSQL and nothing replaced
-  them (one write transaction per venue file is what serialises those writers now). Test titles
-  #622 could not touch: "regardless of database date display settings" in `print-api.test.ts`,
-  "(the R-D dedupe)" in `kitchen-print.test.ts`, "(SP-B4 rehome)" in `receipt-print.test.ts`,
-  "(SP-A.2 §16.4)" and "SP-C:" in `sale-till-source.receipt.test.ts`, "old per-taxpayer path"
-  and "path tenant" in `webhook.test.ts`, "(FIX 2 cascade)" in `transfer-lines.test.ts`, "(the
-  TS-4 shape)" in `move-merge.test.ts`.
-
-## Pointers outside `docs/` that #597 made stale
-
-- `apps/server/README.md:82`
-  says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
-  `packages/db/src/immutability.sql.md:18` cites `apply.ts:105` for the trigger install, which is
-  now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
-  esbuild collapses "all five" migration descriptors, while
-  `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
-  names on `ca01a7fbd`. The fake SumUp client leaves its one-shot switches for a
-  lookup or a refund armed when a checkout before them is refused; no test combines the two.
+- The fake SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout
+  before them is refused; no test combines the two. The lock-ordering and deadlock cases for
+  transfers, merges and split bills went with PostgreSQL and nothing replaced them (one write
+  transaction per venue file is what serialises those writers now).
 
 ## "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too wide
 
@@ -1088,7 +1067,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-23 entries, size M.
+22 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
@@ -1139,10 +1118,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`apps/server/README.md`'s list of 503 causes, and test comments that say "empties every
   table"**
   [Detail](architecture.md#appsserverreadmemds-list-of-503-causes-and-test-comments-that-say-empties-every-table)
-- **Other stale sentences and test titles from the comment-pruning sweeps**
-  [Detail](architecture.md#other-stale-sentences-and-test-titles-from-the-comment-pruning-sweeps)
-- **Pointers outside `docs/` that #597 made stale**
-  [Detail](architecture.md#pointers-outside-docs-that-597-made-stale)
+- **Payments test points and transfer lock cases left by the comment-pruning sweeps**
+  [Detail](architecture.md#payments-test-points-and-transfer-lock-cases-left-by-the-comment-pruning-sweeps)
 - **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
   wide** — found by #567 while pruning comments. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`.

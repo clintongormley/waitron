@@ -323,7 +323,7 @@ beforeAll(() => {
   });
 });
 
-describe("H2 receipt: a sale's device resolves from the request, the chain does not (SP-A.2 §16.4)", () => {
+describe("H2 receipt: a sale's device resolves from the request, the chain does not", () => {
   it("files each sale under the AUTHENTICATED device, changing ONLY device_id — node/series/chain untouched", async () => {
     // Two `till`-kind devices on ONE node. Ringing a sale via device-X then device-Y files two
     // records on the SAME chain (secuencia 1, 2) whose ONLY difference is the `device_id` snapshot:
@@ -378,7 +378,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
   });
 });
 
-describe("SP-C: a sale posted with the dev-override header files under THAT device (devMode)", () => {
+describe("a sale posted with the dev-override header files under THAT device (devMode)", () => {
   it("resolves the sale's device from the x-waitron-dev-device header", async () => {
     // Under `devMode`, a session signed in with the `x-waitron-dev-device: <id>` header (no
     // `waitron_device` cookie) is that device's, and its `POST /api/sales` files under THAT device;

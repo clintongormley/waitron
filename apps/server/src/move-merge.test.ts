@@ -279,7 +279,7 @@ describe("moveOrderLines", () => {
     expect(await linesOf(from)).toHaveLength(0);
   });
 
-  it("moves only the NAMED subset (the TS-4 shape), leaving the rest on the source", async () => {
+  it("moves only the NAMED subset, leaving the rest on the source", async () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     const t1 = await seedTable(cfg, "S1");
     const t2 = await seedTable(cfg, "S2");
