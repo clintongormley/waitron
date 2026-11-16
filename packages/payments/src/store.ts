@@ -302,7 +302,9 @@ export async function associatePaymentWithSale(
     .update(payments)
     .set({
       saleId: params.saleId,
-      ...(params.readerId === undefined ? {} : { readerId: params.readerId }),
+      ...(params.readerId === undefined
+        ? {}
+        : { readerId: sql`coalesce(${payments.readerId}, ${params.readerId})` }),
       updatedAt: nowIso(),
     })
     .where(and(keyWhere(params), isNull(payments.saleId)))

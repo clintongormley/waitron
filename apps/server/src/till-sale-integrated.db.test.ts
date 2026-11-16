@@ -57,6 +57,8 @@ import {
 } from "@waitron/shared";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
+  cardReaders,
+  cardReaderHolders,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
@@ -2004,6 +2006,40 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(
       suite.db.all(sql`select source, device_id from sales where working_order_id = ${id}`),
     ).toEqual([{ source: "device", device_id: cfg.origin.deviceId }]);
+  });
+
+  it("a recovery Pay on another reader settles and keeps reader A", async () => {
+    const { cfg, coffee } = await setupVenue();
+    const retrying = await deviceRequestCfg(suite.db, cfg);
+    const [readerA, readerB] = await suite.db
+      .insert(cardReaders)
+      .values([
+        { provider: "stripe", providerRef: "reader_a", name: "Reader A" },
+        { provider: "stripe", providerRef: "reader_b", name: "Reader B" },
+      ])
+      .returning();
+    await suite.db.insert(cardReaderHolders).values([
+      { readerId: readerA!.id, deviceId: cfg.origin.deviceId },
+      { readerId: readerB!.id, deviceId: retrying.origin.deviceId },
+    ]);
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
+    suite.db.run(sql`update payments set reader_id = ${readerA!.id}
+      where working_order_id = ${id}`);
+    const { deps, client } = integratedDeps(suite.db);
+
+    const out = await payWorkingOrderIntegrated(
+      { ...deps, readerId: readerB!.id, readerRef: readerB!.providerRef },
+      retrying,
+      { id, lines: [] },
+    );
+
+    expect(out.outcome).toBe("captured");
+    expect(await saleCount(id)).toBe(1);
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(
+      suite.db.all(sql`select reader_id, sale_id from payments where working_order_id = ${id}`),
+    ).toEqual([{ reader_id: readerA!.id, sale_id: await saleIdFor(id) }]);
   });
 
   it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
