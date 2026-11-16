@@ -605,6 +605,9 @@ describe("week writes", () => {
     expect({ ...after, Winter: [] }).toEqual({ ...first, Winter: [] });
     expect(after.Winter).not.toEqual(winter);
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
+    expect(zoneWrites(await save([]))).toEqual({ deletes: 1, inserts: 0 });
+    expect(zoneWrites(await save([]))).toEqual({ deletes: 0, inserts: 0 });
+    expect(await zoneTuesdays(v)).toEqual(everySeason([]));
   });
 
   it("reads only the seasons and weekdays it is asked for", async () => {

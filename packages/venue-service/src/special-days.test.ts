@@ -16,6 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { targetSeasons } from "./season-weeks.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
@@ -513,6 +514,18 @@ describe("saveSpecialDay", () => {
       paint: [],
       zonePaint: [],
     });
+    const [season] = await scoped((tx) => targetSeasons(tx, undefined));
+    const [week] = await db
+      .insert(openingHours)
+      .values({
+        zoneId: v.sala,
+        seasonId: season!.id,
+        weekday: 2,
+        kind: "closed",
+        startsAt: "23:00:00",
+        endsAt: "02:00:00",
+      })
+      .returning();
     const before = await christmasDinners(v);
     const after = await save(before.id, {
       name: "Christmas company dinners",
@@ -522,6 +535,9 @@ describe("saveSpecialDay", () => {
     });
     expect(after.zonePaint).toEqual([]);
     expect(after.paint).toEqual(before.paint);
+    expect(await db.select().from(openingHours).where(eq(openingHours.id, week!.id))).toEqual([
+      week,
+    ]);
   });
 
   it("stores touching paint of one period, or of Closed, as one range, and of two periods as two", async () => {

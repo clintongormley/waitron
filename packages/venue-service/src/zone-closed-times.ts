@@ -107,6 +107,8 @@ export async function stageZoneClosedWeek(
     targets.map((season) => season.id),
     seasonWeek,
   );
+  if (seasonWeek.every((ranges) => ranges.length === 0))
+    for (const { id } of targets) if (!seasonsNow?.has(id)) holding.add(id);
   return {
     changed,
     write: () =>

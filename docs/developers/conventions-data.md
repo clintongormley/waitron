@@ -849,6 +849,9 @@ acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.te
 
 ### Seasons and season weeks
 
+**2026-11-16, A1308 vb7:** the day-container descriptions in this earlier account now apply
+only to departments. Zones use the `opening_hours` range rows described above.
+
 **2026-10-12, A506-1.** `seasons` holds the venue's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
 `zone_days` and `zone_day_ranges` each zone's closed times per season
@@ -943,6 +946,9 @@ are under "Special days" below. The cases are under "season weeks in a configura
 `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Special days
+
+**2026-11-16, A1308 vb7:** the account below predates the zone storage move. Current zone
+paint names its date directly on each `opening_hours` range; department day rows remain.
 
 **2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and a list of dates, possibly empty
 (`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which
