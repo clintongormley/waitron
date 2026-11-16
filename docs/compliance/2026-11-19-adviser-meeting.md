@@ -264,7 +264,9 @@ enough.
 *How a copy looks.* On the inspector's Invoices page, a full invoice downloads as its A4 PDF and a
 ticket (simplified invoice) as a ticket-width PDF laid out like the printed till ticket, each
 stamped "DUPLICADO". A cancelled ticket, or one later replaced by a full invoice, downloads exactly
-as it was issued; the list and the export say "Cancelled" or "Replaced by invoice <number>".
+as it was issued. The list marks a cancelled ticket "Cancelled", and shows a full invoice that
+replaces tickets as "Replaces <ticket numbers>"; the replaced ticket's own row does not say which
+invoice replaced it. The planned export takes the list's columns.
 
 *We ask:* Is that right? And should the copy itself also say "Cancelled on <date>" or "Replaced by
 invoice <number>"?

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: **PR 1 (Tasks 1–5) built; PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
+Status: **PR 1 (Tasks 1–5) built; PR 1b (Task 3b) and PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
 2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
 2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.

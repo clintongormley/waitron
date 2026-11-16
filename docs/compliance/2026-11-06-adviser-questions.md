@@ -427,7 +427,7 @@ this.
 only full invoices with a named customer, up to 20, and nothing exports a period's invoices. Found by
 reading the code. The proposal is one read-only page for the tax office and one period export, on the
 box (A1411). Cloud can then show the same page, so a venue without Cloud gets the same capability.
-2026-11-16: the page is built (A1411 PR 1); the period export remains.
+2026-11-16: the page is built (A1411 PR 1); the ticket-width copy (PR 1b) and the period export remain.
 
 ## How a wrong clock is known, and what a late filing is
 
