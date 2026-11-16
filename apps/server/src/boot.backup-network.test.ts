@@ -220,6 +220,7 @@ async function cashSale(base: string, via: RequestInit, workingOrderId: string):
     method: "POST",
     headers: { "content-type": "application/json", cookie: venue.cookie },
     body: JSON.stringify({
+      dining: "eat_in",
       lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
       tender: { method: "cash", amount: "20.00" },
       workingOrderId,

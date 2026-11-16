@@ -132,6 +132,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     expect(selected.recipient).toEqual(recipient);
     const before = await state();
     const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       expectedEdit: null,
       zoneId: walkupZone,

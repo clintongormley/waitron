@@ -1,5 +1,7 @@
 import {
-  recomputeMadridHashes,
+  assertMadridFacts,
+  assertMadridVersionsMatch,
+  assertSameMadridTables,
   stable,
   type CanonicalMadridSemantics,
 } from "./madrid-semantics.js";
@@ -80,10 +82,7 @@ export function madridWithAddedRows(
   categories: MadridAddedCategory[],
 ): { semantics: CanonicalMadridSemantics; added: Record<string, number> } {
   const result = structuredClone(original);
-  const tables = new Set([...Object.keys(original.tables), ...Object.keys(seeded.tables)]);
-  for (const name of tables)
-    if (!original.tables[name] || !seeded.tables[name])
-      throw new Error(`Madrid table added or removed: ${name}`);
+  assertSameMadridTables(original, seeded);
 
   const versions = Object.entries(original.tables.menu_versions!.rows);
   const slots = new Map(Object.keys(SLOT).map((table) => [table, new Set<string>()]));
@@ -165,9 +164,7 @@ export function madridWithAddedRows(
         ["category", categoryKey, row.category_id],
         ["image", product.image, row.image],
       ];
-      for (const [field, want, inRow] of facts)
-        if (stable(inRow) !== stable(want))
-          throw new Error(`Madrid declared ${field} differs: ${product.image}`);
+      assertMadridFacts(facts, product.image);
     }
   }
   for (const [table, expected] of slots)
@@ -223,9 +220,7 @@ export function madridWithAddedRows(
           ["variants", [], offer.variants],
           ["offeredModifiers", [], offer.offeredModifiers],
         ];
-        for (const [field, want, inOffer] of facts)
-          if (stable(inOffer) !== stable(want))
-            throw new Error(`Madrid declared ${field} differs: ${product.image}`);
+        assertMadridFacts(facts, product.image);
       }
     }
     for (const offer of Object.values(stripped.offers ?? {}))
@@ -239,14 +234,7 @@ export function madridWithAddedRows(
     result.tables.menu_versions!.rows[versionKey]!.document = structuredClone(document);
   }
 
-  recomputeMadridHashes(result);
-  const resultVersions = result.tables.menu_versions!.rows;
-  const seededVersions = seeded.tables.menu_versions!.rows;
-  if (
-    Object.keys(resultVersions).length !== Object.keys(seededVersions).length ||
-    Object.entries(resultVersions).some(([k, row]) => stable(row) !== stable(seededVersions[k]))
-  )
-    throw new Error("Madrid row changed or removed: menu_versions");
+  assertMadridVersionsMatch(result, seeded);
   const added = Object.fromEntries(
     [...slots].filter(([, expected]) => expected.size > 0).map(([t, e]) => [t, e.size]),
   );

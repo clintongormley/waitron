@@ -38,7 +38,7 @@ import {
   madridWithVatClassChanges,
   type MadridVatClassChange,
 } from "./testing/madrid-vat-class-changes.js";
-import { madridWithAddedRows, type MadridAddedCategory } from "./testing/madrid-added-rows.js";
+import { madridWithSharedOffers, type MadridSharedOffers } from "./testing/madrid-shared-offers.js";
 import {
   madridWithPeriodChanges,
   type MadridPeriodChange,
@@ -74,63 +74,145 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
   ].map((image) => ({ product: madridProduct(image), old: "reduced", new: "super_reduced" })),
 ];
 
-const TAKEAWAY_DRINKS = {
-  cola: {
-    image: "5796adbb32bc1ed2781bb2ce4755d2b0d9ed7ff37226cfa8b4ff23335684cfeb.webp",
-    customerName: { en: "Coca-Cola can (33 cl)", es: "Coca-Cola en lata (33 cl)" },
-    unitPrice: 180,
-    vatClass: "general",
-    pricingUnit: "each",
-  },
-  colaZero: {
-    image: "1697b140ce241b4ec3c003b86fc62e4212780eff2c2659b3ee71117aa85564a6.webp",
-    customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
-    unitPrice: 180,
-    vatClass: "general",
-    pricingUnit: "each",
-  },
-  beer: {
-    image: "4b2c42eed14559d95309ef3b2e63ad31a625ee1d9db7212326c6b2258eb14a5c.webp",
-    customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
-    unitPrice: 160,
-    vatClass: "general",
-    pricingUnit: "each",
-  },
+const DRINK_IMAGES = {
+  cola: "280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp",
+  colaZero: "1697b140ce241b4ec3c003b86fc62e4212780eff2c2659b3ee71117aa85564a6.webp",
+  beer: "4b2c42eed14559d95309ef3b2e63ad31a625ee1d9db7212326c6b2258eb14a5c.webp",
 };
-const TAKEAWAY_DRINK_NAMES = { en: "Drinks to take away", es: "Bebidas para llevar" };
-const ADDED_CATEGORIES: Record<"en" | "es", MadridAddedCategory[]> = {
-  en: [
-    {
-      menu: "Deli takeaway",
-      name: "Drinks to take away",
-      names: TAKEAWAY_DRINK_NAMES,
-      products: [
-        { ...TAKEAWAY_DRINKS.cola, name: "Coca-Cola", kitchenName: "COCA-COLA · DELI" },
-        {
-          ...TAKEAWAY_DRINKS.colaZero,
-          name: "Coca-Cola Zero",
-          kitchenName: "COCA-COLA ZERO · DELI",
-        },
-        { ...TAKEAWAY_DRINKS.beer, name: "Bottled beer", kitchenName: "BOTTLED BEER · DELI" },
+interface SharedDrinkNames {
+  department: string;
+  menus: { drinks: string; casa: string; lunch: string; deli: string };
+  categories: { soft: string; wineAndBeer: string };
+  deliSection: string;
+  zone: string;
+  station: string;
+  colaZero: { name: string; kitchenName: string };
+  beer: { name: string; kitchenName: string };
+}
+// The restaurant's cola, and its new Coca-Cola Zero and bottled beer, are listed in the deli and
+// take away at the general class; the deli sells to take away and makes its drinks itself.
+const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
+  const menu = (name: string) => `@catalogues:${stable([name])}`;
+  const product = (image: string) => `@products:${stable([image])}`;
+  const category = (name: string) => `@categories:${stable([name])}`;
+  const section = (menuName: string, role: string, name: string) =>
+    `@sections:${stable([menu(menuName), role, name])}`;
+  const menus = names.menus;
+  const restaurantMenus = [menus.drinks, menus.casa, menus.lunch];
+  const added = [DRINK_IMAGES.colaZero, DRINK_IMAGES.beer];
+  const deliSection = section(menus.deli, "section", names.deliSection);
+  return {
+    changed: [
+      {
+        table: "departments",
+        row: `@departments:${stable([names.department])}`,
+        column: "dining",
+        from: "eat_in",
+        to: "takeaway",
+      },
+      {
+        table: "products",
+        row: product(DRINK_IMAGES.cola),
+        column: "takeaway_vat_class",
+        from: null,
+        to: "general",
+      },
+    ],
+    products: [
+      {
+        image: DRINK_IMAGES.colaZero,
+        ...names.colaZero,
+        customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
+        category: names.categories.soft,
+        vatClass: "reduced",
+        takeawayVatClass: "general",
+        unitPrice: 180,
+        pricingUnit: "each",
+      },
+      {
+        image: DRINK_IMAGES.beer,
+        ...names.beer,
+        customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
+        category: names.categories.wineAndBeer,
+        vatClass: "reduced",
+        takeawayVatClass: "general",
+        unitPrice: 160,
+        pricingUnit: "each",
+      },
+    ],
+    added: {
+      products: added.map((image) => [product(image)]),
+      media_images: added.map((image) => [image]),
+      media_blobs: added.map((image) => [image.split(".")[0]]),
+      menu_items: [
+        ...restaurantMenus.flatMap((name) => added.map((image) => [menu(name), product(image)])),
+        ...[DRINK_IMAGES.cola, ...added].map((image) => [menu(menus.deli), product(image)]),
       ],
-    },
-  ],
-  es: [
-    {
-      menu: "Charcutería para llevar",
-      name: "Bebidas para llevar",
-      names: TAKEAWAY_DRINK_NAMES,
-      products: [
-        { ...TAKEAWAY_DRINKS.cola, name: "Coca-Cola", kitchenName: "COCA-COLA · CHARCUTERÍA" },
-        {
-          ...TAKEAWAY_DRINKS.colaZero,
-          name: "Coca-Cola Zero",
-          kitchenName: "COCA-COLA ZERO · CHARCUTERÍA",
-        },
-        { ...TAKEAWAY_DRINKS.beer, name: "Botellín", kitchenName: "BOTELLÍN · CHARCUTERÍA" },
+      menu_version_images: [
+        ...restaurantMenus.flatMap((name) =>
+          added.map((image) => [`@menu_versions:${stable([menu(name), 1])}`, image]),
+        ),
+        ...[DRINK_IMAGES.cola, ...added].map((image) => [
+          `@menu_versions:${stable([menu(menus.deli), 1])}`,
+          image,
+        ]),
       ],
+      sections: [[deliSection]],
+      section_members: [
+        [
+          section(menus.drinks, "section", names.categories.soft),
+          product(DRINK_IMAGES.colaZero),
+          null,
+        ],
+        [
+          section(menus.drinks, "section", names.categories.wineAndBeer),
+          product(DRINK_IMAGES.beer),
+          null,
+        ],
+        [section(menus.deli, "menu_root", menus.deli), null, deliSection],
+        ...[DRINK_IMAGES.cola, ...added].map((image) => [deliSection, product(image), null]),
+      ],
+      routing_cells: [names.categories.soft, names.categories.wineAndBeer].map((name) => [
+        category(name),
+        null,
+        `@floor_zones:${stable([names.zone])}`,
+        `@kitchen_stations:${stable([names.station])}`,
+      ]),
     },
-  ],
+    changedOffers: restaurantMenus.map((name) => ({
+      menuItem: `@menu_items:${stable([menu(name), product(DRINK_IMAGES.cola)])}`,
+      field: "takeawayVatClass",
+      from: "reduced",
+      to: "general",
+    })),
+  };
+};
+const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
+  en: sharedDrinks({
+    department: "Deli",
+    menus: { drinks: "Drinks", casa: "Casa Delgado", lunch: "Set lunch", deli: "Deli takeaway" },
+    categories: { soft: "Soft drinks", wineAndBeer: "Wine and beer" },
+    deliSection: "Drinks",
+    zone: "Deli counter",
+    station: "Deli prep",
+    colaZero: { name: "Coca-Cola Zero", kitchenName: "COCA-COLA ZERO · BAR" },
+    beer: { name: "Bottled beer", kitchenName: "BOTTLED BEER · BAR" },
+  }),
+  es: sharedDrinks({
+    department: "Charcutería",
+    menus: {
+      drinks: "Bebidas",
+      casa: "Casa Delgado",
+      lunch: "Menú del Día",
+      deli: "Charcutería para llevar",
+    },
+    categories: { soft: "Refrescos", wineAndBeer: "Vino y cerveza" },
+    deliSection: "Bebidas",
+    zone: "Mostrador de charcutería",
+    station: "Preparación de charcutería",
+    colaZero: { name: "Coca-Cola Zero", kitchenName: "COCA-COLA ZERO · BARRA" },
+    beer: { name: "Botellín", kitchenName: "BOTELLÍN · BARRA" },
+  }),
 };
 const periodChange = (
   department: string,
@@ -1937,7 +2019,7 @@ for (const locale of ["en", "es"] as const) {
         expected.seeded.tables.opening_hours!.rows = Object.fromEntries(
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
-        const { semantics, added } = madridWithAddedRows(
+        const { semantics, added } = madridWithSharedOffers(
           madridWithDroppedColumns(
             madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
             {
@@ -1945,7 +2027,7 @@ for (const locale of ["en", "es"] as const) {
             },
           ),
           historicalSeeded,
-          ADDED_CATEGORIES[locale],
+          SHARED_DRINKS[locale],
         );
         expected.seeded = semantics;
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;

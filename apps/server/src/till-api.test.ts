@@ -1633,6 +1633,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // This suite's configuration carries no regime limit.
       simplifiedInvoiceLimit: null,
       fullInvoices: true,
+      takeawayVat: true,
       themeHash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146",
     });
     // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the
@@ -2434,7 +2435,11 @@ describe("POST /api/sales (session-guarded sale)", () => {
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ lines: [], tender: { method: "cash", amount: "0" } }),
+      body: JSON.stringify({
+        dining: "eat_in",
+        lines: [],
+        tender: { method: "cash", amount: "0" },
+      }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -2451,6 +2456,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
         workingOrderId: "not-a-uuid",
@@ -2485,6 +2491,7 @@ describe("the device checks read the session's device, not the device cookie", (
         cookie: await sessionOnDeviceWith(["open-cash-drawer"]),
       },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -2511,6 +2518,7 @@ describe("the device checks read the session's device, not the device cookie", (
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -2554,7 +2562,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -2568,7 +2576,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
@@ -2590,6 +2598,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
         cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         simulationOutcome: "captured",
@@ -2614,6 +2623,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
         cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         id: "not-a-uuid",
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
       }),
@@ -2805,6 +2815,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
         cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
         zoneId: "not-a-zone",
@@ -2827,6 +2838,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
         cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         zoneId: "not-a-zone",
@@ -2854,6 +2866,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
           cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
         },
         body: JSON.stringify({
+          dining: "eat_in",
           id: randomUUID(),
           lines: [{ menuItemId: waterOfferId, quantity: "1" }],
           simulationOutcome,
@@ -2886,7 +2899,7 @@ async function park(
   return app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ dining: "eat_in", ...body }),
   });
 }
 
@@ -3030,14 +3043,14 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       app.request("/api/working-orders", {
         method: "POST",
         headers: json,
-        body: JSON.stringify({ id, lines: [] }),
+        body: JSON.stringify({ dining: "eat_in", id, lines: [] }),
       }),
       app.request("/api/working-orders"),
       app.request(`/api/working-orders/${id}`),
       app.request(`/api/working-orders/${id}`, {
         method: "PUT",
         headers: json,
-        body: JSON.stringify({ lines: [] }),
+        body: JSON.stringify({ dining: "eat_in", lines: [] }),
       }),
       app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
       // The prep surface.
@@ -3101,6 +3114,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: allowedId,
         zoneId: counterZoneId,
         lines: [{ menuItemId: waterOfferId, quantity: "2" }],
@@ -3118,6 +3132,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         zoneId: counterZoneId,
         lines: [{ menuItemId: hiddenWaterOfferId, quantity: "1" }],
@@ -3141,6 +3156,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         lines: [{ productId: waterProduct.id, quantity: "1" }],
       }),
@@ -3253,6 +3269,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: waterOfferId, quantity: "5" }],
         label: "Mesa 7 bis",
         revision: 0,
@@ -3308,7 +3325,11 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const put = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: waterOfferId, quantity: "2" }], revision: 0 }),
+      body: JSON.stringify({
+        dining: "eat_in",
+        lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+        revision: 0,
+      }),
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
@@ -4433,6 +4454,7 @@ describe("canonical modifier HTTP serialization", () => {
       method: "POST",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         id,
         lines: [{ menuItemId: f.offer.id, quantity: "2", ...f.answers }],
       }),
@@ -4452,6 +4474,7 @@ describe("canonical modifier HTTP serialization", () => {
       method: "PUT",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [
           {
             workingOrderLineId: body.lines[0]!.workingOrderLineId,
@@ -4507,6 +4530,7 @@ describe("canonical modifier HTTP serialization", () => {
         method: "POST",
         headers: f.headers,
         body: JSON.stringify({
+          dining: "eat_in",
           id: randomUUID(),
           lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers, ...line }],
         }),
@@ -4636,6 +4660,7 @@ describe("canonical modifier checkout refusal", () => {
             },
           ],
           tender: { method: "cash", amount: "20.00" },
+          dining: "eat_in",
         }),
       });
       expect(response.status, await response.clone().text()).toBe(400);
@@ -4680,6 +4705,7 @@ describe("a till request cannot hand over settled extras or options", () => {
       method: "POST",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         id,
         lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers, [key]: value(f) }],
       }),
@@ -4699,6 +4725,7 @@ describe("a till request cannot hand over settled extras or options", () => {
       method: "POST",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         id,
         lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers }],
       }),
@@ -4712,6 +4739,7 @@ describe("a till request cannot hand over settled extras or options", () => {
       method: "PUT",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [
           {
             workingOrderLineId: body.lines[0]!.workingOrderLineId,
@@ -4750,6 +4778,7 @@ describe("a till request cannot hand over settled extras or options", () => {
         method: "POST",
         headers: f.headers,
         body: JSON.stringify({
+          dining: "eat_in",
           id,
           lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers }],
         }),
@@ -4763,6 +4792,7 @@ describe("a till request cannot hand over settled extras or options", () => {
         method: "PUT",
         headers: f.headers,
         body: JSON.stringify({
+          dining: "eat_in",
           lines: [
             {
               workingOrderLineId: body.lines[0]!.workingOrderLineId,
@@ -4792,6 +4822,7 @@ describe("a till request cannot hand over settled extras or options", () => {
       method: "POST",
       headers: f.headers,
       body: JSON.stringify({
+        dining: "eat_in",
         id,
         lines: [
           {
@@ -4898,7 +4929,7 @@ describe("sale-policy order flow routes", () => {
       const parked = await app.request("/api/working-orders", {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({ id, zoneId, lines }),
+        body: JSON.stringify({ dining: "eat_in", id, zoneId, lines }),
       });
       expect(parked.status).toBe(200);
       expect(
@@ -4984,6 +5015,7 @@ describe("settling edit answers", () => {
         kind === "line"
           ? await cancelItemHttp(edits.db, venue.app, venue.cookie, id, line!.lineNo, "1")
           : await sendBillRequest(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+              dining: "eat_in",
               revision: order!.revision,
               expectedEdit,
               lines: [{ workingOrderLineId: line!.id, menuItemId, quantity: "1" }],
@@ -5016,6 +5048,7 @@ it("refuses integrated reader pay while Payments is Off before any collection", 
       cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
     },
     body: JSON.stringify({
+      dining: "eat_in",
       id: randomUUID(),
       lines: [{ menuItemId: waterOfferId, quantity: "1" }],
     }),

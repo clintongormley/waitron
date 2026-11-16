@@ -150,6 +150,7 @@ function expectAsked(): void {
 describe("POST /api/sales needs payment.take", () => {
   function counterSale(id: string) {
     return send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
       tender: { method: "cash", amount: "20.00" },
       workingOrderId: id,
@@ -158,6 +159,7 @@ describe("POST /api/sales needs payment.take", () => {
   }
   function payTabByCard(tabId: string) {
     return send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "card", amount: "18.00", externalRef: "OP-1" },
       workingOrderId: tabId,
@@ -214,7 +216,11 @@ describe("POST /api/sales needs payment.take", () => {
 
 describe("POST /api/pay needs payment.take", () => {
   function payOnReader(tabId: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/pay", { id: tabId, lines: [] });
+    return send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id: tabId,
+      lines: [],
+    });
   }
 
   it("refuses before the reader is asked and leaves the tab open with no payment", async () => {

@@ -960,7 +960,11 @@ describe("screens and actions are separate", () => {
     expect(advance.body.error).toEqual(forbidden("prepare-orders").error);
     const collect = await send(cookie, "POST", `/api/orders/${id}/collect`, {});
     expect(collect.body.error).toEqual(forbidden("hand-over-orders").error);
-    const pay = await send(cookie, "POST", "/api/sales", { lines: [], tender: cash });
+    const pay = await send(cookie, "POST", "/api/sales", {
+      dining: "eat_in",
+      lines: [],
+      tender: cash,
+    });
     expect(pay.body.error?.code).toBe("device.cash_not_allowed");
   });
 
@@ -975,6 +979,7 @@ describe("screens and actions are separate", () => {
       forbidden("prepare-orders"),
     );
     const park = await send(cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: randomUUID(),
       lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
     });
@@ -1018,6 +1023,7 @@ describe("the order of a sale's refusals", () => {
     });
     const { cookie } = await signInOn(restaurantOnly);
     const sale = await send(cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
       zoneId: deli.id,
     });
@@ -1042,6 +1048,7 @@ describe("the person's permission and the profile's action are both needed", () 
   it("serves an action with no person permission to any signed-in staff member on a profile that permits it", async () => {
     const { cookie } = await signIn(["take-orders"], "staff");
     const park = await send(cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: randomUUID(),
       lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
     });
@@ -1051,6 +1058,7 @@ describe("the person's permission and the profile's action are both needed", () 
   it("refuses the same staff member the same order on a profile that does not take orders", async () => {
     const { cookie } = await signIn(allBut("take-orders"), "staff");
     const park = await send(cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: randomUUID(),
       lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
     });
@@ -1063,14 +1071,18 @@ describe("a shared kitchen display", () => {
     const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
     const kds = await profile(CAPABILITY_FLAGS, "kds");
     await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
-    const park = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
+    const park = await send(cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
+      id: randomUUID(),
+      lines: [],
+    });
     expect(park.body.error?.code).toBe("sale.empty_basket");
     const order = await counterOrder(v, "Caña");
     const collect = await send(cookie, "POST", `/api/working-orders/${order}/collect`, {
       tender: cash,
     });
     expect(collect.body.error?.code).toBe("device.cash_not_allowed");
-    const pay = await send(cookie, "POST", "/api/pay", {});
+    const pay = await send(cookie, "POST", "/api/pay", { dining: "eat_in" });
     expect(pay.body.error).toEqual(forbidden("pay").error);
     const open = await send(cookie, "POST", "/api/drawer/open", {});
     expect(open.body.error).toEqual(forbidden("drawer_open").error);
@@ -1089,7 +1101,11 @@ describe("a shared kitchen display", () => {
       "kds",
     );
     await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
-    const park = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
+    const park = await send(cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
+      id: randomUUID(),
+      lines: [],
+    });
     expect(park.body.error).toEqual(forbidden("take-orders").error);
   });
 
@@ -1097,9 +1113,9 @@ describe("a shared kitchen display", () => {
     const cookie = await display(CAPABILITY_FLAGS);
     const order = await counterOrder(v, "Caña");
     for (const [path, body] of [
-      ["/api/working-orders", { id: randomUUID(), lines: [] }],
-      ["/api/sales", { lines: [], tender: cash }],
-      ["/api/pay", {}],
+      ["/api/working-orders", { dining: "eat_in", id: randomUUID(), lines: [] }],
+      ["/api/sales", { dining: "eat_in", lines: [], tender: cash }],
+      ["/api/pay", { dining: "eat_in" }],
       [`/api/working-orders/${order}/collect`, { tender: cash }],
       [`/api/working-orders/${order}/payments`, cash],
       ["/api/drawer/open", {}],
@@ -1253,7 +1269,11 @@ it("lets admitted staff save display zones while their profile still refuses ord
   expect(current.status).toBe(200);
   expect(current.body.startingZoneId).toEqual(expect.any(String));
   expect((await send(cookie, "PUT", "/api/device/zones", current.body)).status).toBe(200);
-  const order = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
+  const order = await send(cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
+    id: randomUUID(),
+    lines: [],
+  });
   expect({ status: order.status, error: order.body.error }).toEqual(forbidden("take-orders"));
 });
 

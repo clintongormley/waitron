@@ -694,6 +694,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
           [PERSON_HEADER]: till.personId,
         },
         body: JSON.stringify({
+          dining: "eat_in",
           lines: [{ menuItemId: till.menuItemId, quantity: "1" }],
           tender: { method: "cash", amount: "5.00" },
           workingOrderId,

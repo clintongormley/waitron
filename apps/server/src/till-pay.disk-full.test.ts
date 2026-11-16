@@ -67,6 +67,7 @@ const lines = (count: number) =>
 
 function walkUpPay(disk: DiskFullState, id = randomUUID()) {
   return send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: lines(1),
     zoneId: counter.zoneId,
@@ -75,6 +76,7 @@ function walkUpPay(disk: DiskFullState, id = randomUUID()) {
 
 function payAgain(disk: DiskFullState, id: string) {
   return send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: [],
     zoneId: counter.zoneId,
@@ -205,6 +207,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     const id = randomUUID();
 
     const answer = await send(venue.appWith({ disk, log }), venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: lines(1),
       zoneId: counter.zoneId,
@@ -356,6 +359,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
       }
 
       const cash = await send(venue.appWith({ disk }), venue.cookie, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: randomUUID(),
         lines: lines(20),
         zoneId: counter.zoneId,

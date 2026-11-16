@@ -14,6 +14,8 @@ afterEach(() => setLocale("en"));
 
 function bill(over: Partial<PartyBill>): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-1",
     revision: 0,
     invoiceType: "F2",

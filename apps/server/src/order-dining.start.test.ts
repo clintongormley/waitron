@@ -100,6 +100,7 @@ const croquettes = () => [{ menuItemId: venue.offerFor("Croquettes"), quantity: 
 
 function park(body: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id: randomUUID(),
     lines: croquettes(),
     zoneId: counterZoneId,
@@ -135,7 +136,7 @@ async function revisionOf(id: string): Promise<number> {
 describe("a new order's way of selling", () => {
   it("parks an order in a takeaway department as takeaway", async () => {
     await departmentsSell("takeaway");
-    const parked = await park({});
+    const parked = await park({ dining: "takeaway" });
     expect(parked.status).toBe(200);
     expect(await diningOf(parked.json.id as string)).toBe("takeaway");
   });
@@ -149,25 +150,34 @@ describe("a new order's way of selling", () => {
     expect(await diningOf(id)).toBeUndefined();
   });
 
-  it.each([
-    ["takeaway", "takeaway"],
-    [undefined, "takeaway"],
-  ] as const)(
-    "sells a walk-up in a till-choice department asked %s as %s",
-    async (dining, expected) => {
-      await departmentsSell("till_choice", "takeaway");
-      const workingOrderId = randomUUID();
-      const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-        workingOrderId,
-        lines: croquettes(),
-        zoneId: counterZoneId,
-        tender: { method: "cash", amount: "10.00" },
-        ...(dining === undefined ? {} : { dining }),
-      });
-      expect(sold.status).toBe(200);
-      expect(await diningOf(workingOrderId)).toBe(expected);
-    },
-  );
+  it("sells a walk-up asked takeaway, in a till-choice department starting takeaway", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: croquettes(),
+      zoneId: counterZoneId,
+      tender: { method: "cash", amount: "10.00" },
+      dining: "takeaway",
+    });
+    expect(sold.status).toBe(200);
+    expect(await diningOf(workingOrderId)).toBe("takeaway");
+  });
+
+  it("refuses a walk-up that does not say its way, in a till-choice department, and records nothing", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: croquettes(),
+      zoneId: counterZoneId,
+      tender: { method: "cash", amount: "10.00" },
+    });
+    expect(sold.status).toBe(400);
+    expect(sold.json).toEqual({ code: "management.request_invalid", params: { field: "dining" } });
+    expect(await diningOf(workingOrderId)).toBeUndefined();
+    expect(await effectsOf(workingOrderId)).toEqual({ sales: 0, ticketItems: 0 });
+  });
 
   it("sells a walk-up asked to eat in, in a till-choice department starting takeaway", async () => {
     await departmentsSell("till_choice", "takeaway");
@@ -204,6 +214,7 @@ describe("a new order's way of selling", () => {
     });
     const workingOrderId = randomUUID();
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId,
       lines: croquettes(),
       zoneId: counterZoneId,
@@ -265,6 +276,92 @@ describe("a new order's way of selling", () => {
       });
     },
   );
+});
+
+describe("the way a zone's offers say a new order starts", () => {
+  async function contextDining(zoneId: string): Promise<unknown> {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/service-zones/${zoneId}/offers`,
+    );
+    expect(answer.status).toBe(200);
+    return (answer.json.context as { dining: unknown }).dining;
+  }
+
+  it.each([
+    ["eat_in", "takeaway", "eat_in"],
+    ["takeaway", "eat_in", "takeaway"],
+    ["till_choice", "takeaway", "takeaway"],
+    ["till_choice", "eat_in", "eat_in"],
+  ] as const)(
+    "a counter zone in a %s department starting %s starts %s",
+    async (policy, startsAs, starts) => {
+      await departmentsSell(policy, startsAs);
+      expect(await contextDining(counterZoneId)).toEqual({ policy, startsAs: starts });
+    },
+  );
+
+  it("a table zone in a till-choice department starting takeaway starts eaten here", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    expect(await contextDining(tables.zoneId)).toEqual({
+      policy: "till_choice",
+      startsAs: "eat_in",
+    });
+  });
+
+  it("the menu-state poll carries the way after a department's setting is saved", async () => {
+    const poll = async () => {
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/menu-state?zoneId=${counterZoneId}`,
+      );
+      expect(answer.status).toBe(200);
+      return answer.json.dining;
+    };
+    await departmentsSell("eat_in");
+    expect(await poll()).toEqual({ policy: "eat_in", startsAs: "eat_in" });
+    await departmentsSell("takeaway");
+    expect(await poll()).toEqual({ policy: "takeaway", startsAs: "takeaway" });
+    await departmentsSell("till_choice", "takeaway");
+    expect(await poll()).toEqual({ policy: "till_choice", startsAs: "takeaway" });
+  });
+
+  it("the default zone's offers say the same", async () => {
+    await departmentsSell("takeaway");
+    const answer = await send(venue.app, venue.cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect((answer.json.context as { dining: unknown }).dining).toEqual({
+      policy: "takeaway",
+      startsAs: "takeaway",
+    });
+  });
+
+  it("answers null in a region that charges no takeaway VAT", async () => {
+    await departmentsSell("takeaway");
+    await venue.db.execute(sql`update taxpayer set country = 'GB'`);
+    await venue.db.execute(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'GB-vat') where module = 'venue'`,
+    );
+    try {
+      expect(await contextDining(counterZoneId)).toBeNull();
+      const poll = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/menu-state?zoneId=${counterZoneId}`,
+      );
+      expect(poll.json.dining).toBeNull();
+    } finally {
+      await venue.db.execute(sql`update taxpayer set country = 'ES'`);
+      await venue.db.execute(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
+      );
+    }
+  });
 });
 
 describe("a request naming a way an existing order does not have", () => {
@@ -382,6 +479,114 @@ describe("a request naming a way an existing order does not have", () => {
   });
 });
 
+describe("a request that does not say how the order is sold", () => {
+  const refusal = { code: "management.request_invalid", params: { field: "dining" } };
+
+  async function linesOf(id: string): Promise<number> {
+    const lines = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    return lines.length;
+  }
+
+  it("refuses a cash sale and records nothing", async () => {
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: croquettes(),
+      zoneId: counterZoneId,
+      tender: { method: "cash", amount: "10.00" },
+      dining: undefined,
+    });
+    expect(sold.status).toBe(400);
+    expect(sold.json).toEqual(refusal);
+    expect(await diningOf(workingOrderId)).toBeUndefined();
+    expect(await effectsOf(workingOrderId)).toEqual({ sales: 0, ticketItems: 0 });
+  });
+
+  it("refuses a card pay, asks the reader for nothing and records nothing", async () => {
+    const id = await parkedTakeaway();
+    const revision = await revisionOf(id);
+    const calls = venue.card.collectCalls.length;
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: [],
+      dining: undefined,
+    });
+    expect(paid.status).toBe(400);
+    expect(paid.json).toEqual(refusal);
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(await revisionOf(id)).toBe(revision);
+    expect(await effectsOf(id)).toEqual({ sales: 0, ticketItems: 0 });
+  });
+
+  it("refuses a park and parks nothing", async () => {
+    const id = randomUUID();
+    const parked = await park({ id, dining: undefined });
+    expect(parked.status).toBe(400);
+    expect(parked.json).toEqual(refusal);
+    expect(await diningOf(id)).toBeUndefined();
+    expect(await linesOf(id)).toBe(0);
+  });
+
+  it("refuses saving an open order and leaves it as it was", async () => {
+    const id = await parkedTakeaway();
+    const revision = await revisionOf(id);
+    const saved = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: [...croquettes(), ...croquettes()],
+      revision,
+      dining: undefined,
+    });
+    expect(saved.status).toBe(400);
+    expect(saved.json).toEqual(refusal);
+    expect(await linesOf(id)).toBe(1);
+    expect(await revisionOf(id)).toBe(revision);
+    expect(await effectsOf(id)).toEqual({ sales: 0, ticketItems: 0 });
+  });
+
+  it("refuses sending a round and sends nothing", async () => {
+    const { partyId, tabId } = await seatedWith(venue);
+    const draftPath = `/api/parties/${partyId}/drafts`;
+    const saved = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      draftPath,
+      await observedDraftCommandBody(venue.db, "PUT", draftPath, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: croquettes(),
+      }),
+    );
+    expect(saved.status).toBe(200);
+    const draft = saved.json.draft as { id: string; revision: number; lines: { id: string }[] };
+    const [party] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${partyId}`,
+    );
+    const linesBefore = await linesOf(tabId);
+    const submitPath = `${draftPath}/${draft.id}/submit`;
+    const submitted = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      submitPath,
+      await observedDraftCommandBody(venue.db, "POST", submitPath, {
+        submissionId: randomUUID(),
+        draftRevision: draft.revision,
+        expectedPartyRevision: party!.revision,
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+        dining: undefined,
+      }),
+    );
+    expect(submitted.status).toBe(400);
+    expect(submitted.json).toEqual(refusal);
+    expect(await linesOf(tabId)).toBe(linesBefore);
+    expect(await effectsOf(tabId)).toEqual({ sales: 0, ticketItems: 0 });
+  });
+});
+
 describe("the classes a line keeps", () => {
   beforeEach(() => departmentsSell("till_choice"));
 
@@ -440,7 +645,7 @@ describe("a set lunch on a takeaway order", () => {
 
   it("refuses a set lunch in a takeaway department, saying the order cannot switch", async () => {
     await departmentsSell("takeaway");
-    const parked = await park({ lines: lunchAt(counter) });
+    const parked = await park({ dining: "takeaway", lines: lunchAt(counter) });
     expect(parked.status).toBe(409);
     expect(parked.json).toEqual({
       code: "order.set_lunch_takeaway",
@@ -458,6 +663,7 @@ describe("a set lunch on a takeaway order", () => {
     await departmentsSell("till_choice");
     const id = await parkedTakeaway();
     const saved = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "takeaway",
       lines: [...croquettes(), ...lunchAt(counter)],
       revision: await revisionOf(id),
     });

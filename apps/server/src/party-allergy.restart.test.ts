@@ -150,6 +150,7 @@ describe("A669 consideration through a server process restart", () => {
         .where(eq(sessions.id, v.operator.sessionId));
       const requestCookie = await sessionCookieForTest(v.db, token);
       const command = {
+        ...(path === "draft" ? { dining: "eat_in" } : {}),
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(v, party.partyId),
         expectedEdit: await inTx(v, (tx) => readBillEditState(tx, party.tabId)),
@@ -331,6 +332,7 @@ describe("A669 submit HTTP assignments", () => {
           .where(eq(sessions.id, v.operator.sessionId));
         const requestCookie = await sessionCookieForTest(v.db, token);
         const body = {
+          ...(draft === null ? {} : { dining: "eat_in" }),
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(v, party.partyId),
           expectedEdit: await inTx(v, (tx) => readBillEditState(tx, party.tabId)),

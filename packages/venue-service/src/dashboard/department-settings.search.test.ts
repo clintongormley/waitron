@@ -22,6 +22,14 @@ it.each(["en", "es"] as const)(
     el.model = structuredClone(el.model);
     el.model.departments[2]!.active = true;
     el.model.courses = [{ id: "mains", name: "Mains" }];
+    el.model.takeawayVat = true;
+    Object.assign(
+      el.model.salePolicies.departments.find((row) => row.departmentId === "d1")!,
+      {
+        dining: "till_choice",
+        diningStartsAs: "eat_in",
+      },
+    );
     el.model.serviceSteps = [
       {
         afterStepId: null,

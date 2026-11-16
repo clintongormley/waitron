@@ -1846,6 +1846,7 @@ describe("the single-payment routes on a bill whose only card payment was refund
     expect(back.answer.json).toMatchObject({ refund: { state: "completed" } });
 
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "cash", amount: "30.00" },
       workingOrderId: billId,
@@ -1874,7 +1875,11 @@ describe("the single-payment routes on a bill whose only card payment was refund
     await refund(billId, card.id, { applied: "20.00" });
     const calls = venue.card.collectCalls.length;
 
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] });
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id: billId,
+      lines: [],
+    });
 
     expect(paid).toEqual({
       status: 409,

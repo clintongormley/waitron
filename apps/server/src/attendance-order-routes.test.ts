@@ -60,6 +60,7 @@ async function action(app: Hono, id: string, kind: Action) {
   const lines = [{ menuItemId: v.offerFor("House salad"), quantity: "1" }];
   if (kind === "park")
     return send(app, v.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines,
       zoneId: v.zoneId,
@@ -71,6 +72,7 @@ async function action(app: Hono, id: string, kind: Action) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     return send(app, v.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: [{ ...lines[0]!, workingOrderLineId: line!.id, quantity: "2" }],
       revision: 0,
       ...extra,

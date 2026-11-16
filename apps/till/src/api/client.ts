@@ -47,6 +47,7 @@ import type {
   BumpMode,
   ChangesAfterSending,
   ContentLanguages,
+  Dining,
   JoinSide,
   ExtraSelection,
   KitchenSignal,
@@ -63,6 +64,7 @@ import type {
   MenuState,
   MenuUnavailable,
   ServedMenu,
+  DiningStart,
 } from "@waitron/shared";
 import { readEventStream } from "./transfer-events.js";
 import type {
@@ -232,6 +234,8 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
   /** Whether the server can issue a full invoice naming the customer (F1). */
   fullInvoices: boolean;
+  /** Whether the venue's region charges a different VAT class on food taken away. */
+  takeawayVat: boolean;
   /** `/api/theme`'s hash for the theme in use. */
   themeHash: string;
   /** A hash of every field here but `servers` and `membership`; `/api/menu-state` names it too. */
@@ -433,6 +437,12 @@ export type TillMenuOffer = LiveOffer;
  * structure and Device Home Page. */
 export type TillZoneMenu = ServedMenu;
 
+/** Whether the till offers an order's switch between eaten here and takeaway: never, now, or no
+ * longer (something is sent or paid). */
+export type DiningChoice = "none" | "open" | "locked";
+
+export type ZoneDining = DiningStart;
+
 export interface ZoneOffers {
   service: MenuState["service"];
   context: {
@@ -440,6 +450,8 @@ export interface ZoneOffers {
     departmentId: string;
     departmentName: string;
     serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
+    /** Null where the region charges no takeaway VAT: every order is eaten here. */
+    dining: ZoneDining | null;
   };
   defaultMenuId: string | null;
   menus: TillZoneMenu[];
@@ -462,6 +474,8 @@ export type MenuStateAnswer = MenuState & {
   defaultMenuId?: string | null;
   liveFields?: string;
   setupRevision?: string;
+  /** The zone's {@link ZoneOffers} `context.dining`, so a department's change reaches a running till. */
+  dining?: ZoneDining | null;
 };
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
@@ -864,6 +878,8 @@ export interface DraftSubmission extends GroupCommand {
   joinGroupId?: string;
   billId?: string;
   lateSend?: LateSend;
+  /** The way the screen showed the bill. */
+  dining: Dining;
 }
 
 /** The groups placed, and the draft as it is left: null once every line was sent. */
@@ -1066,6 +1082,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   /** The table/operator label and venue order number printed on every document as its grouping key. */
   orderLabel: string | null;
   orderNumber: number;
+  /** The order was taken away; absent when it was eaten here. */
+  takeAway?: true;
   invoiceNumber: string;
   issuedAt: string;
   total: string;
@@ -1408,6 +1426,9 @@ export interface HeldOrder {
   receiptLanguage?: string;
   /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
   invoiceType: "F1" | "F2";
+  /** The order's own way, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
@@ -1709,6 +1730,7 @@ export interface StationQueueGroup {
    *  counter order is delivered to, or the name kept once that table was let go; absent when
    *  none. */
   tableShortNames?: string[];
+  dining: Dining;
   queuedAt: string;
   /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`
    *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */
@@ -2008,6 +2030,7 @@ export interface PassCard {
     tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
+    dining: Dining;
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
@@ -2177,6 +2200,9 @@ export interface MergeInvoiceChoice {
 export interface PartyBill {
   workingOrderId: string;
   revision: number;
+  /** The bill's own way, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
   invoiceType: "F1" | "F2";
   invoiceDelivery?: InvoiceDeliveryChoice;
   recipient: {
@@ -3033,6 +3059,7 @@ export class TillApi {
     kitchenNote: string | null | undefined,
     guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
+    dining: Dining,
     lateSend?: LateSend,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
@@ -3045,6 +3072,7 @@ export class TillApi {
       kitchenNote,
       ...(guestCount === undefined ? {} : { guestCount }),
       expectedEdit,
+      dining,
       ...(lateSend === undefined ? {} : { lateSend }),
     });
   }
@@ -3060,6 +3088,8 @@ export class TillApi {
     expectedEdit: BillEditExpected | null;
     id: string;
     lines: SaleLine[];
+    /** The way the screen showed the order; refused `working_order.out_of_date` when it differs. */
+    dining: Dining;
     invoiceType?: "F1" | "F2";
     recipient?: {
       taxId: string;
@@ -3263,6 +3293,7 @@ export class TillApi {
   parkOrder(req: {
     id: string;
     lines: SaleLine[];
+    dining: Dining;
     zoneId?: string;
     label?: string;
     kitchenNote?: string | null;
@@ -3383,6 +3414,7 @@ export class TillApi {
       label?: string;
       revision: number;
       expectedEdit: BillEditExpected | null;
+      dining: Dining;
       lateSend?: LateSend;
     },
   ): Promise<{ revision: number; invoice?: TillSaleResult }> {
@@ -3391,6 +3423,22 @@ export class TillApi {
       "PUT",
       req,
     );
+  }
+
+  /** Switch a saved order between eaten here and takeaway → `PUT /api/working-orders/:id/dining`.
+   * Rejects, among others, `order.dining_fixed`, `order.dining_locked`, `order.set_lunch_takeaway`
+   * and `working_order.out_of_date`. */
+  switchDining(
+    orderId: string,
+    dining: Dining,
+    revision: number,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(`/api/working-orders/${orderId}/dining`, "PUT", {
+      dining,
+      revision,
+      expectedEdit,
+    });
   }
 
   setWorkingOrderLabel(

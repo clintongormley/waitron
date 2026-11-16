@@ -261,6 +261,7 @@ async function ringSale(
     method: "POST",
     headers: { "content-type": "application/json", cookie: `${sessionCookie}; ${deviceCookie}` },
     body: JSON.stringify({
+      dining: "eat_in",
       lines: [{ menuItemId, quantity: "2" }],
       tender: { method: "cash", amount: "5.00" },
     }),
@@ -395,6 +396,7 @@ describe("a sale posted with the dev-override header files under THAT device (de
         [DEV_DEVICE_HEADER]: deviceY,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: product.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),

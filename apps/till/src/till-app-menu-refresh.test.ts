@@ -157,6 +157,7 @@ function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-bar",
@@ -479,6 +480,41 @@ describe("the unavailable set", () => {
       expect(api.listZoneOffers).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("a department's way of selling on a running till (A1522)", () => {
+  it("a poll answering a changed way changes the next draft and the sale it sends", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    expect(counter(el).store.dining).toBe("eat_in");
+
+    api.menuState.mockResolvedValue({
+      ...menuState("v1"),
+      dining: { policy: "takeaway", startsAs: "takeaway" },
+    });
+    await poll(el);
+
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(counter(el).store.dining).toBe("takeaway");
+    add(el, "Lemonade");
+    await pay(el);
+    expect(api.recordSale.mock.calls[0]![9]).toBe("takeaway");
+  });
+
+  it("a poll answering a region without takeaway VAT starts the next draft eaten here", async () => {
+    const takeaway = { policy: "takeaway", startsAs: "takeaway" } as const;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue({ ...V1, context: { ...V1.context, dining: takeaway } }),
+    });
+    await toCounter(el);
+    expect(counter(el).store.dining).toBe("takeaway");
+    api.menuState.mockResolvedValue({ ...menuState("v1"), dining: null });
+    await poll(el);
+
+    expect(counter(el).store.dining).toBe("eat_in");
+  });
 });
 
 describe("a basket that spans a publish", () => {
@@ -963,6 +999,7 @@ describe("a refresh overtaken by a change of service area", () => {
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
+        dining: null,
       },
     };
     const listZoneOffers = vi.fn((zoneId: string) =>
@@ -1375,6 +1412,7 @@ describe("the poll's own costs", () => {
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
+        dining: null,
       },
     };
     const zone = (id: string) => ({

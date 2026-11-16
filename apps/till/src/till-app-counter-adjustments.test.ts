@@ -63,6 +63,7 @@ const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: "zone-counter",
     departmentId: "department-default",
@@ -113,6 +114,8 @@ function heldOrder(
   draughtBeerQuantity = "1.000",
 ): HeldOrder {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     kitchenNote: {
       scope: { workingOrderId: "wo-9" },
       note: null,

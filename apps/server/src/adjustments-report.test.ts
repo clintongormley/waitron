@@ -135,6 +135,7 @@ async function submit(who: Member, partyId: string, submitted: Draft): Promise<v
     tx.select({ revision: parties.revision }).from(parties).where(eq(parties.id, partyId)),
   );
   await call(who, "POST", `/api/parties/${partyId}/drafts/${submitted.id}/submit`, {
+    dining: "eat_in",
     allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     draftRevision: submitted.revision,

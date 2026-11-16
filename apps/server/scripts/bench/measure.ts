@@ -450,6 +450,7 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
       expectedEdit: null,
       lines: nextDishes(2).map((menuItemId) => ({ menuItemId, quantity: "1" })),
       tender: { method: "cash", amount: "200.00" },
+      dining: "eat_in",
     },
   });
 

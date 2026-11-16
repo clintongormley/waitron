@@ -96,6 +96,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
         zoneId: offers.zoneId,
         lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],
         tender: { method: kind.includes("card") ? "card" : "cash", amount: "100.00" },
+        dining: "eat_in",
       };
     } else if (kind === "collection") {
       const offers = await withTransaction(suite.db, (tx) =>
@@ -106,6 +107,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
         }),
       );
       const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+        dining: "eat_in",
         id,
         zoneId: offers.zoneId,
         lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],
@@ -131,8 +133,13 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
       } else {
         path = reader ? "/api/pay" : "/api/sales";
         body = reader
-          ? { id, lines: [] }
-          : { workingOrderId: id, lines: [], tender: { method: "cash", amount: "100.00" } };
+          ? { id, lines: [], dining: "eat_in" }
+          : {
+              workingOrderId: id,
+              lines: [],
+              tender: { method: "cash", amount: "100.00" },
+              dining: "eat_in",
+            };
       }
     }
     let before = snapshot();

@@ -84,9 +84,16 @@ describe("kitchen note client", () => {
       "Together",
       undefined,
       null,
+      "eat_in",
     );
-    await api.pay({ expectedEdit: null, id: "o", lines: [], kitchenNote: "Together" });
-    await api.parkOrder({ id: "o", lines: [], kitchenNote: "Together" });
+    await api.pay({
+      dining: "eat_in",
+      expectedEdit: null,
+      id: "o",
+      lines: [],
+      kitchenNote: "Together",
+    });
+    await api.parkOrder({ dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" });
     expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body))).toEqual([
       {
         lines: [],
@@ -94,9 +101,10 @@ describe("kitchen note client", () => {
         workingOrderId: "o",
         kitchenNote: "Together",
         expectedEdit: null,
+        dining: "eat_in",
       },
-      { id: "o", lines: [], kitchenNote: "Together", expectedEdit: null },
-      { id: "o", lines: [], kitchenNote: "Together" },
+      { dining: "eat_in", id: "o", lines: [], kitchenNote: "Together", expectedEdit: null },
+      { dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" },
     ]);
   });
 });

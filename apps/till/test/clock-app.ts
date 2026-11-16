@@ -75,6 +75,7 @@ export async function clockApp(
   let state = options.state ?? clockState();
   let entries = 0;
   const info: TillInfo = {
+    takeawayVat: true,
     locale: "en-GB",
     clockingAvailable: options.enabled ?? true,
     invoiceLocale: "es-ES",

@@ -3357,6 +3357,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     );
 
     const saved = await request("PUT", `/api/working-orders/${billId}`, {
+      dining: "eat_in",
       lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Steak"), quantity: "1" }],
       revision: await revisionOf(billId),
     });
@@ -3407,6 +3408,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
         .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 1))),
     );
     return request("PUT", `/api/working-orders/${billId}`, {
+      dining: "eat_in",
       lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Steak"), quantity: "1" }],
       revision: await revisionOf(billId),
     });
@@ -3774,6 +3776,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
     expect((await contribute(billId, "50.00")).status).toBe(200);
 
     const refused = await request("POST", "/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "cash", amount: "120.00" },
       workingOrderId: billId,
@@ -3806,7 +3809,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
       }),
     );
 
-    const refused = await request("POST", "/api/pay", { id: billId, lines: [] });
+    const refused = await request("POST", "/api/pay", { dining: "eat_in", id: billId, lines: [] });
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "bill.payments_received" });

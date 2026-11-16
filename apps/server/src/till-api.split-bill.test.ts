@@ -564,6 +564,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(
         observedWholePaymentBody(venueSuite.db, "/api/sales", {
+          dining: "eat_in",
           lines: [],
           tender: { method: "cash", amount: "5.00" },
           workingOrderId: checkId,

@@ -287,3 +287,86 @@ it.each([false, true])(
     }
   },
 );
+
+describe("how the department sells", () => {
+  const selling: ServiceSettingsValue = {
+    ...department,
+    dining: "eat_in",
+    diningStartsAs: "eat_in",
+  };
+  async function mountSelling(value = selling, takeawayVat = true, follows?: ServiceSettingsValue) {
+    const el = await mount(value, follows);
+    el.takeawayVat = takeawayVat;
+    await settle(el);
+    return el;
+  }
+  it.each(["en", "es"] as const)(
+    "offers the three ways and hides Starts as until the till chooses (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountSelling();
+      const dining = box(el, "dining");
+      expect(dining.label).toBe(locale === "en" ? "How it sells" : "Cómo se vende");
+      expect(dining.required).toBe(true);
+      expect(dining.options).toEqual(
+        locale === "en"
+          ? [
+              { value: "eat_in", label: "Eaten in" },
+              { value: "takeaway", label: "Taken away" },
+              { value: "till_choice", label: "Chosen on the till" },
+            ]
+          : [
+              { value: "eat_in", label: "Para tomar aquí" },
+              { value: "takeaway", label: "Para llevar" },
+              { value: "till_choice", label: "Se elige en la caja" },
+            ],
+      );
+      expect(el.shadowRoot!.querySelector('[name="diningStartsAs"]')).toBeNull();
+      await emitted(el, () => choose(el, "dining", "till_choice"), {
+        ...selling,
+        dining: "till_choice",
+      });
+      const startsAs = box(el, "diningStartsAs");
+      expect(startsAs.label).toBe(locale === "en" ? "Starts as" : "Empieza como");
+      expect(startsAs.options).toEqual(
+        locale === "en"
+          ? [
+              { value: "eat_in", label: "Eaten here" },
+              { value: "takeaway", label: "Taken away" },
+            ]
+          : [
+              { value: "eat_in", label: "Para tomar aquí" },
+              { value: "takeaway", label: "Para llevar" },
+            ],
+      );
+      await emitted(el, () => choose(el, "diningStartsAs", "takeaway"), {
+        ...selling,
+        dining: "till_choice",
+        diningStartsAs: "takeaway",
+      });
+    },
+  );
+  it("draws neither choice without takeaway VAT, nor for a zone", async () => {
+    for (const el of [
+      await mountSelling({ ...selling, dining: "till_choice" }, false),
+      await mountSelling({ ...inherited, dining: "till_choice" }, true, selling),
+    ]) {
+      expect(el.shadowRoot!.querySelector('[name="dining"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[name="diningStartsAs"]')).toBeNull();
+      cleanup();
+    }
+  });
+  it("shows each supplied error beside its field and disables both", async () => {
+    const el = await mountSelling({ ...selling, dining: "till_choice" });
+    el.errors = { dining: "Choose how it sells.", diningStartsAs: "Choose how it starts." };
+    el.disabled = true;
+    await settle(el);
+    for (const field of ["dining", "diningStartsAs"] as const) {
+      const control = box(el, field);
+      expect(control.shadowRoot!.querySelector(".error")!.textContent!.trim()).toBe(
+        el.errors[field],
+      );
+      expect(control.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    }
+  });
+});

@@ -90,6 +90,7 @@ function offers(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId,
       departmentId: "department-restaurant",

@@ -98,3 +98,22 @@ it.each([
     "Unavailable",
   );
 });
+it("finds How it sells only where takeaway VAT applies, and Starts as only in departments chosen on the till", async () => {
+  const model = structuredClone(zonesModel);
+  Object.assign(
+    model.salePolicies.departments.find((row) => row.departmentId === "d1")!,
+    {
+      dining: "till_choice",
+    },
+  );
+  const ctx = {
+    request: (async (path: string) => (path.endsWith("/zones") ? [] : model)) as DashboardRequest,
+  } satisfies DashboardModuleContext;
+  expect(await resolve("dining", ctx)).toEqual([]);
+  expect(await resolve("diningStartsAs", ctx)).toEqual([]);
+  model.takeawayVat = true;
+  expect((await resolve("dining", ctx)).map((row) => row.id)).toEqual(["d1", "d2"]);
+  expect(await resolve("diningStartsAs", ctx)).toEqual([
+    { id: "d1", label: "Restaurant", path: "/manage/venue-operations/department/d1/view/service" },
+  ]);
+});

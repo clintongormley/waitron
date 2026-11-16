@@ -27,6 +27,8 @@ export function partyBill(
   over: Partial<PartyBill> = {},
 ): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

@@ -42,6 +42,7 @@ const stationItem = {
   queuedAt: "2026-10-20T10:00:00Z",
 };
 const stationGroup: StationQueueGroup = {
+  dining: "eat_in",
   kitchenNote: null,
   orderId: "bill-1",
   orderNumber: 5,
@@ -67,7 +68,13 @@ const expoItem = passItem({
   orderId: "bill-1",
   course: { id: "course-1", name: "Starter", displayOrder: 1 },
 });
-const order = { orderId: "bill-1", orderNumber: 5, tableLabel: "Table 4", kitchenNote: null };
+const order = {
+  orderId: "bill-1",
+  orderNumber: 5,
+  tableLabel: "Table 4",
+  kitchenNote: null,
+  dining: "eat_in" as const,
+};
 const expoBoard: PassBoard = passBoard({
   held: [
     passCard({

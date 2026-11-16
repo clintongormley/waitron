@@ -96,6 +96,7 @@ type Venue = Awaited<ReturnType<typeof seasonVenue>>;
 const park = async (v: Venue, dish: { itemId: string; versionId: string }) => {
   const id = randomUUID();
   const answer = await sendAsTill(v, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     zoneId: v.diningRoomId,
     lines: [{ menuItemId: dish.itemId, quantity: "1", menuVersionId: dish.versionId }],

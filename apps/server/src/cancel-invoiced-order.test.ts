@@ -203,6 +203,7 @@ async function placed(
 ): Promise<string> {
   const id = randomUUID();
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     zoneId,
     lines: lines.map(({ name, ...line }) => ({ menuItemId: offerOf(name), ...line })),
@@ -475,6 +476,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("copies each line's unit price before any discount onto the credit unnegated, and its list total negated", async () => {
     const id = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: ticketThenPayZone,
       lines: [
@@ -1682,7 +1684,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   it("refuses while a card captured for the invoice has not settled it, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     venue.card.crashNextCollect("captured");
-    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     expect(lost.status).toBe(500);
 
     await expectRefusedUnwritten(id, cancel(id), {
@@ -1692,7 +1698,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
 
     // Pay again settles the invoice from the captured payment, charging nothing more.
     const calls = venue.card.collectCalls.length;
-    const recovered = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const recovered = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     expect(recovered.status).toBe(200);
     expect(venue.card.collectCalls.length).toBe(calls);
     expect(await statusOf(venue, id)).toBe("settled");
@@ -1701,7 +1711,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   it("refuses an operator without sale.rectify as not permitted while a captured card has not settled the invoice, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     venue.card.crashNextCollect("captured");
-    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     expect(lost.status).toBe(500);
 
     const answer = cancel(id, venue.cookie);
@@ -1717,7 +1731,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     const original = await invoiceOf(id);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
-    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
     const paymentsWhileHeld = paymentsOf(id);
 
@@ -1742,7 +1760,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
-    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
     const paymentsWhileHeld = paymentsOf(id);
 
@@ -1764,7 +1786,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     venue.card.failNextCollect();
-    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
     const refused = await cancel(id);
     release();
@@ -1784,7 +1810,11 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect((await cancel(id)).status).toBe(200);
     const calls = venue.card.collectCalls.length;
 
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
 
     expect({ status: paid.status, code: paid.json.code }).toEqual({
       status: 409,
@@ -1845,7 +1875,11 @@ describe("cancelling a placed order with no invoice", () => {
     const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
-    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
     const before = fiscalSnapshot();
 

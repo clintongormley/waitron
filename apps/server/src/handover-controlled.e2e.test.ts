@@ -873,6 +873,7 @@ function saleBody(boxes: Boxes) {
     zoneId: boxes.venue.zoneId,
     lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
     tender: { method: "cash", amount: "3.00" },
+    dining: "eat_in",
   };
 }
 
@@ -933,6 +934,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
         id: randomUUID(),
         zoneId: boxes.venue.zoneId,
         lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+        dining: "eat_in",
       },
     });
     const payingText = await paying.text();
@@ -1226,7 +1228,10 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
     })
     .catch(() => {});
   await startAgain(m1);
-  const m1Sale = await ask(m1, "/api/sales", { cookie: boxes.venue.cookie, body: saleBody(boxes) });
+  const m1Sale = await ask(m1, "/api/sales", {
+    cookie: boxes.venue.cookie,
+    body: saleBody(boxes),
+  });
   const restartAfterActivating = {
     m1Selling: (await nodeProbe(m1)).acceptingSales,
     m1Sale: m1Sale.status,
@@ -1594,6 +1599,7 @@ async function inheritedWork(
       id: randomUUID(),
       zoneId: venue.zoneId,
       lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      dining: "eat_in",
     },
   });
   const ordersOf = (file: string) =>

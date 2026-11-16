@@ -74,6 +74,7 @@ it("a trading boot without a fiscal description field accepts a department's emp
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
         tender: { method: "cash", amount: "3.00" },

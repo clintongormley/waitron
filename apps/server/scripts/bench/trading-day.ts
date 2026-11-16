@@ -278,6 +278,7 @@ export async function tradeDay(
           expectedEdit: saved.edit,
           draftRevision: draft.revision,
           groups: [{ lineIds: draft.lines.map((line) => line.id), release: step.release }],
+          dining: "eat_in",
         },
       );
       bill.groupIds[step.round] = (submitted.groups as { id: string }[])[0]!.id;
@@ -411,6 +412,7 @@ async function pay(
       id: tabId,
       lines: [],
       expectedEdit: await editOf(tabId),
+      dining: "eat_in",
     });
     return;
   }

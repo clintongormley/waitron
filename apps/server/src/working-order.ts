@@ -8463,6 +8463,7 @@ export interface StationQueueGroup {
    *  {@link billPartyTables} chooses them, or a counter order's delivery table, or the name kept
    *  once that delivery table was let go; absent when none. */
   tableShortNames?: string[];
+  dining: Dining;
   queuedAt: string;
   /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
    * over from the counter's waiting list. */
@@ -8815,6 +8816,7 @@ export async function listStationQueues(
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
       status: workingOrders.status,
+      dining: workingOrders.dining,
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
       ...queueGroupColumns,
@@ -8905,6 +8907,7 @@ export async function listStationQueues(
         orderNumber: row.orderNumber,
         label: row.label,
         ...optional("tableShortNames", tableShortNames.get(row.orderId)),
+        dining: row.dining,
         queuedAt: row.queuedAt,
         status: row.status,
         ...optional("party", queueParty(row)),
@@ -9117,6 +9120,7 @@ export async function readPassRows(
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
+      dining: workingOrders.dining,
       ...queueGroupColumns,
       groupRequestKind: orderGroups.requestKind,
       groupCreatedAt: orderGroups.createdAt,
@@ -9266,6 +9270,7 @@ export async function readPassRows(
         ...optional("tableShortNames", tableShortNames.get(row.orderId)),
         kitchenNote: kitchenNotes.get(row.orderId)!.note,
         ...optional("formerNumbers", former.get(row.orderId)),
+        dining: row.dining,
         openedAt: row.openedAt,
       },
       stationChosenAt: row.stationChosenAt,

@@ -1063,6 +1063,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           method: "POST",
           headers: { "content-type": "application/json", cookie: cookies },
           body: JSON.stringify({
+            dining: "eat_in",
             lines: [{ menuItemId: offer, quantity: "1" }],
             tender: { method: "cash", amount: "2.00" },
           }),

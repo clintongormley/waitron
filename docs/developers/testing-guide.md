@@ -332,10 +332,14 @@ were appended to each expected phase. The captures, digests and original asserti
 unchanged (`madrid-red.log` and `madrid-green.log` in the same receipt folder).
 
 A new demo product in a new category is added to the expected capture with `madridWithAddedRows`
-(`apps/server/scripts/demo-seed/testing/madrid-added-rows.ts`): the baseline test declares each new
+(`apps/server/scripts/demo-seed/testing/madrid-added-rows.ts`): its caller declares each new
 category's section names and each product's names, VAT class, price, unit, category, menu and
 image. The helper takes every other cell of the new rows, and the other fields of the new section
 and offers in the published menu, from the seeded output; what it refuses is stated at its export.
+A demo product in an existing category, a product offered on another menu too, or a changed cell
+of an existing row goes through `madridWithSharedOffers`
+(`apps/server/scripts/demo-seed/testing/madrid-shared-offers.ts`) instead: the baseline test lists
+each changed cell, each new product's facts and every added row by the cells that identify it.
 
 ## A migration set gets a whole database-backed suite by calling one function.
 

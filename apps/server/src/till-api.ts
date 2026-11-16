@@ -274,7 +274,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
-import { parseDining, switchOrderDining } from "./order-dining.js";
+import { requireDining, switchOrderDining } from "./order-dining.js";
 import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
@@ -1544,9 +1544,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             profileId: device.deviceProfileId,
           });
         }
-        await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
+        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
+        const takeawayVat = await VENUE_SERVICE.venueChargesTakeawayVat(tx);
         return {
-          context,
+          context: { ...context, dining: VENUE_SERVICE.diningStartOf(policy, takeawayVat) },
           zones: (await VENUE_SERVICE.listServiceZones(tx)).filter((zone) =>
             counters.some((counter) => counter.id === zone.id),
           ),
@@ -1568,9 +1569,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const tx = deps.db;
         await checkZones(tx, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
-        await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
+        const policy = await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
+        const takeawayVat = await VENUE_SERVICE.venueChargesTakeawayVat(tx);
         return {
-          context,
+          context: { ...context, dining: VENUE_SERVICE.diningStartOf(policy, takeawayVat) },
           ...(await VENUE_SERVICE.listZoneOffers(tx, zoneId)),
         };
       });
@@ -1668,10 +1670,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           at,
           menuState.menus.map((menu) => menu.menuId),
         );
-        return {
-          state: { ...menuState, defaultMenuId },
-          setupRead: await readTillSetup(tx, deps, device),
-        };
+        const setupRead = await readTillSetup(tx, deps, device);
+        const dining = VENUE_SERVICE.diningStartOf(
+          await VENUE_SERVICE.resolveSalePolicy(tx, zone),
+          setupRead.setup.takeawayVat,
+        );
+        return { state: { ...menuState, defaultMenuId, dining }, setupRead };
       });
       return c.json({
         ...state,
@@ -1817,7 +1821,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
-      const dining = parseDining(body.dining);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
@@ -1828,9 +1831,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       assertProfileAction(session.device, "take-orders");
       await assertRequestDevice(deps, c, session);
+      // After the device checks, so a profile or device refusal outranks a malformed `lines`,
+      // `tender` or `dining`.
       if (!Array.isArray(body.lines)) throw invalid("lines");
       if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
         throw invalid("tender");
+      const dining = requireDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1897,7 +1903,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
-      const dining = parseDining(body.dining);
+      const dining = requireDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1963,7 +1969,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const lateSend = parseLateSend(body.lateSend);
-      const dining = parseDining(body.dining);
+      const dining = requireDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -2043,7 +2049,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       const expected = requireRevision(body.revision);
       const lateSend = parseLateSend(body.lateSend);
-      const dining = parseDining(body.dining);
+      const dining = requireDining(body.dining);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         updateHeldOrder(
@@ -2106,9 +2112,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
       }>(c);
-      const dining = parseDining(body.dining);
-      if (dining === undefined)
-        throw new AppError("management.request_invalid", { field: "dining" });
+      const dining = requireDining(body.dining);
       const revision = await withTransaction(deps.db, (tx) =>
         switchOrderDining(
           tx,
@@ -3896,7 +3900,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
-        dining: parseDining(body.dining),
+        dining: requireDining(body.dining),
       };
       const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);

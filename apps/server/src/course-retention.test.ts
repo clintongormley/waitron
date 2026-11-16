@@ -221,6 +221,7 @@ async function setup() {
       draftRevision: draft.revision,
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [{ lineIds: draft.lines.map((x) => x.id), release }],
+      dining: "eat_in",
     });
   }
   async function snapshot() {
@@ -432,6 +433,7 @@ for (const mode of ["new draft", "new basket", "new line"] as const)
           ? v.save([v.line()])
           : mode === "new basket"
             ? v.request("/api/working-orders", "POST", {
+                dining: "eat_in",
                 id: randomUUID(),
                 zoneId: v.counter.zoneId,
                 lines: [
@@ -495,6 +497,7 @@ it("new product choice after its default clears is course-free and fires earlies
   await v.remove();
   const id = randomUUID();
   const parked = await v.request("/api/working-orders", "POST", {
+    dining: "eat_in",
     id,
     zoneId: v.counter.zoneId,
     lines: [

@@ -141,6 +141,8 @@ const table7 = seated(
 const table9 = table({ id: "t9", label: "9" });
 
 const tabBill: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",
@@ -156,6 +158,8 @@ const tabBill: PartyBill = {
   receiptAvailable: false,
 };
 const checkBill: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-check",
   revision: 0,
   invoiceType: "F2",
@@ -247,6 +251,7 @@ const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: zone.id,
     departmentId: "department-default",
@@ -862,6 +867,7 @@ describe("till-app: the party's bills and Finish table", () => {
       undefined,
       undefined,
       { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      "eat_in",
     );
   });
 
@@ -5494,6 +5500,7 @@ describe("till-app: paying a bill by its state", () => {
       undefined,
       undefined,
       { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      "eat_in",
     );
     expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
@@ -6629,6 +6636,7 @@ describe("till-app: the order's groups", () => {
       "v1",
       "draft-1",
       {
+        dining: "eat_in",
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
         draftRevision: 1,
@@ -6645,6 +6653,21 @@ describe("till-app: the order's groups", () => {
       { release: "hold", lines: [roundLines[0]] },
     ]);
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+  });
+
+  it("sends a round with the bill's own way, whatever the table's department says (A1522)", async () => {
+    const { el } = await mountApp({
+      submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
+      getPartyBills: vi.fn().mockResolvedValue([{ ...tabBill, dining: "takeaway" }, checkBill]),
+      zonePolicy: { dining: { policy: "eat_in", startsAs: "eat_in" } },
+    });
+    const order = await openPartyTable(el);
+
+    await ringRound(el, order);
+    emit(order, "submit-draft", roundDetail(order, [{ release: "fire", lineIndexes: [0] }]));
+    await flush(el);
+
+    expect(vi.mocked(api.submitDraft).mock.calls[0]![2].dining).toBe("takeaway");
   });
 
   it("sends each round under a submission id of its own", async () => {
@@ -8682,6 +8705,7 @@ describe("till-app: submitting the draft", () => {
     await act(el, order, "send-all");
 
     expect(vi.mocked(api.submitDraft).mock.calls[1]![2]).toEqual({
+      dining: "eat_in",
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
       draftRevision: expect.any(Number),
@@ -10515,6 +10539,8 @@ describe("till-app: recording an unpaid departure", () => {
 
   /** A presented bill of 18.00 whose invoice owes `amountDue` once its credit notes are counted. */
   const creditedBill = (workingOrderId: string, amountDue: string): PartyBill => ({
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",
@@ -14804,5 +14830,37 @@ describe("till-app: moving every dish off a bill set for a full invoice", () => 
       "The bills' invoice details have changed. Check them and move the dishes again.",
     );
     expect(api.moveDishes).toHaveBeenCalledOnce();
+  });
+});
+
+describe("the way each table bill sells (A1522)", () => {
+  it("hands the table screen the shown bill's own way and switch, following a switch of bill", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          tabBill,
+          { ...checkBill, dining: "takeaway", diningChoice: "locked" } satisfies PartyBill,
+        ]),
+    });
+    const order = await openPartyTable(el);
+    expect(order.orderId).toBe("wo-4");
+    expect([order.dining, order.diningChoice]).toEqual(["eat_in", "none"]);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect([tableOrder(el)!.dining, tableOrder(el)!.diningChoice]).toEqual(["takeaway", "locked"]);
+  });
+  it("shows nothing on a saved bill the party's bills read did not list", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const order = await openPartyTable(el);
+    expect(order.orderId).toBe("wo-4");
+    expect(order.diningChoice).toBe("unread");
+    expect(order.shadowRoot!.querySelector("wt-segmented-control[name='dining']")).toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-dining-label]")).toBeNull();
   });
 });

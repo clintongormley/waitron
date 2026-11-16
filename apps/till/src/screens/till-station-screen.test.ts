@@ -57,6 +57,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 
 const kitchenQueue: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
@@ -87,6 +88,7 @@ const kitchenQueue: StationQueueGroup[] = [
 
 const barQueue: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,
@@ -1052,6 +1054,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   it("device mode hides the kitchen-fire button on a held course (no device fire route, §3d)", async () => {
     const heldCourseQueue: StationQueueGroup[] = [
       {
+        dining: "eat_in",
         kitchenNote: null,
         orderId: "wo-h",
         orderNumber: 9,
@@ -1198,6 +1201,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   it("a heading tap on a kitchen display advances each of its dishes through deviceAdvance", async () => {
     const twoLine: StationQueueGroup[] = [
       {
+        dining: "eat_in",
         kitchenNote: null,
         orderId: "wo-1",
         orderNumber: 5,

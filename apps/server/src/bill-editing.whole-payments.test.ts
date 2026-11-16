@@ -89,6 +89,7 @@ function request(p: Fixture, expectedEdit: unknown, mode: Mode) {
     expectedEdit,
     lines: [],
     tender: { method: mode === "manual" ? "card" : "cash", amount: "35.00" },
+    dining: "eat_in",
   };
 }
 function run(

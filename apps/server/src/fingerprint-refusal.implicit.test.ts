@@ -200,6 +200,7 @@ describe("late issuance rolls back its initiating command", () => {
             : action === "submit"
               ? {
                   ...command,
+                  dining: "eat_in",
                   draftRevision: state.draft!.revision,
                   groups: [{ lineIds: state.draft!.lines.map((line) => line.id), release: "fire" }],
                 }
@@ -221,6 +222,7 @@ describe("late issuance rolls back its initiating command", () => {
         body = {
           revision: bill!.revision,
           expectedEdit: edit,
+          dining: "eat_in",
           label: "Revised label",
           lines: lines.map((line) => ({
             workingOrderLineId: line.id,
@@ -429,6 +431,7 @@ describe("late issuance rolls back its initiating command", () => {
     expect(
       (
         await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+          dining: "eat_in",
           id,
           zoneId: offers.zoneId,
           lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],

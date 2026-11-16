@@ -19,6 +19,7 @@ import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { nutritionIconStyles } from "./nutrition-icons.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { takeAwayMark, takeAwayMarkStyles } from "./take-away-mark.js";
 import { dishLine, quantityText } from "./dish-format.js";
 import {
   type CourseSection,
@@ -191,6 +192,7 @@ export class TillStationQueue extends LitElement {
     nutritionIconStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
+    takeAwayMarkStyles,
     segmentedOptionStyles,
     kitchenHelpStyles,
     kitchenBoardStyles,
@@ -1301,7 +1303,9 @@ export class TillStationQueue extends LitElement {
             isCounterOrder(order)
               ? html`<span class="counter">${t("station.counter")}</span> `
               : nothing
-          }<span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>`,
+          }<span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>${
+            order.dining === "takeaway" ? html` ${takeAwayMark()}` : nothing
+          }`,
     )}
     ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
     ${labels.map((label) => html`<span class="label">${label}</span>`)}

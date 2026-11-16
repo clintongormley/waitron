@@ -35,6 +35,7 @@ export const allergyThresholds = {
 };
 export function allergyQueue(): StationQueueGroup {
   return {
+    dining: "eat_in",
     kitchenNote: "For the whole order",
     orderId: "bill-1",
     orderNumber: 12,
@@ -101,6 +102,7 @@ export function allergyBoard(kind: "bill" | "group" = "bill"): PassBoard {
         orders: [
           {
             orderId: group.orderId,
+            dining: group.dining,
             orderNumber: group.orderNumber,
             tableLabel: group.label ?? undefined,
             kitchenNote: group.kitchenNote,

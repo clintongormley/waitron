@@ -112,6 +112,8 @@ export function heldTable(partyOver: Partial<TableParty> = {}): TableState {
 
 export function billOf(over: Partial<PartyBill> = {}): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-4",
     revision: 0,
     invoiceType: "F2",
@@ -267,6 +269,7 @@ export const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: zone.id,
     departmentId: "department-default",

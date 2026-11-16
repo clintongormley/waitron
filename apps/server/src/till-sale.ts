@@ -367,6 +367,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   namesLocale?: string;
   orderLabel: string | null;
   orderNumber: number;
+  /** The order was taken away; absent when it was eaten here. */
+  takeAway?: true;
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
   invoiceNumber: string;
   /** The fiscal record's issuance instant, ISO-8601. */

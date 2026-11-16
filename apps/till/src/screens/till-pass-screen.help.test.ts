@@ -24,7 +24,7 @@ function billCard(orderNumber: number, dishes: [string, string, string][]): Pass
   return passCard({
     key: `bill:${orderId}`,
     target: { kind: "bill", workingOrderId: orderId },
-    orders: [{ orderId, orderNumber, kitchenNote: null }],
+    orders: [{ dining: "eat_in", orderId, orderNumber, kitchenNote: null }],
     items: dishes.map(([id, name, courseId]) =>
       passItem({
         id,
@@ -45,7 +45,15 @@ function groupCard(groupId: string, position: number, dish: string): PassCard {
     kind: "next_course",
     party: { id: "v-4", revision: 7 },
     group: { displayNumber: position, position },
-    orders: [{ orderId: "wo-9", orderNumber: 9, tableLabel: "Table 4", kitchenNote: null }],
+    orders: [
+      {
+        dining: "eat_in",
+        orderId: "wo-9",
+        orderNumber: 9,
+        tableLabel: "Table 4",
+        kitchenNote: null,
+      },
+    ],
     items: [passItem({ id: `it-${groupId}`, name: dish, orderId: "wo-9", course: null })],
   });
 }

@@ -26,6 +26,8 @@ const party: TableParty = {
 };
 
 const paidTab: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-tab",
   revision: 0,
   invoiceType: "F2",
@@ -41,6 +43,8 @@ const paidTab: PartyBill = {
   receiptAvailable: true,
 };
 const check: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-check",
   revision: 0,
   invoiceType: "F2",
@@ -56,6 +60,8 @@ const check: PartyBill = {
   receiptAvailable: false,
 };
 const abandoned: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-gone",
   revision: 0,
   invoiceType: "F2",

@@ -1,5 +1,5 @@
 import type { DepartmentCourseSetting } from "../release-reminders.js";
-import type { DeleteImpact } from "@waitron/shared";
+import type { DeleteImpact, Dining, DiningPolicy } from "@waitron/shared";
 import type { FloorPlanSetDeleteImpact, FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
 import type { ServiceStep, ServiceStepInput } from "../service-steps.js";
@@ -31,17 +31,19 @@ export interface DepartmentSalePolicy {
   paidWhen: PaidWhen;
   collectionNumber: CollectionNumber;
   printTradingName: boolean;
+  dining?: DiningPolicy;
+  diningStartsAs?: Dining;
 }
 export interface ZoneSalePolicy {
   orderStart: "table" | "counter" | null;
   zoneId: string;
   paidWhen: PaidWhen | null;
   collectionNumber: CollectionNumber | null;
-  effective: Omit<DepartmentSalePolicy, "departmentId">;
+  effective: Omit<DepartmentSalePolicy, "departmentId" | "dining" | "diningStartsAs">;
 }
 export interface DepartmentSettingsInput extends Pick<
   DepartmentSalePolicy,
-  "orderStart" | "paidWhen" | "collectionNumber"
+  "orderStart" | "paidWhen" | "collectionNumber" | "dining" | "diningStartsAs"
 > {
   name: string;
   tradingName: string;
@@ -101,6 +103,8 @@ export interface VenueServiceModel {
   lateSendManagerDepartmentIds: string[];
   serviceSteps: ServiceStep[];
   courses: { id: string; name: string }[];
+  /** Whether the venue's region charges a different VAT class on food taken away. */
+  takeawayVat?: boolean;
 }
 export interface VenueServiceChoices {
   floorZones: FloorZone[];

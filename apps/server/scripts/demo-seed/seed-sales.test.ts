@@ -192,6 +192,53 @@ describe("seedSales", () => {
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
   });
 
+  it("rates a deli sale's lines at their takeaway class, or their served class when they have none", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 82_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: "es-ES",
+    })();
+    const cola: SeedSalesProduct = {
+      id: "p-cola",
+      name: "Cola",
+      customerName: { [LOCALE]: "Cola" },
+      unitPrice: "2.50",
+      vatClass: "reduced",
+      takeawayVatClass: "general",
+    };
+    const ham: SeedSalesProduct = {
+      id: "p-ham",
+      name: "Jamón",
+      customerName: { [LOCALE]: "Jamón" },
+      unitPrice: "12.00",
+      vatClass: "reduced",
+    };
+    await seedSales(suite.db, {
+      venue: venueFor(venue),
+      invoiceLocale: "es-ES",
+      days: 3,
+      products: [cola],
+      deliProducts: [cola, ham],
+    });
+    const lines = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ saleId: saleLines.saleId, name: saleLines.name, vatRate: saleLines.vatRate })
+        .from(saleLines),
+    );
+    const deliSales = new Set(lines.filter((line) => line.name === "Jamón").map((l) => l.saleId));
+    expect(deliSales.size).toBeGreaterThan(0);
+    const rateOf = (line: (typeof lines)[number]) => Number(line.vatRate);
+    expect(lines.filter((line) => line.name === "Jamón").map(rateOf)).toEqual(
+      lines.filter((line) => line.name === "Jamón").map(() => 1000),
+    );
+    const colaInDeli = lines.filter((line) => line.name === "Cola" && deliSales.has(line.saleId));
+    expect(colaInDeli.length).toBeGreaterThan(0);
+    expect(new Set(colaInDeli.map(rateOf))).toEqual(new Set([2100]));
+    expect(new Set(lines.filter((line) => line.name === "Cola").map(rateOf))).toEqual(
+      new Set([1000, 2100]),
+    );
+  });
+
   it("records every demo sale and its fiscal record as the demo seed's, with no device", async () => {
     // Its own provisioner: the shared one's fixed `K` letter is a valid NIF for its first venue only.
     const venue = await createDemoVenueProvisioner(() => suite.db, {

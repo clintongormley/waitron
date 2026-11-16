@@ -118,6 +118,7 @@ function menu(
   return {
     service: phase === "breakfast" ? breakfastRunning : lunchRunning,
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId,
       departmentId: "department-restaurant",
@@ -1650,7 +1651,7 @@ describe("counter pay", () => {
     await flush(el, 6);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(recordSale.mock.calls[0]![9]).toBeUndefined();
+    expect(recordSale.mock.calls[0]![10]).toBeUndefined();
 
     await choose(el, "data-late-agreed");
 
@@ -1724,7 +1725,7 @@ describe("counter pay", () => {
     expect(windowOf(el)).toBeNull();
     expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(api.recordSale!.mock.calls[0]![9]).toBeUndefined();
+    expect(api.recordSale!.mock.calls[0]![10]).toBeUndefined();
   });
 
   it("records a manual card payment with the ended menu once the kitchen agreed", async () => {

@@ -38,6 +38,7 @@ const dish = (id: string, state: "queued" | "preparing", name: string) => ({
 
 const groups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
@@ -49,6 +50,7 @@ const groups: StationQueueGroup[] = [
     items: [dish("ti-1", "queued", "Paella"), dish("ti-2", "preparing", "Water")],
   },
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,

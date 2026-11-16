@@ -95,7 +95,13 @@ import {
   orderInZones,
   orderZoneIdSql,
 } from "./operations.js";
-import { applyDepartmentDining, findOrdersWithDiningChoice, resolveOrderDining } from "./dining.js";
+import {
+  applyDepartmentDining,
+  findOrdersWithDiningChoice,
+  resolveOrderDining,
+  diningStartOf,
+  venueChargesTakeawayVat,
+} from "./dining.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
@@ -190,6 +196,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   keepZoneOpen,
   resolveSalePolicy,
   resolveOrderDining,
+  diningStartOf,
+  venueChargesTakeawayVat,
   findOrdersWithDiningChoice,
   applyDepartmentDining,
   recordSaleReceiptHeader,

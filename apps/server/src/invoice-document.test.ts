@@ -40,9 +40,14 @@ import {
 import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
-import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import {
+  departments,
+  saleReceiptHeaders,
+  setDepartmentSalePolicyField,
+} from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
@@ -1129,5 +1134,96 @@ describe("the theme's logo on the A4 invoice", () => {
     } finally {
       await clearThemes(suite.db);
     }
+  });
+});
+
+describe("a takeaway sale's A4 invoice", () => {
+  async function paidBill(dining: "eat_in" | "takeaway"): Promise<string> {
+    await withTransaction(suite.db, async (tx) => {
+      for (const { id } of await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.active, true)))
+        await setDepartmentSalePolicyField(tx, id, "dining", dining);
+    });
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
+    await setOrderInvoiceChoice(suite.db, venue.backend, venue.cfg, billId, {
+      revision: order!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Bill customer",
+        countryCode: "ES",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+      },
+    });
+    return withTransaction(suite.db, async (tx) => {
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: `invoice-document-${dining}`,
+          kind: "contribution",
+          method: "cash",
+          applied: 1200,
+          tendered: 2000,
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      return sale!.id;
+    });
+  }
+  const texts = (document: Parameters<typeof buildReceiptDocument>[0]) =>
+    buildReceiptDocument({ ...document, surface: "a4" }).elements.flatMap((e) =>
+      e.kind === "text" ? [e.text] : [],
+    );
+
+  // Fails if the A4 invoice of a takeaway sale stops saying so, or an eat-in one starts to.
+  it("says Para llevar on a takeaway sale's invoice, and nothing on an eat-in one", async () => {
+    const takeaway = await read(venue.backend, await paidBill("takeaway"));
+    const eatIn = await read(venue.backend, await paidBill("eat_in"));
+    expect(takeaway.result.takeAway).toBe(true);
+    expect(texts(takeaway)).toContain("Para llevar");
+    expect(eatIn.result).not.toHaveProperty("takeAway");
+    expect(texts(eatIn)).not.toContain("Para llevar");
+  });
+
+  // Pins today's split, so changing it is deliberate: a replacement of a takeaway sale reads Take
+  // away on the till's receipt through the original sale's order; its A4 page reads only the
+  // replacement's own order link, which it has none of.
+  async function replacementOfTakeaway(): Promise<string> {
+    const original = await paidBill("takeaway");
+    return withTransaction(suite.db, (tx) => insertCorrective(tx, original, { replaces: true }));
+  }
+
+  it("says Take away on a takeaway sale's replacement receipt on the till", async () => {
+    const replacement = await replacementOfTakeaway();
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, replacement),
+    );
+    expect(receipt.takeAway).toBe(true);
+  });
+
+  it("does not say Take away on a takeaway sale's replacement A4 page", async () => {
+    const replacement = await replacementOfTakeaway();
+    const page = await withTransaction(suite.db, (tx) =>
+      readCustomerInvoiceDocument(venue.backend, tx, venue.cfg, replacement),
+    );
+    expect(page.result.invoiceType).toBe("R4");
+    expect(page.result).not.toHaveProperty("takeAway");
+    expect(texts(page)).not.toContain("Para llevar");
   });
 });

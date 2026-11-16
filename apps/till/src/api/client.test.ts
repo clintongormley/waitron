@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { PERSON_HEADER } from "@waitron/shared";
+import { PERSON_HEADER, type Dining } from "@waitron/shared";
 import clientSource from "./client.ts?raw";
 import {
   SESSION_PERSON_REFUSAL,
@@ -125,6 +125,7 @@ describe("TillApi", () => {
           undefined,
           4,
           expectedEdit,
+          "eat_in",
         );
       else await api.collectOrder("wo-4", tender, undefined, 4, expectedEdit);
 
@@ -133,6 +134,7 @@ describe("TillApi", () => {
         tender,
         guestCount: 4,
         expectedEdit,
+        ...(state === "open" ? { dining: "eat_in" } : {}),
       });
     },
   );
@@ -334,6 +336,7 @@ describe("TillApi", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -349,6 +352,7 @@ describe("TillApi", () => {
           tender: { method: "cash", amount: "5.00" },
           workingOrderId: "wo1",
           expectedEdit: null,
+          dining: "eat_in",
         }),
       }),
     );
@@ -376,6 +380,7 @@ describe("TillApi", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -388,6 +393,7 @@ describe("TillApi", () => {
           invoiceType: "F1",
           recipient,
           expectedEdit: null,
+          dining: "eat_in",
         }),
       }),
     );
@@ -409,6 +415,7 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
 
     const out = await api.pay({
+      dining: "eat_in",
       expectedEdit: null,
       id: "wo1",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
@@ -422,6 +429,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          dining: "eat_in",
           expectedEdit: null,
           id: "wo1",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
@@ -442,6 +450,7 @@ describe("TillApi", () => {
     };
 
     await new TillApi("", fetchStub).pay({
+      dining: "eat_in",
       expectedEdit: null,
       id: "wo-card",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
@@ -453,6 +462,7 @@ describe("TillApi", () => {
       "/api/pay",
       expect.objectContaining({
         body: JSON.stringify({
+          dining: "eat_in",
           expectedEdit: null,
           id: "wo-card",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
@@ -482,6 +492,7 @@ describe("TillApi", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     await api.collectOrder("wo-tip", tender, undefined, undefined, null);
     const bodies = fetchStub.mock.calls.map(([, init]) =>
@@ -489,7 +500,7 @@ describe("TillApi", () => {
     );
     const wanted = { method: "card", amount: "1.50", externalRef: "OP-TIP", addedTip: "0.30" };
     expect(bodies).toEqual([
-      { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null },
+      { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null, dining: "eat_in" },
       { tender: wanted, expectedEdit: null },
     ]);
   });
@@ -510,16 +521,30 @@ describe("TillApi", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
-    await api.pay({ expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" });
+    await api.pay({
+      dining: "eat_in",
+      expectedEdit: null,
+      id: "wo2",
+      lines,
+      receiptLanguage: "es-ES",
+    });
     await api.collectOrder("wo3", tender, "es-ES", undefined, null);
 
     const bodies = fetchStub.mock.calls.map(
       ([, init]) => JSON.parse((init as RequestInit).body as string) as unknown,
     );
     expect(bodies).toEqual([
-      { lines, tender, workingOrderId: "wo1", receiptLanguage: "es-ES", expectedEdit: null },
-      { expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" },
+      {
+        lines,
+        tender,
+        workingOrderId: "wo1",
+        receiptLanguage: "es-ES",
+        expectedEdit: null,
+        dining: "eat_in",
+      },
+      { dining: "eat_in", expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" },
       { tender, receiptLanguage: "es-ES", expectedEdit: null },
     ]);
   });
@@ -547,6 +572,7 @@ describe("TillApi", () => {
         undefined,
         guestCount,
         null,
+        "eat_in",
       );
       expect(sentBody(fetchStub)).toStrictEqual({
         lines,
@@ -554,13 +580,26 @@ describe("TillApi", () => {
         workingOrderId: "wo1",
         ...sent,
         expectedEdit: null,
+        dining: "eat_in",
       });
     });
 
     it("with a card payment", async () => {
       const fetchStub = stub();
-      await new TillApi("", fetchStub).pay({ expectedEdit: null, id: "wo2", lines, guestCount });
-      expect(sentBody(fetchStub)).toStrictEqual({ expectedEdit: null, id: "wo2", lines, ...sent });
+      await new TillApi("", fetchStub).pay({
+        dining: "eat_in",
+        expectedEdit: null,
+        id: "wo2",
+        lines,
+        guestCount,
+      });
+      expect(sentBody(fetchStub)).toStrictEqual({
+        dining: "eat_in",
+        expectedEdit: null,
+        id: "wo2",
+        lines,
+        ...sent,
+      });
     });
 
     it("with a collect", async () => {
@@ -589,12 +628,12 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "declined" }));
     const api = new TillApi("", fetchStub);
 
-    const out = await api.pay({ expectedEdit: null, id: "wo1", lines: [] });
+    const out = await api.pay({ dining: "eat_in", expectedEdit: null, id: "wo1", lines: [] });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/pay",
       expect.objectContaining({
-        body: JSON.stringify({ expectedEdit: null, id: "wo1", lines: [] }),
+        body: JSON.stringify({ dining: "eat_in", expectedEdit: null, id: "wo1", lines: [] }),
       }),
     );
     expect(out).toEqual({ outcome: "declined" });
@@ -850,6 +889,7 @@ describe("TillApi", () => {
         zoneKeepOpen: null,
       },
       context: {
+        dining: null,
         departmentName: "Restaurant",
         zoneId: "counter",
         departmentId: "deli",
@@ -1024,9 +1064,14 @@ describe("TillApi", () => {
     await api.listDefaultZoneOffers();
     api.setServiceZone("counter");
 
-    await api.parkOrder({ id: "wo-1", lines: [{ menuItemId: "ham", quantity: "1" }] });
+    await api.parkOrder({
+      dining: "eat_in",
+      id: "wo-1",
+      lines: [{ menuItemId: "ham", quantity: "1" }],
+    });
 
     expect(JSON.parse(fetchStub.mock.calls[1]![1]!.body as string)).toEqual({
+      dining: "eat_in",
       id: "wo-1",
       lines: [{ menuItemId: "ham", quantity: "1" }],
       zoneId: "counter",
@@ -1069,6 +1114,7 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
 
     const r = await api.parkOrder({
+      dining: "eat_in",
       id: "wo1",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       label: "Table 4",
@@ -1081,6 +1127,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          dining: "eat_in",
           id: "wo1",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           label: "Table 4",
@@ -1157,6 +1204,7 @@ describe("TillApi", () => {
 
     await expect(
       api.updateWorkingOrder("wo1", {
+        dining: "eat_in",
         expectedEdit: null,
         lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
         label: "Table 5",
@@ -1171,6 +1219,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          dining: "eat_in",
           expectedEdit: null,
           lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
           label: "Table 5",
@@ -3441,6 +3490,7 @@ describe("TillApi", () => {
           today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" },
           queue: [
             {
+              dining: "eat_in",
               kitchenNote: null,
               orderId: "wo-1",
               orderNumber: 7,
@@ -4916,6 +4966,7 @@ describe("TillApi: a party's drafts", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
     const body = {
       submissionId: "sub-1",
+      dining: "eat_in" as const,
       expectedPartyRevision: 4,
       draftRevision: 2,
       expectedEdit: { ...observed, draftRevision: 2 },
@@ -4936,6 +4987,7 @@ describe("TillApi: a party's drafts", () => {
       .mockResolvedValue(jsonResponse({ tabId: "wo-1", revision: 6, groups: [], draft }));
     const body = {
       submissionId: "sub-2",
+      dining: "eat_in" as const,
       expectedPartyRevision: 5,
       draftRevision: 3,
       expectedEdit: { ...observed, draftRevision: 3 },
@@ -4958,6 +5010,7 @@ describe("TillApi: a party's drafts", () => {
       .mockResolvedValue(jsonResponse({ tabId: "wo-2", revision: 6, groups: [], draft: null }));
     const body = {
       submissionId: "sub-3",
+      dining: "eat_in" as const,
       expectedPartyRevision: 5,
       draftRevision: 3,
       expectedEdit: { ...observed, draftRevision: 3 },
@@ -4980,6 +5033,7 @@ describe("TillApi: a party's drafts", () => {
 
     await expect(
       new TillApi("", fetchStub).submitDraft("v1", "d1", {
+        dining: "eat_in",
         submissionId: "sub-3",
         expectedPartyRevision: 1,
         draftRevision: 2,
@@ -5935,11 +5989,19 @@ describe("a late-send confirmation on a request", () => {
           undefined,
           undefined,
           null,
+          "eat_in",
           lateSend,
         ),
     ],
-    ["pay", (api, lateSend) => api.pay({ expectedEdit: null, id: "wo-1", lines, lateSend })],
-    ["parkOrder", (api, lateSend) => api.parkOrder({ id: "wo-1", lines, lateSend })],
+    [
+      "pay",
+      (api, lateSend) =>
+        api.pay({ dining: "eat_in", expectedEdit: null, id: "wo-1", lines, lateSend }),
+    ],
+    [
+      "parkOrder",
+      (api, lateSend) => api.parkOrder({ dining: "eat_in", id: "wo-1", lines, lateSend }),
+    ],
     ["placeOrder", (api, lateSend) => api.placeOrder("wo-1", null, lateSend)],
     [
       "sendLines",
@@ -5968,6 +6030,7 @@ describe("a late-send confirmation on a request", () => {
       "updateWorkingOrder",
       (api, lateSend) =>
         api.updateWorkingOrder("wo-1", {
+          dining: "eat_in",
           lines,
           revision: 2,
           expectedEdit: null,
@@ -5978,6 +6041,7 @@ describe("a late-send confirmation on a request", () => {
       "submitDraft",
       (api, lateSend) =>
         api.submitDraft("v1", "d1", {
+          dining: "eat_in",
           submissionId: "sub-1",
           expectedPartyRevision: 4,
           draftRevision: 2,
@@ -6392,5 +6456,71 @@ describe("TillApi: closing a bill as a deferred payment", () => {
     ]);
     expect(fetchStub.mock.calls[0]![1]).toMatchObject({ method: "GET", signal });
     expect(fetchStub.mock.calls[0]![1]!.body).toBeUndefined();
+  });
+});
+
+describe("the way an order sells on every sale, pay, park and round body (A1522)", () => {
+  const lines = [{ menuItemId: "toast", quantity: "1" }];
+  const sends: [string, (api: TillApi, dining: Dining) => Promise<unknown>][] = [
+    [
+      "recordSale",
+      (api, dining) =>
+        api.recordSale(
+          lines,
+          { method: "cash", amount: "3.00" },
+          "wo-1",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          null,
+          dining,
+        ),
+    ],
+    ["pay", (api, dining) => api.pay({ expectedEdit: null, id: "wo-1", lines, dining })],
+    ["parkOrder", (api, dining) => api.parkOrder({ id: "wo-1", lines, dining })],
+    [
+      "updateWorkingOrder",
+      (api, dining) =>
+        api.updateWorkingOrder("wo-1", { lines, revision: 2, expectedEdit: null, dining }),
+    ],
+    [
+      "submitDraft",
+      (api, dining) =>
+        api.submitDraft("v1", "d1", {
+          submissionId: "sub-1",
+          expectedPartyRevision: 4,
+          draftRevision: 2,
+          expectedEdit: { billId: "b1", editorVersion: 1, draftId: "d1", draftRevision: 2 },
+          groups: [{ lineIds: ["dl-1"], release: "fire" }],
+          dining,
+        }),
+    ],
+  ];
+
+  describe.each(sends)("%s", (_name, send) => {
+    it.each(["eat_in", "takeaway"] as const)("carries dining %s", async (dining) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}));
+      await send(new TillApi("", fetchStub), dining);
+      const body = JSON.parse(fetchStub.mock.calls[0]![1].body) as Record<string, unknown>;
+      expect(body.dining).toBe(dining);
+    });
+  });
+
+  it("switchDining sends the order's way, revision and expected edit, and answers the revision", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
+    const expectedEdit = { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null };
+    await expect(
+      new TillApi("", fetchStub).switchDining("wo-1", "takeaway", 3, expectedEdit),
+    ).resolves.toEqual({ revision: 4 });
+    const [path, init] = fetchStub.mock.calls[0]! as [string, RequestInit];
+    expect(path).toBe("/api/working-orders/wo-1/dining");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual({
+      dining: "takeaway",
+      revision: 3,
+      expectedEdit,
+    });
   });
 });

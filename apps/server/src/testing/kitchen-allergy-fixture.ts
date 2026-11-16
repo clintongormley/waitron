@@ -210,6 +210,7 @@ export async function kitchenCommand(
       method: "POST",
       body: {
         ...body,
+        dining: "eat_in",
         expectedPartyRevision: await revisionOf(v, party.partyId),
         draftRevision: draft.revision,
         expectedEdit: await inTx(v, (tx) => readBillEditState(tx, party.tabId)),

@@ -481,15 +481,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms still have two layout limits.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
 
-- **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
-  gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
-  or chosen on the till, and each order records which. One price either way. Fiscal: the owner lands it.
-  Design approved by the owner on 14 November and planned the same day. PR 1 of 3 (products carry
-  a takeaway class) and PR 2 (each order records how it is sold, and its lines file at that way's
-  rate) are built; PR 3 (screens, till, printing, demo) is not.
-  [Design](superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md),
-  [plan](superpowers/plans/2026-11-14-a1522-eat-in-takeaway-vat.md)
-
 - **A1523. A cover charge, and dearer seats on the terrace (owner, 2026-11-14).** Not supported
   today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
   more on the terrace today is to make it a department of its own with its own menu. Not designed.
@@ -911,6 +902,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A1513. Take orders from the delivery apps: Glovo, Uber Eats, Just Eat (owner, 2026-11-11).**
   After go-live, not at it. Today staff would type each app order into the till by hand. Needs a
   design, including whether to connect each app or one service that gathers them all. Not started.
+  A delivery-app order is always taken away.
 
 - **A1514. Share bookings with TheFork and Reserve with Google (owner, 2026-11-11).** Later: Waitron's
   own booking system, including online booking (A1013), works first. Without it, a venue taking

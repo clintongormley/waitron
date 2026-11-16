@@ -2335,3 +2335,142 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(printed.filter((text) => text.startsWith("Goes with"))).toEqual(["Goes with Bar $& $$"]);
   });
 });
+
+describe("a takeaway order's kitchen paper", () => {
+  const firedAt = new Date(2026, 7, 17, 14, 30);
+  const base: KitchenTicket = {
+    locale: "en-GB",
+    scope: "station",
+    stationName: "Grill",
+    tableLabel: "",
+    orderNumber: "A-17",
+    firedAt,
+    items: [{ qty: 1, name: "Steak" }],
+  };
+  const tickets: [string, Partial<KitchenTicket>][] = [
+    ["the first ticket", {}],
+    ["a FIRE ticket", { mark: "FIRE" }],
+    ["a HOLD ticket", { mark: "HOLD" }],
+    ["a reprint", { reprintedAt: new Date(2026, 7, 17, 15, 20) }],
+  ];
+
+  // Fails if any kind of ticket loses the takeaway line, or an eat-in ticket gains it.
+  it.each(tickets)("prints TAKE AWAY on %s, and nothing on an eat-in one", (_, extra) => {
+    const eatIn = printedLines(
+      formatKitchenTicket({ ...base, ...extra } as KitchenTicket, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    const takeaway = printedLines(
+      formatKitchenTicket(
+        { ...base, ...extra, takeAway: true } as KitchenTicket,
+        KITCHEN_80,
+        TEST_TIME_ZONE,
+      ),
+    );
+    expect(eatIn).not.toContain("*** TAKE AWAY ***");
+    const at = eatIn.indexOf("Grill");
+    expect(takeaway).toEqual([...eatIn.slice(0, at), "*** TAKE AWAY ***", ...eatIn.slice(at)]);
+  });
+
+  it("prints the ticket language's words", () => {
+    const lines = printedLines(
+      formatKitchenTicket({ ...base, locale: "es-ES", takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(lines[0]).toBe("*** PARA LLEVAR ***");
+  });
+
+  it("prints TAKE AWAY on a ticket for several stations", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          locale: "en-GB",
+          scope: "stations",
+          tableLabel: "",
+          orderNumber: "A-17",
+          firedAt,
+          stations: [{ stationName: "Grill", items: [{ qty: 1, name: "Steak" }] }],
+          takeAway: true,
+        },
+        KITCHEN_80,
+        TEST_TIME_ZONE,
+      ),
+    );
+    expect(lines[0]).toBe("*** TAKE AWAY ***");
+  });
+
+  const allergyBlock = {
+    who: "Ana",
+    allergens: {},
+    note: null,
+    clashes: {},
+    labels: { en: { avoids: ["Gluten"], clashes: [] }, es: { avoids: ["Gluten"], clashes: [] } },
+  };
+  const slips: [string, Record<string, unknown>][] = [
+    ["VOID", { kind: "VOID" }],
+    ["RECALLED", { kind: "RECALLED" }],
+    ["HOLD CHANGED", { kind: "HOLD CHANGED", direction: "added" }],
+    ["HOLD CANCELLED", { kind: "HOLD CANCELLED" }],
+    ["TO STATION", { kind: "TO STATION", toStation: "Bar" }],
+    ["EXTRA CANCELLED", { kind: "EXTRA CANCELLED", held: false, cancelledExtra: "Cheese" }],
+    ["ALLERGY CHANGED", { kind: "ALLERGY CHANGED", allergyBlock }],
+    ["ALLERGY REMOVED", { kind: "ALLERGY REMOVED", allergyBlock: null }],
+  ];
+
+  // Fails if a MOVED slip of a takeaway order loses the takeaway line, or an eat-in one gains it.
+  it("prints TAKE AWAY under a MOVED slip's heading, and nothing on an eat-in one", () => {
+    const moved: MovedSlip = {
+      stationName: "Grill",
+      fromNumber: "28",
+      fromText: "(counter)",
+      toText: "T5",
+      at: firedAt.toISOString(),
+      items: [{ qty: 1, name: "BURG" }],
+      held: [],
+      locale: "en-GB",
+    };
+    const eatIn = printedLines(formatMovedSlip(moved, KITCHEN_80, TEST_TIME_ZONE));
+    const takeaway = printedLines(
+      formatMovedSlip({ ...moved, takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(eatIn[0]).toBe("*** MOVED ***");
+    expect(eatIn).not.toContain("*** TAKE AWAY ***");
+    expect(takeaway).toEqual([eatIn[0], "*** TAKE AWAY ***", ...eatIn.slice(1)]);
+  });
+
+  // Fails if a note-change slip of a takeaway order loses the takeaway line, or an eat-in one
+  // gains it.
+  it("prints TAKE AWAY under a note-change slip's heading, and nothing on an eat-in one", () => {
+    const slip = {
+      locale: "es-ES",
+      stations: [{ stationName: "Grill", items: [{ qty: 1, name: "Steak" }] }],
+      tableLabel: null,
+      orderNumber: "A-17",
+      at: firedAt.toISOString(),
+      orderNoteChange: { before: "Old", after: "New" },
+    };
+    const eatIn = printedLines(formatKitchenNoteChangeSlip(slip, KITCHEN_80, TEST_TIME_ZONE));
+    const takeaway = printedLines(
+      formatKitchenNoteChangeSlip({ ...slip, takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(eatIn).not.toContain("*** PARA LLEVAR ***");
+    expect(takeaway).toEqual([eatIn[0], "*** PARA LLEVAR ***", ...eatIn.slice(1)]);
+  });
+
+  // Fails if any correction slip kind loses the takeaway line, or an eat-in slip gains it.
+  it.each(slips)("prints TAKE AWAY on a %s slip, and nothing on an eat-in one", (_, kind) => {
+    const slip = {
+      ...kind,
+      locale: "en-GB",
+      stationName: "Grill",
+      tableLabel: null,
+      orderNumber: "A-17",
+      at: firedAt.toISOString(),
+      item: { qty: 1, name: "Steak" },
+    } as Parameters<typeof formatCorrectionSlip>[0];
+    const eatIn = printedLines(formatCorrectionSlip(slip, KITCHEN_80, TEST_TIME_ZONE));
+    const takeaway = printedLines(
+      formatCorrectionSlip({ ...slip, takeAway: true }, KITCHEN_80, TEST_TIME_ZONE),
+    );
+    expect(eatIn).not.toContain("*** TAKE AWAY ***");
+    expect(takeaway).toEqual([eatIn[0], "*** TAKE AWAY ***", ...eatIn.slice(1)]);
+  });
+});

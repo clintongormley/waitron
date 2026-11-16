@@ -19,11 +19,12 @@ export async function readReceiptOrder(
   tx: Transaction,
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
-): Promise<{ orderLabel: string | null; orderNumber: number }> {
+): Promise<{ orderLabel: string | null; orderNumber: number; takeAway?: true }> {
   const [order] = await tx
     .select({
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
+      dining: workingOrders.dining,
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
       partyId: parties.id,
@@ -37,15 +38,17 @@ export async function readReceiptOrder(
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId });
   }
+  const takeAway = order.dining === "takeaway" ? { takeAway: true as const } : {};
   // Issuance freezes the grouping onto the order; later table edits cannot change the document.
   if (!opts.atIssuance && order.saleId !== null) {
-    return { orderLabel: order.label, orderNumber: order.orderNumber };
+    return { orderLabel: order.label, orderNumber: order.orderNumber, ...takeAway };
   }
   if (order.partyId !== null) {
     const labels = (await partyTableLabels(tx, [order.partyId])).get(order.partyId)!;
     return {
       orderLabel: labels.length === 0 ? order.label : partyReceiptLabel(order.partyName, labels),
       orderNumber: order.orderNumber,
+      ...takeAway,
     };
   }
   const labels = await orderTableLabels(tx, [
@@ -57,5 +60,5 @@ export async function readReceiptOrder(
       label: order.label,
     },
   ]);
-  return { orderLabel: labels.get(workingOrderId)!, orderNumber: order.orderNumber };
+  return { orderLabel: labels.get(workingOrderId)!, orderNumber: order.orderNumber, ...takeAway };
 }

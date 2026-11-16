@@ -114,6 +114,7 @@ async function place(cookie: string, id: string): Promise<Response> {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
+      dining: "eat_in",
       id,
       zoneId: venue.counter.zoneId,
       lines: [{ menuItemId: venue.counterItem("Burger"), quantity: "1" }],
@@ -174,6 +175,7 @@ async function paymentRequest(kind: PaymentRoute) {
       id,
       path: "/api/sales",
       body: {
+        dining: "eat_in",
         workingOrderId: id,
         expectedEdit: null,
         zoneId: venue.counter.zoneId,
@@ -186,6 +188,7 @@ async function paymentRequest(kind: PaymentRoute) {
       id,
       path: "/api/pay",
       body: {
+        dining: "eat_in",
         id,
         expectedEdit: null,
         zoneId: venue.counter.zoneId,

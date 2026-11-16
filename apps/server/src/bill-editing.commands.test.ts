@@ -482,6 +482,7 @@ async function sendAsk(saved: Awaited<ReturnType<typeof save>>) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, saved.draft!.partyId));
   return {
     allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
+    dining: "eat_in" as const,
     submissionId: randomUUID(),
     operatorId: venue.operatorId,
     expectedPartyRevision: party!.revision,

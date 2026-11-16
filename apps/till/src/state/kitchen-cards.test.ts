@@ -63,6 +63,7 @@ function bill(
 ): MergedQueueGroup {
   return {
     kitchenNote: null,
+    dining: "eat_in",
     orderId,
     orderNumber: 12,
     label: "Table 4",

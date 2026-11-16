@@ -99,6 +99,7 @@ async function sweep(disk: DiskFullState): Promise<{ all: string[]; refused: str
 
 function park(app: Hono, id = randomUUID()) {
   return send(app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     zoneId: venue.zoneId,
     lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],

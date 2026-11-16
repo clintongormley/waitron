@@ -699,7 +699,7 @@ describe("table + tab routes", () => {
 
     const res = await request(`/api/working-orders/${tabId}`, {
       method: "PUT",
-      body: JSON.stringify({ revision, lines: [{ menuItemId, quantity: "1" }] }),
+      body: JSON.stringify({ dining: "eat_in", revision, lines: [{ menuItemId, quantity: "1" }] }),
     });
 
     expect(res.status).toBe(409);
@@ -707,7 +707,11 @@ describe("table + tab routes", () => {
     for (const revision of [{ revision: "2" }, {}]) {
       const malformed = await request(`/api/working-orders/${tabId}`, {
         method: "PUT",
-        body: JSON.stringify({ ...revision, lines: [{ menuItemId, quantity: "1" }] }),
+        body: JSON.stringify({
+          dining: "eat_in",
+          ...revision,
+          lines: [{ menuItemId, quantity: "1" }],
+        }),
       });
       expect(malformed.status).toBe(400);
       expect(await malformed.json()).toMatchObject({
@@ -746,6 +750,7 @@ describe("table + tab routes", () => {
       request(`/api/working-orders/${tabId}`, {
         method: "PUT",
         body: JSON.stringify({
+          dining: "eat_in",
           revision: copy,
           lines: [
             {

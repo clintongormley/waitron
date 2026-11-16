@@ -333,8 +333,7 @@ describe("Casa Delgado VAT classes", () => {
   });
 
   // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the deli's other food is at 10% (art. 91.Uno.1.1.º).
-  // Art. 91.Uno.1.1.º excludes alcoholic drinks and sweetened soft drinks, so the takeaway drinks take the general 21% (art. 90.Uno).
-  it("sells the takeaway cheeses at the super-reduced rate, the takeaway drinks at the general rate and the other deli goods at the reduced rate", () => {
+  it("sells the takeaway cheeses at the super-reduced rate and the other deli goods at the reduced rate", () => {
     const expected = {
       "Iberian ham": "reduced",
       Chorizo: "reduced",
@@ -351,9 +350,6 @@ describe("Casa Delgado VAT classes", () => {
       Olives: "reduced",
       "Octopus in oil": "reduced",
       "Tuna belly": "reduced",
-      "Coca-Cola": "general",
-      "Coca-Cola Zero": "general",
-      "Bottled beer": "general",
     };
     for (const set of sets)
       expect(
@@ -367,6 +363,45 @@ describe("Casa Delgado VAT classes", () => {
         ),
         set.id,
       ).toEqual(expected);
+  });
+  // Art. 91.Uno.1.1.º excludes alcoholic drinks and sweetened soft drinks from the reduced rate for
+  // goods, so taken away they take the general 21% (art. 90.Uno).
+  it("lists the restaurant's cola, Coca-Cola Zero and bottled beer in the deli, served at the reduced rate and taken away at the general rate", () => {
+    const drinks = ["refresco-cola.png", "coca-cola-zero-lata.png", "botellin-cerveza.png"];
+    for (const set of sets) {
+      const restaurant = set.menus.restaurant.categories.flatMap((category) => category.products);
+      expect(
+        drinks.map((image) => {
+          const product = restaurant.find((candidate) => candidate.image === image);
+          return [image, product?.vatClass, product?.takeawayVatClass];
+        }),
+        set.id,
+      ).toEqual(drinks.map((image) => [image, "reduced", "general"]));
+      expect(set.menus.deli.listedSection?.productImages, set.id).toEqual(drinks);
+      expect(set.menus.deli.listedSection?.name.en, set.id).toBe("Drinks");
+      const deliOwn = set.menus.deli.categories.flatMap((category) => category.products);
+      expect(
+        deliOwn.filter(
+          (product) =>
+            product.vatClass === "general" ||
+            /cola|beer/i.test(product.staffName?.en ?? product.image),
+        ),
+        set.id,
+      ).toEqual([]);
+    }
+  });
+
+  it("gives a takeaway class only to the drinks the deli lists", () => {
+    for (const set of sets)
+      expect(
+        [set.menus.restaurant, set.menus.deli, set.menus.lunch]
+          .flatMap((menu) => menu.categories)
+          .flatMap((category) => category.products)
+          .filter((product) => product.takeawayVatClass !== undefined)
+          .map((product) => product.image)
+          .sort(),
+        set.id,
+      ).toEqual(["botellin-cerveza.png", "coca-cola-zero-lata.png", "refresco-cola.png"]);
   });
 });
 

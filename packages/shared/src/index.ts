@@ -172,6 +172,7 @@ export {
   DININGS,
   type Dining,
   type DiningPolicy,
+  type DiningStart,
 } from "./dining.js";
 export { int4InRange } from "./int4-range.js";
 export { MEDIA_FILENAME } from "./media-filename.js";

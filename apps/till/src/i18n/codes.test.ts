@@ -1020,3 +1020,48 @@ it("keeps a till on the handover screen while it follows the main server", () =>
     "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
   );
 });
+
+it.each([
+  [
+    "order.dining_fixed",
+    "This department sells every order one way, so eat here or take away cannot be chosen for this order",
+    "Este departamento vende todos sus pedidos de una sola forma, así que no se puede elegir para tomar aquí o para llevar en este pedido",
+  ],
+  [
+    "order.dining_locked",
+    "This order has already gone to the kitchen or been paid, so it can no longer switch between eat here and take away. The screen now shows the way it is sold",
+    "Este pedido ya ha ido a cocina o ya tiene un cobro, así que ya no se puede cambiar entre para tomar aquí y para llevar. La pantalla muestra ahora cómo se vende",
+  ],
+  [
+    "order.dining_differs",
+    "One of these bills is to eat here and the other to take away, so dishes cannot move between them. Switch one bill to match the other first, if it has not gone to the kitchen",
+    "Una de estas cuentas es para tomar aquí y la otra para llevar, así que los platos no pueden pasar de una a otra. Cambia primero una de ellas para que coincidan, si aún no ha ido a cocina",
+  ],
+  [
+    "order.set_lunch_takeaway",
+    "Set lunches are only served to eat here for now, so a takeaway order cannot include one. Remove the set lunch to sell this order to take away",
+    "Por ahora el menú del día solo se sirve para tomar aquí, así que un pedido para llevar no puede incluirlo. Quita el menú del día para vender este pedido para llevar",
+  ],
+])("words %s in English and Spanish (A1522)", (code, en, es) => {
+  expect(codeMessage(code, "en")).toBe(en);
+  expect(codeMessage(code, "es")).toBe(es);
+});
+
+it.each([
+  [
+    "eat_in",
+    "This order is sold to eat here, and its department does not let the till switch it to take away",
+    "Este pedido se vende para tomar aquí y su departamento no deja que la caja lo cambie a para llevar",
+  ],
+  [
+    "takeaway",
+    "This order is sold to take away, and its department does not let the till switch it to eat here",
+    "Este pedido se vende para llevar y su departamento no deja que la caja lo cambie a para tomar aquí",
+  ],
+])(
+  "names the way an order.dining_fixed order is sold (%s), in English and Spanish (A1522)",
+  (dining, en, es) => {
+    expect(codeMessage("order.dining_fixed", "en", { dining })).toBe(en);
+    expect(codeMessage("order.dining_fixed", "es", { dining })).toBe(es);
+  },
+);

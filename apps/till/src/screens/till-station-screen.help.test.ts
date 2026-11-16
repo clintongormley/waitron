@@ -20,6 +20,7 @@ const SENT = "2026-08-17T10:00:00.000Z";
 function queue(orderId: string, itemId: string, name: string): StationQueueGroup[] {
   return [
     {
+      dining: "eat_in",
       kitchenNote: null,
       orderId,
       orderNumber: 5,

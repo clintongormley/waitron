@@ -30,6 +30,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 // One item in each of the three kitchen states, so the three columns can be asserted from a single
 // mount.
 const groupA: StationQueueGroup = {
+  dining: "eat_in",
   kitchenNote: null,
   orderId: "wo-1",
   orderNumber: 5,
@@ -73,6 +74,7 @@ const groupA: StationQueueGroup = {
 };
 
 const groupB: StationQueueGroup = {
+  dining: "eat_in",
   kitchenNote: null,
   orderId: "wo-2",
   orderNumber: 6,
@@ -405,6 +407,7 @@ describe("till-station-queue", () => {
 
   it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {
     const group: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-9",
       orderNumber: 9,
@@ -442,6 +445,7 @@ describe("till-station-queue", () => {
 
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the dish", () => {
     const withModifiers: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-9",
       orderNumber: 9,
@@ -553,6 +557,7 @@ describe("till-station-queue", () => {
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
     const withCustomisation: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-c",
       orderNumber: 12,
@@ -629,6 +634,7 @@ describe("till-station-queue", () => {
 
   describe("as-served allergens: the dish's own allergen icons + not-reviewed note", () => {
     const withAllergens: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-a",
       orderNumber: 11,
@@ -658,6 +664,7 @@ describe("till-station-queue", () => {
     };
 
     const pendingItem: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-p",
       orderNumber: 12,
@@ -749,6 +756,7 @@ describe("till-station-queue", () => {
 
   describe("as-served diet badges", () => {
     const veganItem: StationQueueGroup = {
+      dining: "eat_in",
       kitchenNote: null,
       orderId: "wo-v",
       orderNumber: 21,
@@ -1143,6 +1151,7 @@ describe("till-station-queue", () => {
 // then a fired middle course, then the fired null (bread) course — so a passing grouping test proves the
 // widget re-orders (null, then by display_order) rather than echoing the item order.
 const coursedOrder: StationQueueGroup = {
+  dining: "eat_in",
   kitchenNote: null,
   orderId: "wo-c",
   orderNumber: 7,
@@ -1803,6 +1812,7 @@ describe("till-station-queue — kitchen notices strip", () => {
 // A seated party's bill: listed out of position order, with a line moved in from another bill (no
 // group) and each item still carrying a course, so a passing test proves the card sections by GROUP.
 const partyOrder: StationQueueGroup = {
+  dining: "eat_in",
   kitchenNote: null,
   orderId: "wo-p",
   orderNumber: 9,
@@ -2418,6 +2428,7 @@ describe("till-station-queue — a merged queue's station labels", () => {
 
 describe("till-station-queue — moving a dish to another station", () => {
   const order: StationQueueGroup = {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-m",
     orderNumber: 8,
@@ -2593,6 +2604,7 @@ describe("till-station-queue — where Move sits", () => {
     queuedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-g",
     orderNumber: 9,
@@ -3371,6 +3383,7 @@ function ageBill(
 ): StationQueueGroup & { stationId?: string } {
   return {
     kitchenNote: null,
+    dining: "eat_in",
     orderId: `wo-${orderNumber}`,
     orderNumber,
     label: `Table ${orderNumber}`,
@@ -5673,4 +5686,35 @@ it("localises fractional kitchen lines, totals and overview counts in Spanish", 
   } finally {
     setLocale(previous);
   }
+});
+
+describe("a takeaway order's card heading", () => {
+  // Fails if a takeaway order's heading stops saying Take away in the till's language, or an eat-in
+  // order's heading gains it.
+  it.each([
+    ["en-GB", "Take away"],
+    ["es-ES", "Para llevar"],
+  ])(
+    "says Take away on a takeaway order's heading in %s, and nothing on an eat-in one",
+    async (locale, words) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [groupA, { ...groupB, dining: "takeaway" }],
+          stationId: "st-1",
+        });
+        const heads = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")].map(
+          (card) => [
+            card.dataset.order,
+            card.querySelector(".ticket-head [data-take-away]")?.textContent?.trim(),
+          ],
+        );
+        expect(heads).toContainEqual([String(groupB.orderNumber), words]);
+        expect(heads).toContainEqual([String(groupA.orderNumber), undefined]);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
 });

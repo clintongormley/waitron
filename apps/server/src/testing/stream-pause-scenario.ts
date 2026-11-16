@@ -436,6 +436,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         method: "POST",
         headers: { "content-type": "application/json", cookie: cookies },
         body: JSON.stringify({
+          dining: "eat_in",
           lines: [{ menuItemId: box.offer, quantity: "1" }],
           tender: { method: "cash", amount: "2.00" },
         }),

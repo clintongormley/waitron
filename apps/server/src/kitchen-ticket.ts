@@ -75,6 +75,8 @@ export type KitchenTicket = {
   mark?: "HOLD" | "FIRE";
   from?: { stationName: string; locale: string };
   party?: { name: string; locale: string };
+  /** The order is taken away, so the station packs it. */
+  takeAway?: boolean;
 } & (
   | {
       scope: "station";
@@ -445,6 +447,7 @@ export function formatKitchenTicket(
     );
   if (ticket.mark !== undefined)
     text(`*** ${kitchenTicketWords(ticket.locale)[ticket.mark === "HOLD" ? "hold" : "fire"]} ***`);
+  if (ticket.takeAway === true) text(`*** ${kitchenTicketWords(ticket.locale).takeAway} ***`);
   text(
     ticket.scope === "station"
       ? ticket.stationName
@@ -513,6 +516,7 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
 
 export type CorrectionSlip = {
   locale: string;
+  takeAway?: boolean;
   party?: { name: string; locale: string };
   kitchenNote?: KitchenNoteHeading;
   stationName: string;
@@ -607,6 +611,7 @@ export function formatCorrectionSlip(
   };
 
   text(`*** ${slipHeader(slip)} ***`);
+  if (slip.takeAway === true) text(`*** ${kitchenTicketWords(slip.locale).takeAway} ***`);
   text(slip.stationName);
   if (slip.tableLabel !== null) text(slip.tableLabel);
   if (slip.party === undefined) text(slip.orderNumber);
@@ -649,6 +654,7 @@ export interface KitchenNoteChangeSlip {
   party?: { name: string; locale: string };
   at: string;
   orderNoteChange: KitchenNoteChange;
+  takeAway?: boolean;
 }
 
 export function formatKitchenNoteChangeSlip(
@@ -666,6 +672,7 @@ export function formatKitchenNoteChangeSlip(
   const onlyGroup = onlyGroupOf(allItems);
 
   text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
+  if (slip.takeAway === true) text(`*** ${kitchenTicketWords(slip.locale).takeAway} ***`);
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
   const numbers = slip.orderNumbers ?? [slip.orderNumber];
@@ -741,6 +748,7 @@ export interface MovedSlip {
   items: KitchenTicketItem[];
   held: { group: number; items: KitchenTicketItem[] }[];
   locale: string;
+  takeAway?: boolean;
 }
 
 /**
@@ -771,6 +779,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting, timeZone: s
     slip.locale,
   );
   text(`*** ${words.moved} ***`);
+  if (slip.takeAway === true) text(`*** ${words.takeAway} ***`);
   text(slip.stationName);
   const numbers =
     slip.toNumber === undefined ? slip.fromNumber : `${slip.fromNumber} -> ${slip.toNumber}`;

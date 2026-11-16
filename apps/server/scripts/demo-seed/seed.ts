@@ -15,6 +15,7 @@ import {
   buildMenuDocument,
   listAvailableProducts,
   menuDocumentHash,
+  menuItems,
   publishMenu,
   readContentLanguages,
   readReceiptLanguage,
@@ -75,8 +76,8 @@ export async function seedDemoRestaurant(
   demoSeedEnvironment(process.env);
   await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
-  const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
-    const { productsByImage, menuIds, stationIds } = await seedMenus(tx, {
+  const seeded = await withTransaction(db, async (tx) => {
+    const { productsByImage, menuIds, stationIds, deliListed } = await seedMenus(tx, {
       locale,
       dataSet,
     });
@@ -90,7 +91,7 @@ export async function seedDemoRestaurant(
     await routeToDemoPrinter(tx, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
-    await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds });
+    await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds, deliListed });
     await giveKitchenDisplaysThePass(tx);
     await seedStaff(tx, { dataSet, locale });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
@@ -102,12 +103,18 @@ export async function seedDemoRestaurant(
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), administrator.id);
     }
+    const deliItems = await tx
+      .select({ productId: menuItems.productId })
+      .from(menuItems)
+      .where(eq(menuItems.menuId, menuIds.deli));
     return {
       products: (await listAvailableProducts(tx)).products,
+      deliProductIds: new Set(deliItems.map((item) => item.productId)),
       invoiceLocale: (await readReceiptLanguage(tx)).locale,
       passStationIds: { kitchen: stationIds.kitchen, deli: stationIds.deli },
     };
   });
+  const { products, deliProductIds, invoiceLocale, passStationIds } = seeded;
 
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
     id: p.id,
@@ -115,6 +122,7 @@ export async function seedDemoRestaurant(
     customerName: p.customerName,
     unitPrice: p.unitPrice,
     vatClass: p.vatClass,
+    takeawayVatClass: p.takeawayVatClass,
   }));
 
   await seedSales(db, {
@@ -126,6 +134,7 @@ export async function seedDemoRestaurant(
     invoiceLocale,
     days: salesDays,
     products: salesProducts,
+    deliProducts: salesProducts.filter((product) => deliProductIds.has(product.id)),
   });
 
   // Install zone restrictions only after practice sales finish.

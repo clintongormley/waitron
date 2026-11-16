@@ -329,6 +329,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
         () => {},
       );
       const paid = await send(app, venue.cookie, "POST", "/api/pay", {
+        dining: "eat_in",
         id: billId,
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
         lines: [],

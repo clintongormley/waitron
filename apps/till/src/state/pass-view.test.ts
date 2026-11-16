@@ -404,6 +404,7 @@ describe("A797 a pass card names a bill's place", () => {
     orderId: "order-1",
     orderNumber: 12,
     kitchenNote: null,
+    dining: "eat_in",
     ...overrides,
   });
 

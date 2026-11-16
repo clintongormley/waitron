@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { TillShell } from "../widgets/till-shell.js";
 import {
@@ -683,3 +683,135 @@ it.each(retirementLooks)(
     }
   },
 );
+
+describe("eaten here or taken away", () => {
+  let previous = currentLocale();
+  beforeEach(() => {
+    previous = currentLocale();
+    setLocale("en-GB");
+  });
+  afterEach(() => setLocale(previous));
+
+  const segmented = (el: TillCounterScreen) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+      "wt-segmented-control[name='dining']",
+    );
+  const label = (el: TillCounterScreen) =>
+    el.shadowRoot!.querySelector("[data-dining-label]")?.textContent?.trim();
+  const saved = (dining: "eat_in" | "takeaway", policy: "eat_in" | "takeaway" | "till_choice") => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy, startsAs: policy === "takeaway" ? "takeaway" : "eat_in" });
+    store.loadFrom("saved", [], undefined, 1, undefined, dining);
+    return store;
+  };
+
+  it("offers the switch for a draft in a department that leaves the way to the till", async () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    const { el } = await mount({ store });
+    const control = segmented(el)!;
+    expect(control).not.toBeNull();
+    expect(control.value).toBe("eat_in");
+    expect(control.options.map((option) => option.label)).toEqual(["Eat here", "Take away"]);
+    expect(label(el)).toBeUndefined();
+  });
+
+  it("offers the switch for a saved order the server still lets switch", async () => {
+    const { el } = await mount({ store: saved("takeaway", "takeaway"), diningChoice: "open" });
+    expect(segmented(el)?.value).toBe("takeaway");
+  });
+
+  it("labels a saved order whose way is locked", async () => {
+    const { el } = await mount({ store: saved("takeaway", "till_choice"), diningChoice: "locked" });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBe("Take away");
+  });
+
+  it("labels a takeaway order in a takeaway department", async () => {
+    const { el } = await mount({ store: saved("takeaway", "takeaway"), diningChoice: "none" });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBe("Take away");
+  });
+
+  it("shows nothing for an eat-in order in an eat-in department", async () => {
+    const { el } = await mount({ store: saved("eat_in", "eat_in"), diningChoice: "none" });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBeUndefined();
+  });
+
+  it("shows nothing for an eat-in draft where the region has no distinction", async () => {
+    const { el } = await mount({ store: new WorkingOrderStore() });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBeUndefined();
+  });
+
+  it("labels a takeaway order whose department now sells eaten here as Take away", async () => {
+    const { el } = await mount({ store: saved("takeaway", "eat_in"), diningChoice: "none" });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBe("Take away");
+  });
+
+  it("labels an eat-in order whose department now sells taken away as Eat here", async () => {
+    const { el } = await mount({ store: saved("eat_in", "takeaway"), diningChoice: "none" });
+    expect(segmented(el)).toBeNull();
+    expect(label(el)).toBe("Eat here");
+  });
+
+  it("words the switch in Spanish", async () => {
+    const previous = currentLocale();
+    try {
+      setLocale("es");
+      const store = new WorkingOrderStore();
+      store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+      const { el } = await mount({ store });
+      expect(segmented(el)!.options.map((option) => option.label)).toEqual([
+        "Para tomar aquí",
+        "Para llevar",
+      ]);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it.each([
+    ["collecting", { stage: "collect" as const }],
+    ["busy", { busy: true }],
+    ["sending the order", { orderInFlight: true }],
+  ])("disables the switch while %s", async (_case, over) => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    const { el } = await mount({ store });
+    expect(segmented(el)!.disabled).toBe(false);
+    Object.assign(el, over);
+    await el.updateComplete;
+    expect(segmented(el)!.disabled).toBe(true);
+  });
+
+  it("labels Eat here as a plain chip", async () => {
+    const { el } = await mount({ store: saved("eat_in", "takeaway"), diningChoice: "none" });
+    const chip = el.shadowRoot!.querySelector("[data-dining-label]")!;
+    expect([...chip.classList]).toEqual(["chip"]);
+  });
+
+  it("asks for Take away with the screen's dining-change event", async () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    const { el } = await mount({ store });
+    const changes: unknown[] = [];
+    const outer: unknown[] = [];
+    el.parentElement!.addEventListener("dining-change", (event) =>
+      changes.push((event as CustomEvent<{ dining: string }>).detail),
+    );
+    el.parentElement!.addEventListener("wt-change", (event) => outer.push(event));
+    const control = segmented(el)!;
+    await control.updateComplete;
+    await userEvent.click(
+      [...control.shadowRoot!.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Take away",
+      )!,
+    );
+    expect(changes).toEqual([{ dining: "takeaway" }]);
+    expect(outer).toEqual([]);
+    expect(store.dining).toBe("eat_in");
+  });
+});

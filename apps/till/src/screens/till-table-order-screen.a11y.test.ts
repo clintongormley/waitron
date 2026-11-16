@@ -139,6 +139,8 @@ const party: TableParty = {
 
 const partyBills: PartyBill[] = [
   {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-1",
     revision: 0,
     invoiceType: "F2",
@@ -154,6 +156,8 @@ const partyBills: PartyBill[] = [
     receiptAvailable: true,
   },
   {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-2",
     revision: 0,
     invoiceType: "F2",

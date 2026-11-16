@@ -94,6 +94,7 @@ const zoneOffers = (id: string): ZoneOffers => ({
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     zoneId: id,
     serviceMode: zones.find((zone) => zone.id === id)!.serviceMode,
     departmentId: "department",

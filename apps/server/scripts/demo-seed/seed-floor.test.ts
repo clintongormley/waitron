@@ -186,6 +186,49 @@ describe("seedFloor", () => {
     ]);
   });
 
+  it("sells the deli to take away and the restaurant eaten here, and makes the deli's drinks at the deli", async () => {
+    await provisionVenue();
+    const result = await withTransaction(suite.db, async (tx) => {
+      const { menuIds, productsByImage, stationIds, deliListed } = await seedMenus(tx, {
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
+      await seedFloor(tx, {
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+        menuIds,
+        deliListed,
+      });
+      const { rows: departments } = await tx.execute<{ name: string; dining: string }>(sql`
+        select name, dining from departments order by name`);
+      const { rows: zones } = await tx.execute<{ id: string }>(sql`
+        select id from floor_zones where name = 'Deli counter'`);
+      const drinks = ["refresco-cola.png", "coca-cola-zero-lata.png", "botellin-cerveza.png"].map(
+        (image) => productsByImage.get(image)!,
+      );
+      const makers = await resolveMakers(
+        tx,
+        zones[0]!.id,
+        drinks,
+        new Date("2026-10-06T10:00:00Z"),
+      );
+      return { departments, makers, drinks, deliStationId: stationIds.deli };
+    });
+    expect(result.departments).toEqual([
+      { name: "Deli", dining: "takeaway" },
+      { name: "Restaurant and bar", dining: "eat_in" },
+    ]);
+    expect(result.makers).toEqual(
+      new Map(
+        result.drinks.map((id) => [
+          id,
+          { kind: "made", route: { kind: "station", stationId: result.deliStationId } },
+        ]),
+      ),
+    );
+  });
+
   it("each demo department starts with the four linked meal visits", async () => {
     await provisionVenue();
 

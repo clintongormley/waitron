@@ -13,6 +13,7 @@ import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
 import {
   applyDepartmentDining,
   departmentDining,
+  diningStartOf,
   findOrdersWithDiningChoice,
   resolveOrderDining,
   venueChargesTakeawayVat,
@@ -176,6 +177,49 @@ describe("resolveOrderDining", () => {
     const zoneId = await zoneSelling("till_choice", { startsAs: "takeaway", orderStart: "table" });
     expect(await resolve(zoneId, undefined)).toBe("eat_in");
     expect(await resolve(zoneId, "takeaway")).toBe("takeaway");
+  });
+
+  describe("diningStartOf, from the zone's resolved sale policy", () => {
+    async function startOfZone(zoneId: string) {
+      return withTransaction(db, async (tx) =>
+        diningStartOf(await resolveSalePolicy(tx, zoneId), await venueChargesTakeawayVat(tx)),
+      );
+    }
+
+    it.each([
+      ["eat_in", "eat_in"],
+      ["takeaway", "takeaway"],
+    ] as const)("a department fixed %s starts %s", async (dining, startsAs) => {
+      await venueIn("ES", "ES-common");
+      expect(await startOfZone(await zoneSelling(dining, { startsAs: "takeaway" }))).toEqual({
+        policy: dining,
+        startsAs,
+      });
+    });
+
+    it("a till-choice counter starts as the department says", async () => {
+      await venueIn("ES", "ES-common");
+      expect(await startOfZone(await zoneSelling("till_choice", { startsAs: "takeaway" }))).toEqual(
+        {
+          policy: "till_choice",
+          startsAs: "takeaway",
+        },
+      );
+    });
+
+    it("a till-choice table zone starts eaten here, whatever the department starts as", async () => {
+      await venueIn("ES", "ES-common");
+      const zoneId = await zoneSelling("till_choice", {
+        startsAs: "takeaway",
+        orderStart: "table",
+      });
+      expect(await startOfZone(zoneId)).toEqual({ policy: "till_choice", startsAs: "eat_in" });
+    });
+
+    it("is null in a region without takeaway VAT", async () => {
+      await venueIn("GB", "GB-vat");
+      expect(await startOfZone(await zoneSelling("takeaway"))).toBeNull();
+    });
   });
 
   it("sells eaten here in a department stored with its column defaults", async () => {

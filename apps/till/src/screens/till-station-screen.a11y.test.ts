@@ -44,6 +44,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 
 const groups: StationQueueGroup[] = [
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
@@ -101,6 +102,7 @@ const groups: StationQueueGroup[] = [
     ],
   },
   {
+    dining: "eat_in",
     kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,

@@ -23,8 +23,8 @@ To correct the class on the live menu without publishing your other changes to t
 A line already on an order keeps the class it was added with.
 
 Where your region taxes takeaway food differently, **VAT when taken away** holds this product's
-class for when it is taken away. Left empty, it uses the class the empty field shows. The
-till cannot sell an order as taken away yet, so this class is not charged yet.
+class for an order sold as **Take away** on the till. Left empty, such an order is charged the class
+the empty field shows.
 
 ## Set how a product is sold {#selling}
 

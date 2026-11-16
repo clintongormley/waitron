@@ -201,6 +201,7 @@ describe("changing a sent dish while a New order waits on the bill", () => {
       "POST",
       `/api/parties/${bill.partyId}/drafts/${saved.edit.draftId}/submit`,
       {
+        dining: "eat_in",
         submissionId: randomUUID(),
         expectedPartyRevision: party!.revision,
         expectedEdit,

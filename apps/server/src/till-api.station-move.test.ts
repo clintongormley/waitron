@@ -240,6 +240,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it("maps an unsent line to 409 ticket.not_sent", async () => {
     const tabId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: tabId,
       zoneId: venue.zoneId,
       lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
@@ -337,6 +338,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       const edited =
         path === "whole order"
           ? await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}`, {
+              dining: "eat_in",
               revision,
               expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
               lines: [
@@ -379,6 +381,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     async (path) => {
       const tabId = randomUUID();
       const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+        dining: "eat_in",
         id: tabId,
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
@@ -405,6 +408,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       const edited =
         path === "whole order"
           ? await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}`, {
+              dining: "eat_in",
               revision,
               lines: [
                 {
@@ -443,6 +447,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it("sends added counter units to an explicit station after the original dish moved", async () => {
     const tabId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: tabId,
       zoneId: venue.zoneId,
       lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],

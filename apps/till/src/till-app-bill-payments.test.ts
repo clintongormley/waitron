@@ -1896,6 +1896,39 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(sent().at(-1)).toEqual(original);
   });
 
+  it("pays a takeaway table bill in full as takeaway (A1522)", async () => {
+    const recordSale = vi.fn().mockResolvedValue(invoiceOf("120.00"));
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ dining: "takeaway" })]),
+      recordSale,
+    });
+    const order = await openTable(el);
+    emit(order, "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
+    await flush(el);
+    expect(recordSale.mock.calls[0]![9]).toBe("takeaway");
+  });
+
+  it("pays a table bill the bills read does not list as the zone starts a new order (A1522)", async () => {
+    const recordSale = vi.fn().mockResolvedValue(invoiceOf("120.00"));
+    const takeawayZone = {
+      ...offers,
+      context: { ...offers.context, dining: { policy: "takeaway", startsAs: "takeaway" } },
+    };
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const { el } = await mountApp({
+      getPartyBills,
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(takeawayZone),
+      listZoneOffers: vi.fn().mockResolvedValue(takeawayZone),
+      recordSale,
+    });
+    const order = await openTable(el);
+    getPartyBills.mockResolvedValue([]);
+    (el as unknown as { partyBills: unknown[] }).partyBills = [];
+    emit(order, "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
+    await flush(el);
+    expect(recordSale.mock.calls[0]![9]).toBe("takeaway");
+  });
+
   it.each(["open", "placed"] as const)(
     "retains the original full-payment body for a %s bill after an unknown answer and ownership refresh",
     async (status) => {
@@ -1926,6 +1959,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
               undefined,
               4,
               expectedEdit,
+              "eat_in",
             ]
           : ["wo-4", { method: "cash", amount: "120.00" }, undefined, 4, expectedEdit],
       );
@@ -1984,7 +2018,18 @@ describe("till-app: a bill payment's refusals and retries", () => {
       const expectedEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
       expect(original).toEqual(
         status === "open"
-          ? [[], tender, "wo-4", undefined, undefined, undefined, undefined, 4, expectedEdit]
+          ? [
+              [],
+              tender,
+              "wo-4",
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              4,
+              expectedEdit,
+              "eat_in",
+            ]
           : ["wo-4", tender, undefined, 4, expectedEdit],
       );
       const confirmation = () => tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
@@ -2117,6 +2162,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           undefined,
           4,
           { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         ],
         [
           [],
@@ -2128,6 +2174,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           undefined,
           4,
           { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         ],
       ]);
     },

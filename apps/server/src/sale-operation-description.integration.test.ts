@@ -133,6 +133,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
   )[0]!;
   const id = randomUUID();
   const result = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: id,
     lines: [{ menuItemId: counter.offerFor(product.id), quantity: "1" }],
     tender: { method: "cash", amount: "3.00" },

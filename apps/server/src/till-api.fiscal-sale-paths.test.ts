@@ -506,6 +506,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
+          dining: "eat_in",
           workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
           tender: { method: "cash", amount: "1.50" },
@@ -554,6 +555,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
@@ -632,6 +634,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: ham.menuItemId, quantity: "0.2001" }],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -648,6 +651,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [
           { menuItemId: ham.menuItemId, quantity: "0.200" },
           { menuItemId: water.menuItemId, quantity: "2" },
@@ -700,6 +704,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [
           { menuItemId: ham.menuItemId, quantity: "0.200" },
           { menuItemId: water.menuItemId, quantity: "2" },
@@ -750,6 +755,7 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
@@ -790,6 +796,7 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
@@ -821,6 +828,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         label: "Mesa 3",
@@ -842,6 +850,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
@@ -879,6 +888,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
@@ -952,6 +962,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
+          dining: "eat_in",
           id: workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
           label: "Mesa 3",
@@ -965,6 +976,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
           method: "POST",
           headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
           body: JSON.stringify({
+            dining: "eat_in",
             workingOrderId,
             lines: [],
             tender: { method, amount: "5.00" },
@@ -1024,7 +1036,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const response = await app.request("/api/pay", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({ id, lines: [{ menuItemId: each.menuItemId, quantity: "1" }], tip }),
+        body: JSON.stringify({
+          dining: "eat_in",
+          id,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tip,
+        }),
       });
 
       expect(response.status).toBe(200);
@@ -1068,6 +1085,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
+          dining: "eat_in",
           id,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
           tip,
@@ -1101,6 +1119,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1130,6 +1149,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1164,6 +1184,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         readerId: other.id,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
@@ -1199,6 +1220,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
+          dining: "eat_in",
           id: randomUUID(),
           readerId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
@@ -1239,6 +1261,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1262,6 +1285,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1286,6 +1310,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1315,6 +1340,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1367,6 +1393,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
           method: "POST",
           headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
           body: JSON.stringify({
+            dining: "eat_in",
             id: workingOrderId,
             lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
             ...body,
@@ -1440,6 +1467,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1463,6 +1491,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       }),
@@ -1501,6 +1530,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         simulationOutcome: "captured",
@@ -1525,7 +1555,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const payRes = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
     });
 
     expect(payRes.status).toBe(400);
@@ -1590,6 +1620,7 @@ describe("POST /api/pay when the device changes profile while the payment is sta
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -1729,6 +1760,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         label: "Mesa 9",
@@ -1816,6 +1848,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       {
         bumpMode: "line",
         kitchenNote: null,
+        dining: "eat_in",
         orderId: workingOrderId,
         orderNumber: expect.any(Number),
         label: "Mesa 9",
@@ -1914,6 +1947,7 @@ describe("Mode P sends preparation with payment", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
@@ -1958,6 +1992,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
@@ -2027,7 +2062,11 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id: openId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] }),
+      body: JSON.stringify({
+        dining: "eat_in",
+        id: openId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
     });
     const refused = await app.request(`/api/orders/${openId}/collect`, {
       method: "POST",
@@ -2091,6 +2130,7 @@ describe("handheld sales and device capability gates", () => {
           cookie: `${blockedSession}; ${blockedDevice}`,
         },
         body: JSON.stringify({
+          dining: "eat_in",
           workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
@@ -2144,6 +2184,7 @@ describe("handheld sales and device capability gates", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
@@ -2185,6 +2226,7 @@ describe("handheld sales and device capability gates", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "card", amount: "3.00" },
       }),
@@ -2234,6 +2276,7 @@ describe("handheld sales and device capability gates", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
@@ -2246,7 +2289,7 @@ describe("handheld sales and device capability gates", () => {
   // config, order existence, or printer state. Plain `apiDeps(cfg)` (no card provider) suffices for the
   // pay case precisely because the guard short-circuits ahead of the provider check.
   it.each([
-    ["POST /api/pay", "/api/pay", { id: randomUUID() }],
+    ["POST /api/pay", "/api/pay", { dining: "eat_in", id: randomUUID() }],
     ["POST /api/sales/:id/reprint", `/api/sales/${randomUUID()}/reprint`, {}],
     ["POST /api/drawer/open", "/api/drawer/open", {}],
   ])(
@@ -2293,7 +2336,7 @@ describe("handheld sales and device capability gates", () => {
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({ id: randomUUID() }),
+      body: JSON.stringify({ dining: "eat_in", id: randomUUID() }),
     });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("device.forbidden_action");
@@ -2305,7 +2348,7 @@ describe("handheld sales and device capability gates", () => {
     const park = await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id, lines: [{ menuItemId, quantity: "2" }] }),
+      body: JSON.stringify({ dining: "eat_in", id, lines: [{ menuItemId, quantity: "2" }] }),
     });
     expect(park.status).toBe(200);
     return id;
@@ -2479,6 +2522,7 @@ describe("handheld sales and device capability gates", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
+          dining: "eat_in",
           lines: [{ menuItemId, quantity: "2" }],
           tender: { method, amount: "5.00" },
         }),
@@ -2684,6 +2728,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     workingOrderId,
     lines: [{ menuItemId: product.menuItemId, quantity: "2", extras, options }],
     tender: { method: "cash", amount: "10.00" },
+    dining: "eat_in",
   };
   const response = await app.request("/api/sales", {
     method: "POST",
@@ -2948,6 +2993,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         readerId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
@@ -2979,6 +3025,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       }),
@@ -3134,6 +3181,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: body.workingOrderId,
         lines: [{ menuItemId: body.menuItemId, quantity: "2" }],
         tender: { method: "card", amount: "3.00", ...body.outside },
@@ -3251,6 +3299,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
+          dining: "eat_in",
           workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
           tender: { method, amount: "5.00" },
@@ -3291,6 +3340,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
       }),
@@ -3354,7 +3404,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         const parked = await app.request("/api/working-orders", {
           method: "POST",
           headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({ id, lines: [{ menuItemId: each.menuItemId, quantity: "2" }] }),
+          body: JSON.stringify({
+            dining: "eat_in",
+            id,
+            lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+          }),
         });
         expect(parked.status).toBe(200);
         expect(
@@ -3376,6 +3430,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
                   workingOrderId: id,
                   lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
                   tender,
+                  dining: "eat_in",
                 }
               : { tender },
           ),
@@ -3416,6 +3471,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
+          dining: "eat_in",
           id: workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         }),
@@ -3501,6 +3557,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
+          dining: "eat_in",
           id: workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         }),
@@ -3535,6 +3592,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       method: "POST",
       headers: { "content-type": "application/json", cookie: await on(deviceCookie) },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
@@ -3661,6 +3719,7 @@ describe("a sale cannot hand over settled extras or options", () => {
         ],
         tender: { method: "cash", amount: "10.00" },
         simulationOutcome: "captured",
+        dining: "eat_in",
       }),
     });
     expect(response.status, await response.clone().text()).toBe(400);

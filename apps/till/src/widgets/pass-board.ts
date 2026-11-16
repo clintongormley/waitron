@@ -41,6 +41,7 @@ import {
   kitchenAllergyStyles,
 } from "./kitchen-allergy-block.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { takeAwayMark, takeAwayMarkStyles } from "./take-away-mark.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 
 type ServerColumn = "held" | "toFire" | "inProgress" | "ready";
@@ -94,6 +95,7 @@ export class TillPassBoard extends LitElement {
     nutritionIconStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
+    takeAwayMarkStyles,
     kitchenBoardStyles,
     kitchenHelpStyles,
     css`
@@ -521,6 +523,7 @@ export class TillPassBoard extends LitElement {
         ${card.orders.map(
           (order) =>
             html`<span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
+              ${order.dining === "takeaway" ? takeAwayMark() : nothing}
               ${placeLabel(passOrderPlace(order))}`,
         )}
         ${card.group === undefined ? nothing : html`<span class="group-name">${groupName(card.group)}</span>`}

@@ -1511,6 +1511,13 @@ export const en = {
   "table.reread_failed":
     "The order was updated, but the table could not be read again. Open the table again to check its amounts.",
   "table.split_updated_elsewhere": "The table was updated by somebody else. Try to Split again.",
+  "dining.eat_in": "Eat here",
+  "dining.takeaway": "Take away",
+  "dining.label": "Eat here or take away",
+  "dining.switch_to_eat_in": "Switch to eat here",
+  "dining.switch_failed": "Could not switch the order between eat here and take away, try again",
+  "dining.switch_to_eat_in_explained":
+    "Switch to eat here changes the whole order to eat here and keeps its dishes; then pay or send again",
   "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",
@@ -3597,6 +3604,14 @@ export const es: Record<StringKey, string> = {
   "table.reread_failed":
     "El pedido se actualizó, pero no se pudo volver a leer la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
   "table.split_updated_elsewhere": "Otra persona ha actualizado la mesa. Intenta Separar de nuevo.",
+  "dining.eat_in": "Para tomar aquí",
+  "dining.takeaway": "Para llevar",
+  "dining.label": "Para tomar aquí o para llevar",
+  "dining.switch_to_eat_in": "Cambiar a tomar aquí",
+  "dining.switch_failed":
+    "No se pudo cambiar el pedido entre para tomar aquí y para llevar, inténtalo de nuevo",
+  "dining.switch_to_eat_in_explained":
+    "Cambiar a tomar aquí cambia todo el pedido a tomar aquí y conserva sus platos; después, cobra o envía de nuevo",
   "table.draft_title": "Nuevo pedido",
   "table.view_menu": "Carta",
   "table.view_order": "Pedido",

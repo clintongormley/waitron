@@ -85,6 +85,7 @@ async function givenAwayBill(): Promise<{ partyId: string; tabId: string }> {
 
 function pay(billId: string, tender: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     lines: [],
     tender,
     workingOrderId: billId,
@@ -241,6 +242,7 @@ describe("the card reader on a bill whose every line was given away", () => {
     const readerCalls = venue.card.collectCalls.length;
 
     const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id: tabId,
       lines: [],
     });
@@ -265,6 +267,7 @@ describe("the card reader on a bill whose every line was given away", () => {
     const { tabId } = await givenAwayBill();
 
     const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id: tabId,
       lines: [],
       tip: "not-money",
@@ -334,7 +337,11 @@ describe("the card reader on a bill whose every line was given away", () => {
     const readerCalls = venue.card.collectCalls.length;
 
     for (const id of [partyBill, walkUp]) {
-      const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+      const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        dining: "eat_in",
+        id,
+        lines: [],
+      });
       expect(answer.json).toMatchObject({ outcome: "captured", ticket: { total: "0.00" } });
     }
 
@@ -347,7 +354,7 @@ describe("the card reader on a bill whose every line was given away", () => {
 
   it("answers a resent reader Pay with the first ticket and files nothing more", async () => {
     const { tabId } = await givenAwayBill();
-    const body = { id: tabId, lines: [] };
+    const body = { id: tabId, lines: [], dining: "eat_in" };
 
     const first = await send(venue.app, venue.cookie, "POST", "/api/pay", body);
     const again = await send(venue.app, venue.cookie, "POST", "/api/pay", body);
@@ -404,7 +411,11 @@ describe("other ways a bill owing nothing is paid", () => {
     const id = await presentedGivenAway();
     const readerCalls = venue.card.collectCalls.length;
 
-    const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
 
     expect(answer).toMatchObject({
       status: 200,
@@ -440,6 +451,7 @@ describe("other ways a bill owing nothing is paid", () => {
     const readerCalls = venue.card.collectCalls.length;
 
     const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [{ menuItemId: counter.offerFor(freeWaterId), quantity: "1" }],
       zoneId: counter.zoneId,
@@ -457,6 +469,7 @@ describe("other ways a bill owing nothing is paid", () => {
     const id = randomUUID();
 
     const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [{ menuItemId: counter.offerFor(freeWaterId), quantity: "1" }],
       tender: { method: "cash", amount: "0.00" },
       workingOrderId: id,

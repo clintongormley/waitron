@@ -35,6 +35,7 @@ describe("cash sales while reconciliation is unknown", () => {
           method: "POST",
           headers: { cookie: v.cookie, "content-type": "application/json" },
           body: JSON.stringify({
+            dining: "eat_in",
             workingOrderId,
             zoneId: v.zoneId,
             lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],

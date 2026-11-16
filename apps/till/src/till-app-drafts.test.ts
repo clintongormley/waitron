@@ -107,6 +107,7 @@ function zoneOffers(version: string, prices: Record<string, string> = {}): ZoneO
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "z1",
       departmentId: "department-bar",
@@ -2098,6 +2099,7 @@ describe("till-app: sending the draft", () => {
       await flush(el, 6);
 
       expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+        dining: "eat_in",
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
         draftRevision: 1,
@@ -2739,6 +2741,7 @@ describe("till-app: sending the draft", () => {
     const [partyId, draftId, submission] = api.submitDraft.mock.calls[0]!;
     expect([partyId, draftId]).toEqual(["v1", "draft-1"]);
     expect(submission).toEqual({
+      dining: "eat_in",
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
       draftRevision: 1,
@@ -4028,6 +4031,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     const sentStore = draft(el);
     await act(el, "send-all");
     expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+      dining: "eat_in",
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
       draftRevision: 1,
@@ -4057,6 +4061,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     const sentStore = draft(el);
     await act(el, "send-all");
     expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+      dining: "eat_in",
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
       draftRevision: 1,

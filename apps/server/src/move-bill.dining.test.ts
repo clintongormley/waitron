@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { floorZones, workingOrders } from "@waitron/db";
+import { floorZones, kitchenStations, printJobs, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,6 +18,12 @@ import { createTable } from "./testing/live-table.js";
 import { observedMoveBillBody, takeIntoParty } from "./testing/move-bill-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
+import { createPrinter } from "@waitron/printing";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { readKitchenLanguage } from "./kitchen-language.js";
+import { attachPrinterToStation } from "./station-printers.js";
+import { printedLines } from "./testing/decode-ticket.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // A bill moved within its own department keeps its way of selling; one that takes a department for
 // the first time takes that department's way (A1522, Decision 6).
@@ -180,5 +186,135 @@ describe("a bill that takes a department for the first time", () => {
         .where(eq(workingOrders.id, order.id)),
     );
     expect(row).toEqual({ partyId: seated.partyId });
+  });
+});
+
+describe("the paper a move sends", () => {
+  async function kitchenPrinters(): Promise<string[]> {
+    return inTx(venue, async (tx) => {
+      const ids: string[] = [];
+      for (const { id } of await tx.select({ id: kitchenStations.id }).from(kitchenStations)) {
+        await tx
+          .update(kitchenStations)
+          .set({ printMovedSlips: true })
+          .where(eq(kitchenStations.id, id));
+        const printer = await createPrinter(tx, {
+          name: `Kitchen ${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
+        await attachPrinterToStation(tx, { stationId: id, printerId: printer.id });
+        ids.push(printer.id);
+      }
+      return ids;
+    });
+  }
+
+  /** The printed lines of each job queued on `printerIds` since the last call, each job once. */
+  async function paperSince(seen: Set<string>, printerIds: readonly string[]): Promise<string[][]> {
+    const jobs = await inTx(venue, (tx) =>
+      tx
+        .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
+        .from(printJobs),
+    );
+    const fresh = jobs.filter((job) => !seen.has(job.id));
+    for (const job of fresh) seen.add(job.id);
+    return fresh
+      .filter((job) => printerIds.includes(job.printerId))
+      .map((job) => printedLines(job.payload));
+  }
+
+  async function allJobIds(): Promise<Set<string>> {
+    const jobs = await inTx(venue, (tx) => tx.select({ id: printJobs.id }).from(printJobs));
+    return new Set(jobs.map((job) => job.id));
+  }
+
+  // Fails if the ticket a takeaway counter order's move to a table sends, or that order's void
+  // slip, drops the takeaway line.
+  it("says take away for a takeaway counter order moved to a seated table, and on its void slip", async () => {
+    const printerIds = await kitchenPrinters();
+    const id = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
+      zoneId: counterZone,
+      operatorId: venue.operatorId,
+      dining: "takeaway",
+    });
+    const seated = await seatedWith(venue, "Croquettes");
+    const seen = await allJobIds();
+
+    expect((await moveTo(id, seated.tableId)).status).toBe(200);
+
+    const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
+    const tickets = await paperSince(seen, printerIds);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]![0]).toBe(`*** ${words.takeAway} ***`);
+
+    await inTx(venue, (tx) => cancelLine(tx, venue.cfg, id, 1));
+    const slips = await paperSince(seen, printerIds);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(0, 2)).toEqual([`*** ${words.void} ***`, `*** ${words.takeAway} ***`]);
+  });
+
+  // Fails if the MOVED slip of a takeaway bill whose dishes the kitchen has drops the takeaway
+  // line.
+  it("says take away on the MOVED slip of a sent takeaway bill moved to another table", async () => {
+    const printerIds = await kitchenPrinters();
+    await departmentsSell("takeaway");
+    const seated = await seatedWith(venue, "Croquettes");
+    expect(diningOf(seated.tabId)).toBe("takeaway");
+    const table = await inTx(venue, (tx) =>
+      createTable(tx, venue.cfg, {
+        label: `Table ${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      }),
+    );
+    const seen = await allJobIds();
+
+    expect((await moveTo(seated.tabId, table.id)).status).toBe(200);
+
+    const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
+    const slips = await paperSince(seen, printerIds);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(0, 2)).toEqual([`*** ${words.moved} ***`, `*** ${words.takeAway} ***`]);
+  });
+
+  // Fails if the note-change slip of a takeaway bill whose dishes the kitchen has drops the
+  // takeaway line.
+  it("says take away on the note-change slip of a sent takeaway bill", async () => {
+    const printerIds = await kitchenPrinters();
+    await departmentsSell("takeaway");
+    const seated = await seatedWith(venue, "Croquettes");
+    const seen = await allJobIds();
+    const note = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/parties/${seated.partyId}/kitchen-note`,
+    );
+    expect(note.status).toBe(200);
+
+    const put = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${seated.partyId}/kitchen-note`,
+      {
+        submissionId: randomUUID(),
+        expectedNoteRevision: note.json.revision,
+        expectedPartyRevision: note.json.ownerRevision,
+        note: "Train at 14:30",
+      },
+    );
+    expect(put.status).toBe(200);
+
+    const words = kitchenTicketWords(await inTx(venue, (tx) => readKitchenLanguage(tx)));
+    const slips = await paperSince(seen, printerIds);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(0, 2)).toEqual([
+      `*** ${words.noteChanged} ***`,
+      `*** ${words.takeAway} ***`,
+    ]);
   });
 });

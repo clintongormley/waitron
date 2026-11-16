@@ -658,10 +658,10 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
 }
 
-export interface DepartmentEditInput extends Pick<
-  DepartmentPolicyField,
-  "orderStart" | "paidWhen" | "collectionNumber"
-> {
+export interface DepartmentEditInput
+  extends
+    Pick<DepartmentPolicyField, "orderStart" | "paidWhen" | "collectionNumber">,
+    Partial<Pick<DepartmentPolicyField, "dining" | "diningStartsAs">> {
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
@@ -688,6 +688,8 @@ export async function saveDepartmentEditSettings(
     orderStart: input.orderStart,
     paidWhen: input.paidWhen,
     collectionNumber: input.collectionNumber,
+    ...(input.dining === undefined ? {} : { dining: input.dining }),
+    ...(input.diningStartsAs === undefined ? {} : { diningStartsAs: input.diningStartsAs }),
   };
   await tx.update(departments).set(settings).where(eq(departments.id, departmentId));
   if (input.transfers !== undefined)

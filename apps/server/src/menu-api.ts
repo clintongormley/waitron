@@ -14,15 +14,7 @@ import {
   type ContentLanguageRules,
   type Decimal,
 } from "@waitron/shared";
-import {
-  readTaxpayer,
-  readVenue,
-  readVenueClock,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
-import { chargesTakeawayVat } from "@waitron/country-packs";
+import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   moveProductItems,
   deleteProductItems,
@@ -122,6 +114,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, requireEnum, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { setProductCourse } from "./kitchen.js";
 
 import type { Logger } from "./logger.js";
@@ -134,10 +127,7 @@ async function readMenuSettingsAnswer(
 ): Promise<MenuDefaults & { takeawayVat: boolean }> {
   return {
     ...(await readMenuSettings(tx)),
-    takeawayVat: chargesTakeawayVat(
-      (await readTaxpayer(tx))?.country ?? "",
-      (await readVenue(tx)).fiscalTerritory,
-    ),
+    takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
   };
 }
 

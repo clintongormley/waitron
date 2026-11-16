@@ -213,7 +213,7 @@ async function counterOrder(...names: string[]): Promise<string> {
 async function wholeBillAtReader(billId: string) {
   const calls = venue.card.collectCalls.length;
   const release = venue.card.holdNextCollect();
-  const paying = post("/api/pay", { id: billId, lines: [] });
+  const paying = post("/api/pay", { dining: "eat_in", id: billId, lines: [] });
   await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
   const [row] = venue.db.all<{ payment_attempt_at: string | null }>(
     sql`select payment_attempt_at from working_orders where id = ${billId}`,
@@ -298,6 +298,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
       const moved = await toCounter(firstParty, prepayZone);
       const paid = await post("/api/sales", {
+        dining: "eat_in",
         workingOrderId: firstParty.tabId,
         lines: [],
         tender: { method, amount: "20.00" },
@@ -628,6 +629,7 @@ describe("paying a moved bill, by its state", () => {
       tender: { method: "cash", amount: "15.00" },
     });
     const sold = await post("/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "cash", amount: "15.00" },
       workingOrderId: firstParty.tabId,

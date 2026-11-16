@@ -40,6 +40,8 @@ afterEach(cleanupWidgets);
 
 function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

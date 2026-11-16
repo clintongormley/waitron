@@ -241,3 +241,24 @@ for (const locale of ["en-GB", "es-ES"] as const) {
     }
   }
 }
+
+describe("a takeaway sale's on-screen receipt", () => {
+  // Fails if a takeaway sale's on-screen receipt stops saying so beside its order, in the receipt's
+  // language, or an eat-in one gains the line.
+  it.each([
+    ["es-ES", "Para llevar"],
+    ["en-GB", "Take away"],
+  ])(
+    "says Take away under the order in %s, and nothing on an eat-in one",
+    async (locale, words) => {
+      const mark = async (result: TillSaleResult) => {
+        const { el } = await mountWidget<TillTicketView>("till-ticket-view", { result, issuer });
+        const text = el.shadowRoot!.querySelector("[data-test='take-away']")?.textContent?.trim();
+        cleanupWidgets();
+        return text;
+      };
+      expect(await mark({ ...facts, locale, takeAway: true })).toBe(words);
+      expect(await mark({ ...facts, locale })).toBeUndefined();
+    },
+  );
+});

@@ -514,6 +514,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie: bothCookies },
         body: JSON.stringify({
+          dining: "eat_in",
           lines: [{ menuItemId: waterOffer, quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
         }),

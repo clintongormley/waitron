@@ -57,6 +57,7 @@ const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: "zone-counter",
     departmentId: "department-default",
@@ -280,6 +281,8 @@ const sentDish = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabL
 
 function placedServer() {
   const order: HeldOrder = {
+    dining: "eat_in",
+    diningChoice: "none",
     expectedEdit: null,
     id: "wo-placed",
     orderNumber: 12,

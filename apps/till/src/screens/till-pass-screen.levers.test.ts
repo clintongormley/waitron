@@ -34,7 +34,9 @@ const groupCard = (overrides: Partial<PassCard> = {}): PassCard =>
     target: { kind: "group", partyId: "p-1", groupId: "g-1" },
     kind: "next_course",
     party: { id: "p-1", revision: 7 },
-    orders: [{ orderId: "order-7", orderNumber: 7, tableLabel: "T7", kitchenNote: null }],
+    orders: [
+      { dining: "eat_in", orderId: "order-7", orderNumber: 7, tableLabel: "T7", kitchenNote: null },
+    ],
     group: { displayNumber: 1, position: 1 },
     items: [passItem({ id: "g-a", orderId: "order-7" })],
     ...overrides,
@@ -318,7 +320,7 @@ describe("A773 pass screen: levers", () => {
 
   it("names a refused Ready's card by its order number alone when it has no table", async () => {
     const untabled = passCard({
-      orders: [{ orderId: "order-6", orderNumber: 6, kitchenNote: null }],
+      orders: [{ dining: "eat_in", orderId: "order-6", orderNumber: 6, kitchenNote: null }],
     });
     const api = fakeApi({
       getDevicePassBoard: vi
@@ -734,7 +736,15 @@ describe("A773 pass screen: a party's group cards on a till's configured Pass", 
         passCard({
           key: "bill:order-7",
           target: { kind: "bill", workingOrderId: "order-7" },
-          orders: [{ orderId: "order-7", orderNumber: 7, tableLabel: "T7", kitchenNote: null }],
+          orders: [
+            {
+              dining: "eat_in",
+              orderId: "order-7",
+              orderNumber: 7,
+              tableLabel: "T7",
+              kitchenNote: null,
+            },
+          ],
           readyAt: minutesAgo(1),
           allReady: true,
           items: [
@@ -851,7 +861,7 @@ describe("A773 pass screen: a party's group cards on a till's configured Pass", 
 
   it("names a group card with no table by its order number", async () => {
     const untabled = groupCard({
-      orders: [{ orderId: "order-9", orderNumber: 9, kitchenNote: null }],
+      orders: [{ dining: "eat_in", orderId: "order-9", orderNumber: 9, kitchenNote: null }],
     });
     const api = allApi(passBoard({ inProgress: [untabled] }), {
       bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
@@ -923,6 +933,7 @@ describe("A797 pass screen: a refusal names the card as its heading does", () =>
     const card = groupCard({
       orders: [
         {
+          dining: "eat_in",
           orderId: "order-7",
           orderNumber: 7,
           tableLabel: "Terrace 4 + Terrace 5",

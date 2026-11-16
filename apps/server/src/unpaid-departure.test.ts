@@ -894,7 +894,11 @@ describe("bills already presented", () => {
 
 describe("a presented bill whose card is in flight", () => {
   function pay(billId: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] });
+    return send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id: billId,
+      lines: [],
+    });
   }
 
   /** Everything a departure could write, across the venue. */
@@ -1791,6 +1795,7 @@ describe("what is refused", () => {
     );
 
     const short = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id: party.tabId,
       lines: [],
     });
@@ -1853,7 +1858,11 @@ describe("what is refused", () => {
       label: "paid by card at the reader",
       method: "card",
       collect: (billId: string) =>
-        send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] }),
+        send(venue.app, venue.cookie, "POST", "/api/pay", {
+          dining: "eat_in",
+          id: billId,
+          lines: [],
+        }),
     },
   ];
 

@@ -3,7 +3,14 @@ import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, int4InRange } from "@waitron/shared";
+import {
+  AppError,
+  DINING_POLICIES,
+  DININGS,
+  int4InRange,
+  type Dining,
+  type DiningPolicy,
+} from "@waitron/shared";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import {
   departments,
@@ -146,6 +153,8 @@ const runBodyPaint = runBodyIds("department.not_found", "service_zone.not_found"
 const runBodyMenus = runBodyIds("menu.not_found");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
+const DINING_POLICY = new Set<unknown>(DINING_POLICIES);
+const DINING = new Set<unknown>(DININGS);
 
 function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (
@@ -160,6 +169,8 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
     return value as "none" | "numbered";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
+  if (!zone && field === "dining" && DINING_POLICY.has(value)) return value as DiningPolicy;
+  if (!zone && field === "diningStartsAs" && DINING.has(value)) return value as Dining;
   throw new AppError("management.request_invalid", { field });
 }
 
@@ -723,6 +734,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "orderStart",
           "paidWhen",
           "collectionNumber",
+          "dining",
+          "diningStartsAs",
           "transfers",
           "needsClearing",
           "lateSendNeedsManager",
@@ -754,6 +767,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.collectionNumber,
             false,
           ) as DepartmentEditInput["collectionNumber"],
+          ...(body.dining === undefined
+            ? {}
+            : { dining: requireSalePolicyField("dining", body.dining, false) as DiningPolicy }),
+          ...(body.diningStartsAs === undefined
+            ? {}
+            : {
+                diningStartsAs: requireSalePolicyField(
+                  "diningStartsAs",
+                  body.diningStartsAs,
+                  false,
+                ) as Dining,
+              }),
           ...(body.transfers === undefined
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),

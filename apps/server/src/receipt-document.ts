@@ -243,6 +243,7 @@ export function buildReceiptDocument({
 
   if (result.orderLabel !== null || result.orderNumber !== 0)
     row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
+  if (result.takeAway === true) text(label.takeAway, 0, { bold: true });
   const dated = (invoice: {
     invoiceNumber: string;
     issuedAt: string;

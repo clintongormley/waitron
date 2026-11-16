@@ -87,7 +87,15 @@ const populated = (): PassBoard =>
       passCard({
         key: "bill:wo-f",
         target: { kind: "bill", workingOrderId: "wo-f" },
-        orders: [{ orderId: "wo-f", orderNumber: 3, tableLabel: "Table 2", kitchenNote: null }],
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: "wo-f",
+            orderNumber: 3,
+            tableLabel: "Table 2",
+            kitchenNote: null,
+          },
+        ],
         items: [passItem({ id: "it-f", name: "Octopus", orderId: "wo-f", phase: "requested" })],
         releaseTicketItemIds: ["it-f"],
         releaseContext: "ctx-1",
@@ -99,7 +107,15 @@ const populated = (): PassBoard =>
         key: "bill:wo-old",
         target: { kind: "bill", workingOrderId: "wo-old" },
         requestedAt: minutesAgo(40),
-        orders: [{ orderId: "wo-old", orderNumber: 4, tableLabel: "Table 5", kitchenNote: null }],
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: "wo-old",
+            orderNumber: 4,
+            tableLabel: "Table 5",
+            kitchenNote: null,
+          },
+        ],
         items: [
           passItem({
             id: "it-old",
@@ -121,7 +137,15 @@ const groupCard = (groupId: string, position: number, overrides: Partial<PassCar
     kind: "next_course",
     party: { id: "v-7", revision: 3 },
     group: { displayNumber: position, position },
-    orders: [{ orderId: "wo-p", orderNumber: 9, tableLabel: "Table 7", kitchenNote: null }],
+    orders: [
+      {
+        dining: "eat_in",
+        orderId: "wo-p",
+        orderNumber: 9,
+        tableLabel: "Table 7",
+        kitchenNote: null,
+      },
+    ],
     items: [passItem({ id: `it-${groupId}`, name: "Croquettes", orderId: "wo-p", course: null })],
     ...overrides,
   });
@@ -280,6 +304,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
         passCard({
           orders: [
             {
+              dining: "eat_in",
               orderId: "order-1",
               orderNumber: 27,
               formerNumbers: [28, 30],

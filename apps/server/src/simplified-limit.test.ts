@@ -227,6 +227,7 @@ async function twoBills(main: Basket, second: Basket) {
 async function parked(app: Hono, offers: ZoneOffers, basket: Basket): Promise<string> {
   const id = randomUUID();
   const answer = await send(app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     lines: linesOf(offers, basket),
     zoneId: offers.zoneId,
@@ -238,6 +239,7 @@ async function parked(app: Hono, offers: ZoneOffers, basket: Basket): Promise<st
 describe("a counter sale", () => {
   function cashSale(basket: Basket, id = randomUUID()) {
     return send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: linesOf(counter, basket),
       zoneId: counter.zoneId,
@@ -260,6 +262,7 @@ describe("a counter sale", () => {
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: linesOf(counter, { Mitad: 1 }),
       zoneId: counter.zoneId,
@@ -318,6 +321,7 @@ describe("a counter sale", () => {
         lines: stored ? [] : linesOf(counter, { Gratis: 1 }),
         zoneId: counter.zoneId,
         ...(stored ? {} : { invoiceType: "F1", recipient }),
+        dining: "eat_in",
       });
 
       expect(answer).toEqual({
@@ -341,6 +345,7 @@ describe("a counter sale", () => {
     const before = written();
 
     const replay = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "0.00" },
@@ -362,6 +367,7 @@ describe("a counter sale", () => {
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: linesOf(counter, { Mitad: 1 }),
       zoneId: counter.zoneId,
@@ -381,6 +387,7 @@ describe("a counter sale", () => {
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: linesOf(counter, { Mitad: 1 }),
       zoneId: counter.zoneId,
@@ -418,6 +425,7 @@ describe("a counter sale", () => {
     const id = await parked(venue.app, counter, { Lote: 1, Céntimo: 1 });
     const before = written();
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "4000.00" },
@@ -437,6 +445,7 @@ describe("a counter sale", () => {
     const before = written();
 
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "1600.00" },
@@ -457,6 +466,7 @@ describe("a card on the integrated reader", () => {
     const before = written();
 
     const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       invoiceType: "F1",
@@ -480,6 +490,7 @@ describe("a card on the integrated reader", () => {
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: linesOf(counter, { Mitad: 1 }),
       zoneId: counter.zoneId,
@@ -508,7 +519,11 @@ describe("a card on the integrated reader", () => {
       where id = ${id}`);
     const before = written();
 
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
 
     expect(answer).toEqual({
       status: 409,
@@ -522,6 +537,7 @@ describe("a card on the integrated reader", () => {
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: linesOf(counter, { Lote: 1, Céntimo: 1 }),
       zoneId: counter.zoneId,
@@ -536,6 +552,7 @@ describe("a card on the integrated reader", () => {
     const { tabId } = await seated(venue.app, { Lote: 1, Céntimo: 1 });
     const before = written();
     const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id: tabId,
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
       lines: [],
@@ -675,6 +692,7 @@ describe("an edit that grows an order", () => {
   it("parking a basket over the limit is refused, writing no order", async () => {
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines: linesOf(counter, { Lote: 1, Céntimo: 1 }),
       zoneId: counter.zoneId,
@@ -688,6 +706,7 @@ describe("an edit that grows an order", () => {
     const id = await parked(limited, counter, { Mitad: 1 });
     const revision = orderRow(id)!.revision;
     const over = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Mitad: 1, Lote: 1 }),
       revision,
     });
@@ -697,6 +716,7 @@ describe("an edit that grows an order", () => {
     expect(orderRow(id)!.revision).toBe(revision);
 
     const atLimit = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Lote: 1 }),
       revision,
     });
@@ -851,6 +871,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
     const revision = orderRow(id)!.revision;
 
     const updated = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Mitad: 2 }),
       revision,
     });
@@ -863,6 +884,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
     expect(written()).toEqual(before);
 
     const paid = await send(limited, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "3200.00" },
@@ -871,7 +893,11 @@ describe("growing a bill with a saved full-invoice choice", () => {
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },
     });
-    const card = await send(limited, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    const card = await send(limited, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+    });
     expect(card).toEqual({
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },
@@ -1007,6 +1033,7 @@ describe("an edit that does not raise an order already over the limit", () => {
   it("a held order's update that shrinks it is saved while still over, and again down to the limit", async () => {
     const id = await parked(venue.app, counter, { Mitad: 3 });
     const shrunk = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Mitad: 2 }),
       revision: orderRow(id)!.revision,
     });
@@ -1014,6 +1041,7 @@ describe("an edit that does not raise an order already over the limit", () => {
     expect(storedLines(id).map((entry) => entry.split(":")[1])).toEqual(["1000", "1000"]);
 
     const atLimit = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Lote: 1 }),
       revision: orderRow(id)!.revision,
     });
@@ -1024,6 +1052,7 @@ describe("an edit that does not raise an order already over the limit", () => {
     const id = await parked(venue.app, counter, { Mitad: 2 });
     const revision = orderRow(id)!.revision;
     const answer = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      dining: "eat_in",
       lines: linesOf(counter, { Mitad: 2, Céntimo: 1 }),
       revision,
     });

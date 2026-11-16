@@ -92,6 +92,7 @@ function menu(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "z1",
       departmentId: "department-bar",

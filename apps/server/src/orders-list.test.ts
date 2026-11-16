@@ -105,6 +105,7 @@ describe("facts this list relies on", () => {
 
   it("a till sale rung with no bill id is filed against a bill the sale made", async () => {
     const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
       tender: { method: "cash", amount: "3.00" },
       zoneId: venue.zoneId,

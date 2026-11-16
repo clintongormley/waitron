@@ -56,7 +56,9 @@ const toFireCard = passCard({
   target: { kind: "group", partyId: "p1", groupId: "g1" },
   kind: "new_order",
   requestedAt: minutesAgo(7),
-  orders: [{ orderId: "order-1", orderNumber: 12, tableLabel: "T4", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-1", orderNumber: 12, tableLabel: "T4", kitchenNote: null },
+  ],
   group: { displayNumber: 2, position: 1 },
   items: [passItem({ id: "req-1", phase: "requested", firedAt: null, requestedAt: minutesAgo(7) })],
   releaseTicketItemIds: ["req-1"],
@@ -67,7 +69,9 @@ const blockedCard = passCard({
   key: "bill:order-2",
   target: { kind: "bill", workingOrderId: "order-2" },
   kind: "next_course",
-  orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null },
+  ],
   items: [
     passItem({
       id: "blocked-1",
@@ -85,7 +89,9 @@ const extraCard = passCard({
   key: "bill:order-3",
   target: { kind: "bill", workingOrderId: "order-3" },
   kind: "added",
-  orders: [{ orderId: "order-3", orderNumber: 14, tableLabel: "T6", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-3", orderNumber: 14, tableLabel: "T6", kitchenNote: null },
+  ],
   items: [
     passItem({
       id: "extra-1",
@@ -105,14 +111,18 @@ const groupInProgress = passCard({
   target: { kind: "group", partyId: "p2", groupId: "g2" },
   party: { id: "p2", revision: 4 },
   group: { displayNumber: 3, position: 1 },
-  orders: [{ orderId: "order-4", orderNumber: 15, tableLabel: "T7", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-4", orderNumber: 15, tableLabel: "T7", kitchenNote: null },
+  ],
   items: [passItem({ id: "g-1", orderId: "order-4" })],
 });
 
 const billInProgress = passCard({
   key: "bill:order-5",
   target: { kind: "bill", workingOrderId: "order-5" },
-  orders: [{ orderId: "order-5", orderNumber: 16, tableLabel: "T8", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-5", orderNumber: 16, tableLabel: "T8", kitchenNote: null },
+  ],
   items: [passItem({ id: "b-1", orderId: "order-5" })],
 });
 
@@ -121,7 +131,9 @@ const heldCard = passCard({
   target: { kind: "bill", workingOrderId: "order-6" },
   kind: "held",
   requestedAt: null,
-  orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null },
+  ],
   items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
 });
 
@@ -131,8 +143,20 @@ const twoBillCard = passCard({
   party: { id: "p3", revision: 2 },
   group: { displayNumber: 4, position: 1 },
   orders: [
-    { orderId: "order-21", orderNumber: 21, tableLabel: "T11", kitchenNote: null },
-    { orderId: "order-22", orderNumber: 22, tableLabel: "T11", kitchenNote: null },
+    {
+      dining: "eat_in",
+      orderId: "order-21",
+      orderNumber: 21,
+      tableLabel: "T11",
+      kitchenNote: null,
+    },
+    {
+      dining: "eat_in",
+      orderId: "order-22",
+      orderNumber: 22,
+      tableLabel: "T11",
+      kitchenNote: null,
+    },
   ],
   items: [
     passItem({ id: "two-1", orderId: "order-21" }),
@@ -145,7 +169,9 @@ const readyCard = passCard({
   target: { kind: "bill", workingOrderId: "order-7" },
   readyAt: minutesAgo(3),
   allReady: true,
-  orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+  orders: [
+    { dining: "eat_in", orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null },
+  ],
   items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
 });
 
@@ -1128,6 +1154,7 @@ describe("A797 pass card heading", () => {
       target: { kind: "group", partyId: "p9", groupId: "g9" },
       orders: [
         {
+          dining: "eat_in",
           orderId: "order-9",
           orderNumber: 21,
           tableLabel: "Terrace 4 + Terrace 5",
@@ -1140,4 +1167,36 @@ describe("A797 pass card heading", () => {
 
     expect(cardOf(el, card.key).querySelector(".label")!.textContent).toBe("T4+T5");
   });
+});
+
+describe("a takeaway order's pass card heading", () => {
+  // Fails if a takeaway order's pass card stops saying Take away in the till's language, or an
+  // eat-in card gains it.
+  it.each([
+    ["en-GB", "Take away"],
+    ["es-ES", "Para llevar"],
+  ])(
+    "says Take away on a takeaway order's card in %s, and nothing on an eat-in one",
+    async (locale, words) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const takeaway = passCard({
+          ...toFireCard,
+          key: "bill:takeaway",
+          target: { kind: "bill", workingOrderId: "order-9" },
+          orders: [
+            { ...toFireCard.orders[0]!, orderId: "order-9", orderNumber: 19, dining: "takeaway" },
+          ],
+        });
+        const el = await mountBoard({ board: passBoard({ toFire: [toFireCard, takeaway] }) });
+        const mark = (key: string) =>
+          cardOf(el, key).querySelector(".ticket-head [data-take-away]")?.textContent?.trim();
+        expect(mark(takeaway.key)).toBe(words);
+        expect(mark(toFireCard.key)).toBeUndefined();
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
 });

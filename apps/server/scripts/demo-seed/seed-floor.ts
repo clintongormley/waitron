@@ -32,11 +32,13 @@ export interface SeedFloorInput {
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   dataSet: DemoDataSet;
   menuIds?: { restaurant: string; lunch: string; deli: string; drinks: string };
+  /** From `seedMenus`: the deli counter routes these categories to this station. */
+  deliListed?: { stationId: string; categoryIds: readonly string[] };
 }
 
 export async function seedFloor(
   tx: Transaction,
-  { locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
+  { locale, departmentTradingNames, dataSet, menuIds, deliListed }: SeedFloorInput,
 ): Promise<void> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
 
@@ -65,6 +67,7 @@ export async function seedFloor(
       name: plain(floor.departmentNames.deli),
       tradingName: departmentTradingNames.deli,
       active: true,
+      dining: "takeaway",
     })
     .returning({ id: departments.id });
   const deliDepartmentId = deliRow?.id;
@@ -165,6 +168,12 @@ export async function seedFloor(
     name: plain(floor.deliCounterZone),
     displayOrder: 4,
   });
+  for (const categoryId of deliListed?.categoryIds ?? [])
+    await setRoutingCell(
+      tx,
+      { row: { kind: "category", categoryId }, zoneId: deliCounterZone.id },
+      { kind: "station", stationId: deliListed!.stationId },
+    );
   if (menuIds !== undefined) {
     const restaurantId = defaultPolicy.department_id;
     const [existing] = await tx

@@ -16,6 +16,7 @@ import type {
   ChangeSource,
   Dining,
   DiningPolicy,
+  DiningStart,
 } from "@waitron/shared";
 import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
@@ -869,6 +870,14 @@ export interface VenueServiceContribution {
     zoneId: string,
     requested: Dining | undefined,
   ): Promise<Dining>;
+  /** How a zone sells and the way a new order there starts, from its sale policy and whether the
+   *  region charges takeaway VAT; null where it does not. Reads nothing. */
+  diningStartOf(
+    zone: Pick<EffectiveSalePolicy, "orderStart" | "dining" | "diningStartsAs">,
+    takeawayVat: boolean,
+  ): DiningStart | null;
+  /** Whether the venue's region charges a different VAT class on food taken away. */
+  venueChargesTakeawayVat(tx: Transaction): Promise<boolean>;
   /** Of the named orders, those whose department leaves the way to the till, in a region that
    *  charges takeaway VAT; read at once. */
   findOrdersWithDiningChoice(

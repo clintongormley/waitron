@@ -168,7 +168,8 @@ that went to a station of its own, can be changed whatever the stations allow.
 
 The station screen shows a card for each group of dishes a table sent, and one for each counter
 order. A card names its table by the table's short name; a counter order with no table reads
-**Counter #12**. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
+**Counter #12**. A takeaway order's card heading, and its kitchen paper, say **Take away**, so
+pack it. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
 **Ready**, with the card that has waited longest first. Its minutes count from when its first dish
 was sent to this station to be cooked, or moved here. Tap a column's heading, which shows how many
 cards the column holds, to collapse it to a narrow strip that keeps its name and count

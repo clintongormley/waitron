@@ -221,6 +221,7 @@ async function setupVenue(options: {
 const park = (v: Venue, zoneId: string, menuItemId: string, menuVersionId?: string) => {
   const id = randomUUID();
   return sendAsTill(v, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     zoneId,
     lines: [
@@ -351,6 +352,7 @@ describe("ordering uses period membership while browsing follows the timetable",
       lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
     };
     const added = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+      dining: "eat_in",
       revision: order.revision,
       lines: [
         ...order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
@@ -373,6 +375,7 @@ describe("ordering uses period membership while browsing follows the timetable",
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
 
     const paid = await sendAsTill(v, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: held.id,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -445,6 +448,7 @@ async function editMealLine(v: Venue, id: string, patch: { quantity?: string; no
     }[];
   };
   return sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+    dining: "eat_in",
     revision: order.revision,
     lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity, note }) => ({
       workingOrderLineId,
@@ -470,6 +474,7 @@ async function lowerMealRow(v: Venue, id: string, count: number, note: string) {
   };
   const one = order.lines.length === 1;
   return sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+    dining: "eat_in",
     revision: order.revision,
     lines: order.lines.slice(0, one ? 1 : count).map(({ workingOrderLineId, menuItemId }) => ({
       workingOrderLineId,
@@ -568,6 +573,7 @@ const savedTableDraft = async (v: Venue, middayVersionId = v.versions["Midday me
     tabId,
     submitUrl: `/api/parties/${partyId}/drafts/${draft.id}/submit`,
     submit: (submissionId: string) => ({
+      dining: "eat_in",
       submissionId,
       draftRevision: draft.revision,
       expectedPartyRevision: party!.revision,
@@ -915,6 +921,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       expect(
         (
           await sendAsTill(v, "POST", "/api/working-orders", {
+            dining: "eat_in",
             id,
             zoneId: v.diningZone,
             lines: [1, 2, 3].map(() => ({ menuItemId: v.toast.midday, quantity: "1" })),
@@ -945,6 +952,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     };
     expect(
       await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        dining: "eat_in",
         revision: order.revision,
         lines: [
           ...order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
@@ -973,6 +981,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     const id = randomUUID();
     expect(
       await sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         id,
         zoneId: v.diningZone,
         lines: [{ menuItemId: v.toast.breakfast, quantity: "1" }],
@@ -1092,6 +1101,7 @@ describe("service periods gate only added dishes and added stored quantities", (
           "POST",
           `/api/parties/${partyId}/drafts/${draft.id}/submit`,
           {
+            dining: "eat_in",
             submissionId: randomUUID(),
             draftRevision: draft.revision,
             expectedPartyRevision: revision,
@@ -1182,6 +1192,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         "POST",
         `/api/parties/${partyId}/drafts/${draft.id}/submit`,
         {
+          dining: "eat_in",
           submissionId: randomUUID(),
           draftRevision: draft.revision,
           expectedPartyRevision: party!.revision,
@@ -1306,6 +1317,7 @@ describe("a dish whose period ended earlier today", () => {
     id = randomUUID(),
   ) =>
     sendAsTill(v, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: v.diningZone,
       lines: [{ menuItemId, quantity: "1" }],
@@ -1423,6 +1435,7 @@ describe("a dish whose period ended earlier today", () => {
     const toast = (v: Venue) => [{ menuItemId: v.toast.midday, quantity: "1" }];
     const cashSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
       sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         zoneId: v.diningZone,
         lines: toast(v),
@@ -1431,6 +1444,7 @@ describe("a dish whose period ended earlier today", () => {
       });
     const cardSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
       sendAsTill(v, "POST", "/api/pay", {
+        dining: "eat_in",
         id,
         zoneId: v.diningZone,
         lines: toast(v),
@@ -1634,6 +1648,7 @@ describe("a dish whose period ended earlier today", () => {
             ...confirmation,
           })
         : sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+            dining: "eat_in",
             revision: order.revision,
             lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
               workingOrderLineId,
@@ -1832,6 +1847,7 @@ describe("a dish whose period ended earlier today", () => {
       };
       at(mondayAt("14:05"));
       const saved = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        dining: "eat_in",
         revision: order.revision,
         lines: [
           {
@@ -2048,6 +2064,7 @@ describe("a dish whose period ended earlier today", () => {
       const { v, printerId, stationId, id } = await parkedAtLunch();
       at(mondayAt("14:05"));
       const paid = await sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         lines: [],
         tender: { method: "cash", amount: "5.00" },
@@ -2139,6 +2156,7 @@ describe("a dish whose period ended earlier today", () => {
       at(mondayAt("14:05"));
       await replaceLunchMenu(v);
       const paid = await sendAsTill(v, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         lines: [],
         tender: { method: "cash", amount: "5.00" },
@@ -2258,6 +2276,7 @@ describe("a dish whose period ended earlier today", () => {
       };
       const dishId = order.lines[0]!.workingOrderLineId;
       const added = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        dining: "eat_in",
         revision: order.revision,
         lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
           workingOrderLineId,

@@ -1019,3 +1019,49 @@ it("adding, renaming, moving or deleting a step dirties the form, undoing it cle
   await send(original);
   await clean();
 });
+it("choosing how the department sells dirties the form, choosing the stored way cleans it, and leaving asks only while dirty", async () => {
+  const el = await mount();
+  el.model = { ...el.model!, takeawayVat: true };
+  await el.updateComplete;
+  await selectDepartmentTab(el, "service");
+  const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+  const box = (name: string) =>
+    fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `wt-combobox[name=${name}]`,
+    );
+  await expect.poll(() => box("dining")).not.toBeNull();
+  const choose = async (name: string, value: string) => {
+    await chooseOption(box(name)!, value);
+    await el.updateComplete;
+    await fields.updateComplete;
+  };
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  expect(el.hasUnsavedChanges).toBe(false);
+  await choose("dining", "till_choice");
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(saveButton().disabled).toBe(false);
+  expect(unload()).toBe(true);
+  await choose("dining", "eat_in");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(unload()).toBe(false);
+  await choose("dining", "till_choice");
+  await choose("diningStartsAs", "takeaway");
+  await choose("dining", "eat_in");
+  expect(box("diningStartsAs")).toBeNull();
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await choose("dining", "till_choice");
+  expect(el.hasUnsavedChanges).toBe(true);
+  const leaving = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await leaving).toBe(false);
+  void leave();
+  await choice("discard");
+  await expect.poll(() => box("dining")?.value).toBe("eat_in");
+  expect(box("diningStartsAs")).toBeNull();
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+});

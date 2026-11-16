@@ -629,6 +629,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   },
+  "order.dining_fixed": {
+    en: "This department sells every order one way, so eat here or take away cannot be chosen for this order",
+    es: "Este departamento vende todos sus pedidos de una sola forma, así que no se puede elegir para tomar aquí o para llevar en este pedido",
+  },
+  "order.dining_locked": {
+    en: "This order has already gone to the kitchen or been paid, so it can no longer switch between eat here and take away. The screen now shows the way it is sold",
+    es: "Este pedido ya ha ido a cocina o ya tiene un cobro, así que ya no se puede cambiar entre para tomar aquí y para llevar. La pantalla muestra ahora cómo se vende",
+  },
+  "order.dining_differs": {
+    en: "One of these bills is to eat here and the other to take away, so dishes cannot move between them. Switch one bill to match the other first, if it has not gone to the kitchen",
+    es: "Una de estas cuentas es para tomar aquí y la otra para llevar, así que los platos no pueden pasar de una a otra. Cambia primero una de ellas para que coincidan, si aún no ha ido a cocina",
+  },
+  "order.set_lunch_takeaway": {
+    en: "Set lunches are only served to eat here for now, so a takeaway order cannot include one. Remove the set lunch to sell this order to take away",
+    es: "Por ahora el menú del día solo se sirve para tomar aquí, así que un pedido para llevar no puede incluirlo. Quita el menú del día para vender este pedido para llevar",
+  },
   "station.no_default": {
     en: "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
     es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
@@ -962,13 +978,31 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   filed_figures_changed: FIGURES_UNCHECKED,
 };
 
+/** `order.dining_fixed` by the way the order is sold. */
+const DINING_FIXED: Record<string, { en: string; es: string }> = {
+  eat_in: {
+    en: "This order is sold to eat here, and its department does not let the till switch it to take away",
+    es: "Este pedido se vende para tomar aquí y su departamento no deja que la caja lo cambie a para llevar",
+  },
+  takeaway: {
+    en: "This order is sold to take away, and its department does not let the till switch it to eat here",
+    es: "Este pedido se vende para llevar y su departamento no deja que la caja lo cambie a para tomar aquí",
+  },
+};
+
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown },
+  params?: { reason?: unknown; dining?: unknown },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  if (
+    code === "order.dining_fixed" &&
+    typeof params?.dining === "string" &&
+    Object.hasOwn(DINING_FIXED, params.dining)
+  )
+    return pickLocale(DINING_FIXED[params.dining]!, locale);
   if (code === "deferred_close.ineligible") {
     const reason = typeof params?.reason === "string" ? params.reason : "";
     if (Object.hasOwn(DEFERRED_INELIGIBLE, reason))

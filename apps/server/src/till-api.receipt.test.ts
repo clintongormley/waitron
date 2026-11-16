@@ -463,6 +463,7 @@ async function ringSale(
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
+      dining: "eat_in",
       workingOrderId,
       lines: [{ menuItemId, quantity: "1" }],
       tender: { method, amount: "1.50" },
@@ -495,6 +496,7 @@ it.each(["cash", "card"] as const)(
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method, amount: "1.50" },
       }),
@@ -2293,6 +2295,7 @@ describe("payment slip persisted capture facts", () => {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
+          dining: "eat_in",
           workingOrderId: id,
           lines: linesOf(each.menuItemId, "1000"),
           tender: { method: "card", amount: "1500.00" },
@@ -2524,6 +2527,7 @@ describe("persisted cash receipt facts", () => {
         zoneId: scope!.zone_id,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
+        dining: "eat_in",
       }),
     };
     const first = await app.request("/api/sales", request);
@@ -2558,6 +2562,7 @@ describe("persisted cash receipt facts", () => {
         workingOrderId: id,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "20.00" },
+        dining: "eat_in",
       }),
     };
     const first = await app.request("/api/sales", request);

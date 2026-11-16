@@ -258,6 +258,7 @@ async function sell(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
+      dining: "eat_in",
       workingOrderId: id,
       lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
       tender,
@@ -926,6 +927,7 @@ describe("a sale prints its goods in the default content language its lines stor
       method: "POST",
       headers: { "content-type": "application/json", cookie: v.till },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         lines: [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
         tender: { method: "cash", amount: "5.00" },
@@ -997,6 +999,7 @@ describe("a sale prints its goods in the default content language its lines stor
       method: "POST",
       headers: { "content-type": "application/json", cookie: v.till },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
@@ -1694,6 +1697,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       if (stored !== null) await choose(venue, id, stored);
 
       const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         lines: [],
         tender: { method: "cash", amount: "20.00" },
@@ -2044,7 +2048,11 @@ describe("a sale files in the receipt language saved on its order", () => {
         [
           "the language a second card payment sends",
           (id: string) =>
-            ["POST", "/api/pay", { id, lines: [], receiptLanguage: "ca-ES" }] as const,
+            [
+              "POST",
+              "/api/pay",
+              { dining: "eat_in", id, lines: [], receiptLanguage: "ca-ES" },
+            ] as const,
         ],
         [
           "the language a collect sends",
@@ -2153,6 +2161,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       const id = randomUUID();
 
       const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         ...(await counterBasket(venue)),
         tender: CASH,
@@ -2170,6 +2179,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       const id = randomUUID();
 
       const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        dining: "eat_in",
         id,
         ...(await counterBasket(venue)),
         receiptLanguage: "es-ES",
@@ -2182,8 +2192,11 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
 
     it.each([
-      ["/api/sales", (id: string) => ({ workingOrderId: id, lines: [], tender: CASH })],
-      ["/api/pay", (id: string) => ({ id, lines: [] })],
+      [
+        "/api/sales",
+        (id: string) => ({ dining: "eat_in", workingOrderId: id, lines: [], tender: CASH }),
+      ],
+      ["/api/pay", (id: string) => ({ dining: "eat_in", id, lines: [] })],
     ] as const)(
       "stores the language sent with %s for a parked order, one revision on, and files it",
       async (path, body) => {
@@ -2207,8 +2220,11 @@ describe("a sale files in the receipt language saved on its order", () => {
     );
 
     it.each([
-      ["/api/sales", (id: string) => ({ workingOrderId: id, lines: [], tender: CASH })],
-      ["/api/pay", (id: string) => ({ id, lines: [] })],
+      [
+        "/api/sales",
+        (id: string) => ({ dining: "eat_in", workingOrderId: id, lines: [], tender: CASH }),
+      ],
+      ["/api/pay", (id: string) => ({ dining: "eat_in", id, lines: [] })],
     ] as const)(
       "writes nothing to a parked order when %s sends no language, or the one already saved",
       async (path, body) => {
@@ -2262,7 +2278,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it.each([
       ["collect", (id: string) => [`/api/working-orders/${id}/collect`, { tender: CASH }] as const],
-      ["card pay", (id: string) => ["/api/pay", { id, lines: [] }] as const],
+      ["card pay", (id: string) => ["/api/pay", { dining: "eat_in", id, lines: [] }] as const],
     ] as const)(
       "ignores the language sent with the %s of a placed order whose invoice is already issued",
       async (_name, request) => {
@@ -2299,6 +2315,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       venue.card.crashNextCollect("attempting");
 
       const stuck = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        dining: "eat_in",
         id,
         ...(await counterBasket(venue)),
         receiptLanguage: "es-ES",
@@ -2372,6 +2389,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         const id = randomUUID();
 
         const refused = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+          dining: "eat_in",
           workingOrderId: id,
           ...(await counterBasket(venue)),
           tender: CASH,
@@ -2389,6 +2407,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         const id = randomUUID();
 
         const refused = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+          dining: "eat_in",
           id,
           ...(await counterBasket(venue)),
           // A reader that does not exist: choosing it first would answer `reader.not_found`.
@@ -2428,6 +2447,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       const id = randomUUID();
 
       const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         ...(await counterBasket(venue)),
         tender: CASH,
@@ -2441,8 +2461,8 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
 
     it.each([
-      ["/api/sales", (id: string) => ({ workingOrderId: id, tender: CASH })],
-      ["/api/pay", (id: string) => ({ id })],
+      ["/api/sales", (id: string) => ({ dining: "eat_in", workingOrderId: id, tender: CASH })],
+      ["/api/pay", (id: string) => ({ dining: "eat_in", id })],
     ] as const)(
       "answers a %s retry of a settled sale sending another language with the stored ticket",
       async (path, body) => {

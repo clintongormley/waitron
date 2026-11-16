@@ -190,6 +190,27 @@ describe("the till's setup revision", () => {
     expect(new Set(seen).size).toBe(seen.length);
   });
 
+  it("the start read says whether the region charges takeaway VAT, and a change moves the revision (A1522)", async () => {
+    const till = await setupTill();
+    const before = await sendAsTill(till, "GET", "/api/till");
+    expect(before.body.takeawayVat).toBe(true);
+    await suite.db.execute(sql`update taxpayer set country = 'GB'`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'GB-vat') where module = 'venue'`,
+    );
+    try {
+      const after = await sendAsTill(till, "GET", "/api/till");
+      expect(after.body.takeawayVat).toBe(false);
+      expect(after.body.setupRevision).not.toBe(before.body.setupRevision);
+      expect(await menuStateRevision(till)).toBe(after.body.setupRevision);
+    } finally {
+      await suite.db.execute(sql`update taxpayer set country = 'ES'`);
+      await suite.db.execute(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
+      );
+    }
+  });
+
   it("two devices on different profiles name different revisions, which meet once the profiles match", async () => {
     const first = await setupTill();
     const second = await secondDeviceOnOwnProfile(first);
