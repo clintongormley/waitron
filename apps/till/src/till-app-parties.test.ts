@@ -4291,6 +4291,126 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
   });
 
+  it("keeps both bills' retained dishes together for review when the shown bill vanishes", async () => {
+    let merged = false;
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({
+      getPartyBills: bills,
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        courses: [
+          { id: "starters", name: "Starters", displayOrder: 1, fireNowZoneIds: [] },
+          { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
+        ],
+      }),
+      readCurrentOrders: vi
+        .fn()
+        .mockResolvedValue({
+          revision: 3,
+          hasGroups: false,
+          nextDisplayNumber: 1,
+          retainedCourses: [],
+          reminder: null,
+          groups: [],
+          ungrouped: [],
+        }),
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        if (merged && args[1].billId === "wo-check")
+          throw { code: "tab.not_open", status: 409, tabId: "wo-check" };
+        return drafts.saveDraft(...args);
+      }),
+    });
+    await openPartyTable(el);
+    await ringAndWait(el);
+    const saved = structuredClone(drafts.drafts);
+    vi.mocked(api.saveDraft).mockRejectedValueOnce(new TypeError("offline"));
+    partyDraft(tableOrder(el)!).addProduct(
+      { ...dish, id: "cake", menuItemId: "cake", name: "Cake", courseId: "desserts" },
+      "2",
+    );
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el, 6);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+      "Flan",
+      "Cake",
+    ]);
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true, billId: "wo-check" });
+    await flush(el, 6);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    const before = vi.mocked(api.saveDraft).mock.calls.length;
+    partyDraft(tableOrder(el)!).addProduct(
+      { ...dish, id: "tea", menuItemId: "tea", name: "Tea", courseId: "starters" },
+      "3",
+    );
+    merged = true;
+    bills.mockResolvedValue([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el, 6);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(
+      tableOrder(el)!.retainedDraft?.lines.map((line) => [
+        line.product.name,
+        line.quantity,
+        line.place,
+      ]),
+    ).toEqual([
+      ["Flan", "1", { kind: "fire" }],
+      ["Cake", "2", { kind: "new", slot: 2 }],
+      ["Tea", "3", { kind: "new", slot: 1 }],
+    ]);
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill 2 is no longer at this table. Now showing Bill 1.",
+    );
+    expect(banner(el)?.textContent ?? "").not.toContain(t("table.error"));
+    await rereadAfterAnotherTill(el);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+      "Flan",
+      "Cake",
+      "Tea",
+    ]);
+    expect(
+      vi
+        .mocked(api.saveDraft)
+        .mock.calls.slice(before)
+        .filter(([, save]) => save.billId === "wo-4"),
+    ).toEqual([]);
+    expect(drafts.drafts).toEqual(saved);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
+    expect(tableOrder(el)!.retainedDraft).toBeNull();
+    expect(
+      partyDraft(tableOrder(el)!).lines.map((line) => [line.product.name, line.quantity]),
+    ).toEqual([
+      ["Flan", "1"],
+      ["Cake", "2"],
+      ["Tea", "3"],
+    ]);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el, 6);
+    expect(
+      drafts.drafts.map((draft) => [
+        draft.billId,
+        draft.lines.map((line) => [line.menuItemId, line.quantity]),
+      ]),
+    ).toEqual([
+      [
+        "wo-4",
+        [
+          ["flan", "1"],
+          ["cake", "2"],
+          ["tea", "3"],
+        ],
+      ],
+    ]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
   describe("LOOK F1: nothing but the server tells this till the bill on screen was merged away", () => {
     const abandoned = { ...checkBill, status: "abandoned" as const, outstanding: "0.00" };
 

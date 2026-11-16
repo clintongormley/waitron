@@ -1756,6 +1756,7 @@ interface ReadBills {
   bills: PartyBill[] | null;
   /** A background read not made, or set aside, because of this till's own change to the bills. */
   setAside?: true;
+  balance?: Promise<boolean>;
 }
 
 function errorText(
@@ -14121,13 +14122,13 @@ export class TillApp extends LitElement {
       );
       if (background && started !== this.#ownBillsStarted)
         return { read, partyId: party.id, bills: null, setAside: true };
-      const answer = { read, partyId: party.id, bills };
+      const answer: ReadBills = { read, partyId: party.id, bills };
       if (read === this.#partyBillsRead) {
         const before = this.partyBills;
         this.partyBills = bills;
         this.#followSplitBills(bills);
         this.#syncDraftBillStatus();
-        void this.#loadBillBalance(balance);
+        answer.balance = this.#loadBillBalance(balance);
         if (follow) await this.#followBillsRead(answer, before, false, splitRead);
       }
       return answer;
@@ -14234,23 +14235,48 @@ export class TillApp extends LitElement {
     this.#showDraft(await this.#openDraft(session, splitRead));
   }
 
-  /** The unsaved lines a dropped draft kept for `from`, offered for review on `to` instead, unless
-   * `to` already holds lines kept for review; answers whether they were moved. */
+  /** A vanished bill's lines join any existing review; only the waiter applies them. */
   #carryCandidate(personId: string, from: string, to: string): boolean {
     const fromKey = JSON.stringify([personId, from]);
     const toKey = JSON.stringify([personId, to]);
     const kept = this.#draftCandidates.get(fromKey);
-    if (kept === undefined || this.#draftCandidates.has(toKey)) return false;
+    if (kept === undefined) return false;
+    const destination = this.#draftCandidates.get(toKey);
+    const lines = structuredClone([...(destination?.lines ?? [])]);
+    const courses = new Map([
+      ...[...lines, ...kept.lines].flatMap((line) =>
+        line.course === undefined ? [] : [[line.course.id, line.course] as const],
+      ),
+      ...(this.currentOrders?.retainedCourses ?? []).map((course) => [course.id, course] as const),
+      ...this.courses.map((course) => [course.id, course] as const),
+    ]);
+    for (const line of kept.lines) {
+      const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
+        zoneId: this.#tableZoneId,
+        courses: [...courses.values()],
+        held: heldViews(this.currentOrders, this.tabGroups),
+        firstOrder: this.currentOrders?.hasGroups === false,
+        placed: lines.map((row) => ({
+          courseId: row.courseId ?? row.product.courseId ?? null,
+          place: row.place ?? { kind: "fire" },
+        })),
+      });
+      if (placement.shift !== undefined)
+        for (const row of lines)
+          if (row.place?.kind === "new" && row.place.slot >= placement.shift.from) row.place.slot++;
+      lines.push({ ...line, place: placement.place });
+    }
     this.#draftCandidates.delete(fromKey);
     this.#draftCandidates.set(toKey, {
-      ...kept,
+      ...(destination ?? kept),
+      lines,
       billId: to,
       base: { billId: to, editorVersion: 0, draftId: null, draftRevision: null },
     });
     return true;
   }
 
-  async #loadBillBalance(known?: BillBalance): Promise<void> {
+  async #loadBillBalance(known?: BillBalance): Promise<boolean> {
     const read = ++this.#billBalanceRead;
     const billId = this.activeTabId;
     const bill = this.partyBills.find((row) => row.workingOrderId === billId);
@@ -14258,11 +14284,11 @@ export class TillApp extends LitElement {
     const open = paying?.surface === "table" && paying.billId === billId;
     if (billId === undefined || (bill?.hasPayments !== true && !open)) {
       this.billBalance = null;
-      return;
+      return true;
     }
     if (known?.workingOrderId === billId) {
       this.billBalance = known;
-      return;
+      return true;
     }
     const sentAt = ++this.#payTicks;
     try {
@@ -14270,10 +14296,12 @@ export class TillApp extends LitElement {
       if (read === this.#billBalanceRead) {
         if (open) await this.#showBillPayingBalance(paying.id, billId, balance, sentAt);
         else this.billBalance = balance;
+        return true;
       }
     } catch {
       if (read === this.#billBalanceRead && !open) this.billBalance = null;
     }
+    return false;
   }
 
   /** The party the open bill was read under, for a bill action. */
@@ -18792,10 +18820,10 @@ export class TillApp extends LitElement {
     else await this.#onTableRefusal(error);
   }
 
-  /** A bill action refused for the money on a bill: said, and the party's bills read again. */
   async #onBillMoneyRefusal(error: unknown): Promise<void> {
     this.errorKey = billWriteError(error);
-    await this.#loadPartyBills();
+    const billId = this.activeTabId;
+    if (billId !== undefined) await this.#rereadAmounts(billId, this.#orderVisit, undefined, false);
   }
 
   async #onRelocationRefusal(error: unknown, live: () => boolean): Promise<void> {
@@ -19026,6 +19054,32 @@ export class TillApp extends LitElement {
     if (pending === null) return;
     this.differentPeopleConfirmation = null;
     await pending.proceed();
+  }
+
+  async #onMoveDishesOpen(event: Event): Promise<void> {
+    event.preventDefault();
+    const { ready } = (event as CustomEvent<{ ready: () => void }>).detail;
+    const billId = this.activeTabId;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const current = () =>
+      this.isConnected &&
+      !this.tableOpening &&
+      api === this.api &&
+      session === this.#operatorSession &&
+      billId === this.activeTabId &&
+      visit === this.#orderVisit;
+    if (billId === undefined || !current()) return;
+    const read = await this.#loadPartyBills();
+    const balanced = await read.balance;
+    if (!current() || read.read !== this.#partyBillsRead) return;
+    if (read.bills === null || balanced !== true) {
+      this.errorKey = "table.reread_failed";
+      return;
+    }
+    if (this.errorKey === "table.reread_failed") this.errorKey = undefined;
+    ready();
   }
 
   async #onMoveDishes(
@@ -23286,6 +23340,7 @@ export class TillApp extends LitElement {
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
         @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
+        @move-dishes-open=${(event: Event) => void this.#onMoveDishesOpen(event)}
         @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}

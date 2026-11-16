@@ -718,7 +718,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   from the ⋮ for a paid bill once something does.
   [Detail](backlog/till.md#a1261-a-full-invoice-for-a-bill-already-paid-from-the-tables-)
 
-- **A bill another till moved, merged or part-paid** (bundle of 2, 1 important, size M). Holds A1267, A1288. [Detail](backlog/till.md#bundle-a-bill-another-till-moved-merged-or-part-paid)
 
 - **A1416. A started or served dish whose option was renamed blocks every save of its order until
   it is cancelled (left open by A1382).** Run on main for a started dish, and in R3-fixes for a

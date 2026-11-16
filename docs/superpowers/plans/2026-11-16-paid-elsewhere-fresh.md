@@ -1,6 +1,6 @@
 # Paid elsewhere and retained lines: implementation plan
 
-Authority: watcher-fed PAID-ELSEWHERE-FRESH, questions.md 2026-11-16 21:21. Sol-high draft, Claude read, driver corrections; build awaits watcher. No owner design approval claimed.
+Authority: watcher-fed PAID-ELSEWHERE-FRESH, questions.md 2026-11-16 21:21. Sol-high draft, Claude read, driver corrections; watcher cleared the corrected plan at 21:38 on 2026-11-16 (lane F questions.md). No owner design approval claimed.
 
 Finish line: Move dishes opens with current paid choices; a refused move refreshes the table amount. If reproduced, vanished-bill kept lines join the replacement's review, with no automatic save or send.
 
@@ -22,6 +22,6 @@ Files: `apps/till/src/till-app.ts` owns reads/candidates; `screens/till-table-or
 
 Verification and size
 
-Run cases red/green, then all changed files with `pnpm --filter @waitron/till exec vitest run` and named paths. Reuse helpers; no `till-app-drafts.test.ts` change. Prove the no-auto-write assertion by a deliberate forbidden write in a disposable copy. LOOK at the three states in EN/ES, both themes and phone/desktop per RUNNER; watcher may accept Claude's proposed reduced LOOK. Images stay local.
+Run cases red/green, then all changed files with `pnpm --filter @waitron/till exec vitest run` and named paths. Reuse helpers; no `till-app-drafts.test.ts` change. Prove the no-auto-write assertion by a deliberate forbidden write in a disposable copy. LOOK at the three states in EN/ES, both themes and phone/desktop per RUNNER; watcher retained the full matrix at 21:38. Images stay local.
 
 No guide change expected: EN/ES `table-service.md#bill-switcher` and `#move-dishes` describe unchanged actions. Delete A1267/A1288, bundle and index from `docs/backlog/till.md` and `docs/backlog.md`, including A803's :3219/:3221 references. Estimates added/removed: production +60–105/−10–25; tests/support +140–210/−0–20; docs including plan +30–40/−35–50. No generated files. Two-seat concurrency review, hook/current-head CI, authorised land-branch; H13 applies.
