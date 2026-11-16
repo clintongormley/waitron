@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  measureDeviceReading,
   withOperationAuthority,
   type ModuleOperationHost,
   type ModuleOperationInput,
@@ -352,6 +353,94 @@ it("resumes committed work without collecting fresh clocks or rewriting the jour
       await operations.prepare({ ...operation, input: selected.input }, async () => "exact replay"),
     ).toBe("exact replay");
     expect(f.history).toEqual(before);
+  });
+});
+
+it("the restore's start tells its host when the minute it resumes was chosen, so its waiting page can refuse an earlier device", async () => {
+  const f = fixture();
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const noted: number[] = [];
+    f.host.startClockChosenMinute = (issuedAtMs) => noted.push(issuedAtMs);
+    await operations.resumeRecovery!(operation);
+    expect(noted).toEqual([]);
+    const selected = await selectAfterWait(operations, operation);
+    await operations.resumeRecovery!(operation);
+    expect(noted).toHaveLength(1);
+    expect(encodeMinuteIdentity(noted[0]!)).toBe(selected.identity);
+  });
+});
+
+type KeptCase = {
+  /** The device's time against the box's when the confirmation was kept. */
+  aheadMs?: number;
+  onBox?: boolean;
+  /** Boot id when kept and at the start; `undefined` at the start means the host reads none. */
+  kept?: string | null;
+  start?: string | null;
+  /** How far the wall clock moved over the two minutes of uptime. */
+  wallMovedMs?: number;
+  /** Uptime read when kept and at the start; the wall moves by their difference unless told. */
+  keptUptimeMs?: number;
+  startUptimeMs?: number;
+  none?: boolean;
+};
+it.each<[string, KeptCase, string]>([
+  ["a confirmation kept two minutes earlier on the same boot", {}, "admitted"],
+  ["a confirmation whose device ran 31 seconds ahead", { aheadMs: 31_000 }, "clock_disagreement"],
+  ["a confirmation from before a switch-off", { start: "b2" }, "second_clock_missing"],
+  ["a confirmation from before a clock step", { wallMovedMs: 121_001 }, "second_clock_missing"],
+  ["a confirmation kept with no boot id", { kept: null }, "second_clock_missing"],
+  ["a confirmation with no boot id at the start", { start: null }, "second_clock_missing"],
+  ["a confirmation where the start reads no boot", { start: undefined }, "second_clock_missing"],
+  [
+    "a confirmation with no boot id at either end",
+    { kept: null, start: null },
+    "second_clock_missing",
+  ],
+  [
+    "a confirmation kept with a negative uptime",
+    { keptUptimeMs: -1000, startUptimeMs: 119_000 },
+    "second_clock_missing",
+  ],
+  [
+    "a confirmation whose start reads a negative uptime",
+    { keptUptimeMs: 1000, startUptimeMs: -119_000, wallMovedMs: -120_000 },
+    "second_clock_missing",
+  ],
+  ["a confirmation from the box's own screen", { onBox: true }, "second_clock_missing"],
+  ["no confirmation", { none: true }, "second_clock_missing"],
+])("the restore's start with no internet clock takes %s", async (_name, c, outcome) => {
+  const { aheadMs = 0, onBox = false, kept = "b1", none = false } = c;
+  const { keptUptimeMs = 5_000, startUptimeMs = 125_000 } = c;
+  const { wallMovedMs = startUptimeMs - keptUptimeMs } = c;
+  const start = "start" in c ? c.start : "b1";
+  const f = fixture();
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const selected = await selectAfterWait(operations, operation);
+    vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => ({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
+    }));
+    const received = { wall: Date.now(), monotonic };
+    const issued = { wall: received.wall - 200, monotonic: received.monotonic - 200 };
+    const reading = measureDeviceReading(issued, received.wall + aheadMs, received, onBox);
+    const boot = { bootId: kept, uptimeMs: keptUptimeMs, wallMs: received.wall };
+    if (!none) f.host.startClockConfirmation = () => ({ reading, boot });
+    monotonic += 120_000;
+    vi.setSystemTime(Date.now() + wallMovedMs);
+    if (start !== undefined) f.host.readBoot = () => ({ id: start, ms: startUptimeMs });
+    await operations.resumeRecovery!(operation);
+    const prepared = operations.prepare(
+      { ...operation, input: selected.input },
+      async () => "admitted",
+    );
+    if (outcome === "admitted") await expect(prepared).resolves.toBe("admitted");
+    else await expect(prepared).rejects.toMatchObject(refusal(outcome));
   });
 });
 

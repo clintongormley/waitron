@@ -39,6 +39,61 @@ async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
   await el.updateComplete;
 }
 
+const WAITING_EN =
+  "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.";
+const CONFIRMED_EN = "Time confirmed. This page shows when the server is ready.";
+const WAITING = { code: "server.waiting_for_clock", status: 503, params: { confirmed: false } };
+const WAITING_CONFIRMED = { ...WAITING, params: { confirmed: true } };
+const SERVER_MS = Date.UTC(2026, 10, 14, 9, 30, 5);
+const DEVICE_MS = Date.UTC(2026, 10, 14, 9, 30, 7);
+const when = (ms: number) =>
+  new Date(ms).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+/** The waiting app's clock routes, answering as `start-clock-waiting.ts` does unless told otherwise. */
+function clockApi(
+  answers: { compare?: object; confirm?: object; set?: object; refuseKey?: boolean } = {},
+) {
+  const sent: { route: string; body: Record<string, unknown> }[] = [];
+  let challenges = 0;
+  const restoreClock = vi.fn(async (route: string, body: Record<string, unknown>) => {
+    sent.push({ route, body });
+    if (answers.refuseKey) throw { code: "promotion.break_glass_invalid", status: 403 };
+    if (route === "challenge") return { id: `challenge-${++challenges}` };
+    const times = { deviceMs: DEVICE_MS, serverMs: SERVER_MS };
+    if (route === "compare") return answers.compare ?? { result: "agrees", ...times };
+    if (route === "confirm") return answers.confirm ?? { result: "confirmed", ...times };
+    return answers.set ?? { status: "set" };
+  });
+  return { sent, restoreClock };
+}
+
+function clockApiWith(
+  clock: ReturnType<typeof clockApi>,
+  getStatus: () => Promise<unknown>,
+): SetupApi {
+  return { getStatus, restoreClock: clock.restoreClock } as unknown as SetupApi;
+}
+
+function mountWaiting(
+  clock: ReturnType<typeof clockApi>,
+  extra: Partial<SetupDoneScreen> = {},
+): Promise<SetupDoneScreen> {
+  const getStatus = vi.fn().mockRejectedValue(WAITING);
+  return mountDone(getStatus, {
+    api: clockApiWith(clock, getStatus),
+    nodeRecoveryKey: "node-key-secret",
+    pollIntervalMs: 100000,
+    ...extra,
+  });
+}
+
 afterEach(() => {
   setLocale("en-GB");
   cleanupWidgets();
@@ -273,6 +328,596 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
   });
 
+  it("asks for the time on the screen itself when the restore's start waits for it", async () => {
+    const before = location.href;
+    const clock = clockApi();
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-step]")).not.toBeNull());
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(WAITING_EN);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(q(el, "[data-test=clock-device]")?.textContent).toBe(when(DEVICE_MS));
+    expect(q(el, "[data-test=clock-confirm]")?.textContent?.trim()).toBe("Confirm the time");
+    expect(q(el, "[data-test=clock-this-device]")?.textContent?.trim()).toBe("This device");
+    expect(clock.sent.map((call) => call.route)).toEqual(["challenge", "compare"]);
+    expect(clock.sent.every((call) => call.body.key === "node-key-secret")).toBe(true);
+    expect(clock.sent[1]!.body.challengeId).toBe("challenge-1");
+    expect(location.href).toBe(before);
+  });
+
+  it("asks once however many polls answer that the start waits", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, { api: clockApiWith(clock, getStatus) });
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(3));
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-step]")).not.toBeNull());
+    expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(1);
+  });
+
+  it("Confirm the time sends the key with a fresh challenge and says the time is confirmed", async () => {
+    const clock = clockApi();
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    expect(clock.sent.slice(2).map((call) => call.route)).toEqual(["challenge", "confirm"]);
+    expect(clock.sent[3]!.body).toMatchObject({
+      key: "node-key-secret",
+      challengeId: "challenge-2",
+    });
+    expect(clock.sent[3]!.body.instantMs).toBeTypeOf("number");
+    expect(q(el, "[data-test=clock-confirm]")).toBeNull();
+    expect(q(el, "[data-test=clock-this-device]")).toBeNull();
+  });
+
+  it("asks again when a poll after its confirmation says the server holds none", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() => expect(clock.sent.some((call) => call.route === "confirm")).toBe(true));
+    await vi.waitFor(() =>
+      expect(clock.sent.filter((call) => call.route === "compare").length).toBe(2),
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(WAITING_EN);
+  });
+
+  it("keeps saying the time is confirmed while polls say the server holds the confirmation", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn(() =>
+      Promise.reject(
+        clock.sent.some((call) => call.route === "confirm") ? WAITING_CONFIRMED : WAITING,
+      ),
+    );
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    const polled = getStatus.mock.calls.length;
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(polled + 2));
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN);
+    expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(1);
+  });
+
+  it("ignores a poll sent before its confirmation that answers after it", async () => {
+    const clock = clockApi();
+    let answerHeld!: () => void;
+    let polls = 0;
+    const getStatus = vi.fn(() => {
+      polls += 1;
+      if (polls === 1) return Promise.reject(WAITING);
+      if (polls === 2)
+        return new Promise((_, reject) => {
+          answerHeld = () => reject(WAITING);
+        });
+      return Promise.reject(WAITING_CONFIRMED);
+    });
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(polls).toBe(2));
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    answerHeld();
+    await vi.waitFor(() => expect(polls).toBeGreaterThan(4));
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN);
+    expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(1);
+  });
+
+  it("says the time is confirmed, asking nothing, when the server holds another page's confirmation", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn().mockRejectedValue(WAITING_CONFIRMED);
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(2));
+    expect(clock.sent).toEqual([]);
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+  });
+
+  it("a confirmation the times refuse shows the times again", async () => {
+    const clock = clockApi({
+      confirm: { result: "differs", deviceMs: DEVICE_MS, serverMs: SERVER_MS },
+    });
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(2),
+    );
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(WAITING_EN);
+    expect(q(el, "[data-test=clock-confirm]")).not.toBeNull();
+  });
+
+  it("This device sets the server's clock with the key, then confirms the set time against a fresh challenge", async () => {
+    const clock = clockApi();
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-this-device]")).not.toBeNull());
+    q(el, "[data-test=clock-this-device]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    expect(clock.sent.slice(2).map((call) => call.route)).toEqual([
+      "challenge",
+      "set",
+      "challenge",
+      "confirm",
+    ]);
+    expect(clock.sent[3]!.body).toMatchObject({
+      key: "node-key-secret",
+      challengeId: "challenge-2",
+    });
+    expect(clock.sent[5]!.body).toMatchObject({
+      key: "node-key-secret",
+      challengeId: "challenge-3",
+    });
+    expect(clock.sent[5]!.body.instantMs).toBeTypeOf("number");
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+  });
+
+  it("after This device, shows the times again when the confirmation finds them apart", async () => {
+    const clock = clockApi({
+      confirm: { result: "differs", deviceMs: DEVICE_MS, serverMs: SERVER_MS },
+    });
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-this-device]")).not.toBeNull());
+    q(el, "[data-test=clock-this-device]")!.click();
+    await vi.waitFor(() =>
+      expect(clock.sent.slice(2).map((call) => call.route)).toEqual([
+        "challenge",
+        "set",
+        "challenge",
+        "confirm",
+        "challenge",
+        "compare",
+      ]),
+    );
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(WAITING_EN);
+    expect(q(el, "[data-test=clock-this-device]")).not.toBeNull();
+    expect(q(el, "[data-test=clock-note]")).toBeNull();
+  });
+
+  it.each([
+    [
+      "a refused This device",
+      { set: { status: "refused", reason: "challenge" } },
+      "clock-this-device",
+      "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    ],
+    [
+      "a screen on the server itself",
+      { compare: { result: "same_machine" } },
+      undefined,
+      "This screen is on the server itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
+    ],
+  ] as const)("says what happened after %s", async (_label, answers, press, line) => {
+    const clock = clockApi(answers);
+    const el = await mountWaiting(clock);
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-step]")).not.toBeNull());
+    if (press !== undefined) {
+      await vi.waitFor(() => expect(q(el, `[data-test=${press}]`)).not.toBeNull());
+      q(el, `[data-test=${press}]`)!.click();
+    }
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toBe(line));
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the server key from the selected backup's paper there.",
+    ],
+    [
+      "es-ES",
+      "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor del papel de la copia elegida.",
+    ],
+  ] as const)(
+    "if the server refuses the key, says where to enter it, since this screen has no key field, in %s",
+    async (locale, line) => {
+      setLocale(locale);
+      const clock = clockApi({ refuseKey: true });
+      const el = await mountWaiting(clock);
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toBe(line),
+      );
+    },
+  );
+
+  it.each([
+    ["en-GB", WAITING_EN, "Confirm the time", "This device"],
+    [
+      "es-ES",
+      "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",
+      "Confirmar la hora",
+      "Este dispositivo",
+    ],
+  ] as const)(
+    "after a rebuild that waits for its time, keeps the device steps below the clock step in %s",
+    async (locale, line, confirm, thisDevice) => {
+      setLocale(locale);
+      const clock = clockApi();
+      const el = await mountWaiting(clock, { restored: "bucket" });
+      await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(line));
+      await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+      expect(q(el, "[data-test=clock-confirm]")?.textContent?.trim()).toBe(confirm);
+      expect(q(el, "[data-test=clock-this-device]")?.textContent?.trim()).toBe(thisDevice);
+      const steps = q(el, "[data-test=device-steps]")!;
+      expect(
+        q(el, "[data-test=clock-step]")!.compareDocumentPosition(steps) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+
+  it("after a rebuild that waited for its time, reports ready once the server trades", async () => {
+    const clock = clockApi();
+    const getStatus = vi
+      .fn()
+      .mockRejectedValueOnce(WAITING)
+      .mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+      restored: "bucket",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+    expect(q(el, "[data-test=device-steps]")).not.toBeNull();
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
+    ],
+    [
+      "es-ES",
+      "Esta página no ha podido obtener las dos horas del servidor, así que Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
+    ],
+  ] as const)(
+    "while no comparison has answered, says so, keeps both choices off and asks again, in %s",
+    async (locale, line) => {
+      setLocale(locale);
+      const sent: string[] = [];
+      const restoreClock = vi.fn(async (route: string) => {
+        sent.push(route);
+        if (route === "challenge") return { id: "challenge" };
+        throw new TypeError("Failed to fetch");
+      });
+      const getStatus = vi.fn().mockRejectedValue(WAITING);
+      const el = await mountDone(getStatus, {
+        api: { getStatus, restoreClock } as unknown as SetupApi,
+        nodeRecoveryKey: "node-key-secret",
+      });
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toBe(line),
+      );
+      await vi.waitFor(() =>
+        expect(sent.filter((route) => route === "compare").length).toBeGreaterThan(2),
+      );
+      const confirm = q(el, "[data-test=clock-confirm]") as HTMLElement & { disabled: boolean };
+      const thisDevice = q(el, "[data-test=clock-this-device]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(confirm.disabled).toBe(true);
+      expect(thisDevice.disabled).toBe(true);
+      confirm.click();
+      thisDevice.click();
+      await afterATimerTurn(el);
+      expect(sent).not.toContain("confirm");
+      expect(sent).not.toContain("set");
+    },
+  );
+
+  it("shows both times once a comparison answers after one that failed", async () => {
+    let compares = 0;
+    const restoreClock = vi.fn(async (route: string) => {
+      if (route === "challenge") return { id: "challenge" };
+      compares += 1;
+      if (compares === 1) throw new TypeError("Failed to fetch");
+      return { result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS };
+    });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(q(el, "[data-test=clock-device]")?.textContent).toBe(when(DEVICE_MS));
+    expect(q(el, "[data-test=clock-note]")).toBeNull();
+    expect(
+      (q(el, "[data-test=clock-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false);
+    expect(compares).toBe(2);
+  });
+
+  it.each([
+    ["a too-slow or clock-moved round trip", { result: "challenge" }],
+    ["an answer without times", { result: "agrees" }],
+  ])("compares again after %s, then shows both times", async (_label, first) => {
+    let compares = 0;
+    const restoreClock = vi.fn(async (route: string) => {
+      if (route === "challenge") return { id: "challenge" };
+      compares += 1;
+      if (compares === 1) return first;
+      return { result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS };
+    });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(q(el, "[data-test=clock-note]")).toBeNull();
+    expect(
+      (q(el, "[data-test=clock-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false);
+    expect(compares).toBe(2);
+  });
+
+  it("does not compare again on the server's own screen", async () => {
+    const clock = clockApi({ compare: { result: "same_machine" } });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-note]")).not.toBeNull());
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(5));
+    expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(1);
+  });
+
+  it("sends nothing more with the key once it leaves the page while a challenge is pending", async () => {
+    const sent: string[] = [];
+    let answerChallenge!: () => void;
+    const restoreClock = vi.fn((route: string) => {
+      sent.push(route);
+      if (route === "challenge")
+        return new Promise((resolve) => {
+          answerChallenge = () => resolve({ id: "challenge" });
+        });
+      return Promise.resolve({ result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+    });
+    const getStatus = vi.fn().mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(sent).toEqual(["challenge"]));
+    el.remove();
+    answerChallenge();
+    await afterATimerTurn(el);
+    expect(sent).toEqual(["challenge"]);
+  });
+
+  it("a press that gets no answer hides the times and compares again", async () => {
+    const sent: string[] = [];
+    let pressFails = true;
+    const restoreClock = vi.fn(async (route: string) => {
+      sent.push(route);
+      if (route === "challenge") return { id: "challenge" };
+      if (route === "confirm" && pressFails) {
+        pressFails = false;
+        throw new TypeError("Failed to fetch");
+      }
+      return { result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS };
+    });
+    let releasePoll!: () => void;
+    const getStatus = vi
+      .fn()
+      .mockRejectedValueOnce(WAITING)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            releasePoll = () => reject(WAITING);
+          }),
+      )
+      .mockRejectedValue(WAITING);
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    await vi.waitFor(() => expect(getStatus).toHaveBeenCalledTimes(2));
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toMatch(
+        /^This page could not get the two times from the server/,
+      ),
+    );
+    expect(q(el, "[data-test=clock-server]")?.textContent).toBe("");
+    expect(sent.filter((route) => route === "compare")).toHaveLength(1);
+    releasePoll();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(q(el, "[data-test=clock-note]")).toBeNull();
+    expect(sent.filter((route) => route === "compare")).toHaveLength(2);
+  });
+
+  it("sends no confirmation once it leaves the page while a press's challenge is pending", async () => {
+    const sent: string[] = [];
+    let answerChallenge: (() => void) | undefined;
+    const restoreClock = vi.fn((route: string) => {
+      sent.push(route);
+      if (route === "challenge" && sent.length > 2)
+        return new Promise((resolve) => {
+          answerChallenge = () => resolve({ id: "challenge" });
+        });
+      if (route === "challenge") return Promise.resolve({ id: "challenge" });
+      return Promise.resolve({ result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+    });
+    const el = await mountWaiting({ sent: [], restoreClock } as unknown as ReturnType<
+      typeof clockApi
+    >);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() => expect(answerChallenge).toBeDefined());
+    el.remove();
+    answerChallenge!();
+    await afterATimerTurn(el);
+    expect(sent).toEqual(["challenge", "compare", "challenge"]);
+  });
+
+  it("keeps the latest comparison's times when an earlier one answers after it", async () => {
+    const LATER_SERVER_MS = Date.UTC(2026, 10, 15, 9, 30, 5);
+    let status: object = WAITING;
+    const held: ((answer: object) => void)[] = [];
+    let compares = 0;
+    const sent: string[] = [];
+    const restoreClock = vi.fn((route: string) => {
+      sent.push(route);
+      if (route === "challenge") return Promise.resolve({ id: "challenge" });
+      if (route === "confirm")
+        return Promise.resolve({ result: "differs", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+      compares += 1;
+      if (compares === 1)
+        return Promise.resolve({ result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+      return new Promise((resolve) => held.push(resolve));
+    });
+    const getStatus = vi.fn(() => Promise.reject(status));
+    const el = await mountDone(getStatus, {
+      api: { getStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    q(el, "[data-test=clock-confirm]")!.click();
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    status = WAITING_CONFIRMED;
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(CONFIRMED_EN),
+    );
+    status = WAITING;
+    await vi.waitFor(() => expect(held).toHaveLength(2));
+    expect(q(el, "[data-test=clock-server]")?.textContent).toBe("");
+    expect(
+      (q(el, "[data-test=clock-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(true);
+    held[1]!({ result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    held[0]!({ result: "agrees", deviceMs: DEVICE_MS, serverMs: LATER_SERVER_MS });
+    await afterATimerTurn(el);
+    expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS));
+  });
+
+  it("draws no clock step while the server has not said it waits", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { restored: "bucket" });
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+  });
+
+  it("does not ask for the time on a 503 with any other code", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn().mockRejectedValue({ code: "setup.not_ready", status: 503 });
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(2));
+    expect(clock.sent).toEqual([]);
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
+  });
+
+  it("reports ready on a 404 without asking for the time", async () => {
+    const clock = clockApi();
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountDone(getStatus, {
+      api: clockApiWith(clock, getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(clock.sent).toEqual([]);
+  });
+
+  it("through the real client, asks for the time on the waiting app's answer with the key in the body", async () => {
+    const posts: Request[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method !== "POST")
+        return new Response(
+          '{"error":{"code":"server.waiting_for_clock","params":{"confirmed":false}}}',
+          {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      posts.push(request.clone());
+      return new URL(request.url).pathname === "/restore-clock/challenge"
+        ? Response.json({ id: "challenge-1" })
+        : Response.json({ result: "agrees", deviceMs: DEVICE_MS, serverMs: SERVER_MS });
+    });
+    const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: new SetupApi("", fetchImpl),
+      startDelayMs: 0,
+      pollIntervalMs: 3,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    expect(posts.map((request) => new URL(request.url).pathname)).toEqual([
+      "/restore-clock/challenge",
+      "/restore-clock/compare",
+    ]);
+    expect(posts.every((request) => !request.url.includes("node-key-secret"))).toBe(true);
+    expect(await posts[1]!.json()).toMatchObject({
+      key: "node-key-secret",
+      challengeId: "challenge-1",
+    });
+  });
+
   it("waits through 503s, then reports ready once getStatus answers 404", async () => {
     const getStatus = vi
       .fn()
@@ -371,6 +1016,40 @@ describe("setup-done-screen", () => {
     expect(removed.getStatus).toHaveBeenCalledOnce();
   });
 
+  it("does not ask for the time when it is removed while a poll is in flight", async () => {
+    const inFlight = () => {
+      let fail!: (reason: unknown) => void;
+      const getStatus = vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      );
+      return { getStatus, fail: (reason: unknown) => fail(reason) };
+    };
+    const removed = inFlight();
+    const control = inFlight();
+    const removedClock = clockApi();
+    const controlClock = clockApi();
+    const el = await mountDone(removed.getStatus, {
+      api: clockApiWith(removedClock, removed.getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await mountDone(control.getStatus, {
+      api: clockApiWith(controlClock, control.getStatus),
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() => {
+      expect(removed.getStatus).toHaveBeenCalledOnce();
+      expect(control.getStatus).toHaveBeenCalledOnce();
+    });
+    el.remove();
+    removed.fail(WAITING);
+    control.fail(WAITING);
+    await vi.waitFor(() => expect(controlClock.sent.length).toBeGreaterThan(0));
+    expect(removedClock.sent).toEqual([]);
+  });
+
   it.each(["en-GB", "es-ES"])(
     "offers no reload control before or after ready in %s",
     async (locale) => {
@@ -391,6 +1070,26 @@ describe("setup-done-screen", () => {
       expect(q(el, "[data-test=reload]")).toBeNull();
     },
   );
+
+  it("drops the node recovery key once its poll answers ready", async () => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountDone(getStatus, { nodeRecoveryKey: "node-key-secret" });
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(el.nodeRecoveryKey).toBeUndefined();
+  });
+
+  it("keeps the node recovery key while its poll answers 503", async () => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "setup.not_ready", status: 503 });
+    const el = await mountDone(getStatus, { nodeRecoveryKey: "node-key-secret" });
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(2));
+    expect(el.nodeRecoveryKey).toBe("node-key-secret");
+  });
+
+  it("drops the node recovery key once it leaves the page", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { nodeRecoveryKey: "node-key-secret" });
+    el.remove();
+    expect(el.nodeRecoveryKey).toBeUndefined();
+  });
 
   it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
     const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });

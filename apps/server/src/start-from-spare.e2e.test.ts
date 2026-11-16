@@ -140,6 +140,7 @@ async function start(box: Box, spareBytes: number, seams: StartServerSeams = {})
     readRecoveryState,
     writeRecoveryState,
     startServer: (env, base) => startServer(env, base, { spareBytes, ...seams }),
+    serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
     serveRecovery,
     installShutdownHandlers: (started) => {
       server = started;

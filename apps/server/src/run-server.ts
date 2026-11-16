@@ -5,6 +5,8 @@ import "./errors.js";
 
 export interface ShutdownDeps {
   on: (signal: NodeJS.Signals, handler: () => void) => void;
+  /** Takes off a handler `on` added; needed only by a caller that removes its handlers. */
+  off?: (signal: NodeJS.Signals, handler: () => void) => void;
   write: (line: string, done: () => void) => void;
   exit: (code: number) => void;
   now: () => Date;
@@ -15,6 +17,7 @@ export interface ShutdownDeps {
 /* v8 ignore start -- the real process bindings; every test supplies its own `deps` instead */
 const DEFAULT_DEPS: ShutdownDeps = {
   on: (signal, handler) => void process.once(signal, handler),
+  off: (signal, handler) => void process.off(signal, handler),
   write: (line, done) => void process.stdout.write(line, done),
   exit: (code) => process.exit(code),
   now: () => new Date(),
@@ -59,11 +62,13 @@ export interface ShutdownTarget {
  * so it takes Node's default action and kills the process mid-shutdown
  * (`run-server.signals.test.ts`). Accepted gap for a person's signals; {@link restartProcess} stops
  * sending its own.
+ *
+ * The answer takes the handlers off again, unless a shutdown is already under way.
  */
 export function installShutdownHandlers(
   server: ShutdownTarget,
   deps: ShutdownDeps = DEFAULT_DEPS,
-): void {
+): () => void {
   // Every path ends in exactly one exit, whichever of {clean close, failure-log write, deadline}
   // reaches it first; a timer's `cancel()` can arrive a tick too late, so the losers must be no-ops.
   let exited = false;
@@ -116,9 +121,16 @@ export function installShutdownHandlers(
     );
   };
   for (const signal of ["SIGTERM", "SIGINT"] as const) deps.on(signal, onSignal);
+  const installedBefore = handlersInstalled;
   const askedBeforeAnyHandler = restartRequested && !handlersInstalled;
   handlersInstalled = true;
   if (askedBeforeAnyHandler) onSignal();
+  // Taken off, a later restart ask is kept for the next handlers, as before any were installed.
+  return () => {
+    if (shuttingDown) return;
+    for (const signal of ["SIGTERM", "SIGINT"] as const) deps.off?.(signal, onSignal);
+    handlersInstalled = installedBefore;
+  };
 }
 
 /**

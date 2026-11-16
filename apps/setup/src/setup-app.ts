@@ -1865,6 +1865,7 @@ export class SetupApp extends LitElement {
       this.restoreRequest = undefined;
       this.restored = "archive";
       this.screen = "done";
+      void this.#handKeyToDone(request.recoveryOperation && request.nodeRecoverySecret);
     } catch (error) {
       if (!current()) return;
       const { code, params } = (error ?? {}) as {
@@ -1946,6 +1947,7 @@ export class SetupApp extends LitElement {
       this.bucketRequest = undefined;
       this.restored = "bucket";
       this.screen = "done";
+      void this.#handKeyToDone(request.nodeRecoverySecret);
     } catch (error) {
       if (!current()) return;
       const { code, params } = (error ?? {}) as {
@@ -2045,6 +2047,7 @@ export class SetupApp extends LitElement {
         if (current()) {
           this.restored = "cloud";
           this.screen = "done";
+          void this.#handKeyToDone(recoveryOperation && nodeRecoverySecret);
         }
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
@@ -2281,6 +2284,13 @@ export class SetupApp extends LitElement {
       this.connectRequest = body;
       this.screen = "connect";
     }
+  }
+
+  /** Set on the drawn done screen rather than kept here, so that screen's drop is the only copy's. */
+  async #handKeyToDone(key: string | undefined): Promise<void> {
+    await this.updateComplete;
+    const done = this.shadowRoot?.querySelector("setup-done-screen");
+    if (done?.isConnected) done.nodeRecoveryKey = key;
   }
 
   /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */

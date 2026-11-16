@@ -183,6 +183,7 @@ it.each([
           readRecoveryState,
           writeRecoveryState,
           startServer: async (merged, base) => (server = await startServer(merged, base, seams)),
+          serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
           serveRecovery: async () => {
             throw new Error("unexpected recovery mode");
           },

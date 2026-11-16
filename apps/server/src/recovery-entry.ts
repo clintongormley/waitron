@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import { assertNoStartAgainDeletion, createFirstSetupCoordinator } from "@waitron/provisioning";
-import type { WaitronModule } from "@waitron/module";
+import type { ModuleOperationHost, WaitronModule } from "@waitron/module";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import type { RecoveryOperationInput } from "./recovery-module-operation.js";
@@ -51,6 +51,8 @@ export async function createRecoveryEntryRunner(options: {
   context: RecoveryEntryContext;
   timeServiceSynchronised?: () => Promise<boolean>;
   readBoot?: () => BootReading;
+  startClockConfirmation?: ModuleOperationHost["startClockConfirmation"];
+  startClockChosenMinute?: ModuleOperationHost["startClockChosenMinute"];
 }): Promise<RestoreOperationRunner> {
   await assertNoStartAgainDeletion(options.venueDir);
   const { operation, copy, context } = options;
@@ -68,6 +70,8 @@ export async function createRecoveryEntryRunner(options: {
     selected,
     timeServiceSynchronised: options.timeServiceSynchronised,
     readBoot: options.readBoot,
+    startClockConfirmation: options.startClockConfirmation,
+    startClockChosenMinute: options.startClockChosenMinute,
     database() {
       throw new AppError("module.operation_invalid", { module: operation.binding.module });
     },

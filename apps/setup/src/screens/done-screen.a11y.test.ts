@@ -77,6 +77,50 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each([undefined, "bucket"] as const)(
+    "has no violations asking for the time, then once it is confirmed (restored: %s)",
+    async (restored) => {
+      const times = {
+        deviceMs: Date.UTC(2026, 10, 14, 9, 30, 7),
+        serverMs: Date.UTC(2026, 10, 14, 9, 30, 5),
+      };
+      const api = {
+        getStatus: () => Promise.reject({ code: "server.waiting_for_clock", status: 503 }),
+        restoreClock: async (route: string) =>
+          route === "challenge"
+            ? { id: "challenge" }
+            : { result: route === "confirm" ? "confirmed" : "agrees", ...times },
+      } as unknown as SetupApi;
+      const { host, el } = await mountWidget<SetupDoneScreen>(
+        "setup-done-screen",
+        { api, startDelayMs: 0, pollIntervalMs: 100000, restored, nodeRecoveryKey: "key" },
+        theme,
+      );
+      await vi.waitFor(() => expect(q(el, "[data-test=clock-server]")?.textContent).not.toBe(""));
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=clock-confirm]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).toBeNull());
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it("has no violations while the server has not answered the comparison", async () => {
+    const api = {
+      getStatus: () => Promise.reject({ code: "server.waiting_for_clock", status: 503 }),
+      restoreClock: async (route: string) => {
+        if (route === "challenge") return { id: "challenge" };
+        throw new TypeError("Failed to fetch");
+      },
+    } as unknown as SetupApi;
+    const { host, el } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      { api, startDelayMs: 0, pollIntervalMs: 100000, nodeRecoveryKey: "key" },
+      theme,
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-note]")).not.toBeNull());
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations once the server is ready", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

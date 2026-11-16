@@ -131,6 +131,11 @@ declare module "@waitron/shared" {
     /** A production start of a bundle whose release stamp names no release version. */
     "server.unreleased_build": Record<string, never>;
     /**
+     * A restore's start is waiting to confirm the box's time before it names new invoice series.
+     * `confirmed`: the waiting app holds a confirmation the start has not yet refused.
+     */
+    "server.waiting_for_clock": { confirmed: boolean };
+    /**
      * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE,
      * never the value: an operator who pasted a secret into the wrong variable must not have it land
      * in an error's params.
@@ -1772,6 +1777,9 @@ declare module "@waitron/shared" {
     /** A Wi-Fi join was not sent over an encrypted connection from the box's own page. */
     "box_network.join_connection_insecure": { reason: "unencrypted" | "other_origin" };
     "restore.request_waiting": Record<string, never>;
+    /** A restore's clock-waiting route was sent by a page on another site (`Origin` or
+     * `Sec-Fetch-Site`). */
+    "restore.clock_origin_refused": Record<string, never>;
     "restore.flow_unreadable": Record<string, never>;
     "restore.administrator_password_missing": Record<string, never>;
     /** A restored box's first start (a certificate for this machine, the next membership term)

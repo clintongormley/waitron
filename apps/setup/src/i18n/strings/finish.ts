@@ -46,6 +46,21 @@ export const finishEn = {
   "done.heading_restored": "Restored from your backup",
   "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
   "done.ready": "The server is ready. Open it here:",
+  "done.waiting_for_clock":
+    "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.",
+  "done.clock_confirmed": "Time confirmed. This page shows when the server is ready.",
+  "done.clock.server_time": "The server's time:",
+  "done.clock.device_time": "This device's time:",
+  "done.clock.confirm": "Confirm the time",
+  "done.clock.this_device": "This device",
+  "done.clock.on_box":
+    "This screen is on the server itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
+  "done.clock.set_refused":
+    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+  "done.clock.key_refused":
+    "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the server key from the selected backup's paper there.",
+  "done.clock.unanswered":
+    "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
   "done.description.dashboard":
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
@@ -127,6 +142,21 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.restarting":
     "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
   "done.ready": "El servidor está listo. Ábrelo desde aquí:",
+  "done.waiting_for_clock":
+    "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",
+  "done.clock_confirmed": "Hora confirmada. Esta página te avisa cuando el servidor esté listo.",
+  "done.clock.server_time": "Hora del servidor:",
+  "done.clock.device_time": "Hora de este dispositivo:",
+  "done.clock.confirm": "Confirmar la hora",
+  "done.clock.this_device": "Este dispositivo",
+  "done.clock.on_box":
+    "Esta pantalla está en el propio servidor, así que su hora no cuenta. Abre esta página en un móvil, ordenador o caja de la red del local.",
+  "done.clock.set_refused":
+    "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
+  "done.clock.key_refused":
+    "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor del papel de la copia elegida.",
+  "done.clock.unanswered":
+    "Esta página no ha podido obtener las dos horas del servidor, así que Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
   "done.description.dashboard":
     "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
   "done.description.till": "Toma pedidos y cobra.",

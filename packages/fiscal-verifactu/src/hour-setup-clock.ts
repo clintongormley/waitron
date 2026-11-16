@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type {
-  ModuleClockSetAnswer,
-  ModuleClockSetRequest,
-  ModuleOperationHost,
-  OperationBinding,
+import {
+  measureDeviceReading,
+  type ModuleClockSetAnswer,
+  type ModuleClockSetRequest,
+  type ModuleOperationHost,
+  type OperationBinding,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
@@ -109,23 +110,19 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       return refuse("clock_corrected");
     return compareHourClocks([...held.observations, sample], release());
   };
-  const take = (state: Session, browser: SetupBrowserClockSample) => {
+  const take = (state: Session, browser: SetupBrowserClockSample, onBox: boolean) => {
     const challenge =
       typeof browser.challengeId !== "string"
         ? undefined
         : state.challenges.get(browser.challengeId);
     if (challenge !== undefined) state.challenges.delete(browser.challengeId);
     const received = box();
-    const elapsed =
-      challenge === undefined ? NaN : received.monotonicFinishedMs - challenge.monotonic;
-    const timed =
-      challenge !== undefined &&
-      Number.isSafeInteger(browser.instantMs) &&
-      Number.isFinite(elapsed) &&
-      elapsed >= 0 &&
-      elapsed <= 5000 &&
-      Math.abs(received.wallFinishedMs - challenge.wall - elapsed) <= 1000;
-    return { challenge, received, elapsed, timed };
+    return measureDeviceReading(
+      challenge,
+      browser.instantMs,
+      { wall: received.wallFinishedMs, monotonic: received.monotonicFinishedMs },
+      onBox,
+    );
   };
   return {
     challenge(key: string) {
@@ -140,19 +137,18 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       browser: SetupBrowserClockSample,
       client: SetupClockClient,
     ): SetupClockMeasurement {
-      const { received, elapsed, timed } = take(session(key), browser);
-      if (client.onBox) return { status: "refused", reason: "same_machine" };
-      if (!timed) return { status: "refused", reason: "challenge" };
+      const reading = take(session(key), browser, client.onBox);
+      if (reading.result === "unavailable") return { status: "refused", reason: reading.reason };
       // The device read its clock at the round trip's midpoint, give or take half of it.
-      const halfMs = elapsed / 2;
-      const wallMs = received.wallFinishedMs - halfMs;
+      const halfMs = reading.uncertaintyMs;
+      const wallMs = reading.wallFinishedMs - halfMs;
       return {
         status: "measured",
         deviceMs: browser.instantMs,
         request: {
           offsetMs: Math.round(browser.instantMs - wallMs),
           agreesWithinMs: AGREEMENT_MS,
-          measuredAt: { wallMs, monoMs: received.monotonicFinishedMs - halfMs },
+          measuredAt: { wallMs, monoMs: reading.monotonicFinishedMs - halfMs },
           reading: {
             boxAt: new Date(Math.round(wallMs)).toISOString(),
             witnessAt: new Date(browser.instantMs).toISOString(),
@@ -169,26 +165,11 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       carried?: HourClockObservation,
     ) {
       const state = session(key);
-      const { challenge, received, elapsed, timed } =
+      const observations: HourClockObservation[] = [
         browser === null
-          ? { challenge: undefined, received: box(), elapsed: NaN, timed: false }
-          : take(state, browser);
-      const observations: HourClockObservation[] = [];
-      if (browser !== null && client.onBox)
-        observations.push({ source: "browser", result: "unavailable", reason: "same_machine" });
-      else if (browser !== null && challenge !== undefined && timed) {
-        observations.push({
-          source: "browser",
-          result: "usable",
-          instantMs: browser.instantMs,
-          uncertaintyMs: elapsed / 2,
-          wallStartedMs: challenge.wall,
-          wallFinishedMs: received.wallFinishedMs,
-          monotonicStartedMs: challenge.monotonic,
-          monotonicFinishedMs: received.monotonicFinishedMs,
-        });
-      } else if (browser === null && carried !== undefined) observations.push(carried);
-      else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
+          ? (carried ?? { source: "browser", result: "unavailable", reason: "challenge" })
+          : { ...take(state, browser, client.onBox), source: "browser" },
+      ];
       observations.push(await observeTimeServiceHourClock(timeService, { wall, monotonic }));
       if (sessions.get(key) !== state) return refuse("clock_stale");
       const sample = box();

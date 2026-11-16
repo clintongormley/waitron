@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
@@ -17,6 +18,24 @@ const HEADINGS = {
   archive: "done.heading_restored",
   cloud: "done.heading_restored",
 } as const;
+
+/** The waiting app's answer; its `confirmed` says whether it holds a confirmation the start has not refused. */
+function waitingForClock(error: unknown): { confirmed: boolean } | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  if (error.code !== "server.waiting_for_clock") return undefined;
+  const params =
+    "params" in error ? (error.params as { confirmed?: unknown } | undefined) : undefined;
+  return { confirmed: params?.confirmed === true };
+}
+
+type ClockAnswer = { result?: string; status?: string; deviceMs?: number; serverMs?: number };
+type ClockNote =
+  | "done.clock.on_box"
+  | "done.clock.set_refused"
+  | "done.clock.key_refused"
+  | "done.clock.unanswered";
+/** No answer to show: the key was refused, the request failed, or the screen left the page. */
+type ClockMiss = "key_refused" | "failed" | "gone";
 
 function isServerError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("status" in error)) return false;
@@ -51,6 +70,18 @@ export class SetupDoneScreen extends LitElement {
       }
       wt-card ul {
         margin: 0;
+      }
+      .clock dl {
+        margin: 0 0 var(--wt-space-3);
+      }
+      .clock dd {
+        margin: 0 0 var(--wt-space-2);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .clock-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
       .break-glass {
         padding: var(--wt-space-4);
@@ -110,7 +141,31 @@ export class SetupDoneScreen extends LitElement {
 
   @property({ type: Number }) pollIntervalMs = 1500;
 
+  /** In memory only, to confirm the restore's start's time; dropped once ready or off the page. */
+  @property({ attribute: false }) nodeRecoveryKey?: string;
+
   @state() private ready = false;
+
+  @state() private waitingForClock = false;
+
+  @state() private clockTimes?: { deviceMs: number; serverMs: number };
+
+  @state() private confirmed = false;
+
+  /** Confirmations this screen has made; a poll sent before the latest one cannot report it. */
+  #confirmations = 0;
+
+  @state() private clockNote?: ClockNote;
+
+  @state() private clockPress?: "confirm" | "set";
+
+  /** Set when the latest comparison got no answer, so the next poll compares again. */
+  #compareAgain = false;
+
+  #compares = 0;
+
+  /** Moves on when the screen leaves the page, so work begun before then sends no keyed request. */
+  #life = 0;
 
   #timer?: ReturnType<typeof setTimeout>;
 
@@ -126,6 +181,8 @@ export class SetupDoneScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#life += 1;
+    this.nodeRecoveryKey = undefined;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
   }
 
@@ -140,18 +197,168 @@ export class SetupDoneScreen extends LitElement {
    * A resolved `getStatus` means the box has not restarted yet. A `TypeError` is `fetch` failing while
    * the box is down mid-restart: expected, never shown. A 5xx is read as not ready yet, so it waits
    * too. Any other rejection (a 404 once the setup route is gone, another non-2xx, or a body that is
-   * not JSON) is taken to mean the box is trading.
+   * not JSON) is taken to mean the box is trading. A restore's start that is waiting to confirm
+   * its time answers `server.waiting_for_clock`, and this screen asks for the time itself: opening
+   * the waiting page would reload and lose the key held in memory. Its `confirmed` says whether the
+   * server still holds a confirmation; once a refused try drops it, this screen asks again.
    */
   async #pollOnce(): Promise<void> {
+    const confirmationsBefore = this.#confirmations;
     try {
       await this.api.getStatus();
     } catch (error) {
+      const waiting = waitingForClock(error);
+      if (waiting !== undefined && this.isConnected) {
+        if (waiting.confirmed) {
+          this.waitingForClock = true;
+          this.confirmed = true;
+          return;
+        }
+        if (this.#confirmations !== confirmationsBefore) return;
+        if (this.waitingForClock && !this.confirmed && !this.#compareAgain) return;
+        if (this.confirmed) this.clockTimes = undefined;
+        this.waitingForClock = true;
+        this.confirmed = false;
+        await this.#compare();
+        return;
+      }
       if (error instanceof TypeError || isServerError(error)) {
         return;
       }
       if (!this.isConnected) return;
       this.ready = true;
+      this.nodeRecoveryKey = undefined;
     }
+  }
+
+  /** This device's time against a fresh challenge. */
+  async #timed(route: "compare" | "confirm" | "set"): Promise<ClockAnswer | ClockMiss> {
+    const life = this.#life;
+    const key = this.nodeRecoveryKey;
+    try {
+      const { id } = await this.api.restoreClock<{ id: string }>("challenge", { key });
+      if (life !== this.#life) return "gone";
+      const answer = await this.api.restoreClock<ClockAnswer>(route, {
+        key,
+        challengeId: id,
+        instantMs: Date.now(),
+      });
+      return life === this.#life ? answer : "gone";
+    } catch (error) {
+      if (life !== this.#life) return "gone";
+      const refused =
+        typeof error === "object" && error !== null && "status" in error && error.status === 403;
+      return refused ? "key_refused" : "failed";
+    }
+  }
+
+  /** Both times are hidden after a failure, which keeps Confirm and This device off. */
+  #missed(miss: "key_refused" | "failed"): void {
+    if (miss === "key_refused") {
+      this.clockNote = "done.clock.key_refused";
+      return;
+    }
+    this.clockNote = "done.clock.unanswered";
+    this.clockTimes = undefined;
+    this.#compareAgain = true;
+  }
+
+  async #compare(): Promise<void> {
+    const request = ++this.#compares;
+    const answer = await this.#timed("compare");
+    if (answer === "gone" || request !== this.#compares) return;
+    if (typeof answer === "string") {
+      this.#missed(answer);
+      return;
+    }
+    if (answer.result === "same_machine") {
+      this.#compareAgain = false;
+      this.clockNote = "done.clock.on_box";
+      return;
+    }
+    // Answered without times (`challenge`: the round trip was too slow or the box's clock moved).
+    if (answer.deviceMs === undefined || answer.serverMs === undefined) {
+      this.#missed("failed");
+      return;
+    }
+    this.#compareAgain = false;
+    if (this.clockNote === "done.clock.unanswered") this.clockNote = undefined;
+    this.clockTimes = { deviceMs: answer.deviceMs, serverMs: answer.serverMs };
+  }
+
+  async #press(press: "confirm" | "set"): Promise<void> {
+    // The host still takes a click while its button is disabled.
+    if (this.clockPress !== undefined || this.clockTimes === undefined) return;
+    this.clockPress = press;
+    this.clockNote = undefined;
+    try {
+      const answer = await this.#timed(press);
+      const setRefused = press === "set" && typeof answer === "object" && answer.status !== "set";
+      // Choosing this device's time is the confirmation (plan D-confirm), measured against the
+      // clock just set rather than assumed.
+      const checked =
+        typeof answer === "object" && answer.status === "set"
+          ? await this.#timed("confirm")
+          : answer;
+      if (checked === "gone") return;
+      if (typeof checked === "string") {
+        this.#missed(checked);
+      } else if (checked.result === "confirmed") {
+        this.#confirmations += 1;
+        this.confirmed = true;
+      } else {
+        if (setRefused) this.clockNote = "done.clock.set_refused";
+        await this.#compare();
+      }
+    } finally {
+      this.clockPress = undefined;
+    }
+  }
+
+  #clockStep(): TemplateResult | typeof nothing {
+    if (!this.waitingForClock || this.ready || this.confirmed) return nothing;
+    const when = (ms: number | undefined) =>
+      ms === undefined
+        ? ""
+        : new Date(ms).toLocaleString(currentLocale(), {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+    return html`<section class="clock" data-test="clock-step">
+      <dl>
+        <dt>${t("done.clock.server_time")}</dt>
+        <dd data-test="clock-server">${when(this.clockTimes?.serverMs)}</dd>
+        <dt>${t("done.clock.device_time")}</dt>
+        <dd data-test="clock-device">${when(this.clockTimes?.deviceMs)}</dd>
+      </dl>
+      ${
+        this.clockNote === undefined
+          ? nothing
+          : html`<p class="intro" data-test="clock-note" role="alert">${t(this.clockNote)}</p>`
+      }
+      <div class="clock-actions">
+        <wt-button
+          data-test="clock-confirm"
+          variant="primary"
+          ?disabled=${this.clockTimes === undefined}
+          ?loading=${this.clockPress === "confirm"}
+          @click=${() => void this.#press("confirm")}
+          >${t("done.clock.confirm")}</wt-button
+        >
+        <wt-button
+          data-test="clock-this-device"
+          variant="secondary"
+          ?disabled=${this.clockTimes === undefined}
+          ?loading=${this.clockPress === "set"}
+          @click=${() => void this.#press("set")}
+          >${t("done.clock.this_device")}</wt-button
+        >
+      </div>
+    </section>`;
   }
 
   override render(): TemplateResult {
@@ -199,9 +406,8 @@ export class SetupDoneScreen extends LitElement {
           ? nothing
           : html`<div class="mode">${modePill(this.onboardingIntent, "mode-indicator")}</div>`
       }
-      <p class="intro" data-test="status" role="status">
-        ${t(this.ready ? "done.ready" : "done.restarting")}
-      </p>
+      <p class="intro" data-test="status" role="status">${t(this.#statusKey())}</p>
+      ${this.#clockStep()}
       <div class="choices" data-test="links">
         <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/manage"
           >${t("done.description.dashboard")}</wt-choice-row
@@ -238,6 +444,13 @@ export class SetupDoneScreen extends LitElement {
             </wt-card>`
       }
     `;
+  }
+
+  #statusKey():
+    "done.ready" | "done.waiting_for_clock" | "done.clock_confirmed" | "done.restarting" {
+    if (this.ready) return "done.ready";
+    if (!this.waitingForClock) return "done.restarting";
+    return this.confirmed ? "done.clock_confirmed" : "done.waiting_for_clock";
   }
 
   #deviceSteps(): TemplateResult {

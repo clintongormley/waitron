@@ -74,6 +74,8 @@ interface BaseOptions {
   testClock?: ModuleOperationHost["testClock"];
   timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
   readBoot?: ModuleOperationHost["readBoot"];
+  startClockConfirmation?: ModuleOperationHost["startClockConfirmation"];
+  startClockChosenMinute?: ModuleOperationHost["startClockChosenMinute"];
   /** Recovery states already read from this same unchanging database, keyed by node and binding. */
   rememberedStates?(): Map<string, unknown> | undefined;
   /** Sets the box's clock for the restore page, where nobody signs in. */
@@ -236,7 +238,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
     },
   });
   const setBoxClock = options.setBoxClock;
-  const host = createModuleOperationHost(
+  const created = createModuleOperationHost(
     {},
     {
       ...scoped,
@@ -254,6 +256,11 @@ export function createSelectedRecoveryPreparation(options: Options): {
           }),
     },
   );
+  const { startClockConfirmation, startClockChosenMinute } = options;
+  const host =
+    startClockConfirmation === undefined && startClockChosenMinute === undefined
+      ? created
+      : Object.freeze({ ...created, startClockConfirmation, startClockChosenMinute });
   const modules = configureModuleOperations(options.modules, host);
   const contribution = modules.find((module) => module.name === binding.module)?.operations;
   return {

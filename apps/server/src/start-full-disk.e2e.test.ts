@@ -221,6 +221,7 @@ function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0
       }
       return { close: () => Promise.resolve() };
     }),
+    serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
     serveRecovery: vi.fn<(app: Hono, opts: RecoveryServeOptions) => Promise<unknown>>(() =>
       Promise.resolve(),
     ),
@@ -1116,6 +1117,7 @@ describe("a start on a real full disk", () => {
     const d = entryDeps(stateDir, {
       spareBytes: 0,
       baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
         served = await serveRecovery(app, opts);
         return served;
@@ -2261,6 +2263,7 @@ describe("a Start again choice on a real full disk", () => {
     const d = entryDeps(stateDir, {
       venueDir,
       baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
         served = await serveRecovery(app, opts);
         return served;

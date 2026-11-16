@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createArchiveKeySlot, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { errnoOf } from "./errno.js";
 import { listAdminHolders } from "@waitron/identity";
@@ -36,6 +37,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
+import type { ModuleOperationHost } from "@waitron/module";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   lockRestoreTarget,
@@ -168,6 +170,20 @@ async function readStagedNodeKey(stateDir: string): Promise<string> {
   } finally {
     await file?.close();
   }
+}
+
+/** Whether `sent` is the staged node recovery key; with none staged, or none readable, nothing is. */
+export async function matchesStagedNodeKey(stateDir: string, sent: unknown): Promise<boolean> {
+  let held: string;
+  let given: string;
+  try {
+    given = nodeKey(sent);
+    held = await readStagedNodeKey(stateDir);
+  } catch {
+    return false;
+  }
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(given), digest(held));
 }
 
 export interface ArchiveRestoreRequest {
@@ -375,6 +391,9 @@ export interface StagedRestoreDeps {
   timeServiceSynchronised?: () => Promise<boolean>;
   /** Absent, the box's own boot reading. */
   readBoot?: () => BootReading;
+  /** The restore's start only; the restore command has nobody to confirm the time. */
+  startClockConfirmation?: ModuleOperationHost["startClockConfirmation"];
+  startClockChosenMinute?: ModuleOperationHost["startClockChosenMinute"];
 }
 
 type Restore = (deps: RestoreFileDeps) => Promise<void>;

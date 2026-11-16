@@ -4474,6 +4474,48 @@ public production preparation API does not fall back to signed paper, Cloud rece
 emergency identities from environment files. Follow
 [recovering a box](../operations/hour-recovery.md).
 
+A restore's start whose placement is refused for its time (`sif.allocation_invalid` with
+`second_clock_missing`, `clock_disagreement` or `clock_corrected`) waits instead of failing: the
+start is not counted towards the start-failure page, and the box's usual address answers every
+page with a waiting page and every other request, apart from that page's own `/restore-clock/`
+routes, with 503 `server.waiting_for_clock`, whose `confirmed` says whether the waiting app holds a
+confirmation (`apps/server/src/start-clock-waiting.ts`; `start-clock-waiting.test.ts`, "says
+whether it holds a kept confirmation: none, kept, then dropped"); the listener serving it answers
+`/legal/*`, `/ca.crt` and `/setup/trust` ahead of it (`apps/server/src/recovery-listener.ts`). Every
+other refusal counts as
+before, and so does a wait whose page cannot be served (`apps/server/src/node-entry.test.ts`, "a %s
+refusal waits: %s" and "counts a wait whose page cannot be served, so the box can still reach the
+start-failure page").
+
+**The node recovery key confirms the time while the start waits (D-key).** After a successful
+restore the setup page keeps the node recovery key it sent, in memory only, and its done
+screen drops it once the server answers ready or the screen leaves the page
+(`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
+screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+"drops the node recovery key once its poll answers ready" and "drops the node recovery key once it
+leaves the page"). The waiting app's clock routes take that key in the body and compare it with the
+staged key file, refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
+(`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
+setting nothing"). The done screen shows both times with **Confirm the time** and **This device**;
+a browser that lost the key types it on the waiting page, which shows the same step
+(`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
+with both times and their dates"). A confirmation is kept only when the times agree within 30
+seconds, with the box's boot reading, and has no time limit (`start-clock-waiting.test.ts`,
+"confirm within 5 seconds that agrees is kept with the box's boot reading" and "keeps the
+confirmation however long the start takes to ask for it"); **This device** sets the box's clock
+through the restore page's setter, so the step is noted and alerted as there.
+
+**The start tries again only for a reason (D-wait).** The retry is a loop in `runEntry` in the same
+process. Every 15 seconds it looks for a confirmation kept since its last try or the time service
+answering synchronised, and either starts a try; with neither it never tries again
+(`node-entry.test.ts`, "tries again at the next look once a device's time agrees, handing that
+confirmation to the try", "tries again at the look that finds the time service synchronised" and
+"with no confirmation and the time service never synchronised, never tries again"). A try refused
+again with a confirmation drops it (the same file's "drops the confirmation a refused try was
+handed, so the start asks again"), the waiting answer's `confirmed` turns false, and the done screen
+asks again (`done-screen.test.ts`, "asks again when a poll after its confirmation says the server
+holds none").
+
 The one allocation outside the clock rule is the preproduction throwaway
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
 it, as does a Live setup through the setup page on a development box (`throwawayMarker`,
@@ -4736,8 +4778,9 @@ Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-set
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
-confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
-restore and handover pages' clock step. It opens no stop of its own.
+confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), from the setup,
+restore and handover pages' clock step, and from the done screen or waiting page while a restore's
+start waits for its time. It opens no stop of its own.
 
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
@@ -6527,7 +6570,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   until the internet confirms that start or during start-up; a Box administration holder's while the
   start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
-  its recovery key or kit) or the handover page (signed in as a `node.manage` holder), when that
+  its recovery key or kit), the done screen or waiting page while that restore's start waits (under
+  the node recovery key) or the handover page (signed in as a `node.manage` holder), when that
   person chooses **This device** (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
   #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
@@ -6558,7 +6602,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   switch, which it gave as an administrator sign-in and whose page checks the box's current
   recovery key, a choice that is not owner-approved); a restore's start uses the restore page's
   choice while the box's boot id is unchanged and its clock has not been stepped since
-  ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)); a minute whose name is already in a
+  ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)), and otherwise waits until
+  the time service synchronises or the node recovery key confirms again, held by the browser that
+  pressed Restore backup or typed on the waiting page; a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6569,7 +6615,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/minute-selection-unknown-name suites (the
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name suites (the
   last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
   than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 

@@ -53,6 +53,10 @@ import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface
 import { installShutdownHandlers, type ShutdownTarget } from "./run-server.js";
 import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { createStartClockWaiting, type StartClockWaiting } from "./start-clock-waiting.js";
+import { boxHostClient } from "./box-host-client.js";
+import { createSetupClockSet, type SetupClockSet } from "./setup-clock-set.js";
+import { timeServiceReader } from "./clock-service-reading.js";
 import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { clearRestoreSecretFiles } from "./restore-secrets.js";
@@ -72,6 +76,15 @@ import "./errors.js";
 
 /** How long a boot must survive before its failure counter is cleared (spec §9.2). */
 const STAYED_UP_MS = 120_000;
+
+/** The series check's refusals a restore's start waits through, uncounted: each clears with an
+ *  event at the venue, where the start-failure page could offer nothing more. */
+const CLOCK_WAIT_REASONS: ReadonlySet<unknown> = new Set([
+  "second_clock_missing",
+  "clock_disagreement",
+  "clock_corrected",
+]);
+const CLOCK_LOOK_MS = 15_000;
 
 export interface EntryDeps {
   /** The arguments the process was started with, after the script's own path. */
@@ -109,7 +122,18 @@ export interface EntryDeps {
   now?: () => Date;
   startServer: (env: NodeJS.ProcessEnv, base?: NodeJS.ProcessEnv) => Promise<StartedEntryServer>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
-  installShutdownHandlers: (server: ShutdownTarget) => void;
+  /** Serves the page a restore's start shows while it waits to confirm its time. */
+  serveStartClockWaiting: (
+    app: Hono,
+    opts: RecoveryServeOptions,
+  ) => Promise<{ close(): Promise<void> }>;
+  /** Whether the box's internet time service answers synchronised; absent, the host's answer. */
+  timeServiceSynchronised?: () => Promise<boolean>;
+  /** The waiting page's clock setter; absent, the restore page's (`createSetupClockSet`). */
+  startClockSetter?: () => SetupClockSet;
+  /** Also installed while a restore's start waits to confirm its time, and taken off through
+   *  the answer before the server's go on; an answer that is not a function takes nothing off. */
+  installShutdownHandlers: (server: ShutdownTarget) => (() => void) | void;
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
   scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
   log: Logger;
@@ -278,7 +302,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    `fullyStarted` (present on a box that answered while it waited for its peers) settled, and the
  *    process then survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing
  *    seconds in reset the counter on every attempt. A restart this start's own server asks for
- *    takes its attempt back off (`beforeRestart`).
+ *    takes its attempt back off (`beforeRestart`), as does a restore's start each time it waits
+ *    to confirm its time.
  * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
  *    the venue files, and before `startServer`, which migrates and then queries the schema. It
  *    judges a database nothing has migrated yet, which the one-directional comparison in
@@ -546,6 +571,33 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
 
+/** Serves through `serveRecovery`, on the address and port the box's tills and health check use. */
+export async function serveStartClockWaiting(
+  app: Hono,
+  opts: RecoveryServeOptions,
+): Promise<{ close(): Promise<void> }> {
+  const listener = await serveRecovery(app, opts);
+  return { close: () => closeListener(listener) };
+}
+
+function clockWaitReason(error: unknown): string | null {
+  if (!isAppError(error) || error.code !== "sif.allocation_invalid") return null;
+  const reason: unknown = (error.params as { reason?: unknown }).reason;
+  return typeof reason === "string" && CLOCK_WAIT_REASONS.has(reason) ? reason : null;
+}
+
+/** Resolves at the first look, every 15 seconds, that finds a kept confirmation or the time
+ *  service synchronised: without either, a try would refuse again. */
+async function waitForClockReason(
+  page: StartClockWaiting,
+  timeServiceSynchronised: () => Promise<boolean>,
+): Promise<void> {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, CLOCK_LOOK_MS));
+    if (page.confirmation() !== null || (await timeServiceSynchronised())) return;
+  }
+}
+
 /**
  * Writes `recovery.json` back unchanged through the count's own path. Only a failure a full disk
  * explains, judged on free space read after it, is answered; any other is thrown.
@@ -648,9 +700,7 @@ async function runAdmittedEntry(
   // Written before the first step that can fail, so a boot that hangs is counted. Accepted
   // consequence: an attempt cut short counts too — three power-cycles during a long cold restore
   // land a box on the page, where the retry button clears it.
-  const attempt = await changeState(deps, (current) =>
-    afterFailure(current, BOOT_INCOMPLETE, now()),
-  );
+  let attempt = await changeState(deps, (current) => afterFailure(current, BOOT_INCOMPLETE, now()));
   const page = pageLog(logDir, now, deps.log);
   // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
   page("info", "server.boot_started");
@@ -691,22 +741,107 @@ async function runAdmittedEntry(
     const migrationsRoot = deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT;
 
     const recoveryOrigin = loadCloudOrigin(deps.baseEnv);
-    await (deps.runStagedRestore ?? runStagedRestore)({
-      stateDir: deps.stateDir,
-      venueDir: deps.venueDir,
-      migrationsRoot,
-      log: deps.log,
-      recoverySecret: deps.baseEnv.WAITRON_NODE_RECOVERY_KEY,
-      recoveryOperationPath: deps.baseEnv.WAITRON_RECOVERY_OPERATION_FILE,
-      onManagedCloudRestored: async (binding) => {
-        if (recoveryOrigin)
-          await createCloudRecoveryClient({
+    const steady = () => performance.now();
+    let waiting:
+      { page: StartClockWaiting; setter: SetupClockSet; close(): Promise<void> } | undefined;
+    let chosenMinuteMs: number | undefined;
+    let failed: { error: unknown } | undefined;
+    let trying: Promise<unknown> = Promise.resolve();
+    try {
+      for (;;) {
+        const offered = waiting?.page.confirmation() ?? null;
+        try {
+          const tried = (deps.runStagedRestore ?? runStagedRestore)({
             stateDir: deps.stateDir,
-            origin: recoveryOrigin,
-            environment: "preproduction",
-          }).markRestored(binding);
-      },
-    });
+            venueDir: deps.venueDir,
+            migrationsRoot,
+            log: deps.log,
+            recoverySecret: deps.baseEnv.WAITRON_NODE_RECOVERY_KEY,
+            recoveryOperationPath: deps.baseEnv.WAITRON_RECOVERY_OPERATION_FILE,
+            onManagedCloudRestored: async (binding) => {
+              if (recoveryOrigin)
+                await createCloudRecoveryClient({
+                  stateDir: deps.stateDir,
+                  origin: recoveryOrigin,
+                  environment: "preproduction",
+                }).markRestored(binding);
+            },
+            startClockConfirmation: () => offered,
+            startClockChosenMinute: (issuedAtMs) => {
+              chosenMinuteMs = issuedAtMs;
+            },
+          });
+          trying = tried.catch(() => {});
+          await tried;
+          break;
+        } catch (error) {
+          const reason = clockWaitReason(error);
+          if (reason === null) throw error;
+          // Refused with it: a confirmation kept since stays, and only that one starts a try.
+          if (offered !== null) waiting?.page.dropConfirmation(offered);
+          // Served before the attempt is taken back: a page that cannot be served must count, or
+          // the box would restart into the same wait for ever.
+          if (waiting === undefined) {
+            const setter =
+              deps.startClockSetter?.() ??
+              createSetupClockSet({
+                stateDir: deps.stateDir,
+                host: boxHostClient(),
+                monotonic: steady,
+                log: deps.log,
+              });
+            const page = createStartClockWaiting({
+              clock: { wall: () => Date.now(), monotonic: steady },
+              stateDir: deps.stateDir,
+              setBoxClock: setter,
+              earliestMs: () => chosenMinuteMs,
+            });
+            const served = await deps.serveStartClockWaiting(page.app, transport);
+            // On the box Node is process 1, which ignores a stop signal it has no handler for. A
+            // stop lets a try under way finish, within the handlers' deadline.
+            const stopHandlers = deps.installShutdownHandlers({
+              close: async () => {
+                await served.close();
+                await trying;
+              },
+            });
+            waiting = {
+              page,
+              setter,
+              close: () => {
+                if (typeof stopHandlers === "function") stopHandlers();
+                return served.close();
+              },
+            };
+          }
+          const taken = attempt;
+          await persistState(deps, (current) => withoutAttempt(current, taken.before, taken.after));
+          deps.log("warn", "server.start_waiting_for_clock", { reason });
+          await waitForClockReason(
+            waiting.page,
+            deps.timeServiceSynchronised ?? timeServiceReader(),
+          );
+          attempt = await changeState(deps, (current) =>
+            afterFailure(current, BOOT_INCOMPLETE, now()),
+          );
+        }
+      }
+    } catch (error) {
+      failed = { error };
+    } finally {
+      await waiting?.close().catch((error: unknown) => {
+        deps.log("warn", "server.start_waiting_close_failed", { errorCode: codeOf(error) });
+      });
+    }
+    // A step the page made lives only in this process until noted; the full start raises the note.
+    // A failed start notes it too, and keeps its own failure.
+    if (failed !== undefined) {
+      await waiting?.setter.writePending().catch((error: unknown) => {
+        deps.log("warn", "server.start_clock_step_unnoted", { errorCode: codeOf(error) });
+      });
+      throw failed.error;
+    }
+    await waiting?.setter.writePending();
     await (deps.runStagedReset ?? runStagedReset)({
       stateDir: deps.stateDir,
       venueDir: deps.venueDir,
@@ -838,6 +973,7 @@ function bootThisProcess(): Promise<void> {
       installShutdownHandlers({ close: () => closeListener(listener) });
       return listener;
     },
+    serveStartClockWaiting,
     installShutdownHandlers,
     // `unref` so the timer alone never holds the process open: the listener the server bound is
     // what keeps it alive, and a process that dies before the threshold has not stayed up.

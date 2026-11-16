@@ -468,6 +468,14 @@ export class SetupApi {
     return this.#request("/setup-api/discovery", "GET");
   }
 
+  /** A route of the waiting app a restore's start serves while it waits to confirm its time. */
+  restoreClock<T>(
+    route: "challenge" | "compare" | "confirm" | "set",
+    body: Record<string, unknown>,
+  ): Promise<T> {
+    return this.#request<T>(`/restore-clock/${route}`, "POST", body);
+  }
+
   getStatus(): Promise<SetupStatus> {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }

@@ -240,17 +240,58 @@ it asks its internet time service again at that moment whether it is synchronise
 the start still carries on when the box's operating system has not restarted since the restore
 page confirmed the time (the same boot id) and its clock has not been stepped by more than a second
 since (`apps/server/src/hour-recovery-placement-3.test.ts`, "a fresh-box Cloud restore places
-without an internet clock while the box stayed on since the page's select"). Otherwise placement is
-refused (`sif.allocation_invalid`, `second_clock_missing`), the staged restore is kept, and the next
-start tries again (the same file's "a fresh-box Cloud restore refused at placement after a
-switch-off for no internet clock keeps its request and places on the next start"). How long a Cloud download took makes no difference to this (0 and 31 seconds were tried while
-building A1385; no test keeps that comparison). The box restarts by
-itself after a failed start (`restart: unless-stopped`, `deploy/compose.yml`); after three failed
+without an internet clock while the box stayed on since the page's select"). Otherwise, or if the
+clocks it compares disagree, or the box's clock moves during the check, placement is refused
+(`sif.allocation_invalid`, `second_clock_missing`, `clock_disagreement` or `clock_corrected`), the
+staged restore is kept (the same file's "a fresh-box Cloud restore refused at placement after a
+switch-off for no internet clock keeps its request and places on the next start"), and the start
+waits instead of failing; a wait does not count towards the start-failure page. How long a Cloud
+download took makes no difference to this (0 and 31 seconds were tried while building A1385; no
+test keeps that comparison).
+
+While the start waits, the box's usual address answers every page with "The server is restoring
+your backup and is waiting to confirm its time." and every other request, apart from the waiting
+page's own `/restore-clock/` routes, with 503 `server.waiting_for_clock`
+(`apps/server/src/start-clock-waiting.test.ts`, "answers %s with the waiting page in English,
+asking for the key" and "answers %s %s with server.waiting_for_clock"). The listener serving it
+answers `/legal/*`, `/ca.crt` and `/setup/trust` ahead of it (`apps/server/src/recovery-listener.ts`),
+and with box TLS that is not usable serves none of it. The setup page where
+the restore was started keeps the node recovery key it sent in its memory, never in storage, and
+shows both times on the same page, with **Confirm the time** and **This device**
+(`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
+screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+"asks for the time on the screen itself when the restore's start waits for it"). If that page was
+reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
+node recovery key (the paper calls it the server key) from the backup's paper: the waiting page then shows the same step
+(`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
+with both times and their dates"). Every clock route refuses a missing or wrong key
+(`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
+setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
+file's "/restore-clock/%s refuses the right key from another site's page (%o)"), and the box's own
+screen does not count. The waiting page leaves for the server once the wait ends
+(`start-clock-waiting-page.test.ts`, "leaves for the server once the wait ends without a
+confirmation, as when its time service synchronises").
+
+**Confirm the time** is kept only when the two times agree within 30 seconds; **This device** sets
+the box's clock from the device's time. The box looks every 15 seconds and tries the restore again
+at the first look that finds a confirmation kept since its last try, or its internet time service
+synchronised; it never tries again without one of them (`apps/server/src/node-entry.test.ts`,
+"tries again at the next look once a device's time agrees, handing that confirmation to the try",
+"tries again at the look that finds the time service synchronised" and "with no confirmation and
+the time service never synchronised, never tries again"). A try that refuses again drops the
+confirmation it was given (the same file's "drops the confirmation a refused try was handed, so the
+start asks again"), and the setup page asks for the time again (`done-screen.test.ts`, "asks again
+when a poll after its confirmation says the server holds none"). If the waiting page cannot be
+served, or the restore is refused for another reason, the start counts as failed. The box restarts
+by itself after a failed start (`restart: unless-stopped`, `deploy/compose.yml`); after three failed
 starts in a row (`RECOVERY_AT`, `apps/server/src/recovery-state.ts`) it shows the start-failure
-page, which says "The box could not make its new invoice series." and asks you to connect the box
-to the internet and press **Retry a normal boot**; once the box's time service says it is synchronised the restore finishes
-(`apps/server/src/recovery-surface.test.ts`, "names a refused series in both languages"; the
-restart and the three-start count are read, not run here).
+page, which says "The box could not make its new invoice series." and "Press “Retry a normal boot”
+to try again. Where this page offers “Throw this restore away”, that throws this restore away
+instead, so you can restore again or set up this box." (`apps/server/src/recovery-surface.test.ts`,
+"names a refused series in both languages"). That page offers **Throw this restore away** only when
+the restore holds administrator password checks from the selected backup and the page is open over
+HTTPS (`renderRestoreDiscard`, `apps/server/src/recovery-restore.ts`); the restart and the
+three-start count are read, not run here.
 
 ## Keep the resulting evidence
 

@@ -683,6 +683,7 @@ describe("a start after a reset of a box that joined was cut short in tls/", () 
       startServer: async () => {
         throw new Error("past the reset");
       },
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (_app, options) => {
         served.push(options);
       },
