@@ -638,7 +638,11 @@ export function formatAppError(error: AppError): string {
  * understood. */
 function reportFailure(error: unknown, deps: CliDeps): number {
   if (isAppError(error)) {
-    if (error.code === "setup.certificate_refused" && error.params.reason === "setup_stopped")
+    if (
+      error.code === "setup.certificate_refused" &&
+      "reason" in error.params &&
+      error.params.reason === "setup_stopped"
+    )
       deps.io.stderr(
         "Setup stopped after the invoice series were made. No invoice was issued. Open the box's setup page and choose Start again. It clears this unfinished setup so you can enter it again.",
       );
