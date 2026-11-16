@@ -1299,7 +1299,7 @@ it("a save's refusal stays when the draft changes after it", async () => {
 });
 
 it.each(["en-GB", "es-ES"])(
-  "with nothing selected, reserves an empty form area above the list (%s)",
+  "with nothing selected, reserves an empty form area above the list beside the plan (%s)",
   async (locale) => {
     setLocale(locale);
     await viewport(1280, 800);
@@ -1544,8 +1544,7 @@ it("at 390 px with nothing selected puts the list straight under Add tables", as
   await viewport(390, 844);
   const el = await open();
   await expect.poll(() => sheet(el)).not.toBeNull();
-  sheet(el)!.shadowRoot!.querySelector<HTMLElement>("button")!.click();
-  await el.updateComplete;
+  await expandSheet(el);
   const panel = sheet(el)!.querySelector("floor-plan-tables-panel")!.shadowRoot!;
   const foot = panel.querySelector(".foot")!.getBoundingClientRect();
   const heads = panel.querySelector(".heads")!.getBoundingClientRect();

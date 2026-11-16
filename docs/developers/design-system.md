@@ -1039,7 +1039,9 @@ height. The floor-plan editor sets `bottomInset` to how far its phone sheet reac
 and calls `reveal` when the selection changes or the sheet opens, and again whenever the sheet's
 height changes, until the person's next press or wheel (the page under the modal cannot scroll).
 `showTables()` scrolls a canvas where no table shows whole to the plan's tables, as far as they
-fit, keeping the plan's top left corner; the editor calls it each time it loads a layout.
+fit, keeping the plan's top left corner, yet far enough to show whole the table fewest squares
+across plus down from that corner if it fits with its margin; the editor calls it each time it
+loads a layout.
 
 `wt-sheet` is a bar with a top border on the surface colour, whose toggle (at least `--wt-tap-min`
 tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`. Pressing it flips

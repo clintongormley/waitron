@@ -862,7 +862,8 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   /** When no table shows whole in the view, scrolls the plan into it as far as it fits, keeping its
-   *  top left corner. */
+   *  top left corner, yet far enough to show whole the table fewest squares across plus down from
+   *  it, where that table and its margin fit. */
   showTables(): void {
     const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
     const square = GRID_SQUARE_PX * this.zoom;
@@ -876,10 +877,16 @@ export class WtFloorPlanCanvas extends LitElement {
     if (placements.some((p) => shown(this.#drawnBox(p)))) return;
     const plan = bounds(placements);
     if (plan === null) return;
-    const start = (near: number, size: number, view: number): number =>
-      Math.max(0, Math.min(near - this.#margin, near + size + this.#margin - view)) * square;
-    viewport.scrollLeft = start(this.#origin.x + plan.x, plan.width, columns);
-    viewport.scrollTop = start(this.#origin.y + plan.y, plan.height, rows);
+    const one = placements
+      .map((p) => this.#drawnBox(p))
+      .reduce((a, b) => (b.x + b.y < a.x + a.y ? b : a));
+    const m = this.#margin;
+    const start = (near: number, size: number, view: number, own: number, ownSize: number) => {
+      const choice = Math.max(own + ownSize + m - view, Math.min(near - m, near + size + m - view));
+      return Math.max(0, Math.min(own - m, choice)) * square;
+    };
+    viewport.scrollLeft = start(this.#origin.x + plan.x, plan.width, columns, one.x, one.width);
+    viewport.scrollTop = start(this.#origin.y + plan.y, plan.height, rows, one.y, one.height);
   }
 
   /** `p`'s turned box in squares from the drawn grid's corner. */

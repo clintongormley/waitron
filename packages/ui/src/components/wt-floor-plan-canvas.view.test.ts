@@ -1390,6 +1390,21 @@ it("showTables keeps the top left corner of a plan wider than the view", async (
   expect(box.bottom).toBeLessThanOrEqual(view.bottom);
 });
 
+it("showTables shows whole the table nearest the plan's top left when tables in opposite corners cannot fit together", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("A", 60, 120), table("B", 200, 40)];
+  await settled(el);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  const box = el.shadowRoot!.querySelector('[data-key="A"]')!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  expect(box.right).toBeLessThanOrEqual(view.right);
+  expect(box.bottom).toBeLessThanOrEqual(view.bottom);
+});
+
 it("showTables leaves a view where a table already shows whole, and moves one where none does", async () => {
   const el = await canvas();
   el.showTables();

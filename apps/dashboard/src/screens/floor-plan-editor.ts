@@ -348,12 +348,12 @@ export class FloorPlanEditor extends LitElement {
         overscroll-behavior: contain;
       }
       .table-slot {
-        /* Keep the list still across plain, joined and empty selections; errors scroll inside. */
+        /* Beside the plan, keep the list still across plain, joined and empty selections; errors scroll inside. */
         block-size: calc(4 * var(--wt-field-height) + 5 * var(--wt-space-3));
         overflow-y: auto;
         flex: none;
       }
-      /* In the sheet the slot gives way to the list; selecting a table brings its form into view. */
+      /* In the sheet the slot gives way to the list. */
       .layout.narrow .table-slot:empty {
         display: none;
       }
