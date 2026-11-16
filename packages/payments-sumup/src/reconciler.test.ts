@@ -20,17 +20,22 @@ const now = new Date("2026-07-25T00:00:00Z");
 
 async function failedPayment(paymentRef: string) {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
-  await withTransaction(suite.db, (tx) =>
-    insertFailedPayment(tx, {
-      provider: "sumup",
-      paymentRef,
-      amount: decimal("10.00"),
-      origin: deviceOrigin(seeded.deviceId),
-      nodeId: seeded.nodeId,
-      workingOrderId: seeded.workingOrderId,
-    }),
-  );
-  await suite.db.execute(sql`update payments set created_at = '2026-07-01T12:00:00.000Z'`);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+  try {
+    await withTransaction(suite.db, (tx) =>
+      insertFailedPayment(tx, {
+        provider: "sumup",
+        paymentRef,
+        amount: decimal("10.00"),
+        origin: deviceOrigin(seeded.deviceId),
+        nodeId: seeded.nodeId,
+        workingOrderId: seeded.workingOrderId,
+      }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
   return seeded;
 }
 
