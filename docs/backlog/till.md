@@ -1680,14 +1680,14 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Reopening a held order keeps its lines right
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
   withdrawn label matches nothing, and the till surfaces `held.options_changed`. A whole-order
   save after an options list is deleted removes its answer from a parked counter order;
-  a fired table dish is recalled and resent; a served one refuses `ticket.already_served`. Preserve these recorded answers when
-  reopening and saving the order.
+  a fired table dish is recalled and resent; a served one refuses `ticket.already_served`. Preserve
+  these recorded answers when reopening and saving the order.
 - **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
   the variant, and says it saved.** Needs a decision first about whether a basket edit may change a
   variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
