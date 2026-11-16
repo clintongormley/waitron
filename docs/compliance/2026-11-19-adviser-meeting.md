@@ -4,8 +4,8 @@ Written 15 November 2026 for the owner; last updated 16 November. Nothing here h
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question can be read without the others. Questions
-1 and 2 need the adviser's judgement, questions 3 to 14 are confirmations, questions 15 to 20 follow
-up the adviser's answers of 15 November, and questions 21 and 22 ask about what is still missing.
+1 and 2 need the adviser's judgement, questions 3 to 14 are confirmations, questions 15 to 21 follow
+up the adviser's answers of 15 November, and questions 22 and 23 ask about what is still missing.
 
 **Where the questions come from.** The adviser answered S1 to S16 and R1 to R6 of the October
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09) on 15 November; what those
@@ -429,9 +429,47 @@ way, such as its continuous backup copy?
 
 Yes / No / Note: ____________________________________________
 
+**21. VAT rates kept per product, and a wrong rate found later (follows answers 1.4 and 1.13).**
+
+*The situation.* Today each product carries a VAT class (general, reduced, super-reduced or zero),
+which is copied into the published menu and onto each order line; the class's percentage is looked
+up on the day of the invoice. If a product's class changes while a table is still eating, the meal
+keeps the old one.
+
+*What Waitron proposes.*
+
+- Each product keeps a dated history of two rates, one for eating at the venue and one for taking
+  away (LIVA 91.Uno.2.2.º and 91.Dos), each chosen from a list Waitron maintains of the rates AEAT
+  accepts (0, 2, 4, 5, 7.5, 10 and 21). A change can be scheduled ahead, for example from 1 April,
+  and applied to many products at once.
+- An invoice takes each product's rates on the day the meal ends (answer 1.4; LIVA 90.Dos). A dinner
+  begun on 31 March that ends after midnight takes the rates of 1 April. A deposit keeps the rate of
+  the day it was paid.
+- A wrong rate found later is recorded on the product as a correction ("should have been 21% from
+  1 February"), without rewriting what was charged. Customers' tickets stay as they are and nothing
+  is sent to AEAT. For each earlier quarter, Waitron works out the VAT owed by treating the price
+  charged as including the right rate, as answer 1.13 says, and puts it on the corrections report of
+  question 7 for the accountant to file.
+
+*Example.* 200 bottles of wine to take away at €8.00, sold in the first quarter at 10% instead of
+21%: €1,600 × 21/121 − €1,600 × 10/110 = €277.69 − €145.45 = €132.24 owed for the first quarter, by
+a complementary return.
+
+*We ask:*
+
+- (a) Is the proposal right?
+- (b) Is the difference worked out on each invoice line, on each invoice, or on the quarter's total
+  for the product? Rounding gives slightly different amounts.
+- (c) A rate set too high, for example 21% charged where 10% was due: the venue paid too much VAT.
+  Taking the reduction in the current return obliges it to pay the excess back to the customer
+  (LIVA 89.Cinco.b), which it cannot do for a ticket that names nobody. Must it then ask for the
+  earlier return to be corrected (LGT art. 120.3), or leave the VAT as declared?
+
+Yes / No / Note: ____________________________________________
+
 ### What is still missing
 
-**21. Two questions from October still awaited.** S18, a change of the company's legal name keeping
+**22. Two questions from October still awaited.** S18, a change of the company's legal name keeping
 its tax number, and S19, holding back a chain's later records while an earlier one's answer is
 unknown.
 
@@ -439,7 +477,7 @@ unknown.
 
 Note: ____________________________________________
 
-**22. Other advisers we need.** Some of our questions are outside tax:
+**23. Other advisers we need.** Some of our questions are outside tax:
 
 - **Legal metrology (S17, selling by weight).** A certified scale weighs the goods and either sends
   the weight, price per kilo and total to the till, or staff type the weight in. Does that meet the
@@ -467,8 +505,8 @@ Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un sof
 venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un servidor, un equipo
 en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta puede leerse por
 separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15 a
-la 20 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
-1.16 y 2.1 a 2.6), que le agradecemos; la 21 y la 22 tratan lo que aún falta.
+la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
+1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta.
 
 ### Requieren su criterio
 
@@ -895,9 +933,51 @@ completa por otra vía, como su copia de seguridad continua?
 
 Sí / No / Nota: ____________________________________________
 
+**21. Tipos de IVA por producto, y un tipo erróneo descubierto después (a partir de sus respuestas
+1.4 y 1.13).**
+
+*Situación.* Hoy cada producto tiene una clase de IVA (general, reducido, superreducido o cero), que
+se copia en la carta publicada y en cada línea del pedido; el porcentaje de la clase se busca el día
+de la factura. Si la clase de un producto cambia mientras una mesa aún está comiendo, la comida
+conserva la anterior.
+
+*Propuesta de Waitron.*
+
+- Cada producto guarda un historial con fechas de dos tipos, uno para consumir en el local y otro
+  para llevar (LIVA art. 91.Uno.2.2.º y 91.Dos), elegidos de una lista que mantiene Waitron con los
+  tipos que admite la AEAT (0, 2, 4, 5, 7,5, 10 y 21). Un cambio puede programarse con antelación,
+  por ejemplo desde el 1 de abril, y aplicarse a muchos productos a la vez.
+- La factura aplica los tipos de cada producto del día en que termina la comida (su respuesta 1.4;
+  LIVA art. 90.Dos: «El tipo impositivo aplicable a cada operación será el vigente en el momento del
+  devengo»). Una cena empezada el 31 de marzo que termina pasada la medianoche lleva los tipos del 1
+  de abril. Una señal conserva el tipo del día en que se pagó.
+- Un tipo erróneo descubierto después se registra en el producto como corrección («debió ser el
+  21 % desde el 1 de febrero»), sin reescribir lo cobrado. Los tiques de los clientes no cambian y no
+  se remite nada a la AEAT. Para cada trimestre anterior, Waitron calcula el IVA debido considerando
+  que el precio cobrado incluía el tipo correcto, como indica su respuesta 1.13, y lo incluye en el
+  informe de correcciones de la pregunta 7 para que el gestor lo presente.
+
+*Ejemplo.* 200 botellas de vino para llevar a 8,00 €, vendidas en el primer trimestre al 10 % en
+lugar del 21 %: 1.600 € × 21/121 − 1.600 € × 10/110 = 277,69 € − 145,45 € = 132,24 € a ingresar por
+el primer trimestre, mediante autoliquidación complementaria.
+
+*Preguntamos:*
+
+- (a) ¿Es correcta la propuesta?
+- (b) ¿La diferencia se calcula por línea de factura, por factura o sobre el total del trimestre
+  para el producto? El redondeo da importes algo distintos.
+- (c) Un tipo demasiado alto, por ejemplo el 21 % cobrado cuando correspondía el 10 %: el local
+  ingresó IVA de más. Si regulariza en la autoliquidación en curso, el art. 89.Cinco.b LIVA dispone
+  que «estará obligado a reintegrar al destinatario de la operación el importe de las cuotas
+  repercutidas en exceso», lo que no puede hacer con un tique sin destinatario identificado. ¿Debe
+  entonces solicitar la rectificación de la autoliquidación anterior (art. 120.3 LGT), o dejar el IVA
+  como se declaró?
+
+Sí / No / Nota: ____________________________________________
+
 ### Lo que aún falta
 
-**21. Dos preguntas de octubre aún pendientes.** La S18, cambio de denominación social con el mismo
+**22. Dos preguntas de octubre aún pendientes.** La S18, cambio de denominación social con el mismo
 NIF, y la S19, retener los registros posteriores de una cadena mientras se desconoce la respuesta a
 uno anterior.
 
@@ -905,7 +985,7 @@ uno anterior.
 
 Nota: ____________________________________________
 
-**22. Otros asesores que necesitamos.** Algunas de nuestras preguntas quedan fuera del ámbito
+**23. Otros asesores que necesitamos.** Algunas de nuestras preguntas quedan fuera del ámbito
 fiscal:
 
 - **Metrología legal (S17, venta a peso).** Una balanza verificada pesa el producto y envía al TPV el
@@ -994,7 +1074,7 @@ productor al firmar.
 | Is the email step informed consent? | Answered: the adviser's answer 1.11 accepts tacit consent once the customer is told how the ticket will arrive and that paper is available, which the till's sentence does | [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md), Part B2 |
 | Is a ticket left with the bill, or a sent email, delivered? | Owner, 16 November: yes to both; question 16 states it | the owner's review of this sheet, 16 November |
 | The adviser's answer 1.15: who is the third party for copies held outside Spain | Owner, 16 November: Waitron Cloud will keep its copies in EU data centres, so the question does not arise for it | the owner's review of this sheet, 16 November |
-| The labour and privacy questions in full | Not for the tax adviser; question 22 lists them and asks whom to ask | [2026-11-06-adviser-questions.md](2026-11-06-adviser-questions.md) |
+| The labour and privacy questions in full | Not for the tax adviser; question 23 lists them and asks whom to ask | [2026-11-06-adviser-questions.md](2026-11-06-adviser-questions.md) |
 | T13, the long-term archive | Owner, 15 November: "Agree, no archive now" (A1531) | `~/waitron-campaign-l/questions.md:1783-1785`; [backlog.md:2235](../backlog.md) |
 | T16, a change of producer | Owner, 11 November, "Later": A993 is built only once a change is scheduled. Its venue-move half is now in question 6 | commit `e59fac8c94`; [backlog.md:246-249](../backlog.md) |
 | S14's second half: may R5 and R1 to R4 share one series? | Owner, 15 November: they will not share; the adviser agreed the same day (answer 1.14). Question 4 asks the narrower point | `~/waitron-campaign-shared/desk/done/20261115-1018-L-r5-series-date-rulings.md` |
