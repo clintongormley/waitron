@@ -1,4 +1,4 @@
-import { personStaffRoles, staffRoles } from "@waitron/db";
+import { dayCutoverChanges, personStaffRoles, staffRoles } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -10,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import {
   openingHours,
   departments,
@@ -32,6 +33,7 @@ import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
 import { deleteStaffRole } from "./staff-roles.js";
 import { saveSeasonStaffing } from "./paint.js";
+import { readStaffingMonth } from "./month.js";
 import type { AreaRef } from "./slots.js";
 import type { RotaWeek } from "./staffing-types.js";
 
@@ -178,6 +180,48 @@ async function addSeason(name: string, startsOn: string) {
 const hours = (r: RotaWeek) => r.days.map((d) => [d.businessDay, d.hasHours]);
 
 describe("the rota week", () => {
+  it("uses each date's day start for rota slots, assigned shifts and Staffing-month counts", async () => {
+    const v = await venue();
+    await tx(async (t) => {
+      await seedBusinessDay(t, { dayCutover: "04:00" });
+      await t.insert(dayCutoverChanges).values({
+        effectiveBusinessDay: "2026-12-01",
+        dayCutover: "02:00:00",
+      });
+      await saveSeasonStaffing(t, v.seasonId, [
+        {
+          area: v.area,
+          weekday: 2,
+          blocks: [
+            { staffRoleId: v.staffRoleId, headcount: 1, startsAt: "03:00", endsAt: "03:30" },
+            { staffRoleId: v.staffRoleId, headcount: 1, startsAt: "07:00", endsAt: "07:30" },
+          ],
+        },
+      ]);
+    });
+    for (const [week, businessDay, cutover, start, end] of [
+      ["2026-11-23", "2026-11-24", "04:00", 1380, 1410],
+      ["2026-11-30", "2026-12-01", "02:00", 60, 90],
+    ] as const) {
+      const shiftId = await add(v, { week, businessDay, startsAt: "03:00", endsAt: "03:30" });
+      const day = (await read(week)).days.find((d) => d.businessDay === businessDay)!;
+      expect(day.cutover).toBe(cutover);
+      const match = day.areas.find((a) => a.area.id === v.departmentId)!.match;
+      const early = match.slots.find((s) => s.slot.startsAt === "03:00")!;
+      expect(early.slot).toMatchObject({ businessDay, start, end });
+      expect(early.status).toEqual({ kind: "filled", shiftId, outsideRole: false });
+      expect(match.slots.find((s) => s.slot.startsAt === "07:00")!.status).toEqual({
+        kind: "unfilled",
+      });
+      const month = await tx((t) =>
+        readStaffingMonth(t, businessDay.slice(0, 7), new Date("2026-11-16T12:00:00Z")),
+      );
+      expect(month.days.find((d) => d.date === businessDay)!.areas).toEqual([
+        { area: v.area, needed: 2, unfilled: 1 },
+      ]);
+    }
+  });
+
   it("keeps an existing hidden job role when the shift's time or person changes", async () => {
     const v = await venue();
     const shiftId = await add(v);

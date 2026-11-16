@@ -341,6 +341,10 @@ it("a refusal naming an edit shows that area and marks its date, keeping the dra
     new Map([["day", "Some of the details are not valid"]]),
   );
   expect(frame(painter).refusal).toBe("Kitchen, Fri 25 Dec: Some of the details are not valid");
+  expect(
+    grid(painter).shadowRoot!.querySelector<HTMLElement>(".column-error")!.getBoundingClientRect()
+      .height,
+  ).toBe(1);
   await pick(painter, "department:dep-restaurant");
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(grid(painter).days.get("day")).toEqual([dinner]);

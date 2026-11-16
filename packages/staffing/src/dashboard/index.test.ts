@@ -181,7 +181,7 @@ describe("STAFFING_DASHBOARD", () => {
     expect(opened).toHaveBeenCalledWith("staffing", { month: "2026-12" });
     await vi.waitFor(() =>
       expect(request).toHaveBeenCalledWith(
-        "/management-api/staffing/seasons/winter",
+        "/management-api/staffing/seasons/winter?month=2026-12",
         "GET",
         undefined,
         { passive: true },

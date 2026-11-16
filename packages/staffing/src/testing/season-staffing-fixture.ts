@@ -51,6 +51,9 @@ export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
   const winter = seasonId === "winter";
   return {
     cutover: "06:00",
+    month: "2026-12",
+    cutoverChanges: [],
+    weekdayCutovers: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((day) => [day, ["06:00"]])),
     seasons: [
       { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
       { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
@@ -77,22 +80,27 @@ export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
 }
 
 export interface SeasonApiOptions {
-  read?: (seasonId: string) => Promise<SeasonStaffing>;
+  read?: (seasonId: string, month: string) => Promise<SeasonStaffing>;
   save?: (seasonId: string, edits: SeasonStaffingEdit[]) => Promise<void>;
   staffRoles?: () => Promise<ListedStaffRole[]>;
 }
 
 /** A StaffingApi serving a season's staffing, the staff roles and an empty list of people. */
 export function seasonApi(options: SeasonApiOptions = {}) {
-  const read = options.read ?? (async (seasonId: string) => seasonStaffing(seasonId));
+  const read =
+    options.read ??
+    (async (seasonId: string, month: string) => ({ ...seasonStaffing(seasonId), month }));
   const save = options.save ?? (async () => undefined);
   const staffRoles = options.staffRoles ?? (async () => STAFF_ROLES);
   const request = vi.fn(async (path: string, method: string, body?: unknown) => {
     if (path.split("?")[0] === "/management-api/staffing/staff-roles")
       return { staffRoles: await staffRoles() };
     if (path === "/management-api/staff") return [];
-    const seasonId = decodeURIComponent(/\/staffing\/seasons\/(.+)$/.exec(path)![1]!);
-    if (method === "GET") return read(seasonId);
+    const seasonId = decodeURIComponent(
+      /\/staffing\/seasons\/(.+)$/.exec(path.split("?")[0]!)![1]!,
+    );
+    if (method === "GET")
+      return read(seasonId, new URL(path, "https://example.test").searchParams.get("month")!);
     return save(seasonId, (body as { edits: SeasonStaffingEdit[] }).edits);
   });
   return { api: new StaffingApi(request as unknown as DashboardRequest), request };

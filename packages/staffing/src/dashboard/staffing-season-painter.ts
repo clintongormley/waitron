@@ -1,13 +1,18 @@
-import { dateFormat, formatMonthDay } from "@waitron/venue-service/dashboard/hours-view";
+import {
+  dateFormat,
+  formatMonthDay,
+  formatDate,
+} from "@waitron/venue-service/dashboard/hours-view";
 import { css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { conjunctionList } from "@waitron/shared";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { paintRowStyles, periodColourStyles, seasonLastDay } from "@waitron/venue-service/painter";
 import { copyBlocks, sameBlocks } from "../block-model.js";
-import { areaKey, type StaffingBlock } from "../slots.js";
+import { areaKey, blockSpan, type StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit } from "../staffing-types.js";
 import { StaffingPainterBase } from "./staffing-painter-base.js";
 import { weekdayDate } from "./format.js";
@@ -68,6 +73,18 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     paintRowStyles,
     painterStyles,
     css`
+      staffing-grid::part(column-error) {
+        contain: inline-size;
+        position: static;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        inline-size: auto;
+        block-size: auto;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+        font-weight: var(--wt-font-weight-normal);
+      }
       .season {
         display: inline-flex;
         align-items: center;
@@ -94,13 +111,13 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
 
   @property() seasonId = "";
   protected get identity(): string {
-    return this.seasonId;
+    return this.seasonId ? `${this.seasonId}/${this.month}` : "";
   }
-  protected readData(id: string) {
-    return this.api.readSeason(id);
+  protected readData() {
+    return this.api.readSeason(this.seasonId, this.month);
   }
-  protected saveData(id: string, edits: SeasonStaffingEdit[]) {
-    return this.api.saveSeason(id, edits);
+  protected saveData(_id: string, edits: SeasonStaffingEdit[]) {
+    return this.api.saveSeason(this.seasonId, edits, this.read!.month);
   }
   protected seed = seed;
   protected copyDraft = copyDraft;
@@ -244,6 +261,22 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     </span>`;
   }
 
+  private invalidColumns(read: SeasonStaffing, area: string): ReadonlyMap<string, string> {
+    if (this.readOnly) return NOTHING_BY_KEY;
+    const errors = new Map<string, string>();
+    for (const [weekday, blocks] of this.draft.get(area) ?? []) {
+      const starts = read.weekdayCutovers[Number(weekday)];
+      const crossing = (starts?.length ? starts : [read.cutover]).find((start) =>
+        blocks.some((block) => {
+          const span = blockSpan(block, start);
+          return span.end <= span.start;
+        }),
+      );
+      if (crossing) errors.set(weekday, tf("staffing.painter.crosses_start", { time: crossing }));
+    }
+    return errors;
+  }
+
   private content(read: SeasonStaffing | undefined, shown: string, chosen: string | undefined) {
     if (!read)
       return this.loadError
@@ -252,6 +285,7 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     if (!read.areas.length)
       return html`<p class="message" data-test="no-areas">${t("staffing.painter.no_areas")}</p>`;
     const columns = this.columns();
+    const invalid = this.invalidColumns(read, shown);
     return html`<staffing-grid
       .target=${`${this.seasonId}/${shown}`}
       .columns=${columns}
@@ -264,13 +298,21 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
       .headcount=${this.headcount}
       .cutover=${read.cutover}
       .readOnly=${this.readOnly || this.saving}
-      .columnErrors=${this.columnErrors(this.refused, shown)}
+      .columnErrors=${invalid.size ? invalid : this.columnErrors(this.refused, shown)}
       @staffing-change=${(event: CustomEvent<StaffingChange>) => this.paint(shown, event)}
     ></staffing-grid>`;
   }
 
   override render() {
     const read = this.read;
+    const invalidAreas =
+      read?.areas
+        .filter(({ area }) => this.invalidColumns(read, areaKey(area)).size)
+        .map(({ name }) => name) ?? [];
+    const invalid = invalidAreas.length > 0;
+    const invalidMessage = invalid
+      ? tf("staffing.painter.fix_blocks", { areas: conjunctionList(invalidAreas, currentLocale()) })
+      : "";
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
     const shownArea = read?.areas.find(({ area }) => areaKey(area) === shown);
@@ -285,11 +327,13 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
         }
         .scope=${this.scope}
         .coordinator=${this.coordinator}
-        .dirty=${this.scope?.isDirty() ?? false}
+        .dirty=${!invalid && (this.scope?.isDirty() ?? false)}
         .busy=${this.saving}
-        .refusal=${this.refused?.message ?? [this.refreshError, this.notice].filter(Boolean).join(" ")}
+        .refusal=${[invalidMessage, this.refused?.message ?? [this.refreshError, this.notice].filter(Boolean).join(" ")].filter(Boolean).join(" ")}
         .readOnly=${this.readOnly}
-        @painter-save=${() => void this.save()}
+        @painter-save=${() => {
+          if (!invalid) void this.save();
+        }}
         @painter-close=${() => this.open("staffing", this.addressParams())}
       >
         ${read ? this.seasonChip(read) : nothing}
@@ -325,6 +369,7 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
             : nothing
         }
         ${this.readOnly && shownArea ? html`<div slot="row" class="guide-read-only" data-test="guide-hint">${guideText(shownArea)}</div>` : nothing}
+        ${read?.cutoverChanges.length ? html`<p slot="row" class="covers" data-test="cutover-changes">${read.cutoverChanges.map((change) => tf("staffing.painter.start_changes", { date: formatDate(change.effectiveBusinessDay), time: change.dayCutover })).join(" ")}</p>` : nothing}
         ${this.content(read, shown, chosen)}
       </painter-frame>
       ${this.roleDialog()}`;

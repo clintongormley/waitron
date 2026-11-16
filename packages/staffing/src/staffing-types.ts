@@ -37,8 +37,11 @@ export interface StaffingGuideRange {
 
 /** A season's staffing for every active area; `weekdays` holds 0 (Sunday) to 6, empty when unpainted. */
 export interface SeasonStaffing {
-  /** The current changeover, `HH:MM`. */
+  /** The grid start for the selected season occurrence, `HH:MM`. */
   cutover: string;
+  month: string;
+  cutoverChanges: { effectiveBusinessDay: string; dayCutover: string }[];
+  weekdayCutovers: Record<number, string[]>;
   /** Every season, by start. */
   seasons: { id: string; name: string; startsOn: string; colour: CalendarColour }[];
   areas: { area: AreaRef; name: string; weekdays: Record<number, StaffingBlock[]> }[];

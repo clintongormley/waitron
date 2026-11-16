@@ -855,7 +855,10 @@ export class StaffingGrid extends LitElement {
               >
                 <span>${column.label}</span>${
                   this.columnErrors.has(column.key)
-                    ? html`<span class="column-error" id=${`column-error-${column.key}`}
+                    ? html`<span
+                        part="column-error"
+                        class="column-error"
+                        id=${`column-error-${column.key}`}
                         >${this.columnErrors.get(column.key)}</span
                       >`
                     : nothing

@@ -43,7 +43,7 @@ count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`
 own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
 slots it produces. Opening hours' special-day painter draws from the first date's changeover and
 says so when the dates' changeovers differ. Needs a
-decision on how one grid with one time ruler shows dates with different changeovers.
+decision on how one grid with one time ruler shows dates with different changeovers. Special-day saves also validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
 
 ## A711. Shared staffing painter code
 
@@ -157,15 +157,6 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
-## A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's design)
-
-`currentCutover` (`packages/staffing/src/paint.ts`), the paint, route, rota and month
-reads use `clock.dayCutover`, the venue's first start; since dated start changes landed (#1563)
-a venue that changes its start sees staffing on the wrong boundary. Read the start in force for
-each date instead, with a test that changes the start and checks the painter and the Staffing
-month. Detail: A788's design, `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`
-("The staffing painters read the venue's first start").
-
 ## Nothing in the product closes a pay period
 
 (found by A793's design, read). The workforce
@@ -227,11 +218,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Staffing reads the day start in force on each date
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
-  design).**
-  [Detail](workforce.md#a851-staffing-reads-the-venues-first-business-day-start-not-the-one-in-force-found-by-a788s-design).
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** Decide whether
   a block may run to the day's real end.
   [Detail](workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
@@ -273,6 +261,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
   [Detail](workforce.md#a711-shared-staffing-painter-code)
 
 ## Decisions and deliberate limits
+
+- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Special days and longer-than-day staffing remain A708/A644.
 
 ### First and latest staff activity per planned shift (owner, 2026-11-15)
 
