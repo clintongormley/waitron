@@ -1201,6 +1201,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         id: orderId,
+        dining: "eat_in",
         lines: [],
         expectedEdit: null,
         readerId: reader!.id,
