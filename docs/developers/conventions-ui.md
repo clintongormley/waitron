@@ -2097,8 +2097,9 @@ configuration.
 Fixed until the till starts again (a reload, or a server switch, which runs `#boot` again):
 
 - `locale`: the venue's display language, read when the server starts (`readVenueLocale`,
-  `apps/server/src/boot.ts`). The till uses it before sign-in, on a kitchen screen, and for a
-  person who has saved no language of their own; a person's saved language wins
+  `apps/server/src/boot.ts`). The till uses it before sign-in, on a kitchen screen that has kept
+  no language of its own (`waitron.kitchenDisplayLanguage.<deviceId>`, used while the till still
+  offers it), and for a person who has saved no language of their own; a person's saved language wins
   (`resolveActiveLocale`, `packages/shared/src/locales.ts`).
 - `servers`: the till's router follows the primary on its own among the servers it was given at
   start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). Each entry's `standing`

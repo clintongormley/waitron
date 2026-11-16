@@ -71,10 +71,8 @@ their full text.
   the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
   `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
   Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
-  screen's own tests; its fixed mount passes `embedded` and
-  `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
-  test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
-  so a device cookie revoked mid-session raises nothing until the next connect. The screens' `css`
+  screen's own tests; its fixed mount passes `embedded` and `canExitToCounter=false`, so its
+  standalone header, Back button and that property are likewise test-only. The screens' `css`
   templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
   allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
   confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the
@@ -1122,17 +1120,6 @@ table the last reset's copy leaves off while placing a part; on any other date, 
 naming no set, every part and no joined table (`requireActiveTable`,
 `packages/bookings/src/bookings.ts`).
 Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
-
-
-## A kitchen display forgets its chosen language on a reload
-
-(seen 2026-10-27 in A797 slice 9's
-LOOK; open). Pick Español on a kitchen display, reload, and every heading is English again; a
-till keeps the signed-in person's saved language. By the code, not a run of `main`: on a kitchen
-display `#onLocaleSelected` (`apps/till/src/till-app.ts`) only switches the screen, since there is
-no session to save the pick to, and `#preLoginLocale` returns the venue's language whenever
-`deviceMode` is set. Decide whether a kitchen display keeps its pick on the device, as it keeps
-its collapsed columns.
 
 
 ## A1101. Short names on the floor map where a full name does not fit, and on printed kitchen tickets.
