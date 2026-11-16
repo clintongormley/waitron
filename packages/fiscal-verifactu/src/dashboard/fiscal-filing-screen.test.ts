@@ -1,7 +1,7 @@
 import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import {
   codeMessage,
   currentLocale,
