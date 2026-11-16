@@ -91,6 +91,7 @@ export function createLinuxDevices(
   // Counted rather than timed, so a forget made after a backward step still follows every listing
   // started before it.
   let forgets = 0;
+  let lastScanFailure: string | undefined;
 
   const record = (next: BluetoothAvailability): void => {
     const changed = availability === undefined || !sameAvailability(availability, next);
@@ -205,10 +206,12 @@ export function createLinuxDevices(
       if (wanted.has("bluetooth")) {
         try {
           found.push(...(await bluetooth.scan()));
+          lastScanFailure = undefined;
         } catch (error) {
-          opts.log?.warn("bluetooth scan failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
+          const failure = { error: error instanceof Error ? error.message : String(error) };
+          const key = JSON.stringify(failure);
+          if (key !== lastScanFailure) opts.log?.warn("bluetooth scan failed", failure);
+          lastScanFailure = key;
         }
       }
       return found;
