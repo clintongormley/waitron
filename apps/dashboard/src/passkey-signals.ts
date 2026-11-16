@@ -25,7 +25,6 @@ async function attempt(call: () => Promise<void>): Promise<boolean> {
   }
 }
 
-/** Never throws. */
 export async function signalAcceptedPasskeys(
   api: Pick<DashboardApi, "passkeySignals">,
 ): Promise<void> {
