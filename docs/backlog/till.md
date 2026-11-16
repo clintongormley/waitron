@@ -589,7 +589,7 @@ Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) Someone
 of a disabled device's current cookie can ask first and so replace that cookie; outside dev mode
 they still cannot get in without a manager tapping the number. (2) If an ask's response is lost
 after the server saved it, the browser's next ask joins as a new device and the old row stays
-disabled. (3) A long name in the waiting list overflows a phone's width. (4) An ask that replaces
+disabled. (4) An ask that replaces
 a waiting one always gets a later `createdAt`, but an ask made when no ask is waiting under its
 id, whatever ended the previous one (accepting it included, once the device is later disabled),
 is not forced later, and nothing in the code rules out the two sharing a millisecond.
@@ -616,9 +616,7 @@ Pair repeat some request-body building; seven unread `devices.*` strings.
 
 ## What W104 left open (#1225)
 
-Left OPEN by W104, not acted on: (1) leaving the Devices page with Back while a Pair save is in
-flight still sends a deny for that request (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`),
-and what then happens to the device is untested; (2) the Add a device and Pair dialogs were looked at only through the browser
+Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were looked at only through the browser
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
 address has not been looked at; (3) a device's knock is refused if the window shut while its body was
 arriving, but open periods are told apart only by their start time, to the millisecond
@@ -1848,8 +1846,7 @@ except that it no longer waits on the retired split and transfer routes (A1196).
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W105 (#1235): review suggestions #1235 did not take.
     [Detail](till.md#what-w105-left-open-1235)
-  - W104 (#1225), not acted on: leaving Devices with Back during a Pair save still sends a deny;
-    the dialogs were never looked at on a box; a device's request to join that was still arriving
+  - W104 (#1225), not acted on: the dialogs were never looked at on a box; a device's request to join that was still arriving
     when the window shut is not refused if the window reopened within the same millisecond.
     [Detail](till.md#what-w104-left-open-1225)
   - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
