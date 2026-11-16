@@ -19,7 +19,7 @@ import {
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
-import { endorseKey } from "@waitron/membership";
+import { endorseKey, routableServers } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
 import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
@@ -370,6 +370,14 @@ describe("a controlled handover to the joined spare, then the old box back by em
         (rows.invoice_series as Array<{ id: string }>).map(({ id }) => id);
       expect(codes(oldRows)).not.toEqual([]);
       expect(Object.values(oldRows).flat()).toContainEqual(mainSale.record);
+      const servingPrimary = async (venue: typeof c.venue) =>
+        routableServers(await readNodeMembership(venue)).find(
+          ({ standing }) => standing === "serving-primary",
+        );
+      const contactUrlIn = async (venue: typeof c.venue, nodeId: string) =>
+        (await readNodeMembership(venue))!.body.nodes.find((n) => n.nodeId === nodeId)!.contactUrl;
+      const cUrl = await contactUrlIn(c.venue, spareId);
+      expect(cUrl).not.toBe("");
       const handedOver = await takeoverRoutes({
         store: c,
         nodeId: spareId,
@@ -383,6 +391,11 @@ describe("a controlled handover to the joined spare, then the old box back by em
         waitUntil,
       }).takeOver();
       expect((await readNodeMode(c.node, spareId)).mode).toBe("primary");
+      expect(await servingPrimary(c.venue)).toEqual({
+        nodeId: spareId,
+        url: cUrl,
+        standing: "serving-primary",
+      });
       const cRows = await fiscalRowsOf(c.venue, spareId);
       expect(codes(cRows)).not.toEqual([]);
       for (const code of codes(cRows)) expect(codes(oldRows)).not.toContain(code);
@@ -437,6 +450,8 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const b = await openVenueDatabase(bVenue);
       opened.push(b);
       const bFiscalAtCopy = await fiscalRows(b.venue);
+      const bUrl = await contactUrlIn(b.venue, newId);
+      expect(bUrl).not.toBe("");
 
       // C is switched off; B declares the emergency and takes over on the copy it holds.
       const declaration = new Hono();
@@ -487,6 +502,11 @@ describe("a controlled handover to the joined spare, then the old box back by em
         waitUntil,
       }).takeOver();
       expect((await readNodeMode(b.node, newId)).mode).toBe("primary");
+      expect(await servingPrimary(b.venue)).toEqual({
+        nodeId: newId,
+        url: bUrl,
+        standing: "serving-primary",
+      });
       const bRows = await fiscalRowsOf(b.venue, newId);
       for (const code of codes(bRows))
         expect([...codes(oldRows), ...codes(cRows)]).not.toContain(code);
