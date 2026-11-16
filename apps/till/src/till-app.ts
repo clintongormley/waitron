@@ -6606,6 +6606,7 @@ export class TillApp extends LitElement {
     loaded = true,
   ): void {
     if (this.#heldPlaceEditLock() !== undefined) {
+      // Keep the pending Send's menu versions until its answer or a replacement basket.
       this.#counterOffersDue = true;
       return;
     }
