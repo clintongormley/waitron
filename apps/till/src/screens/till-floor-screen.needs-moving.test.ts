@@ -99,13 +99,13 @@ const cardButton = (el: TillFloorScreen, id: string, which: "leave-here" | "mark
 function deferred(): {
   promise: Promise<{ zoneId: string; revision: number }>;
   answer: () => void;
-  refuse: () => void;
+  refuse: (code?: string) => void;
 } {
   let answer!: () => void;
-  let refuse!: () => void;
+  let refuse!: (code?: string) => void;
   const promise = new Promise<{ zoneId: string; revision: number }>((resolve, reject) => {
     answer = () => resolve({ zoneId: "z1", revision: 7 });
-    refuse = () => reject({ code: "floor_today.out_of_date" });
+    refuse = (code = "floor_today.out_of_date") => reject({ code });
   });
   return { promise, answer, refuse };
 }
@@ -224,6 +224,51 @@ describe("till-floor-screen: a table that needs moving", () => {
     await settle(el);
 
     expect(api.markMovedToday).toHaveBeenCalledWith("t3", 6);
+  });
+
+  it.each(["answers", "refuses", "fails"] as const)(
+    "sequences two list presses in one room when the first %s",
+    async (outcome) => {
+      const api = stubApi();
+      const first = deferred();
+      api.leaveHereToday.mockImplementationOnce(() => first.promise);
+      const el = await mount([moving("t3", 12), moving("t4", 30)], api);
+      await toList(el);
+      cardButton(el, "t3", "leave-here").click();
+      cardButton(el, "t4", "mark-moved").click();
+      await settle(el);
+      expect(api.leaveHereToday).toHaveBeenCalledWith("t3", 6);
+      expect(api.markMovedToday).not.toHaveBeenCalled();
+      expect(cardButton(el, "t4", "mark-moved").disabled).toBe(true);
+      if (outcome === "answers") first.answer();
+      else first.refuse(outcome === "refuses" ? "floor_today.out_of_date" : "server.internal");
+      await vi.waitFor(() =>
+        expect(api.markMovedToday).toHaveBeenCalledWith("t4", outcome === "answers" ? 7 : 6),
+      );
+      expect(refusal(el)).toBe(
+        outcome === "answers"
+          ? null
+          : codeMessage(outcome === "refuses" ? "floor_today.out_of_date" : "server.internal"),
+      );
+    },
+  );
+
+  it("does not make another room wait for a list press", async () => {
+    const api = stubApi();
+    const first = deferred();
+    api.leaveHereToday.mockImplementationOnce(() => first.promise);
+    const el = await mount([moving("t3", 12), { ...moving("t4", 30), zoneId: "z2" }], api);
+    el.zones = [zone, { ...zone, id: "z2", name: "Terrace" }];
+    await toList(el);
+    cardButton(el, "t3", "leave-here").click();
+    await settle(el);
+    el.selectedZoneId = "z2";
+    await settle(el);
+    await toList(el);
+    cardButton(el, "t4", "mark-moved").click();
+    await vi.waitFor(() => expect(api.markMovedToday).toHaveBeenCalledWith("t4", 6));
+    first.answer();
+    await settle(el);
   });
 
   it("on the list reads Needs clearing while it also needs clearing", async () => {

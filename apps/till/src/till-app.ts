@@ -3544,11 +3544,9 @@ export class TillApp extends LitElement {
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
-  /** Set when Split a table took the bill on screen, the bills read after it failed, and no bill known
-   * before it stayed: the next successful bills read for this party on this visit shows
-   * {@link billToShow}'s choice ({@link #followBillsRead}) and ends the wait, even when it lists no
-   * bill. */
-  #billAfterSplit?: { partyId: string; visit: number };
+  /** Failed split follow-up reads leave the shown bill's fate unknown until a successful read on
+   * this visit. An explicit bill choice ends that wait. */
+  #billAfterSplit?: { partyId: string; visit: number; billId?: string };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -4618,6 +4616,7 @@ export class TillApp extends LitElement {
       orders.revision !== party.revision
     )
       throw { code: "party.out_of_date" };
+    if (party.revision < this.orderParty!.revision) return;
     this.#applyTables(tablesRead, tables);
     this.orderParty = party;
     this.tabGroups = groups.groups;
@@ -13111,8 +13110,8 @@ export class TillApp extends LitElement {
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
-  async #loadTabLines(): Promise<void> {
-    await this.#followPartyDraft();
+  async #loadTabLines(splitRead = false): Promise<void> {
+    await this.#followPartyDraft(splitRead);
     const read = ++this.#tabLinesRead;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
@@ -13127,11 +13126,15 @@ export class TillApp extends LitElement {
       this.#groupsReadFor = partyId;
       return;
     }
-    const groups = this.#readGroups();
-    const orders = this.#readCurrentOrders();
+    const groups = this.#readGroups(splitRead);
+    const orders = this.#readCurrentOrders(splitRead);
     try {
       const billId = this.activeTabId;
-      const tab = await this.#splitRefusalRead(() => this.api.getTabLines(billId));
+      const tab = await this.#splitRefusalRead(
+        () => this.api.getTabLines(billId),
+        undefined,
+        splitRead,
+      );
       if (read !== this.#tabLinesRead) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
@@ -13159,11 +13162,15 @@ export class TillApp extends LitElement {
   }
 
   /** A failed read answers null: the screen then offers nothing to mark served. */
-  async #readCurrentOrders(): Promise<CurrentOrders | null> {
+  async #readCurrentOrders(splitRead = false): Promise<CurrentOrders | null> {
     const party = this.orderParty;
     if (party === null) return null;
     try {
-      return await this.#splitRefusalRead(() => this.api.readCurrentOrders(party.id));
+      return await this.#splitRefusalRead(
+        () => this.api.readCurrentOrders(party.id),
+        undefined,
+        splitRead,
+      );
     } catch {
       return null;
     }
@@ -13193,12 +13200,16 @@ export class TillApp extends LitElement {
 
   /** The groups' revision is not kept: a command sends the revision the party was shown at. A failed
    * read answers null groups and no printing problem. */
-  async #readGroups(): Promise<{ groups: OrderGroup[] | null; printProblems: PrintProblem[] }> {
+  async #readGroups(
+    splitRead = false,
+  ): Promise<{ groups: OrderGroup[] | null; printProblems: PrintProblem[] }> {
     const party = this.orderParty;
     if (party === null) return { groups: [], printProblems: [] };
     try {
-      const { groups, printProblems } = await this.#splitRefusalRead(() =>
-        this.api.listGroups(party.id),
+      const { groups, printProblems } = await this.#splitRefusalRead(
+        () => this.api.listGroups(party.id),
+        undefined,
+        splitRead,
       );
       return { groups, printProblems };
     } catch {
@@ -13436,7 +13447,7 @@ export class TillApp extends LitElement {
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
   }
 
-  async #openDraft(session: number): Promise<OpenedDraft> {
+  async #openDraft(session: number, splitRead = false): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
@@ -13525,7 +13536,7 @@ export class TillApp extends LitElement {
         if (this.#tableMenuPending) this.#followTableMenu();
       }
     });
-    return { sync, read: await sync.load(this.#draftReadBounds()) };
+    return { sync, read: await sync.load(this.#draftReadBounds(splitRead)) };
   }
 
   #syncDraftBillStatus(): void {
@@ -13657,14 +13668,14 @@ export class TillApp extends LitElement {
     }
   }
 
-  #draftReadBounds(): DraftReadBounds | undefined {
+  #draftReadBounds(splitRead = false): DraftReadBounds | undefined {
     const refusal = this.#splitRefusalReading;
-    return refusal === undefined
+    return refusal === undefined && !splitRead
       ? undefined
-      : { limitMs: SPLIT_REFUSAL_READ_LIMIT_MS, stop: refusal.ended.signal };
+      : { limitMs: SPLIT_REFUSAL_READ_LIMIT_MS, stop: refusal?.ended.signal };
   }
 
-  async #refreshBillDraft(): Promise<void> {
+  async #refreshBillDraft(splitRead = false): Promise<void> {
     const sync = this.#draftSync;
     if (
       sync === undefined ||
@@ -13684,7 +13695,7 @@ export class TillApp extends LitElement {
     });
     try {
       const loaded = await sync.load(
-        this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
+        this.#draftReadBounds(splitRead) ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
       );
       if (
         !loaded ||
@@ -13745,7 +13756,7 @@ export class TillApp extends LitElement {
   }
 
   /** Relocation invalidates the old party's write scope; retain its candidate for review. */
-  async #followPartyDraft(): Promise<void> {
+  async #followPartyDraft(splitRead = false): Promise<void> {
     const sync = this.#draftSync;
     if (
       sync === undefined ||
@@ -13759,7 +13770,7 @@ export class TillApp extends LitElement {
     const party = this.orderParty?.id;
     await this.#savesOutFor(party);
     if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
-    this.#showDraft(await this.#openDraft(session));
+    this.#showDraft(await this.#openDraft(session, splitRead));
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
@@ -13942,8 +13953,15 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #loadLinesAndBills(balance?: BillBalance, follow = true): Promise<[void, ReadBills]> {
-    return Promise.all([this.#loadTabLines(), this.#loadPartyBills(balance, follow)]);
+  async #loadLinesAndBills(
+    balance?: BillBalance,
+    follow = true,
+    splitRead = false,
+  ): Promise<[void, ReadBills]> {
+    return Promise.all([
+      this.#loadTabLines(splitRead),
+      this.#loadPartyBills(balance, follow, false, splitRead),
+    ]);
   }
 
   /** A failed read leaves the list empty rather than showing another party's bills, unless it is a
@@ -13958,6 +13976,7 @@ export class TillApp extends LitElement {
     balance?: BillBalance,
     follow = true,
     background = false,
+    splitRead = false,
   ): Promise<ReadBills> {
     const party = this.orderParty;
     if (background && this.#ownBillsChanges > 0)
@@ -13975,7 +13994,11 @@ export class TillApp extends LitElement {
     }
     const refusal = this.#splitRefusalReading;
     try {
-      const bills = await this.#splitRefusalRead(() => this.api.getPartyBills(party.id));
+      const bills = await this.#splitRefusalRead(
+        () => this.api.getPartyBills(party.id),
+        undefined,
+        splitRead,
+      );
       if (background && started !== this.#ownBillsStarted)
         return { read, partyId: party.id, bills: null, setAside: true };
       const answer = { read, partyId: party.id, bills };
@@ -13985,7 +14008,7 @@ export class TillApp extends LitElement {
         this.#followSplitBills(bills);
         this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
-        if (follow) await this.#followBillsRead(answer, before);
+        if (follow) await this.#followBillsRead(answer, before, false, splitRead);
       }
       return answer;
     } catch {
@@ -14006,6 +14029,7 @@ export class TillApp extends LitElement {
     answer: ReadBills,
     before: readonly PartyBill[],
     opening = false,
+    splitRead = false,
   ): Promise<void> {
     const { read, partyId, bills } = answer;
     if (
@@ -14017,12 +14041,28 @@ export class TillApp extends LitElement {
     )
       return;
     const gone = this.activeTabId;
-    const next = billToShow(gone, bills);
     const afterSplit =
-      gone === undefined &&
+      this.#billAfterSplit?.billId === gone &&
       this.#billAfterSplit?.partyId === partyId &&
       this.#billAfterSplit.visit === this.#orderVisit;
-    if (gone === undefined) this.#billAfterSplit = undefined;
+    const paidAfterSplit =
+      afterSplit &&
+      gone !== undefined &&
+      bills.some((bill) => bill.workingOrderId === gone && !owing(bill));
+    const paying = this.billPaying;
+    if (
+      paidAfterSplit &&
+      (this.#billPaymentHeld(gone!) ||
+        (paying?.surface === "table" &&
+          paying.billId === gone &&
+          (paying.busy ||
+            paying.taken?.pending !== undefined ||
+            this.#pendingReread?.dialogId === paying.id ||
+            (this.billRefunding?.payId === paying.id && this.billRefunding.busy))))
+    )
+      return;
+    const next = billToShow(paidAfterSplit ? undefined : gone, bills);
+    if (afterSplit || gone === undefined) this.#billAfterSplit = undefined;
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
     const sync = this.#draftSync;
@@ -14049,7 +14089,7 @@ export class TillApp extends LitElement {
       const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
       this.billGone =
-        shown === undefined
+        shown === undefined || paidAfterSplit
           ? null
           : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
               gone: numbered ? billLabel(was) : "",
@@ -14063,7 +14103,7 @@ export class TillApp extends LitElement {
         );
       }
     }
-    await this.#loadTabLines();
+    await this.#loadTabLines(splitRead);
     if (
       next === undefined ||
       session !== this.#operatorSession ||
@@ -14071,7 +14111,7 @@ export class TillApp extends LitElement {
       this.#draftSync?.billId === next
     )
       return;
-    this.#showDraft(await this.#openDraft(session));
+    this.#showDraft(await this.#openDraft(session, splitRead));
   }
 
   /** The unsaved lines a dropped draft kept for `from`, offered for review on `to` instead, unless
@@ -14254,6 +14294,7 @@ export class TillApp extends LitElement {
           outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
         return true;
       }
+      if (party.revision < this.orderParty!.revision) return true;
       this.#applyTables(tablesRead, tables);
       this.orderParty = party;
       this.tabGroups = groups.groups;
@@ -17257,11 +17298,14 @@ export class TillApp extends LitElement {
 
   /** Re-reads occupancy without leaving the screen. Unlike {@link #refreshFloor}, a failed read
    * empties the floor. */
-  async #reloadTables(): Promise<void> {
+  async #reloadTables(splitRead = false): Promise<void> {
     const read = this.#startTablesRead();
     const refusal = this.#splitRefusalReading;
     try {
-      this.#applyTables(read, await this.#splitRefusalRead(() => this.api.getTablesState()));
+      this.#applyTables(
+        read,
+        await this.#splitRefusalRead(() => this.api.getTablesState(), undefined, splitRead),
+      );
     } catch {
       // Split a table's panel names its tables from the floor, as it joins its rows with the bills.
       if (
@@ -17307,6 +17351,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (!live()) return;
+    this.floorCarried = carryRevisions(this.floorCarried, result.zoneRevisions);
     await this.#refreshBillDraft();
     if (!live()) return;
     await this.#reloadTables();
@@ -17893,17 +17938,26 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A refusal's sentence waits on its reads. One still out at the limit counts as failed, and what
-   * it answers later goes nowhere. */
-  async #splitRefusalRead<T>(read: () => Promise<T>): Promise<T> {
-    const refusal = this.#splitRefusalReading;
-    if (refusal === undefined) return read();
-    const limit = limited(SPLIT_REFUSAL_READ_LIMIT_MS, refusal.ended.signal);
+  /** A read still out at the limit counts as failed; its later answer cannot replace state. */
+  async #splitRefusalRead<T>(
+    read: (signal?: AbortSignal) => Promise<T>,
+    stop?: AbortSignal,
+    splitRead = false,
+  ): Promise<T> {
+    const bounds = this.#draftReadBounds(splitRead);
+    if (bounds === undefined && stop === undefined) return read();
+    const stopped =
+      stop === undefined
+        ? bounds?.stop
+        : bounds?.stop === undefined
+          ? stop
+          : AbortSignal.any([stop, bounds.stop]);
+    const limit = limited(SPLIT_REFUSAL_READ_LIMIT_MS, stopped);
     try {
       return await Promise.race([
-        read(),
+        read(limit.signal),
         pause(limit.signal).then(() => {
-          throw new DOMException("A refusal's read ended", "AbortError");
+          throw new DOMException("A split read ended", "AbortError");
         }),
       ]);
     } finally {
@@ -18105,8 +18159,9 @@ export class TillApp extends LitElement {
       revision: this.orderParty?.revision,
     };
     try {
-      const read = await this.#splitRefusalRead(() =>
-        this.api.getSplitSources(partyId, { signal: controller.signal }),
+      const read = await this.#splitRefusalRead(
+        (signal) => this.api.getSplitSources(partyId, { signal }),
+        controller.signal,
       );
       if (generation === this.#splitReadGeneration) {
         this.#splitReadAbort = undefined;
@@ -18170,13 +18225,13 @@ export class TillApp extends LitElement {
     try {
       // A panel closed during these reads leaves a party that still needs its bill and sync. A
       // split's own reads can overtake them, which is why it asks for the bill too (#followSplit).
-      await this.#reloadTables();
+      await this.#reloadTables(true);
       if (visit !== this.#orderVisit) return;
       this.#rememberOrderParty();
       const before = this.partyBills;
-      const answer = await this.#loadPartyBills(undefined, false, true);
+      const answer = await this.#loadPartyBills(undefined, false, true, true);
       if (visit !== this.#orderVisit) return;
-      await this.#followBillsRead(answer, before, true);
+      await this.#followBillsRead(answer, before, true, true);
     } finally {
       panel.reloading = false;
     }
@@ -18312,7 +18367,7 @@ export class TillApp extends LitElement {
     if (!live()) return;
     if (this.activeTableId === tableId)
       this.activeTableId = party.tableIds.find((id) => id !== tableId);
-    await this.#reloadTables();
+    await this.#reloadTables(true);
     if (!live()) return;
     this.#rememberOrderParty();
     const shown = this.activeTabId;
@@ -18321,7 +18376,7 @@ export class TillApp extends LitElement {
     let paidUnseen = false;
     if (leftWhole || (shown !== undefined && looseIds.includes(shown))) {
       const known = this.partyBills;
-      const { bills: read } = await this.#loadPartyBills(undefined, false);
+      const { bills: read } = await this.#loadPartyBills(undefined, false, false, true);
       if (!live()) return;
       paidUnseen = !leftWhole && read === null;
       const remaining = read?.find((bill) => bill.workingOrderId === shown);
@@ -18339,14 +18394,16 @@ export class TillApp extends LitElement {
         }
       }
     }
-    const [, { bills: reread }] = await this.#loadLinesAndBills();
+    const [, { bills: reread }] = await this.#loadLinesAndBills(undefined, true, true);
     if (paidUnseen && live()) {
+      if (reread === null)
+        this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit, billId: shown };
       const remaining = reread?.find((bill) => bill.workingOrderId === shown);
       const next = billToShow(undefined, reread ?? []);
       if (remaining !== undefined && !owing(remaining) && next !== undefined && next !== shown) {
         this.billGone = null;
         this.#chooseBill(next);
-        await this.#loadLinesAndBills();
+        await this.#loadLinesAndBills(undefined, true, true);
       }
     }
     if (
@@ -18354,7 +18411,7 @@ export class TillApp extends LitElement {
       asked.session === this.#operatorSession &&
       !this.#hasLeftParty(party.id, sent)
     )
-      await this.#refreshBillDraft();
+      await this.#refreshBillDraft(true);
   }
 
   /** D16: works out what to say, runs the row's reads, and only then says it. Answers true when the
@@ -20131,6 +20188,7 @@ export class TillApp extends LitElement {
    * later than any read still followed; any other (a seat's, a split's, + New bill's, an answer's)
    * is unknown to every bills read sent so far. */
   #chooseBill(billId: string): void {
+    this.#billAfterSplit = undefined;
     this.activeTabId = billId;
     this.#billChosenRead = this.partyBills.some((bill) => bill.workingOrderId === billId)
       ? 0

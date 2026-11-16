@@ -2950,7 +2950,8 @@ says nothing and leaves Split as it was. Once rows are drawn no read holds Split
 the rows' read answered with, and if they are stale the server refuses it and the panel comes back with the sentence
 and reads. A bill ticked before its edit state has arrived does not hold Split either: while the state has not
 arrived the press names what it knows and the server judges whether it is current, and a state arriving after the
-tick counts as a change. A read that sentence waits on counts as failed once it has been out for 25 seconds. Leaving the table, or pressing Split again,
+tick counts as a change. The panel's sources read and the floor, bills, lines, groups, orders and draft reads in its first-bill
+reload or split follow-up count as failed after 25 seconds. The same limit applies to reads a refusal's sentence waits on. Leaving the table, or pressing Split again,
 ends those reads and the sentence with them. Taking the till off the page ends them too, and they start again
 once it is back on the same order. Its precedents: the Products browser's Move and Delete
 dialog, whose confirm is quiet after the summary failed; `wt-delete-dialog`, whose Delete is quiet

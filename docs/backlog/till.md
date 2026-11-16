@@ -1205,16 +1205,6 @@ naming no set, every part and no joined table (`requireActiveTable`,
 Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
 
 
-## A880. Two tables pressed on the till's floor list at once: the second can be refused as out of date (2026-10-18).
-
-Leave it here or Mark moved on one table, then on another before the first
-is answered, sends the same room revision twice, so the second can come back
-`floor_today.out_of_date`. Found by reading `#sendTodayAction`
-(`apps/till/src/screens/till-floor-screen.ts`); A878's finish-branch review reproduced it (a
-browser probe sent `t3` and `t4` with revision 6, and the server answered 200, then 409
-`floor_today.out_of_date`). Left open by A878.
-
-
 ## A kitchen display forgets its chosen language on a reload
 
 (seen 2026-10-27 in A797 slice 9's
@@ -1932,37 +1922,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   Held line ends in a separator with nothing after it, where the Served line above reads "Served · 0
   · €0.00".
   [Detail](till.md#a1108-the-till-order-screens-sent-panel-reads-sent--and-held-)
-
-## Bundle: What happens after a split, and keeping the newest revision
-
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1347. Join tables and Move guests from the order screen drop the room's new revision (left
-  open by A803 slice 4c).** `#onJoinTables` and `#onMoveGuests` (`apps/till/src/till-app.ts`) ignore
-  the `zoneRevisions` their answer carries, which Split a table now hands to the floor through
-  `carryRevisions`. Read, not run: a floor change sent before the next floor read would be refused once.
-- **A1348. A split whose answer is lost leaves the floor on the room's old revision (left open by
-  A803 slice 4c).** When the split's reply never arrives and the till's reads show it went through,
-  `#followSplit` runs with no `zoneRevisions` to carry, so A590's window, closed for an answered
-  split, stays open on that path until the next floor read.
-- **A1352. Split a table's own reads have no time limit outside a refusal (left open by A803 slice
-  4c).** A first rows read that hangs leaves the panel blank, Split quiet and no words; a hung
-  first-bill reload leaves that panel without the party's drafts. Back and the same table read again.
-  Only the reads after a refused press stop at 25 seconds.
-- **A1362. After a split, both bills reads failing leaves the till on the bill that left paid
-  (left open by A803 slice 4c).** The list is empty and the timed read does not move it; the bill
-  switcher still works. Found in 4c's fix round 12 and not run again at the head, where
-  `#followSplit` (`apps/till/src/till-app.ts`) still reads the bills only once.
-- **A1365. No case covers the follow-up after a split when the bill's draft arrives during it (left
-  open by A803 slice 4c).** Since fix I1, `#followSplit` carries on in that state, where before it
-  stopped. The till suites stay green, but nothing pins what it does there.
-- **A880. Two tables pressed on the till's floor list at once: the second can be refused as out of
-  date (2026-10-18).** Left open by A878.
-  [Detail](till.md#a880-two-tables-pressed-on-the-tills-floor-list-at-once-the-second-can-be-refused-as-out-of-date-2026-10-18)
-- **A1129. A late allergy re-read or course-places repair can step the order back a revision.**
-  Read only: after their waits both set `orderParty` from their own read without checking a newer
-  one (`till-app.ts`), until the next command's `party.out_of_date` reloads; check the revision as
-  `#rememberOrderParty` does. Believed to predate A797 slice 3 (ba517141a, c9ad7a634).
 
 ## Bundle: Status words on the pass and beside it
 
@@ -3505,7 +3464,7 @@ landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bi
 main bill, has landed (#2360); it leaves open A1261, A1265 and A1267. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1349, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1349 and A1358–A1360. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
