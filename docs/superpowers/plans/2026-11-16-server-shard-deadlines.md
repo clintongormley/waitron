@@ -1,7 +1,8 @@
 # Server shard deadlines
 
 Source: Lane I SERVER-SHARD-DEADLINE, queued by the watcher at 21:45 on 16 November 2026.
-Separate Sol/high draft checked by the driver; Claude reviewed it once. No owner plan or design approval is claimed.
+Separate Sol/high draft checked by the driver; Claude reviewed it (238s), then its corrections (136s).
+The driver accepted all findings, including the final light-bin qualification limit. No owner plan or design approval is claimed.
 Build only after watcher clearance, including the necessary existing-parser correction below.
 
 Finish line: a hang inside the eight named test steps reports unfinished files and processes before GitHub's job limit.
@@ -43,6 +44,8 @@ merge-job change, test-timeout change or repair of the unknown incidents. Setup/
   leaves a report; both causes remain open. The generic docs/backlog.md incidents index needs no edit; request that exception.
 - [ ] Run `pnpm exec vitest run scripts/run-with-deadline.test.mjs scripts/ci-workflow.test.mjs scripts/root-scope-consumers.test.mjs`.
   Read counts and failures, then normal finish-branch review, hook and current-head CI. No whole-workspace local test run.
+  This PR does not select light-a/light-b: their path has the wiring table and real-line parser unit cases only; its first
+  natural runtime check is a scheduled/manual full run on main, since ordinary main pushes run no package tests.
 
 Expected changed lines: existing parser 8–15, workflow 8–20, scope data 5, tests 40–70, docs 50–90 including this plan.
 No implementation yet. The initial review's smaller proof, five-consumer scope, measured-room rule and doc limits are accepted.
