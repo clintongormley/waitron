@@ -247,7 +247,7 @@ describe("withPendingSweep", () => {
     expect(stripe).toHaveBeenCalledTimes(1);
   });
 
-  it("one provider's resolvePending throwing does NOT stop the others being swept (T12b)", async () => {
+  it("one provider's resolvePending throwing does NOT stop the others being swept", async () => {
     const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     const aThrows = vi.fn(async () => {
       throw new Error("A boom");
