@@ -162,6 +162,19 @@ describe("liveSteps", () => {
     expect(liveSteps(rules, beyond, at("22:20"))).toEqual([live("Drinks?", "22:40", "22:40")]);
   });
 
+  it("a Done 30 seconds or less after an order clears no repeat counted from it", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const ordered = facts({ firstOrderAt: at("21:00"), lastOrderAt: at("22:00") });
+    expect(
+      stepsClearedByDone(
+        rules,
+        ordered,
+        { stepId: "Drinks?", dueAt: at("22:20") },
+        at("22:00") + 20_000,
+      ),
+    ).toEqual([]);
+  });
+
   it("a Done after a step's trigger clears it; one before its next trigger does not", () => {
     const rules = [rule("Check", "course_served", 5, "mains")];
     const ordered = { firstOrderAt: at("20:40"), lastOrderAt: at("20:40") };
@@ -380,6 +393,16 @@ describe("stepsClearedByDone", () => {
     expect(stepsClearedByDone(rules, reordered, shown("Drinks?", "22:20"), at("22:31"))).toEqual(
       [],
     );
+  });
+
+  it("a Done for a repeat an order sent shortly before it fell due replaced clears nothing", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const reordered = facts({ firstOrderAt: at("21:00"), lastOrderAt: at("22:00") });
+    const stale = { stepId: "Drinks?", dueAt: at("22:00") + 10_000 };
+    expect(liveSteps(rules, reordered, at("22:00") + 40_000)).toEqual([
+      live("Drinks?", "22:20", "22:20"),
+    ]);
+    expect(stepsClearedByDone(rules, reordered, stale, at("22:00") + 40_000)).toEqual([]);
   });
 
   it("a Done for a step since started again clears nothing", () => {
