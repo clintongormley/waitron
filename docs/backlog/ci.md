@@ -212,29 +212,7 @@ request for `/manage/devices` on 5190 returned the till HTML, while the same pat
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
 server without changing their deployed same-origin paths; this also affects setup's existing links.
 
-## At a load average near 60, more root guard files fail on time
-
-2026-10-22: A994 adds a root worker limit calculated from startup processor and memory headroom.
-Its simultaneous-root-suite experiment is described in
-[CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
-The historical experiment also adds eight spinning loops; repeat that workload before
-closing this entry.
-
-Three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
-loops that only spin.
-
-Receipts in lane B's campaign folder,
-`a751-receipts/heavy3/` (before A751) and `a751-receipts/verify-heavy3/` (A751's branch,
-`425cf16b8`).
-
-The retained failures name `scripts/fiscal-allocation-migration.test.ts`,
-`scripts/guarded-teardowns.test.ts`, `scripts/menu-sections-upgrade.test.ts`,
-`scripts/mutation-shard.test.mjs` and `scripts/pre-push.test.mjs`. (2026-11-07, A1422: the first and
-third were deleted with the frozen migration history, so three remain.)
-Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
-this load with the bound lifted, and whether the case can be made cheaper.
-
-### A668-5 normal-push recurrence, 2026-10-16
+## A668-5 normal-push recurrence, 2026-10-16
 
 2026-10-22: A994 reproduces the diagnostic failure cold and starts that fixture after self refresh,
 retaining its Docker, error, signal and 700 ms assertions. Its root worker estimate and concurrent

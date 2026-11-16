@@ -592,6 +592,47 @@ entry predicate compares the argument URL with the module's resolved URL. Using 
 production predicate unchanged. (2026-11-11, A1489: the predicate now resolves both paths through
 `scripts/is-main-script.mjs`, and these fixtures copy that helper too.)
 
+### Mac root-guard concurrency check, 16 November 2026
+
+The A751 follow-up named three files that had missed their time limits before A994 added the
+worker estimator. The deciding follow-up used macOS 26.6.2, Node 26.13.0 and Vitest 4.1.12,
+with the source at `aa26211117` plus the documentation-only measurement plan. Three separate
+installed trees ran concurrently: two `pnpm exec vitest run` commands and one with `--coverage`.
+JSON and file-progress reporters retained results, and an outside process sampled owned process
+trees every two seconds. Each command used the existing 45-minute diagnostic wrapper.
+
+All three resolved to three workers, with `CI` and `VITEST_MAX_WORKERS` unset. The startup
+one-minute load was 4.88 on 18 processors, the five-minute load was 6.72, and `memory_pressure`
+reported 62% free. The eight proposed busy loops were scaled to zero: after the larger of those
+two load estimates, nine root workers and two processors of spare headroom, less than one whole
+processor remained. No worker override or additional busy loop was used. Sampled one-minute
+host load ranged from 4.88 to 19.29; this was not a repeat of the historical load near 60.
+
+Each complete run passed 205 files and 22,165 tests, with one Linux-only boot-identity test
+skipped (`scripts/box/network-change.test.mjs`). The two plain runs took 296.56 and 296.71 seconds;
+the coverage run took 329.14 seconds. Root coverage passed its configured thresholds:
+statements 98.10%, lines 98.63%, functions 98.83%, branches 96.69%.
+
+The JSON results give these spans from the first case's start to the last case's end:
+
+| File | Cases passed per run | Plain A (s) | Plain B (s) | Coverage (s) | Slowest case across the three (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `guarded-teardowns.test.ts` | 23 | 0.845 | 0.765 | 3.954 | 3.925 |
+| `mutation-shard.test.mjs` | 62 | 6.076 | 6.084 | 5.698 | 3.125 |
+| `pre-push.test.mjs` | 28 | 48.811 | 48.751 | 48.469 | 6.843 |
+
+The slowest cases were the teardown tree scan, the UI CLI shard inventory and the pre-push
+fetch-deadline fallback, respectively. Their case limits remained 30, 30 and 25 seconds; the hook's
+own 15-second limit also stayed unchanged. No assertion, test, production script or limit changed.
+These are passing observations at the stated load, not a reproduced failure or a measured repair.
+
+The watcher cleared this Mac-only method on 16 November at 17:02, including deletion of each
+passing file's backlog work. All three passed, so that investigation is closed under that clearance;
+this does not establish a worst case or a guarantee at higher load. The plan is
+[Root guards under load](../superpowers/plans/2026-11-16-root-guards-under-load.md).
+Commands, resolved configuration, logs, JSON results, coverage summary and process snapshots
+are retained in Lane I's `receipts/root-guards-under-load-20261116/`.
+
 ### Why the sign-off check leaves out main's commits, and why only a refreshed main
 
 An existing remote ref makes the hook use its remote tip as the range base. After a rebase onto

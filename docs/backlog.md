@@ -1683,8 +1683,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **A1398. Test-file inventory only on a same-count mismatch** (1 conditional entry). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
-- **Root guard deadlines under extreme external load (left open by A751).**
-  [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
+- **A668-5. Remaining captured root-test failures.** [Detail](backlog/ci.md#a668-5-normal-push-recurrence-2026-10-16).
 
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
