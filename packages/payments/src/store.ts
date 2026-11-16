@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -732,6 +732,7 @@ export async function listAbandonedRefundOutcomes(
   tx: Transaction,
   provider: string,
   paymentRef?: string,
+  openOnly = false,
 ) {
   const rows = await tx
     .selectDistinct({
@@ -755,6 +756,7 @@ export async function listAbandonedRefundOutcomes(
         eq(payments.provider, provider),
         isNotNull(payments.reconcileRemediatedAt),
         paymentRef === undefined ? undefined : eq(payments.paymentRef, paymentRef),
+        openOnly ? and(ne(payments.state, "refunded"), isNull(paymentRefunds.id)) : undefined,
       ),
     )
     .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);

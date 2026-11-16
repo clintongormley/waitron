@@ -1889,6 +1889,15 @@ describe("listAbandonedRefundOutcomes", () => {
     await withTransaction(suite.db, async (tx) => {
       await markReconcileRemediated(tx, { ...confirmed, at });
       await markReconcileRemediated(tx, { ...unconfirmed, at });
+    });
+    const openBefore = await withTransaction(suite.db, (tx) =>
+      listAbandonedRefundOutcomes(tx, "fake", undefined, true),
+    );
+    expect(openBefore.map((row) => row.paymentRef)).toEqual([
+      "refund-confirmed",
+      "refund-unconfirmed",
+    ]);
+    await withTransaction(suite.db, async (tx) => {
       await recordRefund(tx, {
         ...confirmed,
         amount: decimal("10.00"),
@@ -1924,6 +1933,11 @@ describe("listAbandonedRefundOutcomes", () => {
       },
     ]);
     expect(await read("other-provider")).toEqual([]);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        listAbandonedRefundOutcomes(tx, "fake", undefined, true),
+      ),
+    ).toEqual([]);
     const selected = await withTransaction(suite.db, (tx) =>
       listAbandonedRefundOutcomes(tx, "fake", "refund-unconfirmed"),
     );

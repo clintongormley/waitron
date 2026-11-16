@@ -46,7 +46,7 @@ export class StripeReconciler implements PaymentReconciler {
     const account = await this.opts.resolveAccount();
     const settlementLagMs = this.opts.settlementLagMs ?? DEFAULT_SETTLEMENT_LAG_MS;
     const marked = await withTransaction(this.opts.db, (tx) =>
-      listAbandonedRefundOutcomes(tx, PROVIDER),
+      listAbandonedRefundOutcomes(tx, PROVIDER, undefined, true),
     );
     let recovered = 0;
     const unconfirmed: string[] = [];
