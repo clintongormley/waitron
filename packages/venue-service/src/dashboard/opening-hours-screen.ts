@@ -1575,7 +1575,7 @@ export class OpeningHoursScreen extends LitElement {
   override render() {
     return html`${this.calendarHeading()}
     ${this.readError && !this.moduleView ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
-      this.moduleView
+      this.moduleView && (this.model || this.readError)
         ? this.moduleContent(this.moduleView)
         : !this.model
           ? nothing

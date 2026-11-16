@@ -2362,6 +2362,29 @@ describe("the Calendar's module views", () => {
     expect(error.textContent).toBe(t("opening.load_error"));
   });
 
+  it("waits for a successful hours read before drawing its business month", async () => {
+    vi.setSystemTime(new Date("2027-04-01T01:30:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const ready = Promise.withResolvers<OpeningHoursModel>();
+    const read = vi
+      .spyOn(OpeningHoursApi.prototype, "readOpeningHours")
+      .mockReturnValue(ready.promise);
+    try {
+      const el = await mountCalendar();
+      await settle(el);
+      const before = el.shadowRoot!.querySelector("[data-test=stub-staffing]")?.textContent ?? null;
+      ready.resolve(model());
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]")?.textContent)
+        .toContain("2027-03");
+      const after = el.shadowRoot!.querySelector("[data-test=stub-staffing]")!.textContent;
+      expect([before, after]).toEqual([null, "2027-03 {}"]);
+    } finally {
+      ready.resolve(model());
+      read.mockRestore();
+    }
+  });
+
   it("draws no switch and titles the page Calendar when no module view is given", async () => {
     const el = await mountCalendar([]);
     await expect.poll(() => drawnView(el)).toBe("year");
