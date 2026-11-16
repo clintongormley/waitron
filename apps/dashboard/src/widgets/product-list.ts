@@ -36,12 +36,8 @@ import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
-  holdPageCursor,
-  pointerElementsAt,
-  releasePageCursor,
-} from "@waitron/ui/src/reorder-table.js";
-import {
   blockClickAfterDrag,
+  TreePointerDrag,
   clearDragMarks,
   dragGhost,
   lastShownRow,
@@ -396,12 +392,65 @@ export class ProductList extends LitElement {
   #counts = new Map<string | null, { categories: number; products: number }>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #dragged: string[] = [];
-  #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
-    null;
-  /** The row a drop would file into — a category's key, or ROOT_KEY — while one is offered. */
-  #target: string | undefined = undefined;
   #hover: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
-  #pointer = { x: 0, y: 0 };
+  get #pointerDrag() {
+    return this.#drag.state;
+  }
+  get #pointer() {
+    return this.#drag.point;
+  }
+  get #target() {
+    return this.#drag.target;
+  }
+  readonly #drag = new TreePointerDrag<string[], string>({
+    activate: (key) => {
+      if (!this.#rowByKey.has(key)) return undefined;
+      const visible = new Set(
+        [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+          (row) => row.dataset.rowKey!,
+        ),
+      );
+      this.#dragged = this.selected.includes(key)
+        ? this.selected.filter((key) => visible.has(key))
+        : [key];
+      return this.#dragged;
+    },
+    targetFor: (_data, over) => this.#dropTargetFor(over),
+    sameTarget: (a, b) => a === b,
+    moved: ({ over, changed, target, starting }) => {
+      if (starting) {
+        this.ghost = this.#ghostOf(this.#dragged);
+        this.#send("drag-items", { keys: this.#dragged });
+        void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
+      }
+      if (this.#edgeOrigin === null) {
+        const origin = shownRow(this.#table()!.shadowRoot!, this.#pointerDrag!.key);
+        if (origin) {
+          this.#edgeScroll.start(origin, this.#pointer, () => this.#drag.repaint());
+          this.#edgeOrigin = origin;
+        }
+      }
+      this.#edgeScroll.update(this.#pointer);
+      placeDragGhost(this.renderRoot, this.#pointer);
+      this.#hoverOpen(over);
+      if (changed || target !== undefined) this.#paint();
+    },
+    ended: () => {
+      this.#edgeScroll.stop();
+      this.#edgeOrigin = null;
+      if (this.#hover) clearTimeout(this.#hover.timer);
+      this.#hover = null;
+      this.#dragged = [];
+      this.ghost = null;
+      this.#paint();
+      this.#send("drag-items", { keys: [] });
+    },
+    drop: (keys, target) =>
+      this.#send("drop-items", {
+        keys,
+        folderId: target === ROOT_KEY ? null : target.slice(7),
+      }),
+  });
   @state() private ghost: DragGhost | null = null;
 
   readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
@@ -432,7 +481,7 @@ export class ProductList extends LitElement {
         // so after each of its updates the drop is judged again on the rows the list now holds and
         // the marks redrawn.
         if (!this.#pointerDrag?.active) return;
-        if (this.#target !== undefined) this.#target = this.#dropTargetFor(this.#target);
+        this.#drag.revalidate();
         this.#paint();
       },
     });
@@ -460,113 +509,15 @@ export class ProductList extends LitElement {
   };
 
   #startDrag(event: PointerEvent, key: string, grip: boolean): void {
-    if (this.#pointerDrag || event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey))
-      return;
     if (event.pointerType === "touch" && !grip) return;
-    this.#pointerDrag = {
-      pointerId: event.pointerId,
-      key,
-      x: event.clientX,
-      y: event.clientY,
-      active: false,
-    };
-    document.addEventListener("pointermove", this.#moveDrag);
-    document.addEventListener("pointerup", this.#endDrag);
-    document.addEventListener("pointercancel", this.#endDrag);
-    document.addEventListener("keydown", this.#dragKey, true);
+    this.#drag.start(event, key);
   }
 
   readonly #edgeScroll = new DragEdgeScroll();
   #edgeOrigin: Element | null = null;
 
-  readonly #moveDrag = (event: PointerEvent): void => {
-    const drag = this.#pointerDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
-    event.preventDefault();
-    if (!drag.active) {
-      if (!this.#rowByKey.has(drag.key)) {
-        this.#finishDrag();
-        return;
-      }
-      drag.active = true;
-      holdPageCursor();
-      const visible = new Set(
-        [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
-          (row) => row.dataset.rowKey!,
-        ),
-      );
-      this.#dragged = this.selected.includes(drag.key)
-        ? this.selected.filter((key) => visible.has(key))
-        : [drag.key];
-      this.ghost = this.#ghostOf(this.#dragged);
-      this.#send("drag-items", { keys: this.#dragged });
-      void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
-    }
-    this.#pointer = { x: event.clientX, y: event.clientY };
-    if (this.#edgeOrigin === null) {
-      const origin = shownRow(this.#table()!.shadowRoot!, drag.key);
-      if (origin) {
-        this.#edgeScroll.start(origin, this.#pointer, () => this.#trackDrop());
-        this.#edgeOrigin = origin;
-      }
-    }
-    this.#edgeScroll.update(this.#pointer);
-    this.#trackDrop();
-  };
-
-  #trackDrop(): void {
-    placeDragGhost(this.renderRoot, this.#pointer);
-    const over = pointerElementsAt(this.#pointer.x, this.#pointer.y).find(
-      (item): item is HTMLElement =>
-        item instanceof HTMLElement && item.matches("tr[data-row-key]"),
-    )?.dataset.rowKey;
-    const target = over === undefined ? undefined : this.#dropTargetFor(over);
-    const changed = target !== this.#target;
-    this.#target = target;
-    this.#hoverOpen(over);
-    if (changed || target !== undefined) this.#paint();
-  }
-
-  readonly #endDrag = (event: PointerEvent): void => {
-    const drag = this.#pointerDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    const keys = this.#dragged;
-    // A backstop: the table-update hook in firstUpdated has already judged the drop again after
-    // any refresh it saw.
-    const target = this.#target === undefined ? undefined : this.#dropTargetFor(this.#target);
-    this.#finishDrag();
-    if (!drag.active || event.type !== "pointerup") return;
-    blockClickAfterDrag(false);
-    if (target !== undefined)
-      this.#send("drop-items", { keys, folderId: target === ROOT_KEY ? null : target.slice(7) });
-  };
-
-  readonly #dragKey = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || !this.#pointerDrag?.active) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.#finishDrag();
-    blockClickAfterDrag(true);
-  };
-
   #finishDrag(): void {
-    this.#edgeScroll.stop();
-    this.#edgeOrigin = null;
-    const drag = this.#pointerDrag;
-    document.removeEventListener("pointermove", this.#moveDrag);
-    document.removeEventListener("pointerup", this.#endDrag);
-    document.removeEventListener("pointercancel", this.#endDrag);
-    document.removeEventListener("keydown", this.#dragKey, true);
-    if (this.#hover) clearTimeout(this.#hover.timer);
-    this.#hover = null;
-    this.#pointerDrag = null;
-    this.#target = undefined;
-    this.#dragged = [];
-    this.ghost = null;
-    if (drag?.active) releasePageCursor();
-    this.#paint();
-    this.#send("drag-items", { keys: [] });
+    this.#drag.finish();
   }
 
   /** Over a category or All products a drop files into it; over a product or variant, into the
