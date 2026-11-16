@@ -1668,7 +1668,7 @@ this section records the remaining build and real-box qualification.
   [Detail](backlog/replication-cloud.md#a1274-a-box-that-handed-over-and-then-loses-its-nodedb-can-start-as-a-second-main-box)
 
 - **A1296: code-quality follow-ups from A947 slice 3a's finish review.** Parallel venue and node
-  handle types, staged node-copy opening and the shared verification reader.
+  handle types, staged node-copy opening and the remaining transaction stages.
   [Detail](backlog/replication-cloud.md#a1296-code-quality-follow-ups-from-a947-slice-3as-finish-review)
 
 - **A1282: browser trust after a connection repair replaces the certificate authority.** The browser

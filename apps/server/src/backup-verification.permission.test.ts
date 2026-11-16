@@ -190,7 +190,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
   expect(await readdir(f.deps.scratchRoot)).toEqual([]);
 }, 300_000);
 
-it.each(["directory removal", "query close"])(
+it.each(["directory removal", "query close", "node query close"])(
   "%s uncertainty cannot pass verification",
   async (failure) => {
     const f = await suite.create();
@@ -208,7 +208,11 @@ it.each(["directory removal", "query close"])(
     } else {
       vi.spyOn(store, "openBackupQuery").mockImplementation(async (path) => {
         const opened = await originalOpen(path);
-        if (typeof path !== "string" || !path.includes("verification-venue-")) return opened;
+        const selected =
+          failure === "node query close"
+            ? path instanceof Uint8Array
+            : typeof path === "string" && path.includes("verification-venue-");
+        if (!selected) return opened;
         return {
           ...opened,
           close: async () => {
@@ -247,11 +251,13 @@ it.each(["success", "owner refusal"])(
     const originalOpen = store.openBackupQuery;
     const originalRm = realFs.rm;
     let placedQuery: store.BackupQuery | undefined;
+    let nodeQuery: store.BackupQuery | undefined;
     let checked = false;
     vi.spyOn(store, "openBackupQuery").mockImplementation(async (path) => {
       const opened = await originalOpen(path);
       if (typeof path === "string" && path.includes("verification-venue-"))
         placedQuery = opened.query;
+      if (path instanceof Uint8Array) nodeQuery = opened.query;
       return opened;
     });
     vi.spyOn(fs, "rm").mockImplementation(async (path, options) => {
@@ -285,6 +291,8 @@ it.each(["success", "owner refusal"])(
     expect(result.status).toBe(outcome === "success" ? "passed" : "unavailable");
     expect(result.reason).toBe(outcome === "success" ? "none" : "unexpected");
     expect(checked).toBe(true);
+    expect(nodeQuery).toBeDefined();
+    await expect(nodeQuery!.rows("select 1")[Symbol.asyncIterator]().next()).rejects.toThrow();
     expect(await readdir(f.deps.scratchRoot)).toEqual([]);
   },
 );

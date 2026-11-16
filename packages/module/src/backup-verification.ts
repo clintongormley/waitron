@@ -28,6 +28,9 @@ export interface BackupEntries {
 }
 
 export interface BackupVerificationContext {
+  /** Borrowed from the verifier for owners declaring node.dump; absent and null mean no copy.
+   * A failed query closes this shared reader. */
+  readonly nodeCopy?: BackupQuery | null;
   readonly before: BackupQuery;
   readonly after: BackupQuery;
   readonly entries: BackupEntries;

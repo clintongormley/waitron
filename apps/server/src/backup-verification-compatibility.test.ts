@@ -143,14 +143,18 @@ beforeEach(async () => {
   );
   bindTarget();
 });
-async function run(beforeOverride?: BackupQuery) {
+async function run(
+  beforeOverride?: BackupQuery,
+  availability: "shared" | "null" | "undefined" = "shared",
+) {
   const path = suite.db
     .all<{ file: string }>(sql`pragma database_list`)
     .find((r) => r.file.endsWith("venue.db"))!.file;
   const handle = await openBackupQuery(path);
   const snapshot = () => suite.db.all(sql`select name, sql from sqlite_schema order by name`);
   const original = snapshot();
-  const scratch = await mkdtemp(join(tmpdir(), "a947-compatibility-scratch-"));
+  const dump = entries.find((e) => e.name === "node.dump");
+  const nodeCopy = dump === undefined ? null : await openBackupQuery(dump.bytes).catch(() => null);
   try {
     return await check({
       manifest,
@@ -159,10 +163,17 @@ async function run(beforeOverride?: BackupQuery) {
       before: beforeOverride ?? handle.query,
       entries,
       migrationsRoot: root!,
-      scratchDir: scratch,
+      ...{
+        nodeCopy:
+          availability === "undefined"
+            ? undefined
+            : availability === "null"
+              ? null
+              : (nodeCopy?.query ?? null),
+      },
     });
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await nodeCopy?.close();
     await handle.close();
     expect(verify).not.toHaveBeenCalled();
     expect(snapshot()).toEqual(original);
@@ -235,6 +246,20 @@ describe("strict backup compatibility", () => {
           Object.entries(manifest.modules).filter(([name]) => name !== "node"),
         ),
       };
+      await expect(run()).resolves.toBe("unsupported");
+    });
+    it.each(["null", "undefined"] as const)(
+      "does not reopen node bytes when the supplied query is %s",
+      async (availability) => {
+        addNodeModule();
+        await carryNodeCopy();
+        await expect(run(undefined, availability)).resolves.toBe("invalid");
+      },
+    );
+    it("keeps target incompatibility ahead of a malformed node copy", async () => {
+      addNodeModule();
+      setEntry("node.dump", "not a database");
+      target = { ...target, digest: "0".repeat(64) };
       await expect(run()).resolves.toBe("unsupported");
     });
     it("refuses a backup that carries no node copy", async () => {

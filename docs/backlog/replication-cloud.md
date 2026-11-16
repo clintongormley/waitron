@@ -994,10 +994,6 @@ Fix idea: at join, also pin the main box's own trusted keys.
 Raised by the finish-branch simplify review (2026-11-01) and not applied there, because each is a
 restructuring wider than a review fix:
 
-- `node.dump` is opened twice in one verification run: read-only with an authorizer
-  (`backup-verification-compatibility.ts`) and writable in memory without one
-  (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened
-  opener.
 - The venue and node handles travel as separate fields under four names (`nodeDb`, `node`,
   `ownerNode`, `nodeDatabase()`), with three near-identical pair types (`VenueDatabase`,
   `VenueAndNodeHandles`, `MigrationFiles`). Pass one pair type.

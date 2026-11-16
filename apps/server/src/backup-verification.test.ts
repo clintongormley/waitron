@@ -257,7 +257,36 @@ describe("complete backup verification", () => {
     try {
       const f = await fixture();
       await seal(f);
+      const opened: store.BackupQuery[] = [];
+      const originalOpen = store.openBackupQuery;
+      vi.spyOn(store, "openBackupQuery").mockImplementation(async (input) => {
+        const handle = await originalOpen(input);
+        if (input instanceof Uint8Array) opened.push(handle.query);
+        return handle;
+      });
+      let shared: store.BackupQuery | null | undefined;
+      f.deps.modules = modules.map((m) =>
+        m.name !== "node"
+          ? m
+          : {
+              ...m,
+              backup: {
+                ...m.backup,
+                verification: {
+                  ...m.backup!.verification!,
+                  async verifyRestoredData(context) {
+                    shared = (context as typeof context & { nodeCopy?: store.BackupQuery | null })
+                      .nodeCopy;
+                    return m.backup!.verification!.verifyRestoredData(context);
+                  },
+                },
+              },
+            },
+      );
       const result = await verify(f);
+      expect(opened).toHaveLength(1);
+      expect(shared).toBe(opened[0]);
+      await expect(shared!.rows("select 1")[Symbol.asyncIterator]().next()).rejects.toThrow();
       expect(result.modules.map((m) => [m.name, m.status])).toEqual([
         ["core", "passed"],
         ["fiscal-none", "passed"],
@@ -805,6 +834,7 @@ insert into bookings
           verification: {
             ...original,
             async verifyRestoredData(context) {
+              expect(context.nodeCopy).toBeUndefined();
               await context.entries.read("secrets/tls/ca.key");
               exposed = true;
               return original.verifyRestoredData(context);

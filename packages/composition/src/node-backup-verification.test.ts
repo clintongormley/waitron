@@ -71,16 +71,26 @@ const secretEntries: Record<string, Uint8Array | null> = {
 async function run(
   nodeDump: Uint8Array | null | undefined = undefined,
   entries: Record<string, Uint8Array | null> = secretEntries,
+  availability: "shared" | "null" | "undefined" = "shared",
 ) {
   const dump = nodeDump === undefined ? await sourceCopy() : nodeDump;
   const path = (s: typeof before) =>
     s.db.all<{ file: string }>(sql`pragma database_list`).find((r) => r.file.endsWith("venue.db"))!
       .file;
+  const nodeCopy = dump === null ? null : await openBackupQuery(dump).catch(() => null);
   const a = await openBackupQuery(path(before));
   try {
     const b = await openBackupQuery(path(after));
     try {
       const context: BackupVerificationContext = {
+        ...{
+          nodeCopy:
+            availability === "undefined"
+              ? undefined
+              : availability === "null"
+                ? null
+                : (nodeCopy?.query ?? null),
+        },
         before: a.query,
         after: b.query,
         entries: {
@@ -105,6 +115,7 @@ async function run(
     }
   } finally {
     await a.close();
+    await nodeCopy?.close();
   }
 }
 
@@ -143,6 +154,31 @@ describe("node.db's backup verification", () => {
     seedSourceNode(null);
     await expect(run(nodeDump)).resolves.toEqual(result("invalid", "invalid"));
   });
+
+  it.each(["null", "undefined"] as const)(
+    "does not reopen bytes when the shared copy is %s",
+    async (availability) => {
+      seedSourceNode(null);
+      await expect(run(undefined, secretEntries, availability)).resolves.toEqual(
+        result("invalid", "invalid"),
+      );
+    },
+  );
+
+  it.each([9007199254740992n, -9007199254740992n])(
+    "refuses out-of-range integer key version %s without rounding it",
+    async (version) => {
+      seedSourceNode(publicKey);
+      await sealKey(SOURCE, privateKey);
+      source.node.run(sql`pragma ignore_check_constraints=on`);
+      try {
+        source.node.run(sql`update node_signing_key set key_version=${version}`);
+      } finally {
+        source.node.run(sql`pragma ignore_check_constraints=off`);
+      }
+      await expect(run()).rejects.toBeInstanceOf(RangeError);
+    },
+  );
 
   it("passes a key-less source whose node copy holds nothing for it", async () => {
     seedSourceNode(null);
