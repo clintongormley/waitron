@@ -1,6 +1,6 @@
 # Whole-state capture implementation plan
 
-**Status: NOT CLEARED.** Claude's 2026-11-16 source review recommends a smaller disposition-table approach instead of this recursive collector. The watcher must settle that scope before any build. Both approaches must keep venue material snapshot-only, derive completeness fixtures from the layout, and avoid making stray working files a new backup refusal.
+**Status:** The watcher cleared Claude's smaller disposition-table recommendation on 2026-11-16 at 05:37. The executable scope is the dated amendment below; the original recursive proposal is retained as a superseded record, not an implementation instruction. No owner design approval claimed.
 
 **Goal:** One PR captures every declared, non-excluded state path and restores that material through the real cold-restore path, using SQLite snapshots rather than copying live databases.
 
@@ -33,3 +33,14 @@ For each behaviour, add a failing assertion, observe the expected failure, imple
 Forecast added/removed lines: production **240/70**, tests **300/60**, fixture/support **20/10**, prose **80/20**: approximately **800 total churn**. Past 1,200 changed lines, stop for the watcher's outside opinion; material policy changes return before build. Prose updates: `docs/developers/conventions-data.md`, `docs/backlog.md` (delete this entry), `docs/backlog/box.md` (retain unrelated B2 carry-forwards). No database-placement durability project or other carry-forward work.
 
 After focused checks, run `finish-branch`: two Claude run-it angles covering capture/completeness and restore/identity safety, then a fresh read of fixes, normal push hook and current-head CI. One PR; the user authorised finish and land, subject to watcher clearance and the normal gates.
+
+## Executable amendment: watcher 2026-11-16 05:37
+
+The watcher: “A disposition table in state-layout.ts naming every top-level entry as captured (required/optional) or excluded with its reason, driving the existing capture, plus a completeness guard that fails when a new entry has no disposition, fixes exactly that. No recursive collector and no binary rewrite until a real captured file needs them. Venue snapshots only; explicit current cloud/operation exclusions; file-level TLS recovery entries.” This adopts Claude's 203-second review recommendation; it is not owner design approval.
+
+- Add a mandatory `backup` disposition to `StateEntry` in `packages/store/src/state-layout.ts`: required/optional file, excluded with a reason, database snapshot, module evidence, or named required TLS files with a reason for the rest being excluded. Derive the required/optional archive path arrays from that same table, preserving current order and bytes. Reset policy stays separate.
+- `apps/server/src/state-secrets.ts` keeps its `RECOVERY_FILES` export as an alias of the derived required list; `backup-optional-state.ts` keeps its optional export as an alias of the derived optional list. Trace every consumer of both names; no verifier, restore writer, archive format or runtime filesystem admission change.
+- TDD: add a store guard test that every declared entry has a disposition and every exclusion/snapshot/evidence has a reason. Observe it fail on current missing dispositions. Pin the existing five required paths, optional backup.env, TLS file subset, snapshot venue and module-evidence policy. Implement the table and aliases minimally.
+- Run store state-layout.test.ts and the root scripts/state-layout.test.ts; server state-secrets.test.ts, backup-optional-state.test.ts, archive-entries.test.ts, archive-entries.node.test.ts, backup-sweep.test.ts and restore-artifact-file.test.ts. Existing real capture/restore cases retain their assertions. Prove the completeness guard by deleting one disposition in an installed disposable checkout and confirming its named failure, then restore.
+- Delete the now-closed index entry in docs/backlog.md and rewrite only the whole-state paragraph of B2 in docs/backlog/box.md, preserving unrelated carry-forwards; add the policy/guard description to conventions-data.md. No runtime unknown-file refusal, recursion, binary rewrite or extra files solely for architecture.
+- Forecast about 250 changed lines: production +90/−12, tests +55/−0, support files +0/−0, prose +70/−23. Outside opinion past 375. The normal two-angle backup/restore run-it wave, one fixes read if needed, hook and current-head CI remain required.
