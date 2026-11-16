@@ -151,7 +151,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     item: "trading.env",
     where: "state",
     class: "destination-owned",
-    treatment: "M2 keeps its own node id; promotion rewrites it",
+    treatment: "M2 keeps its own node id, written when it joined",
   },
   { item: "tls/ca.crt", where: "state", class: "destination-owned", treatment: TLS },
   { item: "tls/ca.key", where: "state", class: "destination-owned", treatment: TLS },

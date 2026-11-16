@@ -6,8 +6,8 @@ import {
   seedDeviceProfiles,
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -60,6 +60,8 @@ import { writeAllocationInput } from "./testing/allocation-input.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
+import { resolveAccountKey } from "./account-key.js";
+import { writeTradingEnv } from "./trading-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -389,11 +391,20 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
+    // As the spare's join writes it (`adopt.ts`).
+    const tradingEnv = await writeTradingEnv(stateDir, {
+      nodeId: seed.nodeId,
+      environment: "production",
+      accountKey: resolveAccountKey({}, RING).toString("base64"),
+    });
+    const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
+
     restartAsked.mockClear();
 
     const mirror = await startServer(
       {
         ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
+        ...parseEnvFile(joined.bytes),
         ...allocationEnv,
       },
       {},
@@ -448,8 +459,10 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       await delay(50);
       expect(restartAsked).toHaveBeenCalled();
 
-      const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
-      expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
+      expect({
+        ino: (await stat(tradingEnv)).ino,
+        bytes: await readFile(tradingEnv, "utf8"),
+      }).toEqual(joined);
       const activeSeriesId = await readStandardSeriesId(db.main, seed.nodeId);
       expect(
         (await db.main.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)?.code,
@@ -463,7 +476,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       primary = await startServer(
         {
           ...KEY_ENV,
-          WAITRON_NODE_ID: persisted.WAITRON_NODE_ID!,
+          ...parseEnvFile(joined.bytes),
           WAITRON_VENUE_DIR: venueDir.main,
           WAITRON_HTTP_PORT: String(primaryPort),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,

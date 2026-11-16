@@ -202,7 +202,6 @@ describe("a spare on a real placed copy", () => {
             modules,
             holders: createDeploymentHolders("mirror", "secondary"),
             log: () => {},
-            persistTradingEnv: async () => {},
             withModuleOperations: runner,
           },
           { oldNodeNeutralised: true },

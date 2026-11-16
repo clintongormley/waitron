@@ -336,7 +336,6 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
           nodeId: held.standby.nodeId,
           holders: createDeploymentHolders("mirror", "secondary"),
           log: () => {},
-          persistTradingEnv: async () => {},
           modules,
           withModuleOperations,
         },

@@ -374,8 +374,7 @@ choice for later venues (the owner's answer to question 4 of that design).
   The separate [empty-contactUrl entry](#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
   keeps the missing-self fallback concern.
 - **Restore restart and promotion.** A persistent wiped-state marker and in-process mirror
-  promotion remain open. Role repair from a committed chart is tested by `promoted-role.test.ts`;
-  it does not qualify a power cut between publishing `trading.env` and committing promotion.
+  promotion remain open. Role repair from a committed chart is tested by `promoted-role.test.ts`.
 - **Fiscal-certificate distribution.** The old distribution design was reverted. The spare gets
   the shared ring at join, but later ring changes, restore onto Cloud and the dormant certificate's
   protection still need the [distribution work](#fiscal-certificate-distribution).
@@ -686,15 +685,12 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
 
 ## Bundle: Decide what the old promote route still does
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **After a plain promote nobody sweeps the old box's open card payments.** That route writes no
   activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
   resolves it on the new box. A text search found no screen calling the route. Left open by A1018
   Slice 5 (Rulings R47, R48).
-- **A failed promotion leaves `trading.env` behind.** `apps/server/src/promote.ts` writes it inside
-  the transaction's body, so a failed activation leaves it written (run: false, then true). On main
-  since at least #1587 (`git log -S`). A start with that leftover and no retry was not run.
 - **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
   [Detail](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)
 

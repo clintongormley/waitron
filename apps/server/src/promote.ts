@@ -185,7 +185,6 @@ export interface MirrorPromotionResult extends PromotionResult {
 }
 
 export interface MirrorPromoteDeps extends PromoteDeps {
-  readonly persistTradingEnv: () => Promise<void>;
   readonly modules?: readonly WaitronModule[];
   readonly moduleOperations?: ModuleOperations;
   readonly withModuleOperations?: PromotionOperationRunner;
@@ -279,7 +278,6 @@ export async function promoteMirrorToPrimary(
     }
     const series = await readLiveSeriesIdTx(tx, node.nodeId, "standard");
     await readLiveSeriesIdTx(tx, node.nodeId, "full");
-    await deps.persistTradingEnv();
     await commitMirrorPromotionTx(tx, document);
     for (const m of deps.modules ?? []) {
       if (m.provisioning?.standby?.activate !== undefined)

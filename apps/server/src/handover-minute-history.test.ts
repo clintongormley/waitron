@@ -293,7 +293,6 @@ async function sparePromotes(s: ReturnType<typeof spareService>, input: unknown)
           modules,
           holders: createDeploymentHolders("mirror", "secondary"),
           log: () => {},
-          persistTradingEnv: async () => {},
           withModuleOperations: runner,
         },
         { oldNodeNeutralised: true },

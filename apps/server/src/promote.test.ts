@@ -528,7 +528,7 @@ describe("promoteMirrorToPrimary", () => {
     nodeId: string;
     standardSeriesId: string;
     endorsement: Endorsement;
-    deps: (log: PromoteDeps["log"], persistTradingEnv?: () => Promise<void>) => MirrorPromoteDeps;
+    deps: (log: PromoteDeps["log"]) => MirrorPromoteDeps;
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
@@ -588,26 +588,16 @@ describe("promoteMirrorToPrimary", () => {
       nodeId: standby.nodeId,
       standardSeriesId,
       endorsement,
-      deps: (log, persistTradingEnv = async () => {}) => ({
+      deps: (log) => ({
         db,
         node: suite.node,
         holders,
         log,
         ring: RING,
         nodeId: standby.nodeId,
-        persistTradingEnv,
       }),
     };
   }
-
-  it("persists trading identity without handing the callback a cached series", async () => {
-    const { db, deps, nodeId } = await mirror();
-    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
-    const persist = vi.fn(async () => {});
-    await promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true });
-    expect(persist).toHaveBeenCalledTimes(1);
-    expect(persist).toHaveBeenCalledWith();
-  });
 
   it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the validated standard seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
@@ -635,58 +625,23 @@ describe("promoteMirrorToPrimary", () => {
     await db.execute(
       sql`update invoice_series set retired_at = current_timestamp where node_id = ${nodeId} and purpose = 'full'`,
     );
-    const persisted: string[] = [];
 
     const error = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-        }),
-        { oldNodeNeutralised: true },
-      ),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
 
     expect(isAppError(error) && error.code).toBe("series.no_full_for_node");
-    expect(persisted).toEqual([]);
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
   });
 
-  it("persists trading identity BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
-    // A persist that throws must leave the node a mirror; had the flip run first, it would be primary.
-    const { db, deps, nodeId } = await mirror();
-    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
-    const persisted: string[] = [];
-    const err = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-          throw new Error("disk full");
-        }),
-        { oldNodeNeutralised: true },
-      ),
-    );
-    expect((err as Error).message).toBe("disk full");
-    expect(persisted).toEqual(["persisted"]);
-    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
-    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
-    expect((await readNodeMembership(db))?.body.term).toBe(3);
-  });
-
-  it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
+  it("refuses without a fence attestation, leaving the node a mirror", async () => {
     const { deps, nodeId } = await mirror();
-    const persisted: string[] = [];
     const err = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-        }),
-        { oldNodeNeutralised: false },
-      ),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: false }),
     );
     expect(isAppError(err) && err.code).toBe("promotion.fence_not_attested");
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
-    expect(persisted).toEqual([]);
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
@@ -701,24 +656,17 @@ describe("promoteMirrorToPrimary", () => {
     expect((await readNodeMembership(db))?.body.term).toBe(4);
   });
 
-  it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
+  it("refuses a fenced node with promotion.node_fenced, leaving it a mirror", async () => {
     const { db, deps, nodeId } = await mirror();
     await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
-    const persisted: string[] = [];
     const err = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-        }),
-        { oldNodeNeutralised: true },
-      ),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "sell-only" });
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
-    expect(persisted).toEqual([]);
   });
 
   // Covers only a machine whose OWN held chart contains the clearing. A standby that never finished
@@ -738,20 +686,13 @@ describe("promoteMirrorToPrimary", () => {
         revoked: [nodeId],
       }),
     );
-    const persisted: string[] = [];
     const err = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-        }),
-        { oldNodeNeutralised: true },
-      ),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "evicted" });
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
-    expect(persisted).toEqual([]);
   });
 
   it("refuses with membership.chart_too_large, leaving it a mirror, when its held chart lists MAX_NODES machines but not itself", async () => {
@@ -769,19 +710,12 @@ describe("promoteMirrorToPrimary", () => {
         })),
       }),
     );
-    const persisted: string[] = [];
     const err = await captureError(() =>
-      promoteMirrorToPrimary(
-        deps(noopLog, async () => {
-          persisted.push("persisted");
-        }),
-        { oldNodeNeutralised: true },
-      ),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("membership.chart_too_large");
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
-    expect(persisted).toEqual([]);
   });
 
   it("aborts the whole PONR with promotion.membership_superseded when a newer term raced in", async () => {
@@ -896,7 +830,6 @@ describe("promoteMirrorToPrimary", () => {
     const { db, deps, nodeId } = await mirror();
     await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     await db.delete(deployment);
-    const persist = vi.fn(async () => {});
     const activate = vi.fn(async () => {});
     const activating = fakeModule("activating-regime", {
       provisioning: {
@@ -906,14 +839,13 @@ describe("promoteMirrorToPrimary", () => {
 
     const error = await captureError(() =>
       promoteMirrorToPrimary(
-        { ...deps(noopLog, persist), modules: [activating] },
+        { ...deps(noopLog), modules: [activating] },
         { oldNodeNeutralised: true },
       ),
     );
 
     expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
     expect(activate).not.toHaveBeenCalled();
-    expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
       mode: "mirror",
@@ -940,13 +872,11 @@ describe("promoteMirrorToPrimary", () => {
   it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
     const { db, deps, nodeId } = await mirror();
     await writeNodeMembership(db, heldTermThreeDoc(nodeId, "unpinned-old-primary"));
-    const persist = vi.fn(async () => {});
     const err = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
     expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
-    expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
       mode: "mirror",
@@ -959,13 +889,11 @@ describe("promoteMirrorToPrimary", () => {
     const doc = heldTermThreeDoc(nodeId, "unpinned-old-primary");
     const body = { ...doc.body, revoked: ["gone", "gone"] };
     await writeNodeMembership(db, signedBy("unpinned-old-primary", body));
-    const persist = vi.fn(async () => {});
     const err = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
     expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
-    expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
   });
@@ -974,13 +902,11 @@ describe("promoteMirrorToPrimary", () => {
     const { db, deps, nodeId } = await mirror();
     const doc = { ...heldTermThreeDoc(nodeId, "unpinned-old-primary"), note: "x" };
     await writeNodeMembership(db, doc as SignedMembershipDocument);
-    const persist = vi.fn(async () => {});
     const err = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
     expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
-    expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
   });
@@ -989,13 +915,11 @@ describe("promoteMirrorToPrimary", () => {
     const { db, deps, nodeId } = await mirror();
     await writeNodeMembership(db, unreadableChart(nodeId, "unpinned-old-primary"));
     const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
-    const persist = vi.fn(async () => {});
     const err = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
     expect(isAppError(err) && err.params).toEqual({ reason: "malformed" });
-    expect(persist).not.toHaveBeenCalled();
     expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
   });
 

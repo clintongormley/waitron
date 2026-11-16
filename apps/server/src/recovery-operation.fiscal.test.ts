@@ -404,7 +404,6 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
         ring,
         holders: createDeploymentHolders("mirror", "secondary"),
         log: () => {},
-        persistTradingEnv: async () => {},
         modules: [module],
         withModuleOperations: ({ db, nodeDb, node }, run) =>
           withRecoveryKeyOperation(
