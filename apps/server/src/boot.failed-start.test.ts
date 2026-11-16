@@ -1300,7 +1300,9 @@ describe("append-only triggers at boot", () => {
       };
     });
     const stop = StreamHost.prototype.stop;
-    const stopping = vi.spyOn(StreamHost.prototype, "stop").mockImplementation(function () {
+    const stopping = vi.spyOn(StreamHost.prototype, "stop").mockImplementation(function (
+      this: StreamHost,
+    ) {
       calls.push("stream");
       return stop.call(this);
     });
