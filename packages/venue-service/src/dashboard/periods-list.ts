@@ -1,3 +1,4 @@
+import { t as tableText } from "@waitron/dashboard-kit";
 import type { CalendarColour } from "@waitron/shared";
 import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -368,11 +369,13 @@ export class PeriodsList extends LitElement {
       },
       {
         key: "customerMenu",
+        choosable: "shown",
         label: t("period.customer_menu"),
         cell: (row) => (row.kind === "period" ? this.menuName(row.menuId) : nothing),
       },
       {
         key: "staffMenus",
+        choosable: "shown",
         label: t("opening.staff_menus"),
         cell: (row) =>
           row.kind !== "period"
@@ -385,6 +388,7 @@ export class PeriodsList extends LitElement {
         ? [
             {
               key: "floorPlan",
+              choosable: "shown",
               label: t("period.floor_plan"),
               cell: (row: PeriodRow) => this.floorPlanCell(row),
             } satisfies DataTableColumn<PeriodRow>,
@@ -392,6 +396,7 @@ export class PeriodsList extends LitElement {
         : []),
       {
         key: "paintedIn",
+        choosable: "shown",
         label: t("period.painted_in"),
         cell: (row) => (row.kind === "period" ? this.paintedInCell(row) : nothing),
       },
@@ -451,6 +456,17 @@ export class PeriodsList extends LitElement {
               : html`<wt-data-table
                   wrap-to-fit
                   aria-label=${t("period.title")}
+                  viewKey="waitron.periods.table"
+                  customiseColumnsLabel=${tableText("table.customise_columns")}
+                  customiseLabel=${tableText("table.customise")}
+                  restoreColumnsLabel=${tableText("table.restore_columns")}
+                  doneLabel=${tableText("table.done")}
+                  moveColumnLabel=${tableText("table.move_column")}
+                  showColumnLabel=${tableText("table.show_column")}
+                  hideColumnLabel=${tableText("table.hide_column")}
+                  alwaysShownColumnLabel=${tableText("table.column_always_shown")}
+                  lastShownColumnLabel=${tableText("table.column_last_shown")}
+                  columnPositionLabel=${tableText("table.column_position")}
                   .columns=${columns}
                   .rows=${rows}
                   .rowKey=${(row: PeriodRow) => `${row.kind}:${row.id}`}

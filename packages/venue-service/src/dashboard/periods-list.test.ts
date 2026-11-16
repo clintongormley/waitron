@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -764,3 +765,29 @@ it("a period naming the department's default set reads as the default, (default)
 });
 
 beforeEach(() => history.replaceState({}, "", "/manage/periods"));
+
+it("offers localized remembered column choices for waitron.periods.table", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.periods.table:columns", '{"customerMenu":false}');
+  try {
+    const el = await mount();
+    await loaded(el);
+    const root = table(el)!.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="customerMenu"]')).toHaveProperty(
+      "checked",
+      false,
+    );
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.periods.table:columns");
+    setLocale("en");
+  }
+});

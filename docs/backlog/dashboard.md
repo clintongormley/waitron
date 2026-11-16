@@ -50,7 +50,7 @@ Review #559 also recorded no test reaching `management_session.required` in
   (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list
   (`apps/dashboard/src/screens/servers-screen.ts`) offers no chooser, its one column beside the
   buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
-  with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser;
+  with no chooser;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
   four report tables on the sales screen

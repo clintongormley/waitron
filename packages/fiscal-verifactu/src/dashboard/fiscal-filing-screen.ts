@@ -27,6 +27,7 @@ import {
   dateTimeFormat,
   formatIsoMinute,
   subscribeLocale,
+  t as tableText,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
 import { formatMoney, localCalendarDate } from "@waitron/shared";
@@ -1128,21 +1129,25 @@ export class FiscalFilingScreen extends LitElement {
       },
       {
         key: "invoice",
+        choosable: "shown",
         label: t("fiscal_filing.column.invoice"),
         cell: (row) => `${row.record.numSerieFactura} · ${row.record.fechaExpedicionFactura}`,
       },
       {
         key: "reason",
+        choosable: "shown",
         label: t("fiscal_filing.column.reason"),
         cell: (row) => t(`fiscal_filing.cause.${row.cause}`),
       },
       {
         key: "code",
+        choosable: "shown",
         label: t("fiscal_filing.column.code"),
         cell: (row) => (row.evidence.codigo === null ? "—" : String(row.evidence.codigo)),
       },
       {
         key: "held",
+        choosable: "shown",
         label: t("fiscal_filing.column.held"),
         align: "end",
         cell: (row) => count(row.heldBehind),
@@ -1190,6 +1195,17 @@ export class FiscalFilingScreen extends LitElement {
       <wt-data-table
         data-test="case-table"
         aria-label=${t("fiscal_filing.cases")}
+        viewKey="waitron.fiscal-filing.cases.table"
+        customiseColumnsLabel=${tableText("table.customise_columns")}
+        customiseLabel=${tableText("table.customise")}
+        restoreColumnsLabel=${tableText("table.restore_columns")}
+        doneLabel=${tableText("table.done")}
+        moveColumnLabel=${tableText("table.move_column")}
+        showColumnLabel=${tableText("table.show_column")}
+        hideColumnLabel=${tableText("table.hide_column")}
+        alwaysShownColumnLabel=${tableText("table.column_always_shown")}
+        lastShownColumnLabel=${tableText("table.column_last_shown")}
+        columnPositionLabel=${tableText("table.column_position")}
         emptyMessage=${t("fiscal_filing.cases.none")}
         .columns=${this.#columns()}
         .rows=${cases.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}

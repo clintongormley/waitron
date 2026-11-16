@@ -1,4 +1,5 @@
 import { FALLBACK_LOCALE } from "@waitron/shared";
+import { TABLE_CUSTOMISATION_STRINGS } from "./strings.js";
 
 // The dashboard's shared i18n resolver: module-level locale state, a pub/sub for live switches, and a
 // mutable catalogue registry a module fills at load — so a module UI can contribute its own strings
@@ -6,7 +7,10 @@ import { FALLBACK_LOCALE } from "@waitron/shared";
 
 type Catalogue = Record<string, Record<string, string>>;
 
-const catalogues: Catalogue = { en: {}, es: {} };
+const catalogues: Catalogue = {
+  en: { ...TABLE_CUSTOMISATION_STRINGS.en },
+  es: { ...TABLE_CUSTOMISATION_STRINGS.es },
+};
 
 let locale: string = FALLBACK_LOCALE;
 

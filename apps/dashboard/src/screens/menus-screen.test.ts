@@ -5086,14 +5086,22 @@ describe("the Structure tree", () => {
     });
 
     it.each(["en-GB", "es-ES"])(
-      "fills the toolbar's width at phone width in %s",
+      "fills the toolbar beside Customise at phone width in %s",
       async (locale) => {
         await at([390, 844], locale, async () => {
           const el = await mountLunch();
           const table = q<HTMLElement>(el, "dashboard-menu-structure-table")!;
-          expect(searchBox(el).getBoundingClientRect().width).toBeGreaterThanOrEqual(
-            table.getBoundingClientRect().width * 0.9,
+          const search = searchBox(el).getBoundingClientRect();
+          const chooser = table
+            .shadowRoot!.querySelector("wt-data-table")!
+            .shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
+          const box = chooser.getBoundingClientRect();
+          const gap = Number.parseFloat(getComputedStyle(chooser.parentElement!).columnGap);
+          expect(search.width).toBeGreaterThanOrEqual(
+            (table.getBoundingClientRect().width - box.width - gap) * 0.9,
           );
+          expect(box.top).toBeLessThan(search.bottom);
+          expect(box.bottom).toBeGreaterThan(search.top);
         });
       },
     );

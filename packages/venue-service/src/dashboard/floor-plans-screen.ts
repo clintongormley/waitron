@@ -1,3 +1,4 @@
+import { t as tableText } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -455,10 +456,16 @@ export class FloorPlansScreen extends LitElement {
       { key: "name", label: t("floor_plans.column.set_zone"), cell: (row) => this.nameCell(row) },
       {
         key: "usedBy",
+        choosable: "shown",
         label: t("floor_plans.column.used_by"),
         cell: (row) => this.usedByCell(row),
       },
-      { key: "tables", label: t("floor_plans.column.tables"), cell: (row) => this.tablesCell(row) },
+      {
+        key: "tables",
+        choosable: "shown",
+        label: t("floor_plans.column.tables"),
+        cell: (row) => this.tablesCell(row),
+      },
       ...(this.readOnly
         ? []
         : [
@@ -498,6 +505,17 @@ export class FloorPlansScreen extends LitElement {
             : html`<wt-data-table
                 wrap-to-fit
                 aria-label=${t("floor_plans.title")}
+                viewKey="waitron.floor-plans.table"
+                customiseColumnsLabel=${tableText("table.customise_columns")}
+                customiseLabel=${tableText("table.customise")}
+                restoreColumnsLabel=${tableText("table.restore_columns")}
+                doneLabel=${tableText("table.done")}
+                moveColumnLabel=${tableText("table.move_column")}
+                showColumnLabel=${tableText("table.show_column")}
+                hideColumnLabel=${tableText("table.hide_column")}
+                alwaysShownColumnLabel=${tableText("table.column_always_shown")}
+                lastShownColumnLabel=${tableText("table.column_last_shown")}
+                columnPositionLabel=${tableText("table.column_position")}
                 .columns=${columns}
                 .rows=${this.rows(model)}
                 .rowKey=${(row: Row) => row.key}

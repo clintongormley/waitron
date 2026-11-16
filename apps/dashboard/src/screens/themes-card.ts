@@ -235,6 +235,7 @@ export class ThemesCard extends LitElement {
     if (band === "colours") {
       columns.push({
         key: "colours",
+        choosable: "shown",
         label: t("appearance.themes_colours"),
         cell: (row) =>
           row.colours.map(
@@ -246,6 +247,7 @@ export class ThemesCard extends LitElement {
     if (statusColumn) {
       columns.push({
         key: "status",
+        choosable: "shown",
         label: t("appearance.themes_status"),
         cell: (row) => this.#status(row),
       });
@@ -481,6 +483,17 @@ export class ThemesCard extends LitElement {
       body: html`<wt-data-table
         wrap-to-fit
         aria-label=${t("appearance.themes_table")}
+        viewKey="waitron.themes.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${rowsOf(this.list)}
         .columns=${this.#columns()}
         .rowKey=${(row: Row) => row.key}

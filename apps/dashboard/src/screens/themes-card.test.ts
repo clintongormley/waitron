@@ -1,5 +1,6 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { THEME_NAME_MAX_LENGTH, WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { DashboardApi, type ThemeList, type ThemeView } from "../api/client.js";
@@ -367,4 +368,24 @@ describe("the Themes card fits its own width", () => {
     expect(tag.top).toBeGreaterThanOrEqual(name.bottom);
     expect(tag.left).toBeCloseTo(name.left, 0);
   });
+});
+
+it("offers localized column choices and restores a hidden theme colour", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.themes.table:columns", '{"colours":false}');
+  try {
+    const el = await mount(four);
+    const chooser = inTable(el, ".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(inTable(el, 'input[data-column="colours"]')).toHaveProperty("checked", false);
+    expect(inTable(el, "wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.themes.table:columns");
+  }
 });

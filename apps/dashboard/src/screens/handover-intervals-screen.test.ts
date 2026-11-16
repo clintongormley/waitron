@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import type {
@@ -355,5 +356,40 @@ it("flushes a pending search on Enter without a second debounced request", async
     expect(read).toHaveBeenCalledTimes(2);
   } finally {
     vi.useRealTimers();
+  }
+});
+
+it.each([
+  ["waitron.handover-intervals.table", "destination", 0],
+  ["waitron.returned-invoices.table", "chain", 1],
+] as const)("offers localized remembered columns for %s", async (key, hidden, index) => {
+  setLocale("es-ES");
+  localStorage.setItem(`${key}:columns`, JSON.stringify({ [hidden]: false }));
+  try {
+    const { el } = await mountWidget<HandoverIntervalsScreen>(
+      "dashboard-handover-intervals-screen",
+      {
+        api: {
+          listHandoverIntervals: async () => ({ intervals: [row], timeZone: "Europe/Madrid" }),
+          listReturnedInvoices: async () => invoicePage,
+        } as unknown as DashboardApi,
+      },
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelectorAll("wt-data-table")[index]!.rows).toHaveLength(1),
+    );
+    const root = el.shadowRoot!.querySelectorAll("wt-data-table")[index]!.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector(`input[data-column="${hidden}"]`)).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem(`${key}:columns`);
   }
 });

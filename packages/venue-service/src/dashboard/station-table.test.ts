@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -342,4 +343,25 @@ it("A773 station policy: shows whether each station waits for the pass", async (
   const es = await mount(stations);
   expect(cell(es, "grill")).toBe("Sí");
   expect(cell(es, "bar")).toBe("No");
+});
+
+it("offers localized column choices and restores a hidden station output", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.prep-stations.table:columns", '{"printedOn":false}');
+  try {
+    const el = await mount();
+    const root = table(el)!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="printedOn"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.prep-stations.table:columns");
+  }
 });

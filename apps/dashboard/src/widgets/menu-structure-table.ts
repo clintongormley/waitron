@@ -301,8 +301,6 @@ export class MenuStructureTable extends LitElement {
   #target: Drop | undefined = undefined;
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
-  /** Whether a column filter is narrowing the rows, as the table last reported. */
-  @state() private filtering = false;
 
   #fitFrame = 0;
   readonly #pathResize = new ResizeObserver(() => this.#schedulePathFit());
@@ -914,7 +912,7 @@ export class MenuStructureTable extends LitElement {
   #rowSelectable(row: TableRow): boolean {
     if (row.kind === "root" || row.readOnly) return false;
     if (row.node.ref.kind !== "section") return true;
-    if (this.filtering) return false;
+    if (this.#table()?.filterValues("available").length) return false;
     const { search, names } = this.#compiledSearch();
     if (search === undefined) return true;
     let matches = names.get(row.name);
@@ -934,10 +932,6 @@ export class MenuStructureTable extends LitElement {
       this.#searchCache = { query: this.search, search: textSearch(this.search), names: new Map() };
     return this.#searchCache;
   }
-
-  readonly #filterChange = (event: CustomEvent<{ filters: Record<string, string | string[]> }>) => {
-    this.filtering = Object.values(event.detail.filters).some((value) => value.length > 0);
-  };
 
   #ownedSection(row: Row): boolean {
     return row.node.ref.kind === "section" && !row.readOnly && !row.node.includedMenuId;
@@ -1405,6 +1399,7 @@ export class MenuStructureTable extends LitElement {
       },
       {
         key: "kind",
+        choosable: "shown",
         label: t("members.kind"),
         cell: (row) =>
           row.kind === "root"
@@ -1415,6 +1410,7 @@ export class MenuStructureTable extends LitElement {
       },
       {
         key: "available",
+        choosable: "shown",
         label: t("editor.available"),
         cell: (row) => {
           if (row.kind === "root" || row.node.ref.kind !== "product") return nothing;
@@ -1458,6 +1454,17 @@ export class MenuStructureTable extends LitElement {
     const empty = this.nodes.length === 0;
     return html`<wt-data-table
         aria-label=${t("menus.tree_heading")}
+        viewKey="waitron.menu-structure.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         emptyMessage=${t("menus.structure_empty")}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
@@ -1501,7 +1508,6 @@ export class MenuStructureTable extends LitElement {
           this.#send("wt-selection-change", { selected: event.detail.selected });
         }}
         @wt-expand-change=${this.#expandChange}
-        @wt-filter-change=${this.#filterChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot>${
           empty

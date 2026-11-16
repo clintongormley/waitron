@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
 import { userEvent } from "vitest/browser";
@@ -1668,4 +1669,28 @@ describe("replacing a full invoice AEAT refused for a future date, with full-inv
     );
     expect(action(details).disabled).toBe(false);
   });
+});
+
+it("offers localized remembered column choices for waitron.fiscal-filing.cases.table", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.fiscal-filing.cases.table:columns", '{"code":false}');
+  try {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const root = table.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="code"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.fiscal-filing.cases.table:columns");
+    setLocale("en");
+  }
 });

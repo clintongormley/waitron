@@ -132,6 +132,7 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       {
         key: "chain",
+        choosable: "shown",
         label: t("returned_invoices.chain"),
         cell: (row) =>
           html`<span part="value"
@@ -140,6 +141,7 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       {
         key: "invoice",
+        choosable: "shown",
         label: t("returned_invoices.invoice"),
         cell: (row) =>
           html`<span part="value"
@@ -148,6 +150,7 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       {
         key: "record",
+        choosable: "shown",
         label: t("returned_invoices.record"),
         cell: (row) =>
           html`<span part="value"
@@ -156,11 +159,13 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       ...(["taxable", "gross", "tax"] as const).map((key) => ({
         key,
+        choosable: "shown" as const,
         label: t(`returned_invoices.${key}`),
         cell: (row: ReturnedInvoiceRecord) => row[key] ?? t("returned_invoices.not_recorded"),
       })),
       {
         key: "receivedAt",
+        choosable: "shown",
         label: t("returned_invoices.received"),
         sortValue: (row) => row.receivedAt,
         cell: (row) => this.#time(row.receivedAt, this.invoiceZone),
@@ -184,26 +189,31 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       {
         key: "destination",
+        choosable: "shown",
         label: t("handover_intervals.destination"),
         cell: (row) => html`<span part="value">${row.destinationName}</span>`,
       },
       {
         key: "copy",
+        choosable: "shown",
         label: t("handover_intervals.copy"),
         cell: (row) => this.#time(row.lastChangeAtMs),
       },
       {
         key: "declared",
+        choosable: "shown",
         label: t("handover_intervals.declared"),
         cell: (row) => this.#time(row.declaredAtMs),
       },
       {
         key: "activated",
+        choosable: "shown",
         label: t("handover_intervals.activated"),
         cell: (row) => this.#time(row.activatedAt),
       },
       {
         key: "receipt",
+        choosable: "shown",
         label: t("handover_intervals.receipt"),
         cell: (row) =>
           html`<span part="value"
@@ -212,6 +222,7 @@ export class HandoverIntervalsScreen extends LitElement {
       },
       {
         key: "reason",
+        choosable: "shown",
         label: t("handover_intervals.reason"),
         cell: (row) => html`<span part="value">${row.reason}</span>`,
       },
@@ -231,6 +242,17 @@ export class HandoverIntervalsScreen extends LitElement {
       </div>
       <wt-data-table
         aria-label=${t("handover_intervals.title")}
+        viewKey="waitron.handover-intervals.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${this.rows}
         .columns=${this.#columns()}
         .rowKey=${(row: HandoverInterval) => row.operationId}
@@ -255,6 +277,16 @@ export class HandoverIntervalsScreen extends LitElement {
         </div>
         <wt-data-table
           aria-label=${t("returned_invoices.title")}
+          customiseColumnsLabel=${t("table.customise_columns")}
+          customiseLabel=${t("table.customise")}
+          restoreColumnsLabel=${t("table.restore_columns")}
+          doneLabel=${t("table.done")}
+          moveColumnLabel=${t("table.move_column")}
+          showColumnLabel=${t("table.show_column")}
+          hideColumnLabel=${t("table.hide_column")}
+          alwaysShownColumnLabel=${t("table.column_always_shown")}
+          lastShownColumnLabel=${t("table.column_last_shown")}
+          columnPositionLabel=${t("table.column_position")}
           viewKey="waitron.returned-invoices.table"
           searchable
           searchLabel=${t("returned_invoices.search")}

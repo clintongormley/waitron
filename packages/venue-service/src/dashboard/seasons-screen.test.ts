@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
@@ -385,4 +386,26 @@ it("keeps a delete's opening revision through a live update and takes a new one 
   await screen.updateComplete;
   screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
   await expect.poll(() => revisions).toEqual([4, 9]);
+});
+
+it("offers localized remembered column choices for waitron.seasons.table", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.seasons.table:columns", '{"startsOn":false}');
+  try {
+    const table = await mount();
+    const root = table.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="startsOn"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.seasons.table:columns");
+    setLocale("en");
+  }
 });

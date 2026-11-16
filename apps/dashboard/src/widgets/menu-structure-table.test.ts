@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
@@ -10,6 +11,13 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
+function forgetColumnsAndFilters() {
+  sessionStorage.removeItem("waitron.menu-structure.table");
+  localStorage.removeItem("waitron.menu-structure.table:columns");
+  localStorage.removeItem("waitron.menu-structure.table:column-order");
+}
+beforeEach(forgetColumnsAndFilters);
+afterEach(forgetColumnsAndFilters);
 afterEach(cleanupWidgets);
 beforeEach(async () => {
   await page.viewport(1280, 844);
@@ -3510,6 +3518,31 @@ describe("Select mode while a search or filter hides rows", () => {
     expect([...el.shownSelectableKeys()]).toEqual([]);
   });
 
+  it("keeps sections out of selection when the Available filter was restored", async () => {
+    sessionStorage.setItem(
+      "waitron.menu-structure.table",
+      JSON.stringify({ filters: { available: "no" } }),
+    );
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) =>
+        each.id === "p-lemonade" ? { ...each, available: false } : each,
+      ),
+    });
+    expect(table(el).filterValues("available")).toEqual(["no"]);
+    const availableOnly = [
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ];
+    expect(boxKeys(el)).toEqual(availableOnly);
+    expect([...el.shownSelectableKeys()]).toEqual(availableOnly);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "");
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav", "included-wine"]);
+  });
+
   it("gives no section or included menu a box while the Available filter is on", async () => {
     const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
     const el = await mount({
@@ -4549,4 +4582,27 @@ describe("names holding replacement patterns or another placeholder", () => {
       `${lemon}, in ${drinks}`,
     );
   });
+});
+
+it("offers localized remembered column choices for waitron.menu-structure.table", async () => {
+  const previous = currentLocale();
+  setLocale("es-ES");
+  localStorage.setItem("waitron.menu-structure.table:columns", '{"kind":false}');
+  try {
+    const el = await mount();
+    const root = table(el).shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="kind"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.menu-structure.table:columns");
+    setLocale(previous);
+  }
 });
