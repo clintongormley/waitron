@@ -61,8 +61,6 @@ export const shellEn = {
   "shell.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
   "shell.operation_conflict":
     "This server holds saved setup work that does not match this request, so it did not do this one.",
-  "shell.already_stamped":
-    "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.",
   "shell.already_provisioning": "Setup is already in progress on this server.",
   "shell.already_provisioned": "This server is already set up.",
 
@@ -290,8 +288,6 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.not_ready": "El servidor aún no está listo. Espera un momento e inténtalo de nuevo.",
   "shell.operation_conflict":
     "Este servidor tiene guardado un trabajo de configuración que no coincide con esta solicitud, así que no ha hecho esta.",
-  "shell.already_stamped":
-    "Un intento anterior de configuración dejó este servidor configurado a medias, para otro entorno. Contacta con soporte para restablecer este servidor y vuelve a empezar la configuración.",
   "shell.already_provisioning": "La configuración ya está en curso en este servidor.",
   "shell.already_provisioned": "Este servidor ya está configurado.",
 

@@ -1762,11 +1762,6 @@ export class SetupApp extends LitElement {
         this.provisionCanRetry = false;
         this.provisionReloadLabel = say("shell.reload_open_till");
         return;
-      case "deployment.already_stamped":
-        this.provisionMessage = say("shell.already_stamped");
-        this.provisionCanRetry = false;
-        this.provisionReloadLabel = say("shell.reload");
-        return;
       case "setup.mode_not_allowed":
       case "sif.throwaway_allocation_refused":
         this.provisionMessage = say(
@@ -2237,11 +2232,6 @@ export class SetupApp extends LitElement {
         return;
       case "setup.already_provisioned":
         this.provisionMessage = say("shell.already_provisioned");
-        this.provisionCanRetry = false;
-        this.provisionReloadLabel = say("shell.reload");
-        return;
-      case "deployment.already_stamped":
-        this.provisionMessage = say("shell.already_stamped");
         this.provisionCanRetry = false;
         this.provisionReloadLabel = say("shell.reload");
         return;

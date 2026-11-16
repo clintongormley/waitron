@@ -2134,8 +2134,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       });
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
-        // Stamped after boot, as a live provision refused inside `applyVenue` leaves it on a
-        // preproduction host; boot itself refuses a database stamped for another environment.
         const stamped = await post("/__test/stamp-deployment", {});
         expect(stamped.status).toBe(204);
         const expected = {

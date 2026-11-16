@@ -419,7 +419,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
   [Audit](backlog/self-service-refusals.md#setup-reset).
 
-- **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
+- **A1089: a Live setup refused after its production stamp, then restarted, has no way out.** The wizard's Live path stamps the database production before the attempt is marked activation started, so a refusal in that window followed by a restart leaves a box that refuses to start and whose recovery page cannot move its files aside. The fix (stamp only once activation has started, as the command path does) is queued in lane K.
   [Audit](backlog/self-service-refusals.md#setup-environment).
 
 - **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1158, A1159 and A1161 list what still refuses.
