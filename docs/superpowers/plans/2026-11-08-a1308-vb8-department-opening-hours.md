@@ -23,6 +23,12 @@ special-day date only), which `opening_hours_kind_by_owner_ck` already enforces.
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2).
 
+**2026-11-16 preflight correction (watcher clearance, Lane H questions.md 05:51):**
+Keep the current department-delete preview without an hours count: #3207 removed that preview
+before vb8. Item 2's service-delete impact read is retired; item 1 still ports the existing hours
+delete before deleting menu periods. `zone-closure-hours.ts` was removed by #3261; Task 1 exercises
+its current caller path through `zoneClosureDays` and `resolveDepartmentsDays` instead.
+
 ## What it builds
 
 1. **Department writers:** `writeDepartmentSeasonWeeks` (`packages/venue-service/src/season-weeks.ts:98-136`)

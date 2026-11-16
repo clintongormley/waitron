@@ -5,7 +5,6 @@ import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  departmentDays,
   dayCutoverChanges,
   specialDayDates,
   specialDays,
@@ -90,6 +89,49 @@ const refusal = async (promise: Promise<unknown>) => {
 const december = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => `2030-12-${String(from + i).padStart(2, "0")}`);
 const dates = (days: readonly string[]) => days.map((date) => ({ date, closedAllDay: false }));
+
+it("a closed department stretch on a date is a closed opening_hours row without a period", async () => {
+  const v = await venue();
+  const saved = await save(null, {
+    name: "Afternoon closure",
+    repeatsYearly: false,
+    dates: dates(["2030-12-20"]),
+    paint: [
+      {
+        departmentId: v.restaurant,
+        date: "2030-12-20",
+        ranges: [{ periodId: null, startsAt: "16:00", endsAt: "18:00" }],
+      },
+    ],
+  });
+  const [date] = await db
+    .select()
+    .from(specialDayDates)
+    .where(eq(specialDayDates.specialDayId, saved.id));
+  expect(
+    await db
+      .select({
+        departmentId: openingHours.departmentId,
+        zoneId: openingHours.zoneId,
+        specialDayDateId: openingHours.specialDayDateId,
+        kind: openingHours.kind,
+        periodId: openingHours.periodId,
+        startsAt: openingHours.startsAt,
+        endsAt: openingHours.endsAt,
+      })
+      .from(openingHours),
+  ).toEqual([
+    {
+      departmentId: v.restaurant,
+      zoneId: null,
+      specialDayDateId: date!.id,
+      kind: "closed",
+      periodId: null,
+      startsAt: "16:00:00",
+      endsAt: "18:00:00",
+    },
+  ]);
+});
 
 async function christmasDinners(v: Venue) {
   const days = december(14, 23);
@@ -176,7 +218,7 @@ describe("saveSpecialDay", () => {
     expect(after.paint.some((entry) => entry.date === "2030-12-14")).toBe(false);
     expect(after.zonePaint).toEqual([]);
     expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.specialDayDateId, removed.id)),
+      await db.select().from(openingHours).where(eq(openingHours.specialDayDateId, removed.id)),
     ).toEqual([]);
     expect(
       await db.select().from(openingHours).where(eq(openingHours.specialDayDateId, removed.id)),
@@ -914,7 +956,7 @@ describe("deleteSpecialDay", () => {
     });
     expect(await dateRows(before.id)).toEqual([]);
     expect(
-      await db.select().from(departmentDays).where(inArray(departmentDays.specialDayDateId, ids)),
+      await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids)),
     ).toEqual([]);
     expect(
       await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids)),

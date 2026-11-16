@@ -1,12 +1,5 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  departmentDayRanges,
-  departmentDays,
-  readVenueClock,
-  seasons,
-  openingHours,
-  type Transaction,
-} from "@waitron/db";
+import { readVenueClock, seasons, openingHours, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -100,31 +93,27 @@ export async function writeDepartmentSeasonWeeks(
     throw new Error("a season week takes periods only");
   if (seasonIds.length === 0) return;
   await tx
-    .delete(departmentDays)
+    .delete(openingHours)
     .where(
       and(
-        eq(departmentDays.departmentId, departmentId),
-        inArray(departmentDays.seasonId, [...seasonIds]),
+        eq(openingHours.departmentId, departmentId),
+        inArray(openingHours.seasonId, [...seasonIds]),
       ),
     );
-  const days = await tx
-    .insert(departmentDays)
-    .values(
-      seasonIds.flatMap((seasonId) =>
-        WEEKDAYS.map((weekday) => ({ departmentId, seasonId, weekday })),
-      ),
-    )
-    .returning({ id: departmentDays.id, weekday: departmentDays.weekday });
-  const ranges = days.flatMap((day) =>
-    week[day.weekday!]!.map((range) => ({
-      dayId: day.id,
-      departmentId,
-      periodId: range.periodId,
-      startsAt: storedTime(range.startsAt),
-      endsAt: storedTime(range.endsAt),
-    })),
+  const ranges = seasonIds.flatMap((seasonId) =>
+    WEEKDAYS.flatMap((weekday) =>
+      week[weekday]!.map((range) => ({
+        departmentId,
+        seasonId,
+        weekday,
+        kind: "period" as const,
+        periodId: range.periodId,
+        startsAt: storedTime(range.startsAt),
+        endsAt: storedTime(range.endsAt),
+      })),
+    ),
   );
-  if (ranges.length > 0) await tx.insert(departmentDayRanges).values(ranges);
+  if (ranges.length > 0) await tx.insert(openingHours).values(ranges);
 }
 
 export async function writeZoneSeasonWeeks(
@@ -203,28 +192,28 @@ export async function readDepartmentSeasonWeeks(
   const dayCutover = cutover ?? (await readVenueClock(tx)).dayCutover;
   const rows = await tx
     .select({
-      departmentId: departmentDays.departmentId,
-      seasonId: departmentDays.seasonId,
-      weekday: departmentDays.weekday,
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      departmentId: openingHours.departmentId,
+      seasonId: openingHours.seasonId,
+      weekday: openingHours.weekday,
+      periodId: openingHours.periodId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDays)
-    .innerJoin(seasons, eq(seasons.id, departmentDays.seasonId))
-    .leftJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
+    .from(openingHours)
+    .innerJoin(seasons, eq(seasons.id, openingHours.seasonId))
     .where(
       and(
+        isNotNull(openingHours.departmentId),
         departmentIds === undefined
           ? undefined
-          : inArray(departmentDays.departmentId, [...departmentIds]),
-        only === undefined ? undefined : inArray(departmentDays.seasonId, [...only.seasonIds]),
-        only === undefined ? undefined : inArray(departmentDays.weekday, [...only.weekdays]),
+          : inArray(openingHours.departmentId, [...departmentIds]),
+        only === undefined ? undefined : inArray(openingHours.seasonId, [...only.seasonIds]),
+        only === undefined ? undefined : inArray(openingHours.weekday, [...only.weekdays]),
       ),
     );
   return groupWeeks(
     rows.map((row) => ({
-      ownerId: row.departmentId,
+      ownerId: row.departmentId!,
       seasonId: row.seasonId!,
       weekday: row.weekday!,
       range:

@@ -6,7 +6,6 @@ import { beforeEach, beforeAll, describe, expect, it } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  departmentDays,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   seasons,
@@ -544,9 +543,6 @@ describe("saveSeasons", () => {
     expect(await seasonOnDay(v, "2030-12-20")).toBe(v.winter);
     expect(await seasonsOf()).toEqual(THREE);
     expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, christmas.id)),
-    ).toEqual([]);
-    expect(
       await db.select().from(openingHours).where(eq(openingHours.seasonId, christmas.id)),
     ).toEqual([]);
   });
@@ -558,9 +554,9 @@ describe("saveSeasons", () => {
     await change({ delete: [v.autumn] });
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.winter);
     expect(await seasonsOf()).toEqual(THREE.slice(1));
-    expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.autumn)),
-    ).toEqual([]);
+    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
+      [],
+    );
     expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
       [],
     );
@@ -586,7 +582,7 @@ describe("saveSeasons", () => {
     const kitchen = (await scoped((tx) => createDepartment(tx, { name: "Kitchen" }))).id;
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, kitchen, [summer!.id], EMPTY_WEEK()));
     const daysOf = (seasonId: string) =>
-      db.select().from(departmentDays).where(eq(departmentDays.seasonId, seasonId));
+      db.select().from(openingHours).where(eq(openingHours.seasonId, seasonId));
     const summerDays = await daysOf(summer!.id);
     expect(summerDays).toHaveLength(7);
     expect(await daysOf(autumn!.id)).toEqual([]);
@@ -663,9 +659,9 @@ describe("saveSeasons", () => {
     const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar);
     expect(barWeeks?.get(mid.id)).toEqual(EMPTY_WEEK());
     expect(barWeeks?.has(early.id)).toBe(false);
-    expect(
-      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.winter)),
-    ).toEqual([]);
+    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.winter))).toEqual(
+      [],
+    );
   });
 
   it("refuses a duplicate between two sent entries naming the later one", async () => {

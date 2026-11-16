@@ -5,9 +5,8 @@ import { beforeEach, beforeAll, describe, expect, it } from "vitest";
 import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
+  openingHours,
   categories,
-  departmentDayRanges,
-  departmentDays,
   kitchenStations,
   menuPeriods,
   routingCellPeriods,
@@ -140,6 +139,37 @@ const specialDay = (
         )
       ).id,
   );
+
+it("a replacement joins only its own department and season weekday, and no replacement removes its ranges", async () => {
+  const v = await venue();
+  const week = (periodId: string) =>
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      slots:
+        weekday === 3 ? [slot(periodId, "12:00", "14:00"), slot(v.dinner, "14:00", "16:00")] : [],
+    }));
+  await scoped((tx) =>
+    replaceMenuWeek(tx, v.restaurant, week(v.lunch), WRITE_AT, 1, { seasonId: v.seasons.autumn }),
+  );
+  await scoped((tx) =>
+    replaceMenuWeek(tx, v.restaurant, week(v.afternoon), WRITE_AT, 1, {
+      seasonId: v.seasons.summer,
+    }),
+  );
+  await scoped((tx) => deletePeriod(tx, v.lunch, v.dinner, WRITE_AT, 1));
+  const rows = await db.select().from(openingHours);
+  expect(
+    rows.filter((row) => row.departmentId === v.restaurant && row.seasonId === v.seasons.autumn),
+  ).toMatchObject([{ weekday: 3, periodId: v.dinner, startsAt: "12:00:00", endsAt: "16:00:00" }]);
+  expect(
+    rows.filter((row) => row.departmentId === v.restaurant && row.seasonId === v.seasons.summer),
+  ).toHaveLength(2);
+  expect(rows.filter((row) => row.departmentId === v.deli)).toEqual([]);
+  await scoped((tx) => deletePeriod(tx, v.dinner, null, WRITE_AT, 1));
+  expect(await db.select().from(openingHours).where(eq(openingHours.periodId, v.dinner))).toEqual(
+    [],
+  );
+});
 
 describe("where a period is painted", () => {
   it("lists seasons by when they start, and special days with a date today or later or repeating, by name", async () => {
@@ -393,34 +423,28 @@ describe("deleting a period", () => {
     const seasonRanges = await db
       .select({
         season: seasonsTable.name,
-        weekday: departmentDays.weekday,
+        weekday: openingHours.weekday,
         period: menuPeriods.name,
-        startsAt: departmentDayRanges.startsAt,
-        endsAt: departmentDayRanges.endsAt,
+        startsAt: openingHours.startsAt,
+        endsAt: openingHours.endsAt,
       })
-      .from(departmentDayRanges)
-      .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-      .innerJoin(seasonsTable, eq(seasonsTable.id, departmentDays.seasonId))
-      .innerJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-      .where(eq(departmentDays.departmentId, v.restaurant))
-      .orderBy(
-        asc(seasonsTable.startsOn),
-        asc(departmentDays.weekday),
-        asc(departmentDayRanges.startsAt),
-      );
+      .from(openingHours)
+      .innerJoin(seasonsTable, eq(seasonsTable.id, openingHours.seasonId))
+      .innerJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+      .where(eq(openingHours.departmentId, v.restaurant))
+      .orderBy(asc(seasonsTable.startsOn), asc(openingHours.weekday), asc(openingHours.startsAt));
     const specialDayRanges = await db
       .select({
         date: specialDayDates.date,
         period: menuPeriods.name,
-        startsAt: departmentDayRanges.startsAt,
-        endsAt: departmentDayRanges.endsAt,
+        startsAt: openingHours.startsAt,
+        endsAt: openingHours.endsAt,
       })
-      .from(departmentDayRanges)
-      .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-      .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
-      .leftJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-      .where(eq(departmentDays.departmentId, v.restaurant))
-      .orderBy(asc(specialDayDates.date), asc(departmentDayRanges.startsAt));
+      .from(openingHours)
+      .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
+      .leftJoin(menuPeriods, eq(menuPeriods.id, openingHours.periodId))
+      .where(eq(openingHours.departmentId, v.restaurant))
+      .orderBy(asc(specialDayDates.date), asc(openingHours.startsAt));
     const routing = await db
       .select({
         cellId: routingCellPeriods.cellId,
@@ -612,10 +636,10 @@ describe("deleting a period", () => {
       await remove(v.lunch, null);
 
       const dayRows = await db
-        .select({ id: departmentDays.id })
-        .from(departmentDays)
-        .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
-        .where(eq(departmentDays.departmentId, v.restaurant));
+        .select({ id: openingHours.id })
+        .from(openingHours)
+        .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
+        .where(eq(openingHours.departmentId, v.restaurant));
       expect(dayRows).toEqual([]);
       const resolved = await scoped(async (tx) =>
         resolveDepartmentDays(tx, v.restaurant, [date, plainWednesday], await readVenueClock(tx)),

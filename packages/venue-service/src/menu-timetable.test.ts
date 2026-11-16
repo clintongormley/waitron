@@ -17,10 +17,9 @@ import {
 } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
+  openingHours,
   menus,
   categories,
-  departmentDayRanges,
-  departmentDays as departmentDayRows,
   floorZones,
   kitchenStations,
   menuPeriods,
@@ -237,14 +236,11 @@ describe("service-period writers", () => {
       ],
     });
     const stored = await db
-      .select({ startsAt: departmentDayRanges.startsAt, endsAt: departmentDayRanges.endsAt })
-      .from(departmentDayRanges)
-      .innerJoin(departmentDayRows, eq(departmentDayRows.id, departmentDayRanges.dayId))
+      .select({ startsAt: openingHours.startsAt, endsAt: openingHours.endsAt })
+      .from(openingHours)
+
       .where(
-        and(
-          isNotNull(departmentDayRows.specialDayDateId),
-          eq(departmentDayRanges.periodId, v.periods!.noches),
-        ),
+        and(isNotNull(openingHours.specialDayDateId), eq(openingHours.periodId, v.periods!.noches)),
       );
     expect(stored).toEqual([{ startsAt: "21:00:00", endsAt: "02:30:00" }]);
     const running = await scoped((tx) =>
@@ -692,14 +688,14 @@ const paintedRanges = (periodId: string) =>
   db
     .select({
       date: specialDayDates.date,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDayRows, eq(departmentDayRows.id, departmentDayRanges.dayId))
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDayRows.specialDayDateId))
-    .where(eq(departmentDayRanges.periodId, periodId))
-    .orderBy(specialDayDates.date, departmentDayRanges.startsAt);
+    .from(openingHours)
+
+    .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
+    .where(eq(openingHours.periodId, periodId))
+    .orderBy(specialDayDates.date, openingHours.startsAt);
 /** Saves a special day on `date`, painting the restaurant's day with `paint` (none clears it). */
 const saveDay = (
   v: Venue,
@@ -1501,19 +1497,19 @@ const lineContexts = () =>
 const paintOn = async (_v: Venue, date: string) => {
   const onDate = eq(specialDayDates.date, date);
   const days = await db
-    .select({ id: departmentDayRows.id })
-    .from(departmentDayRows)
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDayRows.specialDayDateId))
+    .select({ id: openingHours.id })
+    .from(openingHours)
+    .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
     .where(onDate);
   const ranges = await db
     .select({
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      periodId: openingHours.periodId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDayRows, eq(departmentDayRows.id, departmentDayRanges.dayId))
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDayRows.specialDayDateId))
+    .from(openingHours)
+
+    .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
     .where(onDate);
   return { days: days.length, ranges };
 };

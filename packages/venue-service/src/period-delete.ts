@@ -1,7 +1,6 @@
-import { and, asc, eq, gte, inArray, isNotNull, ne, notExists } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, ne, isNull, or } from "drizzle-orm";
 import {
-  departmentDayRanges,
-  departmentDays,
+  openingHours,
   menuPeriods,
   readVenueClock,
   seasons,
@@ -50,7 +49,7 @@ async function paintedIn(
   today: LocalDate | null,
   periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
-  const onePeriod = (column: typeof menuPeriods.id | typeof departmentDayRanges.periodId) =>
+  const onePeriod = (column: typeof menuPeriods.id | typeof openingHours.periodId) =>
     periodId === undefined ? undefined : eq(column, periodId);
   const periods = await tx
     .select({ id: menuPeriods.id })
@@ -62,30 +61,28 @@ async function paintedIn(
   );
   const seasonPaint = await tx
     .selectDistinct({
-      periodId: departmentDayRanges.periodId,
+      periodId: openingHours.periodId,
       id: seasons.id,
       name: seasons.name,
       startsOn: seasons.startsOn,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(seasons, eq(seasons.id, departmentDays.seasonId))
-    .where(and(isNotNull(departmentDayRanges.periodId), onePeriod(departmentDayRanges.periodId)))
+    .from(openingHours)
+    .innerJoin(seasons, eq(seasons.id, openingHours.seasonId))
+    .where(and(isNotNull(openingHours.periodId), onePeriod(openingHours.periodId)))
     .orderBy(asc(seasons.startsOn), asc(seasons.id));
   for (const row of seasonPaint)
     painted.get(row.periodId!)!.seasons.push({ id: row.id, name: row.name });
   const specialDayPaint = await tx
     .selectDistinct({
-      periodId: departmentDayRanges.periodId,
+      periodId: openingHours.periodId,
       id: specialDays.id,
       name: specialDays.name,
       repeatsYearly: specialDays.repeatsYearly,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
+    .from(openingHours)
+    .innerJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(and(isNotNull(departmentDayRanges.periodId), onePeriod(departmentDayRanges.periodId)))
+    .where(and(isNotNull(openingHours.periodId), onePeriod(openingHours.periodId)))
     .orderBy(asc(specialDays.name), asc(specialDays.id));
   const oneOffs = [
     ...new Set(specialDayPaint.filter((row) => !row.repeatsYearly).map((row) => row.id)),
@@ -173,69 +170,79 @@ export async function deletePeriod(
   }
   const clock = await readVenueClock(tx);
   await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
-  const dayIds = (
-    await tx
-      .selectDistinct({ dayId: departmentDayRanges.dayId })
-      .from(departmentDayRanges)
-      .where(eq(departmentDayRanges.periodId, periodId))
-  ).map((row) => row.dayId);
+  const dayKeys = await tx
+    .selectDistinct({
+      departmentId: openingHours.departmentId,
+      seasonId: openingHours.seasonId,
+      weekday: openingHours.weekday,
+      specialDayDateId: openingHours.specialDayDateId,
+    })
+    .from(openingHours)
+    .where(eq(openingHours.periodId, periodId));
   if (replacementId === null) {
-    await tx.delete(departmentDayRanges).where(eq(departmentDayRanges.periodId, periodId));
-    // A special-day date's row exists only while it holds paint, as saveSpecialDay writes it; a
-    // season's row stands for its weekday even when empty.
-    if (dayIds.length > 0)
-      await tx
-        .delete(departmentDays)
-        .where(
-          and(
-            inArray(departmentDays.id, dayIds),
-            isNotNull(departmentDays.specialDayDateId),
-            notExists(
-              tx
-                .select({ id: departmentDayRanges.id })
-                .from(departmentDayRanges)
-                .where(eq(departmentDayRanges.dayId, departmentDays.id)),
-            ),
-          ),
-        );
+    await tx.delete(openingHours).where(eq(openingHours.periodId, periodId));
   } else {
     await tx
-      .update(departmentDayRanges)
+      .update(openingHours)
       .set({ periodId: replacementId })
-      .where(eq(departmentDayRanges.periodId, periodId));
-    await joinTouchingRanges(tx, dayIds, clock, at);
+      .where(eq(openingHours.periodId, periodId));
+    await joinTouchingRanges(tx, dayKeys, clock, at);
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
   await assertWaitingChangeFits(tx, at, clock);
 }
 
-/** Joins touching ranges of one period within each of `dayIds`' days, ordered from a dated day's
- *  own start, or an undated day's start in force at `at`. */
+type DayKey = Pick<
+  typeof openingHours.$inferSelect,
+  "departmentId" | "seasonId" | "weekday" | "specialDayDateId"
+>;
+const dayKey = (row: DayKey) =>
+  `${row.departmentId}|${row.seasonId ?? ""}|${row.weekday ?? ""}|${row.specialDayDateId ?? ""}`;
+
 async function joinTouchingRanges(
   tx: Transaction,
-  dayIds: readonly string[],
+  days: readonly DayKey[],
   clock: BusinessDayClock,
   at: Date,
 ): Promise<void> {
-  if (dayIds.length === 0) return;
+  if (days.length === 0) return;
   const rows = await tx
     .select({
-      id: departmentDayRanges.id,
-      dayId: departmentDayRanges.dayId,
-      periodId: departmentDayRanges.periodId,
-      startsAt: departmentDayRanges.startsAt,
-      endsAt: departmentDayRanges.endsAt,
+      id: openingHours.id,
+      departmentId: openingHours.departmentId,
+      seasonId: openingHours.seasonId,
+      weekday: openingHours.weekday,
+      specialDayDateId: openingHours.specialDayDateId,
+      periodId: openingHours.periodId,
+      startsAt: openingHours.startsAt,
+      endsAt: openingHours.endsAt,
       date: specialDayDates.date,
     })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .leftJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
-    .where(inArray(departmentDayRanges.dayId, [...dayIds]));
+    .from(openingHours)
+    .leftJoin(specialDayDates, eq(specialDayDates.id, openingHours.specialDayDateId))
+    .where(
+      or(
+        ...days.map((day) =>
+          and(
+            eq(openingHours.departmentId, day.departmentId!),
+            day.seasonId === null
+              ? isNull(openingHours.seasonId)
+              : eq(openingHours.seasonId, day.seasonId),
+            day.weekday === null
+              ? isNull(openingHours.weekday)
+              : eq(openingHours.weekday, day.weekday),
+            day.specialDayDateId === null
+              ? isNull(openingHours.specialDayDateId)
+              : eq(openingHours.specialDayDateId, day.specialDayDateId),
+          ),
+        ),
+      ),
+    );
   const undated = inForceClock(clock, at).dayCutover;
   const byDay = new Map<string, typeof rows>();
   for (const row of rows) {
-    const day = byDay.get(row.dayId);
-    if (day === undefined) byDay.set(row.dayId, [row]);
+    const day = byDay.get(dayKey(row));
+    if (day === undefined) byDay.set(dayKey(row), [row]);
     else day.push(row);
   }
   for (const ranges of byDay.values()) {
@@ -245,17 +252,17 @@ async function joinTouchingRanges(
     const joined = joinTouching(ranges, (a, b) => a.periodId === b.periodId);
     if (joined.length === ranges.length) continue;
     const kept = new Set(joined.map((range) => range.id));
-    await tx.delete(departmentDayRanges).where(
+    await tx.delete(openingHours).where(
       inArray(
-        departmentDayRanges.id,
+        openingHours.id,
         ranges.filter((range) => !kept.has(range.id)).map((range) => range.id),
       ),
     );
     const endsAt = new Map(ranges.map((range) => [range.id, range.endsAt]));
     for (const range of joined.filter((range) => range.endsAt !== endsAt.get(range.id)))
       await tx
-        .update(departmentDayRanges)
+        .update(openingHours)
         .set({ endsAt: range.endsAt })
-        .where(eq(departmentDayRanges.id, range.id));
+        .where(eq(openingHours.id, range.id));
   }
 }

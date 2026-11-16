@@ -7,8 +7,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
     // All listed fixture rows are removed together; check their foreign keys at commit.
     await tx.execute(sql`pragma defer_foreign_keys = on`);
     for (const table of [
-      // A season day's range keys its period with no delete rule; the days take their ranges.
-      "department_days",
+      // A range keys its period with no delete rule, so remove ranges first.
       "opening_hours",
       "seasons",
 

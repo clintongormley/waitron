@@ -20,9 +20,8 @@ import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 import { applyDepartmentDining } from "./dining.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
+  openingHours,
   menus,
-  departmentDayRanges,
-  departmentDays,
   departments,
   departmentCourses,
   floorZones,
@@ -294,17 +293,16 @@ export async function listVenueReadiness(
     .orderBy(asc(departments.name), asc(departments.id));
   if (activeDepartments.length === 0) return [...issues, { code: "venue.department_missing" }];
   const placed = await tx
-    .selectDistinct({ departmentId: departmentDays.departmentId })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
+    .selectDistinct({ departmentId: openingHours.departmentId })
+    .from(openingHours)
     .where(
       and(
         inArray(
-          departmentDays.departmentId,
+          openingHours.departmentId,
           activeDepartments.map((department) => department.id),
         ),
-        isNotNull(departmentDays.seasonId),
-        isNotNull(departmentDayRanges.periodId),
+        isNotNull(openingHours.seasonId),
+        isNotNull(openingHours.periodId),
       ),
     );
   const placedDepartments = new Set(placed.map((row) => row.departmentId));

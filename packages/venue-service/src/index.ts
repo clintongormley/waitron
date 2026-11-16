@@ -4,8 +4,6 @@ export {
   allergyLineTicks,
   billIdentities,
   billNumberAllocations,
-  departmentDayRanges,
-  departmentDays,
   openingHours,
   departments,
   departmentTransferDestinations,
