@@ -1520,14 +1520,6 @@ sends would silently drop a real change from a till that could not read the line
 stays editable (`#lineReadOnly`, by reading). The other routes, such as a mark from the till that the
 line was not touched or an id on the answer, change what the till and the box agree on.
 
-## A till request refused for naming someone not signed in locks the screen with no sentence
-
-Left open by A1382. #2534 built one check on every request that needs a signed-in person, so a
-refusal from any of them locks the till, and the sign-in screen says nothing about why
-([One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773)). The owner chose the words on
-2026-11-07: "You have been logged out because somebody else has logged in on this device." They are
-not in yet, and the Spanish is not written.
-
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:
@@ -2216,10 +2208,12 @@ kitchen-screen request from any other device is refused.
 
 When a request named a person and comes back with that refusal, whatever its status, the till locks
 to the sign-in screen once and keeps that person's unsaved lines for their next sign-in, without
-signing out the device's session, which belongs to someone else. While the till is locked this way
-it shows no error from the refused sign-in's requests. A refusal for a request sent under an earlier
-sign-in, the same person's included, or through a client the till no longer holds, does not lock
-it: that request fails with its usual error.
+signing out the device's session, which belongs to someone else. The sign-in screen then says "You
+have been logged out because somebody else has logged in on this device." (the owner's words,
+2026-11-07). While the till is locked this way it shows no error from the refused sign-in's
+requests. A refusal for a request sent under an earlier sign-in, the same person's included, or
+through a client the till no longer holds, does not lock it: that request fails with its usual
+error.
 
 A sign-out (`DELETE /api/session`) is sent once the person's saves have finished, and names, in the
 same header, the person signed in on that tab when the sign-out began. None is sent if a later

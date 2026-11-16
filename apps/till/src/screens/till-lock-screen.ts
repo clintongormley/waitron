@@ -198,6 +198,7 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) cloudEmergencyBusy = false;
   @property({ type: Boolean }) cloudEmergencyRefused = false;
 
+  @property({ type: Boolean }) loggedOutByOther = false;
   @property({ attribute: false }) clockNotice?: StaffNotice;
   @property({ attribute: false }) storageNotices: readonly StaffNotice[] = [];
 
@@ -390,6 +391,13 @@ export class TillLockScreen extends LitElement {
             ${words.main} · ${words.hint}
           </p>`;
         })}
+        ${
+          this.loggedOutByOther
+            ? html`<p class="clock status" role="status" data-logged-out-by-other>
+                ${t("login.logged_out_by_other")}
+              </p>`
+            : nothing
+        }
         ${
           this.clockNotice === undefined
             ? nothing

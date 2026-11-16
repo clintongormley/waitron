@@ -823,6 +823,20 @@ describe("till-lock-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-clock-notice]")).toHaveLength(0);
   });
 
+  it("draws the logged-out-by-somebody-else line only while loggedOutByOther is set", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(query(el, "[data-logged-out-by-other]")).toBeNull();
+    el.loggedOutByOther = true;
+    await el.updateComplete;
+    expect(query(el, "[data-logged-out-by-other]")!.textContent!.trim()).toBe(
+      t("login.logged_out_by_other"),
+    );
+    el.loggedOutByOther = false;
+    await el.updateComplete;
+    expect(query(el, "[data-logged-out-by-other]")).toBeNull();
+  });
+
   it("renders one row per server with its state, and a check-again button", async () => {
     const statuses: ServerStatus[] = [
       { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },

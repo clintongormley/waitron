@@ -3599,6 +3599,9 @@ export class TillApp extends LitElement {
   /** The sign-in the box refused, kept until a boot; a later sign-in or a server switch moves
    * {@link #tabPerson} away from it. */
   #refusedPerson: SessionPerson | undefined;
+  get #lockedForRefusedPerson(): boolean {
+    return this.#refusedPerson !== undefined && this.#refusedPerson === this.#tabPerson;
+  }
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -3904,17 +3907,12 @@ export class TillApp extends LitElement {
   @state() private capabilities: CapabilityFlag[] = [];
   /** The non-fatal error to show over the counter, or `undefined` for none. While the till is locked
    * because the box refused this sign-in's person, every error set is dropped: it comes from a request
-   * of the sign-in that just ended, and the lock already says what to do. */
+   * of the sign-in that just ended, and the lock already says why. */
   @state() private get errorKey(): CounterError | undefined {
     return this.#errorKey;
   }
   private set errorKey(value: CounterError | undefined) {
-    if (
-      value !== undefined &&
-      this.#refusedPerson !== undefined &&
-      this.#refusedPerson === this.#tabPerson
-    )
-      return;
+    if (value !== undefined && this.#lockedForRefusedPerson) return;
     this.#errorKey = value;
   }
   #errorKey?: CounterError;
@@ -23904,6 +23902,7 @@ export class TillApp extends LitElement {
                           .cloudEmergencyRefused=${this.cloudEmergencyRefused}
                           @switch-to-spare=${() => void this.#onSwitchToSpare()}
                           @start-in-cloud=${() => void this.#onStartInCloud()}
+                          .loggedOutByOther=${this.#lockedForRefusedPerson}
                           .clockNotice=${this.pinClockNotice}
                           .storageNotices=${this.pinStorageNotices}
                           @check-again=${() => void this.router?.probeNow()}

@@ -609,6 +609,8 @@ export const en = {
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "login.throttled": "Try again in {n}s",
   "login.powered_by": "Powered by",
+  "login.logged_out_by_other":
+    "You have been logged out because somebody else has logged in on this device.",
   // Supervisor-override dialog
   "override.title": "Approval needed",
   "override.pick_supervisor": "Choose who approves",
@@ -2727,6 +2729,8 @@ export const es: Record<StringKey, string> = {
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
   "login.throttled": "Inténtalo de nuevo en {n}s",
   "login.powered_by": "Con la tecnología de",
+  "login.logged_out_by_other":
+    "Se ha cerrado tu sesión porque otra persona ha iniciado sesión en este dispositivo.",
   "override.title": "Hace falta aprobación",
   "override.pick_supervisor": "Elige quién aprueba",
   "override.enter_pin": "Introduce su PIN",
