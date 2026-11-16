@@ -196,12 +196,7 @@ export async function readCardReaderDeleteImpact(
   return (await cardReaderDeleteRules(tx, seats, id, true)).plan.impact;
 }
 
-/**
- * Step (a): the rules, throwing the first refusal's code; when `unpairAtProvider`, also switches
- * the reader off (disabled_at set if null) before the provider is called, so a pay
- * that starts afterwards does not find it (`resolvePayReader` reads active readers only,
- * `till-api.ts:316`).
- */
+// Disable before the provider call so a later payment cannot select this reader.
 export async function prepareCardReaderDelete(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
@@ -238,7 +233,6 @@ export async function startCardReaderDelete(
   return { plan, deleted: plan.impact };
 }
 
-/** Unpair's local write: disabled_at and unpaired_at = at, undeleted rows only. */
 export async function markCardReaderUnpaired(
   tx: Transaction,
   id: string,
