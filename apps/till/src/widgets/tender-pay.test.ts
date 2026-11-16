@@ -1442,7 +1442,7 @@ describe("till-tender-pay", () => {
       expect(query(el, ".pay")).toBeNull();
     });
 
-    it("shows a tip entry only when tipsEnabled on either card path", async () => {
+    it("shows an idle tip entry only for connected readers with tips enabled", async () => {
       const store = new WorkingOrderStore();
       const { el: withTip } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,

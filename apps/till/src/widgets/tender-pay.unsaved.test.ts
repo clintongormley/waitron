@@ -426,3 +426,22 @@ it("manual tip protects leave without a reader and confirmation consumes it once
   expect(app.payments).toEqual([{ method: "card", amount: "3.00", addedTip: "0.30" }]);
   expect(unload()).toBe(false);
 });
+
+it("Cancel discards restored manual details without a reader before reopening", async () => {
+  const { form } = await mount();
+  form.tipsEnabled = true;
+  await form.updateComplete;
+  form.restoreManualCard({
+    method: "card",
+    amount: "3.00",
+    addedTip: "0.30",
+    externalRef: "OP-TIP",
+  });
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  await click(form, ".cancel");
+  await click(form, ".pay-card");
+  expect(form.shadowRoot!.querySelector<WtInput>(".tip-input")!.value).toBe("");
+  expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("");
+  expect(unload()).toBe(false);
+});

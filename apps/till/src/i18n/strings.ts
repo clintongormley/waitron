@@ -934,9 +934,9 @@ export const en = {
   "profile.label": "Device profile",
   "profile.switch": "Switch",
   "tender.tip_not_recorded":
-    "This tip cannot be recorded on this bill. If you did not take a tip, clear it and record the payment again. Otherwise, cancel and keep the machine's receipt. Do not charge the card again.",
+    "This tip cannot be recorded on this bill. If you already charged it, refund the extra on the other card machine, clear Tip and record the rest. If nothing was owed, refund the whole charge. If you did not take a tip, clear Tip and record the payment. Do not charge the card again.",
   "profile.payment_recovery":
-    "Choose Check card payments / sign in to check its outcome; sign in there if asked. Then try Switch again. Cancel keeps the current profile.",
+    "Use Check card payments / sign in to see its outcome, then try Switch again. Cancel keeps the current profile.",
   "profile.order_open": "Park or clear the order in progress before switching profile.",
   "profile.draft_unsaved":
     "The order's last change could not be saved. Try again, or remove it, before switching profile.",
@@ -3028,9 +3028,9 @@ export const es: Record<StringKey, string> = {
   "profile.label": "Perfil de dispositivo",
   "profile.switch": "Cambiar",
   "tender.tip_not_recorded":
-    "Esta propina no se puede registrar en esta cuenta. Si no has cobrado propina, bórrala y vuelve a registrar el pago. En caso contrario, cancela y conserva el comprobante del datáfono. No vuelvas a cobrar la tarjeta.",
+    "Esta propina no se puede registrar en esta cuenta. Si ya la has cobrado, devuelve el importe de más en el otro datáfono, borra Propina y registra el resto. Si no se debía nada, devuelve todo el cobro. Si no has cobrado propina, borra Propina y registra el pago. No vuelvas a cobrar la tarjeta.",
   "profile.payment_recovery":
-    "Elige Comprobar pagos con tarjeta / acceder para consultar el resultado; inicia sesión allí si se solicita. Después, vuelve a pulsar Cambiar. Cancelar mantiene el perfil actual.",
+    "Usa Comprobar pagos con tarjeta / acceder para consultar el resultado y vuelve a pulsar Cambiar. Cancelar mantiene el perfil actual.",
   "profile.order_open": "Aparca o vacía el pedido en curso antes de cambiar de perfil.",
   "profile.draft_unsaved":
     "No se pudo guardar el último cambio del pedido. Vuelve a intentarlo, o quítalo, antes de cambiar de perfil.",
