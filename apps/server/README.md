@@ -801,13 +801,12 @@ The ones worth grepping for:
 - **`duty.degraded`** (`error` when the duty is stale, `warn` otherwise) —
   `{ duty, consecutiveFailures, skipped, parked, stale, lastOkAt }`. One line per DEGRADED duty,
   per pass —
-  `ok: false`, or `ok: true` with `skipped > 0` or `parked > 0`: the same condition, computed once in
-  `health.ts`'s `recordPass`, that decides whether `/health` reads unhealthy for that duty, so this
-  line and a `503` can never disagree about what "degraded" means. The level comes from `stale`, not
-  from `consecutiveFailures` — `stale` is already the exact criterion `/health`'s `200`/`503` verdict
-  uses, so
-  an `error` line and a `503` are the same condition by construction, and a duty that fails on the
-  first pass after boot logs `error` immediately (`lastOkAt === null` reads as stale). This is the
+  `ok: false`, or `ok: true` with `skipped > 0` or `parked > 0`, as `health.ts`'s `recordPass`
+  computes it; a degraded pass leaves the duty's `lastOkAt` where it was. The level comes from
+  `stale`, not from `consecutiveFailures`: the same `isStale` test `/health`'s `200`/`503` verdict
+  uses, but taken at the pass, while `/health` takes it at each request, so a duty can go stale
+  between passes and answer `503` before any `error` line. A duty that fails on the first pass after
+  boot logs `error` immediately (`lastOkAt === null` reads as stale). This is the
   single fastest line to grep for a degraded duty — see ["What to do about a `503`"](#what-health-means)
   above.
 - **`drain.complete`** (`info`) — per-pass summary counters for `fiscal.drain`, including `skipped`

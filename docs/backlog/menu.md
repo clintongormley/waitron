@@ -12,13 +12,12 @@ were PostgreSQL's integer maximum; the test names "refuses a pick bound above wh
 hold" and "refuses a maxQuantity above what the column can hold" (`src/extra-contract.test.ts`)
 assume a column limit.
 
-## Test titles in `packages/menu` a comments-only change cannot touch
+## Test titles from `packages/menu` a comments-only change cannot touch
 
-**Test titles in `packages/menu` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
+**Test titles from `packages/menu` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
 `describe("validateContainsTag (Task 4)")` and `describe("validateDietOverride (Task 4)")`
-(`src/dietary.test.ts`), "settles a product id sent in upper case in the database"
-(`src/product-modifiers.test.ts`, the code settles it now), "rebuilds every lookup index without the
-tenant" (`src/migrations.test.ts`).
+(`packages/shared/src/menu-document/dietary.test.ts`), "settles a product id sent in upper case in
+the database" (`packages/menu/src/product-modifiers.test.ts`, the code settles it now).
 
 ## The media library still reads every matching image for search and name sorting, inside the venue write lock
 
@@ -1263,7 +1262,8 @@ From "Extras and Options — deliberate limits, and what is left open"
   is a possible later addition.
 - **A menu offer carries all its product's extras and options lists; there is no per-menu extras
   editing (owner, 2026-10-01; #993).** The per-menu tables were dropped, and
-  `packages/menu/src/migrations.test.ts` checks they stay gone.
+  `packages/db/src/schema/menu/migrations.test.ts`'s "has no per-menu extras tables" checks they
+  stay gone.
 - **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
   has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
   it with extras, sell it in a unit with no scale, no decimals and the measure switch off (a jug).

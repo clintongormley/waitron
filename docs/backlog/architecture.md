@@ -26,22 +26,14 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
   checker and were left.
 
-## `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same condition by construction"
+## `apps/server/README.md`'s list of 503 causes, and two test comments that say "empties every table"
 
-- #637 removed that claim from `health.ts` (a duty can go stale between
-  passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
-  line 404) as naming one that answers 200 — read, not run. Test titles:
-  `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus non-hashed where the rule
-  is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
-  says "binds 0.0.0.0" while connecting only over loopback. `apps/server/src/rebuild-first-start.ts`
-  (near line 121, lane A's file) says "The log carries the error's code only", the overclaim #637
-  corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
-  "Empties every table" in
-  `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
-  `packages/menu/src/migrations.test.ts` (near line 304) is wider than the reset, which
-  leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
+- #637's review read the README's list of `503` causes (near line 688) as naming one that answers
+  200 — read, not run. "Empties every table" in `packages/bookings/src/schema/bookings.test.ts`
+  (near line 65) and `packages/db/src/schema/menu/migrations.test.ts` (near line 596) is wider than
+  the reset, which leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
 
-## `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course definition; `fireCourse` calls `requireCourse`
+## Other stale sentences and test titles from the comment-pruning sweeps
 
 - `docs/developers/conventions-data.md` names a
   `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
@@ -1098,7 +1090,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-26 entries, size M.
+23 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
@@ -1114,9 +1106,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
   `packages/menu`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
   whether to keep pinning it is the owner's call.
-- **Test titles in `packages/menu` a comments-only change cannot touch** — OPEN (found by
-  #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
-  [Detail](menu.md#test-titles-in-packagesmenu-a-comments-only-change-cannot-touch)
+- **Test titles from `packages/menu` a comments-only change cannot touch** — OPEN (found by
+  #603). Three titles, in `packages/shared`'s `dietary.test.ts` and `packages/menu`'s
+  `product-modifiers.test.ts`.
+  [Detail](menu.md#test-titles-from-packagesmenu-a-comments-only-change-cannot-touch)
 - **A test comment still names the old savepoint error.**
   `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
@@ -1129,9 +1122,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
   [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
-- **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561
-  while pruning comments.
-  [Detail](box.md#packagesprovisioningreadmemd-also-says-only-es-common-is-implemented)
 - **`packages/provisioning` code found by #561 and not changed.** The coverage config leaves
   `src/bin.ts` out with no reason stated any more, which may hide code a test could reach.
   [Detail](box.md#packagesprovisioning-code-found-by-561-and-not-changed)
@@ -1146,22 +1136,13 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `src/drain.ts`'s `codeOf` comment names `@waitron/scheduler`, now part of `@waitron/payments`. A760
   left
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
-- **Remove the stale till description beside the device-delete preview fixture.**
-  `apps/dashboard/src/screens/devices-screen.test.ts:6005` calls the fixture a till, while
-  its `d1` row is a kitchen display (`kind: "kds_station"`). Remove that comment in the next
-  comment-cleanup pass.
-- **The order-line schema's variant-name comment mistakes missing customer text for a null map.**
-  `packages/db/src/schema/orders.ts` says `variantDescriptions` is null when the variant has no
-  customer name. The existing working-order case "names a variant line with no customer or kitchen
-  name" instead reads its frozen staff-name map. Left open by A612; remove the misleading comment.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **`apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
-  condition by construction"**
-  [Detail](architecture.md#appsserverreadmemd-near-line-496-still-says-an-error-line-and-a-503-are-the-same-condition-by-construction)
-- **`working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course
-  definition; `fireCourse` calls `requireCourse`**
-  [Detail](architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
+- **`apps/server/README.md`'s list of 503 causes, and two test comments that say "empties every
+  table"**
+  [Detail](architecture.md#appsserverreadmemds-list-of-503-causes-and-two-test-comments-that-say-empties-every-table)
+- **Other stale sentences and test titles from the comment-pruning sweeps**
+  [Detail](architecture.md#other-stale-sentences-and-test-titles-from-the-comment-pruning-sweeps)
 - **Pointers outside `docs/` that #597 made stale**
   [Detail](architecture.md#pointers-outside-docs-that-597-made-stale)
 - **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too

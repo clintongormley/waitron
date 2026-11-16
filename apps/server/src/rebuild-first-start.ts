@@ -157,8 +157,7 @@ export interface FirstStart {
 
 /**
  * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not
- * stream (its term may not have moved), and the first-start record stays so the next start tries again. The log
- * carries the error's code only.
+ * stream (its term may not have moved), and the first-start record stays so the next start tries again.
  */
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {

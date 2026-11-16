@@ -189,10 +189,11 @@ number). The SIF's `id_sistema_informatico` is **not** an option — it is the `
 product constant (`W1`, owned by `packages/fiscal-verifactu`), which identifies Waitron's software,
 not the venue.
 
-`--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
-other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
-`--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes among the
-standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
+`--territory` accepts a territory `@waitron/country-packs` lists in `FISCAL_TERRITORIES`: `ES-common`
+(common-territory Spain, Veri\*Factu with IVA) or `GB-vat`, which selects `fiscal-none` and files
+nothing; any other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also
+refuses a `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes
+among the standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
@@ -268,8 +269,8 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `deployment.already_stamped`         | The venue directory is stamped for the OTHER environment (`@waitron/db`'s code, not this package's)             | Stop. One database per environment is a fiscal invariant; a pre-production database that took production numbering leaves a permanent hole in the series. Point at the right directory, or fix `WAITRON_ENV`.                        |
 | `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.                         |
 | `provisioning.foreign_taxpayer`      | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One taxpayer per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                         |
-| `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
-| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                                               |
+| `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                         | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
+| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give a territory `FISCAL_TERRITORIES` lists.                                                                                                                                                                                         |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
 | `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--rectificative-code` are the same                            | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
@@ -320,9 +321,7 @@ call, or a `useVenueDb` suite.
 pnpm --filter @waitron/provisioning test:coverage
 ```
 
-`src/bin.ts` is excluded from coverage deliberately: every decision it could get wrong lives in
-`cli.ts`, which is injected and fully tested. What remains — a tty, a readline, a process exit
-code — is verified by running the built bundle instead.
+`vitest.config.ts` leaves `src/bin.ts` and `src/index.ts` out of coverage.
 
 ## Historical supplied allocation input on the Task 4 branch
 

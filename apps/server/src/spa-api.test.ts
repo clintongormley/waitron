@@ -52,7 +52,7 @@ describe("mountSpa", () => {
     expect(await res.text()).toContain("id=app");
   });
 
-  it("serves a hashed asset with an immutable cache and correct content-type", async () => {
+  it("serves a file under /assets/ with an immutable cache and correct content-type", async () => {
     const res = await mount("").request("/assets/app-abc123.js");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/javascript");
@@ -84,7 +84,7 @@ describe("mountSpa", () => {
     expect(await assetRes.text()).toBe("console.log(1)");
   });
 
-  it("serves a non-hashed root file (favicon) without the immutable cache", async () => {
+  it("serves a file outside /assets/ (favicon) without the immutable cache", async () => {
     const res = await mount("").request("/favicon.svg");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("image/svg+xml");
