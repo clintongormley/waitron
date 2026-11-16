@@ -1033,18 +1033,16 @@ right PIN that the approval does not admit (`apps/server/src/adjustments-apply.t
 `packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
 (the dashboard sign-in), `mirror-bundle-api.test.ts` (standby connect),
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
-`till-api.receipt.test.ts` (a drawer override) — weaker than the set looks:
-`GET /management-api/membership` (whose suite, `management-api.membership.test.ts`, tries a wrong
-password and a wrong code), the waiting box's carry-on (whose suite, `waiting-start.test.ts`, tries
-a wrong password and an unknown email, so it rests on identity's cases only for a suspended or
-pending person), the adjustment approver (`apps/server/src/adjustments-apply.ts`, tried
-in `adjustments-api.test.ts`), the refund override and the manual-refund confirmer
-(`apps/server/src/bill-refunds.ts`, both tried in `bill-payments-api.test.ts`), the
-unpaid-departure override (`apps/server/src/unpaid-departure.ts`) and the cancel override
-(`apps/server/src/working-order.ts`) have suites that try a wrong password or PIN (and, for the
-membership route, the adjustment approver and the cancel, a malformed one), not an unknown,
-suspended or pending person, so for those causes they rest on identity's cases alone; and a new
-sign-in route is seen by none of them. Built in C95, #930.
+`till-api.receipt.test.ts` (a drawer override). The membership read
+(`management-api.membership.test.ts`), adjustment approver (`adjustments-api.test.ts`), refund
+override and manual-refund confirmer (`bill-payments-api.test.ts`) also compare the 401
+status, full JSON body and asynchronous scrypt count for unknown, suspended and wrong-secret credentials.
+Those four route cases do not cover pending people or missing stored credentials. The waiting
+box's carry-on (`waiting-start.test.ts`) tries a wrong password and an unknown email, so it rests
+on identity's cases for a suspended or pending person. The unpaid-departure override
+(`apps/server/src/unpaid-departure.ts`) and cancel override (`apps/server/src/working-order.ts`)
+have wrong-PIN cases, and the cancel also tries a malformed PIN; they rest on identity's cases
+for unknown, suspended or pending people. No listed suite inventories new sign-in routes.
 
 On a till's PIN sign-in, a person the device's profile does not admit also answers that one code
 (`pin.invalid`) after the same hashing work.
