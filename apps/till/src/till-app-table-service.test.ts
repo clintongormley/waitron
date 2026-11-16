@@ -3295,8 +3295,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
       "wo-7",
       {
-        kind: "contribution",
-        amount: "3.00",
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: "5",
         applied: "3.00",
@@ -3335,8 +3335,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
       "wo-7",
       {
-        kind: "contribution",
-        amount: "3.00",
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: "5",
         applied: "3.00",
@@ -3368,8 +3368,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
       "wo-7",
       {
-        kind: "contribution",
-        amount: "3.00",
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: "5",
         applied: "3.00",

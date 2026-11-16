@@ -13736,11 +13736,12 @@ export class TillApp extends LitElement {
         paying?.surface === "table" &&
         paying.billId === gone &&
         !paying.busy &&
+        paying.taken?.pending === undefined &&
+        this.#pendingReread?.dialogId !== paying.id &&
+        !(this.billRefunding?.payId === paying.id && this.billRefunding.busy) &&
         !this.#billPaymentHeld(gone)
       )
         this.#closeBillPaying();
-      if (this.presentedPaying?.billId === gone && !this.submitting && !this.#billPaymentHeld(gone))
-        this.#closePresented();
     }
     this.activeTabId = next;
     this.#billAfterSplit = undefined;
@@ -13807,10 +13808,11 @@ export class TillApp extends LitElement {
       this.billBalance = known;
       return;
     }
+    const sentAt = ++this.#payTicks;
     try {
       const balance = await this.api.getBillBalance(billId);
       if (read === this.#billBalanceRead) {
-        if (open) await this.#showBillPayingBalance(paying.id, billId, balance, ++this.#payTicks);
+        if (open) await this.#showBillPayingBalance(paying.id, billId, balance, sentAt);
         else this.billBalance = balance;
       }
     } catch {

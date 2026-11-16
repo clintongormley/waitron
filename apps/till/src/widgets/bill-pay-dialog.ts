@@ -1516,9 +1516,17 @@ export class TillBillPayDialog extends LitElement {
       case "items": {
         const picked = this.#picked();
         if (picked.length === 0) return t("bill_pay.scope_items_none");
-        const names = picked
-          .map((line) => {
-            const shown = this.#shownQuantity(line, this.picks.get(line.lineNo)!);
+        const names = portionGroups(
+          picked,
+          (line) => line.portionKey ?? null,
+          (line) => line.lineNo,
+        )
+          .map((group) => {
+            const line = group[0]!;
+            const shown =
+              group.length > 1
+                ? String(group.length)
+                : this.#shownQuantity(line, this.picks.get(line.lineNo)!);
             return shown === "1" ? line.name : `${line.name} ×${shown}`;
           })
           .join(", ");

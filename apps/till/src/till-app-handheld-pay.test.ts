@@ -236,7 +236,7 @@ describe("till-app: paying a table from a handheld", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(1);
-    expect(sent()[0]).toMatchObject({ kind: "contribution", amount: "70.00" });
+    expect(sent()[0]).toMatchObject({ kind: "share", shareOf: 1, applied: "70.00" });
   });
 
   it("a practice phone pays through the instant simulator without seeded hardware", async () => {

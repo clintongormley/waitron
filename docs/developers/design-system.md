@@ -6863,8 +6863,9 @@ Items groups matching whole portions with the bill screen's grouping key and a c
 the request carries the selected members' line numbers. Successful table-bill reads refresh idle
 item choices, retaining valid selections and tender input. A selected member that leaves is dropped,
 never replaced by another portion. Idle Pay closes when its bill moves or merges away, including
-its refund child. A send or unanswered payment keeps its original bill and request; reopening that
-bill at its destination uses the retained confirmation.
+its refund child. A pending card or payment/refund send keeps its window on the original bill. Unanswered
+payments retain their original bill and request; reopening that bill at its destination uses the
+retained confirmation.
 
 On an open table bill and a Counter bill, Whole bill also offers Close as deferred payment as a
 secondary action; a presented bill's Pay window offers it under its whole-amount line. It is

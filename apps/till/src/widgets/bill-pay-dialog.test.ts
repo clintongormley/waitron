@@ -236,6 +236,20 @@ it("caps a selected quantity and drops paid or departed picks on a successful re
   expect(field(el, "tendered")!.value).toBe("50");
 });
 
+it("confirms matching portions with one counted name", async () => {
+  const el = await mount({
+    lines: [1, 2, 3].map((lineNo) => ({ ...tiramisu, lineNo, portionKey: "same-dessert" })),
+  });
+  await pick(el, "line", "1");
+  await click(el, "[data-units-more='1']");
+  await click(el, "[data-units-more='1']");
+  await type(el, "tendered", "20");
+  await previewed(el, cashPreview("18.00", "2.00"));
+  expect(scope(el)).toBe(
+    t("bill_pay.scope_items").replace("{items}", "Tiramisu ×3").replace("{amount}", money("18.00")),
+  );
+});
+
 it.each([null, balanceOf({ outstanding: "0.00", reserved: "120.00" })])(
   "waits for an owing balance before a desktop Whole bill card",
   async (balance) => {
