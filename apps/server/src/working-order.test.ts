@@ -1358,7 +1358,7 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
 }
 
 describe("listHeldOrders", () => {
-  it("lists the node's open orders with item counts, GROSS total and label, ordered by number", async () => {
+  it("lists the venue's open orders with item counts, GROSS total and label, ordered by number", async () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, coffeeId));

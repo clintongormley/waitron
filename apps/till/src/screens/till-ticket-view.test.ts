@@ -804,7 +804,7 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.textContent).not.toContain("Jamón");
   });
 
-  it("groups a filed dish's option lines under it — dish at its price, options indented at their delta (ordering modifiers, Task 14)", async () => {
+  it("groups a filed dish's option lines under it — dish at its price, options indented at their delta", async () => {
     // A PAID option (+0.50) and a FREE option (0.00), both children of the dish (lineNo 1).
     const { el } = await mount({
       lines: [
@@ -1708,7 +1708,7 @@ it("shows a dish's frozen options answers in the DINER's wording", async () => {
   ).toEqual(["¿Cómo lo quiere?: Poco hecho"]);
 });
 
-describe("till-ticket-view: a line given away or discounted (service plan Task 11)", () => {
+describe("till-ticket-view: a line given away or discounted", () => {
   // Every row prints its list price and each amount taken off is its own line, as on paper
   // (`apps/server/src/receipt-ticket.ts`).
   const adjusted: Partial<TillSaleResult> = {

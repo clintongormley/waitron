@@ -240,7 +240,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a basket with diet & contains badges (dietary-classification, Task 7) has no violations", async () => {
+  it("a basket holding dishes that carry diet profiles has no violations", async () => {
     const store = new WorkingOrderStore();
     const salad: TillProduct = {
       ...coffee,

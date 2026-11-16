@@ -2811,7 +2811,7 @@ describe("till-table-order-screen", () => {
     });
   });
 
-  describe("changing a sent line, and cancelling part of one (menus plan Task 7c)", () => {
+  describe("changing a sent line, and cancelling part of one", () => {
     const sent = "2026-08-20T09:59:00.000Z";
     // Three different texts for the three names, so a surface reading the wrong one fails.
     const burger: TillProduct = {
