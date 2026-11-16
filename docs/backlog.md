@@ -1242,9 +1242,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Staffing painter shared parts** (bundle of 2, size M). Holds A699 popup/navigation and A711 painter chrome/date-source sharing. [Detail](backlog/workforce.md#bundle-staffing-painter-shared-parts)
 
-- **A700. A failed Opening hours read also hides the Calendar's other views.**
-  [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
-
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
   that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
   Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push

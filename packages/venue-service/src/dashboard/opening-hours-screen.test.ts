@@ -2303,16 +2303,20 @@ describe("the Calendar's module views", () => {
       { view: staffing, canWrite: true },
       { view: rota, canWrite: true },
     ],
+    failHours = false,
   ) {
     const el = document.createElement("dashboard-opening-hours-screen") as Screen & {
       calendar?: unknown;
     };
-    const request = (async (path: string) =>
-      path.includes("/opening-hours/year?")
+    const request = (async (path: string) => {
+      if (failHours && path === "/management-api/venue-service/opening-hours")
+        throw new Error("Hours unavailable");
+      return path.includes("/opening-hours/year?")
         ? yearRead(2026)
         : path.includes("/opening-hours/month?")
           ? { days: [] }
-          : structuredClone(model())) as DashboardRequest;
+          : structuredClone(model());
+    }) as DashboardRequest;
     el.api = new OpeningHoursApi(withSeasonDays(request));
     el.calendar = { ctx: { request }, views };
     applyTokens(el);
@@ -2335,6 +2339,28 @@ describe("the Calendar's module views", () => {
   const checked = (el: Screen) =>
     el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=calendar-switch] input:checked")
       ?.value;
+
+  it("draws Staffing with the browser month when the hours read fails at a month-less address", async () => {
+    vi.setSystemTime(new Date("2027-03-05T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar(undefined, true);
+    await settle(el);
+    const content = el.shadowRoot!.querySelector("[data-test=stub-staffing]");
+    expect(content).not.toBeNull();
+    expect(content!.textContent).toContain("2027-03");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
+  });
+
+  it("keeps the failed hours read announced when Opening hours is chosen", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar(undefined, true);
+    await choose(el, "hours");
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
+    const error = el.shadowRoot!.querySelector("[data-test=read-error]")!;
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.textContent).toBe(t("opening.load_error"));
+  });
 
   it("draws no switch and titles the page Calendar when no module view is given", async () => {
     const el = await mountCalendar([]);
