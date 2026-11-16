@@ -1232,6 +1232,42 @@ Its source, watchdog pid, raw process output, samples and `linux-summary.json` a
 under that folder. The probe removes its containers and private network; its owned runtime is
 discarded after validation.
 
+### Local level-0 growth at a stated counter-sale rate, 16 November 2026
+
+A separate run on source `0bde6fa48ec24395b7059be9bba315c6adb7b13d` used the production
+supervisor and the bench venue's real in-process `/api/sales` route. Docker Desktop ran
+Linux/aarch64, Node 26.13.1, Litestream 0.5.18 and versitygw 1.8.0. Each cash sale had four
+items, paced at one sale every five seconds. That is an assumed busy-counter load of 720 sales
+an hour, not an observed venue rate. Background filing and printer completion were not run.
+The bucket was disconnected from its private network and restored at the same numeric IP.
+A failed fetch during disconnection and a successful bucket listing afterwards checked both directions.
+
+| Observation | Measured result |
+| --- | --- |
+| Outage sampling interval | 900.018 seconds |
+| Successful sales during that interval | 180 |
+| Local level-0 bytes before / after | 770,848 / 43,275,770 |
+| Local growth | 42,504,922 bytes |
+| Peak sampled side file | 4,556,752 bytes |
+| Natural child exits / pauses during the outage | 0 / 0 |
+
+Projecting the average growth at that uninterrupted workload gives 4.08 GB over 24 hours;
+the last five minutes alone project to 5.23 GB. A 12-hour busy service projects to 2.04–2.62 GB.
+These are estimates from the sample, not a full-day result or an upper bound: the later rate
+was higher, and physical storage, DNS and other venue duties remain unqualified.
+
+The 180-second catch-up wait after reconnection **failed**. Litestream's retained output
+shows a five-minute retry delay extending past that wait. The probe then stopped the supervisor
+normally. A separate restore, without starting another replicate child, matched every column
+across 206 tables and 7,268 rows, including all 186 sales (three before, 180 during, three after
+the outage), and reported `integrity_check: ok`. This verifies the copy after that stop;
+it does not establish uninterrupted catch-up within three minutes.
+
+Source, samples, child output, the failed wait and the independent restore result are retained
+locally under `~/waitron-campaign-j/receipts/level0-growth-bound-20261116/`. The owned runtime,
+containers and private networks were removed. No size warning or limit was implemented in this run.
+
+
 ## The stream loop test skips locally without its two binaries, and a skip reads as a pass
 
 `apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream

@@ -469,10 +469,16 @@ snapshots or longer compaction intervals.
 
 ## Loose ends left by A549.
 
-- While the bucket is away, Litestream's local level-0 folder grows with nothing measuring or
-  limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
-  stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
-  owner's Mac. A venue's real rate and the box's disk were not measured.
+Measured on Linux/aarch64 on 16 November 2026: 180 four-item cash sales through `/api/sales`
+over 900.018 seconds grew `.venue.db-litestream/ltx/0/` by 42,504,922 bytes. The assumed
+720-sales/hour load projects to 4.08–5.23 GB/day; it excludes background filing/printing and
+does not qualify a full day or physical-box storage. The 180-second catch-up wait failed during
+Litestream's five-minute backoff. After normal stop, a separate restore matched all 206 tables,
+7,268 rows and 186 sales, every column, with integrity `ok`. [Measurement and limits](../developers/testing-guide.md#local-level-0-growth-at-a-stated-counter-sale-rate-16-november-2026).
+
+The remaining qualification is starting during an outage and venue conditions. No additional
+size warning or cap is planned; see [the decision](#local-copy-growth-uses-the-existing-backup-and-disk-warnings).
+
 - Starting Litestream during a real network outage still needs a Linux measurement. A549
   stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
   errors and drops its read transaction to retry (`db.go`, `init`, the same in v0.5.17 and
@@ -1335,7 +1341,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 2 entries, size S.
 - **Loose ends left by A549.**
-  Bound local level-0 growth and qualify starts during an outage and venue conditions.
+  Qualify starts during an outage and venue conditions.
   [Detail](box.md#loose-ends-left-by-a549)
 - **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
   reports).**
@@ -1354,6 +1360,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+### Local-copy growth uses the existing backup and disk warnings
+
+The watcher decided on 16 November 2026, after the two Claude run-it reviews, to keep the existing
+bucket-behind and low-free-space warnings rather than add a local-copy size scan and sentence.
+The size sentence would arrive after the bucket warning and add no remedy or cap. The proposed
+implementation was discarded before publication. The Linux measurement above establishes growth,
+not whether the low-free-space warning leaves enough time during a long outage; no such timing
+qualification is claimed.
 
 ### Writes after the reserved final stream stop (2026-11-16)
 
