@@ -355,6 +355,39 @@ describe("dashboard Orders", () => {
     expect(location.pathname).toBe("/manage/orders/table/Restored");
   });
 
+  it("empties the Table field when Back changes only the status during the field's wait", async () => {
+    history.pushState(null, "", "/manage/orders/status/open");
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    const table =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=table]")!;
+    const input = table.shadowRoot!.querySelector("input")!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      input.value = "4";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      const back = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.back();
+      await back;
+      vi.advanceTimersByTime(400);
+      await el.updateComplete;
+      await table.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(location.pathname).toBe("/manage/orders");
+    expect(table.value).toBe("");
+    expect(input.value).toBe("");
+    const reads = [...vi.mocked(api.listOrdersPage).mock.calls, ...read.mock.calls];
+    expect(reads.map((call) => [call[0].status, call[0].table])).toEqual([
+      ["open", undefined],
+      ["all", undefined],
+    ]);
+  });
+
   it("keeps a table edit still waiting to be sent when another filter changes the address first", async () => {
     const guard = new NavigationGuard(window, {
       isDirty: () => false,
