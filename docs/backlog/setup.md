@@ -339,13 +339,6 @@ for these boxes, is still open to the owner.
   recovery. The only way out is then a
   reinstall. Left open by A1131bc slice 3 (plan, N2).
 
-## "The saved setup cannot be read. Contact support."
-
-- **"The saved setup cannot be read. Contact support."** (`shell.first_setup.attempt_invalid`,
-  `apps/setup/src/i18n/strings/shell.ts`) sends the person to somebody else, against the refusal rule
-  in `CLAUDE.md` §3. Wanted: say what happened and what each choice does. The words date from C42
-  (#837, 2026-09-29). Noticed while planning A1131bc slice 3, not changed there.
-
 ## `restoreFromArtifact` has no production caller
 
 - **`restoreFromArtifact` has no production caller.** Since A1131bc slice 4 deleted the repair

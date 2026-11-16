@@ -6282,8 +6282,8 @@ describe("first setup owner refusals", () => {
     ["setup.attempt_uncertain", ...FIRST_SETUP_HELD.provision],
     [
       "setup.attempt_invalid",
-      "The saved setup cannot be read. Contact support.",
-      "No se puede leer la configuración guardada. Contacta con soporte.",
+      "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything.",
+      "Waitron no puede leer o guardar parte de lo que conserva sobre esta configuración, así que este paso no puede seguir. Recarga la página, o pulsa Reconectar donde aparezca, para intentarlo de nuevo. Si el mensaje vuelve a aparecer, pega la dirección de esta página en una pestaña nueva: una pestaña nueva no usa la copia de la configuración que guarda esta pestaña. Donde se ofrezcan, Empezar de nuevo y Recuperar desde una copia preguntan antes de borrar nada.",
     ],
   ] as const;
   it.each(cases)(

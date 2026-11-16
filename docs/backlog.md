@@ -455,10 +455,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   decide whether they should place archives through `runStagedRestore`, then delete it.
   [Detail](backlog/setup.md#restorefromartifact-has-no-production-caller)
 
-- **"The saved setup cannot be read. Contact support."** sends the person to somebody else. Left
-  open by A1131bc slice 3.
-  [Detail](backlog/setup.md#the-saved-setup-cannot-be-read-contact-support)
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?**
   Since 3b-F a test on two separate databases joins a spare that then takes over, by a handover and
   by an emergency switch; no joined spare's takeover has run on two started servers, so an operator

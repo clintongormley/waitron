@@ -39,7 +39,7 @@ referrals, not completed recovery experiments.
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
-| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
+| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; since 2026-11-16 the `attempt_invalid` words name reload, Reconnect, a new tab, Start again and Recover from backup instead of support; the repair page can still refuse Start again (A1158, A1159, A1161). |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
@@ -506,6 +506,8 @@ the missing-database path is deleted.)
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
 Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record (A1158), the setup databases A1159 lists and the database-present case in A1161 still refuse.
+
+_2026-11-16, SETUP-ATTEMPT-INVALID-WORDING (queued by the watcher; the words are not owner-reviewed): the words no longer send the person to support. They now read "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything." (Spanish to match). Still open: after a reload or a new tab, the repair page can still refuse Start again for the causes in A1158, A1159 and A1161 (under [setup-state](#setup-state)). The rest of this entry records the earlier tree._
 
 ### `shell.operation_conflict`
 
