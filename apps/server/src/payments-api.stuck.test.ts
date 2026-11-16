@@ -69,6 +69,8 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { createTable } from "./testing/live-table.js";
+import { openPartyTab } from "./testing/serve-line.js";
 import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { mountTillApi } from "./till-api.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
@@ -1112,9 +1114,29 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await resolutionsFor(paymentId)).toHaveLength(1);
   });
 
-  it("keeps a manager-confirmed capture when recording the sale fails, then recovers through Counter Pay without collection", async () => {
+  it.each(["Counter", "table"] as const)(
+    "keeps a manager-confirmed %s capture when recording fails, then recovers through Pay without collection",
+    checkSavedCapture,
+  );
+
+  async function checkSavedCapture(surface: "Counter" | "table") {
     const v = await setup();
-    const orderId = await openOrder(v);
+    const orderId =
+      surface === "Counter"
+        ? await openOrder(v)
+        : await withTransaction(suite.db, async (tx) => {
+            const offers = await offerProducts(tx, v.cfg, { zone: "tables" });
+            const table = await createTable(tx, v.cfg, {
+              zoneId: offers.zoneId,
+              label: "Terrace 3",
+            });
+            return (
+              await openPartyTab(tx, v.cfg, {
+                tableId: table.id,
+                lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
+              })
+            ).tabId;
+          });
     const { paymentId, piId } = await strandPayment(v, orderId, {
       status: "succeeded",
       amountReceived: 150,
@@ -1189,7 +1211,8 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     );
     const listed = await tillApp.request("/api/working-orders", { headers: { cookie } });
     expect(listed.status).toBe(200);
-    expect(((await listed.json()) as { id: string }[]).map((row) => row.id)).toContain(orderId);
+    if (surface === "Counter")
+      expect(((await listed.json()) as { id: string }[]).map((row) => row.id)).toContain(orderId);
     const retrieved = await tillApp.request(`/api/working-orders/${orderId}`, {
       headers: { cookie },
     });
@@ -1203,18 +1226,40 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
       .update(cardReaders)
       .set({ heldByDeviceId: tillDevice })
       .where(eq(cardReaders.id, reader!.id));
-    const paid = await tillApp.request("/api/pay", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        id: orderId,
-        dining: "eat_in",
-        lines: [],
-        expectedEdit: null,
-        readerId: reader!.id,
-        zoneId: v.zoneId,
-      }),
-    });
+    const pay = () =>
+      tillApp.request("/api/pay", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          id: orderId,
+          dining: "eat_in",
+          lines: [],
+          expectedEdit: null,
+          readerId: reader!.id,
+          zoneId: v.zoneId,
+        }),
+      });
+    if (surface === "table") {
+      const blocked = vi
+        .spyOn(backend, "recordSale")
+        .mockRejectedValue(new Error("recording unavailable"));
+      try {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const refused = await pay();
+          expect(refused.status).toBe(500);
+          expect((await errorOf(refused)).code).toBe("server.internal");
+        }
+      } finally {
+        blocked.mockRestore();
+      }
+      expect(await paymentRow(paymentId)).toEqual({
+        state: "captured",
+        saleId: null,
+        externalRef: piId,
+      });
+      expect(saleIdsFor(orderId)).toEqual([]);
+    }
+    const paid = await pay();
     expect(paid.status).toBe(200);
     expect(await paid.json()).toMatchObject({ outcome: "captured" });
     const sales = saleIdsFor(orderId);
@@ -1227,7 +1272,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
     expect(v.client.lastCreateIntent).toBeUndefined();
     expect(v.client.processedReaders).toEqual([]);
-  });
+  }
 
   it("continues provider recovery after a manual check failed before confirming the charge", async () => {
     const v = await setup();

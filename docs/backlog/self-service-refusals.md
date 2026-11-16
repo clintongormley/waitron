@@ -54,7 +54,6 @@ referrals, not completed recovery experiments.
 | [Fiscal reply](#fiscal-reply) | Evidence on Fiscal filing → Warnings (2026-11-14); still open: describe only exercised retry behavior and a decision for a persistent malformed reply. |
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
 | [Reconciliation](#fiscal-reconcile) | The caller is the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`); offer evidence and a decision path rather than sending the person to an administrator or adviser. |
-| [Payments](#payments) | Persistent recording failures, table-order recovery guidance and the shared unknown-outcome fallback remain open. Preserve confirmed-outcome requirements and the existing Counter recovery for a saved whole-order charge. |
 | [Boot recovery](#boot-recovery) | Referral reworked (A1089, 2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). No other row gains a way out; the owner's answer names none for these rows, and its Restart the box button (A1498) was built as a dashboard restart of Waitron's server only (watcher, 2026-11-11 10:31), so the held-database row still says to switch the box off and on. |
 
 Take the four reworks in the order above, one small PR per area. Test the refusal and the available
@@ -420,23 +419,6 @@ State: A chain has a run of same-code refusals and eligible stopped work. A refu
 
 Route: Existing: eligible stopped work has the hourly probe described by the message. Missing: a decision route if that probe cannot resolve the refusal. Do not promise that waiting always recovers.
 
-### `payment.bill_settle_failed`
-
-Screen: Dashboard alerts bell (incident history where applicable). Fix: [payments](#payments).
-
-| Language | Current words |
-| --- | --- |
-| EN | A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN} |
-| ES | Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Contacta con soporte.${MORE_ES} |
-
-Wording: `apps/dashboard/src/i18n/alert-messages.ts:290` and `apps/dashboard/src/i18n/alert-messages.ts:291`.
-
-State: A pending bill payment was charged but could not be recorded/issued. The incident stores errorCode; storage or clock failures can also prevent settlement. Bug-only is not established. Receipt: `apps/server/src/bill-payments-loop.ts:207`.
-
-Route: Existing: Payments exposes pending bill payments and confirmed-outcome recovery. Trace its ability to finish this particular stored charge before pointing to it; a persistent local issuance failure needs a specific remedy. Never charge again or unlock on an unknown outcome.
-
-_2026-11-11, A1089 slice 1: traced (`apps/server/src/payments-api.ts`, the bill-payments list and its `resolve` route, which runs the same `settleFromProviderRow` step as the background loop for a charged payment). The words no longer say to contact support: they say Waitron tries again by itself, name Card payments → Bill payments and refunds awaiting a card provider → Check with provider to try now, and say not to charge the card again. Still open: a recording failure that persists through every retry has no specific remedy. The rest of this entry records the earlier tree._
-
 ### `backup.staging_space_low`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [backup-preparation](#backup-preparation).
@@ -656,38 +638,6 @@ Wording: `packages/fiscal-verifactu/src/dashboard/strings.ts:80`, `packages/fisc
 State: certificate-check.ts:33 groups every VerifactuTransportError of kind http by status. This branch does not restrict the number to a temporary response. Bug-only: no, the response is external. The specific provider remedy is unverified; do not infer it solely from the number.
 
 Route: Existing: the installed certificate stays unchanged. Missing: distinguish a retryable response from a persistent refusal using verified response evidence, then name the applicable certificate/connection/administrator step.
-
-### Shared payment outcome fallback
-
-Message: `payment.outcome_unknown`. Fix: [payments](#payments).
-
-| Language | Current words |
-| --- | --- |
-| EN | The card provider could not say what happened to this payment; the order stays locked. Try again in a minute. |
-| ES | El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto. |
-
-Wording: `apps/dashboard/src/i18n/codes.ts:1164`, `apps/dashboard/src/i18n/codes.ts:1165`.
-
-State: payments-api.ts:1098 throws this for an unknown provider outcome. payments-screen.ts:63 overrides unreachable and ambiguous reasons: ambiguous directs you to the provider dashboard, and disconnected names reconnection. The shared minute-retry text remains the fallback, so a grep of the shared entry alone overstates the live problem. Bug-only: no, provider uncertainty is explicit.
-
-Route: Keep the existing reason-specific handling. Before a fix, exercise the fallback with a real reachable reason and show the missing next step. Never infer no charge from an unknown outcome.
-
-### Payment check fallback
-
-_2026-11-16: this fallback now distinguishes a payment still listed from one removed, preserves its details, and distinguishes background provider checks from a manager-confirmed charge whose recording failed. The confirmed-charge Counter recovery is in [the guide](../../apps/server/src/guide/en/table-service.md#card-check-failed). Persistent recording failures, table-order recovery guidance and the shared unknown-outcome fallback remain open. The rest of this row records the earlier audit._
-
-Message: `payments.stuck.failed`. Fix: [payments](#payments).
-
-| Language | Current words |
-| --- | --- |
-| EN | Something went wrong while checking this payment. If it is still listed, try again in a minute. |
-| ES | Algo salió mal al consultar este cobro. Si sigue en la lista, vuelve a intentarlo en un minuto. |
-
-Wording: `apps/dashboard/src/i18n/strings.ts:2457`, `apps/dashboard/src/i18n/strings.ts:5822`.
-
-State: payments-screen.ts:71 chooses this for server.internal. The fallback contains no information establishing that another minute changes the underlying cause. Bug-only: unproved, since this includes a failed request or unclassified server error.
-
-Route: Missing: a bounded next action after repeated failure, preserving the held order and evidence. Trace the actual internal refusal before claiming a product-only fault or adding a new recovery action.
 
 ## Temporary waits and other screened matches
 
@@ -1126,12 +1076,6 @@ The [concrete inspection and caller-scope proposal](../superpowers/specs/2026-10
 asks whether to plan inspection of already-recorded evidence first, keeping a live fiscal caller
 and persistent recovery OPEN, or design an active operator audit and complete decision route first.
 Both choices concern planning only. Neither support referral is fixed by this documentation.
-
-### payments
-
-**Charged-but-unsettled and repeated payment-check failures need a recovery route.** Trace the existing pending-payment recovery and reason-specific messages, then offer only confirmed-outcome actions. Never retry a charge or unlock an unknown outcome.
-
-_2026-11-11, A1089 slice 1: `payment.bill_settle_failed` now names Check with provider on Card payments instead of support; a recording failure that persists is still open, as are the repeated payment-check failures._
 
 ### certificate
 

@@ -957,6 +957,16 @@ describe("refusals that name a way out the product already has", () => {
         expect(text, label).toContain(t(label, locale));
       }
       expect(text).toContain(noSecondCharge);
+      expect(text).toContain(
+        lang === "en"
+          ? "If recording keeps failing, this is a fault"
+          : "Si el registro sigue fallando, es un fallo",
+      );
+      expect(text).toContain(
+        lang === "en"
+          ? "Keep the order and payment details"
+          : "Conserva los datos del pedido y del cobro",
+      );
       expect(text).not.toMatch(elsewhere);
     },
   );
