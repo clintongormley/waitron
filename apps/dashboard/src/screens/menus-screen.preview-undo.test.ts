@@ -744,7 +744,7 @@ it("forgets a refusal once a fresh preview still lists its change but no longer 
   expect(refusalIn(panel(), "own-rename")).toBeNull();
 });
 
-it.each(["subscription", "patch Reload"])("retires Undo refusal after %s", async (source) => {
+it.each(["subscription", "direct setting"])("retires Undo refusal after %s", async (source) => {
   const before = currentContentLanguages();
   try {
     const live = new LiveData();

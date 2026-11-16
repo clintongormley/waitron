@@ -168,7 +168,6 @@ export class MenuPatchDialog extends LitElement {
   @state() private refusal: Refusal | null = null;
   /** Why the last Reload failed, shown beside the refusal that offered it. */
   @state() private reloadFailure: string | null = null;
-  /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
   /** The `changeKey`s of the edited fields, staged or failing their own check, that have let go of
    * text typed in a language removed since the dialog opened. */
