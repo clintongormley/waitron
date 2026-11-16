@@ -500,7 +500,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   a separate seat design that respects module boundaries; no change is queued.
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
-  write lock** — OPEN (found 2026-09-23, task F1's review wave).
+  write lock** — further optimisation waits for a material measured sale delay; the watcher
+  chose no split after the 2,000-image Mac probe (2026-11-16).
   [Detail](backlog/menu.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
 - **Two price rules disagree about a value that is not negative** — OPEN (found 2026-09-21, task

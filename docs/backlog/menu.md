@@ -27,8 +27,22 @@ orders and pages in SQL, reading only the page's metadata. Search still scores a
 JavaScript, and name sorting still uses `Intl.Collator` for accented names.
 `listImageTranslationGaps` still reads all rows of its selected columns. The route
 (`GET /management-api/images`) uses `withTransaction`, the venue's exclusive write lock, so these
-remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
-measure a way to bound name sorting without changing its results.
+remaining scans share the sale write queue.
+
+**Measured limit, 2026-11-16:** a shared Mac running Node 26.13.0, with 2,000 synthetic
+multilingual image metadata rows, ran the mounted image route while a real fiscal sale queued
+behind its write turn. No image bytes were decoded and no deliberate wait was added. After one
+warm-up, five samples per mode gave these times in milliseconds (median / maximum):
+
+| Mode | Sale queue wait | Sale from enqueue to commit |
+| --- | ---: | ---: |
+| Sale alone | 0.03 / 0.05 | 3.36 / 4.22 |
+| Broad relevance search | 6.89 / 9.96 | 10.24 / 13.02 |
+| Name sort | 9.02 / 11.81 | 11.66 / 14.95 |
+
+These are Mac measurements, not box timings. The watcher chose no route split for these measured
+delays on 2026-11-16. Further optimisation waits for a measured sale delay that warrants it;
+the full scans and translation-gap read remain.
 
 ## Two price rules disagree about a value that is not negative
 
