@@ -130,6 +130,10 @@ A recent confirmation is reused; a recovery-code confirmation must be replaced w
 authenticator code. You need an account with a password, and that password and your current
 authenticator code, if set up, ready to sign in on the spare. A passkey cannot complete that step.
 
+If the spare reports too little disk space when you hand over, choose **Stop**, make room on the spare and
+hand over again. The main box keeps selling. If an encryption key is missing or different, choose
+**Stop** and join the spare again before handing over.
+
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once the
 copy is ready, enter the same administrator account and choose **Continue to clock check**. Tick
 **These details are correct.** and choose **Proceed**: the page compares the clocks and creates the

@@ -1,4 +1,5 @@
 import type { CanonicalValue } from "@waitron/membership";
+import { isSha256Hex } from "./envelope.js";
 import type { OperationBinding } from "@waitron/module";
 
 /**
@@ -20,8 +21,32 @@ export interface RetainedRevision {
 /** A manifest row as the final-state indicator reports it, with what the source box holds. */
 export interface NodeLocalItem extends NodeLocalManifestRow {
   readonly sha256?: string | null;
-  readonly ringVersions?: number[];
+  readonly ringKeys?: readonly RingKeyFingerprint[];
   readonly revisions?: readonly RetainedRevision[];
+}
+
+export interface RingKeyFingerprint {
+  readonly version: number;
+  readonly sha256: string;
+}
+
+export function isRingKeys(raw: unknown): raw is readonly RingKeyFingerprint[] {
+  if (!Array.isArray(raw) || raw.length === 0) return false;
+  const seen = new Set<number>();
+  return raw.every((entry: unknown) => {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const key = entry as Record<string, unknown>;
+    if (
+      Object.keys(key).sort().join() !== "sha256,version" ||
+      !Number.isSafeInteger(key.version) ||
+      (key.version as number) < 1 ||
+      !isSha256Hex(key.sha256) ||
+      seen.has(key.version as number)
+    )
+      return false;
+    seen.add(key.version as number);
+    return true;
+  });
 }
 
 export const MODULE_PREPARED_ITEM = "module-records/<module>.json#prepared";
@@ -138,14 +163,14 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     where: "venue.db",
     class: "transferred",
     treatment:
-      "inside the copy; sealed under the venue key ring, so usable on M2 only when M2's ring holds every version",
+      "inside the copy; sealed under the venue key ring, so usable on M2 only when M2's ring holds every matching key",
   },
   {
     item: "secrets.env",
     where: "state",
     class: "transferred",
     treatment:
-      "earlier: the key ring reached M2 at joining; the indicator lists the ring's key versions",
+      "earlier: the key ring reached M2 at joining; the indicator lists each key's version and fingerprint",
   },
   {
     item: "trading.env",

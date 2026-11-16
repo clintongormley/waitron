@@ -25,6 +25,8 @@ import { currentBinding, peerKeyOf } from "./handover-signing.js";
 import { signedHandoverStatus } from "./handover-status-api.js";
 import { recordOfferInTurn } from "./handover-promotion-turn.js";
 import { beginHandoverFromOffer } from "./handover-store.js";
+import type { Statfs } from "./free-bytes.js";
+import { lowestFreeBytes, START_FREE_SPACE_FLOOR } from "./start-space.js";
 import type { Logger } from "./logger.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
@@ -40,11 +42,14 @@ const STATUS = {
   "handover.backup_settings_differ": 409,
   "handover.modules_differ": 409,
   "handover.key_ring_mismatch": 409,
+  "handover.no_room_at_offer": 409,
   "handover.destination_settings_unreadable": 409,
 } as const;
 
 export interface HandoverDestinationDeps extends PeerStatusApiDeps {
   stateDir: string;
+  venueDir: string;
+  statfs?: Statfs;
   migrationsRoot: string | null;
 }
 
@@ -52,6 +57,7 @@ interface OfferBody {
   binding: HandoverBinding;
   settings: OfferSettings;
   imageMigrations: string;
+  copyBytes: number;
 }
 
 interface VerifiedOffer extends OfferBody {
@@ -61,17 +67,27 @@ interface VerifiedOffer extends OfferBody {
 function offerBodyOf(body: unknown): OfferBody {
   if (body === null || typeof body !== "object" || Array.isArray(body)) refuseRequest("body");
   const fields = body as Record<string, unknown>;
-  if (Object.keys(fields).sort().join() !== "authorisedBy,binding,imageMigrations,settings") {
+  if (
+    Object.keys(fields).sort().join() !== "authorisedBy,binding,copyBytes,imageMigrations,settings"
+  ) {
     refuseRequest("body");
   }
   if (typeof fields.authorisedBy !== "string" || !isUuid(fields.authorisedBy)) {
     refuseRequest("authorisedBy");
+  }
+  if (
+    !Number.isSafeInteger(fields.copyBytes) ||
+    (fields.copyBytes as number) <= 0 ||
+    !Number.isSafeInteger(2 * (fields.copyBytes as number) + START_FREE_SPACE_FLOOR)
+  ) {
+    refuseRequest("copyBytes");
   }
   if (!isSha256Hex(fields.imageMigrations)) refuseRequest("imageMigrations");
   return {
     binding: parseBinding(fields.binding),
     settings: parseOfferSettings(fields.settings),
     imageMigrations: fields.imageMigrations,
+    copyBytes: fields.copyBytes as number,
   };
 }
 
@@ -83,11 +99,17 @@ async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<Verif
       refuseRequest("envelope");
     throw new AppError("handover.peer_unknown", {});
   }
-  const { binding, settings, imageMigrations } = offerBodyOf(verdict.body);
+  const { binding, settings, imageMigrations, copyBytes } = offerBodyOf(verdict.body);
   if (verdict.signerNodeId !== binding.sourceNodeId) refuseRequest("sourceNodeId");
   if (binding.destinationNodeId !== deps.nodeId) refuseRequest("destinationNodeId");
   if (binding.scenario !== "controlled") refuseRequest("scenario");
-  return { envelope: raw as SignedHandoverEnvelope<unknown>, binding, settings, imageMigrations };
+  return {
+    envelope: raw as SignedHandoverEnvelope<unknown>,
+    binding,
+    settings,
+    imageMigrations,
+    copyBytes,
+  };
 }
 
 async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding): Promise<boolean> {
@@ -117,7 +139,10 @@ export function mountHandoverDestinationApi(
   app.post("/api/node/handover/offer", peerBodyLimit(65536));
   app.post("/api/node/handover/offer", (c) =>
     run(c, log, async () => {
-      const { envelope, binding, settings, imageMigrations } = await verifiedOffer(c, deps);
+      const { envelope, binding, settings, imageMigrations, copyBytes } = await verifiedOffer(
+        c,
+        deps,
+      );
       const { operationId } = binding;
       const stored = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // Before the mode and the chart: a retry must still answer once this box has moved on.
@@ -141,6 +166,12 @@ export function mountHandoverDestinationApi(
         );
         const difference = offerSettingsDifference(settings, own);
         if (difference !== null) throw new AppError(difference, {});
+        const neededBytes = 2 * copyBytes + START_FREE_SPACE_FLOOR;
+        const availableBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+        if (availableBytes === null || availableBytes < neededBytes) {
+          log("warn", "handover.offer_space_refused", { operationId, neededBytes, availableBytes });
+          throw new AppError("handover.no_room_at_offer", {});
+        }
         await beginHandoverFromOffer(deps, binding, "destination", envelope);
       });
       const recorded = await readHandoverOperation(deps.node, deps.nodeId, operationId);

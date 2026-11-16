@@ -20,9 +20,14 @@ export type {
   ModuleEntry,
   SchemaEntry,
 } from "./indicator.js";
-export { NODE_LOCAL_MANIFEST, MODULE_PREPARED_ITEM } from "./manifest.js";
+export { NODE_LOCAL_MANIFEST, MODULE_PREPARED_ITEM, isRingKeys } from "./manifest.js";
 export { handoverActivations, handoverScenario } from "@waitron/db";
-export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
+export type {
+  NodeLocalItem,
+  NodeLocalManifestRow,
+  RetainedRevision,
+  RingKeyFingerprint,
+} from "./manifest.js";
 export {
   ACTIVATED_OR_LATER,
   BEFORE_ACTIVATION,

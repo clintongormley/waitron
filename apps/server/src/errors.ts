@@ -260,7 +260,6 @@ declare module "@waitron/shared" {
      * different migrations, or the copy's journal stands behind the receiving box's image.
      */
     "handover.modules_differ": Record<string, never>;
-    /** The box handing over lists a credentials key version the receiving box does not hold. */
     "handover.key_ring_mismatch": Record<string, never>;
     /** The box handing over could not read `file`, one of its own files a handover needs. */
     "handover.settings_unreadable": { file: string };
@@ -306,6 +305,7 @@ declare module "@waitron/shared" {
      * `neededBytes`. The copy is kept and pressing Retry on the recovery page tries again.
      */
     "handover.placement_no_room": { neededBytes: number };
+    "handover.no_room_at_offer": Record<string, never>;
     /**
      * The spare has too little room to place the copy it accepted. It asks the old box to give up
      * filing once there is room.

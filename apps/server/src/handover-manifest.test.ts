@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { dirname } from "node:path";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -18,8 +18,13 @@ import {
   readBackupSettings,
   replaceBackupSettings,
 } from "./backup-env-writer.js";
-import { buildNodeLocalManifest, readOfferSettings } from "./handover-manifest.js";
+import {
+  buildNodeLocalManifest,
+  offerSettingsDifference,
+  readOfferSettings,
+} from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
+import * as manifest from "./handover-manifest.js";
 
 const primary = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const secondary = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -77,11 +82,20 @@ function containsBytes(value: unknown): boolean {
 }
 
 function expectedManifest(
-  ringVersions: number[],
+  versions: number[],
   digests: Record<"backup.env" | "settings:modules", string | null>,
 ): NodeLocalItem[] {
   return NODE_LOCAL_MANIFEST.map((entry) => {
-    if (entry.item === "secrets.env") return { ...entry, ringVersions };
+    if (entry.item === "secrets.env")
+      return {
+        ...entry,
+        ringKeys: versions.map((version) => ({
+          version,
+          sha256: createHash("sha256")
+            .update(version === 2 ? PREVIOUS_KEY : CURRENT_KEY)
+            .digest("hex"),
+        })),
+      };
     if (entry.item === "backup.env" || entry.item === "settings:modules") {
       return { ...entry, sha256: digests[entry.item] };
     }
@@ -134,13 +148,81 @@ describe("buildNodeLocalManifest", () => {
     }
   });
 
+  it("fingerprints raw current and previous keys without exposing them", async () => {
+    const ring = ringWithRotation();
+    const settings = await readOfferSettings(
+      stateDir,
+      ring,
+      "handover.settings_unreadable",
+      primary.db,
+    );
+    const items = await buildNodeLocalManifest(stateDir, ring, primary.db);
+    const want = [
+      { version: 2, sha256: createHash("sha256").update(PREVIOUS_KEY).digest("hex") },
+      { version: 3, sha256: createHash("sha256").update(CURRENT_KEY).digest("hex") },
+    ];
+    expect(settings).toHaveProperty("ringKeys", want);
+    expect(row(items, "secrets.env")).toHaveProperty("ringKeys", want);
+    const other = await readOfferSettings(
+      stateDir,
+      {
+        current: { version: 3, key: Buffer.alloc(32, 9) },
+        previous: ring.previous,
+      },
+      "handover.settings_unreadable",
+      primary.db,
+    );
+    expect(offerSettingsDifference(settings, other)).toBe("handover.key_ring_mismatch");
+    for (const key of [CURRENT_KEY, PREVIOUS_KEY]) {
+      for (const encoding of ["hex", "base64", "latin1"] as const) {
+        expect(JSON.stringify({ settings, items })).not.toContain(key.toString(encoding));
+      }
+    }
+  });
+
+  it("WAL-only growth is included in the offer copy budget", async () => {
+    await primary.db.run(sql`pragma wal_autocheckpoint = 0`);
+    const [{ file }] = primary.db.all<{ file: string }>(sql`pragma database_list`);
+    const fileBytes = (await stat(file)).size;
+    const before = manifest.readOfferCopyBytes(primary.db);
+    try {
+      await primary.db.run(sql`create table offer_budget_probe (payload blob)`);
+      await primary.db.run(sql`insert into offer_budget_probe values (zeroblob(2000000))`);
+      const budget = manifest.readOfferCopyBytes(primary.db);
+      expect((await stat(file)).size).toBe(fileBytes);
+      expect(budget).toBeGreaterThan(before);
+    } finally {
+      await primary.db.run(sql`drop table offer_budget_probe`);
+      await primary.db.run(sql`pragma wal_autocheckpoint = 1000`);
+    }
+  });
+
+  it("reusable pages left by WAL-backed deletion do not inflate the copy estimate", async () => {
+    await primary.db.run(sql`pragma wal_autocheckpoint = 0`);
+    try {
+      await primary.db.run(sql`create table offer_reuse_probe (payload blob)`);
+      await primary.db.run(sql`insert into offer_reuse_probe values (zeroblob(2000000))`);
+      const filled = manifest.readOfferCopyBytes(primary.db);
+      await primary.db.run(sql`delete from offer_reuse_probe`);
+      const emptied = manifest.readOfferCopyBytes(primary.db);
+      expect(filled - emptied).toBeGreaterThan(1900000);
+      await primary.db.run(sql`insert into offer_reuse_probe values (zeroblob(2000000))`);
+      expect(manifest.readOfferCopyBytes(primary.db)).toBe(filled);
+    } finally {
+      await primary.db.run(sql`drop table offer_reuse_probe`);
+      await primary.db.run(sql`pragma wal_autocheckpoint = 1000`);
+    }
+  });
+
   it("lists only the current version when no rotation is under way", async () => {
     const ring = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: CURRENT_KEY.toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "5",
     });
     const items = await buildNodeLocalManifest(stateDir, ring, databaseFor(stateDir));
-    expect(row(items, "secrets.env").ringVersions).toEqual([5]);
+    expect(row(items, "secrets.env").ringKeys).toEqual([
+      { version: 5, sha256: createHash("sha256").update(CURRENT_KEY).digest("hex") },
+    ]);
   });
 
   it("a missing backup.env reads sha256: null", async () => {
@@ -434,7 +516,16 @@ describe("readOfferSettings", () => {
         "handover.settings_unreadable",
         databaseFor(stateDir),
       ),
-    ).toEqual({ backupSettings: null, moduleSettings: null, ringVersions: [2, 3] });
+    ).toEqual({
+      backupSettings: null,
+      moduleSettings: null,
+      ringKeys: [2, 3].map((version) => ({
+        version,
+        sha256: createHash("sha256")
+          .update(version === 2 ? PREVIOUS_KEY : CURRENT_KEY)
+          .digest("hex"),
+      })),
+    });
   });
 });
 

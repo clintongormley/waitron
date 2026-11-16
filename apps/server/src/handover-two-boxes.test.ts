@@ -135,7 +135,7 @@ async function joined() {
   mountPeerStatusApi(spareApp, spareDeps, () => undefined);
   mountHandoverDestinationApi(
     spareApp,
-    { ...spareDeps, stateDir: spareState, migrationsRoot: null },
+    { ...spareDeps, stateDir: spareState, venueDir: spareState, migrationsRoot: null },
     () => undefined,
   );
 

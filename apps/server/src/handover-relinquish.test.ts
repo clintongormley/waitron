@@ -716,6 +716,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
           mainBox.db,
         )) as unknown as CanonicalValue,
         imageMigrations: imageMigrationsDigest(null),
+        copyBytes: 1024,
       },
       { nodeId: mainId, privateKey: mainKey },
     );

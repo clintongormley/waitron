@@ -302,7 +302,7 @@ async function rig() {
   );
   const offer = signEnvelope(
     "stepdown",
-    { binding: binding as unknown as CanonicalValue, authorisedBy },
+    { binding: binding as unknown as CanonicalValue, authorisedBy, copyBytes: 1024 },
     { nodeId: m1.nodeId, privateKey: m1Key },
   );
   await beginHandoverFromOffer(m2Store, binding, "destination", offer);
@@ -402,7 +402,7 @@ interface Mutable {
   nodeLocal: {
     item: string;
     sha256?: string | null;
-    ringVersions?: number[];
+    ringKeys?: { version: number; sha256: string }[];
     revisions?: { binding: Record<string, string>; value: unknown }[];
   }[];
   modulesSummary: Record<string, unknown>;
@@ -1226,7 +1226,21 @@ describe("compareFinalCopy", () => {
 
     it("an old box listing a key version the spare does not hold is refused", async () => {
       const r = await rig();
-      const envelope = r.resigned((body) => void (row(body, "secrets.env").ringVersions = [1, 9]));
+      const envelope = r.resigned(
+        (body) =>
+          void (row(body, "secrets.env").ringKeys = [
+            { version: 1, sha256: "a".repeat(64) },
+            { version: 9, sha256: "b".repeat(64) },
+          ]),
+      );
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.key_ring_mismatch"));
+    });
+
+    it("same-version key replacement after the offer refuses the final copy", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => {
+        row(body, "secrets.env").ringKeys![0].sha256 = "a".repeat(64);
+      });
       expect(await r.compareRow(envelope)).toEqual(refused("handover.key_ring_mismatch"));
     });
 
@@ -2112,6 +2126,7 @@ describe("the spare's duty runs the real comparison", () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
         expect(r.posted).toEqual([]);
         expect((await r.row()).state).toBe("copy_accepted");
+        expect(statSync(acceptedCopyPath(r.m2State, OP)).size).toBeGreaterThan(1024);
         // Written once though many passes checked.
         expect(waits).toEqual([
           expect.objectContaining({

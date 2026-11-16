@@ -563,14 +563,6 @@ as its successor. Read, not run. Left open by A1018
 Slice 3.
 
 
-## A spare learns it has no room to place the copy only after the old box has stopped selling.
-
-The duty does not post its acceptance without room for the copy and the start floor, and waits on
-`handover.no_room_to_place` (`apps/server/src/handover-destination-duty.ts`), but the old box has
-stepped down by then. Finding it while the old box still sells needs the old box's database size
-in the offer. Left open by A1018 Slice 5 (Ruling R35).
-
-
 ## The bucket restore's integrity check has no time limit
 
 The bucket restore calls `isCopyIntact` without a deadline or stop signal (`restore-stream.ts`).
@@ -587,18 +579,6 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
   (Rulings R29, R30).
   [Detail](replication-cloud.md#the-module-preparation-file-grows-with-every-write-and-a-handover-cannot-promise-room-in-it)
-
-## Bundle: Check everything at the offer, while the old box still sells
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A spare learns it has no room to place the copy only after the old box has stopped selling.**
-  Left open by A1018 Slice 5 (Ruling R35).
-  [Detail](replication-cloud.md#a-spare-learns-it-has-no-room-to-place-the-copy-only-after-the-old-box-has-stopped-selling)
-- **A different key under the same version passes the handover's comparison.** It compares ring
-  versions only, so M2 places a copy whose sealed rows it cannot open, and filing then refuses (both
-  run in a test). A real join copies the ring (`apps/server/src/adopt.ts`), so no real box reaches
-  it today. Left open by A1018 Slice 5 (Ruling R49).
 
 ## Bundle: The spare's wait loop: back-off, reasons, stop signals
 
@@ -936,10 +916,8 @@ not open the rows sealed under the new version. Wanted: a way for the ring to re
 rule that a rotation re-joins it.
 Since 3b-5b the plan's decision D7 holds instead: `rotate` refuses `credentials.rotation_spare_joined`
 while `node.db` holds a pair link, re-sealing nothing (`packages/credentials/src/cli.test.ts`). A
-ring changed by hand in `secrets.env` is not stopped, and the two risks below are untouched.
-Two related risks, found by reading only, not run (2026-11-09): before a handover the new box
-compares key-ring version numbers, not the keys themselves (`handover-manifest.ts:166-168`); and a
-ring rotated after the bucket copy's sealed state bundle was last refreshed could leave a bucket
+ring changed by hand in `secrets.env` is not stopped, and the bucket-copy risk below is untouched.
+A related risk, found by reading only, not run (2026-11-09): a ring rotated after the bucket copy's sealed state bundle was last refreshed could leave a bucket
 restore unable to read newer rows (`credentials.key_version_unknown`).
 
 ## A1274: a box that handed over and then loses its node.db can start as a second main box

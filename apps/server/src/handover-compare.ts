@@ -356,7 +356,7 @@ async function settingsRefused(
     {
       backupSettings: rowOf(body, "backup.env")?.sha256 ?? null,
       moduleSettings: rowOf(body, "settings:modules")?.sha256 ?? null,
-      ringVersions: rowOf(body, "secrets.env")?.ringVersions ?? [],
+      ringKeys: rowOf(body, "secrets.env")?.ringKeys ?? [],
     },
     own,
   );

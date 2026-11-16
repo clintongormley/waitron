@@ -357,6 +357,7 @@ beforeAll(async () => {
           sDb,
         )) as unknown as CanonicalValue,
         imageMigrations: imageMigrationsDigest(null),
+        copyBytes: 1024,
       },
       MAIN_BOX,
     ),

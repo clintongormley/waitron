@@ -111,7 +111,6 @@ close the day, then A947 and its handover bundles.
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 - [Series and module-preparation gaps at handover](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 - [Finish the clock work: a check at every start and every change](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
-- [Check everything at the offer, while the old box still sells](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 - [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 - [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
@@ -1544,7 +1543,6 @@ Not in any track until the standalone primary is done.
   stepdown to the full start's own handling once that is mounted (`apps/server/src/boot.ts`).
   Left open by WAITING-START-ENDS.
 
-- **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 
 
 - **A venue with no module that can prepare a promotion cannot hand over.** A venue without
@@ -1622,7 +1620,7 @@ this section records the remaining build and real-box qualification.
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
-  exists (decision D7); the two related risks in the detail stay open.
+  exists (decision D7); the bucket-copy risk in the detail stays open.
   [Detail](backlog/replication-cloud.md#a1273-the-shared-key-ring-has-no-rotation-path-to-the-spare)
 
 - **A1274: a box that handed over and then loses its node.db can start as a second main box.**

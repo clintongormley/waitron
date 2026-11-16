@@ -333,7 +333,7 @@ export function placeCopyBoxes(deps: {
         where: "state",
         class: "transferred",
         treatment: "x",
-        ringVersions: [1],
+        ringKeys: [{ version: 1, sha256: "a".repeat(64) }],
       },
       {
         item: "module-records/<module>.json#prepared",
