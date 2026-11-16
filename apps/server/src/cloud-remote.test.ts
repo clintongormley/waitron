@@ -212,7 +212,7 @@ it("the staff entrance lets the tax office's invoice list, PDF, month and its do
     ["POST", "/management-api/tax-office/invoices/0b0e6d0c-56a4-4c3e-9b0e-1b2b3c4d5e6f/pdf"],
     ["POST", "/management-api/tax-office/months/2026-11"],
     ["GET", "/management-api/tax-office/month-download"],
-    ["GET", "/management-api/tax-office/month-download/file"],
+    ["GET", "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file"],
   ] as const) {
     const response = await staff.request(`https://staff.example.test${path}`, { method });
     expect(response.status, path).toBe(200);

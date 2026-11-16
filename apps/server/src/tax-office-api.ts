@@ -20,6 +20,7 @@ import {
   stringToCents,
   type SupportedLocale,
 } from "@waitron/shared";
+import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 import {
   invoicePdfFileName,
@@ -50,7 +51,7 @@ export interface TaxOfficeApiDeps {
   tradingContext: TradingContext;
   venueLocale: SupportedLocale;
   builds: TaxOfficeMonthBuilds;
-  /** The lowest free space of the disks the file and the backups share; null when unreadable. */
+  /** Null when unreadable. */
   freeBytes: () => Promise<number | null>;
 }
 
@@ -88,7 +89,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "invoice_delivery.not_found": 404,
   "tax_office.export_running": 409,
-  "tax_office.space_low": 409,
+  "tax_office.space_low": 507,
   "tax_office.download_missing": 404,
 };
 
@@ -214,6 +215,8 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const raw = c.req.param("month");
       const days = requireMonth(raw);
       let claimedBy: string | null = null;
+      // Read outside the transaction, whose write lock sales wait behind.
+      const freeBytes = await deps.freeBytes();
       const asked = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -222,7 +225,6 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
         const running = deps.builds.view(authorizedBy);
         // A repeat takes the running build's view: that build's own writing lowers free space.
         if (running.status !== "building" || running.month !== raw) {
-          const freeBytes = await deps.freeBytes();
           const neededBytes = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
           if (freeBytes !== null && freeBytes < neededBytes)
             throw new AppError("tax_office.space_low", { freeBytes, neededBytes });
@@ -237,7 +239,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
         );
         const venue = (await readTaxpayer(tx))?.legalName ?? null;
         await recordActivity(tx, {
-          kind: "tax_office.month_downloaded",
+          kind: "tax_office.month_requested",
           subjectId: "tax-office-month",
           personId: authorizedBy,
           data: { month: raw, invoices: await countTaxOfficeInvoices(tx, issued) },
@@ -266,10 +268,11 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       return c.json(deps.builds.view(personId));
     }),
   );
-  app.get("/management-api/tax-office/month-download/file", (c) =>
+  app.get("/management-api/tax-office/month-download/:id/file", (c) =>
     run(c, log, async () => {
       const personId = await inspectingPerson(deps.db, requireManagementSession(c));
-      const file = deps.builds.file(personId);
+      const id = c.req.param("id");
+      const file = deps.builds.file(personId, id);
       if (file === null) throw new AppError("tax_office.download_missing", {});
       const size = await stat(file.path).then(
         ({ size }) => size,
@@ -287,9 +290,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       let closed = false;
       const closeHandle = (opened: FileHandle) => {
         opened.close().catch((error: unknown) => {
-          log("error", "tax_office.file_close_failed", {
-            errorClass: error instanceof Error ? error.name : typeof error,
-          });
+          log("error", "tax_office.file_close_failed", { errno: errnoOf(error) ?? null });
         });
       };
       const closeFile = () => {
@@ -326,7 +327,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
             controller.close();
             const whole = !connection.aborted;
             closeFile();
-            if (whole) deps.builds.sent(personId, file.id);
+            if (whole) deps.builds.sent(personId, id);
           },
           cancel: closeFile,
         },

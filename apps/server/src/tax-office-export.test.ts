@@ -1,13 +1,13 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import { unzipSync, strFromU8 } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -95,6 +95,7 @@ let seriesIds: { full: string; standard: string; fA: string; fUnderA: string };
 const january: Record<string, string> = {};
 
 const DOWNLOADS = join(mkdtempSync(join(tmpdir(), "tax-office-export-")), "tax-office");
+afterAll(() => rmSync(dirname(DOWNLOADS), { recursive: true, force: true }));
 const buildsOf = new WeakMap<Hono, TaxOfficeMonthBuilds>();
 
 function mount(
@@ -118,6 +119,7 @@ function mount(
     changed: () => {},
     wake: () => {},
     log,
+    freeBytes: extra.freeBytes ?? (() => Promise.resolve(null)),
   });
   buildsOf.set(app, builds);
   mountTaxOfficeApi(
@@ -287,9 +289,20 @@ function requestMonth(app: Hono, month: string, init: RequestInit & { cookie?: s
 const monthStatus = (app: Hono, cookie = managerDashboard) =>
   app.request("/management-api/tax-office/month-download", { headers: { cookie } });
 
-const monthFile = (app: Hono, init: RequestInit & { cookie?: string } = {}) => {
-  const { cookie = managerDashboard, headers, ...rest } = init;
-  return app.request("/management-api/tax-office/month-download/file", {
+/** An id no build holds. */
+const NO_BUILD = "00000000-0000-4000-8000-00000000f11e";
+
+/** The id the person's status shows, or `NO_BUILD` when it shows none. */
+async function currentId(app: Hono, cookie = managerDashboard): Promise<string> {
+  const view = (await (await monthStatus(app, cookie)).json()) as { id?: string };
+  return view.id ?? NO_BUILD;
+}
+
+/** The file under `id`, by default the id the person's status shows. */
+const monthFile = async (app: Hono, init: RequestInit & { cookie?: string; id?: string } = {}) => {
+  const { cookie = managerDashboard, id, headers, ...rest } = init;
+  const path = `/management-api/tax-office/month-download/${id ?? (await currentId(app, cookie))}/file`;
+  return app.request(path, {
     headers: { cookie, ...(headers as Record<string, string> | undefined) },
     ...rest,
   });
@@ -337,7 +350,7 @@ function countingRender() {
 
 const pdfDownloads = async () => (await db().select().from(invoicePdfDownloads)).length;
 const monthEntries = () =>
-  db().select().from(activityLog).where(eq(activityLog.kind, "tax_office.month_downloaded"));
+  db().select().from(activityLog).where(eq(activityLog.kind, "tax_office.month_requested"));
 
 describe("the month's export", () => {
   it("holds a README, a CSV and every invoice issued in the month in venue days, voided ones too", async () => {
@@ -377,6 +390,7 @@ describe("the month's export", () => {
     expect(await pdfWidth(files[pathOf(january.ticket!)]!)).toBe(TICKET_80MM);
     expect(await pdfWidth(files[pathOf(january.twoRates!)]!)).toBe(A4);
     expect(strFromU8(files["README.txt"]!)).toContain("2026-01");
+    expect(strFromU8(files["README.txt"]!)).toMatch(/\r\nPreparado el \d{4}-\d{2}-\d{2}\.\r\n$/);
     // One activity entry, and no per-invoice download rows.
     expect(await pdfDownloads()).toBe(downloadsBefore);
     const entries = await monthEntries();
@@ -697,7 +711,7 @@ describe("the month's export", () => {
   it("frees the export when its first turn fails", async () => {
     const app = mount();
     db().run(sql`create temp trigger refuse_month_entry before insert on activity_log
-      when new.kind = 'tax_office.month_downloaded'
+      when new.kind = 'tax_office.month_requested'
       begin select raise(abort, 'refused for the test'); end`);
     try {
       expect((await exportMonth(app, "2025-06")).status).toBe(500);
@@ -752,8 +766,11 @@ describe("asking for the month's file and saving it", () => {
     const other = await sessionHolding(db(), ["invoice.inspect"]);
     expect((await requestMonth(app, "2026-01", { cookie: asker.cookie })).status).toBe(202);
     await runBuild(app);
-    const ready = (await (await monthStatus(app, asker.cookie)).json()) as { bytes: number };
-    const notTheirs = await monthFile(app, { cookie: other.cookie });
+    const ready = (await (await monthStatus(app, asker.cookie)).json()) as {
+      id: string;
+      bytes: number;
+    };
+    const notTheirs = await monthFile(app, { cookie: other.cookie, id: ready.id });
     expect(notTheirs.status).toBe(404);
     expect(await notTheirs.json()).toMatchObject({
       error: { code: "tax_office.download_missing" },
@@ -780,7 +797,7 @@ describe("asking for the month's file and saving it", () => {
     expect(Object.keys(unzipSync(bytes))).toHaveLength(8);
     await vi.waitFor(() => expect(stillOpen()).toEqual([]));
     expect(await (await monthStatus(app, asker.cookie)).json()).toEqual({ status: "none" });
-    const twice = await monthFile(app, { cookie: asker.cookie });
+    const twice = await monthFile(app, { cookie: asker.cookie, id: ready.id });
     expect(twice.status).toBe(404);
     expect(await twice.json()).toMatchObject({ error: { code: "tax_office.download_missing" } });
   });
@@ -905,7 +922,7 @@ describe("asking for the month's file and saving it", () => {
     const app = mount({ freeBytes: () => Promise.resolve(free) });
     const entriesBefore = (await monthEntries()).length;
     const refused = await requestMonth(app, "2025-06");
-    expect(refused.status).toBe(409);
+    expect(refused.status).toBe(507);
     expect(await refused.json()).toMatchObject({
       error: {
         code: "tax_office.space_low",
@@ -934,9 +951,72 @@ describe("asking for the month's file and saving it", () => {
     expect(again.status).toBe(202);
     expect(await again.json()).toEqual(view);
     const otherMonth = await requestMonth(app, "2025-07");
-    expect(otherMonth.status).toBe(409);
+    expect(otherMonth.status).toBe(507);
     expect(await otherMonth.json()).toMatchObject({ error: { code: "tax_office.space_low" } });
     await runBuild(app);
+  });
+
+  it("serves only the month whose id the save names, once another month replaced it", async () => {
+    const app = mount({ render: countingRender().render });
+    const asker = await sessionHolding(db(), ["invoice.inspect"]);
+    expect((await requestMonth(app, "2026-01", { cookie: asker.cookie })).status).toBe(202);
+    await runBuild(app);
+    const january = (await (await monthStatus(app, asker.cookie)).json()) as { id: string };
+    expect(january).toMatchObject({ status: "ready", month: "2026-01" });
+    expect((await requestMonth(app, "2025-06", { cookie: asker.cookie })).status).toBe(202);
+    await runBuild(app);
+    const stale = await monthFile(app, { cookie: asker.cookie, id: january.id });
+    expect(stale.status).toBe(404);
+    expect(await stale.json()).toMatchObject({ error: { code: "tax_office.download_missing" } });
+    const june = await monthFile(app, { cookie: asker.cookie });
+    expect(june.status).toBe(200);
+    expect(june.headers.get("content-disposition")).toBe(
+      'attachment; filename="invoices-2025-06.zip"',
+    );
+    await june.body!.cancel();
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+  });
+
+  it("reads free space before taking the write lock that sales wait behind", async () => {
+    const seen: string[] = [];
+    const app = mount({
+      render: countingRender().render,
+      freeBytes: async () => {
+        seen.push(
+          await Promise.race([
+            db().withWriteLock(() => Promise.resolve("lock free")),
+            new Promise<string>((resolve) => setTimeout(() => resolve("lock held"), 500)),
+          ]),
+        );
+        return null;
+      },
+    });
+    expect((await requestMonth(app, "2025-06")).status).toBe(202);
+    expect(seen).toEqual(["lock free"]);
+    await runBuild(app);
+  });
+
+  it("logs the system's error code when the file cannot be closed after sending", async () => {
+    const logged: { event: string; fields?: Record<string, unknown> }[] = [];
+    const app = mount({ render: countingRender().render }, (_level, event, fields) =>
+      logged.push({ event, ...(fields === undefined ? {} : { fields }) }),
+    );
+    expect((await requestMonth(app, "2025-06")).status).toBe(202);
+    await runBuild(app);
+    files.whileOpening = (handle) => {
+      const close = handle.close.bind(handle);
+      vi.spyOn(handle, "close").mockImplementationOnce(async () => {
+        await close();
+        throw Object.assign(new Error("input/output error"), { code: "EIO" });
+      });
+    };
+    expect(Object.keys(await unzipped(await monthFile(app)))).toHaveLength(2);
+    await vi.waitFor(() =>
+      expect(logged).toContainEqual({
+        event: "tax_office.file_close_failed",
+        fields: { errno: "EIO" },
+      }),
+    );
   });
 
   it("finishes a build whose requesting session ended, for the same person's next session", async () => {
@@ -1024,6 +1104,12 @@ describe("the month's CSV and README", () => {
       expect(firstLine(words.readme(args))).toBe(named.replace(/ \S+ Harbour Bar/, ""));
     }
     expect(TAX_OFFICE_EXPORT_WORDS.en.readme(args)).toMatch(/^Invoices issued in 2026-01,/);
+  });
+
+  it("says in the README on which day the file was prepared", () => {
+    const args = { venue: null, month: "2026-01", timeZone: "Europe/Madrid", date: "2026-02-01" };
+    expect(TAX_OFFICE_EXPORT_WORDS.en.readme(args)).toContain("\r\nPrepared on 2026-02-01.\r\n");
+    expect(TAX_OFFICE_EXPORT_WORDS.es.readme(args)).toContain("\r\nPreparado el 2026-02-01.\r\n");
   });
 
   it("says in the README what a failed.txt lists", () => {

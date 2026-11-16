@@ -1,15 +1,53 @@
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import type { TaxOfficeMonth } from "./tax-office-export.js";
 import {
   createTaxOfficeMonthBuilds,
   TAX_OFFICE_KEEP_MS,
+  TAX_OFFICE_ROOM_BYTES,
   type TaxOfficeMonthBuilds,
 } from "./tax-office-month-builds.js";
+
+const measuring = vi.hoisted(() => ({
+  /** Runs once, while the next `stat` is under way. */
+  during: null as (() => void) | null,
+}));
+vi.mock("node:fs/promises", async (original) => {
+  const real = await original<typeof import("node:fs/promises")>();
+  return {
+    ...real,
+    stat: vi.fn(async (...args: Parameters<typeof real.stat>) => {
+      const during = measuring.during;
+      measuring.during = null;
+      const result = await real.stat(...args);
+      during?.();
+      return result;
+    }),
+  };
+});
+
+const folders: string[] = [];
+afterEach(() => {
+  for (const folder of folders.splice(0)) {
+    chmodSync(folder, 0o700);
+    if (existsSync(join(folder, "tax-office"))) chmodSync(join(folder, "tax-office"), 0o700);
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
 
 const ANA = "00000000-0000-4000-8000-0000000000a1";
 const BEA = "00000000-0000-4000-8000-0000000000b2";
@@ -31,8 +69,13 @@ async function* stubEntries(): AsyncGenerator<{ name: string; content: string | 
   yield { name: "invoices.csv", content: new Uint8Array([1, 2, 3]) };
 }
 
-function setup(entries: Entries = () => stubEntries(), controller = new AbortController()) {
+function setup(
+  entries: Entries = () => stubEntries(),
+  controller = new AbortController(),
+  freeBytes: () => Promise<number | null> = () => Promise.resolve(null),
+) {
   const dir = join(mkdtempSync(join(tmpdir(), "tax-office-builds-")), "tax-office");
+  folders.push(dirname(dir));
   let now = new Date("2026-02-01T10:00:00.000Z");
   const changed = vi.fn();
   const wake = vi.fn();
@@ -44,6 +87,7 @@ function setup(entries: Entries = () => stubEntries(), controller = new AbortCon
     changed,
     wake,
     log,
+    freeBytes,
   });
   const pass = () => builds.job().pass({ now, signal: controller.signal });
   return {
@@ -74,6 +118,11 @@ function idOf(builds: TaxOfficeMonthBuilds, person: string): string {
   return view.id;
 }
 
+/** The person's ready file, asked for by the id their view shows. */
+function fileOf(t: ReturnType<typeof setup>, person: string) {
+  return t.builds.file(person, idOf(t.builds, person));
+}
+
 it("builds a claimed and begun month into a ready file holding the entries", async () => {
   const t = setup();
   expect(t.builds.view(ANA)).toEqual({ status: "none" });
@@ -85,10 +134,9 @@ it("builds a claimed and begun month into a ready file holding the entries", asy
   expect(t.wake).toHaveBeenCalledTimes(1);
   if (view.status !== "building") throw new Error("not building");
   const result = await t.pass();
-  const file = t.builds.file(ANA);
+  const file = t.builds.file(ANA, view.id);
   expect(file).not.toBeNull();
   expect(file!.path).toBe(join(t.dir, `${view.id}.zip`));
-  expect(file!.bytes).toBe(statSync(file!.path).size);
   const expiresAt = new Date(
     Date.parse("2026-02-01T10:00:00.000Z") + TAX_OFFICE_KEEP_MS,
   ).toISOString();
@@ -96,7 +144,7 @@ it("builds a claimed and begun month into a ready file holding the entries", asy
     status: "ready",
     id: view.id,
     month: "2026-01",
-    bytes: file!.bytes,
+    bytes: statSync(file!.path).size,
     expiresAt,
   });
   expect(t.changed).toHaveBeenCalledTimes(2);
@@ -123,30 +171,33 @@ it("refuses another person's claim while one builds and gives the same person th
 it("deletes a person's ready file when they claim again", async () => {
   const t = setup();
   await readyFor(t, ANA, "2026-01");
-  const old = t.builds.file(ANA)!;
+  const oldId = idOf(t.builds, ANA);
+  const old = t.builds.file(ANA, oldId)!;
   expect(existsSync(old.path)).toBe(true);
   const again = t.builds.claim(ANA, "2025-12");
   expect(again.claimed).toBe(true);
-  expect(existsSync(old.path)).toBe(false);
-  expect(t.builds.file(ANA)).toBeNull();
+  await vi.waitFor(() => expect(existsSync(old.path)).toBe(false));
+  expect(t.builds.file(ANA, oldId)).toBeNull();
   expect(t.builds.view(ANA)).toMatchObject({ status: "building", month: "2025-12" });
 });
 
 it("forgets a sent file and its record, but not a newer record than the one sent", async () => {
   const t = setup();
   await readyFor(t, ANA, "2026-01");
-  const first = t.builds.file(ANA)!;
-  t.builds.sent(ANA, first.id);
-  expect(existsSync(first.path)).toBe(false);
+  const firstId = idOf(t.builds, ANA);
+  const first = t.builds.file(ANA, firstId)!;
+  t.builds.sent(ANA, firstId);
+  await vi.waitFor(() => expect(existsSync(first.path)).toBe(false));
   expect(t.builds.view(ANA)).toEqual({ status: "none" });
   expect(t.changed).toHaveBeenCalledTimes(3);
 
   await readyFor(t, ANA, "2026-01");
-  const second = t.builds.file(ANA)!;
-  expect(second.id).not.toBe(first.id);
-  t.builds.sent(ANA, first.id);
+  const secondId = idOf(t.builds, ANA);
+  const second = t.builds.file(ANA, secondId)!;
+  expect(secondId).not.toBe(firstId);
+  t.builds.sent(ANA, firstId);
   expect(existsSync(second.path)).toBe(true);
-  expect(t.builds.view(ANA)).toMatchObject({ status: "ready", id: second.id });
+  expect(t.builds.view(ANA)).toMatchObject({ status: "ready", id: secondId });
 });
 
 it("records a build whose entries throw as failed, logs once, and accepts the next claim", async () => {
@@ -161,8 +212,8 @@ it("records a build whose entries throw as failed, logs once, and accepts the ne
     nextDueAt: new Date(Date.parse("2026-02-01T10:00:00.000Z") + TAX_OFFICE_KEEP_MS),
   });
   expect(t.changed).toHaveBeenCalledTimes(2);
-  expect(t.builds.view(ANA)).toEqual({ status: "failed", id, month: "2026-01" });
-  expect(t.builds.file(ANA)).toBeNull();
+  expect(t.builds.view(ANA)).toEqual({ status: "failed", id, month: "2026-01", refusal: null });
+  expect(t.builds.file(ANA, id)).toBeNull();
   expect(t.files()).toEqual([]);
   expect(t.log.mock.calls).toEqual([
     [
@@ -194,7 +245,7 @@ it("leaves no record and no file when the job is stopped mid-build", async () =>
 it("deletes an unsaved file and its record once it has been kept long enough", async () => {
   const t = setup();
   await readyFor(t, ANA, "2026-01");
-  const path = t.builds.file(ANA)!.path;
+  const path = fileOf(t, ANA)!.path;
   t.advance(TAX_OFFICE_KEEP_MS - 1);
   expect((await t.pass()).nextDueAt).not.toBeNull();
   expect(existsSync(path)).toBe(true);
@@ -218,11 +269,12 @@ it("frees the claim on release", async () => {
 it("offers no file and shows no record once the hour has ended, before any pass", async () => {
   const t = setup();
   await readyFor(t, ANA, "2026-01");
+  const id = idOf(t.builds, ANA);
   t.advance(TAX_OFFICE_KEEP_MS - 1);
-  expect(t.builds.file(ANA)).not.toBeNull();
+  expect(t.builds.file(ANA, id)).not.toBeNull();
   expect(t.builds.view(ANA)).toMatchObject({ status: "ready" });
   t.advance(1);
-  expect(t.builds.file(ANA)).toBeNull();
+  expect(t.builds.file(ANA, id)).toBeNull();
   expect(t.builds.view(ANA)).toEqual({ status: "none" });
 });
 
@@ -281,17 +333,115 @@ it.skipIf(process.getuid?.() === 0)(
   async () => {
     const t = setup();
     await readyFor(t, ANA, "2026-01");
-    const { id, path } = t.builds.file(ANA)!;
+    const id = idOf(t.builds, ANA);
+    const { path } = t.builds.file(ANA, id)!;
     chmodSync(t.dir, 0o500);
     try {
       t.builds.sent(ANA, id);
-      expect(existsSync(path)).toBe(true);
       expect(t.builds.view(ANA)).toEqual({ status: "none" });
-      expect(t.log.mock.calls).toEqual([
-        ["warn", "tax_office.file_remove_failed", { errno: "EACCES" }],
-      ]);
+      await vi.waitFor(() =>
+        expect(t.log.mock.calls).toEqual([
+          ["warn", "tax_office.file_remove_failed", { errno: "EACCES" }],
+        ]),
+      );
+      expect(existsSync(path)).toBe(true);
     } finally {
       chmodSync(t.dir, 0o700);
     }
   },
 );
+
+it("serves a person's file only under the id of the build that made it", async () => {
+  const t = setup();
+  await readyFor(t, ANA, "2026-01");
+  const january = idOf(t.builds, ANA);
+  expect(t.builds.file(BEA, january)).toBeNull();
+  await readyFor(t, ANA, "2026-02");
+  const february = idOf(t.builds, ANA);
+  expect(t.builds.file(ANA, january)).toBeNull();
+  expect(t.builds.file(ANA, february)).toEqual({
+    path: join(t.dir, `${february}.zip`),
+    month: "2026-02",
+  });
+});
+
+/** A month of `count` PDFs of `size` bytes each, which the ZIP stores rather than compresses. */
+function bigEntries(count: number, size: number): Entries {
+  return async function* () {
+    yield { name: "README.txt", content: "hello" };
+    for (let index = 0; index < count; index += 1)
+      yield { name: `invoices/F-${index}.pdf`, content: randomBytes(size) };
+  };
+}
+
+it("stops a build whose writing would take the disk under the low-space line, keeping no file", async () => {
+  const MIB = 1024 ** 2;
+  // The second reading leaves no room for even a byte more.
+  const readings = [SPACE_LOW_BYTES + 3 * MIB, SPACE_LOW_BYTES, SPACE_LOW_BYTES + 5 * MIB];
+  const freeBytes = vi.fn(() => Promise.resolve(readings.shift() ?? SPACE_LOW_BYTES + 5 * MIB));
+  const t = setup(bigEntries(8, MIB), undefined, freeBytes);
+  t.builds.claim(ANA, "2026-01");
+  const id = idOf(t.builds, ANA);
+  t.builds.begin(ANA, input("2026-01"));
+  await t.pass();
+  expect(t.builds.view(ANA)).toEqual({
+    status: "failed",
+    id,
+    month: "2026-01",
+    refusal: {
+      code: "tax_office.space_low",
+      params: {
+        freeBytes: SPACE_LOW_BYTES + 5 * MIB,
+        neededBytes: SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES,
+      },
+    },
+  });
+  expect(t.files()).toEqual([]);
+  expect(freeBytes).toHaveBeenCalledTimes(3);
+  expect(t.log.mock.calls).toEqual([
+    ["warn", "tax_office.build_space_low", { freeBytes: SPACE_LOW_BYTES }],
+  ]);
+});
+
+it("names the free space it last read when it cannot read it again after stopping", async () => {
+  const MIB = 1024 ** 2;
+  const readings = [SPACE_LOW_BYTES + 3 * MIB, SPACE_LOW_BYTES, null];
+  const t = setup(bigEntries(8, MIB), undefined, () => Promise.resolve(readings.shift() ?? null));
+  await readyFor(t, ANA, "2026-01");
+  expect(t.builds.view(ANA)).toMatchObject({
+    status: "failed",
+    refusal: { params: { freeBytes: SPACE_LOW_BYTES } },
+  });
+  expect(readings).toEqual([]);
+});
+
+it("keeps building while free space cannot be read, reading it again as it writes", async () => {
+  const MIB = 1024 ** 2;
+  const freeBytes = vi.fn(() => Promise.resolve(null));
+  const t = setup(bigEntries(20, MIB), undefined, freeBytes);
+  await readyFor(t, ANA, "2026-01");
+  expect(t.builds.view(ANA)).toMatchObject({ status: "ready" });
+  expect(freeBytes.mock.calls.length).toBeGreaterThanOrEqual(2);
+});
+
+it("finishes a file bigger than the room while the disk keeps its reserve, measuring as it writes", async () => {
+  const MIB = 1024 ** 2;
+  const freeBytes = vi.fn(() => Promise.resolve(SPACE_LOW_BYTES + 2 * MIB));
+  const t = setup(bigEntries(6, MIB), undefined, freeBytes);
+  await readyFor(t, ANA, "2026-01");
+  expect(t.builds.view(ANA)).toMatchObject({ status: "ready" });
+  expect(statSync(fileOf(t, ANA)!.path).size).toBeGreaterThan(6 * MIB);
+  expect(freeBytes.mock.calls.length).toBeGreaterThanOrEqual(3);
+});
+
+it("leaves no record and no file when the job is stopped while the finished file is measured", async () => {
+  const controller = new AbortController();
+  const t = setup(undefined, controller);
+  t.builds.claim(ANA, "2026-01");
+  t.builds.begin(ANA, input("2026-01"));
+  measuring.during = () => controller.abort();
+  await t.pass();
+  expect(measuring.during).toBeNull();
+  expect(t.builds.view(ANA)).toEqual({ status: "none" });
+  expect(t.files()).toEqual([]);
+});

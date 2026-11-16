@@ -485,7 +485,7 @@ const INSPECTOR_ROUTES = [
   "POST /management-api/tax-office/invoices/:saleId/pdf",
   "POST /management-api/tax-office/months/:month",
   "GET /management-api/tax-office/month-download",
-  "GET /management-api/tax-office/month-download/file",
+  "GET /management-api/tax-office/month-download/:id/file",
 ];
 
 const INSPECTOR_REFUSAL = { status: 403, code: "authorization.inspection_only", params: {} };
@@ -619,7 +619,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           "/management-api/me/personal-data/export",
           "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30",
           "/management-api/tax-office/month-download",
-          "/management-api/tax-office/month-download/file",
+          "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file",
         ]) {
           const response = await fetch(url(path), { headers: { cookie: inspector } });
           await response.body?.cancel();
@@ -654,7 +654,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           "/management-api/me/personal-data/export": 200,
           "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30": 200,
           "/management-api/tax-office/month-download": 200,
-          "/management-api/tax-office/month-download/file": 404,
+          "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file": 404,
           "POST month": 202,
           "PUT locale": 204,
           "DELETE session": 204,
@@ -676,7 +676,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           const response = await fetch(url("/management-api/tax-office/month-download"), {
             headers: { cookie: inspector },
           });
-          return (await response.json()) as { status: string; month?: string };
+          return (await response.json()) as { status: string; id?: string; month?: string };
         };
         const asked = await fetch(url("/management-api/tax-office/months/2026-11"), {
           method: "POST",
@@ -688,7 +688,8 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           timeout: 15_000,
           interval: 100,
         });
-        const file = await fetch(url("/management-api/tax-office/month-download/file"), {
+        const { id } = await status();
+        const file = await fetch(url(`/management-api/tax-office/month-download/${id}/file`), {
           headers: { cookie: inspector },
         });
         expect(file.status).toBe(200);

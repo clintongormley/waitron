@@ -1,15 +1,16 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { createWriteStream, rmSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { zipStream } from "./download-archive.js";
 import { errnoOf } from "./errno.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { TaxOfficeMonth } from "./tax-office-export.js";
 
@@ -17,10 +18,18 @@ export type MonthDownloadView =
   | { status: "none" }
   | { status: "building"; id: string; month: string }
   | { status: "ready"; id: string; month: string; bytes: number; expiresAt: string }
-  | { status: "failed"; id: string; month: string };
+  | { status: "failed"; id: string; month: string; refusal: MonthDownloadRefusal | null };
+
+/** Why a build stopped, when the person can do something about it. */
+export interface MonthDownloadRefusal {
+  code: "tax_office.space_low";
+  params: { freeBytes: number; neededBytes: number };
+}
 
 export const TAX_OFFICE_KEEP_MS = 3_600_000;
 export const TAX_OFFICE_ROOM_BYTES = 256 * 1024 ** 2;
+/** How much a build writes between two readings of free space, while there is more room. */
+const WRITE_BETWEEN_READINGS_BYTES = 16 * 1024 ** 2;
 
 export interface TaxOfficeMonthBuilds {
   view(personId: string): MonthDownloadView;
@@ -30,7 +39,8 @@ export interface TaxOfficeMonthBuilds {
   begin(personId: string, month: TaxOfficeMonth): void;
   /** The request's transaction failed after `claim`. */
   release(personId: string): void;
-  file(personId: string): { id: string; path: string; bytes: number; month: string } | null;
+  /** The person's ready file, only while `id` names the build that made it. */
+  file(personId: string, id: string): { path: string; month: string } | null;
   /** The file was sent in full: deletes it and the record. A later id leaves the record alone. */
   sent(personId: string, id: string): void;
   job(): JobDefinition;
@@ -45,6 +55,8 @@ export interface TaxOfficeMonthBuildsDeps {
   changed: () => void;
   wake: () => void;
   log: Logger;
+  /** Null when unreadable. */
+  freeBytes: () => Promise<number | null>;
   keepMs?: number;
 }
 
@@ -57,7 +69,13 @@ type BuildRecord =
       started: boolean;
     }
   | { status: "ready"; id: string; month: string; bytes: number; until: number }
-  | { status: "failed"; id: string; month: string; until: number };
+  | {
+      status: "failed";
+      id: string;
+      month: string;
+      refusal: MonthDownloadRefusal | null;
+      until: number;
+    };
 
 export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxOfficeMonthBuilds {
   const keepMs = deps.keepMs ?? TAX_OFFICE_KEEP_MS;
@@ -79,19 +97,12 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
           expiresAt: new Date(record.until).toISOString(),
         };
       case "failed":
-        return { status: "failed", id, month };
+        return { status: "failed", id, month, refusal: record.refusal };
     }
   };
 
   // Best-effort: a file that cannot be deleted is logged and left to the next start's scratch
   // sweep, never allowed to keep a record in `building`.
-  const removeNow = (path: string): void => {
-    try {
-      rmSync(path, { force: true });
-    } catch (error) {
-      deps.log("warn", "tax_office.file_remove_failed", { errno: errnoOf(error) ?? null });
-    }
-  };
   const remove = async (path: string): Promise<void> => {
     try {
       await rm(path, { force: true });
@@ -113,12 +124,39 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     return null;
   };
 
-  const forget = (personId: string, record: BuildRecord): void => {
-    if (records.get(personId) !== record) return;
+  const forget = (personId: string, record: BuildRecord): Promise<void> => {
+    if (records.get(personId) !== record) return Promise.resolve();
     records.delete(personId);
-    if (record.status === "ready") removeNow(pathOf(record.id));
     deps.changed();
+    return record.status === "ready" ? remove(pathOf(record.id)) : Promise.resolve();
   };
+
+  /** Passes the archive through, stopping it before its writing could take free space under
+   * the low-space line. */
+  function keepingTheReserve(): (source: AsyncIterable<Uint8Array>) => AsyncIterable<Uint8Array> {
+    let written = 0;
+    let allowed = 0;
+    return async function* (source) {
+      for await (const chunk of source) {
+        const bytes = chunk.byteLength;
+        if (bytes > allowed) {
+          const free = await deps.freeBytes();
+          const room = free === null ? WRITE_BETWEEN_READINGS_BYTES : free - SPACE_LOW_BYTES;
+          if (free !== null && room < bytes) {
+            deps.log("warn", "tax_office.build_space_low", { freeBytes: free });
+            throw new AppError("tax_office.space_low", {
+              freeBytes: free,
+              neededBytes: SPACE_LOW_BYTES + Math.max(TAX_OFFICE_ROOM_BYTES, written + bytes),
+            });
+          }
+          allowed = Math.min(room, Math.max(WRITE_BETWEEN_READINGS_BYTES, bytes));
+        }
+        allowed -= bytes;
+        written += bytes;
+        yield chunk;
+      }
+    };
+  }
 
   async function build(
     personId: string,
@@ -136,10 +174,12 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
       );
       await pipeline(
         Readable.fromWeb(zip as WebReadableStream<Uint8Array>),
+        keepingTheReserve(),
         createWriteStream(path),
       );
       signal.throwIfAborted();
       const { size } = await stat(path);
+      signal.throwIfAborted();
       outcome = {
         status: "ready",
         id: record.id,
@@ -148,20 +188,32 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         until: deps.now().getTime() + keepMs,
       };
     } catch (error) {
-      if (!signal.aborted) {
+      const spaceLow = isAppError(error) && hasCode(error, "tax_office.space_low");
+      if (!signal.aborted && !spaceLow)
         deps.log("error", "tax_office.build_failed", {
           errorCode: codeOf(error),
           errorClass: error instanceof Error ? error.name : typeof error,
           errno: errnoOf(error) ?? null,
         });
+      await remove(path);
+      if (!signal.aborted) {
+        let refusal: MonthDownloadRefusal | null = null;
+        if (spaceLow) {
+          // Read again once the partial file is gone, so the person sees what is free now.
+          const freeBytes = (await deps.freeBytes()) ?? error.params.freeBytes;
+          refusal = {
+            code: "tax_office.space_low",
+            params: { freeBytes, neededBytes: error.params.neededBytes },
+          };
+        }
         outcome = {
           status: "failed",
           id: record.id,
           month: record.month,
+          refusal,
           until: deps.now().getTime() + keepMs,
         };
       }
-      await remove(path);
     } finally {
       if (outcome === null) records.delete(personId);
       else records.set(personId, outcome);
@@ -175,9 +227,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     for (const [personId, record] of [...records]) {
       if (record.status === "building") continue;
       if (record.until <= at) {
-        records.delete(personId);
-        if (record.status === "ready") await remove(pathOf(record.id));
-        deps.changed();
+        await forget(personId, record);
       } else if (next === null || record.until < next) {
         next = record.until;
       }
@@ -215,7 +265,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         throw new AppError("tax_office.export_running", {});
       }
       const earlier = records.get(personId);
-      if (earlier?.status === "ready") removeNow(pathOf(earlier.id));
+      if (earlier?.status === "ready") void remove(pathOf(earlier.id));
       const record: BuildRecord = {
         status: "building",
         id: randomUUID(),
@@ -235,16 +285,16 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
     },
     release(personId) {
       const record = records.get(personId);
-      if (record?.status === "building" && !record.started) forget(personId, record);
+      if (record?.status === "building" && !record.started) void forget(personId, record);
     },
-    file(personId) {
+    file(personId, id) {
       const record = live(personId);
-      if (record?.status !== "ready") return null;
-      return { id: record.id, path: pathOf(record.id), bytes: record.bytes, month: record.month };
+      if (record?.status !== "ready" || record.id !== id) return null;
+      return { path: pathOf(record.id), month: record.month };
     },
     sent(personId, id) {
       const record = records.get(personId);
-      if (record?.status === "ready" && record.id === id) forget(personId, record);
+      if (record?.status === "ready" && record.id === id) void forget(personId, record);
     },
     job: () => job,
   };

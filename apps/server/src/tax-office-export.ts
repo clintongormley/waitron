@@ -32,7 +32,7 @@ export interface TaxOfficeExportDeps {
   backend: FiscalBackend;
   tradingContext: TradingContext;
   render: (copy: SaleCopy) => Promise<Uint8Array>;
-  /** Throws when the export must stop: the request was aborted or a handover closed the gate. */
+  /** Throws once the build's job is asked to stop. */
   stopIfAsked: () => void;
   log: Logger;
 }

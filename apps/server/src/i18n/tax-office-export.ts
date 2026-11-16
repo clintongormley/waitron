@@ -26,7 +26,7 @@ export const TAX_OFFICE_EXPORT_WORDS = {
         "",
         "failed.txt, if present: the invoices whose copy could not be made. Their rows are in invoices.csv.",
         "",
-        `Downloaded on ${args.date}.`,
+        `Prepared on ${args.date}.`,
         "",
       ].join("\r\n"),
     failed: (numbers: readonly string[]) =>
@@ -58,7 +58,7 @@ export const TAX_OFFICE_EXPORT_WORDS = {
         "",
         "failed.txt, si existe: las facturas cuya copia no se pudo hacer. Sus filas están en invoices.csv.",
         "",
-        `Descargado el ${args.date}.`,
+        `Preparado el ${args.date}.`,
         "",
       ].join("\r\n"),
     failed: (numbers: readonly string[]) =>
