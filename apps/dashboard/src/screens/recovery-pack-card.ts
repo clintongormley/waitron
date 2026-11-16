@@ -189,9 +189,6 @@ export class RecoveryPackCard extends LitElement {
       this.#forget();
       if (this.canManage && this.api && this.isConnected) this.reload();
     }
-  }
-
-  protected override updated(): void {
     if (this.openRequested && this.canManage && this.api && (this.status !== null || this.failed)) {
       this.openRequested = false;
       const url = new URL(location.href);

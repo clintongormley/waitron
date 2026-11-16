@@ -1064,5 +1064,27 @@ it.each([true, false])(
       expect(words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
         "recovery pack 1, made on 2 September",
       );
+    dialog.dismiss();
+    api.getRecoveryPackStatus.mockResolvedValue({ ...value });
+    el.reload();
+    await settle(el);
+    expect(dialog.isOpen).toBe(false);
   },
 );
+
+it("opens the linked maker after the initial status read fails", async () => {
+  const api = stubApi(STATES.none);
+  api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
+  const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+    api,
+    canManage: true,
+    openRequested: true,
+  });
+  await expect
+    .poll(
+      () =>
+        dialogOf(el).shadowRoot?.querySelector("wt-dialog")?.shadowRoot?.querySelector("dialog")
+          ?.open,
+    )
+    .toBe(true);
+});
