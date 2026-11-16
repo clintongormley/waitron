@@ -662,6 +662,30 @@ describe("a presented bill on a handheld", () => {
     expect(await sheetMessage(el)).toBe(t("sale.unconfirmed"));
   });
 
+  it.each([true, false])(
+    "a card on the reader refused by a box handing over names the handover only when no earlier tap went unanswered (earlier unanswered: %s)",
+    async (unanswered) => {
+      const steppingDown = { code: "handover.stepping_down", status: 503 };
+      const pay = unanswered
+        ? vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+            .mockRejectedValue(steppingDown)
+        : vi.fn().mockRejectedValue(steppingDown);
+      const { el } = await openPresented({ pay });
+      if (unanswered) {
+        await takeOnReader(el);
+        expect(await sheetMessage(el)).toBe(t("sale.unconfirmed"));
+      }
+      await takeOnReader(el);
+
+      expect(pay).toHaveBeenCalledTimes(unanswered ? 2 : 1);
+      expect(await sheetMessage(el)).toBe(
+        unanswered ? t("sale.unconfirmed") : codeMessage("handover.stepping_down"),
+      );
+    },
+  );
+
   it("a card refused while a payment is in flight says so as the pay card does", async () => {
     const { el } = await openPresented({
       pay: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
@@ -1201,6 +1225,25 @@ describe("an unanswered presented payment on a handheld", () => {
       ).toBe(t(key));
     },
   );
+
+  it("a hand-keyed card resend refused by a box handing over stays locked as unconfirmed, with no terminal refund advice", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockRejectedValueOnce({ code: "handover.stepping_down", status: 503 });
+    const { el } = await sentWithNoAnswer("manual", send);
+    await resend(el);
+    await presented(el)!.updateComplete;
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+    const error = presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!.error;
+    expect(error ?? "").not.toContain(t("sale.chain_handed_over_manual_card"));
+    expect(error ?? "").not.toContain(codeMessage("handover.stepping_down"));
+    await expectLockedOn(el, "manual");
+  });
 
   it("a part payment of the bill is refused as unconfirmed", async () => {
     const send = vi.fn().mockRejectedValue(noAnswer());

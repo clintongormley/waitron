@@ -292,3 +292,108 @@ it.each(["en-GB", "es-ES"])(
     expect(write).toHaveBeenCalledOnce();
   },
 );
+
+const noAnswer = () => new TypeError("Failed to fetch");
+const steppingDown = { code: "handover.stepping_down", status: 503 };
+const sendOf = { manual: "recordSale", reader: "pay", collect: "collectOrder" } as const;
+const eventOf = {
+  manual: "confirm-payment",
+  reader: "collect-card",
+  collect: "collect-order",
+} as const;
+const unconfirmedWords = (locale: string) =>
+  locale === "es-ES" ? /El servidor no respondió/ : /did not answer/;
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["manual", "reader", "collect"] as const).map((method) => ({ locale, method })),
+  ),
+)(
+  "keeps a $method counter sale unconfirmed when a later tap is refused by a box handing over, in $locale",
+  async ({ locale, method }) => {
+    const write = vi.fn().mockRejectedValueOnce(noAnswer()).mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { [sendOf[method]]: write });
+    const screen = await openCounter(el);
+    const tap = () =>
+      emit(screen, eventOf[method], method === "reader" ? {} : { method: "card", amount: "3.00" });
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]).toEqual(write.mock.calls[0]);
+    const shown = banner(el)?.textContent?.trim();
+    expect(shown).not.toBe(t("sale.chain_handed_over_manual_card"));
+    expect(shown).not.toBe(codeMessage("handover.stepping_down"));
+    expect(shown).toBe(t("sale.unconfirmed"));
+    expect(shown).toMatch(unconfirmedWords(locale));
+  },
+);
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["reader", "collect"] as const).map((method) => ({ locale, method })),
+  ),
+)(
+  "names a box handing over on a $method counter sale when no earlier tap went unanswered, in $locale",
+  async ({ locale, method }) => {
+    const write = vi.fn().mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { [sendOf[method]]: write });
+    emit(
+      await openCounter(el),
+      eventOf[method],
+      method === "reader" ? {} : { method: "card", amount: "3.00" },
+    );
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(
+      method === "reader"
+        ? codeMessage("handover.stepping_down")
+        : t("sale.chain_handed_over_manual_card"),
+    );
+    expect(banner(el)?.textContent).toMatch(
+      method === "reader"
+        ? locale === "es-ES"
+          ? /traspasando el local/
+          : /handing over/
+        : locale === "es-ES"
+          ? /datáfono/
+          : /terminal/,
+    );
+  },
+);
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    [true, false].map((unanswered) => ({ locale, unanswered })),
+  ),
+)(
+  "on a whole table bill paid by hand-keyed card, a box handing over is named only when no earlier send went unanswered (earlier unanswered: $unanswered), in $locale",
+  async ({ locale, unanswered }) => {
+    const write = unanswered
+      ? vi.fn().mockRejectedValueOnce(noAnswer()).mockRejectedValue(steppingDown)
+      : vi.fn().mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { recordSale: write });
+    await openTable(el);
+    const tap = () =>
+      emit(tableOrder(el)!, "pay-tab", { method: "card", amount: "120.00", externalRef: "op-1" });
+    if (unanswered) {
+      tap();
+      await flush(el);
+      expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    }
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(unanswered ? 2 : 1);
+    expect(write.mock.calls.at(-1)).toEqual(write.mock.calls[0]);
+    const shown = banner(el)?.textContent?.trim();
+    if (unanswered) {
+      expect(shown).not.toBe(t("sale.chain_handed_over_manual_card"));
+      expect(shown).toBe(t("sale.unconfirmed"));
+      expect(shown).toMatch(unconfirmedWords(locale));
+    } else {
+      expect(shown).toBe(t("sale.chain_handed_over_manual_card"));
+      expect(shown).toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+    }
+  },
+);
