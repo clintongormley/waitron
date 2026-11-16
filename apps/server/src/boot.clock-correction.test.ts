@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { BackupSupervisor } from "./backup-supervisor.js";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { ClockAnchor } from "./clock-correction.js";
@@ -78,7 +79,8 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
 describe("the running server's clock correction", () => {
-  it("is handed to the watch and the set route, and a set clears the clock-service caches", async () => {
+  it("is handed to the watch and the set route, and a set clears the clock-service caches and rewrites the backup room note", async () => {
+    const noteClockStep = vi.spyOn(BackupSupervisor.prototype, "noteClockStep");
     let statusReads = 0;
     const host: BoxHostClient = {
       clockStatus: async () => {
@@ -162,6 +164,7 @@ describe("the running server's clock correction", () => {
       await reanchor();
       expect((await alerts()).status).toBe(200);
       expect(statusReads).toBe(cached + 2);
+      expect(noteClockStep).toHaveBeenCalledTimes(2);
 
       // Mounted only when boot hands the routes its correction; this request comes from the box.
       const set = await fetch(`http://127.0.0.1:${httpPort()}/api/box/clock-set`, {
@@ -174,6 +177,7 @@ describe("the running server's clock correction", () => {
         body: { error: { code: "clock.set_refused", params: { reason: "same_machine" } } },
       });
     } finally {
+      noteClockStep.mockRestore();
       if (server !== undefined) await server.close();
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }

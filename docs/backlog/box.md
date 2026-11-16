@@ -1794,16 +1794,6 @@ Whatever their browser sends counts:
   signed in on an enrolled till during such a stop can set any time from 28-10-2024 to 2100, with
   that person named ([Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)). Left open by A798-B slice 9 (#2025).
 
-## The start on a full disk deletes backups by stamp alone after a clock step.
-
-Making room before a backup run, and the free-space watch, offer last the backups a recent step of
-the box's clock holds (stamped before the step, or more than a minute ahead). The start on a full disk (`apps/server/src/start-backup-room.ts`) has no database, so it
-reads only `backup-room-note.json`'s installation start and deletes oldest by stamp, never the newest by
-stamp: after a −400-day step it can delete the real newest backups and keep the ones dated by the
-wrong clock. The note is written when backup settings load (`backup-supervisor.ts`), not when the
-clock steps, so carrying the step means a new note field and a rewrite on every step. Left open by
-A798-B slice 9b, Task 14a.
-
 ## Closing a pay period trusts the box's clock.
 
 `closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until

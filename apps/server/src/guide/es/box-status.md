@@ -195,8 +195,7 @@ el servidor borra copias antiguas conserva las más recientes de las copias hech
 tantas como conserva de las demás, además de las que conserva como siempre; y cuando hace sitio,
 borra las últimas las copias hechas antes del cambio. Esto dura tantos días como se
 conservan las copias, y solo cubre los cambios que hizo el propio servidor, no uno que hiciera su
-servicio de hora. El arranque con el disco lleno aún no lo hace: sigue borrando por las fechas que
-llevan las copias en su nombre.
+servicio de hora.
 
 Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor.
 

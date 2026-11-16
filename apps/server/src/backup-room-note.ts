@@ -7,6 +7,7 @@ import {
   stagedPath,
   writeFileDurable,
 } from "@waitron/provisioning";
+import type { ClockStep } from "@waitron/fiscal";
 import type { BackupFolder } from "./backup-room.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -23,6 +24,13 @@ export interface BackupRoomNote {
   venueDb: VenueDbIdentity;
   folders: BackupRoomNoteFolder[];
   writtenAt: string;
+  /** The box's latest step of its own clock, absent when it has made none. */
+  clockStep?: BackupRoomNoteClockStep;
+}
+
+/** `retainDays` is the running backups' age cap, which bounds how long the step holds archives. */
+export interface BackupRoomNoteClockStep extends Pick<ClockStep, "confirmedAt"> {
+  retainDays: number;
 }
 
 /**
@@ -74,6 +82,7 @@ export async function writeBackupRoomNote(options: {
   nodeId: string;
   installationStartedAt: Date;
   folders: readonly BackupRoomNoteFolder[];
+  clockStep?: BackupRoomNoteClockStep;
   now: () => Date;
   log: Logger;
 }): Promise<void> {
@@ -99,6 +108,14 @@ export async function writeBackupRoomNote(options: {
         configuredDir,
       })),
       writtenAt: options.now().toISOString(),
+      ...(options.clockStep === undefined
+        ? {}
+        : {
+            clockStep: {
+              confirmedAt: options.clockStep.confirmedAt,
+              retainDays: options.clockStep.retainDays,
+            },
+          }),
     };
     await writeFileDurable(notePath(stateDir), JSON.stringify(note), 0o600);
   } catch (error) {
@@ -182,6 +199,17 @@ function parseNote(text: string): BackupRoomNote | null {
       isFolderDir(folder.configuredDir),
   );
   if (!foldersValid) return null;
+  const { clockStep } = value;
+  if (
+    clockStep !== undefined &&
+    !(
+      isRecord(clockStep) &&
+      isTime(clockStep.confirmedAt) &&
+      Number.isSafeInteger(clockStep.retainDays) &&
+      (clockStep.retainDays as number) > 0
+    )
+  )
+    return null;
   return {
     version: 1,
     nodeId: value.nodeId,
@@ -197,5 +225,13 @@ function parseNote(text: string): BackupRoomNote | null {
       configuredDir,
     })),
     writtenAt: value.writtenAt,
+    ...(clockStep === undefined
+      ? {}
+      : {
+          clockStep: {
+            confirmedAt: clockStep.confirmedAt as string,
+            retainDays: clockStep.retainDays as number,
+          },
+        }),
   };
 }

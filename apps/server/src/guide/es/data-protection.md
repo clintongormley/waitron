@@ -435,8 +435,7 @@ configuración para poner en marcha otro local.
   al disco del servidor le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
   de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el servidor ponga
   su propio reloj en hora, conserva algunas de las copias fechadas con el reloj equivocado o las borra las
-  últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
-  servidor](box-status.md#free-space)). Desactivar la copia en el bucket o las copias
+  últimas (lo explica [Estado del servidor](box-status.md#free-space)). Desactivar la copia en el bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
   ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
 - Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia en el bucket con una

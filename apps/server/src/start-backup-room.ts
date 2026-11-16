@@ -16,6 +16,7 @@ import {
   type BackupFolder,
   type DeletableArchive,
 } from "./backup-room.js";
+import { clockStepHold } from "./backup-sweep.js";
 import {
   readBackupRoomNote,
   type BackupRoomNote,
@@ -170,6 +171,9 @@ async function deleteToFloor(
       statfs: deps.statfs,
       folders,
       installationStartedAt: async () => new Date(note.installationStartedAt),
+      clockStepHold: async () =>
+        note.clockStep &&
+        clockStepHold(note.clockStep, deps.now().getTime(), note.clockStep.retainDays),
       signal: NEVER_ABORTED,
       log: deps.log,
       reason: "start_room",

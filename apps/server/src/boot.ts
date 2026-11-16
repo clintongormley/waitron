@@ -3559,6 +3559,7 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
+  correction.addAnchor({ reanchor: () => backupSupervisor.noteClockStep() });
   await backupSupervisor.reload();
   const sealedStateStatus: SealedStateStatus = { failedSince: null, errorCode: null };
   // After migrations, so the row's manifest names the schema the database holds.
