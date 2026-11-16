@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
+import type { TillShell } from "../widgets/till-shell.js";
+import "../widgets/till-shell.js";
 import type {
   DeviceIdentity,
   DevicePassBoard,
@@ -14,7 +16,13 @@ import type {
   PassReleaseResult,
   TillApi,
 } from "../api/client.js";
-import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 
@@ -95,13 +103,17 @@ async function flush(el: TillPassScreen): Promise<void> {
   }
 }
 
+const SCREEN_DEFAULTS: Partial<TillPassScreen> = {
+  runsPass: true,
+  deviceId: "dev-1",
+  serverOrigin: "https://box.local",
+  now: PASS_NOW,
+  reducedMotion: false,
+};
+
 async function mount(props: Partial<TillPassScreen>): Promise<TillPassScreen> {
   const { el } = await mountWidget<TillPassScreen>("till-pass-screen", {
-    runsPass: true,
-    deviceId: "dev-1",
-    serverOrigin: "https://box.local",
-    now: PASS_NOW,
-    reducedMotion: false,
+    ...SCREEN_DEFAULTS,
     ...props,
   });
   await flush(el);
@@ -238,6 +250,67 @@ describe("A773 pass screen: Fire", () => {
         expect(api.releaseDevicePass).toHaveBeenCalledOnce();
       }));
   }
+
+  const readyBoard = passBoard({
+    inProgress: [
+      passCard({
+        key: "group:g-1",
+        target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+        kind: "next_course",
+        party: { id: "p-1", revision: 7 },
+        group: { displayNumber: 1, position: 1 },
+      }),
+    ],
+  });
+  for (const [refusal, initial, press] of [
+    ["a Fire refused ticket.pass_context_changed", toFireBoard(), '[data-pass-fire="group:g-1"]'],
+    ["a group Ready refused party.out_of_date", readyBoard, '[data-group-ready="g-1"]'],
+  ] as const)
+    it(`shows the refreshed line after ${refusal} only once the read it started answers, though a read that set out before it answers first`, () =>
+      withFakeTimers(async () => {
+        const earlier = deferred<DevicePassBoard>();
+        const own = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(earlier.promise)
+            .mockReturnValueOnce(own.promise),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+          bumpDeviceGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(initial) });
+        await refresh(el);
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(press)!.click();
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+
+        earlier.resolve(deviceBoard(initial));
+        await flush(el);
+        expect(tableChanged(el)).toBeNull();
+        own.resolve(deviceBoard(initial));
+        await flush(el);
+        expect(tableChanged(el)).not.toBeNull();
+      }));
+
+  it("shows the refreshed line when a read that set out after the refusal's own read answers first", () =>
+    withFakeTimers(async () => {
+      const own = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        getDevicePassBoard: vi
+          .fn()
+          .mockReturnValueOnce(own.promise)
+          .mockResolvedValueOnce(deviceBoard()),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+      });
+      const el = await mountDisplay(api);
+      await pressFire(el);
+      await refresh(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+      expect(tableChanged(el)).not.toBeNull();
+      own.resolve(deviceBoard());
+      await flush(el);
+      expect(tableChanged(el)).not.toBeNull();
+    }));
 
   it("clears the refreshed sentence with the next Fire press, before its answer", async () => {
     const answer = deferred<PassReleaseResult>();
@@ -569,4 +642,297 @@ describe("A773 pass screen: Fire", () => {
       expect(leverError(el)).toBeNull();
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     }));
+});
+
+describe("A773 pass screen: a refusal line after a press low in a long column", () => {
+  afterEach(resetPage);
+
+  const longBoard = passBoard({
+    toFire: Array.from({ length: 12 }, (_, index) =>
+      fireCard({
+        key: `group:g-${index + 1}`,
+        target: { kind: "group", partyId: "p-1", groupId: `g-${index + 1}` },
+      }),
+    ),
+  });
+  /** In progress group cards of tables T1 to T12, each with its own order. */
+  const longReadyBoard = passBoard({
+    inProgress: Array.from({ length: 12 }, (_, index) =>
+      passCard({
+        key: `group:g-${index + 1}`,
+        target: { kind: "group", partyId: `p-${index + 1}`, groupId: `g-${index + 1}` },
+        kind: "next_course",
+        party: { id: `p-${index + 1}`, revision: 7 },
+        orders: [
+          {
+            dining: "eat_in",
+            orderId: `order-${index + 1}`,
+            orderNumber: index + 1,
+            tableLabel: `T${index + 1}`,
+            kitchenNote: null,
+          },
+        ],
+        group: { displayNumber: 1, position: 1 },
+        items: [passItem({ id: `i-${index + 1}`, orderId: `order-${index + 1}` })],
+      }),
+    ),
+  });
+
+  const lowControl = (el: TillPassScreen, selector: string) =>
+    boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+  const scroller = () => document.scrollingElement!;
+
+  async function pressLow(
+    el: TillPassScreen,
+    selector: string,
+    within: Element = scroller(),
+  ): Promise<void> {
+    lowControl(el, selector).scrollIntoView({ block: "end" });
+    expect(within.scrollTop).toBeGreaterThan(0);
+    await userEvent.click(lowControl(el, selector));
+    await flush(el);
+  }
+
+  function expectInView(line: HTMLElement | null): void {
+    expect(line).not.toBeNull();
+    const box = line!.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(scroller().clientHeight);
+  }
+
+  function expectInViewOf(line: HTMLElement | null, within: HTMLElement): void {
+    expectInView(line);
+    const box = line!.getBoundingClientRect();
+    const frame = within.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+  }
+
+  /** The screen where the till puts it: the shell's body, or the drill-in over it; each scrolls. */
+  async function mountInShell(
+    slot: "body" | "drill",
+    props: Partial<TillPassScreen>,
+  ): Promise<{ el: TillPassScreen; within: HTMLElement }> {
+    const { el: shell } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "tablet-landscape",
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const el = document.createElement("till-pass-screen") as TillPassScreen;
+    Object.assign(el, SCREEN_DEFAULTS, props);
+    if (slot === "drill") el.slot = "drill";
+    shell.appendChild(el);
+    await shell.updateComplete;
+    await shell.updateComplete;
+    await flush(el);
+    const within = shell.shadowRoot!.querySelector<HTMLElement>(
+      slot === "drill" ? ".drill" : "main.body",
+    )!;
+    expect(getComputedStyle(within).overflowY).toBe("auto");
+    expect(within.scrollHeight).toBeGreaterThan(within.clientHeight);
+    return { el, within };
+  }
+
+  /** Turns off scroll anchoring, so a height change above the view moves what is on screen. */
+  async function withoutScrollAnchoring(run: () => Promise<void>): Promise<void> {
+    document.documentElement.style.overflowAnchor = "none";
+    try {
+      await run();
+    } finally {
+      document.documentElement.style.overflowAnchor = "";
+    }
+  }
+
+  /** At 390 px the title, the overdue count and Columns wrap onto two rows; without the count, one. */
+  async function mountOverdueThenNot(api: FakeApi): Promise<TillPassScreen> {
+    await pageAt(390, 844);
+    const overdue = passCard({
+      key: "bill:late",
+      items: [passItem({ id: "late-item", queuedAt: minutesAgo(12), band: "fresh" })],
+    });
+    const el = await mount({
+      api,
+      deviceMode: true,
+      deviceName: "Pass by the back door",
+      initialBoard: deviceBoard(passBoard({ toFire: longBoard.toFire, inProgress: [overdue] })),
+    });
+    expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).not.toBeNull();
+    return el;
+  }
+
+  for (const [code, status, line] of [
+    ["ticket.pass_context_changed", 409, tableChanged],
+    ["device.forbidden_action", 403, leverError],
+  ] as const)
+    it(`at 390 px, keeps a Fire's ${code} line fully in view when the board read after it drops the overdue count above it`, () =>
+      withoutScrollAnchoring(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused(code, status)),
+        });
+        const el = await mountOverdueThenNot(api);
+        await pressLow(el, '[data-pass-fire="group:g-12"]');
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).toBeNull();
+        expectInView(line(el));
+      }));
+
+  for (const [width, height] of [
+    [1024, 768],
+    [390, 844],
+  ] as const) {
+    it(`at ${width} px, brings the refreshed line into view when a Fire scrolled down to is refused as changed, and an unrelated redraw scrolls nothing`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("ticket.pass_context_changed")),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expectInView(tableChanged(el));
+
+      fireButton(el, "group:g-12")!.scrollIntoView({ block: "end" });
+      const scrolledBack = scroller().scrollTop;
+      el.requestUpdate();
+      await flush(el);
+      expect(tableChanged(el)).not.toBeNull();
+      expect(scroller().scrollTop).toBe(scrolledBack);
+    });
+
+    it(`at ${width} px, brings a Fire's other refusal into view`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expect(tableChanged(el)).toBeNull();
+      expectInView(leverError(el));
+    });
+
+    it(`at ${width} px, leaves the page where the person scrolled it while a refused Fire's board read was out`, async () => {
+      await pageAt(width, height);
+      const read = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expectInView(leverError(el));
+
+      scroller().scrollTop = scroller().scrollHeight;
+      const scrolledTo = scroller().scrollTop;
+      expect(scrolledTo).toBeGreaterThan(0);
+      read.resolve(deviceBoard(longBoard));
+      await flush(el);
+      expect(leverError(el)).not.toBeNull();
+      expect(scroller().scrollTop).toBe(scrolledTo);
+    });
+
+    for (const slot of ["body", "drill"] as const) {
+      it(`at ${width} px, in the shell's ${slot}, brings a Fire's refusal into view`, async () => {
+        await pageAt(width, height);
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+        });
+        const { el, within } = await mountInShell(slot, {
+          api,
+          deviceMode: true,
+          initialBoard: deviceBoard(longBoard),
+        });
+        await pressLow(el, '[data-pass-fire="group:g-12"]', within);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expectInViewOf(leverError(el), within);
+      });
+
+      it(`at ${width} px, in the shell's ${slot}, leaves it where the person scrolled it while a refused Fire's board read was out`, async () => {
+        await pageAt(width, height);
+        const read = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+        });
+        const { el, within } = await mountInShell(slot, {
+          api,
+          deviceMode: true,
+          initialBoard: deviceBoard(longBoard),
+        });
+        await pressLow(el, '[data-pass-fire="group:g-12"]', within);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expectInViewOf(leverError(el), within);
+
+        within.scrollTop = within.scrollHeight;
+        const scrolledTo = within.scrollTop;
+        expect(scrolledTo).toBeGreaterThan(0);
+        read.resolve(deviceBoard(longBoard));
+        await flush(el);
+        expect(leverError(el)).not.toBeNull();
+        expect(within.scrollTop).toBe(scrolledTo);
+      });
+    }
+
+    it(`at ${width} px, brings the stale line into view when a Fire gets no answer`, async () => {
+      await pageAt(width, height);
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+        releaseDevicePass: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.releaseDevicePass).toHaveBeenCalledOnce();
+      expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+      expectInView(el.shadowRoot!.querySelector<HTMLElement>("[data-stale]"));
+    });
+
+    it(`at ${width} px, scrolls nothing when a background read fails`, async () => {
+      await pageAt(width, height);
+      await withFakeTimers(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+        const low = () => fireButton(el, "group:g-12")!;
+        low().scrollIntoView({ block: "end" });
+        expect(scroller().scrollTop).toBeGreaterThan(0);
+        const shownAt = low().getBoundingClientRect().top;
+        await refresh(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+        // The page's scroll position moves by the line's height, so the card is what stays put.
+        expect(low().getBoundingClientRect().top).toBe(shownAt);
+      });
+    });
+
+    it(`at ${width} px, brings the refreshed line naming the table into view when a group Ready is refused as out of date`, async () => {
+      await pageAt(width, height);
+      const ready = vi.fn().mockRejectedValue(refused("party.out_of_date"));
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longReadyBoard)),
+        bumpDeviceGroupReady: ready,
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longReadyBoard) });
+      await pressLow(el, '[data-group-ready="g-12"]');
+      expect(ready).toHaveBeenCalledOnce();
+      expect(tableChanged(el)!.textContent).toContain("T12");
+      expectInView(tableChanged(el));
+    });
+
+    it(`at ${width} px, brings a refused reprint into view`, async () => {
+      await pageAt(width, height);
+      const reprint = vi.fn().mockRejectedValue(refused("printer.not_found", 502));
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longReadyBoard)),
+        reprintOrder: reprint,
+      });
+      const el = await mountTill(api);
+      await pressLow(el, '[data-card="group:g-12"] [data-reprint="order-12"]');
+      expect(reprint).toHaveBeenCalledWith("order-12");
+      expectInView(el.shadowRoot!.querySelector<HTMLElement>("[data-reprint-error]"));
+    });
+  }
 });

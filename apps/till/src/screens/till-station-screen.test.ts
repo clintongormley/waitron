@@ -3998,6 +3998,29 @@ describe("till-station-screen out-of-date banner", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("keeps the banner when an older read answers after a newer one failed, until a read newer than the failure answers", async () => {
+    const api = stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ printersDown: [], items: kitchenQueue, notices: [] })
+        .mockImplementationOnce(
+          () => new Promise((resolve) => setTimeout(() => resolve(later), 20_000)),
+        )
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(later),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 31_000); // read 2 out since 15 s; read 3 set out at 30 s and failed
+    expect(banner(el)).not.toBeNull();
+    await tick(el, 4_000); // read 2 answers at 35 s
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+    expect(banner(el)).not.toBeNull();
+    await tick(el, 10_000); // read 4 sets out and answers at 45 s
+    expect(api.getStationQueue).toHaveBeenCalledTimes(4);
+    expect(banner(el)).toBeNull();
+  });
+
   it("a late failure of an older refresh's station list, after a newer refresh answered, shows no banner", async () => {
     const api = stubApi({
       listStations: vi

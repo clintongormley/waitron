@@ -656,6 +656,72 @@ describe("A773 pass screen", () => {
         expect(cardKeys(el)).toEqual(["bill:b"]);
       }));
 
+    it("keeps the stale line when an older read answers after a newer one failed, until a read newer than the failure answers", () =>
+      withFakeTimers(async () => {
+        const older = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(older.promise) // 15 s
+            .mockRejectedValueOnce({ code: "server.internal" }) // 30 s
+            .mockResolvedValueOnce(deviceBoard(boardA)), // 45 s
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard() });
+        await vi.advanceTimersByTimeAsync(30_000);
+        await flush(el);
+        expect(stale(el)).not.toBeNull();
+        older.resolve(deviceBoard(boardB));
+        await flush(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(stale(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(3);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        expect(stale(el)).toBeNull();
+      }));
+
+    it("keeps the stale line a Fire with no answer set when a read that set out before the Fire answers, until a later read answers", () =>
+      withFakeTimers(async () => {
+        const fireBoard = passBoard({
+          toFire: [
+            passCard({
+              key: "group:g-1",
+              target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+              kind: "next_course",
+              releaseTicketItemIds: ["r-1"],
+              releaseContext: "ctx-1",
+            }),
+          ],
+        });
+        const older = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(older.promise) // 15 s
+            .mockResolvedValueOnce(deviceBoard(boardA)), // 30 s
+          releaseDevicePass: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(fireBoard) });
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        boardOf(el)!
+          .shadowRoot!.querySelector<HTMLButtonElement>('[data-pass-fire="group:g-1"]')!
+          .click();
+        await flush(el);
+        expect(api.releaseDevicePass).toHaveBeenCalledOnce();
+        expect(stale(el)).not.toBeNull();
+        older.resolve(deviceBoard(boardB));
+        await flush(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(stale(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        expect(stale(el)).toBeNull();
+      }));
+
     it("ignores a read that answers after it left the page", async () => {
       const answer = deferred<DevicePassBoard>();
       const api = fakeApi({ getDevicePassBoard: vi.fn(() => answer.promise) });

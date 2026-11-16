@@ -1,7 +1,16 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
 import { ContentLanguageController, TickingClock, baseStyles } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
+import {
+  LitElement,
+  type PropertyValues,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { t } from "../i18n/t.js";
@@ -66,6 +75,14 @@ function cardLabel(card: PassCard): string {
   const first = card.orders[0];
   const table = first === undefined ? undefined : passOrderPlace(first);
   return table ? `${numbers} ${table}` : numbers;
+}
+
+type ScrollPositions = readonly (readonly [Element, number])[];
+
+function scrollPositions(element: Element): ScrollPositions {
+  return scrollAncestors(element)
+    .filter((target) => target instanceof Element)
+    .map((target) => [target, target.scrollTop] as const);
 }
 
 const REFRESH_MS = 15_000;
@@ -190,6 +207,11 @@ export class TillPassScreen extends LitElement {
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
   #appliedRequest = 0;
+  #failedRequest = 0;
+  /** Set by a Fire with no answer only: a background read failing never scrolls a wall monitor. */
+  #revealStale = false;
+  /** Settles with the scroll positions just after the refusal line was scrolled into view. */
+  #leverRevealed?: Promise<ScrollPositions>;
   /** Card keys with a Fire out. */
   @state() private sending: ReadonlySet<string> = new Set();
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
@@ -200,6 +222,8 @@ export class TillPassScreen extends LitElement {
   /** The refresh sentence, with the table a Ready refusal names; Fire's names none. */
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
+  /** Only a read numbered above this set out after the refusal, so only its board shows the change. */
+  #tableChangedAfter = 0;
   readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
   /** Unset until a read of the board shown answers; the window offers no choice until then. */
   #display?: DevicePassBoard["display"];
@@ -310,10 +334,13 @@ export class TillPassScreen extends LitElement {
       if (request < this.#appliedRequest || !this.#isCurrent(boardId)) return;
       this.#appliedRequest = request;
       this.#adoptBoard(result);
-      this.stale = false;
+      if (request > this.#failedRequest) this.stale = false;
       this.#lastGoodAt = new Date();
-      this.tableChanged = this.#tableChangedNext;
-      this.#tableChangedNext = null;
+      if (this.#tableChangedNext === null) this.tableChanged = null;
+      else if (request > this.#tableChangedAfter) {
+        this.tableChanged = this.#tableChangedNext;
+        this.#tableChangedNext = null;
+      }
     } catch (error) {
       if (
         probe &&
@@ -323,8 +350,55 @@ export class TillPassScreen extends LitElement {
         this.dispatchEvent(
           new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
         );
-      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
+      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) {
+        this.stale = true;
+        this.#failedRequest = Math.max(this.#failedRequest, request);
+      }
     }
+  }
+
+  override updated(changed: PropertyValues): void {
+    if (this.#revealStale) {
+      this.#revealStale = false;
+      void this.#reveal("[data-stale]");
+    }
+    if (changed.has("tableChanged") && this.tableChanged) void this.#reveal("[data-table-changed]");
+    if (changed.has("leverError") && this.leverError)
+      this.#leverRevealed = this.#reveal("[data-lever-error]");
+    if (changed.has("reprintErrorCode") && this.reprintErrorCode)
+      void this.#reveal("[data-reprint-error]");
+  }
+
+  /**
+   * The status lines sit above the columns, out of view after a press on a card low in a long one.
+   * Waits for the board to redraw: its header, above the lines, can change height, and without
+   * scroll anchoring that moves the line after it was scrolled into view.
+   */
+  async #reveal(selector: string): Promise<ScrollPositions> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector("till-pass-board")?.updateComplete;
+    const line = this.renderRoot.querySelector<HTMLElement>(selector);
+    line?.scrollIntoView({ block: "nearest" });
+    return line === null ? [] : scrollPositions(line);
+  }
+
+  /**
+   * A refusal line drawn before this read answers is brought back into view after it redraws,
+   * unless something scrolled since: the person, or the browser making up for a change above it.
+   */
+  async #reloadAfterPress(): Promise<void> {
+    const refusal = this.leverError;
+    await this.#reload();
+    if (refusal === undefined || this.leverError !== refusal) return;
+    await this.updateComplete;
+    const revealed = await this.#leverRevealed;
+    if (revealed?.every(([scroller, top]) => scroller.scrollTop === top))
+      await this.#reveal("[data-lever-error]");
+  }
+
+  #queueTableChanged(line: { table?: string }): void {
+    this.#tableChangedNext = line;
+    this.#tableChangedAfter = this.#request;
   }
 
   #adoptBoard(read: DevicePassBoard): void {
@@ -370,14 +444,18 @@ export class TillPassScreen extends LitElement {
       if (typeof status !== "number") {
         reload = false;
         this.#dropAskIfChanged(key);
-        if (this.#isCurrent(boardId)) this.stale = true;
+        if (this.#isCurrent(boardId)) {
+          this.stale = true;
+          this.#failedRequest = this.#request;
+          this.#revealStale = true;
+        }
       } else {
         this.#asks.delete(key);
         if (this.#switched(error)) reload = false;
         else if (this.#isCurrent(boardId)) {
           rechoose = code === "device.unauthorized" && this.#followsChoice();
           if (code === "ticket.pass_context_changed" || code === "party.not_open" || rechoose)
-            this.#tableChangedNext = {};
+            this.#queueTableChanged({});
           else this.#leverRefused(card, error);
         }
       }
@@ -386,7 +464,8 @@ export class TillPassScreen extends LitElement {
       sending.delete(key);
       this.sending = sending;
     }
-    if (reload && this.#isCurrent(boardId)) await (rechoose ? this.#loadChoice() : this.#reload());
+    if (reload && this.#isCurrent(boardId))
+      await (rechoose ? this.#loadChoice() : this.#reloadAfterPress());
   }
 
   async #groupReady(boardId: BoardId, key: string): Promise<void> {
@@ -409,13 +488,13 @@ export class TillPassScreen extends LitElement {
       if (this.#isCurrent(boardId)) {
         if ((error as { code?: string } | null)?.code === "party.out_of_date") {
           const first = card.orders[0];
-          this.#tableChangedNext = {
+          this.#queueTableChanged({
             table: (first && passOrderPlace(first)) ?? `#${first?.orderNumber ?? ""}`,
-          };
+          });
         } else this.#leverRefused(card, error);
       }
     }
-    if (this.#isCurrent(boardId)) await this.#reload();
+    if (this.#isCurrent(boardId)) await this.#reloadAfterPress();
   }
 
   async #billReady(boardId: BoardId, key: string): Promise<void> {
@@ -431,7 +510,7 @@ export class TillPassScreen extends LitElement {
       if (this.#switched(error)) return;
       if (this.#isCurrent(boardId)) this.#leverRefused(card, error);
     }
-    if (this.#isCurrent(boardId)) await this.#reload();
+    if (this.#isCurrent(boardId)) await this.#reloadAfterPress();
   }
 
   /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */
