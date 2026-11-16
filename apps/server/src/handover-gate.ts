@@ -10,6 +10,13 @@ export interface HandoverGate {
   settled(limitMs: number): Promise<{ remaining: readonly { method: string; path: string }[] }>;
 }
 
+export function steppingDownResponse(c: Context): Response {
+  const err = new AppError("handover.stepping_down", {});
+  return c.json({ error: { code: err.code, params: err.params } }, 503, {
+    "Cache-Control": "no-store",
+  });
+}
+
 /**
  * Counts the requests inside while open; once closed, refuses every request `allowed` does not name.
  * A Hono middleware is not inside a route's error boundary, so the refusal is written in the
@@ -31,10 +38,7 @@ export function createHandoverGate(): HandoverGate {
     middleware: async (c, next) => {
       if (allowed !== null) {
         if (allowed(c)) return next();
-        const err = new AppError("handover.stepping_down", {});
-        return c.json({ error: { code: err.code, params: err.params } }, 503, {
-          "Cache-Control": "no-store",
-        });
+        return steppingDownResponse(c);
       }
       inside.add(c);
       try {

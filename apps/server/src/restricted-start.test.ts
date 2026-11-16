@@ -39,6 +39,35 @@ describe("startRestricted", () => {
     });
   });
 
+  it.each(["/api/sales", "/api/pay"])(
+    "refuses a sale at %s with the handover code after restart",
+    async (path) => {
+      const app = new Hono();
+      startRestricted({
+        app,
+        nodeId: "old-main",
+        environment: "preproduction",
+        readMembership: async () => null,
+        cors: corsForVenue(async (origin) => origin === "https://new-main.test"),
+        routes: [],
+        log: () => {},
+        listen: () => ({ health: createHealthState(new Date()), close: async () => {} }),
+      });
+
+      const response = await app.request(path, {
+        method: "POST",
+        headers: { origin: "https://new-main.test", "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.stepping_down", params: {} },
+      });
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://new-main.test");
+    },
+  );
+
   it("answers a till on another of the venue's origins, and no stranger", async () => {
     const app = new Hono();
     startRestricted({

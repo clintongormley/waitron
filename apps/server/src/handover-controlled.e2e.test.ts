@@ -2046,14 +2046,13 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(run.inFlightAfterStepdown).toBe("aceptado");
   });
 
-  // Control, run locally and not committed: the start's early return alone left out, M1 waits on M2
-  // at its start check, sells nothing, and M2's cases fail. With `checkPeers` also answering proceed,
-  // this case and the next two fail, the next with three batches against two.
   it("after its restart M1 answers acceptingSales false and serves no sale", () => {
     const { b, run } = seen();
     expect(run.m1Restricted).toMatchObject({ nodeId: b.m1.nodeId, acceptingSales: false });
-    // A restricted start mounts no till route at all.
-    expect(run.m1RefusedSale.status, run.m1RefusedSale.text).toBe(404);
+    expect(run.m1RefusedSale.status, run.m1RefusedSale.text).toBe(503);
+    expect(JSON.parse(run.m1RefusedSale.text)).toEqual({
+      error: { code: "handover.stepping_down", params: {} },
+    });
   });
 
   // Weaker than its name: with `signalDuties` in `stepDown` left out this still passes, because the
@@ -2251,7 +2250,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.restartAfterPlacing).toEqual({ m1Selling: false, m2Selling: false, batches: 2 });
     expect(on.restartAfterActivating).toEqual({
       m1Selling: false,
-      m1Sale: 404,
+      m1Sale: 503,
       batchesFromM1: 2,
       repeatedActivate: { activated: true, restarting: false },
     });
