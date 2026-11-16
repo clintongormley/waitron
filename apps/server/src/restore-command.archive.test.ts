@@ -861,7 +861,7 @@ describe("waitron-restore restore --from-archive, the arguments it accepts", () 
     expect(code).toBe(2);
     expect(out).toEqual([
       expect.stringMatching(
-        /^usage: .*--from-archive <pack-or-archive-code-file> --archive-key <name>/,
+        /^usage: .*--from-archive <pack-pdf-or-archive-pack-file> --archive-key <name>/,
       ),
     ]);
     expect(restore).not.toHaveBeenCalled();

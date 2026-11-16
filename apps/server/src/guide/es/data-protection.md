@@ -445,9 +445,9 @@ configuración para poner en marcha otro local.
   dentro de la base de datos. Cada copia programada va cifrada con la clave de recuperación, que guarda el servidor. Mientras la hace, el servidor escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
-  menos 12 caracteres, así que es tan segura como esa frase. Un paquete de recuperación lleva las claves y los códigos de acceso de las partes que
-  se incluyeron correctamente al hacerlo. Revisa en la portada si falló alguna parte y conserva
-  las claves anteriores para las copias hechas antes de cambiarlas. Guarda cada paquete de
+  menos 12 caracteres, así que es tan segura como esa frase. Revisa en la portada del paquete de recuperación si alguna parte no se pudo hacer.
+  Lee su página Clave del servidor: puede que también necesites un paquete anterior o una hoja.
+  Conserva los paquetes de las copias anteriores que puedas necesitar y guarda cada paquete de
   recuperación bajo llave, fuera del servidor.
 
 El paquete de recuperación también puede contener la dirección y el código de emergencia para una copia bloqueada en Cloud. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Inicio de emergencia en Cloud](servers.md#cloud-emergency).

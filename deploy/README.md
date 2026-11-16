@@ -678,7 +678,7 @@ command against it treat that entrypoint differently:
   line. The file must be visible inside the container and readable by the image's user, `waitron`
   (uid 10001):
   `sudo chown 10001 recovery-pack.pdf` keeps it private at mode 0600. Otherwise the command stops
-  with `cannot read kit file: /recovery-pack.pdf`.
+  with `cannot read recovery pack or kit file: /recovery-pack.pdf`.
 
   The command reads the bucket copy code from the file attached inside the PDF, never from its
   printed text, where a long code wraps. It restores nothing and prints one line when the pack
@@ -709,7 +709,7 @@ command against it treat that entrypoint differently:
   bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
   else prints the usage line and exits 2.
 
-  `restore --from-archive <pack-file> --archive-key <name>` downloads one archive from the bucket
+  `restore --from-archive <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive from the bucket
   named in the venue's recovery pack PDF, or in an archive recovery pack file saved before the
   recovery pack replaced it, and restores it as `restore <backup-file>` does, with the same check
   on the old box. Either holds the bucket's key and the recovery key: keep it off the box, and

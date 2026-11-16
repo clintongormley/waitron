@@ -410,9 +410,9 @@ own, can also make scheduled backups, and can export your setup to start another
   the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
-  as that passphrase. A recovery pack carries the keys and access codes for the parts successfully included
-  when you made it. Check its cover for any failed parts, and keep older keys for backups made
-  before a key changed. Keep every recovery pack locked away, off the box.
+  as that passphrase. Check the recovery pack's cover for any part that could not be made.
+  Read its Server key page: you may also need an older pack or sheet. Keep the packs for any older
+  backups you may still need, and keep every recovery pack locked away, off the box.
 
 The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
 

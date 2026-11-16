@@ -947,6 +947,37 @@ describe("pack typography", () => {
             op === OPS.setTextRenderingMode ? [ops.argsArray[i]![0]] : [],
           );
           expect(modes).toContain(2);
+          const ink = { bold: [] as string[], plain: [] as string[] };
+          let mode = 0;
+          const saved: number[] = [];
+          ops.fnArray.forEach((op, i) => {
+            if (op === OPS.save) saved.push(mode);
+            if (op === OPS.restore) mode = saved.pop()!;
+            if (op === OPS.setTextRenderingMode) mode = ops.argsArray[i]![0];
+            if (op === OPS.showText) {
+              const glyphs = ops.argsArray[i]![0] as ({ unicode: string } | number)[];
+              ink[mode === 2 ? "bold" : "plain"].push(
+                glyphs.map((glyph) => (typeof glyph === "number" ? "" : glyph.unicode)).join(""),
+              );
+            }
+          });
+          const words = PACK_WORDS[locale];
+          const headings =
+            pageNumber === 1
+              ? [
+                  words.title,
+                  words.whichPage,
+                  words.whatIsIn,
+                  words.whatHappened,
+                  words.partColumn,
+                  words.lastChangedColumn,
+                  words.checkColumn,
+                  words.lockedAway,
+                ]
+              : [part.page!.title];
+          for (const text of headings) expect(squash(ink.bold.join(" "))).toContain(squash(text));
+          const plain = pageNumber === 1 ? [name] : [address, code, name, "Keep this pack."];
+          for (const text of plain) expect(squash(ink.plain.join(" "))).toContain(squash(text));
         }
         const pages = await rendered(bytes);
         expect(pages[0]!.text).not.toContain(

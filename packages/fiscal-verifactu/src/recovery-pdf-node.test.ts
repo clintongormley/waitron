@@ -191,10 +191,13 @@ it.each(["inline", "source"])("loads the pack's mono bytes from %s", async (sour
   });
   try {
     const fonts = await nodeFonts.loadRecoveryPackFonts();
-    expect(Buffer.from(fonts.mono)).toEqual(mono);
-    expect(Buffer.from(fonts.regular)).toEqual(
-      await readFile(new URL("./assets/register-noto-sans.ttf", import.meta.url)),
-    );
+    expect(Buffer.from(fonts.mono).equals(mono), "mono font bytes").toBe(true);
+    expect(
+      Buffer.from(fonts.regular).equals(
+        await readFile(new URL("./assets/register-noto-sans.ttf", import.meta.url)),
+      ),
+      "regular font bytes",
+    ).toBe(true);
   } finally {
     vi.doUnmock("./assets/register-noto-sans-mono.ttf?inline");
   }

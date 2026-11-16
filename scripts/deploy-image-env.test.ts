@@ -1533,8 +1533,10 @@ describe("the recovery pack's mono font", () => {
   it("ships matching server/browser bytes with the pinned source and licence", () => {
     const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans-mono.ttf`);
     expect(
-      readFileSync(`${ROOT}packages/fiscal-verifactu/src/assets/register-noto-sans-mono.ttf`),
-    ).toEqual(font);
+      readFileSync(
+        `${ROOT}packages/fiscal-verifactu/src/assets/register-noto-sans-mono.ttf`,
+      ).equals(font),
+    ).toBe(true);
     expect(read("deploy/third-party/noto-sans-mono/README.md")).toContain(
       createHash("sha256").update(font).digest("hex"),
     );
