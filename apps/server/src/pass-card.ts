@@ -200,7 +200,7 @@ function itemOrder(a: PassRow, b: PassRow): number {
   const course = (row: PassRow) => row.course?.displayOrder ?? null;
   const [ca, cb] = [course(a), course(b)];
   return (
-    byText(a.order.openedAt, b.order.openedAt) ||
+    byMoment(a.order.openedAt, b.order.openedAt) ||
     (ca === cb ? 0 : ca === null ? -1 : cb === null ? 1 : ca - cb) ||
     a.lineNo - b.lineNo ||
     byText(a.item.id, b.item.id)
@@ -244,7 +244,7 @@ function placeCard(
     .filter((time): time is string => time !== null);
   const orders = new Map<string, PassCard["orders"][number]>();
   for (const row of [...cardRows].sort(
-    (a, b) => byText(a.order.openedAt, b.order.openedAt) || byText(a.orderId, b.orderId),
+    (a, b) => byMoment(a.order.openedAt, b.order.openedAt) || byText(a.orderId, b.orderId),
   )) {
     if (orders.has(row.orderId)) continue;
     const { openedAt, ...order } = row.order;
@@ -325,7 +325,7 @@ export function buildPassBoard(
     held: column(
       "held",
       (a, b) =>
-        byText(a.heldOrder[0], b.heldOrder[0]) ||
+        byMoment(a.heldOrder[0], b.heldOrder[0]) ||
         byText(a.heldOrder[1], b.heldOrder[1]) ||
         a.heldOrder[2] - b.heldOrder[2],
     ),

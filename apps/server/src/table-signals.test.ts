@@ -497,6 +497,33 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, table2)).signals).toEqual([]);
   });
 
+  it("never takes a ready time that does not parse as a station's oldest, in either line order", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await withBar(v);
+    const table2 = await v.table("Mesa 2");
+    const two = await seat(v, table2);
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, two.tabId, [
+        { menuItemId: v.item("Caña"), quantity: "1" },
+        { menuItemId: v.item("Caña"), quantity: "1" },
+      ]),
+    );
+    await makeReady(v, two.tabId, "Caña");
+    const oldest = async () => {
+      const ready = (await floorRow(v, table2)).signals.find((signal) => signal.kind === "ready");
+      return ready?.kind === "ready" ? ready.byStation.map((station) => station.oldestReadyAt) : [];
+    };
+    const valid = "2026-11-16T10:00:00.000Z";
+
+    await setReadyAt(v, two.tabId, 1, "not a time");
+    await setReadyAt(v, two.tabId, 2, valid);
+    expect(await oldest()).toEqual([valid]);
+
+    await setReadyAt(v, two.tabId, 1, valid);
+    await setReadyAt(v, two.tabId, 2, "not a time");
+    expect(await oldest()).toEqual([valid]);
+  });
+
   it("A725 counts ready dishes by station name and serving takes them off", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);

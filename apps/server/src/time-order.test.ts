@@ -22,9 +22,26 @@ describe("earliestTime and latestTime", () => {
     expect(latestTime(["bad", offset, "worse", zulu])).toBe(zulu);
   });
 
-  it("return the first time when none parses, and nothing for no times", () => {
-    expect(earliestTime(["bad", "worse"])).toBe("bad");
-    expect(latestTime(["bad", "worse"])).toBe("bad");
+  it("break a tie by text, so either list order gives the same winner", () => {
+    // Both name 09:30Z; as text the Z spelling is the smaller.
+    const sameAsOffset = "2026-11-16T09:30:00.000Z";
+    for (const times of [
+      [sameAsOffset, offset],
+      [offset, sameAsOffset],
+    ]) {
+      expect(earliestTime(times)).toBe(sameAsOffset);
+      expect(latestTime(times)).toBe(offset);
+    }
+    for (const times of [
+      ["bad", "worse"],
+      ["worse", "bad"],
+    ]) {
+      expect(earliestTime(times)).toBe("bad");
+      expect(latestTime(times)).toBe("worse");
+    }
+  });
+
+  it("return nothing for no times", () => {
     expect(earliestTime([])).toBeUndefined();
     expect(latestTime([])).toBeUndefined();
   });

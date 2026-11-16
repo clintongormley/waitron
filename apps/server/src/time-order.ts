@@ -1,31 +1,31 @@
 import { byText } from "./text-order.js";
 
 /** Compares stored times as moments rather than as text, and returns the winner exactly as
- *  stored. A time that does not parse never wins over one that does; with none parsing, the first
- *  wins. */
+ *  stored. A time that does not parse never wins over one that does. Two spellings of one moment,
+ *  or two times that do not parse, are decided by text: the smaller for the earliest. */
 export function earliestTime(times: readonly string[]): string | undefined {
-  return pick(times, (at, best) => at < best);
+  return pick(times, -1);
 }
 
-/** As `earliestTime`, for the latest. */
+/** As `earliestTime`, for the latest; a text tie goes to the larger. */
 export function latestTime(times: readonly string[]): string | undefined {
-  return pick(times, (at, best) => at > best);
+  return pick(times, 1);
 }
 
-function pick(
-  times: readonly string[],
-  beats: (at: number, best: number) => boolean,
-): string | undefined {
+function pick(times: readonly string[], direction: 1 | -1): string | undefined {
   let best: string | undefined;
-  let bestAt = Number.NaN;
   for (const time of times) {
-    const at = Date.parse(time);
-    if (best === undefined || (!Number.isNaN(at) && (Number.isNaN(bestAt) || beats(at, bestAt)))) {
-      best = time;
-      bestAt = at;
-    }
+    if (best === undefined || beats(time, best, direction)) best = time;
   }
   return best;
+}
+
+function beats(time: string, best: string, direction: 1 | -1): boolean {
+  const [at, bestAt] = [Date.parse(time), Date.parse(best)];
+  const [bad, bestBad] = [Number.isNaN(at), Number.isNaN(bestAt)];
+  if (bad !== bestBad) return bestBad;
+  const order = bad || at === bestAt ? byText(time, best) : at - bestAt;
+  return direction * order > 0;
 }
 
 /** Orders stored times as moments: no time first, then parseable times by moment, then times that

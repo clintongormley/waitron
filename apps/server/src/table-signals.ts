@@ -25,6 +25,7 @@ import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 import { firedQuantity } from "./kitchen-print.js";
 import { countsWholePortions } from "./order-state-counts.js";
+import { earliestTime } from "./time-order.js";
 
 /** A fired or requested line nobody has finished serving, with its station and waiting bands. */
 interface KitchenLine {
@@ -140,12 +141,10 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
     const key = `${line.stationId}:${line.dishId}`;
     if (!readyDishes.has(key)) station.count += line.units;
     readyDishes.add(key);
-    if (
-      line.readyAt !== null &&
-      (station.oldestReadyAt === null ||
-        Date.parse(line.readyAt) < Date.parse(station.oldestReadyAt))
-    ) {
-      station.oldestReadyAt = line.readyAt;
+    if (line.readyAt !== null) {
+      station.oldestReadyAt = earliestTime(
+        station.oldestReadyAt === null ? [line.readyAt] : [station.oldestReadyAt, line.readyAt],
+      )!;
     }
     ready.set(line.stationId, station);
   }
