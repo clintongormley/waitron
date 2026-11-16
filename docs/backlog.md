@@ -1870,9 +1870,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
-- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe**
-  [Detail](backlog/ci.md#appsserversrcrejoin-commandtesttss-sidecar-assertions-do-not-test-the-wipe).
-
 - **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
 

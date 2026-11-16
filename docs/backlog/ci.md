@@ -3,13 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
-
-The
-fixture closes the handles first, which removes the sidecars. The wipe's sidecar removal is
-pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
-on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
-
 ## The server holds two separate 100-character limits for text a request sends
 
 `SEARCH_MAX`
