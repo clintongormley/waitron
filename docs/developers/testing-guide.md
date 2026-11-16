@@ -770,12 +770,6 @@ copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
 lock files, the inline Node script in `deploy/waitron.sh`, and script and bench fixtures such as
 `apps/server/scripts/cloud-backup-fixture.ts`) keep their runtime's own limit.
 
-## A small coverage merge check does not qualify a package's worker limit
-
-Keep per-package worker limits until you measure the relevant loaded-runner condition. For the
-older payments observations and one/six-worker recheck, run
-`git show edeb8346656cd0690a0155147d4ac358723d278e` (#558).
-
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is

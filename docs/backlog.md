@@ -2362,8 +2362,8 @@ The privacy-specialist questions from Q54 on are open. The Cloud half is lane D'
 
 **Adding a database test to a new package.** Give the suite `useVenueDb` and the migration sets it
 needs; it makes its own temporary venue directory. A worker limit remains a per-package choice.
-The older payments observations and the limits of the small merge check are in the
-[testing guide](developers/testing-guide.md#a-small-coverage-merge-check-does-not-qualify-a-packages-worker-limit).
+For the older payments observations and one/six-worker recheck, run
+`git show edeb8346656cd0690a0155147d4ac358723d278e` (#558).
 The other worker pins still need measurement under the reported workspace load.
 `packages/db` keeps `maxWorkers: 4`, which CI's
 `test-heavy` shards inherit because they pass no worker count of their own. Either way a new package
