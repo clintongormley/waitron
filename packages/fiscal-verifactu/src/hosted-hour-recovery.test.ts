@@ -381,6 +381,9 @@ type KeptCase = {
   start?: string | null;
   /** How far the wall clock moved over the two minutes of uptime. */
   wallMovedMs?: number;
+  /** Uptime read when kept and at the start; the wall moves by their difference unless told. */
+  keptUptimeMs?: number;
+  startUptimeMs?: number;
   none?: boolean;
 };
 it.each<[string, KeptCase, string]>([
@@ -396,10 +399,22 @@ it.each<[string, KeptCase, string]>([
     { kept: null, start: null },
     "second_clock_missing",
   ],
+  [
+    "a confirmation kept with a negative uptime",
+    { keptUptimeMs: -1000, startUptimeMs: 119_000 },
+    "second_clock_missing",
+  ],
+  [
+    "a confirmation whose start reads a negative uptime",
+    { keptUptimeMs: 1000, startUptimeMs: -119_000, wallMovedMs: -120_000 },
+    "second_clock_missing",
+  ],
   ["a confirmation from the box's own screen", { onBox: true }, "second_clock_missing"],
   ["no confirmation", { none: true }, "second_clock_missing"],
 ])("the restore's start with no internet clock takes %s", async (_name, c, outcome) => {
-  const { aheadMs = 0, onBox = false, kept = "b1", wallMovedMs = 120_000, none = false } = c;
+  const { aheadMs = 0, onBox = false, kept = "b1", none = false } = c;
+  const { keptUptimeMs = 5_000, startUptimeMs = 125_000 } = c;
+  const { wallMovedMs = startUptimeMs - keptUptimeMs } = c;
   const start = "start" in c ? c.start : "b1";
   const f = fixture();
   const operations = FISCAL_OPERATIONS.configure!(f.host);
@@ -414,11 +429,11 @@ it.each<[string, KeptCase, string]>([
     const received = { wall: Date.now(), monotonic };
     const issued = { wall: received.wall - 200, monotonic: received.monotonic - 200 };
     const reading = measureDeviceReading(issued, received.wall + aheadMs, received, onBox);
-    const boot = { bootId: kept, uptimeMs: 5_000, wallMs: received.wall };
+    const boot = { bootId: kept, uptimeMs: keptUptimeMs, wallMs: received.wall };
     if (!none) f.host.startClockConfirmation = () => ({ reading, boot });
     monotonic += 120_000;
     vi.setSystemTime(Date.now() + wallMovedMs);
-    if (start !== undefined) f.host.readBoot = () => ({ id: start, ms: 125_000 });
+    if (start !== undefined) f.host.readBoot = () => ({ id: start, ms: startUptimeMs });
     await operations.resumeRecovery!(operation);
     const prepared = operations.prepare(
       { ...operation, input: selected.input },

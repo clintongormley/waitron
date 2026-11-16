@@ -94,6 +94,7 @@ function createHostedHourRecovery(
     if (
       kept === undefined ||
       kept.bootId === null ||
+      !(Number.isFinite(kept.uptimeMs) && kept.uptimeMs >= 0) ||
       boot === undefined ||
       boot.id !== kept.bootId ||
       !(Number.isFinite(boot.ms) && boot.ms >= 0)
