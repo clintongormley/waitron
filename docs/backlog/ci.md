@@ -372,7 +372,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
   [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
-  others were measured or named but not built. Plus two small guard gaps from the same PR.
+  the remaining crash-helper salt, wider memo and child-loading work stays open.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
 - **Finish reusing fixed-secret hashes in remaining server test setup.**
   [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
@@ -1049,6 +1049,10 @@ these, which it did not build (local figures, 2 November 2026):
 - **Some server tests' child processes still load through `tsx`.** Among those,
   `hour-recovery-placement-1`, `hour-recovery-placement-2`, `handover-stepdown.crash.test.ts` and
   `handover-activation-repair.test.ts` replace modules at load time through `registerHooks`.
+  On 16 November, a Mac probe measured six stepdown children from spawn to started at 13.070s
+  total (51% of that file's 25.534s baseline median), and five activation children from spawn to
+  imports ready at 9.168s (41% of 22.453s). These include startup beyond `tsx`, so are upper bounds
+  on loader savings. The watcher cleared a measurement-only cut; no compiled-child probe was built.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run
@@ -1059,12 +1063,11 @@ these, which it did not build (local figures, 2 November 2026):
   recorded, or 0.3%; three times that, for a slower CI machine, is still under 1%. The 5% bar would need
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
-- **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
-  `src/testing/staged-hour-crash.ts` still draw one per call. Reuse the existing
-  `apps/server/test/fixture-salt.ts` helper there when those paths and their consumers are unheld;
-  keep the existing crypto checks.
-- **The recovery-key memo lives in `apps/server/test/hour-recovery-host.ts` only.** Files that do not
-  load the host still pay the full derivation per check; moving the memo into a wider test setup
+- **The remaining random salts in test setup:** `src/testing/staged-hour-crash.ts` still draws one
+  per call. Reuse `apps/server/test/fixture-salt.ts` there when that path and its consumers are
+  unheld; keep the existing crypto checks.
+- **Recovery-key checks outside the host and staged-restore fixtures still derive repeatedly.**
+  Moving the memo into wider test setup
   must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.
 
 
