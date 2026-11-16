@@ -696,6 +696,9 @@ describe("till-station-queue", () => {
       expect(await namedIcons(row)).toEqual([
         ["allergen-milk", "img", allergenName("milk", currentLocale())],
       ]);
+      expect(row.querySelector("wt-icon")!.getAttribute("aria-label")).toMatch(
+        currentLocale().startsWith("es") ? /leche/i : /milk/i,
+      );
     });
 
     it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {

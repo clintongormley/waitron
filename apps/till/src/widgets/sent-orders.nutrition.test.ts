@@ -133,9 +133,9 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
     await unfold(el, "held");
     const companion = el.shadowRoot!.querySelector('[data-companion="companion"]')!;
     expect(icons(companion)).toEqual(["allergen-nuts", "diet-halal"]);
-    expect(
-      companion.querySelector('wt-icon[name="allergen-nuts"]')!.getAttribute("aria-label"),
-    ).toMatch(locale === "en" ? /hazelnut/i : /avellana/i);
+    const nuts = companion.querySelector('wt-icon[name="allergen-nuts"]')!;
+    expect(nuts.getAttribute("role")).toBe("img");
+    expect(nuts.getAttribute("aria-label")).toMatch(locale === "en" ? /hazelnut/i : /avellana/i);
     expect(icons(el.shadowRoot!.querySelector('[data-held-line="dish"]')!)).toEqual([
       "allergen-gluten",
       "diet-kosher",

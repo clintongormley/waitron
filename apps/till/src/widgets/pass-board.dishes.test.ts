@@ -55,6 +55,24 @@ const portion = (id: string, overrides: Partial<PassCardItem> = {}) =>
     ...overrides,
   });
 
+/** Each icon under `within` is large, and drawn wider than a default-size icon on the same page,
+ * for a cook reading from a distance. */
+async function expectLargerThanDefault(el: TillPassBoard, within: Element): Promise<void> {
+  const reference = document.createElement("wt-icon");
+  reference.name = "allergen-milk";
+  el.parentElement!.append(reference);
+  await reference.updateComplete;
+  const defaultWidth = reference.getBoundingClientRect().width;
+  reference.remove();
+  expect(defaultWidth).toBeGreaterThan(0);
+  const icons = [...within.querySelectorAll("wt-icon")];
+  expect(icons.length).toBeGreaterThan(0);
+  for (const icon of icons) {
+    expect(icon.getAttribute("size")).toBe("lg");
+    expect(icon.getBoundingClientRect().width).toBeGreaterThan(defaultWidth);
+  }
+}
+
 describe("A773 pass board widget: dishes", () => {
   it("draws a dish's option answers and extras as indented sub-text after its name", async () => {
     const el = await inProgress([
@@ -176,9 +194,7 @@ describe("A773 pass board widget: dishes", () => {
       ["allergen-milk", "img", allergenName("milk", currentLocale())],
     ]);
     expect(row.querySelector(".allergen-chip")).toBeNull();
-    // Larger than the till's default icon (14px), for a cook reading from a distance.
-    for (const icon of row.querySelectorAll("wt-icon"))
-      expect(icon.getBoundingClientRect().width).toBeGreaterThan(14);
+    await expectLargerThanDefault(el, row);
     expect(row.textContent).toContain(t("allergens.contains"));
     expect(itemOf(el, "pending").querySelector(".item-allergens")).toBeNull();
     expect(itemOf(el, "pending").textContent).not.toMatch(/review|revisi/i);
@@ -583,8 +599,7 @@ describe("A773 pass board widget: dishes", () => {
     )!;
     expect(await namedIcons(extraAllergens)).toEqual([["allergen-milk", "img", milk]]);
     expect(extraAllergens.querySelector(".allergen-chip")).toBeNull();
-    for (const icon of extraAllergens.querySelectorAll("wt-icon"))
-      expect(icon.getBoundingClientRect().width).toBeGreaterThan(14);
+    await expectLargerThanDefault(el, extraAllergens);
     const extraDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-burger-0"]')!;
     expect(extraDiet.querySelector("[data-diet='halal']")).not.toBeNull();
     const dish = el.shadowRoot!.querySelector('[data-item-allergens="burger"]')!;
