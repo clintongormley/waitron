@@ -48,6 +48,40 @@ async function refusalOf(write: Promise<unknown>): Promise<{ code: unknown; para
 }
 
 describe("unit operations", () => {
+  it("returns scale metadata on unit reads even after the measure switch is off", async () => {
+    const made = await run((tx) =>
+      createUnit(
+        tx,
+        {
+          staffName: "Weight",
+          staffAbbreviation: "w",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+          measure: true,
+        },
+        "en",
+      ),
+    );
+    expect(made).toHaveProperty("hardwareUnit", null);
+    await run(async (tx) =>
+      tx.run(sql`update units set hardware_unit = 'g' where id = ${made.id}`),
+    );
+    const off = await run((tx) => updateUnit(tx, made.id, { measure: false }, "en"));
+    expect(off).toEqual({
+      id: made.id,
+      staffName: "Weight",
+      staffAbbreviation: "w",
+      name: {},
+      abbreviation: {},
+      precision: 0,
+      hardwareUnit: "g",
+    });
+    expect(await run((tx) => getUnit(tx, made.id))).toEqual(off);
+    expect(await run((tx) => updateUnit(tx, made.id, {}, "en"))).toEqual(off);
+    expect(await run((tx) => listUnits(tx))).toEqual([off]);
+  });
+
   it.each<[string, Record<string, string>]>([
     ["an empty", { en: "" }],
     ["a missing", {}],
@@ -69,6 +103,7 @@ describe("unit operations", () => {
       );
       expect(saved).toEqual({
         id: expect.any(String),
+        hardwareUnit: null,
         staffName: "Staff unit",
         staffAbbreviation: "su",
         name: { en: "Litre" },
@@ -100,6 +135,7 @@ describe("unit operations", () => {
       );
       expect(saved).toEqual({
         id: expect.any(String),
+        hardwareUnit: null,
         staffName: "Staff unit",
         staffAbbreviation: "su",
         name: { es: "Litro" },

@@ -84,6 +84,8 @@ an **Extras** heading and options lists under **Options**, and each group starts
 to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without
 abandoning the product you are editing.
 
+If the dish's unit prevents extras, this section tells you before you attach a list.
+
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price per portion when you set one. With the price blank, its
 portion multiplied by the product's unit price sets the price per pick, rounded once to a cent.

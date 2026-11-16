@@ -1,3 +1,4 @@
+import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import {
   FormFeedback,
@@ -1847,6 +1848,14 @@ export class ProductEditor extends LitElement {
   }
 
   private renderModifiers() {
+    const unit = this.units.find((candidate) => candidate.id === this.draft.unitId);
+    const noExtras =
+      unit !== undefined &&
+      !takesExtras({
+        hardwareUnit: unit.hardwareUnit ?? null,
+        precision: unit.precision ?? 0,
+        measure: unit.measure,
+      });
     const attached = this.draft.modifiers;
     const held = new Set(attached.map(modifierKey));
     const offered = (kind: ProductModifierRef["kind"]): ComboboxOption[] => {
@@ -1910,6 +1919,7 @@ export class ProductEditor extends LitElement {
               : nothing
           }
           ${this.#reorder.liveRegion()}
+          ${noExtras ? html`<p>${t("editor.extras_unit_notice")}</p>` : nothing}
           <wt-combobox
             name="modifier"
             data-test="add-modifier"

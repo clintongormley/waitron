@@ -1,3 +1,4 @@
+import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import { serviceDishPredicate } from "./service-dishes.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -45,8 +46,11 @@ export interface CountedLine extends KitchenPart {
 const ZERO: OrderStateCounts = { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 };
 
 export function countsWholePortions(dish: Pick<CountedLine, "unitPrecision" | "unit">): boolean {
-  const places = dish.unitPrecision ?? dish.unit?.precision ?? 0;
-  return (dish.unit?.hardwareUnit ?? null) === null && places === 0 && dish.unit?.measure !== true;
+  return takesExtras({
+    hardwareUnit: dish.unit?.hardwareUnit ?? null,
+    precision: dish.unitPrecision ?? dish.unit?.precision ?? 0,
+    measure: dish.unit?.measure,
+  });
 }
 
 /**

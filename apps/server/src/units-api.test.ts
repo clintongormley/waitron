@@ -87,6 +87,7 @@ describe("unit management routes", () => {
       abbreviation: Record<string, string>;
     };
     expect(unit).toEqual({
+      hardwareUnit: null,
       staffName: "Staff unit",
       staffAbbreviation: "su",
       id: expect.any(String),
@@ -275,6 +276,7 @@ describe("unit management routes", () => {
       expect(response.status).toBe(201);
       const saved = await response.json();
       expect(saved).toEqual({
+        hardwareUnit: null,
         id: expect.any(String),
         staffName: "Staff unit",
         staffAbbreviation: "su",
@@ -477,6 +479,7 @@ describe("unit management routes", () => {
       staffName: "Staff unit",
       staffAbbreviation: "su",
       id: created.id,
+      hardwareUnit: null,
       name: { en: "portion" },
       precision: 1,
       abbreviation: { en: "pt" },
@@ -599,7 +602,7 @@ describe("explicit staff identity at the unit API", () => {
     const created = await send("POST", "/management-api/units", input);
     expect(created.status).toBe(201);
     const unit = await created.json();
-    expect(unit).toEqual({ ...input, id: expect.any(String) });
+    expect(unit).toEqual({ ...input, id: expect.any(String), hardwareUnit: null });
     const patched = await send("PATCH", `/management-api/units/${unit.id}`, {
       staffName: "Masa",
       staffAbbreviation: "M",

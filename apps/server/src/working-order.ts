@@ -1,3 +1,5 @@
+import { takesExtras, type ExtrasUnit } from "@waitron/menu/src/unit-extras.js";
+export { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import { serviceDishPredicate, serviceDishCondition } from "./service-dishes.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
@@ -490,17 +492,6 @@ function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): OfferMo
     });
   }
   return { extras, options, extraProducts };
-}
-
-interface ExtrasUnit {
-  hardwareUnit: string | null;
-  precision: number;
-  measure?: true;
-}
-
-/** Whole portions: no scale, no decimal places, and not a measure (ml, g…). */
-export function takesExtras(unit: ExtrasUnit): boolean {
-  return unit.hardwareUnit === null && unit.precision === 0 && unit.measure !== true;
 }
 
 /** The extras lists a line of a dish in `unit` is checked against. The till draws no extras list on

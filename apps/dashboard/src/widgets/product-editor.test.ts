@@ -6927,3 +6927,59 @@ it("refreshes live unit choice labels after a content default change without res
     setLocale(before);
   }
 });
+
+it.each([
+  { kind: "decimal", precision: 1, hardwareUnit: null, measure: false },
+  { kind: "scale", precision: 0, hardwareUnit: "g", measure: false },
+  { kind: "measure", precision: 0, hardwareUnit: null, measure: true },
+])("explains omitted extras for $kind dishes without preventing their save", async (facts) => {
+  const before = currentLocale();
+  setLocale("en-GB");
+  try {
+    const el = await mountPricing(
+      { ...saved, modifiers: [{ kind: "extras", id: "sauces" }] },
+      { units: [{ ...unit, ...facts }], extraLists },
+    );
+    await openSection(el, "modifiers");
+    expect(section(el, "modifiers").textContent).toContain(
+      "The till will not offer extras for this dish because of its unit.",
+    );
+    await edit(el);
+    expect(submittedValue(el).modifiers).toEqual([{ kind: "extras", id: "sauces" }]);
+  } finally {
+    setLocale(before);
+  }
+});
+
+it("updates the extras notice as units change, including Each and a missing choice", async () => {
+  const before = currentLocale();
+  setLocale("es-ES");
+  try {
+    const el = await mountPricing(saved, {
+      units: [
+        { ...unit, precision: 0, hardwareUnit: null },
+        { ...unit, id: "measured", precision: 0, hardwareUnit: null, measure: true },
+      ],
+      extraLists,
+    });
+    await openSection(el, "modifiers");
+    const note = () =>
+      section(el, "modifiers").textContent!.includes(
+        "El TPV no ofrecerá extras para este plato por su unidad.",
+      );
+    expect(note()).toBe(false);
+    el.selectRelated("unit", "measured");
+    await el.updateComplete;
+    expect(note()).toBe(true);
+    el.selectRelated("unit", "missing");
+    await el.updateComplete;
+    expect(note()).toBe(false);
+    await openUnits(el);
+    await chooseOption(combobox(el, "unit")!, EACH_CHOICE);
+    await el.updateComplete;
+    expect(note()).toBe(false);
+    expect(el.currentValue.unitId).toBeNull();
+  } finally {
+    setLocale(before);
+  }
+});

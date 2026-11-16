@@ -103,7 +103,7 @@ export async function createUnit(
   tx: Transaction,
   input: CreateUnitInput,
   fallbackLanguage: string,
-): Promise<Unit> {
+): Promise<SellableUnit> {
   void fallbackLanguage;
   const staffName = unitStaffText(input.staffName, "staffName");
   const staffAbbreviation = unitStaffText(input.staffAbbreviation, "staffAbbreviation");
@@ -120,19 +120,19 @@ export async function createUnit(
       precision: input.precision,
       measure: input.measure ?? false,
     })
-    .returning(UNIT_COLUMNS);
-  return toUnit(row!);
+    .returning(SELLABLE_UNIT_COLUMNS);
+  return toSellableUnit(row!);
 }
 
-export async function listUnits(tx: Transaction): Promise<Unit[]> {
-  const rows = await tx.select(UNIT_COLUMNS).from(units).orderBy(asc(units.id));
-  return rows.map(toUnit);
+export async function listUnits(tx: Transaction): Promise<SellableUnit[]> {
+  const rows = await tx.select(SELLABLE_UNIT_COLUMNS).from(units).orderBy(asc(units.id));
+  return rows.map(toSellableUnit);
 }
 
-export async function getUnit(tx: Transaction, unitId: string): Promise<Unit> {
-  const [row] = await tx.select(UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
+export async function getUnit(tx: Transaction, unitId: string): Promise<SellableUnit> {
+  const [row] = await tx.select(SELLABLE_UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
-  return toUnit(row);
+  return toSellableUnit(row);
 }
 
 /** Sale-facing read; the scale mapping is stored data and is never inferred from editable text. */
@@ -159,7 +159,7 @@ export async function updateUnit(
   unitId: string,
   patch: UpdateUnitInput,
   fallbackLanguage: string,
-): Promise<Unit> {
+): Promise<SellableUnit> {
   const values: UpdateUnitInput = {};
   if (patch.staffName !== undefined) values.staffName = unitStaffText(patch.staffName, "staffName");
   if (patch.staffAbbreviation !== undefined)
@@ -200,9 +200,9 @@ export async function updateUnit(
     .update(units)
     .set(values)
     .where(eq(units.id, unitId))
-    .returning(UNIT_COLUMNS);
+    .returning(SELLABLE_UNIT_COLUMNS);
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
-  return toUnit(row);
+  return toSellableUnit(row);
 }
 
 /** Give a product its unit. A variant has none of its own (it always reads its parent's), so its id

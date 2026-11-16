@@ -93,6 +93,8 @@ bajo **Opciones**, y cada grupo empieza con su propia entrada para crear una nue
 de extras…** o **Añadir lista de opciones…**, así puedes crear una lista sin abandonar el producto
 que estás editando.
 
+Si la unidad del plato no permite extras, esta sección te lo indica antes de adjuntar una lista.
+
 Cada oferta de una carta lleva las listas de extras y de opciones del producto en el orden que fijas
 aquí. Un extra usa el precio por porción de su elemento de la lista cuando lo fijas. Con el precio en
 blanco, su porción multiplicada por el precio unitario del producto fija el precio de cada selección,
