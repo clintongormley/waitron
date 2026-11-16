@@ -25,7 +25,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createPinThrottle, sessions, persons, setProfileAdmission } from "@waitron/identity";
+import { createPinThrottle, tillSessions, persons, setProfileAdmission } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listDepartments, setProfileServiceAccess, setRoutingCell } from "@waitron/venue-service";
 import { readCancellationContext } from "./line-cancel-context.js";
@@ -1322,12 +1322,12 @@ describe("the public cancellation read and command", () => {
     const before = await frozen();
     const sessionRows = await venue.db
       .select()
-      .from(sessions)
-      .where(eq(sessions.personId, venue.staffId));
+      .from(tillSessions)
+      .where(eq(tillSessions.personId, venue.staffId));
     const endedAt = "2026-10-17T00:00:00.000Z";
     watchDerivationsAndLock(venue.db, PINS.manager, () =>
       inTx(venue, (tx) =>
-        tx.update(sessions).set({ endedAt }).where(eq(sessions.id, sessionRows[0]!.id)),
+        tx.update(tillSessions).set({ endedAt }).where(eq(tillSessions.id, sessionRows[0]!.id)),
       ),
     );
     try {
@@ -1338,7 +1338,10 @@ describe("the public cancellation read and command", () => {
       expect(await frozen()).toEqual(before);
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(sessions).set({ endedAt: null }).where(eq(sessions.id, sessionRows[0]!.id)),
+        tx
+          .update(tillSessions)
+          .set({ endedAt: null })
+          .where(eq(tillSessions.id, sessionRows[0]!.id)),
       );
     }
   });

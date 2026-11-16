@@ -18,7 +18,7 @@ import {
   canUseDeviceProfile,
   endDeviceSessions,
   listStaffAdmittedTo,
-  sessions,
+  tillSessions,
 } from "@waitron/identity";
 import { IN_PROGRESS_PAYMENT_STATES, payments } from "@waitron/payments";
 import { getDeviceProfile, isSharedDisplay } from "@waitron/layouts";
@@ -269,16 +269,16 @@ export async function endSessionsNotAdmitted(
     return;
   }
   const open = await tx
-    .select({ id: sessions.id, personId: sessions.personId })
-    .from(sessions)
-    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+    .select({ id: tillSessions.id, personId: tillSessions.personId })
+    .from(tillSessions)
+    .where(and(eq(tillSessions.deviceId, deviceId), isNull(tillSessions.endedAt)));
   if (open.length === 0) return;
   const admitted = new Set(
     (await listStaffAdmittedTo(tx, profileId)).map((person) => person.personId),
   );
   const ended = open.filter((session) => !admitted.has(session.personId)).map((s) => s.id);
   if (ended.length > 0)
-    await tx.update(sessions).set({ endedAt: nowIso() }).where(inArray(sessions.id, ended));
+    await tx.update(tillSessions).set({ endedAt: nowIso() }).where(inArray(tillSessions.id, ended));
 }
 
 /**
@@ -303,9 +303,9 @@ export async function switchActiveProfile(
     .where(eq(devices.id, input.deviceId));
   if (device === undefined || !device.active) throw new AppError("device.unauthorized", {});
   const [session] = await tx
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(and(eq(sessions.id, input.sessionId), isNull(sessions.endedAt)));
+    .select({ id: tillSessions.id })
+    .from(tillSessions)
+    .where(and(eq(tillSessions.id, input.sessionId), isNull(tillSessions.endedAt)));
   if (session === undefined) throw new AppError("session.required", {});
   if (input.profileId === device.deviceProfileId)
     return { activeProfileId: device.deviceProfileId };

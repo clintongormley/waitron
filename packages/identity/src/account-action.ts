@@ -14,8 +14,8 @@ import {
   outgoingMail,
   indexViolated,
   type Transaction,
-  managementAccountActions,
-  managementSessions,
+  accountActions,
+  dashboardSessions,
   loginEmailKey,
   persons,
 } from "@waitron/db";
@@ -110,13 +110,13 @@ export async function issueAccountAction(
 
   await deleteDeadActions(tx, input.personId, input.purpose, nowIso);
   await tx
-    .update(managementAccountActions)
+    .update(accountActions)
     .set({ usedAt: nowIso })
     .where(
       and(
-        eq(managementAccountActions.personId, input.personId),
-        eq(managementAccountActions.purpose, input.purpose),
-        isNull(managementAccountActions.usedAt),
+        eq(accountActions.personId, input.personId),
+        eq(accountActions.purpose, input.purpose),
+        isNull(accountActions.usedAt),
       ),
     );
 
@@ -131,7 +131,7 @@ export async function issueAccountAction(
       ? undefined
       : new Date(now.getTime() + ACCOUNT_ACTION_CODE_TTL_MS).toISOString();
   const [row] = await tx
-    .insert(managementAccountActions)
+    .insert(accountActions)
     .values({
       personId: input.personId,
       purpose: input.purpose,
@@ -143,7 +143,7 @@ export async function issueAccountAction(
       createdAt: nowIso,
       expiresAt,
     })
-    .returning({ id: managementAccountActions.id });
+    .returning({ id: accountActions.id });
   return {
     id: row!.id,
     personId: input.personId,
@@ -164,15 +164,15 @@ async function deleteDeadActions(
   nowIso: string,
 ): Promise<void> {
   await tx
-    .delete(managementAccountActions)
+    .delete(accountActions)
     .where(
       and(
-        eq(managementAccountActions.personId, personId),
-        eq(managementAccountActions.purpose, purpose),
+        eq(accountActions.personId, personId),
+        eq(accountActions.purpose, purpose),
         or(
-          isNotNull(managementAccountActions.usedAt),
-          lte(managementAccountActions.expiresAt, nowIso),
-          gt(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, purpose)),
+          isNotNull(accountActions.usedAt),
+          lte(accountActions.expiresAt, nowIso),
+          gt(accountActions.expiresAt, latestLiveExpiry(nowIso, purpose)),
         ),
       ),
     );
@@ -192,23 +192,23 @@ export async function confirmEmailChangeByCode(
   const nowIso = (input.now ?? new Date()).toISOString();
   const [action] = await tx
     .select({
-      id: managementAccountActions.id,
-      codeHash: managementAccountActions.codeHash,
-      targetEmail: managementAccountActions.targetEmail,
+      id: accountActions.id,
+      codeHash: accountActions.codeHash,
+      targetEmail: accountActions.targetEmail,
     })
-    .from(managementAccountActions)
+    .from(accountActions)
     .where(
       and(
-        eq(managementAccountActions.personId, input.personId),
-        eq(managementAccountActions.purpose, "email_change"),
-        isNull(managementAccountActions.usedAt),
-        gt(managementAccountActions.expiresAt, nowIso),
-        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, "email_change")),
-        gt(managementAccountActions.codeExpiresAt, nowIso),
-        lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
+        eq(accountActions.personId, input.personId),
+        eq(accountActions.purpose, "email_change"),
+        isNull(accountActions.usedAt),
+        gt(accountActions.expiresAt, nowIso),
+        lte(accountActions.expiresAt, latestLiveExpiry(nowIso, "email_change")),
+        gt(accountActions.codeExpiresAt, nowIso),
+        lt(accountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
       ),
     )
-    .orderBy(sql`${managementAccountActions.createdAt} desc`)
+    .orderBy(sql`${accountActions.createdAt} desc`)
     .limit(1);
   if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
     return null;
@@ -219,16 +219,16 @@ export async function confirmEmailChangeByCode(
   const stored = Buffer.from(action.codeHash, "hex");
   if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
     await tx
-      .update(managementAccountActions)
-      .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
-      .where(eq(managementAccountActions.id, action.id));
+      .update(accountActions)
+      .set({ codeAttempts: sql`${accountActions.codeAttempts} + 1` })
+      .where(eq(accountActions.id, action.id));
     return null;
   }
   const claimed = await tx
-    .update(managementAccountActions)
+    .update(accountActions)
     .set({ usedAt: nowIso })
-    .where(and(eq(managementAccountActions.id, action.id), isNull(managementAccountActions.usedAt)))
-    .returning({ id: managementAccountActions.id });
+    .where(and(eq(accountActions.id, action.id), isNull(accountActions.usedAt)))
+    .returning({ id: accountActions.id });
   if (claimed.length !== 1) return null;
   try {
     const changed = await tx
@@ -284,15 +284,15 @@ export async function inspectAccountAction(
   const nowIso = (input.now ?? new Date()).toISOString();
   const [action] = await tx
     .select({ email: persons.email, status: persons.status })
-    .from(managementAccountActions)
-    .innerJoin(persons, eq(persons.id, managementAccountActions.personId))
+    .from(accountActions)
+    .innerJoin(persons, eq(persons.id, accountActions.personId))
     .where(
       and(
-        eq(managementAccountActions.tokenHash, hashToken(input.token)),
-        eq(managementAccountActions.purpose, input.purpose),
-        isNull(managementAccountActions.usedAt),
-        gt(managementAccountActions.expiresAt, nowIso),
-        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
+        eq(accountActions.tokenHash, hashToken(input.token)),
+        eq(accountActions.purpose, input.purpose),
+        isNull(accountActions.usedAt),
+        gt(accountActions.expiresAt, nowIso),
+        lte(accountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
       ),
     )
     .limit(1);
@@ -337,9 +337,9 @@ async function finishClaimedAction(
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});
   await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ endedAt: nowIso })
-    .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
+    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)));
   if (input.purpose === "password_reset")
     await queueSecurityChangeMail(tx, { personId, change: "password_changed" });
   return {
@@ -358,18 +358,18 @@ export async function completeAccountAction(
   if (input.purpose === "invitation") assertPinLength(input.pin ?? "");
   const nowIso = (input.now ?? new Date()).toISOString();
   const claimed = await tx
-    .update(managementAccountActions)
+    .update(accountActions)
     .set({ usedAt: nowIso })
     .where(
       and(
-        eq(managementAccountActions.tokenHash, hashToken(input.token)),
-        eq(managementAccountActions.purpose, input.purpose),
-        isNull(managementAccountActions.usedAt),
-        gt(managementAccountActions.expiresAt, nowIso),
-        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
+        eq(accountActions.tokenHash, hashToken(input.token)),
+        eq(accountActions.purpose, input.purpose),
+        isNull(accountActions.usedAt),
+        gt(accountActions.expiresAt, nowIso),
+        lte(accountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
       ),
     )
-    .returning({ personId: managementAccountActions.personId });
+    .returning({ personId: accountActions.personId });
   if (claimed.length !== 1) throw new AppError("account_action.invalid", {});
   const personId = claimed[0]!.personId;
   return finishClaimedAction(tx, input, personId, nowIso);

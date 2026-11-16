@@ -13,7 +13,7 @@ import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.
 import {
   endManagementSession,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -92,9 +92,9 @@ const ask = (
   });
 const lastSeen = (token: string) =>
   suite.db
-    .select({ lastSeenAt: managementSessions.lastSeenAt })
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)))
+    .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)))
     .get()!.lastSeenAt;
 async function unzipped(response: Response) {
   const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
@@ -332,9 +332,9 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
 
   it("changes no row, not the admin session's last-seen time nor a waiting change", async () => {
     suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(tokens.admin)))
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(tokens.admin)))
       .run();
     suite.db.run(
       sql`insert into change_log (id, payload) values ('pd1', '{"resource":"zz","id":"1"}')`,

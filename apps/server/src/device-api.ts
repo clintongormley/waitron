@@ -14,7 +14,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, profilesAdmitting, sessions, sightingDue } from "@waitron/identity";
+import { authorizeManager, profilesAdmitting, tillSessions, sightingDue } from "@waitron/identity";
 import {
   chosenPrinterOf,
   kindOfFormFactor,
@@ -477,9 +477,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         // The device and the session may both have changed since requireSession's own transaction.
         await assertDeviceStillProven(tx, { device, tokenHash: null });
         const [open] = await tx
-          .select({ id: sessions.id })
-          .from(sessions)
-          .where(and(eq(sessions.id, sessionId), isNull(sessions.endedAt)));
+          .select({ id: tillSessions.id })
+          .from(tillSessions)
+          .where(and(eq(tillSessions.id, sessionId), isNull(tillSessions.endedAt)));
         if (open === undefined) throw new AppError("session.required", {});
         await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
         return readDeviceEquipment(tx, device.deviceId);

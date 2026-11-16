@@ -19,7 +19,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -98,9 +98,9 @@ async function fixture(address: Address = {}): Promise<Fixture> {
     };
   });
   await db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(made.expired)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(made.expired)));
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const cookie = (token: string) => `${MANAGEMENT_COOKIE}=${token}`;
@@ -247,8 +247,8 @@ describe("holiday area", () => {
     const geography = (await saved.json()) as HolidayGeography;
     const [session] = await db
       .select()
-      .from(managementSessions)
-      .where(eq(managementSessions.tokenHash, hashSessionToken(fx.manager.split("=")[1]!)));
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(fx.manager.split("=")[1]!)));
     expect((await db.select().from(settings))[0]!.updatedBy).toBe(session!.personId);
 
     expect(geography).toEqual({

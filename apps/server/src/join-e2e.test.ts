@@ -26,7 +26,7 @@ import {
   hashSessionToken,
   loginWithPin,
   persons,
-  sessions,
+  tillSessions,
   startManagementSession,
 } from "@waitron/identity";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -578,9 +578,9 @@ describe("a deleted device comes back as the same device", () => {
   /** Read straight from the table: the rows a cookie could still sign in with. */
   async function openSessionsOn(deviceId: string): Promise<number> {
     const rows = await suite.db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+      .select({ id: tillSessions.id })
+      .from(tillSessions)
+      .where(and(eq(tillSessions.deviceId, deviceId), isNull(tillSessions.endedAt)));
     return rows.length;
   }
 

@@ -1,4 +1,4 @@
-import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import { seedDepartmentReceipt, seedPerson } from "@waitron/db/testing/seed.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -44,6 +44,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
+    await seedPerson(db, { id: OPERATOR, displayName: "Operator" });
     venue = await provision(db);
   },
 });

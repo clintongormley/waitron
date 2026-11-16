@@ -18,7 +18,7 @@ import {
   products,
   floorZones,
 } from "@waitron/db";
-import { persons, sessions, startManagementSession } from "@waitron/identity";
+import { persons, tillSessions, startManagementSession } from "@waitron/identity";
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -333,9 +333,9 @@ it.each(["ended", "suspended", "wrong-device", "disabled", "rotated-token"])(
     await offers(till);
     if (fault === "ended")
       await suite.db
-        .update(sessions)
+        .update(tillSessions)
         .set({ endedAt: frozen.toISOString() })
-        .where(eq(sessions.id, till.sessionId));
+        .where(eq(tillSessions.id, till.sessionId));
     if (fault === "suspended")
       await suite.db
         .update(persons)

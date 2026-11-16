@@ -1,3 +1,4 @@
+import { captureError, restrictRefused } from "@waitron/db";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -31,7 +32,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 const agedTo = (at: string, token: string) =>
-  sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(token)}`;
+  sql`update dashboard_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(token)}`;
 
 describe("management session lifecycle", () => {
   it("a new login has no fresh proof", async () => {
@@ -39,7 +40,7 @@ describe("management session lifecycle", () => {
     const session = await run((tx) => startManagementSession(tx, { personId }));
     const [row] = (
       await suite.db.execute<Record<string, unknown>>(
-        sql`select * from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
+        sql`select * from dashboard_sessions where token_hash = ${hashSessionToken(session.token)}`,
       )
     ).rows;
     expect(row!.proved_at).toBeNull();
@@ -67,7 +68,7 @@ describe("management session lifecycle", () => {
     await run((tx) => resolveManagementSession(tx, session.token));
     const [row] = (
       await suite.db.execute<{ last_seen_at: string }>(
-        sql`select last_seen_at from management_sessions where person_id = ${personId}`,
+        sql`select last_seen_at from dashboard_sessions where person_id = ${personId}`,
       )
     ).rows;
     expect(Date.parse(row!.last_seen_at)).toBeGreaterThan(Date.parse(aged) + 9 * 60_000);
@@ -79,7 +80,7 @@ describe("management session lifecycle", () => {
     const resolved = await run((tx) => resolveManagementSession(tx, session.token));
     const [row] = (
       await suite.db.execute<{ id: string }>(
-        sql`select id from management_sessions where person_id = ${personId}`,
+        sql`select id from dashboard_sessions where person_id = ${personId}`,
       )
     ).rows;
     const [person] = (
@@ -126,16 +127,16 @@ describe("management session lifecycle", () => {
     expect(code).toBe("management_session.required");
   });
 
-  it("throws management_session.required when the session's person row has been deleted", async () => {
+  it("refuses deleting the person behind a dashboard session", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Reachable because the table declares no key to `persons`. Two nets produce the refusal, so
-    // breaking it takes both: measured by mutation, the inner join alone can be widened to a left
-    // join and this case still passes.
-    await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
-
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
-    expect(code).toBe("management_session.required");
+    const error = await captureError(() =>
+      run((tx) => tx.execute(sql`delete from persons where id = ${personId}`)),
+    );
+    expect(restrictRefused(error)).toBe(true);
+    expect((await run((tx) => resolveManagementSession(tx, session.token))).personId).toBe(
+      personId,
+    );
   });
 
   it("throws management_session.expired past the idle timeout", async () => {
@@ -182,7 +183,7 @@ describe("management session lifecycle", () => {
       const after = Date.now();
       const [row] = (
         await suite.db.execute<{ last_seen_at: string }>(
-          sql`select last_seen_at from management_sessions where person_id = ${personId}`,
+          sql`select last_seen_at from dashboard_sessions where person_id = ${personId}`,
         )
       ).rows;
       expect(Date.parse(row!.last_seen_at)).toBeGreaterThanOrEqual(before);
@@ -218,7 +219,7 @@ describe("what the table holds, as anyone reading a copy of the database sees it
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     const rows = await suite.db.execute<{ id: string; token_hash: string }>(
-      sql`select id, token_hash from management_sessions where person_id = ${personId}`,
+      sql`select id, token_hash from dashboard_sessions where person_id = ${personId}`,
     );
     expect(rows.rows).toEqual([
       { id: expect.any(String), token_hash: hashSessionToken(session.token) },
@@ -231,7 +232,7 @@ describe("what the table holds, as anyone reading a copy of the database sees it
     const session = await run((tx) => startManagementSession(tx, { personId }));
     const [row] = (
       await suite.db.execute<{ id: string; token_hash: string }>(
-        sql`select id, token_hash from management_sessions where person_id = ${personId}`,
+        sql`select id, token_hash from dashboard_sessions where person_id = ${personId}`,
       )
     ).rows;
     expect(await run((tx) => codeOf(() => resolveManagementSession(tx, row!.id)))).toBe(
@@ -271,7 +272,7 @@ it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as con
       });
     const [row] = (
       await suite.db.execute<{ last_seen_at: string }>(
-        sql`select last_seen_at from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
+        sql`select last_seen_at from dashboard_sessions where token_hash = ${hashSessionToken(session.token)}`,
       )
     ).rows;
     expect(row!.last_seen_at).toBe(at);
@@ -297,7 +298,7 @@ async function sessionHolding(permissions: string[]): Promise<{ token: string; p
 const lastSeen = async (token: string) =>
   (
     await suite.db.execute<{ last_seen_at: string }>(
-      sql`select last_seen_at from management_sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select last_seen_at from dashboard_sessions where token_hash = ${hashSessionToken(token)}`,
     )
   ).rows[0]!.last_seen_at;
 

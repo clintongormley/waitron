@@ -16,7 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
 } from "@waitron/identity";
@@ -68,9 +68,9 @@ describe("attendance response boot with permanent workforce", () => {
         const managerCookie = `${MANAGEMENT_COOKIE}=${management.token}`;
         const oldSeenAt = new Date(Date.now() - 60_000).toISOString();
         await suite.db
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ lastSeenAt: oldSeenAt })
-          .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)));
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(management.token)));
         let targetId: string | undefined;
         {
           await withTransaction(suite.db, async (tx) => {
@@ -192,7 +192,7 @@ describe("attendance response boot with permanent workforce", () => {
             expect(
               statements
                 .slice(beforePassive)
-                .filter((q) => /update\s+"management_sessions"/i.test(q)),
+                .filter((q) => /update\s+"dashboard_sessions"/i.test(q)),
             ).toEqual([]);
             const body = {
               commandId: crypto.randomUUID(),
@@ -220,7 +220,7 @@ describe("attendance response boot with permanent workforce", () => {
             expect(
               statements
                 .slice(beforeExplicit)
-                .some((q) => /update\s+"management_sessions"/i.test(q)),
+                .some((q) => /update\s+"dashboard_sessions"/i.test(q)),
             ).toBe(true);
           } else {
             for (const path of paths) {
@@ -270,8 +270,8 @@ describe("attendance response boot with permanent workforce", () => {
             (
               await suite.db
                 .select()
-                .from(managementSessions)
-                .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)))
+                .from(dashboardSessions)
+                .where(eq(dashboardSessions.tokenHash, hashSessionToken(management.token)))
             )[0]!.lastSeenAt,
           ).not.toBe(oldSeenAt);
         {
@@ -284,7 +284,7 @@ describe("attendance response boot with permanent workforce", () => {
               capturedByDeviceId: venue.deviceId,
             });
         }
-        expect((await suite.db.select().from(managementSessions)).length).toBeGreaterThan(0);
+        expect((await suite.db.select().from(dashboardSessions)).length).toBeGreaterThan(0);
       },
       60_000,
     );

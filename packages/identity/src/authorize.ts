@@ -2,7 +2,7 @@ import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { persons, sessions } from "@waitron/db";
+import { persons, tillSessions } from "@waitron/db";
 import type { Permission } from "./permissions.js";
 import { readPersonAuthority, holds } from "./authority.js";
 import {
@@ -43,14 +43,11 @@ export async function authorize(
   args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {
-  // `sessions` declares no key to `persons` (why: `packages/db/src/schema/identity/sessions.ts`),
-  // so a session whose person row is gone is absent from this join and reads as `session.not_open`,
-  // which fails closed.
   const [row] = await tx
-    .select({ personId: sessions.personId })
-    .from(sessions)
-    .innerJoin(persons, eq(persons.id, sessions.personId))
-    .where(and(eq(sessions.id, args.sessionId), isNull(sessions.endedAt)));
+    .select({ personId: tillSessions.personId })
+    .from(tillSessions)
+    .innerJoin(persons, eq(persons.id, tillSessions.personId))
+    .where(and(eq(tillSessions.id, args.sessionId), isNull(tillSessions.endedAt)));
   if (row === undefined) throw new AppError("session.not_open", { sessionId: args.sessionId });
 
   if (holds(await readPersonAuthority(tx, row.personId), args.permission)) {

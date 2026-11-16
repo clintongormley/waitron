@@ -220,14 +220,14 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
         case "webauthn_credentials":
           data = merge(data, passkey(row));
           break;
-        case "sessions":
-        case "management_sessions":
+        case "till_sessions":
+        case "dashboard_sessions":
           if (!digest(row.token_hash)) data = merge(data, "invalid");
           break;
         case "recovery_codes":
           if (!digest(row.code_hash)) data = merge(data, "invalid");
           break;
-        case "management_account_actions":
+        case "account_actions":
           if (!digest(row.token_hash) || (row.code_hash !== null && !digest(row.code_hash)))
             data = merge(data, "invalid");
           break;

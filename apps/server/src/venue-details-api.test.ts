@@ -221,7 +221,7 @@ describe("fresh authorization and history at the HTTP write", () => {
   it.each(["GET", "PATCH"])("refuses an expired session for %s", async (method) => {
     const model = await initial();
     await suite.db.execute(
-      sql`update management_sessions set last_seen_at = '2000-01-01T00:00:00.000Z'`,
+      sql`update dashboard_sessions set last_seen_at = '2000-01-01T00:00:00.000Z'`,
     );
     const response = await request(method, venue.managerCookie, {
       expected: model.details,

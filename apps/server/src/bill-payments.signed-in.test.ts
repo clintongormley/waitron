@@ -19,7 +19,7 @@ import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
@@ -378,9 +378,9 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const billId = await bill();
     const before = await writes(billId, till);
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, till.operator.sessionId));
+      .where(eq(tillSessions.id, till.operator.sessionId));
 
     await expect
       .soft(

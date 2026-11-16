@@ -228,7 +228,7 @@ describe("a spare on a real placed copy", () => {
     expect(answer.status, JSON.stringify(answer.body)).toBe(200);
 
     expect(await readFile(join(dirs().spareState, FILE))).not.toEqual(fileBefore);
-    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["management_sessions"]);
+    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["dashboard_sessions"]);
     expect(changedTables(nodeBefore, allRows(store.node as unknown as Database))).toEqual([]);
   }, 60_000);
 });

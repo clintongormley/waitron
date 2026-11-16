@@ -386,7 +386,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("staff_roles", "state", "the venue's job positions, which an owner edits"),
   classify("person_staff_roles", "state", "which staff roles a person can fill"),
   classify(
-    "management_account_actions",
+    "account_actions",
     "state",
     "pending account activation and recovery proofs; copied to a standby, never drained back",
   ),
@@ -401,12 +401,12 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "single-use account recovery proofs; copied to a standby, never drained back",
   ),
   classify(
-    "sessions",
+    "till_sessions",
     "state",
     "a person's shift login at a till; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),
   classify(
-    "management_sessions",
+    "dashboard_sessions",
     "state",
     "a person's dashboard login; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),

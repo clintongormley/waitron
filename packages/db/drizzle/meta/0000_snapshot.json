@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ab247e3b-b7b1-42c7-afe8-32eb064844fb",
+  "id": "1485ba67-00ff-4e45-952f-7d96f8a264cd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11333,6 +11333,253 @@
         }
       }
     },
+    "account_actions": {
+      "name": "account_actions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_email": {
+          "name": "target_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "code_expires_at": {
+          "name": "code_expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "code_attempts": {
+          "name": "code_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "account_actions_token_hash_uq": {
+          "name": "account_actions_token_hash_uq",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        },
+        "account_actions_person_idx": {
+          "name": "account_actions_person_idx",
+          "columns": [
+            "person_id",
+            "purpose"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "account_actions_person_fk": {
+          "name": "account_actions_person_fk",
+          "tableFrom": "account_actions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "account_actions_purpose_ck": {
+          "name": "account_actions_purpose_ck",
+          "value": "\"account_actions\".\"purpose\" in ('invitation', 'password_reset', 'email_change')"
+        },
+        "account_actions_target_email_ck": {
+          "name": "account_actions_target_email_ck",
+          "value": "(\"account_actions\".\"purpose\" = 'email_change') = (\"account_actions\".\"target_email\" is not null)"
+        },
+        "account_actions_token_hash_ck": {
+          "name": "account_actions_token_hash_ck",
+          "value": "length(\"account_actions\".\"token_hash\") = 64"
+        },
+        "account_actions_code_hash_ck": {
+          "name": "account_actions_code_hash_ck",
+          "value": "\"account_actions\".\"code_hash\" is null or length(\"account_actions\".\"code_hash\") = 64"
+        },
+        "account_actions_code_attempts_ck": {
+          "name": "account_actions_code_attempts_ck",
+          "value": "\"account_actions\".\"code_attempts\" >= 0"
+        },
+        "account_actions_expiry_ck": {
+          "name": "account_actions_expiry_ck",
+          "value": "\"account_actions\".\"expires_at\" > \"account_actions\".\"created_at\""
+        }
+      }
+    },
+    "dashboard_sessions": {
+      "name": "dashboard_sessions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "proved_at": {
+          "name": "proved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "proof_method": {
+          "name": "proof_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "dashboard_sessions_open_idx": {
+          "name": "dashboard_sessions_open_idx",
+          "columns": [
+            "person_id"
+          ],
+          "isUnique": false
+        },
+        "dashboard_sessions_token_hash_uq": {
+          "name": "dashboard_sessions_token_hash_uq",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "dashboard_sessions_person_fk": {
+          "name": "dashboard_sessions_person_fk",
+          "tableFrom": "dashboard_sessions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "dashboard_sessions_token_hash_ck": {
+          "name": "dashboard_sessions_token_hash_ck",
+          "value": "length(\"dashboard_sessions\".\"token_hash\") = 64"
+        },
+        "dashboard_sessions_proof_method_ck": {
+          "name": "dashboard_sessions_proof_method_ck",
+          "value": "\"dashboard_sessions\".\"proof_method\" in ('password', 'passkey', 'recovery-code')"
+        }
+      }
+    },
     "device_profile_admission_roles": {
       "name": "device_profile_admission_roles",
       "columns": {
@@ -11457,239 +11704,6 @@
         "google_oidc_states_state_hash_ck": {
           "name": "google_oidc_states_state_hash_ck",
           "value": "length(\"google_oidc_states\".\"state_hash\") = 64"
-        }
-      }
-    },
-    "management_account_actions": {
-      "name": "management_account_actions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "target_email": {
-          "name": "target_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "code_hash": {
-          "name": "code_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "code_expires_at": {
-          "name": "code_expires_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "code_attempts": {
-          "name": "code_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "used_at": {
-          "name": "used_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "management_account_actions_token_hash_uq": {
-          "name": "management_account_actions_token_hash_uq",
-          "columns": [
-            "token_hash"
-          ],
-          "isUnique": true
-        },
-        "management_account_actions_person_idx": {
-          "name": "management_account_actions_person_idx",
-          "columns": [
-            "person_id",
-            "purpose"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "management_account_actions_person_fk": {
-          "name": "management_account_actions_person_fk",
-          "tableFrom": "management_account_actions",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "management_account_actions_purpose_ck": {
-          "name": "management_account_actions_purpose_ck",
-          "value": "\"management_account_actions\".\"purpose\" in ('invitation', 'password_reset', 'email_change')"
-        },
-        "management_account_actions_target_email_ck": {
-          "name": "management_account_actions_target_email_ck",
-          "value": "(\"management_account_actions\".\"purpose\" = 'email_change') = (\"management_account_actions\".\"target_email\" is not null)"
-        },
-        "management_account_actions_token_hash_ck": {
-          "name": "management_account_actions_token_hash_ck",
-          "value": "length(\"management_account_actions\".\"token_hash\") = 64"
-        },
-        "management_account_actions_code_hash_ck": {
-          "name": "management_account_actions_code_hash_ck",
-          "value": "\"management_account_actions\".\"code_hash\" is null or length(\"management_account_actions\".\"code_hash\") = 64"
-        },
-        "management_account_actions_code_attempts_ck": {
-          "name": "management_account_actions_code_attempts_ck",
-          "value": "\"management_account_actions\".\"code_attempts\" >= 0"
-        },
-        "management_account_actions_expiry_ck": {
-          "name": "management_account_actions_expiry_ck",
-          "value": "\"management_account_actions\".\"expires_at\" > \"management_account_actions\".\"created_at\""
-        }
-      }
-    },
-    "management_sessions": {
-      "name": "management_sessions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ended_at": {
-          "name": "ended_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "proved_at": {
-          "name": "proved_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "proof_method": {
-          "name": "proof_method",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "management_sessions_open_idx": {
-          "name": "management_sessions_open_idx",
-          "columns": [
-            "person_id"
-          ],
-          "isUnique": false
-        },
-        "management_sessions_token_hash_uq": {
-          "name": "management_sessions_token_hash_uq",
-          "columns": [
-            "token_hash"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "management_sessions_token_hash_ck": {
-          "name": "management_sessions_token_hash_ck",
-          "value": "length(\"management_sessions\".\"token_hash\") = 64"
-        },
-        "management_sessions_proof_method_ck": {
-          "name": "management_sessions_proof_method_ck",
-          "value": "\"management_sessions\".\"proof_method\" in ('password', 'passkey', 'recovery-code')"
         }
       }
     },
@@ -12184,92 +12198,6 @@
         }
       }
     },
-    "sessions": {
-      "name": "sessions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ended_at": {
-          "name": "ended_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "sessions_open_idx": {
-          "name": "sessions_open_idx",
-          "columns": [
-            "device_id"
-          ],
-          "isUnique": false
-        },
-        "sessions_token_hash_uq": {
-          "name": "sessions_token_hash_uq",
-          "columns": [
-            "token_hash"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "sessions_device_id_devices_id_fk": {
-          "name": "sessions_device_id_devices_id_fk",
-          "tableFrom": "sessions",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "sessions_token_hash_ck": {
-          "name": "sessions_token_hash_ck",
-          "value": "length(\"sessions\".\"token_hash\") = 64"
-        }
-      }
-    },
     "staff_roles": {
       "name": "staff_roles",
       "columns": {
@@ -12332,6 +12260,112 @@
         "staff_roles_colour_ck": {
           "name": "staff_roles_colour_ck",
           "value": "\"staff_roles\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
+        }
+      }
+    },
+    "till_sessions": {
+      "name": "till_sessions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "till_sessions_opened_at_idx": {
+          "name": "till_sessions_opened_at_idx",
+          "columns": [
+            "opened_at"
+          ],
+          "isUnique": false
+        },
+        "till_sessions_open_idx": {
+          "name": "till_sessions_open_idx",
+          "columns": [
+            "device_id"
+          ],
+          "isUnique": false
+        },
+        "till_sessions_token_hash_uq": {
+          "name": "till_sessions_token_hash_uq",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "till_sessions_device_id_devices_id_fk": {
+          "name": "till_sessions_device_id_devices_id_fk",
+          "tableFrom": "till_sessions",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "till_sessions_person_fk": {
+          "name": "till_sessions_person_fk",
+          "tableFrom": "till_sessions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "till_sessions_token_hash_ck": {
+          "name": "till_sessions_token_hash_ck",
+          "value": "length(\"till_sessions\".\"token_hash\") = 64"
         }
       }
     },

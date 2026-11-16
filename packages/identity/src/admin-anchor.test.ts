@@ -3,7 +3,7 @@ import {
   CORE_MIGRATIONS,
   persons,
   webauthnCredentials,
-  managementSessions,
+  dashboardSessions,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -52,7 +52,7 @@ it.each(operations)(
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: actorId }),
     );
-    await suite.db.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await suite.db.update(dashboardSessions).set({ provedAt: new Date().toISOString() });
     const invoke = () =>
       withTransaction(suite.db, async (tx) => {
         const input = { personId: target!.id, managementSessionId: session.token };

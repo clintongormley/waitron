@@ -1,4 +1,5 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { persons } from "@waitron/db";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -26,12 +27,11 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
   v = await setupPartyVenue(suite.db);
-  await seedPersons(suite.db, {
-    id: OPERATOR,
-    displayName: "Original author",
-    pinHash: "scrypt$00$00",
-    role: "admin",
-  });
+  await suite.db
+    .update(persons)
+    .set({ displayName: "Original author", pinHash: "scrypt$00$00" })
+    .where(eq(persons.id, OPERATOR));
+  await setBuiltInRoleForTest(suite.db, OPERATOR, "admin");
   const [person] = await seedPersons(suite.db, {
     displayName: "Actual actor",
     pinHash: "scrypt$00$00",

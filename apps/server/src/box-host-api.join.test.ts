@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
   type BuiltInRoleKey,
@@ -149,9 +149,9 @@ const json = (value: unknown) => JSON.stringify(value);
 /** Not through `withTransaction`, whose drain would deliver a change a case left waiting. */
 async function setLastSeen(person: Person, at: Date): Promise<void> {
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: at.toISOString() })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(person.token)));
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(person.token)));
 }
 
 /** A full disk modelled as a write lock that refuses every turn, reads included. */
@@ -307,9 +307,9 @@ describe.each([
   it("refuses an ended session", async () => {
     await withTransaction(suite.db, (tx) =>
       tx
-        .update(managementSessions)
+        .update(dashboardSessions)
         .set({ endedAt: new Date().toISOString() })
-        .where(eq(managementSessions.tokenHash, hashSessionToken(manager.token))),
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.token))),
     );
     await expectRefused(manager.cookie, 401, "management_session.required");
   });

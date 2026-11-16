@@ -3,7 +3,7 @@ import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { devices, deviceProfilePrinters, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { persons, sessions } from "@waitron/identity";
+import { persons, tillSessions } from "@waitron/identity";
 import {
   clearUnlistedPrinterChoices,
   readPrinterEquipment,
@@ -144,11 +144,11 @@ async function holdersByDevice(tx: Transaction, deviceIds: string[]): Promise<Ma
     .from(devices)
     .where(inArray(devices.id, deviceIds));
   const signedIn = await tx
-    .select({ deviceId: sessions.deviceId, name: persons.displayName })
-    .from(sessions)
-    .innerJoin(persons, eq(persons.id, sessions.personId))
-    .where(and(inArray(sessions.deviceId, deviceIds), isNull(sessions.endedAt)))
-    .orderBy(desc(sessions.openedAt));
+    .select({ deviceId: tillSessions.deviceId, name: persons.displayName })
+    .from(tillSessions)
+    .innerJoin(persons, eq(persons.id, tillSessions.personId))
+    .where(and(inArray(tillSessions.deviceId, deviceIds), isNull(tillSessions.endedAt)))
+    .orderBy(desc(tillSessions.openedAt));
   const personOf = new Map<string, string>();
   for (const row of signedIn) {
     if (row.deviceId !== null && !personOf.has(row.deviceId)) personOf.set(row.deviceId, row.name);

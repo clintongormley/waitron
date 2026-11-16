@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenueSettings, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   startManagementSession,
-  managementSessions,
+  dashboardSessions,
   withPassiveManagementRead,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -352,14 +352,14 @@ describe("inline translation routes", () => {
     await error(await send(method, input, null), 401, "management_session.required");
     await error(await send(method, input, staffCookie), 403, "authorization.not_permitted");
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
-      .where(eq(managementSessions.personId, managerId));
+      .where(eq(dashboardSessions.personId, managerId));
     await error(await send(method, input), 401, "management_session.expired");
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date().toISOString() })
-      .where(eq(managementSessions.personId, managerId));
+      .where(eq(dashboardSessions.personId, managerId));
     expect((await send(method, method === "PUT" ? input : undefined)).status).toBe(200);
   });
   it.each(["role", "session"] as const)(
@@ -374,9 +374,9 @@ describe("inline translation routes", () => {
             if (change === "role") await setBuiltInRoleForTest(suite.db, managerId, "staff");
             else
               await suite.db
-                .update(managementSessions)
+                .update(dashboardSessions)
                 .set({ endedAt: new Date().toISOString() })
-                .where(eq(managementSessions.personId, managerId));
+                .where(eq(dashboardSessions.personId, managerId));
             controller.enqueue(new TextEncoder().encode(raw));
             controller.close();
           },
@@ -414,9 +414,9 @@ describe("inline translation routes", () => {
         if (change === "role") await setBuiltInRoleForTest(tx, managerId, "staff");
         else
           await tx
-            .update(managementSessions)
+            .update(dashboardSessions)
             .set({ endedAt: new Date().toISOString() })
-            .where(eq(managementSessions.personId, managerId));
+            .where(eq(dashboardSessions.personId, managerId));
       });
       await started;
       const request = send("GET");
@@ -965,9 +965,9 @@ describe("bounded multilingual translation HTTP contract", () => {
     const input = await batch([unit!]);
     const old = new Date(Date.now() - 60000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: old })
-      .where(eq(managementSessions.personId, managerId));
+      .where(eq(dashboardSessions.personId, managerId));
     for (const route of [
       path + "?language=en&missing=any",
       cellsUrl([["unit", unit!.id, "en", "name"]]),
@@ -981,8 +981,8 @@ describe("bounded multilingual translation HTTP contract", () => {
         (
           await suite.db
             .select()
-            .from(managementSessions)
-            .where(eq(managementSessions.personId, managerId))
+            .from(dashboardSessions)
+            .where(eq(dashboardSessions.personId, managerId))
         )[0]!.lastSeenAt,
       ).toBe(old);
     }
@@ -991,8 +991,8 @@ describe("bounded multilingual translation HTTP contract", () => {
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.personId, managerId))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.personId, managerId))
       )[0]!.lastSeenAt,
     ).not.toBe(old);
   });

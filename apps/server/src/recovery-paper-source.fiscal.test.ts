@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { managementSessions, persons } from "@waitron/identity";
+import { dashboardSessions, persons } from "@waitron/identity";
 
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -197,7 +197,7 @@ it("combines real key authentication, configured paper files and the complete ac
       await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
     ).toEqual([{ identity: "P000042" }]);
     expect(await suite.db.select().from(persons)).toEqual([]);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);
   });
 });
@@ -212,7 +212,7 @@ it("refuses activation when the key changes during configured-source collection"
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     expect(await suite.db.select().from(registroSif)).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);
   });
 });

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret, managementSessions, persons } from "@waitron/identity";
+import { hashSecret, dashboardSessions, persons } from "@waitron/identity";
 import {
   readOperationAuthority,
   type OperationAuthority,
@@ -66,7 +66,7 @@ describe("scoped recovery-key authority", () => {
             operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "takeover-1" },
           });
           expect(await suite.db.select().from(persons)).toEqual([]);
-          expect(await suite.db.select().from(managementSessions)).toEqual([]);
+          expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
           return "committed";
         },
         key,

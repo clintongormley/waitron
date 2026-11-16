@@ -294,8 +294,8 @@ describe("GET /management-api/theme-logo-print", () => {
   it("a passive ask, as the dashboard sends it, leaves the session's last activity alone", async () => {
     const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const lastSeen = async () =>
-      (await suite.db.execute(sql`select last_seen_at from management_sessions`)).rows;
-    await suite.db.execute(sql`update management_sessions set last_seen_at = ${earlier}`);
+      (await suite.db.execute(sql`select last_seen_at from dashboard_sessions`)).rows;
+    await suite.db.execute(sql`update dashboard_sessions set last_seen_at = ${earlier}`);
     const before = await lastSeen();
     expect((await withPassiveManagementRead(() => ask(`image=${A}`))).status).toBe(200);
     expect(await lastSeen()).toEqual(before);

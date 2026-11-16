@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { devices, withTransaction, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
+import { hashSessionToken, loginWithPin, tillSessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
 import { deviceOrigin } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
@@ -14,9 +14,9 @@ import { noteSessionPerson } from "./tab-person.js";
 /** Adds device proof to a fixture's existing shift session, replacing its device token. */
 export async function sessionCookieForTest(db: Database, token: string): Promise<string> {
   const [session] = await db
-    .select({ deviceId: sessions.deviceId, personId: sessions.personId })
-    .from(sessions)
-    .where(eq(sessions.tokenHash, hashSessionToken(token)));
+    .select({ deviceId: tillSessions.deviceId, personId: tillSessions.personId })
+    .from(tillSessions)
+    .where(eq(tillSessions.tokenHash, hashSessionToken(token)));
   noteSessionPerson(token, session!.personId);
   return `${SESSION_COOKIE}=${token}; ${await deviceCookieForTest(db, session!.deviceId)}`;
 }
@@ -49,9 +49,9 @@ export async function openTillSession(
   opts: { deviceId: string; personId: string },
 ): Promise<string> {
   const [row] = await db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ ...opts, tokenHash: hashSessionToken(randomUUID()) })
-    .returning({ id: sessions.id });
+    .returning({ id: tillSessions.id });
   return row!.id;
 }
 

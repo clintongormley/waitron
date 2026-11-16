@@ -25,7 +25,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, setProfileAdmission, sessions } from "@waitron/identity";
+import { hashPin, persons, setProfileAdmission, tillSessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
   createDepartment,
@@ -685,9 +685,9 @@ describe("department transfer till writes", () => {
       { revision: 0, zoneId: f.bz, tableId: null },
       () =>
         suite.db
-          .update(sessions)
+          .update(tillSessions)
           .set({ endedAt: new Date().toISOString() })
-          .where(eq(sessions.deviceId, f.desk.deviceId)),
+          .where(eq(tillSessions.deviceId, f.desk.deviceId)),
     );
     expect(result).toMatchObject({ status: 401, body: { error: { code: "session.not_open" } } });
     expect((await state(f.tab)).requests[0]!.status).toBe("pending");

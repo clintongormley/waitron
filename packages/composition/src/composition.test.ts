@@ -273,9 +273,9 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "payment_refunds",
       "venue_credentials",
       "outgoing_mail",
-      "management_account_actions",
-      "management_sessions",
-      "sessions",
+      "account_actions",
+      "dashboard_sessions",
+      "till_sessions",
       "bookings",
       "time_entries",
       // A published version's document holds ids an import does not remap.

@@ -38,11 +38,11 @@ export {
 export type { ProfileAdmission } from "./profile-admission.js";
 export {
   deviceProfileAdmissionRoles,
-  managementAccountActions,
-  managementSessions,
+  accountActions,
+  dashboardSessions,
   persons,
   personStatus,
-  sessions,
+  tillSessions,
   webauthnChallenges,
   webauthnCredentials,
 } from "@waitron/db";

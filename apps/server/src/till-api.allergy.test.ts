@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, sessions, deviceProfileAdmissionRoles } from "@waitron/identity";
+import { hashSessionToken, tillSessions, deviceProfileAdmissionRoles } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";
@@ -58,7 +58,7 @@ beforeEach(async () => {
   ({ deviceId, profileId } = await seedDevice(suite.db, { capabilities: ["take-orders"] }));
   token = randomUUID();
   const [session] = await suite.db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) })
     .returning();
   sessionId = session!.id;
@@ -331,7 +331,10 @@ describe("A669 allergy routes", () => {
       "submission.id_reused",
     );
     const [other] = await seedPersons(suite.db, { displayName: "Other staff", role: "staff" });
-    await suite.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, sessionId));
+    await suite.db
+      .update(tillSessions)
+      .set({ personId: other!.id })
+      .where(eq(tillSessions.id, sessionId));
     noteSessionPerson(token, other!.id);
     await expectError(await request("PUT", path(), original), 409, "submission.id_reused");
     expect(await snapshot()).toEqual(before);
@@ -398,9 +401,9 @@ describe("A669 allergy routes", () => {
       "session.required",
     );
     await suite.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, sessionId));
+      .where(eq(tillSessions.id, sessionId));
     await expectError(await request(verb, route(verb), bodyFor(verb)), 401, "session.required");
   });
   it.each(verbs)("checks device, profile action and admission for %s", async (verb) => {
@@ -485,9 +488,9 @@ describe("A669 allergy routes", () => {
             .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
         if (change === "session")
           await suite.db
-            .update(sessions)
+            .update(tillSessions)
             .set({ endedAt: new Date().toISOString() })
-            .where(eq(sessions.id, sessionId));
+            .where(eq(tillSessions.id, sessionId));
         if (change === "action")
           await suite.db
             .update(deviceProfiles)

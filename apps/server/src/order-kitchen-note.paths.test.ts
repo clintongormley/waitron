@@ -9,7 +9,7 @@ import { parties, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeKitchenNote } from "@waitron/venue-service";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -32,8 +32,8 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 let v: PartyVenue;
 
 beforeEach(async () => {
-  v = await setupPartyVenue(suite.db);
   await seedPersons(suite.db, { id: OPERATOR, displayName: "Kitchen note author" });
+  v = await setupPartyVenue(suite.db);
 });
 
 describe("initial kitchen notes on ordering paths", () => {
@@ -46,7 +46,7 @@ describe("initial kitchen notes on ordering paths", () => {
     "accepts the initial note through %s",
     async (url) => {
       const token = randomUUID();
-      await suite.db.insert(sessions).values({
+      await suite.db.insert(tillSessions).values({
         deviceId: v.cfg.origin.deviceId,
         personId: OPERATOR,
         tokenHash: hashSessionToken(token),

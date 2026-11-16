@@ -1,10 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 
-/**
- * A new bearer token for a session cookie: a random v4 UUID, the shape the cookie screens check with
- * `isUuid` before any lookup (`apps/server/src/till-session.ts`,
- * `packages/server-kit/src/management-cookie.ts`).
- */
 export function mintSessionToken(): string {
   return randomUUID();
 }

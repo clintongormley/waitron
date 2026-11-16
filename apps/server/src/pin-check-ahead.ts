@@ -5,7 +5,7 @@ import {
   persons,
   holds,
   readPersonAuthority,
-  sessions,
+  tillSessions,
   type Permission,
   type PinAttempts,
   type SecretCheck,
@@ -60,10 +60,10 @@ export async function overrideToCheck<T extends { personId: string; pin: string 
 ): Promise<T | undefined> {
   if (override === undefined) return undefined;
   const [operator] = await db
-    .select({ personId: sessions.personId })
-    .from(sessions)
-    .innerJoin(persons, eq(persons.id, sessions.personId))
-    .where(and(eq(sessions.id, authz.sessionId), isNull(sessions.endedAt)));
+    .select({ personId: tillSessions.personId })
+    .from(tillSessions)
+    .innerJoin(persons, eq(persons.id, tillSessions.personId))
+    .where(and(eq(tillSessions.id, authz.sessionId), isNull(tillSessions.endedAt)));
   if (
     operator === undefined ||
     (!checkedAnyway && holds(await readPersonAuthority(db, operator.personId), authz.permission))

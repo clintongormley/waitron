@@ -23,7 +23,7 @@ import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { handoverActivations, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashPassword, managementSessions } from "@waitron/identity";
+import { hashPassword, dashboardSessions } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
@@ -702,7 +702,7 @@ describe("when the operation is not ready", () => {
     const store = await placedSpare();
     const { app } = spareOn(store);
     const { input } = await selectName(app);
-    const sessions = (await store.venue.select().from(managementSessions)).length;
+    const sessions = (await store.venue.select().from(dashboardSessions)).length;
     external.duringHash = async () => {
       external.duringHash = undefined;
       await advanceHandover(
@@ -717,7 +717,7 @@ describe("when the operation is not ready", () => {
       body: { error: { code: "handover.step_out_of_order" } },
     });
     expect(await activations(store)).toEqual([]);
-    expect((await store.venue.select().from(managementSessions)).length).toBe(sessions);
+    expect((await store.venue.select().from(dashboardSessions)).length).toBe(sessions);
   }, 60_000);
 
   it("with no operation ready to promote, a right and a wrong password get the same refusal", async () => {

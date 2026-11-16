@@ -12,7 +12,7 @@ import {
   IDLE_TIMEOUT_MS,
   endManagementSession,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
 } from "@waitron/identity";
@@ -93,15 +93,15 @@ async function refused(response: Response, status: number, code: string) {
 }
 const session = (token: string) =>
   suite.db
-    .select({ lastSeenAt: managementSessions.lastSeenAt })
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)))
+    .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)))
     .get()!;
 const setLastSeen = (token: string, at: Date) =>
   suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: at.toISOString() })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)))
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)))
     .run();
 
 beforeEach(async () => {

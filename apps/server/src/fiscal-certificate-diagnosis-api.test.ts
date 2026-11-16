@@ -12,7 +12,7 @@ import {
   rawState,
 } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-parent-fixtures.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { endManagementSession, managementSessions, persons } from "@waitron/identity";
+import { endManagementSession, dashboardSessions, persons } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
@@ -155,7 +155,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
       if (mode === "revoked") await endManagementSession(tx, f.session.token);
       if (mode === "expired")
         await tx
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set({ lastSeenAt: new Date(Date.now() - 31 * 60_000).toISOString() });
       if (mode === "suspended")
         await tx
@@ -220,7 +220,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
                 .where(eq(persons.id, f.session.personId));
             if (mode === "expiry")
               await tx
-                .update(managementSessions)
+                .update(dashboardSessions)
                 .set({ lastSeenAt: new Date(Date.now() - 31 * 60_000).toISOString() });
           });
       });

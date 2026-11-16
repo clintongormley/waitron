@@ -20,7 +20,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { deviceProfileAdmissionRoles, persons, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, persons, tillSessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import {
@@ -246,7 +246,7 @@ it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspe
       code = "session.required";
     }
     if (kind === "ended") {
-      await store.db.update(sessions).set({ endedAt: new Date().toISOString() });
+      await store.db.update(tillSessions).set({ endedAt: new Date().toISOString() });
       code = "session.required";
     }
     if (kind === "device")
@@ -497,7 +497,7 @@ it.each(["list", "status"] as const)(
       calls += 1;
       if (calls === 2)
         await withTransaction(store.db, (tx) =>
-          tx.update(sessions).set({ endedAt: new Date().toISOString() }),
+          tx.update(tillSessions).set({ endedAt: new Date().toISOString() }),
         );
       return lock(body);
     });

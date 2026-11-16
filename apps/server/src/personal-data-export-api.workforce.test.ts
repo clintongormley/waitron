@@ -24,7 +24,7 @@ import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/see
 import {
   hashPin,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   startManagementSession,
 } from "@waitron/identity";
@@ -535,9 +535,9 @@ beforeEach(async () => {
   cookie = await sessionCookie(marthaId);
   adminCookie = await sessionCookie(admin!.id);
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ createdAt: SESSION_OPENED_AT })
-    .where(eq(managementSessions.personId, marthaId));
+    .where(eq(dashboardSessions.personId, marthaId));
 });
 
 type Sale = { code: string; number: number; total: number };
@@ -855,9 +855,9 @@ describe("a staff member's whole personal-data download", () => {
       .from(persons)
       .where(eq(persons.id, marthaId));
     const [session] = await suite.db
-      .select({ hash: managementSessions.tokenHash })
-      .from(managementSessions)
-      .where(eq(managementSessions.personId, marthaId));
+      .select({ hash: dashboardSessions.tokenHash })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.personId, marthaId));
     const [entry] = await suite.db
       .select({ hash: timeEntries.entryHash })
       .from(timeEntries)
@@ -877,9 +877,9 @@ describe("a staff member's whole personal-data download", () => {
       .from(persons)
       .where(eq(persons.id, marthaId));
     const [session] = await suite.db
-      .select({ hash: managementSessions.tokenHash })
-      .from(managementSessions)
-      .where(eq(managementSessions.personId, marthaId));
+      .select({ hash: dashboardSessions.tokenHash })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.personId, marthaId));
     await suite.db.run(sql`update persons set status = 'suspended' where id = ${marthaId}`);
 
     const files = await download(

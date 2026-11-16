@@ -2,7 +2,7 @@ import "./errors.js";
 import { authorityForRoles, inspectsInvoicesOnly, type PersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
-import { nowIso, managementSessions, personRoles, persons, roles } from "@waitron/db";
+import { nowIso, dashboardSessions, personRoles, persons, roles } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
@@ -38,7 +38,7 @@ export async function startManagementSession(
 ): Promise<ManagementSession> {
   const token = mintSessionToken();
   await tx
-    .insert(managementSessions)
+    .insert(dashboardSessions)
     .values({ personId: input.personId, tokenHash: hashSessionToken(token) });
   return { token, personId: input.personId };
 }
@@ -47,9 +47,9 @@ export async function startManagementSession(
 async function readManagementSession(tx: Database | Transaction, token: string) {
   const rows = await tx
     .select({
-      sessionRowId: managementSessions.id,
-      personId: managementSessions.personId,
-      lastSeenAt: managementSessions.lastSeenAt,
+      sessionRowId: dashboardSessions.id,
+      personId: dashboardSessions.personId,
+      lastSeenAt: dashboardSessions.lastSeenAt,
       status: persons.status,
       email: persons.email,
       displayName: persons.displayName,
@@ -58,14 +58,14 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
       builtInKey: roles.builtInKey,
       permissions: roles.permissions,
     })
-    .from(managementSessions)
-    .innerJoin(persons, eq(persons.id, managementSessions.personId))
-    .leftJoin(personRoles, eq(personRoles.personId, managementSessions.personId))
+    .from(dashboardSessions)
+    .innerJoin(persons, eq(persons.id, dashboardSessions.personId))
+    .leftJoin(personRoles, eq(personRoles.personId, dashboardSessions.personId))
     .leftJoin(roles, eq(roles.id, personRoles.roleId))
     .where(
       and(
-        eq(managementSessions.tokenHash, hashSessionToken(token)),
-        isNull(managementSessions.endedAt),
+        eq(dashboardSessions.tokenHash, hashSessionToken(token)),
+        isNull(dashboardSessions.endedAt),
       ),
     );
   const row = rows[0];
@@ -106,9 +106,9 @@ export async function resolveManagementSession(
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
     await tx
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: nowIso() })
-      .where(and(eq(managementSessions.id, row.sessionRowId), isNull(managementSessions.endedAt)));
+      .where(and(eq(dashboardSessions.id, row.sessionRowId), isNull(dashboardSessions.endedAt)));
   }
   return {
     sessionRowId: row.sessionRowId,
@@ -127,10 +127,10 @@ export async function resolveManagementSession(
 export async function endManagementSession(tx: Transaction, token: string): Promise<boolean> {
   const tokenHash = hashSessionToken(token);
   const updated = await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(managementSessions.tokenHash, tokenHash), isNull(managementSessions.endedAt)))
-    .returning({ id: managementSessions.id });
+    .where(and(eq(dashboardSessions.tokenHash, tokenHash), isNull(dashboardSessions.endedAt)))
+    .returning({ id: dashboardSessions.id });
   return updated.length > 0;
 }
 

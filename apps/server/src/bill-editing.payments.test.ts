@@ -6,7 +6,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import { readBillEditState } from "./bill-editing.js";
 import {
   previewBillPayment,
@@ -94,8 +94,8 @@ async function direct(
 ) {
   const [session] = await venue.db
     .select()
-    .from(sessions)
-    .where(and(eq(sessions.deviceId, venue.deviceId), isNull(sessions.endedAt)));
+    .from(tillSessions)
+    .where(and(eq(tillSessions.deviceId, venue.deviceId), isNull(tillSessions.endedAt)));
   const operator = { personId: venue.operatorId, sessionId: session!.id };
   const cfg = { ...venue.cfg, origin: { ...venue.cfg.origin, deviceId: deviceId(venue.deviceId) } };
   if (mode === "preview")

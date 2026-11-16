@@ -27,13 +27,9 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
   });
 });
 
-/**
- * Its one foreign key is to its device; none to persons, which
- * `packages/db/src/schema/identity/sessions.ts` says why.
- */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares sessions' primary key, its open-session index, and one foreign key, to its device", () => {
-    const config = getTableConfig(api.sessions);
+  it("declares till_sessions' primary key, its indexes, and device and person keys", () => {
+    const config = getTableConfig(api.tillSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
     expect(
@@ -41,30 +37,34 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
         const { columns, foreignTable } = fk.reference();
         return [columns.map((c) => c.name), getTableConfig(foreignTable).name, fk.onDelete];
       }),
-    ).toEqual([[["device_id"], "devices", "restrict"]]);
+    ).toEqual([
+      [["device_id"], "devices", "restrict"],
+      [["person_id"], "persons", "restrict"],
+    ]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("sessions_open_idx");
-    expect(indexNames).toContain("sessions_token_hash_uq");
-    expect(config.checks.map((c) => c.name)).toContain("sessions_token_hash_ck");
+    expect(indexNames).toContain("till_sessions_open_idx");
+    expect(indexNames).toContain("till_sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("till_sessions_token_hash_ck");
   });
 });
 
-/**
- * It declares no foreign key to persons; `packages/db/src/schema/identity/management-sessions.ts`
- * says why.
- */
-describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
-    const config = getTableConfig(api.managementSessions);
+describe("dashboard_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares dashboard_sessions' primary key, indexes and person key", () => {
+    const config = getTableConfig(api.dashboardSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-    expect(config.foreignKeys).toEqual([]);
+    expect(
+      config.foreignKeys.map((fk) => {
+        const { columns, foreignTable } = fk.reference();
+        return [columns.map((c) => c.name), getTableConfig(foreignTable).name, fk.onDelete];
+      }),
+    ).toEqual([[["person_id"], "persons", "restrict"]]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("management_sessions_open_idx");
-    expect(indexNames).toContain("management_sessions_token_hash_uq");
-    expect(config.checks.map((c) => c.name)).toContain("management_sessions_token_hash_ck");
+    expect(indexNames).toContain("dashboard_sessions_open_idx");
+    expect(indexNames).toContain("dashboard_sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("dashboard_sessions_token_hash_ck");
   });
 });
 

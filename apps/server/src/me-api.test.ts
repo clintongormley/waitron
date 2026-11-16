@@ -277,7 +277,7 @@ describe("mountMeApi — whoami", () => {
     // `sql` template as a call to `now()`, which it refuses.
     const tenSecondsFromNow = new Date(Date.now() + 10_000).toISOString();
     await suite.db.execute(sql`
-      update management_sessions
+      update dashboard_sessions
       set last_seen_at = ${tenSecondsFromNow}
       where token_hash = ${hashSessionToken(token)}`);
 
@@ -293,7 +293,7 @@ describe("mountMeApi — whoami", () => {
     const cookie = await cookieFor(me);
     const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from management_sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select id from dashboard_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const refused = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: `${MANAGEMENT_COOKIE}=${rows[0]!.id}`,
@@ -1017,7 +1017,7 @@ describe("mountMeApi — set your own locale", () => {
     return row!.id;
   }
   async function cleanup(personId: string): Promise<void> {
-    await suite.db.execute(sql`delete from management_sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from dashboard_sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
   }
 
@@ -1286,9 +1286,9 @@ describe("mountMeApi — own credentials and second factor", () => {
           ? []
           : [{ params: JSON.stringify({ purpose: "email_change" }), status: "pending" }],
       );
-      expect(
-        suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
-      ).toEqual([]);
+      expect(suite.db.all(sql`select id from account_actions where person_id=${personId}`)).toEqual(
+        [],
+      );
       await suite.db.run(sql`delete from outgoing_mail where person_id=${personId}`);
     },
   );
@@ -1587,7 +1587,7 @@ describe("session proof routes", () => {
     expect(response.status).toBe(204);
     const [row] = (
       await suite.db.execute<{ proved_at: string | null }>(
-        sql`select proved_at from management_sessions where token_hash = ${hashSessionToken(cookie.split("=")[1]!)}`,
+        sql`select proved_at from dashboard_sessions where token_hash = ${hashSessionToken(cookie.split("=")[1]!)}`,
       )
     ).rows;
     expect(row!.proved_at).toEqual(expect.any(String));

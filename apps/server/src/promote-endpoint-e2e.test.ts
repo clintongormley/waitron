@@ -38,7 +38,7 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashDeviceToken, managementSessions, persons } from "@waitron/identity";
+import { hashDeviceToken, dashboardSessions, persons } from "@waitron/identity";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   canonicalize,
@@ -812,7 +812,7 @@ describe("a real offer beside a real promotion on a real start", () => {
         await readHandoverOperation(stores.failedPromotion.node, seed.nodeId, OPERATION_ID),
       ).toMatchObject({ role: "destination", state: "prepared" });
 
-      const sessionsBefore = await db.failedPromotion.select().from(managementSessions);
+      const sessionsBefore = await db.failedPromotion.select().from(dashboardSessions);
       const refused = await postPromote(base, { oldNodeNeutralised: true, ...credentials });
       expect([refused.status, await refused.json()]).toEqual([
         409,
@@ -823,7 +823,7 @@ describe("a real offer beside a real promotion on a real start", () => {
           },
         },
       ]);
-      expect(await db.failedPromotion.select().from(managementSessions)).toEqual(sessionsBefore);
+      expect(await db.failedPromotion.select().from(dashboardSessions)).toEqual(sessionsBefore);
       expect((await readNodeMode(stores.failedPromotion.node, seed.nodeId)).mode).toBe("mirror");
     });
   }, 90_000);

@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPassword,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   verifyPassword,
 } from "@waitron/identity";
 import { codeOf, openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -45,9 +45,9 @@ function recordingThrottle() {
 
 async function lastSeenAt(token: string): Promise<string | undefined> {
   const [row] = await suite.db
-    .select({ lastSeenAt: managementSessions.lastSeenAt })
-    .from(managementSessions)
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+    .from(dashboardSessions)
+    .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
   return row?.lastSeenAt;
 }
 
@@ -85,9 +85,9 @@ describe("ownPasswordChanges", () => {
     const { personId, token } = await openManagementSession(suite.db);
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: tenMinutesAgo })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
     let handed: unknown;
 
     // Refused, so the transaction's own touch of the session rolls back: only the early check is left

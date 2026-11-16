@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { managementSessions, persons } from "@waitron/identity";
+import { dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -125,5 +125,5 @@ it("authenticates the real node key, collects outside the write lock and activat
   expect(ledger[0]?.result).toEqual(result);
   expect(ledger[0]?.allocation.reservationEvidence).toEqual({ checksum: draw.checksum });
   expect(await suite.db.select().from(persons)).toEqual([]);
-  expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
 });

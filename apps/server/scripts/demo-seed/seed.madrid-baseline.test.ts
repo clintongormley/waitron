@@ -505,8 +505,8 @@ for (const locale of ["en", "es"] as const) {
       );
     });
     const seeded = await readMadridSemantics(suite.db);
-    expect(seeded.tables.management_sessions!.rows).toEqual(
-      provisioned.tables.management_sessions!.rows,
+    expect(seeded.tables.dashboard_sessions!.rows).toEqual(
+      provisioned.tables.dashboard_sessions!.rows,
     );
     expect(seeded.tables.products!.rows.length).toBeGreaterThan(45);
     const canonical = {
@@ -707,6 +707,9 @@ for (const locale of ["en", "es"] as const) {
       tenants: "taxpayer",
       tenant_credentials: "venue_credentials",
       scheduled_runs: "reconciliation_runs",
+      sessions: "till_sessions",
+      management_sessions: "dashboard_sessions",
+      management_account_actions: "account_actions",
     };
     for (const phase of ["before", "provisioned", "seeded"] as const)
       expected[phase] = madridWithRenamedTables(expected[phase], tableRenames);
@@ -1195,12 +1198,12 @@ for (const locale of ["en", "es"] as const) {
           null,
         ],
         [
-          "management_sessions",
+          "dashboard_sessions",
           { name: "proved_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
         [
-          "management_sessions",
+          "dashboard_sessions",
           { name: "proof_method", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
@@ -2216,6 +2219,13 @@ for (const locale of ["en", "es"] as const) {
         pk: 0,
       });
       for (const row of Object.values(paymentTable.rows)) row.requested_by = null;
+      for (const name of ["till_sessions", "dashboard_sessions"]) {
+        const table = expected[phase].tables[name]!;
+        table.foreignKeys = [
+          personKey("person_id", 0),
+          ...table.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+        ];
+      }
       const refundTable = expected[phase].tables.payment_refunds!;
       refundTable.foreignKeys = [
         personKey("authorized_by", 0),

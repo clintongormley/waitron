@@ -136,7 +136,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
     const personId = await seedManager(suite.db, { email: `${randomUUID()}@example.test` });
     const session = await run((tx) => startManagementSession(tx, { personId }));
     await suite.db.run(
-      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
+      sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
     );
     await run((tx) =>
       saveOwnProfile(tx, {

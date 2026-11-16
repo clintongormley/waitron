@@ -2,7 +2,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  managementSessions,
+  dashboardSessions,
   nowIso,
 } from "@waitron/db";
 import {
@@ -127,7 +127,7 @@ async function recordProof(
 ): Promise<void> {
   const { sessionRowId } = await resolveManagementSession(tx, token);
   await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ provedAt: nowIso(), proofMethod })
-    .where(eq(managementSessions.id, sessionRowId));
+    .where(eq(dashboardSessions.id, sessionRowId));
 }

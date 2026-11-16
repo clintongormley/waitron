@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { nodeId } from "@waitron/shared";
 import { mountTillApi } from "./till-api.js";
@@ -61,9 +61,9 @@ it("signs in normally in a venue where workforce has never been migrated", async
   });
   expect(opened.status).toBe(200);
   expect(await opened.json()).toMatchObject({ personId: person!.id });
-  expect((await suite.db.select().from(sessions)).map((s) => [s.personId, s.deviceId])).toEqual([
-    [person!.id, device.deviceId],
-  ]);
+  expect((await suite.db.select().from(tillSessions)).map((s) => [s.personId, s.deviceId])).toEqual(
+    [[person!.id, device.deviceId]],
+  );
   expect(
     (await app.request("/api/clock/state", { headers: { [DEV_DEVICE_HEADER]: device.deviceId } }))
       .status,

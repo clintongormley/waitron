@@ -32,7 +32,7 @@ import {
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, startManagementSession, managementSessions } from "@waitron/identity";
+import { persons, startManagementSession, dashboardSessions } from "@waitron/identity";
 import { AppError, decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
@@ -530,13 +530,13 @@ describe("startup zone admission", () => {
         await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager));
       else
         await suite.db
-          .update(managementSessions)
+          .update(dashboardSessions)
           .set(
             state === "expired"
               ? { lastSeenAt: "2000-01-01T00:00:00.000Z" }
               : { endedAt: new Date().toISOString() },
           )
-          .where(eq(managementSessions.personId, manager));
+          .where(eq(dashboardSessions.personId, manager));
       await boot();
       const response = await request("/management-api/session/me");
       expect([401, 403]).toContain(response.status);
@@ -554,7 +554,7 @@ describe("startup zone admission", () => {
     const secret = await enrolAuthenticator(suite.db, manager, {
       current: { version: 1, key: accountPurposeKey(Buffer.alloc(32, 11), "totp") },
     });
-    const before = (await suite.db.select().from(managementSessions)).length;
+    const before = (await suite.db.select().from(dashboardSessions)).length;
     await boot();
     const missing = await request(
       "/management-api/session",
@@ -566,7 +566,7 @@ describe("startup zone admission", () => {
     expect(missing.headers.get("set-cookie")).toBeNull();
     await server!.close();
     server = undefined;
-    expect((await suite.db.select().from(managementSessions)).length).toBe(before);
+    expect((await suite.db.select().from(dashboardSessions)).length).toBe(before);
     await boot();
     const response = await request(
       "/management-api/session",

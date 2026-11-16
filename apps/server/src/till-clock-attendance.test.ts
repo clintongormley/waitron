@@ -5,7 +5,7 @@ import { billPayments, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { sessions } from "@waitron/identity";
+import { tillSessions } from "@waitron/identity";
 import {
   attendanceDayWork,
   attendanceQuestions,
@@ -28,9 +28,9 @@ beforeEach(async () => {
   instant = new Date("2026-01-05T09:00:00Z");
   venue = await createClockVenue(suite.db, () => instant);
   await suite.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ openedAt: instant.toISOString() })
-    .where(eq(sessions.id, venue.sessionId));
+    .where(eq(tillSessions.id, venue.sessionId));
 });
 function request(path = "state", expectedEntryId: string | null = null) {
   return venue.app.request(`/api/clock/${path}`, {

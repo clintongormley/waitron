@@ -33,13 +33,9 @@ fixture at the compiler rather than silently — or whether a guard over the wri
 
 ## Task 1b (#554, session cookies stored only as hashes)
 
-**Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
-screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
-row, so the screens now only save a lookup. Also open: now that both ends are `state`, the
-keys #426 dropped could be declared again — `sessions` to `persons`, and
-`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons` (`sessions`' key to
-`tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
-change what deleting a person does.
+**Task 1b** (#554, session cookies stored only as hashes). The remaining person keys #426 dropped
+could be declared again: `totp_enrollments` and `google_oidc_states` to `persons`. Pp2 merges these
+into `sign_in_challenges` with its person key.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 

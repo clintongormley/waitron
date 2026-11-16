@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { managementSessions, persons, PIN_THROTTLE_FREE_ATTEMPTS } from "@waitron/identity";
+import { dashboardSessions, persons, PIN_THROTTLE_FREE_ATTEMPTS } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import { payments, type RefundLookup } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -245,7 +245,7 @@ it.each(["none", "staff", "expired", "suspended"] as const)(
     }
     if (kind === "staff") cookie = venue.staffDashboard;
     if (kind === "expired") {
-      await store.db.update(managementSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
+      await store.db.update(dashboardSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
       http = 401;
       code = "management_session.expired";
     }

@@ -13,7 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, settings, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, managementSessions, startManagementSession } from "@waitron/identity";
+import { persons, dashboardSessions, startManagementSession } from "@waitron/identity";
 import * as requestKit from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
@@ -260,9 +260,9 @@ describe("time-zone repair management boundary", () => {
       try {
         await parsed.promise;
         if (change === "revoke")
-          await suite.db.update(managementSessions).set({ endedAt: AT.toISOString() });
+          await suite.db.update(dashboardSessions).set({ endedAt: AT.toISOString() });
         if (change === "expire")
-          await suite.db.update(managementSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
+          await suite.db.update(dashboardSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
         if (change === "suspend")
           await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, actor));
         if (change === "demote") await setBuiltInRoleForTest(suite.db, actor, "staff");

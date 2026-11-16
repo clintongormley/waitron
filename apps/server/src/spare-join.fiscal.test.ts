@@ -243,7 +243,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       },
     });
     // The sign-in's own ended session is the one row the attempt leaves.
-    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["management_sessions"]);
+    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["dashboard_sessions"]);
     expect(changedTables(nodeBefore, allRows(store.node as unknown as Database))).toEqual([]);
     expect(await preparationHistory()).toEqual([]);
   }, 60_000);

@@ -7,8 +7,8 @@ import { persons } from "./persons.js";
  * A short-lived, single-use proof delivered to a person's email address. `token_hash` is SHA-256 of
  * the random URL token; the bearer token itself is never stored.
  */
-export const managementAccountActions = table(
-  "management_account_actions",
+export const accountActions = table(
+  "account_actions",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
@@ -28,25 +28,22 @@ export const managementAccountActions = table(
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
-      name: "management_account_actions_person_fk",
+      name: "account_actions_person_fk",
     }).onDelete("restrict"),
-    uniqueIndex("management_account_actions_token_hash_uq").on(t.tokenHash),
-    index("management_account_actions_person_idx").on(t.personId, t.purpose),
+    uniqueIndex("account_actions_token_hash_uq").on(t.tokenHash),
+    index("account_actions_person_idx").on(t.personId, t.purpose),
     check(
-      "management_account_actions_purpose_ck",
+      "account_actions_purpose_ck",
       sql`${t.purpose} in ('invitation', 'password_reset', 'email_change')`,
     ),
     check(
-      "management_account_actions_target_email_ck",
+      "account_actions_target_email_ck",
       sql`(${t.purpose} = 'email_change') = (${t.targetEmail} is not null)`,
     ),
-    check("management_account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
-    check(
-      "management_account_actions_code_hash_ck",
-      sql`${t.codeHash} is null or length(${t.codeHash}) = 64`,
-    ),
-    check("management_account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
-    check("management_account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
+    check("account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
+    check("account_actions_code_hash_ck", sql`${t.codeHash} is null or length(${t.codeHash}) = 64`),
+    check("account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
+    check("account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
   /* v8 ignore stop */
 );

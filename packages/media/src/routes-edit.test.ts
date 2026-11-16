@@ -6,7 +6,7 @@ import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, mediaBlobs } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, dashboardSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { type ReceiptLogoRasters } from "@waitron/shared";
@@ -243,7 +243,7 @@ it("applies upload and raw body bounds, unsupported and damaged-file refusals to
 it("leaves sessions passive while public presentation and rendition reads carry a cookie", async () => {
   const { app, image, headers } = await fixture();
   const earlier = new Date(Date.now() - 600_000).toISOString();
-  await suite.db.update(managementSessions).set({ lastSeenAt: earlier });
+  await suite.db.update(dashboardSessions).set({ lastSeenAt: earlier });
   const response = await app.request(`/media/presentations?references=${image.filename}`, {
     headers,
   });
@@ -251,7 +251,7 @@ it("leaves sessions passive while public presentation and rendition reads carry 
   const images = ((await response.json()) as { images: Record<string, { square: string }> }).images;
   expect((await app.request(images[image.filename]!.square, { headers })).status).toBe(200);
   expect(
-    await suite.db.select({ lastSeenAt: managementSessions.lastSeenAt }).from(managementSessions),
+    await suite.db.select({ lastSeenAt: dashboardSessions.lastSeenAt }).from(dashboardSessions),
   ).toEqual([{ lastSeenAt: earlier }]);
 });
 it("refuses malformed multipart fields without preparing or changing the photo", async () => {

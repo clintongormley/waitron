@@ -9,7 +9,7 @@ import {
   startManagementSession,
   encryptTotpSecret,
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   regenerateOwnRecoveryCodes,
   webauthnCredentials,
@@ -105,7 +105,7 @@ describe("confirmFreshSignIn with a password", () => {
     await confirm(token, { method: "password", password: "correct horse" });
     const rows = (
       await suite.db.execute<{ token_hash: string; proved_at: string | null }>(
-        sql`select token_hash, proved_at from management_sessions where person_id = ${personId}`,
+        sql`select token_hash, proved_at from dashboard_sessions where person_id = ${personId}`,
       )
     ).rows;
     expect(
@@ -120,8 +120,8 @@ describe("confirmFreshSignIn with a password", () => {
     const proof = async () => {
       const [row] = await suite.db
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
       return row;
     };
     await confirm(token, { method: "password", password: "correct horse", recoveryCode: codes[0] });
@@ -153,9 +153,9 @@ describe("confirmFreshSignIn with a password", () => {
     );
     expect(await codeOf(() => confirm(token, { method: "password" }))).toBe("password.invalid");
     const [row] = await suite.db
-      .select({ provedAt: managementSessions.provedAt })
-      .from(managementSessions)
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+      .select({ provedAt: dashboardSessions.provedAt })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
     expect(row).toEqual({ provedAt: null });
   });
 
@@ -240,9 +240,9 @@ describe("confirmFreshSignIn with a password", () => {
 
     const idle = await openManagementSession(suite.db, "admin");
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 24 * 60 * 60_000).toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(idle.token)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(idle.token)));
     expect(
       await codeOf(() => confirm(idle.token, { method: "password", password: "correct horse" })),
     ).toBe("management_session.expired");
@@ -287,9 +287,9 @@ describe("confirmFreshSignIn with a passkey", () => {
       await confirm(token, { method: "passkey", challengeHandle, response: { id: "cred-mine" } }),
     ).toBe(personId);
     const [row] = await suite.db
-      .select({ provedAt: managementSessions.provedAt })
-      .from(managementSessions)
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+      .select({ provedAt: dashboardSessions.provedAt })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(token)));
     expect(row!.provedAt).toEqual(expect.any(String));
   });
 

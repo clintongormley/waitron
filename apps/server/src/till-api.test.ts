@@ -453,7 +453,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // nothing.
     const token = /waitron_till_session=([^;]+)/.exec(cookie)![1]!;
     const rows = await suite.db.execute<{ ended: number }>(
-      sql`select ended_at is not null as ended from sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select ended_at is not null as ended from till_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     expect(rows.rows).toEqual([{ ended: 1 }]);
   });
@@ -486,7 +486,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     });
     expect(body.permissions).toContain("venue.configure");
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
   });
 
@@ -515,7 +515,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       locale: "en-GB",
     });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
   });
 
@@ -566,9 +566,6 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A stale or garbage cookie is never an error: naming nobody, the route clears it and answers
-    // 200. Weaker than its name: it does not pin the `isUuid` screen, since `endSession` hashes the
-    // value and matches no row either way.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -835,11 +832,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 });
 
 describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)", () => {
-  /** Count the `sessions` rows for a person — the differential proof that a throttled attempt
-   *  never reached `loginWithPin` (a login would have inserted a row). */
   async function sessionCount(personId: string): Promise<number> {
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from sessions where person_id = ${personId}`,
+      sql`select cast(count(*) as int) as n from till_sessions where person_id = ${personId}`,
     );
     return rows[0]!.n;
   }
@@ -862,11 +857,13 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(res.status).toBe(200);
     const token = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
     const sess = await suite.db.execute<{ device_id: string }>(
-      sql`select device_id from sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select device_id from till_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     expect(sess.rows).toEqual([{ device_id: deviceIdOf(deviceCookie) }]);
 
-    await suite.db.execute(sql`delete from sessions where token_hash = ${hashSessionToken(token)}`);
+    await suite.db.execute(
+      sql`delete from till_sessions where token_hash = ${hashSessionToken(token)}`,
+    );
   });
 
   it("throttles a (device, person) after the free failures: a further attempt is 429 pin.throttled and loginWithPin never runs", async () => {
@@ -976,7 +973,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(p2.status).toBe(401);
     expect(await p2.json()).toMatchObject({ error: { code: "pin.invalid" } });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${anna.id}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${anna.id}`);
   });
 
   it("throttles per (device, person): a second person on the same device is unaffected (§5)", async () => {
@@ -1005,7 +1002,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(abelOk.status).toBe(200);
     expect(await abelOk.json()).toMatchObject({ personId: abel.id });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${abel.id}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${abel.id}`);
   });
 
   it("one device filling its share of the throttle with made-up ids does not refuse another till's correct PIN", async () => {
@@ -1037,7 +1034,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(ok.status).toBe(200);
     expect(await ok.json()).toMatchObject({ personId: anna.id });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${anna.id}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${anna.id}`);
   });
 });
 
@@ -1165,7 +1162,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   it("ACCEPTS an open session and returns the operator's personId, sessionId and the session's device", async () => {
     const token = await openSession(suite.db);
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select id from till_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
@@ -1220,13 +1217,10 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
-  // Only the row id is presented here. The stored hash is 64 hex characters, which the guard's
-  // UUID shape check refuses before any lookup, so a case presenting it would pass whatever the
-  // lookup did, and it is left out.
   it("REJECTS (401 session.required) the row's own id — what a copy of the database holds", async () => {
     const token = await openSession(suite.db);
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+      sql`select id from till_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.id}` },
@@ -1239,6 +1233,21 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual(await sessionOnSeededDevice(rows[0]!.id));
+  });
+
+  it("REJECTS the stored token hash from a database copy as a cookie", async () => {
+    const token = await openSession(suite.db);
+    const { rows } = await suite.db.execute<{ token_hash: string; person_id: string }>(
+      sql`select token_hash, person_id from till_sessions where token_hash = ${hashSessionToken(token)}`,
+    );
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: {
+        cookie: `${SESSION_COOKIE}=${rows[0]!.token_hash}`,
+        [PERSON_HEADER]: rows[0]!.person_id,
+      },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
   it("REJECTS (401 session.required) when no cookie is present", async () => {
@@ -1258,8 +1267,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 session.required) a NON-UUID cookie", async () => {
-    // A forged, non-UUID cookie is a CLIENT fault and answers 401. Weaker than its name: it does not
-    // pin the `isUuid` screen in `requireSession`, since the hashed value matches no row either way.
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -1431,7 +1438,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     return { personId, token: session.token };
   }
   async function cleanup(personId: string): Promise<void> {
-    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from till_sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
   }
 
@@ -1930,7 +1937,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(
-        sql`delete from devices where id not in (select device_id from sessions)`,
+        sql`delete from devices where id not in (select device_id from till_sessions)`,
       );
       await suite.db.execute(
         sql`delete from device_profiles where id not in (select device_profile_id from devices)`,
@@ -1958,7 +1965,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.inactivityTimeoutSeconds).toBeNull();
     } finally {
       await suite.db.execute(
-        sql`delete from devices where id not in (select device_id from sessions)`,
+        sql`delete from devices where id not in (select device_id from till_sessions)`,
       );
       await suite.db.execute(
         sql`delete from device_profiles where id not in (select device_profile_id from devices)`,
@@ -1988,7 +1995,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(
-        sql`delete from devices where id not in (select device_id from sessions)`,
+        sql`delete from devices where id not in (select device_id from till_sessions)`,
       );
     }
   });
@@ -2337,9 +2344,6 @@ describe("zone-offer menu routes", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // Through the real route: a non-UUID cookie is refused by the guard as 401 before any menu
-    // read. Weaker than its name: it does not pin `requireSession`'s `isUuid` screen, since the hashed
-    // value matches no row either way.
     const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -2726,7 +2730,7 @@ describe("a device's profile decides who may sign in on it", () => {
 
   async function sessionsOf(personId: string, deviceId: string): Promise<number> {
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from sessions
+      sql`select cast(count(*) as int) as n from till_sessions
           where person_id = ${personId} and device_id = ${deviceId}`,
     );
     return rows[0]!.n;

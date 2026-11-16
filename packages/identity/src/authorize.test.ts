@@ -1,3 +1,4 @@
+import { captureError, restrictRefused } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -137,18 +138,19 @@ describe("authorize", () => {
     expect(code).toBe("session.not_open");
   });
 
-  it("throws session.not_open when the session's person row has been deleted", async () => {
+  it("refuses deleting the person behind an open till session", async () => {
     const deviceId = await seedSessionDevice(suite.db);
     const managerId = await seedPerson(suite.db, "manager");
     const sessionId = await openSession(suite.db, deviceId, managerId);
-    // Reachable because `sessions` declares no key to `persons`.
-    await suite.db.execute(sql`delete from persons where id = ${managerId}`);
-
-    // The session is still open, so what refuses here is the inner join finding no person row.
-    const code = await codeOf(() =>
-      run((tx) => authorize(tx, { sessionId, permission: "sale.void" })),
+    const error = await captureError(() =>
+      run(async (tx) => tx.execute(sql`delete from persons where id = ${managerId}`)),
     );
-    expect(code).toBe("session.not_open");
+    expect(restrictRefused(error)).toBe(true);
+    expect(await run((tx) => authorize(tx, { sessionId, permission: "sale.void" }))).toEqual({
+      authorizedBy: managerId,
+      permission: "sale.void",
+      viaOverride: false,
+    });
   });
 
   it("throws pin.invalid when the override targets a suspended person", async () => {

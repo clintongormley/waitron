@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   persons,
-  managementSessions,
+  dashboardSessions,
   startManagementSession,
   hashPin,
   hashSessionToken,
@@ -337,8 +337,8 @@ for (const lost of ["primary", "session"] as const)
       if (lost === "primary") primary = false;
       else
         await suite.db
-          .delete(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+          .delete(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
       release();
       await refreshing;
       const response = await answer;
@@ -462,16 +462,16 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     expect((await send(staff.cookie)).status).toBe(403);
     const oldActivity = new Date(Date.now() - 60000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
     expect(
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).toBe(oldActivity);
     primary = false;
@@ -480,8 +480,8 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     const before = (
       await suite.db
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
     )[0]!.lastSeenAt;
     expect(
       (await app.request("/management-api/cloud/status", { headers: { cookie: manager.cookie } }))
@@ -491,8 +491,8 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).toBe(before);
     expect(f.requests).toHaveLength(0);
@@ -502,9 +502,9 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     expect(body.venueId).toBe(f.venueId);
     expect(body.privateKey).toBeUndefined();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     expect(
       (
         await app.request("/management-api/cloud/check", {
@@ -522,17 +522,17 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).not.toBe(oldActivity);
     await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
     expect((await send(manager.cookie)).status).toBe(403);
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 3600000).toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     expect((await send(manager.cookie)).status).toBe(401);
   } finally {
     await f.close();
@@ -776,16 +776,16 @@ it("refresh and revoke require a live manager and exact Origin; revoke rechecks 
     await started;
     const oldActivity = new Date(Date.now() - 60000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     const revoking = send("revoke");
     try {
       await vi.waitFor(async () => {
         const [row] = await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
         expect(row!.lastSeenAt).not.toBe(oldActivity);
       });
     } finally {
@@ -858,16 +858,16 @@ it("Stop access records the stop with the replacement after the permission reche
     await started;
     const oldActivity = new Date(Date.now() - 60000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     const revoking = send();
     try {
       await vi.waitFor(async () => {
         const [row] = await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
         expect(row!.lastSeenAt).not.toBe(oldActivity);
       });
     } finally {
@@ -939,9 +939,9 @@ it("the plan read needs a live manager on the primary, is passive, and answers w
     primary = true;
     const oldActivity = new Date(Date.now() - 60000).toISOString();
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)));
     const answered = await read();
     expect(answered.status).toBe(200);
     expect(await answered.json()).toEqual({
@@ -955,8 +955,8 @@ it("the plan read needs a live manager on the primary, is passive, and answers w
       (
         await suite.db
           .select()
-          .from(managementSessions)
-          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+          .from(dashboardSessions)
+          .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).toBe(oldActivity);
     const status = await (

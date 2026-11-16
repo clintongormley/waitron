@@ -3,10 +3,10 @@ import "./errors.js";
 import {
   nowIso,
   persons,
-  managementSessions,
-  managementAccountActions,
+  dashboardSessions,
+  accountActions,
   webauthnCredentials,
-  sessions,
+  tillSessions,
   totpEnrollments,
   recoveryCodes,
 } from "@waitron/db";
@@ -246,11 +246,9 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
 
 async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
   await tx
-    .update(managementAccountActions)
+    .update(accountActions)
     .set({ usedAt: nowIso() })
-    .where(
-      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
-    );
+    .where(and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)));
 }
 
 export async function readPasskeys(tx: Transaction, personId: string) {
@@ -377,9 +375,9 @@ export async function changeOwnPin(
     .set({ pinHash: await hashPinAsync(input.pin) })
     .where(eq(persons.id, person.id));
   await tx
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(sessions.personId, person.id), isNull(sessions.endedAt)));
+    .where(and(eq(tillSessions.personId, person.id), isNull(tillSessions.endedAt)));
 }
 
 export async function changeOwnPassword(
@@ -395,13 +393,13 @@ export async function changeOwnPassword(
     .where(eq(persons.id, person.id));
   await invalidateLinks(tx, person.id);
   await tx
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ endedAt: nowIso() })
     .where(
       and(
-        eq(managementSessions.personId, person.id),
-        ne(managementSessions.id, sessionRowId),
-        isNull(managementSessions.endedAt),
+        eq(dashboardSessions.personId, person.id),
+        ne(dashboardSessions.id, sessionRowId),
+        isNull(dashboardSessions.endedAt),
       ),
     );
   await queueSecurityChangeMail(tx, { personId: person.id, change: "password_changed" });

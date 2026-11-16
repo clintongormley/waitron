@@ -78,7 +78,7 @@ describe("account mail owner", () => {
     );
   it("makes a working reset link at send and never stores it in the queue", async () => {
     await queue();
-    expect(suite.db.all(sql`select * from management_account_actions`)).toEqual([]);
+    expect(suite.db.all(sql`select * from account_actions`)).toEqual([]);
     await suite.db.run(
       sql`update outgoing_mail set next_attempt_at = '2026-11-09T12:15:00.001Z' where person_id=${personId}`,
     );

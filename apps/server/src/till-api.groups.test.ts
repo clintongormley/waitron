@@ -9,7 +9,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, resolveMakers, setRoutingCell } from "@waitron/venue-service";
-import { sessions, setProfileAdmission } from "@waitron/identity";
+import { tillSessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -2601,12 +2601,12 @@ describe("one held dish rechecks admission after reading its request", () => {
       .where(eq(deviceProfiles.id, device!.deviceProfileId));
     const [session] = await venue.db
       .select()
-      .from(sessions)
+      .from(tillSessions)
       .where(
         and(
-          eq(sessions.deviceId, venue.deviceId),
-          eq(sessions.personId, venue.operatorId),
-          isNull(sessions.endedAt),
+          eq(tillSessions.deviceId, venue.deviceId),
+          eq(tillSessions.personId, venue.operatorId),
+          isNull(tillSessions.endedAt),
         ),
       );
     const text = JSON.stringify({
@@ -2639,9 +2639,9 @@ describe("one held dish rechecks admission after reading its request", () => {
       await inTx(venue, async (tx) => {
         if (kind === "ended session")
           await tx
-            .update(sessions)
+            .update(tillSessions)
             .set({ endedAt: "2026-10-17T10:00:00.000Z" })
-            .where(eq(sessions.id, session!.id));
+            .where(eq(tillSessions.id, session!.id));
         if (kind === "disabled device")
           await tx.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
         if (kind === "removed action")
@@ -2667,7 +2667,10 @@ describe("one held dish rechecks admission after reading its request", () => {
       release();
       await pending;
       await inTx(venue, async (tx) => {
-        await tx.update(sessions).set({ endedAt: null }).where(eq(sessions.id, session!.id));
+        await tx
+          .update(tillSessions)
+          .set({ endedAt: null })
+          .where(eq(tillSessions.id, session!.id));
         await tx.update(devices).set({ active: true }).where(eq(devices.id, venue.deviceId));
         await tx
           .update(deviceProfiles)

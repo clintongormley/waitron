@@ -1,3 +1,4 @@
+import { captureError, restrictRefused } from "@waitron/db";
 import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -45,7 +46,7 @@ async function fixture() {
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
   await suite.db.run(
-    sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
+    sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
   );
   return { personId, email, managementSessionId: session.token, queueEmailChange: true };
 }
@@ -121,7 +122,7 @@ describe("your profile", () => {
       saveOwnProfile(tx, { ...f, ...details, keyRing: TOTP_KEY_RING }),
     );
     await suite.db.run(
-      sql`update management_sessions set proved_at=null where token_hash=${hashSessionToken(f.managementSessionId)}`,
+      sql`update dashboard_sessions set proved_at=null where token_hash=${hashSessionToken(f.managementSessionId)}`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -134,7 +135,7 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "management_session.proof_required" });
     await suite.db.run(
-      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(f.managementSessionId)}`,
+      sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(f.managementSessionId)}`,
     );
     const codeKey = Buffer.alloc(32, 19);
     const queued = await withTransaction(suite.db, (tx) =>
@@ -148,7 +149,7 @@ describe("your profile", () => {
     expect(queued).toEqual({ queued: true });
     expect(
       suite.db.all(
-        sql`select id from management_account_actions where person_id=${f.personId} and purpose='email_change'`,
+        sql`select id from account_actions where person_id=${f.personId} and purpose='email_change'`,
       ),
     ).toEqual([]);
     expect(
@@ -226,7 +227,7 @@ describe("your profile", () => {
       expect(suite.db.all(sql`select id from outgoing_mail`)).toHaveLength(
         queueEmailChange ? 1 : 0,
       );
-      expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
+      expect(suite.db.all(sql`select id from account_actions`)).toEqual([]);
     },
   );
 
@@ -382,7 +383,7 @@ describe("your profile", () => {
     const deviceId = await seedSessionDevice(suite.db);
     // `id` and `opened_at` are `$defaultFn` generators, not column DEFAULTs, so a raw insert names them.
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (id, token_hash, person_id, device_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${deviceId}, ${new Date().toISOString()}) returning id`,
+      sql`insert into till_sessions (id, token_hash, person_id, device_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${deviceId}, ${new Date().toISOString()}) returning id`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -403,7 +404,7 @@ describe("your profile", () => {
     );
     expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain("9876");
     const rows = await suite.db.execute<{ ended_at: string | null }>(
-      sql`select ended_at from sessions where id = ${till.rows[0]!.id}`,
+      sql`select ended_at from till_sessions where id = ${till.rows[0]!.id}`,
     );
     expect(rows.rows[0]!.ended_at).not.toBeNull();
     expect(await securityNotices(f.personId)).toEqual([]);
@@ -631,13 +632,16 @@ describe("your profile", () => {
     ]);
   });
 
-  it("refuses a live session whose person row no longer exists, as it refuses a signed-out caller", async () => {
-    // `management_sessions` carries no foreign key to `persons`, so the session can outlive the row.
+  it("refuses deleting the person behind a live dashboard session", async () => {
     const f = await fixture();
-    await suite.db.execute(sql`delete from persons where id = ${f.personId}`);
-    expect(await codeOf(() => withTransaction(suite.db, (tx) => readOwnProfile(tx, f)))).toBe(
-      "management_session.required",
+    const before = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx.execute(sql`delete from persons where id = ${f.personId}`),
+      ),
     );
+    expect(restrictRefused(error)).toBe(true);
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toEqual(before);
   });
 
   it("labels the authenticator entry with the display name when the person has no email", async () => {
@@ -731,7 +735,7 @@ describe("your profile", () => {
       ),
     ).resolves.toBeNull();
     const action = await suite.db.execute<{ used_at: string | null }>(
-      sql`select used_at from management_account_actions where id = ${issued!.id}`,
+      sql`select used_at from account_actions where id = ${issued!.id}`,
     );
     expect(action.rows[0]!.used_at).not.toBeNull();
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({

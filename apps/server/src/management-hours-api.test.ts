@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashSessionToken,
-  managementSessions,
+  dashboardSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -54,8 +54,8 @@ beforeEach(async () => {
     staffSession = (
       await tx
         .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.tokenHash, hashSessionToken(staff.token)))
+        .from(dashboardSessions)
+        .where(eq(dashboardSessions.tokenHash, hashSessionToken(staff.token)))
     )[0]!.id;
     ownerCookie = `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: owner })).token}`;
     const common = {
@@ -165,14 +165,14 @@ it.each(["absent", "ended", "expired", "suspended"] as const)(
     const body = await command();
     if (kind === "ended")
       await suite.db
-        .update(managementSessions)
+        .update(dashboardSessions)
         .set({ endedAt: new Date().toISOString() })
-        .where(eq(managementSessions.id, staffSession));
+        .where(eq(dashboardSessions.id, staffSession));
     if (kind === "expired")
       await suite.db
-        .update(managementSessions)
+        .update(dashboardSessions)
         .set({ lastSeenAt: "2020-01-01T00:00:00Z" })
-        .where(eq(managementSessions.id, staffSession));
+        .where(eq(dashboardSessions.id, staffSession));
     if (kind === "suspended")
       await suite.db
         .update(persons)
@@ -203,28 +203,22 @@ it.each(["absent", "ended", "expired", "suspended"] as const)(
 it("automatic own and manager reads are passive while an explicit read extends the dashboard session", async () => {
   const old = new Date(Date.now() - 60_000).toISOString();
   await suite.db
-    .update(managementSessions)
+    .update(dashboardSessions)
     .set({ lastSeenAt: old })
-    .where(eq(managementSessions.id, staffSession));
+    .where(eq(dashboardSessions.id, staffSession));
   const before = snapshot();
   for (const route of routes().slice(0, 4))
     expect((await ask(route, undefined, staffCookie, true)).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.id, staffSession))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, staffSession))
     )[0]!.lastSeenAt,
   ).toBe(old);
   expect(snapshot()).toEqual(before);
   expect((await ask(own + path())).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(managementSessions)
-        .where(eq(managementSessions.id, staffSession))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, staffSession))
     )[0]!.lastSeenAt,
   ).not.toBe(old);
 });
@@ -415,9 +409,9 @@ it("rechecks a revoked own session after authentication and before the human wri
   try {
     await entered;
     await suite.db
-      .update(managementSessions)
+      .update(dashboardSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(managementSessions.id, staffSession));
+      .where(eq(dashboardSessions.id, staffSession));
   } finally {
     release();
   }

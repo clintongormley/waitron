@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   withTransaction,
-  managementSessions,
+  dashboardSessions,
   webauthnChallenges,
   webauthnCredentials,
 } from "@waitron/db";
@@ -99,9 +99,9 @@ describe("finishPasskeyAuthentication under concurrent finishes", () => {
     expect(await codeOf(() => finishAuth(handle))).toBe("passkey.verification_failed");
 
     const sessions = await suite.db
-      .select({ id: managementSessions.id })
-      .from(managementSessions)
-      .where(eq(managementSessions.personId, personId));
+      .select({ id: dashboardSessions.id })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.personId, personId));
     expect(sessions).toHaveLength(1);
   });
 });

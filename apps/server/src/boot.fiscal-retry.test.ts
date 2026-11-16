@@ -289,7 +289,7 @@ describe("boot's Retry now wiring", () => {
       const rows: unknown[][] = [];
       for (const query of [
         sql`select * from envios order by registro_id`,
-        sql`select * from management_sessions order by token_hash`,
+        sql`select * from dashboard_sessions order by token_hash`,
         sql`select * from persons order by id`,
       ])
         rows.push((await suite.db.execute(query)).rows);

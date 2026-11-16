@@ -7,9 +7,9 @@ import {
   webauthnChallenges,
   webauthnCredentials,
   recoveryCodes,
-  sessions,
-  managementSessions,
-  managementAccountActions,
+  tillSessions,
+  dashboardSessions,
+  accountActions,
   totpEnrollments,
   googleOidcStates,
 } from "@waitron/db";
@@ -138,7 +138,7 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     label: s("Kitchen phone"),
   });
   // Later-first, as for every list below.
-  await db.insert(sessions).values([
+  await db.insert(tillSessions).values([
     {
       personId,
       deviceId: secondDeviceId,
@@ -155,7 +155,7 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     },
   ]);
 
-  await db.insert(managementSessions).values([
+  await db.insert(dashboardSessions).values([
     {
       personId,
       tokenHash: secrets.dashboardTokens[0]!,
@@ -174,7 +174,7 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     },
   ]);
 
-  await db.insert(managementAccountActions).values([
+  await db.insert(accountActions).values([
     {
       personId,
       purpose: "email_change",

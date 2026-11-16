@@ -114,8 +114,8 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    venue = await provision(db);
     await seedPerson(db, { id: OPERATOR, displayName: "Operator" });
+    venue = await provision(db);
   },
 });
 

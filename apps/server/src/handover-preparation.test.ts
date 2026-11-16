@@ -29,7 +29,7 @@ import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-prepar
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { hashPassword, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   withOperationAuthority,
@@ -601,7 +601,7 @@ describe("the handover's preparation route", () => {
   it("an operation that moves on while the password is being checked is refused, leaving no session", async () => {
     const s = service();
     await controlledAtFilingAssumed();
-    const sessionsBefore = await suite.db.select().from(managementSessions);
+    const sessionsBefore = await suite.db.select().from(dashboardSessions);
     external.duringHash = async () => {
       external.duringHash = undefined;
       await advanceHandover(store(), OPERATION, "activated", {});
@@ -611,7 +611,7 @@ describe("the handover's preparation route", () => {
       status: 409,
       body: { error: { code: "handover.step_out_of_order" } },
     });
-    expect(await suite.db.select().from(managementSessions)).toEqual(sessionsBefore);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual(sessionsBefore);
   });
 
   it("an unknown operation and an id that is not one both get handover.operation_unknown", async () => {

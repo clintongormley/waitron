@@ -24,7 +24,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueCredentials } from "@waitron/credentials";
-import { managementSessions } from "@waitron/identity";
+import { dashboardSessions } from "@waitron/identity";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
@@ -119,7 +119,7 @@ it("boot keeps an adoption whose copy has not arrived pending, with no ambient s
     expect(await readPendingAdoption(scratch)).toEqual(pending);
     expect((await suite.db.select().from(nodes)).map((node) => node.id)).toEqual([PRIMARY]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   } finally {
     await server?.close();

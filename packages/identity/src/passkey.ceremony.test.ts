@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   withTransaction,
-  managementSessions,
+  dashboardSessions,
   webauthnCredentials,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -166,7 +166,7 @@ describe("signing in and checking a passkey", () => {
       }),
     );
 
-  const sessionCount = async () => (await suite.db.select().from(managementSessions)).length;
+  const sessionCount = async () => (await suite.db.select().from(dashboardSessions)).length;
 
   it("signs in with a signed assertion against the public sign-in's own challenge", async () => {
     const { personId } = await openManagementSession(suite.db, "admin");

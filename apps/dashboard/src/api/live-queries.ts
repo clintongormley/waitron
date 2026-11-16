@@ -115,7 +115,7 @@ export const QUERY_DEPENDENCIES = {
     "bill_payments",
     "bill_payment_refunds",
     "working_orders",
-    // Not `sessions`, which no module declares as a live resource.
+    // Not `till_sessions`, which no module declares as a live resource.
     "printer_holders",
     "printers",
     "card_readers",

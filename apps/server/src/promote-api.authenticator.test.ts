@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, managementSessions } from "@waitron/identity";
+import { hashPassword, hashPin, dashboardSessions } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
@@ -88,7 +88,7 @@ describe("POST /management-api/promote — an admin's right password while a han
       { error: { code: "handover.operation_in_progress", params: { operationId } } },
     ]);
     expect(run).not.toHaveBeenCalled();
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
   });
 });
 
@@ -106,7 +106,7 @@ describe("POST /management-api/promote — a right password for a person holding
       { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
     ]);
     expect(run).not.toHaveBeenCalled();
-    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
   });
 });
 

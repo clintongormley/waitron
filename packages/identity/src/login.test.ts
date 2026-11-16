@@ -48,7 +48,7 @@ describe("loginWithPin", () => {
     });
 
     const rows = await suite.db.execute<{ ended_at: string | null }>(
-      sql`select ended_at from sessions where id = ${session.id}`,
+      sql`select ended_at from till_sessions where id = ${session.id}`,
     );
     expect(rows.rows).toEqual([{ ended_at: null }]);
   });
@@ -83,7 +83,7 @@ describe("loginWithPin", () => {
     expect(code).toBe("pin.invalid");
 
     const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from sessions where person_id = ${personId}`,
+      sql`select count(*) as n from till_sessions where person_id = ${personId}`,
     );
     expect(rows.rows[0]!.n).toBe(0);
   });
@@ -113,7 +113,7 @@ describe("loginWithPin", () => {
 
 async function sessionCount(personId: string): Promise<number> {
   const rows = await suite.db.execute<{ n: number }>(
-    sql`select count(*) as n from sessions where person_id = ${personId}`,
+    sql`select count(*) as n from till_sessions where person_id = ${personId}`,
   );
   return rows.rows[0]!.n;
 }
@@ -197,7 +197,7 @@ describe("endSession", () => {
     // The COLUMN, not `ended_at is not null`: a raw select of a boolean expression answers 0 or 1
     // on this engine.
     const rows = await suite.db.execute<{ ended_at: string | null }>(
-      sql`select ended_at from sessions where id = ${session.id}`,
+      sql`select ended_at from till_sessions where id = ${session.id}`,
     );
     expect(rows.rows).toEqual([{ ended_at: expect.any(String) }]);
 
@@ -217,7 +217,7 @@ describe("endDeviceSessions", () => {
     const endedAt = async (id: string) =>
       (
         await suite.db.execute<{ ended_at: string | null }>(
-          sql`select ended_at from sessions where id = ${id}`,
+          sql`select ended_at from till_sessions where id = ${id}`,
         )
       ).rows[0]!.ended_at;
     const endedBefore = await endedAt(ended.id);
@@ -239,7 +239,7 @@ describe("the stored shift session", () => {
     const personId = await seedPerson(suite.db);
     const session = await run((tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
     const rows = await suite.db.execute<{ device_id: string }>(
-      sql`select device_id from sessions where id = ${session.id}`,
+      sql`select device_id from till_sessions where id = ${session.id}`,
     );
     expect(rows.rows).toEqual([{ device_id: deviceId }]);
 
@@ -254,7 +254,7 @@ describe("the stored shift session", () => {
     const personId = await seedPerson(suite.db);
     const session = await run((tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
     const rows = await suite.db.execute<{ token_hash: string }>(
-      sql`select token_hash from sessions where id = ${session.id}`,
+      sql`select token_hash from till_sessions where id = ${session.id}`,
     );
     expect(rows.rows).toEqual([{ token_hash: hashSessionToken(session.token) }]);
     expect(session.token).not.toBe(session.id);

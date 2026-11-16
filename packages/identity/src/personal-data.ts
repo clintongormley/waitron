@@ -2,13 +2,13 @@ import "./errors.js";
 import {
   devices,
   googleOidcStates,
-  managementAccountActions,
-  managementSessions,
+  accountActions,
+  dashboardSessions,
   persons,
   roles,
   personRoles,
   recoveryCodes,
-  sessions,
+  tillSessions,
   totpEnrollments,
   webauthnChallenges,
 } from "@waitron/db";
@@ -75,38 +75,42 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .from(recoveryCodes)
       .where(eq(recoveryCodes.personId, personId));
 
-    const dashboardSessions = await tx
+    const dashboardSessionRows = await tx
       .select({
-        openedAt: managementSessions.createdAt,
-        lastSeenAt: managementSessions.lastSeenAt,
-        endedAt: managementSessions.endedAt,
-        provedAt: managementSessions.provedAt,
-        proofMethod: managementSessions.proofMethod,
+        openedAt: dashboardSessions.createdAt,
+        lastSeenAt: dashboardSessions.lastSeenAt,
+        endedAt: dashboardSessions.endedAt,
+        provedAt: dashboardSessions.provedAt,
+        proofMethod: dashboardSessions.proofMethod,
       })
-      .from(managementSessions)
-      .where(eq(managementSessions.personId, personId))
-      .orderBy(asc(managementSessions.createdAt), asc(managementSessions.id));
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.personId, personId))
+      .orderBy(asc(dashboardSessions.createdAt), asc(dashboardSessions.id));
 
     const deviceSessions = await tx
-      .select({ device: devices.label, openedAt: sessions.openedAt, endedAt: sessions.endedAt })
-      .from(sessions)
-      .innerJoin(devices, eq(devices.id, sessions.deviceId))
-      .where(eq(sessions.personId, personId))
-      .orderBy(asc(sessions.openedAt), asc(sessions.id));
+      .select({
+        device: devices.label,
+        openedAt: tillSessions.openedAt,
+        endedAt: tillSessions.endedAt,
+      })
+      .from(tillSessions)
+      .innerJoin(devices, eq(devices.id, tillSessions.deviceId))
+      .where(eq(tillSessions.personId, personId))
+      .orderBy(asc(tillSessions.openedAt), asc(tillSessions.id));
 
     const accountEmails = await tx
       .select({
-        purpose: managementAccountActions.purpose,
-        newEmail: managementAccountActions.targetEmail,
-        createdAt: managementAccountActions.createdAt,
-        expiresAt: managementAccountActions.expiresAt,
-        usedAt: managementAccountActions.usedAt,
-        codeExpiresAt: managementAccountActions.codeExpiresAt,
-        codeAttempts: managementAccountActions.codeAttempts,
+        purpose: accountActions.purpose,
+        newEmail: accountActions.targetEmail,
+        createdAt: accountActions.createdAt,
+        expiresAt: accountActions.expiresAt,
+        usedAt: accountActions.usedAt,
+        codeExpiresAt: accountActions.codeExpiresAt,
+        codeAttempts: accountActions.codeAttempts,
       })
-      .from(managementAccountActions)
-      .where(eq(managementAccountActions.personId, personId))
-      .orderBy(asc(managementAccountActions.createdAt), asc(managementAccountActions.id));
+      .from(accountActions)
+      .where(eq(accountActions.personId, personId))
+      .orderBy(asc(accountActions.createdAt), asc(accountActions.id));
 
     const twoFactorSetups = await tx
       .select({ startedAt: totpEnrollments.createdAt, expiresAt: totpEnrollments.expiresAt })
@@ -145,7 +149,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
           lastUsedAt,
         })),
         recoveryCodes: codes,
-        dashboardSessions,
+        dashboardSessions: dashboardSessionRows,
         deviceSessions,
         accountEmails,
         unfinishedSetups: [

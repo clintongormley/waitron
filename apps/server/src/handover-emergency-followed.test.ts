@@ -395,10 +395,10 @@ it("signs in only after staging, so the staged copy is the followed output as it
   const staged = join(dirs().spareState, PAIR_COPY_DIR, VENUE_FILE);
   expect((await readFile(staged)).equals(atStop)).toBe(true);
   const copy = new DatabaseSync(staged, { readOnly: true });
-  expect(copy.prepare("select count(*) as n from management_sessions").get()).toEqual({ n: 0 });
+  expect(copy.prepare("select count(*) as n from dashboard_sessions").get()).toEqual({ n: 0 });
   copy.close();
   const followed = new DatabaseSync(followedVenue(), { readOnly: true });
-  expect(followed.prepare("select count(*) as n from management_sessions").get()).toEqual({
+  expect(followed.prepare("select count(*) as n from dashboard_sessions").get()).toEqual({
     n: 1,
   });
   followed.close();

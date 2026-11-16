@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { deviceProfileAdmissionRoles, hashSessionToken, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, hashSessionToken, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyMoveRead } from "@waitron/module";
 import {
@@ -40,8 +40,8 @@ useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
-    v = await setupPartyVenue(db);
     await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
+    v = await setupPartyVenue(db);
   },
 });
 afterEach(() => vi.restoreAllMocks());
@@ -77,7 +77,7 @@ async function fixture(existing = false) {
     .where(eq(devices.id, deviceId));
   const token = randomUUID();
   const [session] = await v.db
-    .insert(sessions)
+    .insert(tillSessions)
     .values({ deviceId, personId: OPERATOR, tokenHash: hashSessionToken(token) })
     .returning();
   const expectedEdits = await inTx(v, async (tx) => {
@@ -230,7 +230,10 @@ it("transports answer and ticks through the move route and replays the original 
     "submission.id_reused",
   );
   const [other] = await seedPersons(v.db, { displayName: "Other operator", role: "staff" });
-  await v.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, f.sessionId));
+  await v.db
+    .update(tillSessions)
+    .set({ personId: other!.id })
+    .where(eq(tillSessions.id, f.sessionId));
   noteSessionPerson(f.token, other!.id);
   const changedActor = frozen();
   await refused(await f.request("", packet), 409, "submission.id_reused");
@@ -274,9 +277,9 @@ it.each(["preview", "move"])("requires an open session for %s", async (action) =
   const body = action === "preview" ? f.body : adoption(f);
   await refused(await f.request(suffix, body, false), 401, "session.required");
   await v.db
-    .update(sessions)
+    .update(tillSessions)
     .set({ endedAt: new Date().toISOString() })
-    .where(eq(sessions.id, f.sessionId));
+    .where(eq(tillSessions.id, f.sessionId));
   const before = frozen();
   await refused(await f.request(suffix, body), 401, "session.required");
   expect(frozen()).toEqual(before);
@@ -314,9 +317,9 @@ async function revoke(f: Fixture, what: keyof typeof authority) {
       .where(eq(deviceProfileAdmissionRoles.deviceProfileId, f.profileId));
   if (what === "session")
     await v.db
-      .update(sessions)
+      .update(tillSessions)
       .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, f.sessionId));
+      .where(eq(tillSessions.id, f.sessionId));
 }
 for (const action of ["preview", "move"] as const) {
   it.each(["device", "action", "admission"] as const)(
