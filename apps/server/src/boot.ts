@@ -1390,11 +1390,13 @@ async function bootServer(
     config.migrationsRoot,
   );
   const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
+  const expectedTriggers = migrationOptions.flatMap((set) => set.expectedTriggers ?? []);
   const restoredTriggers = [
     ...firstPassRestored,
     ...(await missingBeforeMigration(
       config.venueDir,
       appendOnlyTables.filter((name) => !firstPassTables.includes(name)),
+      expectedTriggers,
     )),
   ];
   await withDevMigrationHint(log, config.devMode, () =>
@@ -1426,7 +1428,7 @@ async function bootServer(
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   if (config.node === undefined) moduleConfig = await readModuleConfig(db);
-  assertAppendOnlyIntact(db, appendOnlyTables);
+  assertAppendOnlyIntact(db, appendOnlyTables, expectedTriggers);
   // A missing trigger also shows up after a crash between a set's migration and its trigger
   // install, or on the first start of a release that marks an existing table append-only, so this
   // is a warning, not a refusal.
@@ -4356,6 +4358,7 @@ async function bootServer(
     tamperWatchJob({
       db,
       tables: appendOnlyTables,
+      expectedTriggers,
       intervalMs: seams.appendOnlyWatch?.intervalMs ?? APPEND_ONLY_CHECK_MS,
       refuse: refuseTrading({
         stateDir: config.stateDir,

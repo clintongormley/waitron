@@ -21,8 +21,15 @@ export {
   appendOnlyTriggerFaults,
   appendOnlyTriggers,
   installAppendOnlyTriggers,
+  installTriggers,
+  triggerFaults,
 } from "./append-only.js";
-export type { AppendOnlyTrigger, CatalogueTarget, StatementTarget } from "./append-only.js";
+export type {
+  AppendOnlyTrigger,
+  ExpectedTrigger,
+  CatalogueTarget,
+  StatementTarget,
+} from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export type { CommitListener, DiskFullListener } from "./connections.js";
 export { connectionPair } from "./connections.js";

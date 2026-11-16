@@ -79,6 +79,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
       assertAppendOnlyIntact(
         db,
         options.flatMap((set) => set.appendOnlyTables ?? []),
+        options.flatMap((set) => set.expectedTriggers ?? []),
       );
       for (const file of [VENUE_FILE, NODE_FILE]) {
         if (!(await isCopyIntact(join(config.venueDir, file))))

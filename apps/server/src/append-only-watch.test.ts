@@ -224,4 +224,15 @@ describe("missingBeforeMigration", () => {
     }
     expect(await missingBeforeMigration(dir, ["sales", "never_installed"])).toEqual([DELETE]);
   });
+
+  it("checks declared migration triggers only on tables already present", async () => {
+    const triggers = [
+      { name: "sales_conditional", table: "sales", definition: "unused" },
+      { name: "future_conditional", table: "future_table", definition: "unused" },
+    ];
+    expect(await missingBeforeMigration(await venueDir(false), [], triggers)).toEqual([]);
+    expect(await missingBeforeMigration(await venueDir(), [], triggers)).toEqual([
+      "sales_conditional",
+    ]);
+  });
 });

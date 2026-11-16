@@ -2,36 +2,51 @@ import { sql } from "drizzle-orm";
 import { openVenueDatabase, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { appendOnlyTriggerFaults } from "@waitron/store";
+import { appendOnlyTriggers, triggerFaults, type ExpectedTrigger } from "@waitron/store";
 import "./errors.js";
 import type { Logger } from "./logger.js";
 import { refusedWhileRunning, updateRecoveryState, type RecoveryStore } from "./recovery-state.js";
 import type { JobDefinition } from "./job-runner.js";
 
-type Faults = ReturnType<typeof appendOnlyTriggerFaults>;
+type Faults = ReturnType<typeof triggerFaults>;
 
 export const APPEND_ONLY_CHECK_MS = 10_000;
 
-/** Throws `append_only.triggers_changed` when any of `tables`' append-only triggers is missing or altered. */
-export function assertAppendOnlyIntact(db: Database, tables: readonly string[]): void {
-  const { missing, altered } = appendOnlyTriggerFaults(db, tables);
+export function assertAppendOnlyIntact(
+  db: Database,
+  tables: readonly string[],
+  expectedTriggers: readonly ExpectedTrigger[] = [],
+): void {
+  const { missing, altered } = triggerFaults(db, [
+    ...appendOnlyTriggers(tables),
+    ...expectedTriggers,
+  ]);
   if (missing.length > 0 || altered.length > 0) {
     throw new AppError("append_only.triggers_changed", { missing, altered });
   }
 }
 
 /**
- * The append-only triggers of `tables` missing from `venueDir` before migrating, counting only
- * tables that already exist: a table the migration is about to create has no trigger yet.
+ * A table the migration is about to create has no trigger to restore yet.
  */
 export async function missingBeforeMigration(
   venueDir: string,
   tables: readonly string[],
+  expectedTriggers: readonly ExpectedTrigger[] = [],
 ): Promise<string[]> {
   const probe = await openVenueDatabase(venueDir);
   try {
-    return appendOnlyTriggerFaults(probe.venue, existingAppendOnlyTables(probe.venue, tables))
-      .missing;
+    const triggers = [...appendOnlyTriggers(tables), ...expectedTriggers];
+    const existing = new Set(
+      existingAppendOnlyTables(
+        probe.venue,
+        triggers.map((trigger) => trigger.table),
+      ).map((table) => table.toLowerCase()),
+    );
+    return triggerFaults(
+      probe.venue,
+      triggers.filter((trigger) => existing.has(trigger.table.toLowerCase())),
+    ).missing;
   } finally {
     await probe.close();
   }
@@ -80,6 +95,7 @@ export function refuseTrading(deps: RefuseTradingDeps): (faults: Faults) => Prom
 export function tamperWatchJob(deps: {
   db: Database;
   tables: readonly string[];
+  expectedTriggers?: readonly ExpectedTrigger[];
   intervalMs: number;
   refuse: (faults: Faults) => Promise<void>;
   log: Logger;
@@ -94,7 +110,10 @@ export function tamperWatchJob(deps: {
     async pass() {
       let faults: Faults;
       try {
-        faults = appendOnlyTriggerFaults(deps.db, deps.tables);
+        faults = triggerFaults(deps.db, [
+          ...appendOnlyTriggers(deps.tables),
+          ...(deps.expectedTriggers ?? []),
+        ]);
       } catch (error) {
         deps.log("warn", "append_only.check_failed", { errorCode: codeOf(error) });
         throw error;

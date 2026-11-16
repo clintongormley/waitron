@@ -355,6 +355,10 @@ changed. A start checks them too: it first puts back any that are missing from a
 there, then refuses to start if one is still missing or has changed. Find out what changed a trigger
 before you go on.
 
+The same check covers the payment rules `payments_guard_update` and `payments_no_delete`, even
+when Payments is Off. These keep recorded payment facts fixed and refuse deletion; normal payment
+capture still updates the row. The page uses the same missing and altered lists for these rules.
+
 The page names the triggers in two lists: `missing`, the ones that were not there, and `altered`,
 the ones whose text is not the text Waitron writes. Where they appear depends on when Waitron
 noticed:
@@ -384,7 +388,7 @@ docker compose run --rm --entrypoint node app -e '
 const { DatabaseSync } = require("node:sqlite");
 const db = new DatabaseSync("/var/lib/waitron/state/venue/venue.db");
 for (const name of process.argv.slice(1)) {
-  if (!/^[a-z0-9_]+_append_only_(update|delete)$/.test(name)) throw new Error(`not an append-only trigger: ${name}`);
+  if (!/^[a-z0-9_]+_append_only_(update|delete)$/.test(name) && !["payments_guard_update", "payments_no_delete"].includes(name)) throw new Error(`not a watched trigger: ${name}`);
   const row = db.prepare("select sql from sqlite_master where type = ? and name = ? collate nocase").get("trigger", name);
   console.log(row === undefined ? `${name}: not there` : `dropping: ${row.sql}`);
   db.exec(`drop trigger if exists "${name}"`);

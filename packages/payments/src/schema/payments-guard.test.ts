@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, captureError, triggerRaised } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { installTriggers, triggerFaults } from "@waitron/store";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { PAYMENT_CHANGE_REFUSAL, PAYMENT_DELETE_REFUSAL } from "../trigger-refusals.js";
 import { payments } from "./payments.js";
@@ -117,6 +119,22 @@ it.each(["attempting", "captured"])("never deletes a payment in state %s", async
   expect(triggerRaised(error, PAYMENT_DELETE_REFUSAL)).toBe(true);
   const saved = await suite.db.execute(sql`select id from payments where id = ${paymentId}`);
   expect(saved.rows).toEqual([{ id: paymentId }]);
+});
+
+it("the real migration definitions match SQLite before and after guard repair", () => {
+  const [options] = migrationOptionsFor(
+    manifestSets().filter((set) => set.name === "payments"),
+    null,
+  );
+  const triggers = options!.expectedTriggers!;
+  expect(triggerFaults(suite.db, triggers)).toEqual({ missing: [], altered: [] });
+  suite.db.run(sql`drop trigger payments_guard_update`);
+  expect(triggerFaults(suite.db, triggers)).toEqual({
+    missing: ["payments_guard_update"],
+    altered: [],
+  });
+  installTriggers(suite.db, triggers);
+  expect(triggerFaults(suite.db, triggers)).toEqual({ missing: [], altered: [] });
 });
 
 const resolution = {

@@ -89,6 +89,12 @@ function unsupported(body: () => unknown) {
 }
 
 describe("bound backup target", () => {
+  it("classifies an absent declared migration trigger as an incompatible target", () => {
+    const contribution = module();
+    contribution.migrations!.migrationTriggers = ["missing_guard"];
+    unsupported(() => target([contribution]));
+  });
+
   it("uses actual SQL and journal bytes, package version, dependency ranges and declared policy", () => {
     const original = target();
     expect(original).toMatchObject({

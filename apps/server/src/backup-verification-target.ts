@@ -143,7 +143,9 @@ export function buildBackupVerificationTarget(input: {
   } catch (error) {
     if (
       error instanceof BackupVerificationProtocolError ||
-      (error instanceof AppError && error.code === "migrations.set_missing") ||
+      (error instanceof AppError &&
+        (error.code === "migrations.set_missing" ||
+          error.code === "migrations.trigger_definition_invalid")) ||
       (error instanceof Error &&
         "code" in error &&
         ["ENOENT", "ENOTDIR", "EISDIR", "ELOOP"].includes(String(error.code)))

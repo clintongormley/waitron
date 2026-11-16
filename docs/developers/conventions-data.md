@@ -1647,6 +1647,19 @@ retained pending-payment recovery and reconciliation while Off. `boot.upgrade.te
 upgrade data check's repair and replaced-trigger refusal; it reports no startup repair warning.
 The installer and stored-text comparison retain the limits above.
 
+**2026-11-16, A1308 pa2b:** the same installer and comparison also accept named definitions from
+the selected sets' migration SQL. Payments declares `payments_guard_update` and
+`payments_no_delete` in its descriptor and the migration manifest; `payments` itself is not
+declared append-only. No other manual trigger is selected. Boot pass 2 and the contained upgrade
+check use the installed-module selection above, including Payments Off; the first boot pass is
+unchanged. The existing `append_only.triggers_restored/changed` codes can therefore name these
+conditional/manual rules too. `boot.failed-start.test.ts` checks repair of both names with the
+payment row and journal retained, the warning and altered-guard refusal; `boot.restore.test.ts`
+checks a payment guard removed while Payments is Off, and `boot.upgrade.test.ts` checks its altered
+guard refusal. `payments-guard.test.ts` compares both real SQL definitions with SQLite before and
+after repair and retains its capture checks. This supersedes the three retired payment-table
+examples in the A646 paragraph, not its selection or stored-text limits.
+
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
 `scripts/classification-complete.test.ts` (every table each migration set's `drizzle/` creates is

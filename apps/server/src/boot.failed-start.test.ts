@@ -1,6 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { payments } from "@waitron/payments";
+import { sql } from "drizzle-orm";
 import { connect, createServer as createNetServer } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1199,6 +1201,84 @@ describe("a start that fails after the venue folder is opened gives the folder b
 });
 
 describe("append-only triggers at boot", () => {
+  it("repairs both payment guards with Payments Off, retaining payment and journal", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir({ "fiscal-none": false, payments: false }, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const store = await openVenueDatabase(venueDir);
+    let before;
+    try {
+      const order = await seedWorkingOrder(store.venue, { source: "operator_script" });
+      await store.venue.insert(payments).values({
+        workingOrderId: order.id,
+        source: "operator_script",
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
+        provider: "fake",
+        paymentRef: "retained",
+        amount: 1000,
+        state: "failed",
+      });
+      before = {
+        payments: store.venue.all(sql`select * from payments`),
+        journal: store.venue.all(sql`select * from __drizzle_migrations_payments`),
+      };
+      store.venue.run(sql`drop trigger payments_guard_update`);
+      store.venue.run(sql`drop trigger payments_no_delete`);
+    } finally {
+      await store.close();
+    }
+    const lines = await withLoggedLines(async () => {
+      const server = await startServer(env);
+      try {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+      } finally {
+        await server.close();
+      }
+    });
+    const reopened = await openVenueDatabase(venueDir);
+    try {
+      expect({
+        payments: reopened.venue.all(sql`select * from payments`),
+        journal: reopened.venue.all(sql`select * from __drizzle_migrations_payments`),
+      }).toEqual(before);
+      expect(
+        reopened.venue.all(
+          sql`select name from sqlite_master where name in ('payments_guard_update', 'payments_no_delete') order by name`,
+        ),
+      ).toEqual([{ name: "payments_guard_update" }, { name: "payments_no_delete" }]);
+    } finally {
+      await reopened.close();
+    }
+    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+      expect.objectContaining({
+        level: "warn",
+        triggers: ["payments_guard_update", "payments_no_delete"],
+      }),
+    ]);
+  }, 60_000);
+
+  it("refuses an altered payment guard with Payments Off and gives the folder back", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir({ "fiscal-none": false, payments: false }, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    tamper(
+      venueDir,
+      "drop trigger payments_guard_update; create trigger payments_guard_update before update on payments begin select 1; end",
+    );
+    const outcome = await startServer(env).then(
+      async (server) => {
+        await server.close();
+        return server;
+      },
+      (error: unknown) => error,
+    );
+    expect(outcome).toMatchObject({
+      code: "append_only.triggers_changed",
+      params: { missing: [], altered: ["payments_guard_update"] },
+    });
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("a seeded venue starts, serves /health and closes", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });

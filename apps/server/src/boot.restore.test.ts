@@ -784,9 +784,9 @@ describe("startServer — the append-only watch in trading mode", () => {
     ],
     ["dropped", [`drop trigger ${UPDATE};`], { missing: [UPDATE], altered: [] }, false],
     [
-      "dropped while Payments is Off",
-      ["drop trigger sales_append_only_update;"],
-      { missing: ["sales_append_only_update"], altered: [] },
+      "dropped payment guard while Payments is Off",
+      ["drop trigger payments_no_delete;"],
+      { missing: ["payments_no_delete"], altered: [] },
       true,
     ],
   ] as const) {
@@ -794,7 +794,11 @@ describe("startServer — the append-only watch in trading mode", () => {
       await withMockedKill(async (kills) => {
         const box = await startWatched(paymentsOff);
         try {
-          await delay(INTERVAL_MS * 5);
+          await vi.waitFor(() =>
+            expect(box.server.health.readJobs?.()["fiscal.tamper_watch"]).toMatchObject({
+              lastOkAt: expect.any(String),
+            }),
+          );
           expect(kills).toEqual([]);
 
           await box.tamper(statements);
