@@ -454,10 +454,13 @@ adds the date of the sale to a later invoice and charges that day's rates, which
 adviser's answer. Three points don't yet:
 
 - *When the meal ends.* The branch takes the day the last dish was served, when that falls on an
-  earlier trading day than the payment. In a venue whose trading day turns over at midnight, a table
-  served its last dish at 23:40 and paying at 00:30 gets the day before as its date of sale. The
-  adviser speaks of the day the meal *ends*; if the meal ends when the guests finish and leave, that is the
-  later day. Thursday's question 3 asks which.
+  earlier trading day than the payment. With D1, the meal ends when staff close the table, which is
+  also when the ticket is issued, so the ticket's own date is the date of the meal (owner,
+  16 November). The branch's rule is then needed only as a fallback, for a table closed on a later
+  trading day than its last dish, such as a bill left open overnight by mistake. In a venue whose
+  trading day turns over at midnight, the fallback also catches a table served its last dish at
+  23:40 that pays at 00:30, and gives it the day before as its date of sale; the adviser speaks of
+  the day the meal *ends*, which would be the later day. Thursday's question 3(a) asks.
 - *Example 3 in Part B1* (paid Monday, dessert removed Wednesday) is the branch's own example 3.
   It relies on the ticket waiting for full payment, which the adviser rejects and you have
   dropped (D1).

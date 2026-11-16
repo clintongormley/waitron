@@ -100,13 +100,16 @@ carries the date of that moment.
 
 *We ask:*
 
-- (a) Does the meal end when the last dish is served, or when the guests finish and leave?
-  Example: the last dish is served at 23:40 on the 1st; the guests have coffee, then pay and leave
-  at 00:30 on the 2nd. Waitron decides by the venue's trading day, which ends at the start-of-day
-  time the venue sets. With 05:00, the meal belongs to the evening's service: the ticket is dated
-  the 2nd, with no separate date of the meal. With midnight, the ticket is dated the 2nd and shows
-  the 1st as the date of the meal. Is dating by the venue's trading day acceptable, or is the date
-  of the meal always the day the guests leave?
+- (a) Waitron takes the meal to end when staff close the table, as above, and the ticket carries
+  that date. A separate date of the meal appears only when the table is closed on a later trading
+  day than its last dish was served (the venue's trading day ends at the start-of-day time it
+  sets): for example a bill left open overnight by mistake, whose date of the meal is then the day
+  of its last dish. Example: the last dish is served at 23:40 on the 1st; the guests have coffee,
+  then pay and leave at 00:30 on the 2nd. With a 05:00 start of day, both fall in the evening's
+  service: the ticket is dated the 2nd, with no separate date of the meal. With midnight, the
+  ticket is dated the 2nd and shows the 1st as the date of the meal. Is it right that the meal ends
+  when the table is closed, rather than when the last dish is served? And is the trading-day rule
+  acceptable for a table closed late?
 - (b) A regular eats on Monday and, by arrangement, pays on Thursday. Waitron issues the ticket on
   Monday, when the meal ends, still unpaid, and records Thursday's payment against it. Is that
   right? Answer 1.4 mentions invoices issued after payment by bank transfer; answer 1.3 says
@@ -592,13 +595,17 @@ todo. Lleva la fecha de ese momento.
 
 *Preguntamos:*
 
-- (a) ¿Termina la comida al servirse el último plato, o cuando los clientes acaban y se marchan?
-  Ejemplo: el último plato se sirve a las 23:40 del día 1; después toman café, y pagan y se marchan
-  a las 00:30 del día 2. Waitron lo decide según la jornada comercial del local, que termina a la
-  hora de inicio del día que el local fija. Con las 05:00, la comida pertenece al servicio de la
-  noche: el tique se fecha el día 2, sin otra fecha de operación. Con la medianoche, el tique se
-  fecha el día 2 e indica el día 1 como fecha de la operación. ¿Es aceptable fechar según la jornada
-  comercial del local, o la fecha de la operación es siempre el día en que se marchan los clientes?
+- (a) Waitron considera que la comida termina cuando el personal cierra la mesa, como se indica
+  arriba, y el tique lleva esa fecha. Solo se indica otra fecha de operación cuando la mesa se
+  cierra en una jornada comercial posterior a la de su último plato (la jornada termina a la hora de
+  inicio del día que fija el local): por ejemplo, una cuenta que se dejó abierta por error durante la
+  noche, cuya fecha de operación es entonces el día de su último plato. Ejemplo: el último plato se
+  sirve a las 23:40 del día 1; después toman café, y pagan y se marchan a las 00:30 del día 2. Con el
+  inicio del día a las 05:00, ambos momentos caen en el servicio de la noche: el tique se fecha el
+  día 2, sin otra fecha de operación. Con la medianoche, el tique se fecha el día 2 e indica el día 1
+  como fecha de la operación. ¿Es correcto que la comida termina al cerrarse la mesa, y no al
+  servirse el último plato? ¿Y es aceptable la regla de la jornada comercial para una mesa cerrada
+  tarde?
 - (b) Un cliente habitual come el lunes y, por acuerdo, paga el jueves. Waitron expide el tique el
   lunes, al terminar la comida, aún sin cobrar, y registra sobre él el pago del jueves. ¿Es
   correcto? Su respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que
