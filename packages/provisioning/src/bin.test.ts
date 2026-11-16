@@ -95,19 +95,22 @@ describe("runBin", () => {
   it("saves module settings only while the venue it opened is open", async () => {
     const directory = await mkdtemp(join(tmpdir(), "waitron-provision-bin-"));
     const config = { overrides: new Map([["fiscal-none", false]]) };
+    let store: Awaited<ReturnType<CliDeps["openVenue"]>> | undefined;
     try {
       const deps = await depsOf();
-      const store = await deps.openVenue(directory);
+      store = await deps.openVenue(directory);
       await runMigrations(store.venue, CORE_MIGRATIONS);
       await deps.writeModuleConfig!(config);
       expect((await readSettings(store.venue, modulesSettings(ALL_MODULES))).doc).toEqual({
         modules: { "fiscal-none": false },
       });
       await store.close();
+      store = undefined;
       await expect(deps.writeModuleConfig!(config)).rejects.toMatchObject({
         code: "setup.not_ready",
       });
     } finally {
+      await store?.close();
       await rm(directory, { recursive: true, force: true });
     }
   });
