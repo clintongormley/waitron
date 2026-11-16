@@ -5,7 +5,7 @@ ones, and the trading watch stops on missing or altered guards, including with P
 Ordinary capture remains allowed. Pa1 (#3465) landed as `4f5b758700`; **the owner lands pa2**.
 
 **Authority:** The [design additions table](../specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)
-and [build order](2026-11-08-a1308-build-order.md) assign the delete refusal to pa2; the original plan
+and [build order](2026-11-08-a1308-build-order.md) assign the delete refusal to pa2; the original plan at `5b5d51f3b7`
 records the owner's 9 November confirmation. Watcher 16 November 06:53 cleared pa1 with its deletion
 and boot/watch gaps disclosed; 07:02 requires this expanded forecast, one Claude read and
 `PLAN FOR APPROVAL` before building (lane E `questions.md`). This is watcher clearance, not new owner
@@ -27,7 +27,7 @@ Reuse the existing store installer and catalogue comparison. Keep SQL solely in
 All migration callers use `migrationOptionsFor`: boot/upgrade, restore/placement/preview,
 provisioning, rejoin, dev setup/onboarding, bench and fixtures. Preserve that shared path.
 `useVenueDb` already saves/restores all triggers during reset; leave its interface alone. Register the definition error in `packages/migrations/src/errors.ts`; account for `firstSetupDatabaseIsEmpty` treating it as not empty and backup-target resolution also reading the definitions.
-**Out:** new data structures, a general SQL parser, payment-specific server imports, unrelated manual
+**Out:** new stored records, a general SQL parser, payment-specific server imports, unrelated manual
 triggers, changes to pa1's predicate, refunds, payment-policy retirement and fiscal work.
 
 ## TDD tasks
@@ -80,4 +80,4 @@ slice rules' exclusions. This is an estimate; material growth goes to the watche
 **PR first line:** “Every venue is reset: payments; backups and exports from before this cannot be
 restored or imported.” Say the added restore/watch work follows pa1's removal of the old triggers;
 include `Sale-path read changed:` with the actual answer, and say the owner lands it. Disclose that the existing `append_only.triggers_restored/changed` messages now also name these conditional/manual guards. No tests or
-experiments were run to write this plan. Claude review and watcher clearance remain required.
+experiments were run to write this plan. Claude reviewed the approach on 16 November (335 seconds); the driver applied its concrete corrections and cut duplicate wiring cases. Watcher clearance of the expanded scope remains required.
