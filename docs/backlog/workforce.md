@@ -166,15 +166,6 @@ each date instead, with a test that changes the start and checks the painter and
 month. Detail: A788's design, `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`
 ("The staffing painters read the venue's first start").
 
-## A780. The staffing painters read holder names they never show (left open by #1828)
-
-Both
-staff-role feeds (`staff-roles` and `painter-staff-roles`, `packages/staffing/src/dashboard/client.ts`)
-read `GET /management-api/staffing/staff-roles`, which always looks up every holder's name
-(`listStaffRolesWithHolderNames`, `packages/staffing/src/staff-roles.ts`). The painters use only
-each role's name, colour and holder ids. Give the painters a read without the names (a query
-parameter or a second route), keeping the Staff roles list's.
-
 ## Nothing in the product closes a pay period
 
 (found by A793's design, read). The workforce
@@ -228,13 +219,6 @@ hours, rate overrides by condition of the hour, paid non-worked states) turning 
 scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
 numbers; needs public holidays for every year it pays (today only 2026 exists), national,
 regional and local. Gated on the labour advisor; not fiscal.
-
-## A link look for `wt-button` (left open by #1841).
-
-The Rota's picker and open-slots menu draw
-"Show everyone" and "Another shift…" as underlined links by restyling a `wt-button` locally
-(`slot-picker.ts`, `open-slots-menu.ts`). A `link` variant on the shared button would replace both;
-it changes a shared primitive, so it needs its token-painting and a11y tests.
 
 ## Staffing's day box: each area's staff roles and times.
 

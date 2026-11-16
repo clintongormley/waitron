@@ -38,16 +38,6 @@ export class SlotPicker extends LitElement {
       .foot [data-test="cancel"] {
         margin-inline-start: auto;
       }
-      /* A button drawn as a link: it changes the list, it does not navigate. */
-      wt-button.link::part(button) {
-        min-width: 0;
-        padding-inline: 0;
-        border-color: transparent;
-        background: transparent;
-        color: var(--wt-color-primary-text);
-        font-weight: var(--wt-font-weight-normal);
-        text-decoration: underline;
-      }
       .title {
         margin: 0;
         font-size: var(--wt-font-size-md);
@@ -197,8 +187,7 @@ export class SlotPicker extends LitElement {
           this.everyone
             ? nothing
             : html`<wt-button
-                class="link"
-                variant="ghost"
+                variant="link"
                 data-test="show-everyone"
                 ?disabled=${this.busy}
                 @click=${() => {

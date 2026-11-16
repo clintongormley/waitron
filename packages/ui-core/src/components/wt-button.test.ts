@@ -439,3 +439,24 @@ describe("a button that starts loading while focused", () => {
     }
   });
 });
+
+test("link paint follows its text token with no box or inline padding at every size", async () => {
+  for (const size of ["sm", "md", "lg"]) {
+    const el = await mount(`<wt-button variant="link" size="${size}">Show everyone</wt-button>`);
+    el.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+    const button = el.shadowRoot!.querySelector("button")!;
+    const style = getComputedStyle(button);
+    expect(style.color).toBe("rgb(4, 5, 6)");
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(style.borderTopColor).toBe("rgba(0, 0, 0, 0)");
+    expect(style.textDecorationLine).toBe("underline");
+    expect(style.fontWeight).toBe(
+      getComputedStyle(el).getPropertyValue("--wt-font-weight-normal").trim(),
+    );
+    expect(style.paddingInlineStart).toBe("0px");
+    expect(style.paddingInlineEnd).toBe("0px");
+    await userEvent.hover(button);
+    expect(getComputedStyle(button).borderTopColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(button).color).toBe("rgb(4, 5, 6)");
+  }
+});

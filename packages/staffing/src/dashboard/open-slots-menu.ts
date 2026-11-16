@@ -41,16 +41,6 @@ export class OpenSlotsMenu extends LitElement {
       [data-test="cancel"] {
         margin-inline-start: auto;
       }
-      /* A button drawn as a link: it changes the list, it does not navigate. */
-      wt-button.link::part(button) {
-        min-width: 0;
-        padding-inline: 0;
-        border-color: transparent;
-        background: transparent;
-        color: var(--wt-color-primary-text);
-        font-weight: var(--wt-font-weight-normal);
-        text-decoration: underline;
-      }
       .title {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-md);
@@ -163,8 +153,7 @@ export class OpenSlotsMenu extends LitElement {
       ${own.length + other.length === 0 ? html`<p>${t("staffing.rota.no_open")}</p>` : nothing}
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       <wt-button
-        class="link"
-        variant="ghost"
+        variant="link"
         data-test="another-shift"
         ?disabled=${this.busy}
         @click=${() =>

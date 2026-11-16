@@ -172,6 +172,7 @@ describe("a day's open slots", () => {
         once: true,
       });
     root.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    expect(root.querySelector("[data-test=another-shift]")!.getAttribute("variant")).toBe("link");
     root.querySelector<HTMLElement>("[data-test=another-shift]")!.click();
     expect(sent).toEqual([
       ["choose-slot", { slot: el.week.days[4]!.areas[0]!.match.slots[0]!.slot }],

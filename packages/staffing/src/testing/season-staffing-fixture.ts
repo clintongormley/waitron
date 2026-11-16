@@ -88,7 +88,8 @@ export function seasonApi(options: SeasonApiOptions = {}) {
   const save = options.save ?? (async () => undefined);
   const staffRoles = options.staffRoles ?? (async () => STAFF_ROLES);
   const request = vi.fn(async (path: string, method: string, body?: unknown) => {
-    if (path === "/management-api/staffing/staff-roles") return { staffRoles: await staffRoles() };
+    if (path.split("?")[0] === "/management-api/staffing/staff-roles")
+      return { staffRoles: await staffRoles() };
     if (path === "/management-api/staff") return [];
     const seasonId = decodeURIComponent(/\/staffing\/seasons\/(.+)$/.exec(path)![1]!);
     if (method === "GET") return read(seasonId);

@@ -55,7 +55,16 @@ export class StaffingApi {
     readonly liveData?: LiveData,
   ) {}
 
-  /** Keeps `apply` fed with the staff roles in position order; resolves after the first read. */
+  watchStaffRoles(
+    queries: QueryController,
+    apply: (staffRoles: ListedStaffRole[]) => void | Promise<void>,
+    query?: "staff-roles",
+  ): Promise<void>;
+  watchStaffRoles(
+    queries: QueryController,
+    apply: (staffRoles: StaffRole[]) => void | Promise<void>,
+    query: "painter-staff-roles",
+  ): Promise<void>;
   watchStaffRoles(
     queries: QueryController,
     apply: (staffRoles: ListedStaffRole[]) => void | Promise<void>,
@@ -68,9 +77,12 @@ export class StaffingApi {
         dependencies: QUERY_DEPENDENCIES[query].map((type) => ({ type })),
         read: async () =>
           (
-            await this.request<{ staffRoles: ListedStaffRole[] }>(BASE, "GET", undefined, {
-              passive: true,
-            })
+            await this.request<{ staffRoles: ListedStaffRole[] }>(
+              query === "painter-staff-roles" ? `${BASE}?holderNames=false` : BASE,
+              "GET",
+              undefined,
+              { passive: true },
+            )
           ).staffRoles,
       },
       apply,

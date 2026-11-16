@@ -31,17 +31,20 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  test.each(["primary", "secondary", "danger", "ghost"] as const)("%s variant", async (variant) => {
-    await mountThemed(`<wt-button variant="${variant}">Pay</wt-button>`, theme);
-    await expectNoA11yViolations(host);
-  });
+  test.each(["primary", "secondary", "danger", "ghost", "link"] as const)(
+    "%s variant",
+    async (variant) => {
+      await mountThemed(`<wt-button variant="${variant}">Pay</wt-button>`, theme);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   test("disabled button", async () => {
     await mountThemed("<wt-button disabled>Pay</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
 
-  test.each(["primary", "danger"] as const)("disabled %s variant", async (variant) => {
+  test.each(["primary", "danger", "link"] as const)("disabled %s variant", async (variant) => {
     await mountThemed(`<wt-button variant="${variant}" disabled>Save</wt-button>`, theme);
     await expectNoA11yViolations(host);
   });
@@ -59,8 +62,8 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 
   // The loading state nests a wt-spinner; it must be decorative so the button's accessible name stays
   // its own (localized) label and aria-busy carries the state.
-  test("loading button", async () => {
-    await mountThemed("<wt-button loading>Searching…</wt-button>", theme);
+  test.each(["secondary", "link"])("loading %s button", async (variant) => {
+    await mountThemed(`<wt-button variant="${variant}" loading>Searching…</wt-button>`, theme);
     await expectNoA11yViolations(host);
   });
 
@@ -87,7 +90,7 @@ describe.each(["light", "dark"] as const)("wt-button hovered a11y (%s theme)", (
   describe.each(["--wt-color-surface", "--wt-color-surface-raised"] as const)(
     "on %s",
     (surface) => {
-      test.each(["primary", "danger", "secondary", "ghost"] as const)(
+      test.each(["primary", "danger", "secondary", "ghost", "link"] as const)(
         "%s variant under the pointer",
         async (variant) => {
           const inner = await mountOn(surface, variant);
@@ -99,7 +102,7 @@ describe.each(["light", "dark"] as const)("wt-button hovered a11y (%s theme)", (
     },
   );
 
-  test.each(["primary", "danger"] as const)(
+  test.each(["primary", "danger", "link"] as const)(
     "%s variant focused from the keyboard and under the pointer",
     async (variant) => {
       const inner = await mountOn("--wt-color-surface", variant);

@@ -1429,6 +1429,15 @@ row menu's Edit. The drag handle and the row menu are lifted above it and keep t
 and a hovered row, or one holding focus, paints `--wt-color-bg`. Guard: the "attached row" cases in
 `apps/dashboard/src/widgets/product-editor.test.ts`.
 
+`wt-button variant="link"` draws an action as underlined text in
+`--wt-color-primary-text`, at `--wt-font-weight-normal`, with a transparent fill and border.
+Use it for an action that changes a list or opens a choice, such as the Rota's **Show everyone**
+and **Another shift…**. It remains a native button; navigation still uses a link.
+It has zero inline padding at every size, keeping the button's minimum width and each size's
+minimum height and block padding. Hover keeps the same paint. Disabled and loading follow the
+ordinary button behaviour below. In Windows contrast themes it uses `ButtonText`, disabled or
+loading text uses `GrayText`, its border blends with `Canvas`, and keyboard focus uses `Highlight`.
+
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
 one icon with its own `aria-label` rather than a text label — the floor plan editor's Undo and
 Redo, for one. It replaces the button's own padding and border radius; it does not change what

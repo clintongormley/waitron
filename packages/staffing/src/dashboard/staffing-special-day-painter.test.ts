@@ -489,7 +489,9 @@ it("keeps its draft when taken off the page and put back, reading only the staff
   parent.append(painter);
   await settle(painter);
   expect(reads(request)).toHaveLength(1);
-  expect(request.mock.calls.filter(([path]) => path.endsWith("/staff-roles"))).toHaveLength(2);
+  expect(
+    request.mock.calls.filter(([path]) => path.split("?")[0]!.endsWith("/staff-roles")),
+  ).toHaveLength(2);
   expect(grid(painter).days.get("day")).toEqual([dinner]);
   expect(frame(painter).dirty).toBe(true);
 });
@@ -915,7 +917,8 @@ it("A710 restores the native paint-row How many text, including a correction equ
 it("reads the staff roles again when a role changes, not when a person does", async () => {
   const liveData = new LiveData();
   const { painter, request } = await mount({ liveData });
-  const roleReads = () => request.mock.calls.filter(([path]) => path.endsWith("/staff-roles"));
+  const roleReads = () =>
+    request.mock.calls.filter(([path]) => path.split("?")[0]!.endsWith("/staff-roles"));
   expect(roleReads()).toHaveLength(1);
   liveData.invalidate([{ type: "persons" }]);
   await settle(painter);
