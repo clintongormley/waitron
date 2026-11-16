@@ -464,7 +464,12 @@ describe("opening a generation", () => {
       h.store.failNext({
         operation: "put",
         key: pointerKey(),
-        error: new AppError("backup.stream_request_failed", { operation: "put", status: 404 }),
+        error: new AppError("backup.stream_request_failed", {
+          operation: "put",
+          key: pointerKey(),
+          status: 404,
+          name: "NoSuchKey",
+        }),
       });
     h.store.upload(fullCopyOf(h.supervisor.status().generation!));
     await h.clock.until(() => h.supervisor.status().state !== "opening", 8);
@@ -474,6 +479,41 @@ describe("opening a generation", () => {
     );
     expect(h.litestream.replicas()).toHaveLength(1);
   });
+
+  it.each([412, 404])(
+    "retries a %s refusal when the original pointer is unchanged",
+    async (status) => {
+      const h = await harness();
+      await writePointer(
+        h.store,
+        VENUE,
+        pointerFrom("node-b", 2, "gen-2-node-b-20260923T110000Z"),
+        null,
+      );
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      h.store.failNext({
+        operation: "put",
+        key: pointerKey(),
+        error:
+          status === 412
+            ? new AppError("backup.stream_precondition_failed", { key: pointerKey() })
+            : new AppError("backup.stream_request_failed", {
+                operation: "put",
+                key: pointerKey(),
+                status: 404,
+                name: "NoSuchKey",
+              }),
+      });
+      h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+      await h.clock.until(() => h.supervisor.status().state !== "opening");
+      expect(h.supervisor.status().state).toBe("streaming");
+      expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(
+        h.supervisor.status().generation,
+      );
+      expect(h.clock.slept).toContain(OPEN_RETRY_MS);
+    },
+  );
 
   it.each([
     { status: 412, replacing: false },
@@ -496,7 +536,12 @@ describe("opening a generation", () => {
       const error =
         status === 412
           ? new AppError("backup.stream_precondition_failed", { key: pointerKey() })
-          : new AppError("backup.stream_request_failed", { operation: "put", status: 404 });
+          : new AppError("backup.stream_request_failed", {
+              operation: "put",
+              key: pointerKey(),
+              status: 404,
+              name: "NoSuchKey",
+            });
       if (replacing) {
         await h.store.delete(pointerKey());
         h.store.failNext({ operation: "put", key: pointerKey(), error });

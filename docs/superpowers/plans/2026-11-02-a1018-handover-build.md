@@ -1,5 +1,8 @@
 # A1018 — controlled and emergency handover between two boxes — Build Plan
 
+_2026-11-16: [The bucket stop-order change](2026-11-16-bucket-pointer-and-stop.md) moves only
+the Cloud snapshot wait after the stream stop; venue-database writers still stop before the stream._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

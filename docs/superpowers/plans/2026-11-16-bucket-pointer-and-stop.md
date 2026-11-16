@@ -21,3 +21,10 @@ Claude initial and corrections reads completed; watcher cleared this smaller rou
 Run those focused suites; normal push hook/current-head CI and concurrency review follow. Record changed pointer/order checks in PR “Changed test checks”. Delete the completed pointer backlog entry, narrow the shutdown bullet and its bundle/index in `docs/backlog/box.md` and `docs/backlog.md`. Leave level-0 growth and status-400 work untouched. No records, migrations, frameworks or unrelated cleanup.
 
 **Estimate:** production +65–100/−20–35 lines; tests +200–290/−25–45; documentation +15–25/−20–30.
+
+_2026-11-16 build review: a refused write followed by the unchanged original version is retried
+with the existing wait. Its presence alone does not establish that another box wrote._
+
+_2026-11-16 at 16:12 CET: the watcher chose the reviewer's smaller route. Remove the extra
+uncertain-create reread and exact-current-byte success check; the existing write helper continues
+to recognise a landed write on its conditional retry. Keep the unchanged-version correction above._

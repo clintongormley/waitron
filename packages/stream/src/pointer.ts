@@ -86,7 +86,7 @@ export function verifyPointer(pointer: SignedPointer, publicKeySpki: string): bo
   );
 }
 
-export function pointerBytes(pointer: SignedPointer): Uint8Array {
+function encode(pointer: SignedPointer): Uint8Array {
   return new TextEncoder().encode(canonicalize(pointer as unknown as CanonicalValue));
 }
 
@@ -146,7 +146,7 @@ export class SentPointers {
   }
 
   add(pointer: SignedPointer): void {
-    this.#sent.add(Buffer.from(pointerBytes(pointer)).toString("base64"));
+    this.#sent.add(Buffer.from(encode(pointer)).toString("base64"));
     if (this.#sent.size > SENT_POINTERS_KEPT) {
       this.#sent.delete(this.#sent.values().next().value!);
     }
@@ -177,7 +177,7 @@ export async function writePointer(
   const stored = await putOwnBytes(
     store,
     pointerKey(),
-    pointerBytes(pointer),
+    encode(pointer),
     previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
     sent && ((bytes) => sent.includes(bytes)),
     call,

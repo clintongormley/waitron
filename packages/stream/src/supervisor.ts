@@ -25,7 +25,6 @@ import {
 import { generationName, isKeySegment } from "./names.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
-  pointerBytes,
   pointerKey,
   pointerMessage,
   readPointer,
@@ -540,7 +539,7 @@ export class StreamSupervisor {
     }
   }
 
-  /** Only exact recorded bytes identify our own write; absence permits a create-only retry. */
+  /** Absence permits a create-only retry; recorded bytes identify a late write by this box. */
   async #movePointer(
     pointer: SignedPointer,
     previousEtag: string | null,
@@ -580,7 +579,7 @@ export class StreamSupervisor {
             hasCode(error, "backup.stream_request_failed") &&
             error.params.operation === "put" &&
             error.params.status === 404);
-        if (refused || expected === null) {
+        if (refused) {
           // A failed read never proves absence, nor permits another refused create.
           let current: Awaited<ReturnType<ObjectStore["get"]>>;
           for (;;) {
@@ -595,7 +594,10 @@ export class StreamSupervisor {
             }
           }
           if (current !== null) {
-            if (Buffer.compare(current.body, pointerBytes(pointer)) === 0) return true;
+            if (current.etag === expected) {
+              await this.#sleep(OPEN_RETRY_MS, signal);
+              continue;
+            }
             if (!this.#sentPointers.includes(current.body)) return "pointer_changed";
             expected = current.etag;
           } else {
