@@ -589,8 +589,9 @@ export interface OrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
-  /** Present only when every kitchen item of the group that the waiter has asked for and is not yet
-   *  served whole is ready (recorded ready, or made here), and at least one such item exists. */
+  /** Present when the group is fired, dishes are left to serve and every kitchen item left to serve
+   *  is ready (recorded ready, or made here); or when at least one kitchen item the waiter asked for
+   *  is left to serve and every such item is ready. */
   ready?: true;
   lineIds: string[];
   courseIds: string[];
