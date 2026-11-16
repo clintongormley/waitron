@@ -2615,7 +2615,7 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-line-course-static="3"]')).toBeNull();
   });
 
-  describe("send / cancel line actions (C5)", () => {
+  describe("send / cancel line actions", () => {
     // A line the kitchen has already STARTED (fired + preparing/ready) — the cancel-only case.
     const preparingLine: TabLine = { ...pendingLine, lineNo: 1, state: "preparing" };
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };

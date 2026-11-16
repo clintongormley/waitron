@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import type { StreamStatus, StreamView } from "@waitron/stream";
-import { DEFAULT_DUTY_TIMINGS, DEFAULT_MAX_TICK_MS } from "./config.js";
 import type { DrainResult } from "@waitron/fiscal";
 import type { TickResult } from "@waitron/payments";
+import { DEFAULT_DUTY_TIMINGS, DEFAULT_MAX_TICK_MS } from "./config.js";
 import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
 import {

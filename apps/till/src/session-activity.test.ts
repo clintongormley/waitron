@@ -184,7 +184,7 @@ describe("SessionActivity", () => {
     expect(wl.request).toHaveBeenCalledTimes(2);
   });
 
-  it("releases a wake lock whose request resolves AFTER stop() — no strand (C3)", async () => {
+  it("releases a wake lock whose request resolves AFTER stop() — no strand", async () => {
     // The request is in flight when stop()/logout happens; it resolves afterwards. The late sentinel
     // must be released, not stored — a stored one would keep the screen awake with no way to give it
     // back.
@@ -206,7 +206,7 @@ describe("SessionActivity", () => {
     expect(sentinel.release).toHaveBeenCalledTimes(1);
   });
 
-  it("serializes overlapping acquisitions to a single retained sentinel (C3)", async () => {
+  it("serializes overlapping acquisitions to a single retained sentinel", async () => {
     // Two requests in flight at once (e.g. reacquire racing an earlier acquire): the superseded one is
     // released, the current one retained, so stop() later has exactly one live sentinel to give back —
     // never a stranded one.
@@ -267,7 +267,7 @@ describe("SessionActivity", () => {
     expect(setTimer).not.toHaveBeenCalled();
   });
 
-  it("keeps the newer sentinel when an older request rejects after it resolved (C3)", async () => {
+  it("keeps the newer sentinel when an older request rejects after it resolved", async () => {
     const settlers: Array<{ resolve: (s: unknown) => void; reject: (e: unknown) => void }> = [];
     const request = vi.fn(
       () =>

@@ -110,18 +110,13 @@ const NO_DRAWERS_OR_DEFAULTS = {
 };
 
 describe("device-profile store against a real migrated database", () => {
-  let managerSession: string;
-
-  beforeEach(async () => {
-    await seedTaxpayer(suite.db);
-    managerSession = await seedSession("manager");
-  });
-
   it("round-trips a manager-authored profile through create → get with validated capabilities", async () => {
+    await seedTaxpayer(suite.db);
+    const session = await seedSession("manager");
     try {
       const created = await inTx((tx) =>
         createDeviceProfile(tx, {
-          managementSessionId: managerSession,
+          managementSessionId: session,
           name: "Front counter",
           formFactor: "till",
 
