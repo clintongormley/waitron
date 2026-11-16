@@ -19,7 +19,9 @@ export type BlockReason =
   | "variant_removed"
   | "extra_removed"
   | "extra_unavailable"
-  | "unit_changed";
+  | "unit_changed"
+  | "choice_required"
+  | "extras_limit";
 
 export interface LineBlock {
   reason: BlockReason;
@@ -128,6 +130,22 @@ export function lineBlock(
     if (label === undefined)
       return { reason: "extra_removed", name: answeredLabelName(line, answer.labelId) };
     if (!label.available) return { reason: "extra_unavailable", name: label.name };
+  }
+  for (const list of offer.offeredModifiers)
+    if (list.kind === "options" && !line.options?.some((answer) => answer.listId === list.id))
+      return { reason: "choice_required", name: list.name };
+  for (const list of extrasLists) {
+    if (list.kind !== "extras") continue;
+    let total = 0;
+    for (const pick of line.extras ?? []) {
+      if (pick.listId !== list.id) continue;
+      const item = list.items.find((candidate) => candidate.productId === pick.productId)!;
+      if (item.maxQuantity !== null && pick.quantity > item.maxQuantity)
+        return { reason: "extras_limit", name: list.name };
+      total += pick.quantity;
+    }
+    if (total < list.minPicks || (list.maxPicks !== null && total > list.maxPicks))
+      return { reason: "extras_limit", name: list.name };
   }
   return undefined;
 }

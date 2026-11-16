@@ -436,7 +436,12 @@ describe("the unavailable set", () => {
   });
 
   it.each([
-    ["the dish", { products: ["Burger"] }, {}, "unavailable"],
+    [
+      "the dish",
+      { products: ["Burger"] },
+      { options: [{ listId: "list-cooked", labelId: "rare" }] },
+      "unavailable",
+    ],
     [
       "an option label it answers",
       { optionLabels: ["rare"] },
@@ -456,6 +461,7 @@ describe("the unavailable set", () => {
             quantity: 1,
           },
         ],
+        options: [{ listId: "list-cooked", labelId: "rare" }],
       },
       "extra_unavailable",
     ],
@@ -657,7 +663,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi.fn().mockResolvedValue(menu("v2", [burgerOffer()])),
     });
     await toCounter(el);
-    add(el, "Burger");
+    add(el, "Burger", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     add(el, "Lemonade");
     api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);
@@ -696,6 +702,7 @@ describe("a basket that spans a publish", () => {
           quantity: 1,
         },
       ],
+      options: [{ listId: "list-cooked", labelId: "rare" }],
     });
     api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);
@@ -707,7 +714,7 @@ describe("a basket that spans a publish", () => {
     expect(payButton(el).disabled).toBe(true);
 
     counter(el).store.removeLine(0);
-    add(el, "Burger");
+    add(el, "Burger", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     await flush(el);
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
     expect(payButton(el).disabled).toBe(false);
@@ -731,6 +738,7 @@ describe("a basket that spans a publish", () => {
           quantity: 1,
         },
       ],
+      options: [{ listId: "list-cooked", labelId: "rare" }],
     });
     api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);
@@ -745,7 +753,7 @@ describe("a basket that spans a publish", () => {
     expect(payButton(el).disabled).toBe(true);
 
     counter(el).store.removeLine(0);
-    add(el, "Burger");
+    add(el, "Burger", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     await flush(el);
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
     expect(payButton(el).disabled).toBe(false);
@@ -968,7 +976,7 @@ describe("the other counter requests refused because the menu changed", () => {
         ),
     });
     await toCounter(el);
-    add(el, "Burger");
+    add(el, "Burger", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     add(el, "Lemonade");
     api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);

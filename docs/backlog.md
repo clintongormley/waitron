@@ -970,11 +970,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   seconds on every till; choose the interval and cost first.
   [Detail](backlog/till.md#refresh-the-floor-without-a-staff-action-in-a-zones-list-view--open-3d-w16)
 
-- **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
-  does not notice a publish that adds a required options list to a dish in the basket, or lowers a
-  list's picks limit, so the till takes the new version silently and the server then refuses
-  `options.label_required` (or `extras.limit_exceeded`): staff see a refusal where the dialog should
-  have asked. [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
+- **The till's menu reads (Task 7, #719).** — left open by the menus plan. Every menu poll waits
+  its turn in the write queue, and a till learns of a menu change only by polling, because the
+  dashboard's live-update route accepts the management cookie only.
+  [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
   name only, not a customer name. The till also searches displayed section names (A461).
