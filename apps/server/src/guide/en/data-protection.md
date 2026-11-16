@@ -255,7 +255,7 @@ dashboard.
 - What data: names, email address, telephone, role, PIN, password, passkeys, two-factor settings, a
   Google link for a person who signs in with Google, and when and on which device each person
   signed in.
-- Who receives it: your email provider, which delivers invitations and password-reset emails;
+- Who receives it: your email provider, which delivers invitations, password-reset emails and account-change notices;
   Google, if you let staff sign in with Google; and _anyone else you share it with_.
 - How long: _set with your adviser_.
 - Security: Waitron stores PINs and passwords only as salted hashes, a deliberately slow scrambled

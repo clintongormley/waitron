@@ -13,7 +13,7 @@ export const SECURITY_CHANGE_EMAIL_WORDS = {
       google_disconnected: "Google sign-in was disconnected from your account.",
     },
     text: (venue: string, change: string, when: string) =>
-      `${venue}: ${change} Changed on ${when}.\n\nIf this was not you, choose ‘I’ve forgotten my password’ on the Waitron sign-in page, or ask a venue administrator to reset your sign-in.`,
+      `${venue}: ${change} Changed on ${when}.\n\nIf this was not you, sign in, remove any sign-in method you don't recognise and change your password; if you can't sign in, ask a venue administrator to reset your sign-in.`,
   },
   es: {
     subject: "Cambió la seguridad de tu cuenta",
@@ -29,6 +29,6 @@ export const SECURITY_CHANGE_EMAIL_WORDS = {
       google_disconnected: "Se desconectó el acceso con Google de tu cuenta.",
     },
     text: (venue: string, change: string, when: string) =>
-      `${venue}: ${change} Cambio realizado el ${when}.\n\nSi no has sido tú, elige «¿Has olvidado tu contraseña?» en la página de acceso de Waitron, o pide a un administrador del local que restablezca tu acceso.`,
+      `${venue}: ${change} Cambio realizado el ${when}.\n\nSi no has sido tú, entra, elimina cualquier método de acceso que no reconozcas y cambia tu contraseña; si no puedes entrar, pide a un administrador del local que restablezca tu acceso.`,
   },
 } as const;

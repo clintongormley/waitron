@@ -1239,7 +1239,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [Detail and decision](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
 
 - **Account security email decisions still open** (owner, 2026-09-12): notify the old address on an
-  email change; wording when an administrator made the change; grouping a burst.
+  email change; notices for administrator or break-glass changes (none are sent yet and their wording
+  remains undecided); grouping a burst.
 
 - **Typed values are only partly checked — a generic phone-format check landed, a country-specific
   one has not.**

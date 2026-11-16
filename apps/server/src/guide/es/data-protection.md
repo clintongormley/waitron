@@ -271,8 +271,8 @@ caja o el panel.
 - Datos: nombres, correo, teléfono, rol, PIN, contraseña, llaves de acceso, verificación en dos
   pasos, un vínculo con Google para quien inicia sesión con Google, y cuándo y en qué dispositivo
   inició sesión cada persona.
-- Destinatarios: tu proveedor de correo, que entrega las invitaciones y los correos para restablecer
-  la contraseña; Google, si permites que el personal inicie sesión con Google; y _cualquier otro con
+- Destinatarios: tu proveedor de correo, que entrega las invitaciones, los correos para restablecer
+  la contraseña y los avisos de cambios en la cuenta; Google, si permites que el personal inicie sesión con Google; y _cualquier otro con
   quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_.
 - Seguridad: Waitron guarda los PIN y las contraseñas solo como hashes con sal, una forma codificada
