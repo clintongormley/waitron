@@ -924,7 +924,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   go below 0. Owner question asked 2026-10-16; (a), keeping it so, is built. Left open by A672.
   [Detail](backlog/till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 
-- **Two forms not yet on the Forms contract** (bundle of 2, size S). [Detail](backlog/till.md#bundle-two-forms-not-yet-on-the-forms-contract)
+- **Other till surfaces have not been checked against the forms rule.** The payment and weighing
+  steps, the dish options picker and the supervisor override dialog hold their buttons before any
+  press; whether a number pad or a choice picker counts as a form is open. Left open by C47.
+  [Detail](backlog/till.md#other-till-surfaces-have-not-been-checked-against-the-forms-rule)
 
 - **Floor plan editor at phone width** (bundle of 3, size S). Holds A1103, A1109. [Detail](backlog/till.md#bundle-floor-plan-editor-at-phone-width)
 

@@ -276,7 +276,7 @@ describe("till-schedule-screen", () => {
     });
   });
 
-  it("surfaces an overlap rejection as a friendly banner, never the raw code", async () => {
+  it("surfaces an overlap rejection as a friendly message below the time-off form, never the raw code", async () => {
     const api = stubApi({
       requestAbsence: vi.fn().mockRejectedValue({ code: "absence.overlaps" }),
     });
@@ -286,7 +286,12 @@ describe("till-schedule-screen", () => {
     await el.updateComplete;
     root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
     await flush(el);
-    expect(root(el).textContent).toContain(codeMessage("absence.overlaps"));
+    const actions = root(el).querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      ".request-absence wt-form-actions",
+    )!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.textContent).toContain(codeMessage("absence.overlaps"));
+    expect(actions.shadowRoot!.textContent).not.toContain("absence.overlaps");
     expect(root(el).textContent).not.toContain("absence.overlaps");
   });
 
@@ -309,8 +314,12 @@ describe("till-schedule-screen", () => {
     const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
     await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
     await el.updateComplete;
-    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.hasAttribute("disabled")).toBe(false);
     submit.click();
+    await el.updateComplete;
+    expect(root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!.error).toBe(
+      t("schedule.cover_colleague_required"),
+    );
     await setSelect(el, 'wt-combobox[name="cover-shift"]', "");
     await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
     await el.updateComplete;
@@ -326,8 +335,12 @@ describe("till-schedule-screen", () => {
     const submit = root(el).querySelector<HTMLElement>("wt-button.abs-submit")!;
     setInput(el, "wt-input.abs-from", "2026-07-01");
     await el.updateComplete;
-    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.hasAttribute("disabled")).toBe(false);
     submit.click();
+    await el.updateComplete;
+    expect(root(el).querySelector<HTMLElement & { error: string }>("wt-input.abs-to")!.error).toBe(
+      t("schedule.absence_to_required"),
+    );
     setInput(el, "wt-input.abs-from", "");
     setInput(el, "wt-input.abs-to", "2026-07-05");
     await el.updateComplete;
@@ -749,10 +762,13 @@ describe("till-schedule-screen", () => {
     await flush(el);
     expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
     expect(shift.value).toBe("");
-    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.hasAttribute("disabled")).toBe(false);
     submit.click();
     await flush(el);
     expect(api.requestSwap).not.toHaveBeenCalled();
+    expect(root(el).querySelector<WtCombobox>('wt-combobox[name="cover-shift"]')!.error).toBe(
+      t("schedule.cover_shift_required"),
+    );
   });
 
   it("drops a chosen colleague the staff list no longer offers, and keeps one it still offers", async () => {
@@ -779,10 +795,13 @@ describe("till-schedule-screen", () => {
     ];
     await el.updateComplete;
     expect(colleague.value).toBe("");
-    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.hasAttribute("disabled")).toBe(false);
     submit.click();
     await flush(el);
     expect(api.requestSwap).not.toHaveBeenCalled();
+    expect(root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!.error).toBe(
+      t("schedule.cover_colleague_required"),
+    );
   });
 
   it("drops a chosen colleague who becomes the operator", async () => {
@@ -797,10 +816,13 @@ describe("till-schedule-screen", () => {
     el.operatorPersonId = "col1";
     await el.updateComplete;
     expect(colleague.value).toBe("");
-    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.hasAttribute("disabled")).toBe(false);
     submit.click();
     await flush(el);
     expect(api.requestSwap).not.toHaveBeenCalled();
+    expect(root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!.error).toBe(
+      t("schedule.cover_colleague_required"),
+    );
   });
 });
 

@@ -84,8 +84,8 @@ it("a late refresh cannot replace a newer response or its refusal", async () => 
   f.getHours.mockReturnValueOnce(old.promise);
   const pending = f.controller.refresh();
   f.getHours.mockRejectedValueOnce({
+    personId: "ana",
     code: "attendance.not_permitted",
-    params: { personId: "ana" },
     status: 403,
   });
   await f.controller.refresh();

@@ -766,21 +766,17 @@ Cash taken on a handheld whose profile allows cash, with no float, is counted ag
 handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
 A238 (landed as #1164) and A239.
 
-## The till's schedule screen does not follow the forms rule yet
+## Other till surfaces have not been checked against the forms rule
 
-  (6) the till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow
-  the rule yet: its cover request keeps its button disabled until a shift and a colleague are
-  chosen, and its absence request until both dates are filled, before any press; neither shows a
-  message beside its fields; and a refusal shows as a `role="alert"` notice at the top of the card.
-  Other till surfaces were not checked against the rule either, and whether a number pad or a
-  choice picker counts as a form under it is open: the payment and weighing steps
-  (`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
-  below the total and Add disabled while the weight is invalid, before any press, with no message;
-  the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
-  until its required choices are made, and shows changed or unavailable choices as `role="alert"`
-  paragraphs rather than beside a field; and the supervisor override dialog
-  (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
-  empty and shows a refusal as a `role="alert"` paragraph.
+Left open by C47 (#838/#839/#840/#841). The till's other surfaces have not been checked against
+the rule, and whether a number pad or a choice picker counts as a form under it is open: the payment and weighing steps
+(`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
+below the total and Add disabled while the weight is invalid, before any press, with no message;
+the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
+until its required choices are made, and shows changed or unavailable choices as `role="alert"`
+paragraphs rather than beside a field; and the supervisor override dialog
+(`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
+empty, before any press.
 
 ## A card payment stuck `attempting` holds its device's profile switch
 
@@ -2252,20 +2248,6 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   destinations while preserving same-area moves.
   [Detail](till.md#held-order-closed-area-destinations-need-the-orders-source-area)
 
-## Bundle: Two forms not yet on the Forms contract
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The booking form draws its bottom alert and Save slot without the shared actions primitive
-  (2026-10-14, A551 review).** `packages/bookings/src/dashboard/booking-form.ts` keeps a
-  `p.error[role=alert]` and its footer button where the Forms contract in
-  `docs/developers/design-system.md` names `wt-form-actions`.
-  [Detail](till.md#the-booking-form-draws-its-bottom-alert-and-save-slot-without-the-shared-actions-primitive)
-- **The till's schedule screen does not follow the forms rule yet** — left open by C47
-  (#838/#839/#840/#841). Other till surfaces were not checked against the rule either, and whether a
-  number pad or a choice picker counts as a form under it is open.
-  [Detail](till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
-
 ## Bundle: Add a device: loose ends from A268
 
 1 entry, size S.
@@ -3515,15 +3497,6 @@ plan editor's save refuses deleting a booked table (`table.booked`) but not maki
 booking stays, and seating it is refused `table.in_joined_table` once the reset applies, so staff
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
 refuses it, as a delete is refused, or only warns.
-
-## The booking form draws its bottom alert and Save slot without the shared actions primitive
-
-`packages/bookings/src/dashboard/booking-form.ts` keeps a
-`p.error[role=alert]` and its footer button where the Forms contract in
-`docs/developers/design-system.md` names `wt-form-actions`. The base at
-`9e40be28237ebdd9eac90a92da9e96b977d8f590` has that same arrangement. Next: use the shared
-actions primitive while retaining the single correction sentence, keyboard submission and
-draft/save behavior. A551's focused validation and axe cases pass with the retained arrangement.
 
 ## The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495)
 

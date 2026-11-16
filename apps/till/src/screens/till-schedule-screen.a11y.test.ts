@@ -4,6 +4,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-schedule-screen.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
 import type { MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
 
@@ -113,6 +114,43 @@ describe.each(["light", "dark"] as const)("till-schedule-screen a11y (%s theme)"
       expect(button.variant).toBe("primary");
       expect(button.disabled).toBe(false);
     }
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with both forms' fields marked, and with a refusal below a form", async () => {
+    const api = stubApi();
+    vi.mocked(api.requestSwap).mockRejectedValue({ code: "swap.not_permitted" });
+    const { el, host } = await mountWidget<TillScheduleScreen>(
+      "till-schedule-screen",
+      { api, staff, operatorPersonId: "me" },
+      theme,
+    );
+    await flush(el);
+    const root = el.shadowRoot!;
+    const press = (selector: string) => root.querySelector<HTMLElement>(selector)!.click();
+    await chooseOption(root.querySelector("wt-combobox[name=cover-shift]")!, "s1");
+    await chooseOption(root.querySelector("wt-combobox[name=abs-kind]")!, "leave");
+    await el.updateComplete;
+    press(".cover-submit");
+    press(".abs-submit");
+    await flush(el);
+    expect(
+      root.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=cover-colleague]")!
+        .error,
+    ).toBe(t("schedule.cover_colleague_required"));
+    expect(
+      root.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=abs-from]")!.error,
+    ).toBe(t("schedule.absence_from_required"));
+    await expectNoA11yViolations(host);
+    await chooseOption(root.querySelector("wt-combobox[name=cover-colleague]")!, "col1");
+    await el.updateComplete;
+    press(".cover-submit");
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(".cover wt-form-actions")!
+          .error,
+      ).toBe(codeMessage("swap.not_permitted")),
+    );
     await expectNoA11yViolations(host);
   });
 

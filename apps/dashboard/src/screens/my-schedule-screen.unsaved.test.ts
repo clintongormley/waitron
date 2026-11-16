@@ -5,6 +5,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, MyShift } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./my-schedule-screen.js";
 
 class ScheduleLeaveApp extends LitElement {
@@ -83,6 +84,11 @@ function value(screen: Screen, name: string) {
   return (
     screen.shadowRoot!.querySelector(`[data-test=${name}]`) as HTMLElement & { value: string }
   ).value;
+}
+function formError(screen: Screen, kind: "cover" | "absence") {
+  return screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    `${kind === "cover" ? ".cover" : ".request-absence"} wt-form-actions`,
+  )!.error;
 }
 function click(screen: Screen, name: string) {
   screen.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`)!.click();
@@ -189,7 +195,11 @@ for (const kind of ["cover", "absence"] as const) {
     await absence(screen);
     if (kind === "absence") await change(screen, "abs-kind", "sick_leave");
     click(screen, kind === "cover" ? "cover-submit" : "abs-submit");
-    await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=notice]")).toBeTruthy();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=load-failed]"))
+      .toBeTruthy();
+    expect(screen.shadowRoot!.querySelector("[data-test=notice]")).toBeNull();
+    expect(formError(screen, kind)).toBe("");
     expect(body).toEqual(
       kind === "cover"
         ? { fromShiftId: "shift-1", toPersonId: "colleague", toShiftId: null }
@@ -224,7 +234,7 @@ for (const kind of ["cover", "absence"] as const) {
     if (kind === "cover") await cover(screen);
     else await absence(screen);
     click(screen, kind === "cover" ? "cover-submit" : "abs-submit");
-    await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=notice]")).toBeTruthy();
+    await expect.poll(() => formError(screen, kind)).toBe(codeMessage("connection.failed"));
     expect(value(screen, kind === "cover" ? "cover-colleague" : "abs-note")).toBe(
       kind === "cover" ? "colleague" : "Family visit",
     );

@@ -7,6 +7,7 @@ import { MyScheduleScreen, scheduleWindow } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { absenceKindName } from "../i18n/domain.js";
+import { codeMessage } from "../i18n/codes.js";
 
 useLocale("es-ES");
 
@@ -222,7 +223,7 @@ describe("my-schedule-screen", () => {
     expect(api.requestAbsence).not.toHaveBeenCalled();
   });
 
-  it("surfaces a rejected action as the notice banner (never the raw code) and releases busy for a retry", async () => {
+  it("surfaces a rejected swap accept as the notice banner (never the raw code) and releases busy for a retry", async () => {
     const api = stubApi({
       acceptSwap: vi.fn().mockRejectedValue({ code: "swap.not_acceptable" }),
     });
@@ -236,6 +237,31 @@ describe("my-schedule-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=accept-sw-offered]")!.click();
     await flush(el);
     expect(api.acceptSwap).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a refused time-off request below its own form (never the raw code), not in the notice banner", async () => {
+    const api = stubApi({
+      requestAbsence: vi.fn().mockRejectedValue({ code: "absence.overlaps" }),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    setInput(el, "abs-from", "2026-06-01");
+    setInput(el, "abs-to", "2026-06-02");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]")!.click();
+    await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      ".request-absence wt-form-actions",
+    )!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.textContent).toContain(codeMessage("absence.overlaps"));
+    expect(actions.shadowRoot!.textContent).not.toContain("absence.overlaps");
+    expect(el.shadowRoot!.querySelector("[data-test=notice]")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+        ".cover wt-form-actions",
+      )!.error,
+    ).toBe("");
   });
 
   it("single-flights a double-clicked action (at most one accept per burst)", async () => {
@@ -609,10 +635,14 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
       const submit = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
         "[data-test=cover-submit]",
       )!;
-      expect(submit.disabled).toBe(true);
+      expect(submit.disabled).toBe(false);
       submit.click();
       await flush(el);
       expect(api.requestSwap).not.toHaveBeenCalled();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`[data-test=cover-${field}]`)!
+          .error,
+      ).toBe(t(`myschedule.cover_${field as "shift" | "colleague"}_required`));
     },
   );
 

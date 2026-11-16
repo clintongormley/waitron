@@ -10871,8 +10871,11 @@ export class TillApp extends LitElement {
       }
     } catch (error) {
       if (current()) {
-        const refusal = error as { code?: string; params?: { field?: string } };
-        this.deviceZonesRefusal = { code: refusal.code, field: refusal.params?.field };
+        const refusal = error as { code?: string; field?: unknown };
+        this.deviceZonesRefusal = {
+          code: refusal.code,
+          field: typeof refusal.field === "string" ? refusal.field : undefined,
+        };
       }
     } finally {
       if (current()) this.deviceZonesSaving = false;

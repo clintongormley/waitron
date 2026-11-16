@@ -8,15 +8,17 @@ import {
   pageTitleStyles,
   draftScopeFor,
   saveActionState,
+  FormFeedback,
   type DraftScope,
 } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { t } from "../i18n/t.js";
 import { wallClock } from "../date-utils.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
+import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import {
   absenceKindName,
   absenceStatusName,
@@ -43,6 +45,11 @@ const WINDOW_DAYS = 14;
 type ScheduleRead = "roster" | "shifts" | "swaps" | "absences";
 type CoverDraft = Parameters<DashboardApi["requestSwap"]>[0];
 type AbsenceDraft = Parameters<DashboardApi["requestAbsence"]>[0];
+type Errors = Record<string, string>;
+
+/** Each form's fields by the names its request sends, which is how a refusal names one. */
+const COVER_FIELDS: ReadonlySet<string> = new Set(["fromShiftId", "toPersonId"]);
+const ABSENCE_FIELDS: ReadonlySet<string> = new Set(["kind", "startsOn", "endsOn", "note"]);
 
 /** A half-open `[from, to)` window, computed in UTC, so a shift is placed by its UTC day. */
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
@@ -186,6 +193,11 @@ export class MyScheduleScreen extends LitElement {
   @state() private absFrom = "";
   @state() private absTo = "";
   @state() private absNote = "";
+  /** A refused request's sentence, keyed by the field it names, or `_form` when it names none. */
+  @state() private coverRefusals: Errors = {};
+  @state() private absenceRefusals: Errors = {};
+  readonly #coverFeedback = new FormFeedback(this);
+  readonly #absenceFeedback = new FormFeedback(this);
   #coverScope?: DraftScope<CoverDraft>;
   #absenceScope?: DraftScope<AbsenceDraft>;
   #connection = 0;
@@ -244,6 +256,10 @@ export class MyScheduleScreen extends LitElement {
     this.absFrom = "";
     this.absTo = "";
     this.absNote = "";
+    this.coverRefusals = {};
+    this.absenceRefusals = {};
+    this.#coverFeedback.reset();
+    this.#absenceFeedback.reset();
     this.busy = false;
     super.disconnectedCallback();
   }
@@ -329,57 +345,120 @@ export class MyScheduleScreen extends LitElement {
     ]);
   }
 
-  async #act(fn: () => Promise<void>): Promise<void> {
+  /** A failed refresh after the write is a load failure, which the list's own controller has
+   * already recorded in `failed`, so only the write's own failure reaches `refused`. */
+  async #act(write: () => Promise<void>, refused: (error: unknown) => void): Promise<void> {
     if (this.busy) return;
     const connection = this.#connection;
     this.busy = true;
     this.noticeCode = undefined;
     try {
-      await fn();
+      try {
+        await write();
+      } catch (error) {
+        if (this.isConnected && connection === this.#connection) refused(error);
+        return;
+      }
       if (!this.isConnected || connection !== this.#connection) return;
-      await this.#loadLists();
-    } catch (error) {
-      if (this.isConnected && connection === this.#connection) this.noticeCode = codeOf(error);
+      await this.#loadLists().catch(() => {});
     } finally {
       if (connection === this.#connection) this.busy = false;
     }
   }
 
   #accept(swapId: string): void {
-    void this.#act(() => this.api.acceptSwap(swapId));
+    void this.#act(
+      () => this.api.acceptSwap(swapId),
+      (error) => (this.noticeCode = codeOf(error)),
+    );
+  }
+
+  #refusal(error: unknown): Errors {
+    return { [fieldOf(error)]: codeMessage(codeOf(error)) };
+  }
+
+  #coverChecks(): Errors {
+    const errors: Errors = {};
+    if (this.coverShiftId === "") errors.fromShiftId = t("myschedule.cover_shift_required");
+    if (this.coverColleagueId === "") errors.toPersonId = t("myschedule.cover_colleague_required");
+    return errors;
+  }
+
+  #absenceChecks(): Errors {
+    const errors: Errors = {};
+    if (this.absFrom === "") errors.startsOn = t("myschedule.absence_from_required");
+    if (this.absTo === "") errors.endsOn = t("myschedule.absence_to_required");
+    else if (this.absFrom !== "" && this.absTo < this.absFrom)
+      errors.endsOn = t("myschedule.absence_to_before_from");
+    return errors;
+  }
+
+  #formErrors(feedback: FormFeedback, refusals: Errors, checks: Errors): Errors {
+    return { ...feedback.remaining(refusals), ...(feedback.attempted ? checks : {}) };
+  }
+
+  #focusFirstInvalid(feedback: FormFeedback, section: string): void {
+    const form = this.shadowRoot?.querySelector(`.${section} .form`);
+    if (form) void feedback.focus(form);
   }
 
   #submitCover(): void {
-    if (this.coverShiftId === "" || this.coverColleagueId === "") return;
+    if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#coverScope).unchanged) return;
+    this.#coverFeedback.press();
+    this.coverRefusals = {};
+    if (Object.keys(this.#coverChecks()).length > 0) {
+      this.#focusFirstInvalid(this.#coverFeedback, "cover");
+      return;
+    }
     const submitted = this.#coverDraft();
     const connection = this.#connection;
-    void this.#act(async () => {
-      await this.api.requestSwap(submitted);
-      if (!this.isConnected || connection !== this.#connection) return;
-      if (sameValue(this.#coverDraft(), submitted)) {
-        this.coverShiftId = "";
-        this.coverColleagueId = "";
-        this.#coverScope?.commit(this.#coverDraft());
-      } else this.#coverScope?.commit(submitted);
-    });
+    void this.#act(
+      async () => {
+        await this.api.requestSwap(submitted);
+        if (!this.isConnected || connection !== this.#connection) return;
+        this.#coverFeedback.reset();
+        if (sameValue(this.#coverDraft(), submitted)) {
+          this.coverShiftId = "";
+          this.coverColleagueId = "";
+          this.#coverScope?.commit(this.#coverDraft());
+        } else this.#coverScope?.commit(submitted);
+      },
+      (error) => {
+        this.coverRefusals = this.#refusal(error);
+        this.#coverFeedback.newRefusal();
+      },
+    );
   }
 
   #submitAbsence(): void {
-    if (this.absFrom === "" || this.absTo === "") return;
+    if (!this.isConnected || this.busy) return;
     if (saveActionState(this.#absenceScope).unchanged) return;
+    this.#absenceFeedback.press();
+    this.absenceRefusals = {};
+    if (Object.keys(this.#absenceChecks()).length > 0) {
+      this.#focusFirstInvalid(this.#absenceFeedback, "request-absence");
+      return;
+    }
     const submitted = this.#absenceDraft();
     const connection = this.#connection;
-    void this.#act(async () => {
-      await this.api.requestAbsence(submitted);
-      if (!this.isConnected || connection !== this.#connection) return;
-      if (sameValue(this.#absenceDraft(), submitted)) {
-        this.absFrom = "";
-        this.absTo = "";
-        this.absNote = "";
-        this.#absenceScope?.commit(this.#absenceDraft());
-      } else this.#absenceScope?.commit(submitted);
-    });
+    void this.#act(
+      async () => {
+        await this.api.requestAbsence(submitted);
+        if (!this.isConnected || connection !== this.#connection) return;
+        this.#absenceFeedback.reset();
+        if (sameValue(this.#absenceDraft(), submitted)) {
+          this.absFrom = "";
+          this.absTo = "";
+          this.absNote = "";
+          this.#absenceScope?.commit(this.#absenceDraft());
+        } else this.#absenceScope?.commit(submitted);
+      },
+      (error) => {
+        this.absenceRefusals = this.#refusal(error);
+        this.#absenceFeedback.newRefusal();
+      },
+    );
   }
 
   #personName(personId: string): string {
@@ -521,6 +600,10 @@ export class MyScheduleScreen extends LitElement {
     const shifts = this.shifts ?? [];
     const colleagues = this.#colleagues();
     const submit = saveActionState(this.#coverScope);
+    const checks = this.#coverChecks();
+    const feedback = this.#coverFeedback;
+    const errors = this.#formErrors(feedback, this.coverRefusals, checks);
+    const marked = new Set(Object.keys(errors).filter((key) => COVER_FIELDS.has(key)));
     return html`<section class="cover" aria-labelledby="cover-h">
       <h2 id="cover-h">${t("myschedule.cover_title")}</h2>
       <div class="form">
@@ -528,6 +611,8 @@ export class MyScheduleScreen extends LitElement {
           ?preserve-order=${true /* Preserve shift chronology. */}
           name="cover-shift"
           data-test="cover-shift"
+          required
+          .error=${errors.fromShiftId ?? ""}
           label=${t("myschedule.cover_shift")}
           search="auto"
           placeholder="—"
@@ -541,11 +626,14 @@ export class MyScheduleScreen extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             this.coverShiftId = e.detail.value;
             this.#coverScope?.changed();
+            feedback.dismiss("fromShiftId");
           }}
         ></wt-combobox>
         <wt-combobox
           name="cover-colleague"
           data-test="cover-colleague"
+          required
+          .error=${errors.toPersonId ?? ""}
           label=${t("myschedule.cover_colleague")}
           search="auto"
           placeholder="—"
@@ -559,20 +647,22 @@ export class MyScheduleScreen extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             this.coverColleagueId = e.detail.value;
             this.#coverScope?.changed();
+            feedback.dismiss("toPersonId");
           }}
         ></wt-combobox>
-        <wt-button
-          variant=${submit.variant}
-          data-test="cover-submit"
-          ?disabled=${
-            submit.unchanged ||
-            this.busy ||
-            this.coverShiftId === "" ||
-            this.coverColleagueId === ""
-          }
-          @click=${() => this.#submitCover()}
-          >${t("myschedule.cover_submit")}</wt-button
-        >
+        <wt-form-actions .error=${feedback.message(errors, marked, t("form.fix_fields"))}>
+          <wt-button
+            variant=${submit.variant}
+            data-test="cover-submit"
+            ?disabled=${
+              submit.unchanged ||
+              this.busy ||
+              (feedback.attempted && Object.keys(checks).length > 0)
+            }
+            @click=${() => this.#submitCover()}
+            >${t("myschedule.cover_submit")}</wt-button
+          >
+        </wt-form-actions>
       </div>
     </section>`;
   }
@@ -611,6 +701,10 @@ export class MyScheduleScreen extends LitElement {
 
   #absenceForm(): TemplateResult {
     const submit = saveActionState(this.#absenceScope);
+    const checks = this.#absenceChecks();
+    const feedback = this.#absenceFeedback;
+    const errors = this.#formErrors(feedback, this.absenceRefusals, checks);
+    const marked = new Set(Object.keys(errors).filter((key) => ABSENCE_FIELDS.has(key)));
     return html`<section class="request-absence" aria-labelledby="request-absence-h">
       <h2 id="request-absence-h">${t("myschedule.absence_title")}</h2>
       <div class="form">
@@ -618,12 +712,14 @@ export class MyScheduleScreen extends LitElement {
           name="abs-kind"
           data-test="abs-kind"
           label=${t("myschedule.absence_kind")}
+          .error=${errors.kind ?? ""}
           search="auto"
           .options=${ABSENCE_KINDS.map((kind) => ({ value: kind, label: absenceKindName(kind) }))}
           .value=${this.absKind}
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             this.absKind = e.detail.value as AbsenceKind;
             this.#absenceScope?.changed();
+            feedback.dismiss("kind");
           }}
         ></wt-combobox>
         <wt-input
@@ -631,12 +727,15 @@ export class MyScheduleScreen extends LitElement {
           name="abs-from"
           data-test="abs-from"
           type="date"
+          required
+          .error=${errors.startsOn ?? ""}
           .label=${t("myschedule.absence_from")}
           .value=${this.absFrom}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absFrom = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("startsOn");
           }}
         ></wt-input>
         <wt-input
@@ -644,12 +743,15 @@ export class MyScheduleScreen extends LitElement {
           name="abs-to"
           data-test="abs-to"
           type="date"
+          required
+          .error=${errors.endsOn ?? ""}
           .label=${t("myschedule.absence_to")}
           .value=${this.absTo}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absTo = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("endsOn");
           }}
         ></wt-input>
         <wt-input
@@ -657,20 +759,28 @@ export class MyScheduleScreen extends LitElement {
           name="abs-note"
           data-test="abs-note"
           .label=${t("myschedule.absence_note")}
+          .error=${errors.note ?? ""}
           .value=${this.absNote}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absNote = (e as CustomEvent<{ value: string }>).detail.value;
             this.#absenceScope?.changed();
+            feedback.dismiss("note");
           }}
         ></wt-input>
-        <wt-button
-          variant=${submit.variant}
-          data-test="abs-submit"
-          ?disabled=${submit.unchanged || this.busy || this.absFrom === "" || this.absTo === ""}
-          @click=${() => this.#submitAbsence()}
-          >${t("myschedule.absence_submit")}</wt-button
-        >
+        <wt-form-actions .error=${feedback.message(errors, marked, t("form.fix_fields"))}>
+          <wt-button
+            variant=${submit.variant}
+            data-test="abs-submit"
+            ?disabled=${
+              submit.unchanged ||
+              this.busy ||
+              (feedback.attempted && Object.keys(checks).length > 0)
+            }
+            @click=${() => this.#submitAbsence()}
+            >${t("myschedule.absence_submit")}</wt-button
+          >
+        </wt-form-actions>
       </div>
     </section>`;
   }
