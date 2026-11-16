@@ -2479,6 +2479,9 @@ describe("till-app", () => {
       acknowledge.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
       await flush(el);
       expect(noticeNode()).toBeNull();
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(noticeNode()).toBeNull();
       for (const code of ["es-ES", "en-GB"]) {
         const reads = read.mock.calls.length;
         emit(shell(el)!, "wt-locale-selected", { code });

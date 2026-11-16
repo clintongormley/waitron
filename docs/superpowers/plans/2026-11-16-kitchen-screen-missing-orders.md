@@ -29,3 +29,5 @@ Execution/landing: RUNNER already authorises finish/land. After clearance and im
 Watcher clearance 2026-11-16 23:24: build as corrected, no further read or boot-clash guard. Add one source-only, unrun pass/pass-monitor seed note to the existing kitchen bundle; change no pass screen.
 
 Run-it correction 2026-11-16: publish the adopted display board, including its acknowledged-notice filter, and publish again after acknowledgement; raw replies can otherwise reintroduce a notice on remount. The existing app regression now clicks the native acknowledgement before switching language.
+
+Watcher clearance 2026-11-16 23:57 explicitly includes the displayed-board/acknowledgement correction and the extra stale-notice refresh assertion.
