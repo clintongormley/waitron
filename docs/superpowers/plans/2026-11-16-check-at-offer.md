@@ -2,7 +2,7 @@
 
 **Authority:** queued ask “Check everything at the offer, while the old box still sells”
 (`docs/backlog/replication-cloud.md:565–570,592–602`; runner dispatch). No owner plan approval.
-**Draft: Claude review, then watcher clearance, before build.** Proposed behavior is untested.
+**Reviewed by Claude (initial and corrections reads); watcher clearance pending.** Behavior is untested.
 One PR; no table, migration, fiscal-invariant, rotation, or recovery-workflow changes.
 Paths: `S` = `apps/server/src`, `H` = `packages/handover/src`, `D` = `apps/dashboard/src`.
 **Deployment limit:** use the same build on both boxes. Old offer shapes refuse before recording;
@@ -10,6 +10,7 @@ an old stored final indicator cannot resume after this format change. Finish han
 updating, or reset the preproduction test installation. No upgrade gate or compatibility layer:
 `CLAUDE.md` forbids that work before go-live. `S/upgrade-checks.ts` has no handover-state check
 (source read only); deployment between stepdown and placement is not prevented by this change.
+Repeat this deployment limit in the PR description.
 
 **Result:** refuse an undersized destination or different encryption keys before stepdown;
 the source keeps selling and the destination records no operation/event. Matching keys and room
@@ -51,8 +52,8 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    Add `venueDir` and optional existing `Statfs` seam to destination dependencies; wire `venueDir`
    in `S/boot.ts`. After existing checks, before `beginHandoverFromOffer`, compare
    `2 * copyBytes + START_FREE_SPACE_FLOOR` with `lowestFreeBytes([stateDir, venueDir], statfs)`.
-   Refuse null or insufficient room as new `handover.no_room_at_offer`; log `neededBytes` and
-   `availableBytes` through AppError's third argument, with no public params. Register in `S/errors.ts`
+   Refuse null or insufficient room as new `handover.no_room_at_offer`; call the route logger with
+   `neededBytes` and `availableBytes` before throwing, with no public params. Register in `S/errors.ts`
    and both route status maps and the source's `OFFER_REFUSALS` whitelist. Preserve replay's
    early stored answer and source retry's original signed envelope, including its original size.
    **Tests:** `S/handover-manifest.test.ts`: “WAL-only growth is included in the offer copy budget”
@@ -60,7 +61,7 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    `archiveTo` copy size ≤ budget). `S/handover-destination-api.test.ts`: “one byte below two
    copies plus floor refuses without recording”, exact-boundary pass, `venueDir` being lower,
    neither reporting space, malformed sizes, old-shape offer refusal before recording, and replay
-   after room disappears. The lower-folder case checks `venueDir` wiring. In
+   after room disappears; assert the refusal log carries both amounts. The lower-folder case checks wiring. In
    `S/handover-source-start-api.test.ts`, use its real spare route for “no room or wrong same-version
    key leaves the source selling and the destination unrecorded”; assert no stepdown/restriction,
    source abandonment, exact 409 code and logs excluding key bytes. Add “source growth retries the original signed offer”.
@@ -76,7 +77,7 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    room for two whole copies plus the startup reserve, this attempt ended while the source keeps
    selling, choose Stop, make room on the spare, then hand over again. Broaden `key_ring_mismatch`
    to missing **or different** keys; choose Stop and rejoin
-   before retrying, without claiming either box's selling state. Keep `no_room_to_place` confined
+   before handing over, without claiming either box's selling state. Keep `no_room_to_place` confined
    to post-stepdown acceptance. Its setup consumer (`apps/setup/src/screens/handover-screen.ts:1093`)
    uses `handover.space`; no setup flow change. Add
    “offer-space and key refusals give truthful next steps in EN and ES” to `D/i18n/codes.test.ts`;
