@@ -3936,3 +3936,35 @@ describe("the header rows on paper (A754)", () => {
     },
   );
 });
+
+describe("a takeaway sale's printed receipt", () => {
+  // Fails if the printed receipt of a takeaway sale stops saying so under its order line, says it
+  // in a language other than the receipt's, or an eat-in receipt gains the line.
+  it.each(
+    [PRINTER_58, PRINTER_80].flatMap((printer) =>
+      [
+        { invoiceLocale: "es-ES", words: "Para llevar", order: "Pedido 41" },
+        { invoiceLocale: "en-GB", words: "Take away", order: "Order 41" },
+      ].map((language) => ({ printer, ...language })),
+    ),
+  )(
+    "says $words under the order line on $printer.paperWidth paper",
+    ({ printer, invoiceLocale, words, order }) => {
+      const input = (result: TillSaleResult) => ({
+        result,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale,
+        printer,
+      });
+      const eatIn = printedLines(formatReceipt(input(FILED_SALE))).map((line) => line.trim());
+      const takeaway = printedLines(formatReceipt(input({ ...FILED_SALE, takeAway: true }))).map(
+        (line) => line.trim(),
+      );
+      expect(eatIn).not.toContain(words);
+      const at = eatIn.findIndex((line) => line.endsWith(order));
+      expect(at).toBeGreaterThan(-1);
+      expect(takeaway).toEqual([...eatIn.slice(0, at + 1), words, ...eatIn.slice(at + 1)]);
+    },
+  );
+});

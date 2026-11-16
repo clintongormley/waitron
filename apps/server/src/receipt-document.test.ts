@@ -1096,6 +1096,43 @@ describe("the header rows: order, number and date (A754)", () => {
     ).toEqual(amount("", "Pedido 41", { gap: 2 }));
   });
 
+  // Fails if a takeaway sale's receipt stops saying so, says it in the wrong language, an eat-in
+  // one gains the line, or the takeaway line changes the goods table.
+  it.each([
+    { invoiceLocale: "es-ES", words: "Para llevar" },
+    { invoiceLocale: "en-GB", words: "Take away" },
+  ])("says $words under the order row of a takeaway sale", ({ invoiceLocale, words }) => {
+    const eatIn = { ...SIMPLIFIED, invoiceLocale };
+    const takeaway = { ...eatIn, result: { ...eatIn.result, takeAway: true as const } };
+    const [order, ...rest] = header(eatIn);
+    expect(header(takeaway)).toEqual([
+      order,
+      { kind: "text", text: words, indent: 0, style: { bold: true } },
+      ...rest,
+    ]);
+    const texts = (input: ReceiptDocumentInput) =>
+      buildReceiptDocument(input).elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
+    expect(texts(eatIn)).not.toContain(words);
+    const tables = (input: ReceiptDocumentInput) =>
+      buildReceiptDocument(input).elements.filter((e) => e.kind === "table");
+    expect(tables(takeaway)).toEqual(tables(eatIn));
+  });
+
+  it("keeps a full invoice's rate column on a takeaway sale", () => {
+    const takeaway = {
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, takeAway: true as const },
+    };
+    const tables = (input: ReceiptDocumentInput) =>
+      buildReceiptDocument(input).elements.filter((e) => e.kind === "table");
+    expect(tables(takeaway)).toEqual(tables(FULL_INVOICE_DOCUMENT_FIXTURE));
+    expect(
+      buildReceiptDocument(takeaway).elements.some(
+        (e) => e.kind === "text" && e.text === "Para llevar",
+      ),
+    ).toBe(true);
+  });
+
   describe("with a five-symbol installation name in the invoice number", () => {
     const printedHeader = (
       paperWidth: "58mm" | "80mm",
