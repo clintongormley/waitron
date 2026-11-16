@@ -1,4 +1,5 @@
-import { page } from "vitest/browser";
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -384,4 +385,25 @@ it("keeps Disconnect reachable without a provider panel or provider-switch permi
   expect(root.querySelector("[data-test=configure-sumup]")).toBeNull();
   expect(root.querySelector("[data-test=switch-sumup]")).toBeNull();
   expect(root.querySelector("[data-test=disconnect-stripe]")).toBeNull();
+});
+
+it("offers localized column choices and restores a hidden module state", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.modules.table:columns", '{"state":false}');
+  try {
+    const el = await mount();
+    const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="state"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.modules.table:columns");
+  }
 });

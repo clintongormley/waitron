@@ -1938,6 +1938,12 @@ only on release.
 
 ### Remembered, searchable, filterable tables
 
+Dashboard main lists offer remembered column choices. `scripts/dashboard-table-customisation.test.ts`
+checks literal table tags for a preference key and chooser label. It is weaker than a rendered check:
+it cannot see dynamically built tags or determine whether the runtime columns offer a choice. Its
+file-and-label exceptions cover dialogs, pickers, the owner's Servers and Departments/zones choices,
+and tables with fewer than two movable columns. Browser tests check each added chooser.
+
 A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. An editor opened and closed from the keyboard returns visible focus; later keyboard navigation shows focus. Dialogs record whether the opening control had visible focus before moving into their content.
 
 `wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty.

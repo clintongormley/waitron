@@ -1,3 +1,4 @@
+import { t as tableText } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -288,11 +289,13 @@ export class SeasonsScreen extends LitElement {
       },
       {
         key: "startsOn",
+        choosable: "shown",
         label: t("season.starts"),
         cell: (row) => formatMonthDay(`${row.month}-${row.day.padStart(2, "0")}`),
       },
       {
         key: "runsUntil",
+        choosable: "shown",
         label: t("season.runs_until"),
         cell: (row) => formatMonthDay(runsUntil(rows, row.key)!),
       },
@@ -370,6 +373,17 @@ export class SeasonsScreen extends LitElement {
             : html`<wt-data-table
                 wrap-to-fit
                 aria-label=${t("season.seasons")}
+                viewKey="waitron.seasons.table"
+                customiseColumnsLabel=${tableText("table.customise_columns")}
+                customiseLabel=${tableText("table.customise")}
+                restoreColumnsLabel=${tableText("table.restore_columns")}
+                doneLabel=${tableText("table.done")}
+                moveColumnLabel=${tableText("table.move_column")}
+                showColumnLabel=${tableText("table.show_column")}
+                hideColumnLabel=${tableText("table.hide_column")}
+                alwaysShownColumnLabel=${tableText("table.column_always_shown")}
+                lastShownColumnLabel=${tableText("table.column_last_shown")}
+                columnPositionLabel=${tableText("table.column_position")}
                 .columns=${columns}
                 .rows=${rows}
                 .rowKey=${(row: SeasonRow) => row.key}

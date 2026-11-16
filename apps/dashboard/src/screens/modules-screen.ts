@@ -298,12 +298,14 @@ export class ModulesScreen extends LitElement {
       },
       {
         key: "state",
+        choosable: "shown",
         label: text("modules.state"),
         cell: (row) =>
           html`${text(row.enabled ? "modules.enabled" : "modules.disabled")}${row.applied !== undefined && row.applied !== row.enabled ? html`<span part="switch-reason">${text("modules.restart_pending")}</span>` : nothing}`,
       },
       {
         key: "configuration",
+        choosable: "shown",
         label: text("modules.configuration"),
         cell: (row) => this.#configuration(row),
         searchValue: (row) => this.#configuration(row),
@@ -438,7 +440,32 @@ export class ModulesScreen extends LitElement {
       </div>
       ${this.disconnectError ? html`<p class="error" role="alert">${codeMessage(this.disconnectError)}</p>` : nothing}
       ${readError ? html`<p class="error" role="alert">${codeMessage(readError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
-      ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} searchable searchLabel=${text("modules.search")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
+      ${
+        rows
+          ? html`<wt-data-table
+              aria-label=${text("nav.modules")}
+              viewKey="waitron.modules.table"
+              customiseColumnsLabel=${t("table.customise_columns")}
+              customiseLabel=${t("table.customise")}
+              restoreColumnsLabel=${t("table.restore_columns")}
+              doneLabel=${t("table.done")}
+              moveColumnLabel=${t("table.move_column")}
+              showColumnLabel=${t("table.show_column")}
+              hideColumnLabel=${t("table.hide_column")}
+              alwaysShownColumnLabel=${t("table.column_always_shown")}
+              lastShownColumnLabel=${t("table.column_last_shown")}
+              columnPositionLabel=${t("table.column_position")}
+              searchable
+              searchLabel=${text("modules.search")}
+              .emptyMessage=${tableNoMatches()}
+              noMatchesMessage=${tableNoMatches()}
+              .rows=${rows}
+              .columns=${this.#columns()}
+              .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`}
+              .wrapToFit=${true}
+            ></wt-data-table>`
+          : html`<p>${text("modules.loading")}</p>`
+      }
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${
         this.switching

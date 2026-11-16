@@ -1405,6 +1405,7 @@ export class MenuStructureTable extends LitElement {
       },
       {
         key: "kind",
+        choosable: "shown",
         label: t("members.kind"),
         cell: (row) =>
           row.kind === "root"
@@ -1415,6 +1416,7 @@ export class MenuStructureTable extends LitElement {
       },
       {
         key: "available",
+        choosable: "shown",
         label: t("editor.available"),
         cell: (row) => {
           if (row.kind === "root" || row.node.ref.kind !== "product") return nothing;
@@ -1458,6 +1460,18 @@ export class MenuStructureTable extends LitElement {
     const empty = this.nodes.length === 0;
     return html`<wt-data-table
         aria-label=${t("menus.tree_heading")}
+        viewKey="waitron.menu-structure.table"
+        .rememberExpanded=${false}
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         emptyMessage=${t("menus.structure_empty")}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}

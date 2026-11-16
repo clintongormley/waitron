@@ -1,3 +1,4 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
@@ -10,6 +11,13 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
+function forgetColumnsAndFilters() {
+  sessionStorage.removeItem("waitron.menu-structure.table");
+  localStorage.removeItem("waitron.menu-structure.table:columns");
+  localStorage.removeItem("waitron.menu-structure.table:column-order");
+}
+beforeEach(forgetColumnsAndFilters);
+afterEach(forgetColumnsAndFilters);
 afterEach(cleanupWidgets);
 beforeEach(async () => {
   await page.viewport(1280, 844);
@@ -4549,4 +4557,27 @@ describe("names holding replacement patterns or another placeholder", () => {
       `${lemon}, in ${drinks}`,
     );
   });
+});
+
+it("offers localized remembered column choices for waitron.menu-structure.table", async () => {
+  const previous = currentLocale();
+  setLocale("es-ES");
+  localStorage.setItem("waitron.menu-structure.table:columns", '{"kind":false}');
+  try {
+    const el = await mount();
+    const root = table(el).shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="kind"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.menu-structure.table:columns");
+    setLocale(previous);
+  }
 });

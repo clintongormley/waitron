@@ -1,4 +1,6 @@
+import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
 import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
@@ -559,4 +561,26 @@ it("clears a refused Make default once another action begins", async () => {
   await screen.updateComplete;
   expect(dialogOf(screen)!.mode).toBe("rename");
   expect(screen.shadowRoot!.querySelector("[data-test=action-error]")).toBeNull();
+});
+
+it("offers localized remembered column choices for waitron.floor-plans.table", async () => {
+  setLocale("es-ES");
+  localStorage.setItem("waitron.floor-plans.table:columns", '{"usedBy":false}');
+  try {
+    const { table } = await mountScreen();
+    const root = table.shadowRoot!;
+    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
+    expect(chooser?.getAttribute("aria-label")).toBe(
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
+    );
+    await userEvent.click(chooser!);
+    expect(root.querySelector('input[data-column="usedBy"]')).toHaveProperty("checked", false);
+    expect(root.querySelector("wt-dialog")).toHaveProperty(
+      "heading",
+      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
+    );
+  } finally {
+    localStorage.removeItem("waitron.floor-plans.table:columns");
+    setLocale("en");
+  }
 });

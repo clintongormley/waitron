@@ -1,3 +1,4 @@
+import { t as tableText } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
@@ -89,6 +90,7 @@ export class StationTable extends LitElement {
       { key: "name", label: t("prep.name"), cell: (station) => this.#name(station) },
       {
         key: "printedOn",
+        choosable: "shown",
         label: t("prep.printed_on"),
         cell: (station) =>
           html`<span data-test=${`printed-on-${station.id}`}
@@ -97,6 +99,7 @@ export class StationTable extends LitElement {
       },
       {
         key: "shownOn",
+        choosable: "shown",
         label: t("prep.shown_on"),
         cell: (station) =>
           html`<span part="screens" data-test=${`screens-${station.id}`}
@@ -105,6 +108,7 @@ export class StationTable extends LitElement {
       },
       {
         key: "waitsForPass",
+        choosable: "shown",
         label: t("prep.waits_for_pass"),
         help: { text: t("prep.waits_for_pass_hint"), label: t("prep.waits_for_pass") },
         cell: (station) =>
@@ -125,6 +129,17 @@ export class StationTable extends LitElement {
     return html`<wt-data-table
       wrap-to-fit
       aria-label=${t("prep.title")}
+      viewKey="waitron.prep-stations.table"
+      customiseColumnsLabel=${tableText("table.customise_columns")}
+      customiseLabel=${tableText("table.customise")}
+      restoreColumnsLabel=${tableText("table.restore_columns")}
+      doneLabel=${tableText("table.done")}
+      moveColumnLabel=${tableText("table.move_column")}
+      showColumnLabel=${tableText("table.show_column")}
+      hideColumnLabel=${tableText("table.hide_column")}
+      alwaysShownColumnLabel=${tableText("table.column_always_shown")}
+      lastShownColumnLabel=${tableText("table.column_last_shown")}
+      columnPositionLabel=${tableText("table.column_position")}
       data-test="station-table"
       .columns=${this.#columns()}
       .rows=${rows}
