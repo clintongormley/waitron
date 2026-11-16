@@ -1,12 +1,11 @@
 // Side-effect: registers this package's codes on the shared AppError registry.
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { isUniqueViolation, type Database, type Transaction } from "@waitron/db";
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
 import { timeEntries } from "./schema/time-entries.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import { markAttendanceEntry } from "./staff-activity.js";
 import type { RecordExtension } from "./record-types.js";
 import type { CorrectionStatus, WorkforceEntryKind } from "./projection.js";
@@ -52,37 +51,19 @@ export interface ChainHead {
  * (`assertExtraListForWrite`, `packages/menu/src/extras.ts`). The chain's safety against a fork
  * is `time_entries_chain_position_uq`, not this.
  */
-async function selectHead(tx: Transaction, key: ChainKey): Promise<ChainHead | undefined> {
+export async function readChainHead(tx: Transaction, key: ChainKey): Promise<ChainHead> {
   const [row] = await tx
     .select({
-      sequenceNo: workforceChains.sequenceNo,
-      lastEntryId: workforceChains.lastEntryId,
-      lastEntryHash: workforceChains.lastEntryHash,
-      lastRecordedAt: workforceChains.lastRecordedAt,
+      sequenceNo: timeEntries.sequenceNo,
+      lastEntryId: timeEntries.id,
+      lastEntryHash: timeEntries.entryHash,
+      lastRecordedAt: timeEntries.recordedAt,
     })
-    .from(workforceChains)
-    .where(eq(workforceChains.nodeId, key.nodeId));
-  return row;
-}
-
-/** Creates the head if there is none yet. */
-export async function readChainHead(tx: Transaction, key: ChainKey): Promise<ChainHead> {
-  const existing = await selectHead(tx, key);
-  if (existing !== undefined) return existing;
-
-  await tx
-    .insert(workforceChains)
-    .values({ nodeId: key.nodeId })
-    .onConflictDoNothing({ target: workforceChains.nodeId });
-
-  const created = await selectHead(tx, key);
-  /* v8 ignore start */
-  if (created === undefined) {
-    // Not `!`-asserted, so a broken invariant surfaces as a structured AppError, not a TypeError.
-    throw new AppError("attendance.append_contention", { ...key, attempts: 0 });
-  }
-  /* v8 ignore stop */
-  return created;
+    .from(timeEntries)
+    .where(eq(timeEntries.nodeId, key.nodeId))
+    .orderBy(desc(timeEntries.sequenceNo))
+    .limit(1);
+  return row ?? { sequenceNo: 0, lastEntryId: null, lastEntryHash: null, lastRecordedAt: null };
 }
 
 /**
@@ -170,16 +151,6 @@ async function attemptAppend(
   }
   /* v8 ignore stop */
 
-  await tx
-    .update(workforceChains)
-    .set({
-      sequenceNo,
-      lastEntryId: inserted.id,
-      lastEntryHash: entryHash,
-      lastRecordedAt: recordedAt,
-    })
-    .where(eq(workforceChains.nodeId, key.nodeId));
-
   await markAttendanceEntry(tx, {
     id: inserted.id,
     eventAt,
@@ -193,8 +164,8 @@ async function attemptAppend(
  * `clock` supplies `recorded_at`; it is injectable so a test can drive the monotonic clamp.
  *
  * Each attempt runs in a nested `tx.transaction()` (a savepoint, since the caller's transaction is
- * open). It confines a losing attempt's own writes — `readChainHead` may have created the head row —
- * so the next attempt starts where the caller's transaction was.
+ * open). It confines a losing attempt's own writes, so the next attempt starts where the caller's
+ * transaction was.
  *
  * Exhaustion throws `attendance.append_contention`.
  */

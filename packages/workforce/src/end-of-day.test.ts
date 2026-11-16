@@ -143,7 +143,6 @@ describe("completed attendance day", () => {
     const before = await f.state();
     await f.process();
     expect((await f.state()).entries).toEqual(before.entries);
-    expect((await f.state()).chains).toEqual(before.chains);
     expect(await f.questions()).toMatchObject([
       { openEntryId: open, kind: "missing-times", missingKinds: ["out"] },
     ]);
@@ -174,7 +173,6 @@ describe("completed attendance day", () => {
     await expect(f.process()).resolves.toMatchObject({ automaticEntryIds: [] });
     const after = await f.state();
     expect(after.entries).toEqual(before.entries);
-    expect(after.chains).toEqual(before.chains);
     expect(await f.questions()).toMatchObject([
       { openEntryId: open, kind: "missing-times", missingKinds: ["out"] },
     ]);
@@ -185,7 +183,6 @@ describe("completed attendance day", () => {
     const before = await f.state();
     await f.process();
     expect((await f.state()).entries).toEqual(before.entries);
-    expect((await f.state()).chains).toEqual(before.chains);
     expect(await f.questions()).toMatchObject([{ kind: "missing-times", missingKinds: ["out"] }]);
   });
   it("does not add an end when a real later out already exists", async () => {
@@ -194,7 +191,6 @@ describe("completed attendance day", () => {
     const before = await f.state();
     expect(await f.process()).toEqual({ automaticEntryIds: [], questionIds: [] });
     expect((await f.state()).entries).toEqual(before.entries);
-    expect((await f.state()).chains).toEqual(before.chains);
     expect(await f.questions()).toEqual([]);
   });
   it("keeps an old no-activity question across tomorrow instead of using tomorrow's activity", async () => {

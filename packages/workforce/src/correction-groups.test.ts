@@ -12,7 +12,6 @@ import * as corrections from "./corrections.js";
 import type { CorrectionRequestInput } from "./corrections.js";
 import { readChain } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 
@@ -148,7 +147,6 @@ it("proposes a historical manager pair and applies it only after the worker acce
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db.select().from(workforceChains).orderBy(workforceChains.nodeId),
   };
 }
 async function refused(action: () => Promise<unknown>, code = "correction.invalid") {
@@ -168,7 +166,7 @@ it.each([
   "different-origin",
   "duplicate-kind",
   "equal-times",
-] as const)("refuses %s request bundles without changing rows or heads", async (shape) => {
+] as const)("refuses %s request bundles without changing rows", async (shape) => {
   const inputs = pair();
   if (shape === "empty") inputs.length = 0;
   if (shape === "three") inputs.push({ ...inputs[1]! });

@@ -1578,7 +1578,7 @@ the trigger set taken from the class, nine tables came back refusing an update a
 ordinary product code performs — `payments` (nine call sites in `packages/payments/src/store.ts`,
 a card payment's row moving through its states), `cadenas` and `registro_sif`
 (`packages/fiscal-verifactu`), `ticket_items` (`apps/server/src/working-order.ts`),
-`daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat`, `workforce_chains` and `envios` —
+`daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat` and `envios` —
 and `order_amendments`, which must refuse both, came back with no trigger at all, because it is
 classified `state`. The class is wrong in both directions.
 

@@ -82,8 +82,6 @@ export const timeEntries = table(
     prevEntryHash: label("prev_entry_hash"),
     /** The 1-based position within this node's chain. */
     sequenceNo: count("sequence_no").notNull(),
-    /** Exactly the first entry of a chain — not the current head, which is
-     * `workforce_chains.last_entry_id`. */
     isFirstEntry: flag("is_first_entry").notNull(),
   },
   (t) => [

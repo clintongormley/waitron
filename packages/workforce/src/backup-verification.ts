@@ -7,7 +7,7 @@ import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
 import { verifyPayPeriodClosures } from "./pay-period-chain.js";
 import type { PayPeriodClosure, RecordExtension } from "./record-types.js";
 
-const immutableTables = ["time_entries", "pay_period_closures", "workforce_chains"];
+const immutableTables = ["time_entries", "pay_period_closures"];
 export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
@@ -15,7 +15,7 @@ export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
     kind: "custom",
     tables: WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table),
     immutableTables,
-    checks: ["data", "chain", "head", "history"],
+    checks: ["data", "chain", "history"],
   },
   secrets: [],
   entries: [],
@@ -32,11 +32,9 @@ export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
         addedColumns: {},
       })),
     });
-    const checks = { data: equal, chain: true, head: true, history: true };
+    const checks = { data: equal, chain: true, history: true };
     for (const query of [context.before, context.after]) {
-      const time = await checkTime(query);
-      checks.chain = time.chain && checks.chain;
-      checks.head = time.head && checks.head;
+      checks.chain = (await checkTime(query)) && checks.chain;
       checks.history = (await checkClosures(query)) && checks.history;
     }
     return {
@@ -136,19 +134,17 @@ function entry(row: BackupRow): VerifiableEntry {
 function chainScope(row: BackupRow): string {
   return JSON.stringify([text(row, "node_id")]);
 }
-async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: boolean }> {
-  const groups = new Map<string, { entries: VerifiableEntry[]; last: BackupRow }>();
+async function checkTime(query: BackupQuery): Promise<boolean> {
+  const groups = new Map<string, VerifiableEntry[]>();
   let chain = true;
-  let head = true;
   if (await has(query, "time_entries")) {
     for await (const row of query.rows(
       "select * from time_entries order by node_id, sequence_no",
     )) {
       try {
         const key = chainScope(row);
-        const group = groups.get(key) ?? { entries: [], last: row };
-        group.entries.push(entry(row));
-        group.last = row;
+        const group = groups.get(key) ?? [];
+        group.push(entry(row));
         groups.set(key, group);
       } catch (error) {
         if (!(error instanceof InvalidEvidence)) throw error;
@@ -156,38 +152,10 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
       }
     }
   }
-  for (const group of groups.values()) if (!verifyChain(group.entries).ok) chain = false;
-  const seen = new Set<string>();
-  if (await has(query, "workforce_chains")) {
-    for await (const row of query.rows("select * from workforce_chains")) {
-      try {
-        const key = chainScope(row);
-        const last = groups.get(key)?.last;
-        seen.add(key);
-        if (last === undefined) {
-          if (
-            row.sequence_no !== 0n ||
-            row.last_entry_id !== null ||
-            row.last_entry_hash !== null ||
-            row.last_recorded_at !== null
-          )
-            head = false;
-        } else if (
-          row.sequence_no !== last.sequence_no ||
-          row.last_entry_id !== last.id ||
-          row.last_entry_hash !== last.entry_hash ||
-          row.last_recorded_at !== last.recorded_at
-        )
-          head = false;
-      } catch (error) {
-        if (!(error instanceof InvalidEvidence)) throw error;
-        head = false;
-      }
-    }
-  }
-  if ([...groups.keys()].some((key) => !seen.has(key))) head = false;
-  return { chain, head };
+  for (const group of groups.values()) if (!verifyChain(group).ok) chain = false;
+  return chain;
 }
+
 function json(row: BackupRow, field: string): unknown {
   try {
     return JSON.parse(text(row, field)) as unknown;

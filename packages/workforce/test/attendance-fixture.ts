@@ -78,7 +78,6 @@ export function attendanceFixture() {
   const questions = () => run((tx) => api.listPendingAttendanceQuestions(tx, personId));
   const state = async () => ({
     entries: await entries(),
-    chains: await suite.db.select().from(api.workforceChains),
     questions: await suite.db.select().from(api.attendanceQuestions),
     mail: await attendanceMailRows(suite.db),
     work: await suite.db.select().from(api.attendanceDayWork),

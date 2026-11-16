@@ -325,6 +325,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "workforce_chains",
   "attendance_source_state",
   "attendance_operation_facts",
   "device_kitchen_screens",
@@ -1153,7 +1154,7 @@ for (const locale of ["en", "es"] as const) {
       }
       const ticketItems = expected[phase].tables.ticket_items!;
       ticketItems.columns = ticketItems.columns.filter((column) => column.name !== "away_at");
-      for (const name of ["workforce_chains", "time_entries", "pay_period_closures"]) {
+      for (const name of ["time_entries", "pay_period_closures"]) {
         const table = expected[phase].tables[name]!;
         table.columns = table.columns.filter((column) => column.name !== "location_id");
         const kept = table.foreignKeys.filter((key) => key.from !== "location_id");

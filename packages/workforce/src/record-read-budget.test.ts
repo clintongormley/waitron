@@ -62,12 +62,12 @@ async function timeRows<T>(body: () => Promise<T>) {
     spy.mockRestore();
   }
 }
-it("reads only the latest live instant when checking an ordinary clock action", async () => {
+it("reads the latest live instant and chain head when checking an ordinary clock action", async () => {
   const result = await timeRows(() =>
     withTransaction(suite.db, (tx) => backend.clockIn(tx, event(personId, "2026-01-05T09:00:00Z"))),
   );
   try {
-    expect(result.rows).toBe(1);
+    expect(result.rows).toBe(2);
     await expect(
       withTransaction(suite.db, (tx) =>
         backend.clockIn(tx, event(personId, "2026-01-05T10:00:00Z")),

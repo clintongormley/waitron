@@ -20,7 +20,6 @@ import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { closePayPeriod } from "./pay-period-close.js";
 import { makeRuleset } from "../test/fixtures.js";
 import { timeEntries } from "./schema/time-entries.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { payPeriodSettings } from "./schema/pay-period-settings.js";
 import { attendanceDayWork } from "./schema/attendance.js";
@@ -33,7 +32,7 @@ const at = "2026-01-05T09:00:00.000Z";
 const person = "10000000-0000-4000-8000-000000000001";
 const node = "10000000-0000-4000-8000-000000000004";
 const retired = "10000000-0000-4000-8000-000000000005";
-const codes = ["data", "chain", "head", "history"] as const;
+const codes = ["data", "chain", "history"] as const;
 const passed = { status: "passed", checks: codes.map((code) => ({ code, status: "passed" })) };
 let requestId: string;
 
@@ -153,9 +152,7 @@ beforeEach(async () => {
   const closures = await original.db.select().from(payPeriodClosures);
   await restored.db.insert(payPeriodClosures).values(closures);
   await restored.db.insert(timeEntries).values(await original.db.select().from(timeEntries));
-  await restored.db
-    .insert(workforceChains)
-    .values(await original.db.select().from(workforceChains));
+
   await restored.db.insert(payPeriodSettings).values({ id: 1, frequency: "monthly" });
   await restored.db
     .insert(attendanceDayWork)
@@ -236,9 +233,9 @@ function invalid(result: Awaited<ReturnType<typeof run>>, code: (typeof codes)[n
 }
 
 describe("complete captured workforce backup evidence", () => {
-  it("walks every node's time chain and stored head including retired nodes", async () => {
+  it("walks every node's time chain including retired nodes", async () => {
     expect(await run()).toEqual(passed);
-    expect(original.db.all(sql`select * from workforce_chains`)).toHaveLength(2);
+    expect(original.db.all(sql`select distinct node_id from time_entries`)).toHaveLength(2);
   });
   it.each(["before", "after"])(
     "validates %s evidence independently of row comparison",
@@ -304,13 +301,6 @@ describe("complete captured workforce backup evidence", () => {
     );
     const row = (await original.db.select().from(timeEntries)).find((r) => r.id === added.id)!;
     await restored.db.insert(timeEntries).values(row);
-    const head = (await original.db.select().from(workforceChains)).find(
-      (r) => r.nodeId === retired,
-    )!;
-    await restored.db
-      .update(workforceChains)
-      .set(head)
-      .where(sql`node_id=${retired}`);
     const [work] = await original.db.select().from(attendanceDayWork);
     await restored.db
       .update(attendanceDayWork)
@@ -333,20 +323,6 @@ describe("complete captured workforce backup evidence", () => {
     await both(`update time_entries set ${change} where node_id='${retired}' and sequence_no=1`);
     invalid(await run(), "chain");
   });
-  it.each(["node_id=x'01'"])("rejects malformed stored head scope %s", async (change) => {
-    await both(`update workforce_chains set ${change} where node_id='${retired}'`);
-    invalid(await run(), "head");
-  });
-  it.each(["last_entry_id='orphan'", "last_entry_hash='orphan'", "last_recorded_at='orphan'"])(
-    "rejects an empty head with %s",
-    async (change) => {
-      await both(
-        "delete from time_entries; delete from pay_period_closures; update workforce_chains set sequence_no=0,last_entry_id=null,last_entry_hash=null,last_recorded_at=null",
-      );
-      await both(`update workforce_chains set ${change} where node_id='${retired}'`);
-      invalid(await run(), "head");
-    },
-  );
   it.each(["snapshot=x'01'", "node_id=x'01'", "sequence_no=1.25", "closed_at='bad'"])(
     "rejects malformed closure representation %s",
     async (change) => {
@@ -356,7 +332,6 @@ describe("complete captured workforce backup evidence", () => {
   );
   it.each([
     ["time decoder", "select * from time_entries order by node_id, sequence_no", "person_id"],
-    ["head decoder", "select * from workforce_chains", "node_id"],
     ["closure decoder", "select * from pay_period_closures", "snapshot"],
   ])(
     "does not classify an unexpected %s failure as corrupt data",
@@ -370,11 +345,7 @@ describe("complete captured workforce backup evidence", () => {
   it("registers explicit obligations for every classified table", () => {
     const owner = validateBackupVerificationContribution(OWNER);
     expect(owner.data.tables).toEqual(WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table));
-    expect(owner.data.immutableTables).toEqual([
-      "time_entries",
-      "pay_period_closures",
-      "workforce_chains",
-    ]);
+    expect(owner.data.immutableTables).toEqual(["time_entries", "pay_period_closures"]);
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });
@@ -426,23 +397,6 @@ describe("complete captured workforce backup evidence", () => {
     await both(`delete from time_entries where id='${requestId}'`);
     invalid(await run(), "chain");
   });
-  it("detects source tail loss against its stored head", async () => {
-    await both(`delete from time_entries where node_id='${retired}' and sequence_no=5`);
-    invalid(await run(), "head");
-  });
-  it.each([
-    "sequence_no=0",
-    "last_entry_id=null",
-    "last_entry_hash='wrong'",
-    "last_recorded_at='2026-01-06T09:00:00.000Z'",
-  ])("checks stored head %s", async (change) => {
-    await both(`update workforce_chains set ${change} where node_id='${retired}'`);
-    invalid(await run(), "head");
-  });
-  it("rejects a missing stored head", async () => {
-    await both(`delete from workforce_chains where node_id='${retired}'`);
-    invalid(await run(), "head");
-  });
   it("compares full time rows even when the altered chain is internally consistent", async () => {
     await corrupt(restored.db, `update time_entries set id='changed' where id='${requestId}'`);
     invalid(await run(), "data");
@@ -488,35 +442,11 @@ describe("complete captured workforce backup evidence", () => {
     await both("delete from pay_period_closures where sequence_no=3");
     expect(await run()).toEqual(passed);
   });
-  it("never creates heads for honestly empty data", async () => {
-    for (const db of [original.db, restored.db])
-      await corrupt(
-        db,
-        "delete from workforce_chains; delete from time_entries; delete from pay_period_closures",
-      );
-    expect(await run()).toEqual(passed);
-    expect(original.db.all(sql`select * from workforce_chains`)).toEqual([]);
-    expect(restored.db.all(sql`select * from workforce_chains`)).toEqual([]);
-  });
-  it("accepts an explicit empty stored head without resetting it", async () => {
-    for (const db of [original.db, restored.db]) {
-      await corrupt(
-        db,
-        "delete from workforce_chains; delete from time_entries; delete from pay_period_closures",
-      );
-      await db.insert(workforceChains).values({ nodeId: node, updatedAt: new Date(at) });
-    }
-    expect(await run()).toEqual(passed);
-  });
-  it("rejects an orphan nonempty stored head", async () => {
-    await both("delete from time_entries; delete from pay_period_closures");
-    invalid(await run(), "head");
-  });
   it("admits absent source tables only into empty migrated state", async () => {
     for (const db of [original.db, restored.db])
       await corrupt(
         db,
-        "delete from workforce_chains; delete from time_entries; delete from pay_period_closures; delete from pay_period_settings; delete from attendance_day_work",
+        "delete from time_entries; delete from pay_period_closures; delete from pay_period_settings; delete from attendance_day_work",
       );
     expect(await run(absent.db)).toEqual(passed);
     await restored.db.insert(payPeriodSettings).values({ frequency: "monthly" });

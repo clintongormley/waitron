@@ -185,6 +185,8 @@ describe("clocking across a backward step of the box's clock", () => {
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
     await run((tx) => backend.clockIn(tx, { ...at(p, "13:00"), nodeId: second }));
     expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+    await run((tx) => backend.clockOut(tx, at(p, "14:00")));
+    expect(await latest(p)).toEqual({ kind: "out", at: "14:00" });
   });
 
   it("lets a clock-out written after an approved later-dated clock-in close it", async () => {
@@ -286,7 +288,7 @@ describe("clocking across a backward step of the box's clock", () => {
         "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=?)",
       );
       expect(
-        plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),
+        plans.filter((line) => line.startsWith("SCAN") && !/^SCAN nodes\b/.test(line)),
       ).toEqual([]);
     }
   });

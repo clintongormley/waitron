@@ -37,7 +37,6 @@ export type {
   AddShiftInput,
   UpdateShiftInput,
 } from "./clocking.js";
-export { workforceChains } from "./schema/workforce-chains.js";
 export { rosterVersions, rosterVersionStatus } from "./schema/roster-versions.js";
 export { shifts } from "./schema/shifts.js";
 export { absences, absenceKind, absenceStatus } from "./schema/absences.js";

@@ -38,7 +38,6 @@ describe("the public surface", () => {
         "timeEntries",
         "workforceCorrectionStatus",
         "workforceEntryKind",
-        "workforceChains",
         "rosterVersions",
         "rosterVersionStatus",
         "shifts",
@@ -137,23 +136,6 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
     expect(config.columns.map((c) => c.name)).not.toContain("ingest_seq");
     expect(config.columns.map((c) => c.name)).toContain("node_id");
     expect(config.columns.map((c) => c.name)).toContain("recorded_at");
-  });
-});
-
-describe("workforce_chains constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares the chain head's key, foreign keys and pointer check", () => {
-    const config = getTableConfig(api.workforceChains);
-
-    expect(config.primaryKeys).toEqual([]);
-    expect(config.columns.filter((c) => c.primary).map((c) => c.name)).toEqual(["node_id"]);
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames.sort()).toEqual([
-      "workforce_chains_last_entry_id_time_entries_id_fk",
-      "workforce_chains_node_id_nodes_id_fk",
-    ]);
-
-    expect(config.checks.map((c) => c.name)).toContain("workforce_chains_pointer_ck");
   });
 });
 

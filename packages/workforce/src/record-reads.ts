@@ -1,9 +1,8 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
 import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import type { Database, Transaction } from "@waitron/db";
+import { nodes, type Database, type Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import type { TimeEntryRecord } from "./projection.js";
 import type { Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
@@ -102,13 +101,13 @@ export async function readLatestLiveEntry(
       and ${directKind(sql`later.entry_kind`)})`;
   const heads = await tx
     .select({ entry: timeEntries })
-    .from(workforceChains)
+    .from(nodes)
     .innerJoin(
       timeEntries,
       eq(
         timeEntries.id,
         sql`(select head.id from time_entries head where head.person_id = ${personId}
-          and head.node_id = ${workforceChains.nodeId}
+          and head.node_id = ${nodes.id}
           and ${directKind(sql`head.entry_kind`)} order by head.sequence_no desc limit 1)`,
       ),
     );

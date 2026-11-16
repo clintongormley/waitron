@@ -862,7 +862,6 @@ const HISTORY_ROWS = [
   "working_line_contexts",
   "department_transfer_requests",
   "time_entries",
-  "workforce_chains",
   "daily_closes",
   "daily_close_chain",
 ] as const;
@@ -1179,7 +1178,6 @@ it.each(["zone", "department"] as const)(
       "sale_receipt_headers",
       "department_transfer_requests",
       "time_entries",
-      "workforce_chains",
       "daily_closes",
       "daily_close_chain",
     ])

@@ -2,7 +2,6 @@
 // Guard: `schema-ownership.test.ts`.
 export { employments } from "./employments.js";
 export { timeEntries, workforceCorrectionStatus, workforceEntryKind } from "./time-entries.js";
-export { workforceChains } from "./workforce-chains.js";
 export { rosterVersions, rosterVersionStatus } from "./roster-versions.js";
 export { shifts } from "./shifts.js";
 export { absences, absenceKind, absenceStatus } from "./absences.js";

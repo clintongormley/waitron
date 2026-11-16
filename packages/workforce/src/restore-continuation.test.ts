@@ -7,17 +7,17 @@
  * fiscal chain. A forked copy of position M+1 is refused by `time_entries_chain_position_uq`.
  * SQLite names a unique index's columns, not the index, so the refusal is asserted by those columns.
  */
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { jobOrigin } from "@waitron/shared";
+import { timeEntries } from "./schema/time-entries.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
@@ -55,12 +55,14 @@ function inputAt(at: string): TimeEntryAppend {
 async function readHead() {
   const [row] = await suite.db
     .select({
-      sequenceNo: workforceChains.sequenceNo,
-      lastEntryId: workforceChains.lastEntryId,
-      lastEntryHash: workforceChains.lastEntryHash,
+      sequenceNo: timeEntries.sequenceNo,
+      lastEntryId: timeEntries.id,
+      lastEntryHash: timeEntries.entryHash,
     })
-    .from(workforceChains)
-    .where(eq(workforceChains.nodeId, nodeId));
+    .from(timeEntries)
+    .where(eq(timeEntries.nodeId, nodeId))
+    .orderBy(desc(timeEntries.sequenceNo))
+    .limit(1);
   return row!;
 }
 
