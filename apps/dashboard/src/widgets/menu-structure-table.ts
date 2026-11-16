@@ -301,7 +301,6 @@ export class MenuStructureTable extends LitElement {
   #target: Drop | undefined = undefined;
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
-  /** Whether a column filter is narrowing the rows, as the table last reported. */
 
   #fitFrame = 0;
   readonly #pathResize = new ResizeObserver(() => this.#schedulePathFit());
