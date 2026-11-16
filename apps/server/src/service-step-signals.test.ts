@@ -1474,6 +1474,41 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       );
     });
 
+    it("a step that follows one a serving started, done at the old table, is not asked again at a table that has ordered", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const [anything, coffee] = await setSteps(v, await tablesDepartment(v), [
+        { name: "Anything else?", start: "all_served", courseId: null, minutes: 10, key: "any" },
+        { name: "Coffee?", start: "after_step", afterStepKey: "any", courseId: null, minutes: 5 },
+      ]);
+      const tableId = await v.table("Table 2");
+      const to = await seat(v, tableId);
+      await orderForParty(v, to.partyId, ["Water"]);
+      const from = await partyWith(v, "Table 1", "fire");
+      const servedAt = await serve(v, from.billId, "Water");
+      await inTx(v, (tx) =>
+        recordStepCompletions(tx, [
+          {
+            partyId: from.partyId,
+            stepId: anything!,
+            doneAt: new Date(servedAt + 1).toISOString(),
+            doneBy: OPERATOR,
+          },
+          {
+            partyId: from.partyId,
+            stepId: coffee!,
+            doneAt: new Date(servedAt + 2).toISOString(),
+            doneBy: OPERATOR,
+          },
+        ]),
+      );
+
+      await moveToParty(v, from, to.partyId, tableId);
+
+      expect((await liveAt(v, to.partyId, tableId))!.map((step) => step.stepId)).not.toContain(
+        coffee,
+      );
+    });
+
     it("with no Done at the old table, the steps still show at the new one", async () => {
       const v = await setupPartyVenue(suite.db);
       const { from, dessert, anything } = await servedAndDone(v, false);

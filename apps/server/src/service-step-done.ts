@@ -6,7 +6,7 @@ import {
   recordStepCompletions,
   serviceStepCompletions,
 } from "@waitron/venue-service";
-import { stepsClearedByDone } from "./service-step-reckoning.js";
+import { stepsClearedByDone, type StepRule } from "./service-step-reckoning.js";
 import { readStepFacts } from "./service-step-signals.js";
 import { assertSubjectZones } from "./zone-access.js";
 import "./errors.js";
@@ -72,22 +72,27 @@ export async function markServiceStepDone(
   return { cleared };
 }
 
+const CARRIED_STARTS: ReadonlySet<StepRule["start"]> = new Set([
+  "course_served",
+  "all_served",
+  "after_step",
+]);
+
 /**
  * Gives party `to` the Done rows party `from` holds for the steps of `tableIds`' departments that
- * start from a serving: a moved bill's dishes keep their serving times, so without them a step
- * already done would be asked again. A repeating step counts afresh from the arrival, and a seated
- * step clears on it, so their Done stays behind.
+ * start from a serving or from another step's Done: a moved bill's dishes keep their serving
+ * times, so without them a step already done, or one following it, would be asked again. A
+ * repeating step counts afresh from the arrival, and a seated step clears on it, so their Done
+ * stays behind.
  */
-export async function carryServingStepDones(
+export async function carryDoneWithBill(
   tx: Transaction,
   from: string,
   to: string,
   tableIds: readonly string[],
 ): Promise<void> {
   const stepIds = [...(await readTableStepRules(tx, tableIds)).values()].flatMap((table) =>
-    table.rules
-      .filter((rule) => rule.start === "course_served" || rule.start === "all_served")
-      .map((rule) => rule.id),
+    table.rules.filter((rule) => CARRIED_STARTS.has(rule.start)).map((rule) => rule.id),
   );
   if (stepIds.length === 0) return;
   const rows = await tx
