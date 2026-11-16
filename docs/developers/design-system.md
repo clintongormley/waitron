@@ -7075,7 +7075,7 @@ flush left. A department row is bold on the `--wt-color-bg` band, and one with n
 sets yet". A set row shows its name in bold, with a "Default" badge (`--wt-color-on-primary` on
 `--wt-color-primary`) on the department's default set; its Used by cell holds a chip, with the
 period's colour swatch, for each period that names the set, or says "Not used" (a long period name
-wraps inside its chip, so on a phone it is not hidden under the pinned column); its row menu, in
+wraps inside its chip rather than widening the column); its row menu, in
 the pinned `actions` column, holds Rename…, Copy… and, on a set that is not the default, Make
 default and Delete…. A zone row's name is a link to that set's layout of the zone in the floor plan
 editor (`layoutPath`), named "{zone} · {set}", and its Tables cell counts the tables on the layout

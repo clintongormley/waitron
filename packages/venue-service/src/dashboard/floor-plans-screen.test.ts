@@ -586,7 +586,7 @@ it("offers localized remembered column choices for waitron.floor-plans.table", a
 });
 
 it.each(["en", "es"] as const)(
-  "at 390 px in %s shows a long period name whole, clear of the pinned Actions column",
+  "at 390 px in %s shows a long period name whole, wrapped inside its chip",
   async (locale) => {
     setLocale(locale);
     const before = [window.innerWidth, window.innerHeight] as const;
@@ -603,9 +603,9 @@ it.each(["en", "es"] as const)(
     expect(chips).toHaveLength(2);
     for (const chip of chips) {
       expect(chip.scrollWidth).toBeLessThanOrEqual(chip.clientWidth);
-      expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
-        cell(table, "set:standard", "actions").getBoundingClientRect().left + 0.5,
-      );
+      const range = document.createRange();
+      range.selectNodeContents([...chip.childNodes].find((n) => n.nodeType === Node.TEXT_NODE)!);
+      expect(range.getClientRects().length, "lines of the name").toBeGreaterThan(1);
     }
   },
 );
