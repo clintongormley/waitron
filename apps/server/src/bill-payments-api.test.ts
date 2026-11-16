@@ -80,7 +80,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedLines, withoutRules } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -4872,7 +4872,7 @@ describe("refund first (design §4.3, §6a)", () => {
     const printed = tickets[0]!;
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
-    expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+    expect(withoutRules(printed.slice(start + 1))).toEqual([
       "Base imponible 21% 33,05 €",
       "IVA 21% 6,95 €",
       "Efectivo 50,00 €",

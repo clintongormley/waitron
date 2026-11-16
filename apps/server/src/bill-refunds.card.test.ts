@@ -51,7 +51,7 @@ import { systemClock } from "./till-backend.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { parkOrder } from "./working-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedLines, withoutRules } from "./testing/decode-ticket.js";
 import "./errors.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
 vi.mock("node:crypto", async (importOriginal) =>
@@ -2170,7 +2170,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     expect(tickets).toHaveLength(1);
     const printed = tickets[0]!;
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
-    expect(printed.slice(start).filter((l) => l !== "" && !/^-+$/.test(l))).toEqual([
+    expect(withoutRules(printed.slice(start))).toEqual([
       "TOTAL 60,00 €",
       "Base imponible 21% 49,58 €",
       "IVA 21% 10,42 €",

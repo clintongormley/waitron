@@ -29,7 +29,7 @@ import {
   tendersOfBill,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedLines, withoutRules } from "./testing/decode-ticket.js";
 import { systemClock } from "./till-backend.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import "./errors.js";
@@ -251,12 +251,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     expect(printed[pulpo + 1]).toBe("Descuento 100% -20,00");
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "" && !/^-+$/.test(line))
-        .slice(0, 4),
-    ).toEqual([
+    expect(withoutRules(printed.slice(start + 1)).slice(0, 4)).toEqual([
       "Base imponible 21% 33,05 €",
       "IVA 21% 6,95 €",
       "Efectivo 50,00 €",

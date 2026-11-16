@@ -27,6 +27,11 @@ export function printedLines(bytes: Uint8Array): string[] {
   return preview.text.split("\n");
 }
 
+/** `lines` without its blank lines and dashed rule lines. */
+export function withoutRules(lines: string[]): string[] {
+  return lines.filter((line) => line !== "" && !/^-+$/.test(line));
+}
+
 /** {@link printedLines} as one string, for a search through the whole printed ticket. */
 export function decodeTicket(bytes: Uint8Array): string {
   return printedLines(bytes).join("\n");

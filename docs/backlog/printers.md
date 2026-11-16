@@ -411,14 +411,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 - [The till's on-screen receipt is a second copy of the layout](#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
 - [On an A4 full invoice, a caption and its amount can split across pages](#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages).
 - [The A4 item table's header can sit alone at a page foot](#the-a4-item-tables-header-can-sit-alone-at-a-page-foot).
-- Equipment labels draw their double-size heading by hand (Part 1a).
-  `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
-  now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check
-  its layout, which uses a different grid.
-- Receipt test tidy-ups (Part 1b). Six receipt test sites repeat the same filter that skips dashed
-  rule lines; give them one shared helper beside `printedLines`
-  (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
-  `nif()` can be plain constants.
 
 ## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
 

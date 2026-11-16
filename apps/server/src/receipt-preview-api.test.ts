@@ -116,7 +116,7 @@ function pictures(result: ReceiptPreviewResponse) {
 }
 
 /** The venue's legal name, on its own line; its tax ID is the line under it. */
-const legal = () => "Deli Test SL";
+const LEGAL = "Deli Test SL";
 const nif = () => `NIF: ${taxId}`;
 /** The ruled line that ends a section. */
 const RULE = expect.stringMatching(/^-+$/);
@@ -186,7 +186,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(response.status).toBe(200);
     const answer = (await response.json()) as ReceiptPreviewResponse;
     expect(printedLines(answer)).toContain("Authored department");
-    expect(printedLines(answer)).toContain(legal());
+    expect(printedLines(answer)).toContain(LEGAL);
     expect(printedLines(answer)).toContain(nif());
     expect(printedLines(answer)).toContain("Calle Mayor 1");
     expect(answer.marks.headerSubtitle).not.toBeNull();
@@ -231,7 +231,7 @@ describe("POST /management-api/receipt-preview", () => {
       footerMessage: "Gracias por su visita",
     });
     const lines = printedLines(result);
-    const name = lines.indexOf(legal());
+    const name = lines.indexOf(LEGAL);
     expect(name).toBeGreaterThanOrEqual(0);
     expect(lines[name - 1]).toBe("Calle Mayor 1, Madrid");
     expect(lines.slice(name + 1, name + 5)).toEqual([nif(), "Calle Mayor 1", "28013 Madrid", RULE]);
@@ -259,7 +259,7 @@ describe("POST /management-api/receipt-preview", () => {
       expect(response.status).toBe(200);
       const lines = printedLines((await response.json()) as ReceiptPreviewResponse);
       expect(lines.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
-      expect(lines.indexOf("Deli Counter")).toBeLessThan(lines.indexOf(legal()));
+      expect(lines.indexOf("Deli Counter")).toBeLessThan(lines.indexOf(LEGAL));
     } finally {
       await suite.db.execute(
         sql`update departments set trading_name = ${originalName} where id = ${id}`,
@@ -314,7 +314,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(headerSubtitle).not.toBeNull();
     expect(headerSubtitle!.end - headerSubtitle!.start).toBe(2);
     expect(linesOf(result, headerSubtitle!.start, headerSubtitle!.end).join(" ")).toBe(header);
-    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 2)).toEqual([legal(), nif()]);
+    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 2)).toEqual([LEGAL, nif()]);
     expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
     expect(linesOf(result, footerMessage!.start - 1, footerMessage!.start)).toEqual([RULE]);
   });
@@ -344,7 +344,7 @@ describe("POST /management-api/receipt-preview", () => {
       const result = await rendered({ headerSubtitle: "---" }, { practiceMode });
       const mark = result.marks.headerSubtitle!;
       expect(linesOf(result, mark.start, mark.end)).toEqual(["---"]);
-      expect(linesOf(result, mark.end, mark.end + 1)).toEqual([legal()]);
+      expect(linesOf(result, mark.end, mark.end + 1)).toEqual([LEGAL]);
     });
 
     it("marks a footer exactly as wide as the roll's rule, and not the rule beside it", async () => {
@@ -361,7 +361,7 @@ describe("POST /management-api/receipt-preview", () => {
   it("marks nothing for absent trim and marks the explicitly enabled venue address", async () => {
     const result = await rendered({});
     const lines = printedLines(result);
-    const name = lines.indexOf(legal());
+    const name = lines.indexOf(LEGAL);
     expect(result.marks).toEqual({
       headerSubtitle: null,
       footerMessage: null,
@@ -725,7 +725,7 @@ describe("POST /management-api/receipt-preview", () => {
     const lines = printedLines(result);
     expect(lines.indexOf("CAP-X")).toBeGreaterThanOrEqual(0);
     expect(lines.indexOf("LEG-Y")).toBeGreaterThan(lines.indexOf("CAP-X"));
-    expect(lines.indexOf("LEG-Y")).toBeLessThan(lines.indexOf(legal()));
+    expect(lines.indexOf("LEG-Y")).toBeLessThan(lines.indexOf(LEGAL));
   });
 
   it("draws no QR, caption or legend for a venue whose fiscal backend gives no words", async () => {
@@ -733,7 +733,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(pictures(result)).toEqual([]);
     expect(result.preview.text).not.toContain("VERI*FACTU");
     expect(result.preview.text).not.toContain("QR tributario");
-    expect(printedLines(result)).toContain(legal());
+    expect(printedLines(result)).toContain(LEGAL);
     expect(printedLines(result)).toContain(nif());
   });
 
@@ -803,10 +803,10 @@ describe("the receipt preview's top block", () => {
       email: "hola@deli.test",
     });
     const lines = printedLines(result);
-    const name = lines.indexOf(legal());
+    const name = lines.indexOf(LEGAL);
     expect(lines.slice(name - 1, name + 7)).toEqual([
       "Desde 1990",
-      legal(),
+      LEGAL,
       nif(),
       "Calle Mayor 1",
       "28013 Madrid",
@@ -827,7 +827,7 @@ describe("the receipt preview's top block", () => {
   it("draws no address, and marks none, when the receipt switches it off", async () => {
     const result = await rendered({ printAddress: false });
     const lines = printedLines(result);
-    const name = lines.indexOf(legal());
+    const name = lines.indexOf(LEGAL);
     expect(lines.slice(name + 1, name + 3)).toEqual([nif(), RULE]);
     expect(result.marks).toEqual({
       headerSubtitle: null,
@@ -847,7 +847,7 @@ describe("the receipt preview's top block", () => {
     const mark = result.marks.logo!;
     expect(linesOf(result, mark.start, mark.end)).toEqual(["", "", ""]);
     expect(result.preview.blocks[mark.start + 1]).toMatchObject({ kind: "image", width: 504 });
-    expect(linesOf(result, mark.end, mark.end + 1)).toEqual([legal()]);
+    expect(linesOf(result, mark.end, mark.end + 1)).toEqual([LEGAL]);
   });
 
   it("draws the saved picture when the logo is the saved one", async () => {
@@ -1058,7 +1058,7 @@ describe("the receipt preview's top block", () => {
       try {
         const result = await rendered({});
         expect([sizes(result), result.marks.logo]).toEqual([[], null]);
-        expect(printedLines(result)).toContain(legal());
+        expect(printedLines(result)).toContain(LEGAL);
         expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
           operation: "readPrintedThemeLogo",
           code: "receipt.read_failed",
@@ -1114,7 +1114,7 @@ describe("the receipt preview's top block", () => {
           warning.mockRestore();
         }
         expect([sizes(result), result.marks.logo]).toEqual([[], null]);
-        expect(printedLines(result)).toContain(legal());
+        expect(printedLines(result)).toContain(LEGAL);
       },
     );
 
