@@ -10158,6 +10158,19 @@ it("signs out when the Backups screen asks for an administrator", async () => {
   expect(backupScreen(el)).toBeNull();
 });
 
+it.each(["demo", "live"] as const)(
+  "hands the Backups screen the box's setup choice from /me (%s)",
+  async (intent) => {
+    history.replaceState(null, "", "/manage/backup");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, onboardingIntent: intent }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(backupScreen(el)!.onboardingIntent).toBe(intent);
+  },
+);
+
 describe("the Users screen's administrator sign-in, pressed for real", () => {
   const marta: PersonSummary = {
     personId: "p2",

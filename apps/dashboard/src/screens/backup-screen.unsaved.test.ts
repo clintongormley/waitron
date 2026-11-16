@@ -12,7 +12,10 @@ class BackupLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   override render() {
-    return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>
+    return html`<dashboard-backup-screen
+        .api=${this.api}
+        .onboardingIntent=${"live"}
+      ></dashboard-backup-screen>
       ${this.leave.render({
         heading: t("unsaved.heading"),
         message: t("unsaved.message"),

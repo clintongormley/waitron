@@ -3335,6 +3335,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-backup-screen
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("system.manage")}
+          .onboardingIntent=${this.onboardingIntent}
           @admin-sign-in=${() => void this.#onLogout()}
         ></dashboard-backup-screen>`;
       case "servers":

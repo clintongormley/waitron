@@ -162,7 +162,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
           };
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(OFF, overrides) },
+      { onboardingIntent: "live", api: stubApi(OFF, overrides) },
       theme,
     );
     await flush(el);
@@ -175,7 +175,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders only usable archive destination choices accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(OFF) },
+      { onboardingIntent: "live", api: stubApi(OFF) },
       theme,
     );
     await flush(el);
@@ -188,6 +188,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       {
+        onboardingIntent: "live",
         api: stubApi(
           { ...OFF, recoveryKeySet: true },
           {
@@ -229,7 +230,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it.each([true, false])("renders the folder switch turned %s accessibly", async (on) => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      { onboardingIntent: "live", api: stubApi({ ...OFF, recoveryKeySet: true }) },
       theme,
     );
     await flush(el);
@@ -243,7 +244,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders neither a folder nor a bucket, refused by the form, accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      { onboardingIntent: "live", api: stubApi({ ...OFF, recoveryKeySet: true }) },
       theme,
     );
     await flush(el);
@@ -258,7 +259,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the configure wizard accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(OFF) },
+      { onboardingIntent: "live", api: stubApi(OFF) },
       theme,
     );
     await flush(el);
@@ -268,7 +269,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the advanced paste + pick-weekdays + fixed-time branches accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(OFF) },
+      { onboardingIntent: "live", api: stubApi(OFF) },
       theme,
     );
     await flush(el);
@@ -282,7 +283,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the configure wizard reusing a key the box already holds accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      { onboardingIntent: "live", api: stubApi({ ...OFF, recoveryKeySet: true }) },
       theme,
     );
     await flush(el);
@@ -293,7 +294,10 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the configure wizard replacing a held key too short to use accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true }) },
+      {
+        onboardingIntent: "live",
+        api: stubApi({ ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true }),
+      },
       theme,
     );
     await flush(el);
@@ -304,7 +308,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the enabled state with the rotate section + re-shown old key accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(ENABLED) },
+      { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
     await flush(el);
@@ -316,7 +320,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders an armed Turn off with its explanation and Cancel accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(ENABLED) },
+      { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
     await flush(el);
@@ -329,7 +333,10 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders stored settings that are switched off, ready to turn back on, accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...ENABLED, enabled: false, storedDisabled: true }) },
+      {
+        onboardingIntent: "live",
+        api: stubApi({ ...ENABLED, enabled: false, storedDisabled: true }),
+      },
       theme,
     );
     await flush(el);
@@ -340,7 +347,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the enabled edit-settings form accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(ENABLED) },
+      { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
     await flush(el);
@@ -352,7 +359,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders the settings editor accessibly with Save quiet, then with Save ready after an edit", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(ENABLED) },
+      { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
     await flush(el);
@@ -377,7 +384,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders turning archives on accessibly with Apply quiet, then with Apply ready after an edit", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      { onboardingIntent: "live", api: stubApi({ ...OFF, recoveryKeySet: true }) },
       theme,
     );
     await flush(el);
@@ -400,7 +407,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
   it("renders a retention box the form refused accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
-      { api: stubApi(ENABLED) },
+      { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
     await flush(el);
@@ -422,6 +429,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       {
+        onboardingIntent: "live",
         api: stubApi(
           { ...OFF, recoveryKeySet: true },
           { applyBackup: vi.fn().mockResolvedValue(FAILING) },
@@ -450,6 +458,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       {
+        onboardingIntent: "live",
         api: stubApi(
           { ...OFF, recoveryKeySet: true },
           {
@@ -495,6 +504,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       {
+        onboardingIntent: "live",
         api: stubApi(OFF, {
           getBackupStatus: vi.fn().mockRejectedValue({ code: "server.internal" }),
         }),

@@ -81,6 +81,24 @@ it("does not offer key replacement without system.manage", async () => {
   expect(el.shadowRoot!.querySelector("dashboard-node-recovery")).toBeNull();
 });
 
+it.each([
+  ["prepare", true],
+  ["live", true],
+  ["demo", false],
+  [undefined, false],
+] as const)(
+  "draws the configuration export card for setup choice %s: %s",
+  async (onboardingIntent, shown) => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, OFF),
+      canManage: true,
+      onboardingIntent,
+    });
+    expect(el.shadowRoot!.querySelector("#configuration-export-title") !== null).toBe(shown);
+    expect(el.shadowRoot!.querySelector("[data-test=configuration-export]") !== null).toBe(shown);
+  },
+);
+
 const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
@@ -434,7 +452,10 @@ describe("backup-screen", () => {
     });
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:configuration");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      onboardingIntent: "live",
+    });
     await flush(el);
     setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
     setInput(el, "[data-test=configuration-confirm]", "a strong passphrase");
@@ -448,7 +469,10 @@ describe("backup-screen", () => {
   });
 
   it("explains a configuration export passphrase mismatch beside both fields", async () => {
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi(),
+      onboardingIntent: "live",
+    });
     await flush(el);
     setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
     setInput(el, "[data-test=configuration-confirm]", "a different passphrase");
@@ -464,7 +488,10 @@ describe("backup-screen", () => {
   });
 
   it("says nothing about the configuration export before it is first pressed, and it works", async () => {
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi(),
+      onboardingIntent: "live",
+    });
     await flush(el);
     setInput(el, "[data-test=configuration-passphrase]", "short");
     await el.updateComplete;
@@ -481,7 +508,10 @@ describe("backup-screen", () => {
     });
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:configuration");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      onboardingIntent: "live",
+    });
     await flush(el);
     q(el, "[data-test=configuration-export]")!.click();
     await el.updateComplete;
@@ -517,7 +547,10 @@ describe("backup-screen", () => {
   });
 
   it("lets the operator reveal both configuration export passphrases", async () => {
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi(),
+      onboardingIntent: "live",
+    });
     await flush(el);
     const passphrase = q(el, "[data-test=configuration-passphrase]")!;
     const confirmation = q(el, "[data-test=configuration-confirm]")!;
@@ -1328,7 +1361,10 @@ describe("the status watcher's key requests and read alerts", () => {
 
 describe("backup-screen failures and edit-mode prefill", () => {
   async function mountLoaded(api: DashboardApi): Promise<BackupScreen> {
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      onboardingIntent: "live",
+    });
     await vi.waitFor(() => expect(q(el, "[data-test=status]")).not.toBeNull());
     return el;
   }
@@ -2101,7 +2137,10 @@ describe("keeping recovery keys after an unconfirmed change", () => {
             operation === "apply" ? { applyBackup: write } : { rotateBackupKey: write },
             operation === "apply" ? OFF : ENABLED,
           );
-          const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+          const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+            api,
+            onboardingIntent: "live",
+          });
           await flush(el);
           if (operation === "apply") {
             setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
@@ -2715,6 +2754,7 @@ describe("configuration export at phone width", () => {
       await page.viewport(390, 850);
       const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
         api: stubApi(),
+        onboardingIntent: "live",
       });
       await flush(el);
       for (const id of ["configuration-passphrase", "configuration-confirm"]) {

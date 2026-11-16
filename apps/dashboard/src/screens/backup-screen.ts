@@ -273,6 +273,8 @@ export class BackupScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) canManage = false;
+  /** The server serves the configuration export only on a box in preparation or live. */
+  @property({ attribute: false }) onboardingIntent?: "demo" | "prepare" | "live";
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -1208,7 +1210,8 @@ export class BackupScreen extends LitElement {
       <h1 class="title">${t("backup.title")}</h1>
       <p><a class="guide" href=${guideHref("backups.overview")}>${t("backup.guide")}</a></p>
       ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .openRequested=${new URL(location.href).searchParams.get("recovery-pack") === "make"} .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
-      ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
+      ${this.onboardingIntent === "prepare" || this.onboardingIntent === "live" ? this.#renderConfigurationExport() : nothing}
+      ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
       ${alertKey === "authorization.not_permitted" && !this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
       <dashboard-backup-settings-evidence
