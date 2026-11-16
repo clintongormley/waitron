@@ -587,7 +587,6 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await waitingActivation.dispose();
     await booted.close();
     booted = undefined;
-    if (held.server.listening) await held.close();
     const copied = await openVenueDatabase(dirs.spareVenue);
     try {
       const held = (await readNodeMembership(copied.venue))!;

@@ -360,7 +360,6 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     expect(await readPendingAdoption(scratch)).toBeNull();
     await server.close();
     server = undefined;
-    if (held.server.listening) await held.close();
 
     server = await startServer(env);
     const { via, close } = httpsVia(tls.caCertPem);

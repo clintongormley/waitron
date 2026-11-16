@@ -120,7 +120,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { freePort } from "./testing/free-ports.js";
-import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { peerCertificate } from "./testing/box-tls.js";
@@ -495,7 +495,9 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
   }
 }
 
-afterEach(() => {
+const retained: RetainedHttpListener[] = [];
+afterEach(async () => {
+  for (const held of retained.splice(0)) if (held.server.listening) await held.close();
   vi.unstubAllEnvs();
 });
 
@@ -694,6 +696,7 @@ describe("startServer, against a migrated venue directory", () => {
   });
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const held = await retainHttpListener();
+    retained.push(held);
     const port = held.port;
     const adoption = adoptRetainedListeners([held]);
     // Read back below to show the rotating file sink is wired into `startServer`.
@@ -810,7 +813,6 @@ describe("startServer, against a migrated venue directory", () => {
     } finally {
       adoption.restore();
       await server.close();
-      if (held.server.listening) await held.close();
       await rm(logDir, { recursive: true, force: true });
     }
 

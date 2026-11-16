@@ -969,7 +969,6 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
-        if (held.server.listening) await held.close();
       }
       expect(running(pid)).toBe(false);
       expect(await accepts(storePort!)).toBe(false);
@@ -1173,7 +1172,6 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
-        if (held.server.listening) await held.close();
       }
       expect(running(pid)).toBe(false);
       expect(await accepts(storePort!)).toBe(false);

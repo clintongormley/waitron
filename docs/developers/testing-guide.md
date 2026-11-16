@@ -558,6 +558,12 @@ Production’s `WAITRON_HTTP_PORT` parser is unchanged; `src/config.test.ts` kee
 This fixture does not change a later waiting-start rebind inside one process, nor reserve a port
 that represents an unreachable peer.
 
+For an in-process adoption, close the retained holder only after any check that the server released
+its port. Closing the holder can close the adopted listener's shared socket and hide a server-close
+leak. A 17 November 2026 deletion control removed the upgrade checker's listener close: the old
+cleanup order passed, while leaving holder cleanup until after the rebind made that check fail
+with `EADDRINUSE`.
+
 ### Select a boot test's port at the real listener bind when its contract permits it
 
 A drawn port is not reserved through boot.

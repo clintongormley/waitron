@@ -20,16 +20,18 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_PRODUCER } from "./testing/test-producer.js";
 import { loadConfig } from "./config.js";
 import { freePort } from "./testing/free-ports.js";
-import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 
 vi.mock("node:child_process", { spy: true });
 
 let root: string;
+const retained: RetainedHttpListener[] = [];
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "waitron-upgrade-check-"));
 });
 afterEach(async () => {
+  for (const held of retained.splice(0)) if (held.server.listening) await held.close();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
@@ -41,6 +43,7 @@ it("binds the configured TLS address and refuses health, sign-in and payment req
   await mkdir(join(root, "tls"));
   await writeFile(join(root, "tls/server.pem"), material.serverCertPem + material.serverKeyPem);
   const held = await retainHttpListener();
+  retained.push(held);
   const port = held.port;
   const adoption = adoptRetainedListeners([held]);
   const config = loadConfig(
@@ -75,7 +78,6 @@ it("binds the configured TLS address and refuses health, sign-in and payment req
   } finally {
     adoption.restore();
     await checked.close();
-    if (held.server.listening) await held.close();
   }
   const reclaimed = await openUpgradeListener(config, () => {});
   await reclaimed.close();
@@ -135,6 +137,7 @@ describe("contained upgrade data checks", () => {
     const { env } = await copiedConfig();
     await writeFile(join(root, "trading.env"), `WAITRON_NODE_ID=${venue.cfg.nodeId}\n`);
     const held = await retainHttpListener();
+    retained.push(held);
     const port = held.port;
     const adoption = adoptRetainedListeners([held]);
     const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => {
@@ -155,10 +158,7 @@ describe("contained upgrade data checks", () => {
     const report = await runUpgradeChecks(
       { ...base, WAITRON_MIGRATIONS_DIR: migrations, WAITRON_HTTP_PORT: String(port) },
       () => {},
-    ).finally(async () => {
-      adoption.restore();
-      if (held.server.listening) await held.close();
-    });
+    ).finally(adoption.restore);
     expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
     expect(connect).not.toHaveBeenCalled();
     for (const process of processes) expect(process).not.toHaveBeenCalled();
@@ -296,6 +296,7 @@ describe("contained upgrade data checks", () => {
     const { runUpgradeChecks } = await import("./upgrade-check-entry.js");
     const { config, env } = await copiedConfig();
     const held = await retainHttpListener();
+    retained.push(held);
     const port = held.port;
     const adoption = adoptRetainedListeners([held]);
     await expect(
@@ -307,10 +308,7 @@ describe("contained upgrade data checks", () => {
           WAITRON_HTTP_PORT: String(port),
         },
         () => {},
-      ).finally(async () => {
-        adoption.restore();
-        if (held.server.listening) await held.close();
-      }),
+      ).finally(adoption.restore),
     ).rejects.toMatchObject({ code: "deployment.environment_mismatch" });
     const { openUpgradeListener } = await import("./upgrade-checks.js");
     const rebound = await openUpgradeListener({ ...config, httpPort: port }, () => {});

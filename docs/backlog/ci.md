@@ -32,13 +32,13 @@ The source audit at `213d0ec3bc` covered 229 allocation expressions in 85 operat
 | `boot.failed-start.test.ts` | 485, 505, 616, 1165, 1412 | Configured main/landing/staff first binds remain unreserved; keep the failed-start and exact listener-release checks. |
 | `boot.invoice-delivery.test.ts` | 188 | Ordinary HTTP binds at zero; configured mirror starts still have an initial gap, and the unused peer address is unreserved. |
 | `boot.joining-spare-answers.test.ts` | 206 | Advertised HTTPS and public store addresses are known before the first binds, which remain unreserved; the fake gateway does not bind its loopback argument. |
-| `boot.mirror.test.ts` | 381, 948, 1151 | The staff address is intentionally unused and unreserved. Fake-gateway loopback arguments are configured data, not listening sockets. |
+| `boot.mirror.test.ts` | 381, 948, 1150 | The staff address is intentionally unused and unreserved. Fake-gateway loopback arguments are configured data, not listening sockets. |
 | `boot.reconcile.test.ts` | 415, 461, 490 | Unused peer addresses remain unreserved. |
 | `boot.restore.test.ts` | 443 | Malformed-membership cases expect a refusal rather than a successful listener; their unused peer input remains unreserved. |
-| `boot.setup-routes.test.ts` | 477 | The extra unused peer is unreserved. |
+| `boot.setup-routes.test.ts` | 480 | The extra unused peer is unreserved. |
 | `boot.start-check.test.ts` | 877 | The first configured waiting listener is unreserved; preserve the separate, intentional waiting-to-normal rebind check. |
-| `boot.test.ts` | 2743 | The unresolvable-host case keeps configured port input and expects ENOTFOUND. |
-| `boot.upgrade.test.ts` | 348 | The built-entry child checks still release the configured address before each new child binds; preserve their release/rebind checks. |
+| `boot.test.ts` | 2745 | The unresolvable-host case keeps configured port input and expects ENOTFOUND. |
+| `boot.upgrade.test.ts` | 346 | The built-entry child checks still release the configured address before each new child binds; preserve their release/rebind checks. |
 | `boot.adoption-allocation.test.ts` | 324 | The sleep stub records its configured loopback argument without binding a listener. |
 | `handover-controlled.e2e.test.ts` | 576 | Both advertised box addresses are released before first use. Later saved-origin restarts also retain their existing binding contract. |
 | `testing/s3-test-server.ts` | 152 | The real Go listener still has a first-bind gap; bounded PortTaken retries and instance-signed readiness recover collisions without retaining the socket. |

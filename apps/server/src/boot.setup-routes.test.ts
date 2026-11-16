@@ -332,11 +332,14 @@ describe("startServer — background listeners and sinks that fail or close", ()
     } finally {
       adoption.restore();
       await server.close();
-      if (main.server.listening) await main.close();
-      if (landing.server.listening) await landing.close();
-      await rm(stateDir, { recursive: true, force: true });
+      try {
+        await expect(fetch(`http://127.0.0.1:${landingPort}/`)).rejects.toThrow();
+      } finally {
+        if (main.server.listening) await main.close();
+        if (landing.server.listening) await landing.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
     }
-    await expect(fetch(`http://127.0.0.1:${landingPort}/`)).rejects.toThrow();
   }, 60_000);
 
   it("warns once on stdout when the log directory cannot be written, and keeps serving", async () => {

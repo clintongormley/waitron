@@ -378,7 +378,6 @@ describe("till reroute — two instances, one venue", () => {
       // 4. A goes down — its listener closes, which a till sees as an unreachable box. FAILING CASE: a
       // probe of a live A resolves; a closed listener rejects.
       await serverA.close();
-      if (heldA.server.listening) await heldA.close();
       await expect(fetch(`http://127.0.0.1:${portA}/api/node`)).rejects.toThrow();
 
       // 5. Promote B at the DB level — the deployment flip a human's promote performs.
@@ -392,7 +391,6 @@ describe("till reroute — two instances, one venue", () => {
       expect((await probe(portB)).acceptingSales).toBe(false);
       await serverB.close();
       serverB = undefined;
-      if (heldB.server.listening) await heldB.close();
 
       // A and B are both down, so B's `tls/` can be written in the state folder they share.
       await writeTlsSet(STATE_ROOT, VENUE_TLS);
