@@ -4539,6 +4539,28 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(warning?.message).toContain(money("125.00"));
   });
 
+  it("sends a retrieved unpaid Counter bill through whole-order Card Pay", async () => {
+    const el = await retrieved({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([held({ hasPayments: false, outstanding: "120.00" })]),
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          workingOrderId: "wo-1",
+          received: "0.00",
+          payments: [],
+          outstanding: "120.00",
+        }),
+      ),
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoiceOf("120.00") }),
+    });
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(api.pay).toHaveBeenCalledWith(expect.objectContaining({ id: "wo-1" }));
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+
   it("forwards a counter whole-card slip choice and warns without charging again", async () => {
     const el = await retrieved({
       listWorkingOrders: vi

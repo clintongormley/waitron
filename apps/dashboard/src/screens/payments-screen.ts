@@ -30,6 +30,7 @@ import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents, type DeleteImpact } from "@waitron/shared";
 import {
   registerCatalogue,
+  QueryController,
   tableNoMatches,
   type CardProviderPanel,
   type DashboardRequest,
@@ -68,7 +69,7 @@ export const readerSettingFields = [
 ] as const;
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
-function stuckRefusalText(error: unknown): string {
+function paymentRefusalText(error: unknown): string {
   const code = codeOf(error);
   if (code === "payment.outcome_unknown") {
     const reason = (error as { params?: { reason?: unknown } }).params?.reason;
@@ -76,7 +77,7 @@ function stuckRefusalText(error: unknown): string {
     if (reason === "ambiguous") return t("payments.stuck.unknown_ambiguous");
   }
   if (code === "reader.provider_disconnected") return t("payments.stuck.provider_disconnected");
-  if (code === "server.internal") return t("payments.stuck.failed");
+  if (code === "server.internal") return t("payments.partial.failed");
   return codeMessage(code);
 }
 
@@ -168,6 +169,7 @@ function billRefusalText(error: unknown): string {
 // Two status reads can wait on the card provider; keep other browser connections
 // available, including in browsers without Web Locks.
 let statusSlotsFree = 2;
+let nextStatusQueryKey = 0;
 const statusSlotWaiters: (() => void)[] = [];
 
 async function takeLocalStatusSlot(): Promise<void> {
@@ -426,6 +428,14 @@ export class PaymentsScreen extends LitElement {
   #opener?: HTMLElement;
   #discoveryVersion = 0;
   #statusVersion = 0;
+  #statusPasses = 0;
+  #statusCompletedAt = -Infinity;
+  readonly #statusQueryKey = `reader-status:${++nextStatusQueryKey}`;
+  readonly #statusQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {},
+  );
   #pairSucceeded = false;
   #statusesDue = true;
   #statusIds: string | undefined;
@@ -438,7 +448,11 @@ export class PaymentsScreen extends LitElement {
   @state() private confirmingPartial: StuckPaymentRow | StuckBillPaymentRow | null = null;
   @state() private confirmingStuck: StuckPaymentRow | null = null;
   @state() private resolvingId: string | null = null;
-  @state() private stuckResult: { text: string; refused: boolean } | null = null;
+  @state() private stuckResult: {
+    text: string;
+    refused: boolean;
+    evidence?: StuckPaymentRow;
+  } | null = null;
   @state() private billPayments: StuckBillPaymentRow[] = [];
   @state() private billRefunds: StuckBillRefundRow[] = [];
   @state() private tenderRefunds: StuckTenderRefundRow[] = [];
@@ -738,8 +752,6 @@ export class PaymentsScreen extends LitElement {
           const gone = (this.readers ?? []).filter(({ id }) => !listed.has(id));
           this.readers = readers;
           for (const { id } of gone) this.#readerGone(id, true);
-          // A status may ask the provider itself, so a background refresh asks again only when the
-          // set of active readers changed.
           const ids = JSON.stringify(
             readers
               .filter((r) => r.active)
@@ -752,6 +764,25 @@ export class PaymentsScreen extends LitElement {
           this.#statusesDue = false;
           this.#statusIds = ids;
           void this.#loadStatuses(readers, !due || !attended);
+          if (!readers.some((r) => r.active)) this.#statusQueries.release("statuses");
+          else
+            void this.#statusQueries
+              .watch(
+                "statuses",
+                {
+                  key: this.#statusQueryKey,
+                  dependencies: [],
+                  refreshMs: 60_000,
+                  quietWhileConnected: false,
+                  read: async () => {
+                    // Reconnects refresh all queries too; only a completed pass starts the cooldown.
+                    if (this.#statusPasses || Date.now() - this.#statusCompletedAt < 60_000) return;
+                    await this.#loadStatuses(this.readers ?? [], true);
+                  },
+                },
+                () => {},
+              )
+              .catch(() => undefined);
         })
         .catch(() => {
           attended = false;
@@ -770,6 +801,7 @@ export class PaymentsScreen extends LitElement {
     if (!this.isConnected) return;
     const client = background ? (this.api.background ?? this.api) : this.api;
     const version = ++this.#statusVersion;
+    this.#statusPasses++;
     this.refreshing = true;
     await Promise.all(
       readers
@@ -792,7 +824,8 @@ export class PaymentsScreen extends LitElement {
           }
         }),
     );
-    if (version === this.#statusVersion) this.refreshing = false;
+    this.#statusCompletedAt = Date.now();
+    if (--this.#statusPasses === 0) this.refreshing = false;
   }
 
   async #onAddReader(providerId: string): Promise<void> {
@@ -1945,6 +1978,7 @@ export class PaymentsScreen extends LitElement {
     this.resolvingId = row.paymentId;
     this.stuckResult = null;
     const order = this.#stuckOrder(row);
+    let failedCheck = false;
     try {
       const outcome = stuckOutcomeText(await this.api.resolveStuckPayment(row.paymentId));
       this.stuckResult =
@@ -1952,11 +1986,26 @@ export class PaymentsScreen extends LitElement {
           ? { text: `${order}: ${t("payments.stuck.failed")}`, refused: true }
           : { text: `${order}: ${outcome}`, refused: false };
     } catch (error) {
-      this.stuckResult = { text: `${order}: ${stuckRefusalText(error)}`, refused: true };
+      failedCheck = codeOf(error) === "server.internal";
+      this.stuckResult = {
+        text: `${order}: ${failedCheck ? t("payments.stuck.failed") : paymentRefusalText(error)}`,
+        refused: true,
+        ...(failedCheck ? { evidence: row } : {}),
+      };
     }
     try {
       this.stuck = await (this.api.background ?? this.api).listStuckPayments();
       this.stuckLoadError = null;
+      if (failedCheck)
+        this.stuckResult = {
+          text: `${order}: ${t(
+            this.stuck.some((current) => current.paymentId === row.paymentId)
+              ? "payments.stuck.failed_listed"
+              : "payments.stuck.failed_removed",
+          )}`,
+          refused: true,
+          evidence: row,
+        };
     } catch (error) {
       this.stuckLoadError = codeOf(error);
     } finally {
@@ -1983,6 +2032,19 @@ export class PaymentsScreen extends LitElement {
               role=${this.stuckResult.refused ? "alert" : "status"}
             >
               ${this.stuckResult.text}
+            </p>`
+          : nothing
+      }
+      ${
+        this.stuckResult?.evidence
+          ? html`<p data-test="stuck-failed-evidence">
+              ${this.stuckResult.evidence.paymentId} · ${this.stuckResult.evidence.workingOrderId} ·
+              ${this.#providerName(this.stuckResult.evidence.provider)} ·
+              ${formatMoney(this.stuckResult.evidence.amount, currentLocale())} ·
+              ${sourceLabel(this.stuckResult.evidence)} ·
+              <time datetime=${this.stuckResult.evidence.startedAt}
+                >${formatAlertTime(this.stuckResult.evidence.startedAt)}</time
+              >
             </p>`
           : nothing
       }
@@ -2107,7 +2169,7 @@ export class PaymentsScreen extends LitElement {
     } catch (error) {
       if (!current()) return;
       showResult({
-        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : stuckRefusalText(error)}`,
+        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : paymentRefusalText(error)}`,
         refused: true,
       });
     }

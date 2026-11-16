@@ -603,8 +603,25 @@ consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir e
 cuenta cuando esté registrado para ver el resultado. Si Comprobar pagos con tarjeta indica **Pago registrado.
 Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
 
+Si falla esa comprobación, sigue [Falló la comprobación de un cobro con tarjeta](table-service.md#card-check-failed).
+
 Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.
 Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo que quede pendiente.
+
+## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
+
+Si falla **Consultar con el proveedor de pagos**, conserva los datos del pedido y del cobro que
+muestra Pagos con tarjeta y consulta el cobro en el panel del proveedor. No vuelvas a cobrar. Si
+el cobro sigue en la lista, Waitron puede seguir consultándolo automáticamente. Puedes elegir
+**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor.
+
+Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si la comprobación
+confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. Si
+el proveedor confirma el cobro, comprueba primero si el pedido original ya está pagado. Si lo
+está, no hace falta hacer nada más. Si era un pedido del Mostrador y sigue sin pagar, busca el
+pedido original en **Mostrador** y elige **Tarjeta** con el mismo proveedor. Waitron registra un
+cobro guardado que coincida. Si el lector pide la tarjeta, cancela sin presentarla. Conserva los
+datos del cobro si no puedes completar este paso.
 
 ## Mover platos a otra cuenta {#move-dishes}
 

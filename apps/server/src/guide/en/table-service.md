@@ -563,8 +563,25 @@ record the provider’s confirmed outcome. Reopen the bill payment after it is r
 result. If Check card payments says **Payment recorded. The rest is still due.**, reopen the bill and
 collect only its outstanding balance.
 
+If that check fails, follow [A card-payment check failed](table-service.md#card-check-failed) below.
+
 If the reader took a different amount, compare the requested and taken figures in the warning.
 Check the bill balance before taking another payment, so you collect only what is still owed.
+
+## A card-payment check failed {#card-check-failed}
+
+If **Check with the card provider** fails, keep the order and payment details shown on Card
+payments and check the payment in the provider's dashboard. Do not charge again. If the payment
+stays listed, Waitron may still check it automatically. You can choose **Check with the card
+provider** again after checking the provider.
+
+If it is no longer listed, that alone does not confirm a charge. If the check confirmed the
+charge but recording failed, Waitron does not retry that recording automatically. If the
+provider confirms payment, first check whether the original order is already paid. If it is,
+nothing more is needed. If it was a Counter order and is still unpaid, find the original order
+at the **Counter** and choose **Card** using the same provider. Waitron records a matching saved
+charge. If the reader asks for the card, cancel without presenting it. Keep the payment details
+if you cannot finish this step.
 
 ## Move dishes to another bill {#move-dishes}
 

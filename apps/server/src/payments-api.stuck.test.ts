@@ -1,3 +1,4 @@
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -30,6 +31,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   hashPassword,
+  loginWithPin,
   hashPin,
   persons,
   PIN_THROTTLE_FREE_ATTEMPTS,
@@ -54,6 +56,8 @@ import {
   insertFailedPayment,
   recordRefund,
   payments,
+  cardReaders,
+  cardReaderHolders,
   stampAttemptingRef,
   type CardProviderContribution,
   type PaymentProvider,
@@ -67,6 +71,8 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
+import { mountTillApi } from "./till-api.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
@@ -1100,6 +1106,147 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await errorOf(again)).toEqual({ code: "payment.not_stuck", params: { paymentId } });
     expect(saleIdsFor(orderId)).toHaveLength(1);
     expect(await resolutionsFor(paymentId)).toHaveLength(1);
+  });
+
+  it("keeps a manager-confirmed capture when recording the sale fails, then recovers through Counter Pay without collection", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId, piId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    const spy = vi
+      .spyOn(backend, "recordSale")
+      .mockRejectedValueOnce(new Error("recording unavailable"));
+    try {
+      const failed = await send(v, "POST", resolvePath(paymentId));
+      expect(failed.status).toBe(500);
+      expect((await errorOf(failed)).code).toBe("server.internal");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await paymentRow(paymentId)).toEqual({
+      state: "captured",
+      saleId: null,
+      externalRef: piId,
+    });
+    expect(await resolutionsFor(paymentId)).toEqual([
+      {
+        personId: v.managerId,
+        workingOrderId: orderId,
+        outcome: "captured",
+        cancelledAtProvider: false,
+      },
+    ]);
+    expect(saleIdsFor(orderId)).toEqual([]);
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    expect(await (await send(v, "GET", "/management-api/payments/held")).json()).toEqual([]);
+    expect((await errorOf(await send(v, "POST", resolvePath(paymentId)))).code).toBe(
+      "payment.not_stuck",
+    );
+
+    const otherProvider = new FakePaymentProvider(suite.db);
+    await expect(
+      payWorkingOrderIntegrated(
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend,
+          clock,
+          provider: otherProvider,
+        },
+        v.cfg,
+        { id: orderId, lines: [] },
+      ),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight" });
+    expect(otherProvider.collectCalls).toEqual([]);
+
+    const tillDevice = v.cfg.origin.deviceId;
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId: tillDevice, personId: v.managerId, pin: "1234" }),
+    );
+    const cookie = await sessionCookieForTest(suite.db, session.token);
+    const tillApp = new Hono();
+    mountTillApi(
+      tillApp,
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend,
+        clock,
+        cfg: v.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+        providers: CARD_PROVIDERS,
+        pool: { get: async () => v.provider, evict: () => {} },
+      },
+      noopLog,
+    );
+    const listed = await tillApp.request("/api/working-orders", { headers: { cookie } });
+    expect(listed.status).toBe(200);
+    expect(((await listed.json()) as { id: string }[]).map((row) => row.id)).toContain(orderId);
+    const retrieved = await tillApp.request(`/api/working-orders/${orderId}`, {
+      headers: { cookie },
+    });
+    expect(retrieved.status).toBe(200);
+    expect(await retrieved.json()).toMatchObject({ id: orderId });
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stripe", providerRef: "reader_recovery", name: "Recovery reader" })
+      .returning();
+    await suite.db.insert(cardReaderHolders).values({ readerId: reader!.id, deviceId: tillDevice });
+    const paid = await tillApp.request("/api/pay", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        id: orderId,
+        lines: [],
+        expectedEdit: null,
+        readerId: reader!.id,
+        zoneId: v.zoneId,
+      }),
+    });
+    expect(paid.status).toBe(200);
+    expect(await paid.json()).toMatchObject({ outcome: "captured" });
+    const sales = saleIdsFor(orderId);
+    expect(sales).toHaveLength(1);
+    expect(await paymentRow(paymentId)).toEqual({
+      state: "captured",
+      saleId: sales[0],
+      externalRef: piId,
+    });
+    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(v.client.processedReaders).toEqual([]);
+  });
+
+  it("continues provider recovery after a manual check failed before confirming the charge", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    const spy = vi
+      .spyOn(v.provider, "resolveAbandonedAttempt")
+      .mockRejectedValueOnce(new Error("check unavailable"));
+    try {
+      const failed = await send(v, "POST", resolvePath(paymentId));
+      expect(failed.status).toBe(500);
+      expect((await errorOf(failed)).code).toBe("server.internal");
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await paymentRow(paymentId)).state).toBe("attempting");
+    expect(await resolutionsFor(paymentId)).toEqual([]);
+    expect(
+      await v.provider.resolvePending(new Date(), await ownsEveryPayment(suite.db)),
+    ).toMatchObject({ forwarded: 1 });
+    expect(await paymentRow(paymentId)).toMatchObject({ state: "captured", saleId: null });
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(v.client.processedReaders).toEqual([]);
   });
 
   it("answers a full disk while filing a captured payment as storage.disk_full, not the till's charged-card answer", async () => {
