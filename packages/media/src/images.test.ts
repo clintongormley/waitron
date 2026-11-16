@@ -274,6 +274,7 @@ describe("metadata and references", () => {
 
           name: "Bread (Large)",
           active: true,
+          productActive: true,
         },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
@@ -344,19 +345,26 @@ describe("metadata and references", () => {
           image: image.filename,
         },
       ]);
-      const variant = (id: string, productId: string, name: string, active: boolean) => ({
+      const variant = (
+        id: string,
+        productId: string,
+        name: string,
+        active: boolean,
+        productActive: boolean,
+      ) => ({
         kind: "variant",
         id,
         productId,
 
         name,
         active,
+        productActive,
       });
       expect(await listImageUsages(tx, image.id)).toEqual([
         { kind: "product", id: "p-on", name: "Bread", active: true },
-        variant("a-kept", "p-on", "Bread (Large)", true),
-        variant("a-of-inactive", "p-off", "Cake (Slice)", false),
-        variant("a-removed", "p-on", "Bread (Small)", false),
+        variant("a-kept", "p-on", "Bread (Large)", true, true),
+        variant("a-of-inactive", "p-off", "Cake (Slice)", false, false),
+        variant("a-removed", "p-on", "Bread (Small)", false, true),
       ]);
     });
   });

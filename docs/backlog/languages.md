@@ -45,25 +45,6 @@ The amounts and date read `20,00 €`, `5 ago 2026`, while its words are Galicia
 The screen falls back to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot
 format. The printed receipt is formatted on the server and keeps the language's own pattern.
 
-## The image library calls an archived variant an "Archived product"
-
-`packages/media/src/dashboard/image-library.ts` (`#usage`) labels every inactive product or variant
-use `image.archived_product` ("Archived product", "Producto archivado"). A variant use is inactive
-when the variant or its product is archived (`packages/media/src/images.ts`, the `variant` branch of
-`usage`), so an archived variant of a product that is not archived is said to be an archived product. The
-label predates A886, which only renamed it. Decide whether a variant gets its own label ("Archived
-variant", "Variante archivada") and, if so, update the content-and-images guides in both languages.
-
-## Bundle: Ui wording sweep
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
-  still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
-  sentence; a specific "nothing yet" sentence per screen, #1037).
-- **The image library calls an archived variant an "Archived product".**
-  [Detail](languages.md#the-image-library-calls-an-archived-variant-an-archived-product)
-
 ## Bundle: Native speaker review
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

@@ -218,8 +218,8 @@ it("speaks Spanish", async () => {
   expect(text(cell(table, "zone:private:terrace", "tables"))).toBe(
     "Ninguna mesa en el plano · 16 de reserva",
   );
-  expect(text(cell(table, "zone:bar-standard:bar-zone", "tables"))).toBe("Aún no hay mesas");
-  expect(text(cell(table, "department:deli", "name"))).toBe("Deli Aún no hay conjuntos");
+  expect(text(cell(table, "zone:bar-standard:bar-zone", "tables"))).toBe("Todavía no hay mesas");
+  expect(text(cell(table, "department:deli", "name"))).toBe("Deli Todavía no hay conjuntos");
   expect(
     cell(table, "set:dinner", "actions").querySelector("wt-row-actions")!.getAttribute("label"),
   ).toBe("Dinner: Acciones");

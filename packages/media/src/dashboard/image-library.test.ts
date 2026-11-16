@@ -1334,6 +1334,52 @@ it.each([
 });
 
 it.each([
+  ["en-GB", "Toast · Large (Archived variant)", "Old toast · Small (Archived product)"],
+  [
+    "es-ES",
+    `Toast · Large (${ES["image.archived_variant"]})`,
+    `Old toast · Small (${ES["image.archived_product"]})`,
+  ],
+])(
+  "in %s, marks an archived variant of an active product apart from a variant whose product is archived",
+  async (locale, archivedVariant, archivedProduct) => {
+    setLocale(locale);
+    const client = api();
+    client.getImage.mockResolvedValue({
+      image: { ...image, usageCount: 2 },
+      uses: [
+        {
+          kind: "variant",
+          id: "large",
+          productId: "toast",
+          name: "Toast · Large",
+          active: false,
+          productActive: true,
+        },
+        {
+          kind: "variant",
+          id: "small",
+          productId: "old",
+          name: "Old toast · Small",
+          active: false,
+          productActive: false,
+        },
+      ],
+    });
+    await mount(client);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(2));
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-modal li a")].map((link) => link.textContent),
+    ).toEqual([archivedVariant, archivedProduct]);
+  },
+);
+
+it("words an archived variant in Spanish", () => {
+  expect(ES["image.archived_variant"]).toBe("Variante archivada");
+});
+
+it.each([
   ["en-GB", "Dining receipt logo"],
   ["es-ES", ES["image.department_receipt_logo"].replace("{department}", "Dining")],
 ])(
@@ -1789,6 +1835,7 @@ const everyKindOfUse: ImageUsage[] = [
     menuId: "menu",
     name: "Large toast",
     active: true,
+    productActive: true,
   },
   { kind: "section", id: "drinks", internalName: "Drinks (internal)", ownerMenuId: "drinks-menu" },
   { kind: "menu_version", id: "v1", menuId: "lunch", menuName: "Lunch Menu", number: 3 },
