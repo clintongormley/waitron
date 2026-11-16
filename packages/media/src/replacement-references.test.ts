@@ -153,7 +153,7 @@ it("changes presentation without rewriting product, variant, section, folder, re
   });
   expect(await snapshot()).toEqual(before);
   expect(await listImageUsages(suite.db, image.id)).toEqual(uses);
-  expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id))).toEqual({
+  expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id, null))).toEqual({
     deleted: false,
     uses,
   });

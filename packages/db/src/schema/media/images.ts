@@ -33,6 +33,8 @@ export const mediaImages = table(
   (t) => [
     unique("media_images_filename_key").on(t.filename),
     index("media_images_date_idx").on(t.createdAt, t.id),
+    index("media_images_original_hash_idx").on(t.originalHash),
+    index("media_images_source_hash_idx").on(t.sourceHash),
     check(
       "media_images_filename_ck",
       sql`length(${t.filename}) = length(cast(${t.filename} as blob)) and substr(${t.filename}, 1, 64) not glob '*[^0-9a-f]*' and (substr(${t.filename}, 65) glob '.jpg' or substr(${t.filename}, 65) glob '.png' or substr(${t.filename}, 65) glob '.webp')`,

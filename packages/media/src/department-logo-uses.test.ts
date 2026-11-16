@@ -48,25 +48,28 @@ it("counts only department logos and protects each until cleared despite retired
         expect.objectContaining({ id: image.id, usageCount: 2 }),
       ]);
     }
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await tx
       .update(departments)
       .set({ receiptLogoImageId: null, receiptText: {} })
       .where(eq(departments.id, rows[0]!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({
+    expect(await deleteImage(tx, image.id, null)).toEqual({
       deleted: false,
       uses: [departmentUses[0]],
     });
 
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses: [departmentUses[0]] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({
+      deleted: false,
+      uses: [departmentUses[0]],
+    });
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     await tx
       .update(departments)
       .set({ receiptLogoImageId: null, receiptText: {} })
       .where(eq(departments.id, rows[1]!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -98,7 +101,7 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
       expect((await listImages(tx, { sort: "date" })).images[0]!.usageCount).toBe(1);
       expect((await listImages(tx, { sort: "name" })).images[0]!.usageCount).toBe(1);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     });
   },
 );
@@ -133,7 +136,7 @@ it("protects a deleted department's retained receipt logo after its name is reus
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     for (const sort of ["date", "name"] as const)
       expect((await listImages(tx, { sort })).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     expect(await tx.select().from(departments).where(eq(departments.id, old.id))).toEqual([
       expect.objectContaining({ id: old.id, receiptLogoImageId: image.id, receiptText: {} }),
     ]);

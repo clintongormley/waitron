@@ -298,7 +298,7 @@ it("serializes expected-revision saves so exactly one wins", async () => {
 
 it("refuses a deleted image before edit validation", async () => {
   const image = (await upload()).image;
-  await withTransaction(suite.db, (tx) => deleteImage(tx, image.id));
+  await withTransaction(suite.db, (tx) => deleteImage(tx, image.id, null));
   await expect(
     withTransaction(suite.db, (tx) =>
       saveImage(tx, image.id, { names: {}, framing, expectedRevision: 1 }, second, rasters, "en"),
@@ -536,7 +536,7 @@ it("prunes sources after deleting their last photo and removes its metadata", as
   await expect(
     withTransaction(suite.db, (tx) => tx.execute(sql`delete from media_blobs`)),
   ).rejects.toMatchObject({ errcode: 1811, message: "FOREIGN KEY constraint failed" });
-  expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id))).toEqual({
+  expect(await withTransaction(suite.db, (tx) => deleteImage(tx, image.id, null))).toEqual({
     deleted: true,
     uses: [],
   });

@@ -124,7 +124,7 @@ describe("unknown images and other refusals", () => {
     for (const call of [
       (tx: Transaction): Promise<unknown> => readImage(tx, imageId),
       (tx: Transaction) => listImageUsages(tx, imageId),
-      (tx: Transaction) => deleteImage(tx, imageId),
+      (tx: Transaction) => deleteImage(tx, imageId, null),
     ]) {
       await expect(withTransaction(suite.db, call)).rejects.toMatchObject({
         code: "image.not_found",
@@ -194,7 +194,7 @@ describe("metadata and references", () => {
       );
       expect(edited.filename).toBe(first.image.filename);
       expect(edited.names).toEqual({ en: "Sourdough", fr: "Pain" });
-      expect(await deleteImage(tx, second.image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, second.image.id, null)).toEqual({ deleted: true, uses: [] });
       expect(await readImageBytes(tx, second.image.filename)).toBeNull();
     });
   });
@@ -229,11 +229,11 @@ describe("metadata and references", () => {
         },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
       expect(await readActivityForSubject(tx, { kind: "media_image", id: image.id })).toEqual([]);
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       await tx.execute(sql`update products set image = null`);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     });
   });
 
@@ -277,13 +277,13 @@ describe("metadata and references", () => {
         },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
       // The detail read and the list read must agree: the list's count is its own SQL, so a use the
       // scan finds but the count misses would show the library a free photo that refuses to delete.
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
       await tx.execute(sql`update products set image = null where id = ${variant!.id}`);
-      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     });
   });
 
@@ -672,7 +672,7 @@ describe("input boundaries", () => {
       );
       expect(await imageExists(tx, image.filename)).toBe(true);
       expect(await imageExists(tx, `${"0".repeat(64)}.webp`)).toBe(false);
-      await deleteImage(tx, image.id);
+      await deleteImage(tx, image.id, null);
       expect(await imageExists(tx, image.filename)).toBe(false);
     });
   });
@@ -778,10 +778,10 @@ it("protects an image used by sections, a menu's own list among them, and counts
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(2);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await updateSection(tx, drinks.id, { image: null });
     await tx.update(sections).set({ image: null }).where(eq(sections.id, root!.id));
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -830,7 +830,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await tx
       .update(sectionMembers)
       .set({ showAsFolder: false })
@@ -842,7 +842,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
       .set({ ...columnsFromOverrides({ image: null }) })
       .where(eq(sectionMembers.id, member!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -878,7 +878,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
     ];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
   });
 });
 
@@ -902,7 +902,7 @@ it("ignores a retired venue logo for usage counts and deletion", async () => {
         [image.id]: 0,
         [other.id]: 0,
       });
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
     expect(await readImageBytes(tx, image.filename)).toBeNull();
 
     expect((await readImage(tx, other.id)).usageCount).toBe(0);
@@ -950,11 +950,11 @@ it("protects an image only a live menu version names, and releases it once anoth
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await publish(tx, menu.id);
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -1008,12 +1008,12 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await cancelMenuPublication(tx, menu.id, queued.versionId, "manager-luis");
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await readImage(tx, image.id)).usageCount).toBe(0);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 
@@ -1134,12 +1134,12 @@ it("protects the photo of a product a live menu version offers only as an extra"
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: false, uses });
     await publish(tx, menu.id);
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect((await readImage(tx, image.id)).usageCount).toBe(0);
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, image.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 

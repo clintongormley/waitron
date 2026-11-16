@@ -159,6 +159,13 @@ describe("media backup evidence", () => {
     for (const suite of [original, restored]) await corrupt(suite, statement);
     expect((await run()).status).toBe("invalid");
   });
+  it("checks the sniffed format of a blob without a photo reference", async () => {
+    const data = await sampleImage({ width: 12, height: 7, format: "png" });
+    const key = createHash("sha256").update(data).digest("hex");
+    for (const suite of [original, restored])
+      await suite.db.insert(mediaBlobs).values({ hash: key, format: "jpg", bytes: data });
+    expect((await run()).status).toBe("invalid");
+  });
   it.each(["jpg", "png"] as const)(
     "accepts authentic retained %s originals but refuses them as WebP replacements",
     async (extension) => {

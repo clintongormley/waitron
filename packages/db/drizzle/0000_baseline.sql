@@ -1671,6 +1671,8 @@ CREATE TABLE `media_images` (
 );
 --> statement-breakpoint
 CREATE INDEX `media_images_date_idx` ON `media_images` (`created_at`,`id`);--> statement-breakpoint
+CREATE INDEX `media_images_original_hash_idx` ON `media_images` (`original_hash`);--> statement-breakpoint
+CREATE INDEX `media_images_source_hash_idx` ON `media_images` (`source_hash`);--> statement-breakpoint
 CREATE UNIQUE INDEX `media_images_filename_key` ON `media_images` (`filename`);--> statement-breakpoint
 CREATE TABLE `handover_activations` (
 	`operation_id` text PRIMARY KEY NOT NULL,

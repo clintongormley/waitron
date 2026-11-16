@@ -63,7 +63,7 @@ it("refuses to delete an image a theme names, and frees it when no theme does", 
     const zest = await addTheme(tx, "Zest", { light: a.filename });
     const bar = await addTheme(tx, "Bar", { light: a.filename, dark: a.filename });
     const night = await addTheme(tx, "Night", { light: b.filename, dark: a.filename });
-    expect(await deleteImage(tx, a.id)).toEqual({
+    expect(await deleteImage(tx, a.id, null)).toEqual({
       deleted: false,
       uses: [
         { kind: "theme_logo", id: bar, name: "Bar" },
@@ -73,7 +73,7 @@ it("refuses to delete an image a theme names, and frees it when no theme does", 
     });
     await tx.update(customThemes).set({ theme: { logo: null } });
     await tx.delete(customThemes).where(eq(customThemes.id, zest));
-    expect(await deleteImage(tx, a.id)).toEqual({ deleted: true, uses: [] });
+    expect(await deleteImage(tx, a.id, null)).toEqual({ deleted: true, uses: [] });
   });
 });
 

@@ -107,6 +107,18 @@ it("accepts two valid images", () => {
   expect(() => validate(wire(twoImages()))).not.toThrow();
 });
 
+it("refuses a JPEG original named as a replacement", () => {
+  const input = wire(tables());
+  input.media_images[0]!.source_hash = hash(bytes);
+  expect(() => validate(input)).toThrow(refused);
+});
+it("refuses a blob and filename relabelled to a format their bytes do not have", () => {
+  const input = wire(tables());
+  input.media_blobs[0]!.format = "png";
+  input.media_images[0]!.filename = `${hash(bytes)}.png`;
+  expect(() => validate(input)).toThrow(refused);
+});
+
 it("refuses a blob whose hash is not a string", () => {
   const input = wire(tables());
   (input.media_blobs[0] as Record<string, unknown>).hash = 42;

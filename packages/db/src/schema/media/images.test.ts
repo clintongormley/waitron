@@ -85,3 +85,19 @@ it("refuses an unknown blob format", async () => {
   expect(() => blob(hash, "gif")).toThrow("media_blobs_format_ck");
   await blob();
 });
+it("uses the original and source indexes when pruning unused bytes", () => {
+  const plan = suite.db
+    .all<{ detail: string }>(
+      sql`explain query plan delete from media_blobs
+    where hash=${hash} and not exists (
+      select 1 from media_images where original_hash=${hash} or source_hash=${hash}
+    )`,
+    )
+    .map((row) => row.detail);
+  expect(plan).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("media_images_original_hash_idx"),
+      expect.stringContaining("media_images_source_hash_idx"),
+    ]),
+  );
+});

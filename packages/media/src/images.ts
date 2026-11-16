@@ -410,7 +410,7 @@ export async function pruneBlobs(
 export async function deleteImage(
   tx: Transaction,
   imageId: string,
-  personId: string | null = null,
+  personId: string | null,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
   // No attach can slip between the usage check and the delete: one write transaction runs on the
   // venue file at a time (the pattern is on `assertExtraListForWrite`,
