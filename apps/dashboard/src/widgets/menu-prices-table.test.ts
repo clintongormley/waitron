@@ -2828,7 +2828,7 @@ it.each(["en-GB", "es-ES"])(
     };
     const el = await atPhoneWidth(locale, { rows: [ranged] });
     const input = override(el, "mi-ranged").shadowRoot!.querySelector("input")!;
-    expect(input.placeholder).toMatch(/^12[.,]50 – 15[.,]00$/);
+    expect(input.placeholder).toBe(locale === "es-ES" ? "12,50 – 15,00" : "12.50 – 15.00");
     const style = getComputedStyle(input);
     const context = document.createElement("canvas").getContext("2d")!;
     context.font = getComputedStyle(input, "::placeholder").font;
