@@ -385,7 +385,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Should `packages/fiscal-verifactu` have a mutation floor?**
   [Detail](backlog/fiscal.md#should-packagesfiscal-verifactu-have-a-mutation-floor).
 
-- **A1411. A page and an export for the tax office (go-live; owner, 2026-11-06).** A venue must let the tax office see, search, copy and print every invoice when it asks. The page is built: Reporting → Invoices lists, searches and opens every issued invoice as a copy under the `invoice.inspect` permission: a full invoice as A4, a ticket (simplified invoice) one ticket wide, laid out like the till's printed ticket and stamped as a copy. A sign-in holding only that permission is refused every dashboard route but Invoices and its own account settings (RD 1007/2023 article 8.4); an inspector is an ordinary person invited by email with such a role (owner, 2026-11-16). Left: the period export (a month's invoices as one download; [plan](superpowers/plans/2026-11-16-a1411-tax-office-invoices.md) Tasks 6–8); and one question for the adviser on 19 Nov beside T4: whether a cancelled or replaced invoice's PDF should say so. Cloud shows the same page through its servers, so venues without Cloud get the same capability. It is needed whatever the adviser says on T4; a no would add remote access on top. It overlaps A664's reader. [Research](compliance/research/2026-11-06-adviser-online-access.md).
+- **Should a cancelled or replaced invoice's copy say so?** Left open by A1411 (the tax office's Invoices page and month download). A question for the adviser on 19 Nov beside T4. [Plan](superpowers/plans/2026-11-16-a1411-tax-office-invoices.md).
 
 ### The setup wizard, onboarding and the demo venue
 
