@@ -231,7 +231,7 @@ it("incomplete headers retain their native deadline", async () => {
 
 it("completed bodies permit delayed responses and keepalive gets fresh ordinary limits", async () => {
   const f = await fixture(async (request) => {
-    await delay(200);
+    await delay(350);
     return new Response(await request.arrayBuffer());
   });
   const first = f.start("/setup-api/restore", "POST", 1);
@@ -249,7 +249,7 @@ it("completed bodies permit delayed responses and keepalive gets fresh ordinary 
 });
 
 it("quick completed requests do not accumulate connection-close listeners", async () => {
-  const f = await fixture();
+  const f = await fixture(undefined, { checkMs: 10_000 });
   const sockets = new Set();
   const counts: number[] = [];
   f.server.on("request", (request) => {
