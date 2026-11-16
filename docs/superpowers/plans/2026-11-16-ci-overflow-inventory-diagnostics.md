@@ -12,7 +12,7 @@
 **Evidence and limits** (Lane I `receipts/ci-overflow-inventory-20261116/diagnosis.md` and routing-window logs):
 - Server health `43823616837`, `recover-planners`, 07:24:53Z: “empty page after 1 of 2 entries”; health `43828425789`, `check`, 08:05:32Z: empty page after 3 of 4 entries, both on 16 November.
 - #3470 run `43818588507`, attempt 1: `changes` had no runner. The per-run watchdog depends on `changes`, so it could not rescue that queued planner; the observed refusal came from independent Server health recovery.
-- Neither failed API path nor reply survives. Three live read-only traces completed; they do not reproduce or explain either refusal. Actual cause remains unknown.
+- The retained failure logs contain neither the failed API path nor its reply. Three live read-only traces completed; they do not reproduce or explain either refusal. Actual cause remains unknown.
 
 **Build only after Claude's read and watcher plan clearance:**
 1. Reuse `inventory()` in `scripts/ci-server-health.mjs`, its single immediate whole-list restart and existing `InventoryUnavailable` errors. Append contextual suffixes to their original words; preserve every guard, return condition, cancellation gate and existing routing exception.
