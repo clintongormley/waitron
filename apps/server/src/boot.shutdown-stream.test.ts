@@ -116,6 +116,7 @@ it("stops Litestream within its reserved window even while preliminary jobs hold
       stream: { spawn: binary.spawn, store: new SwitchableStore(() => new Date()) },
     });
     await vi.waitFor(() => expect(binary.running()).toBeDefined(), { timeout: 10_000 });
+    expect(server.health.readStream().state).toBe("opening");
     const opened = await vi.mocked(openVenueDatabase).mock.results.at(-1)!.value;
     const closeStore = vi.spyOn(opened, "close");
     const output = vi.spyOn(process.stdout, "write");
@@ -142,6 +143,9 @@ it("stops Litestream within its reserved window even while preliminary jobs hold
     expect(closeStore).not.toHaveBeenCalled();
     expect(output.mock.calls.map(([line]) => String(line)).join("")).toContain(
       '"step":"jobRunner"',
+    );
+    expect(output.mock.calls.map(([line]) => String(line)).join("")).toContain(
+      '"streamState":"opening"',
     );
     release();
     vi.useRealTimers();

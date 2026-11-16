@@ -3624,12 +3624,18 @@ async function bootServer(
     streamStopTimer?.cancel();
     return streamHost.stop();
   };
-  undoOnFailure.push(stopStream);
+  undoOnFailure.push(async () => {
+    streamStopping = true;
+    streamStopTimer?.cancel();
+  });
   void whenShutdownStarts().then((startedAt) => {
     if (streamStopping) return;
     const reserve = SHUTDOWN_DEADLINE_MS - LITESTREAM_SHUTDOWN_TIMEOUT_MS - 100;
     const stopAtReserve = () => {
-      log("warn", "server.shutdown_step_overran", { step: shutdownStep });
+      log("warn", "server.shutdown_step_overran", {
+        step: shutdownStep,
+        streamState: streamHost.status().state,
+      });
       void stopStream().catch((error: unknown) =>
         log("error", "stream.stop_failed", { errorCode: codeOf(error) }),
       );

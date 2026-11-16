@@ -6,17 +6,22 @@ it("publishes the first shutdown time before restart preparation and retains it 
   const fresh = await import("./run-server.js");
   const handlers = new Map<string, () => void>();
   const preparation: number[] = [];
+  const order: string[] = [];
   let release!: () => void;
   const held = new Promise<void>((done) => {
     release = done;
   });
   fresh.restartProcess();
   const notification = fresh.whenShutdownStarts();
-  const clock = vi.spyOn(performance, "now").mockReturnValue(123);
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => {
+    order.push("published");
+    return 123;
+  });
   try {
     fresh.installShutdownHandlers(
       {
         beforeRestart: async () => {
+          order.push("preparation");
           preparation.push(await notification);
           await held;
         },
@@ -33,6 +38,7 @@ it("publishes the first shutdown time before restart preparation and retains it 
       },
     );
     expect(await notification).toBe(123);
+    expect(order).toEqual(["published", "preparation"]);
     clock.mockReturnValue(456);
     handlers.get("SIGINT")!();
     expect(await fresh.whenShutdownStarts()).toBe(123);

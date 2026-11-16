@@ -28,6 +28,7 @@ import { startBoxEmailDuty } from "./box-alert-email.js";
 import { startSpareFollow } from "./spare-follow.js";
 import { runSpareSettings } from "./spare-settings.js";
 import { StreamHost } from "./stream-host.js";
+import { clockWatchJob } from "./clock-watch.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -53,6 +54,10 @@ import { withTransaction, withNodeTransaction } from "@waitron/db";
 vi.mock("./background-duties.js", async (original) => {
   const actual = await original<typeof import("./background-duties.js")>();
   return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
+});
+vi.mock("./clock-watch.js", async (load) => {
+  const actual = await load<typeof import("./clock-watch.js")>();
+  return { ...actual, clockWatchJob: vi.fn(actual.clockWatchJob) };
 });
 
 vi.mock("./mirror-bundle-fetch.js", async (original) => {
@@ -1278,6 +1283,38 @@ describe("append-only triggers at boot", () => {
     });
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
+
+  it("stops running jobs before the stream when startup fails after stream registration", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir());
+    const calls: string[] = [];
+    const actual = await vi.importActual<typeof import("./job-runner.js")>("./job-runner.js");
+    vi.mocked(createJobRunner).mockImplementationOnce((deps) => {
+      const runner = actual.createJobRunner(deps);
+      return {
+        ...runner,
+        stopJobs: async () => {
+          calls.push("jobs");
+          await runner.stopJobs();
+        },
+      };
+    });
+    const stop = StreamHost.prototype.stop;
+    const stopping = vi.spyOn(StreamHost.prototype, "stop").mockImplementation(function () {
+      calls.push("stream");
+      return stop.call(this);
+    });
+    const failure = new Error("clock watch startup failed");
+    vi.mocked(clockWatchJob).mockImplementationOnce(() => {
+      throw failure;
+    });
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(calls).toEqual(["jobs", "stream"]);
+    } finally {
+      stopping.mockRestore();
+    }
+  });
 
   it("a seeded venue starts, serves /health and closes", async () => {
     const venueDir = await seededVenueDir();
