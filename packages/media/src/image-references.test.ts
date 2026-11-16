@@ -2,7 +2,14 @@ import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, menus, products, withTransaction, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  mediaBlobs,
+  menus,
+  products,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import {
   activateDueMenuPublications,
   addMember,
