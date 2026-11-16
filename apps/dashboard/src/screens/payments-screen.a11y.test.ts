@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -127,6 +128,60 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
+  it.each([
+    ["en", 390],
+    ["es-ES", 390],
+    ["en", 1280],
+    ["es-ES", 1280],
+  ] as const)(
+    "keeps failed-check guidance and evidence readable (%s, %s px)",
+    async (locale, width) => {
+      const oldWidth = window.innerWidth,
+        oldHeight = window.innerHeight;
+      setLocale(locale);
+      await page.viewport(width, 900);
+      try {
+        const { el, host } = await mountWidget<PaymentsScreen>(
+          "dashboard-payments-screen",
+          {
+            api: stubApi({
+              listStuckPayments: vi
+                .fn()
+                .mockResolvedValueOnce([
+                  {
+                    ...STUCK[0]!,
+                    paymentId: "01234567-89ab-4cde-8fab-012345678901",
+                    workingOrderId: "abcdef01-2345-4678-9abc-def012345678",
+                  },
+                ])
+                .mockResolvedValue([]),
+              resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
+            }),
+            panels: PANELS,
+            surface: "checks",
+          },
+          theme,
+        );
+        await flush(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test^=resolve-]")!.click();
+        await flush(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-resolve]")!.click();
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.textContent).toContain(
+          t("payments.stuck.failed_removed"),
+        );
+        const evidence = el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-test=stuck-failed-evidence]",
+        )!;
+        expect(evidence.textContent).toContain("01234567-89ab-4cde-8fab-012345678901");
+        expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(oldWidth, oldHeight);
+      }
+    },
+  );
+
   it.each(["en", "es-ES"])(
     "shows partial-refund amounts and confirmation accessibly (%s)",
     async (locale) => {

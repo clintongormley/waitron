@@ -606,6 +606,18 @@ Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su
 Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.
 Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo que quede pendiente.
 
+## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
+
+Si falla **Consultar con el proveedor de pagos**, conserva los datos del pedido y del cobro
+que muestra Pagos con tarjeta y consulta el cobro en el panel del proveedor. No vuelvas a cobrar.
+Waitron no repite esta comprobación automáticamente. Si el cobro sigue en la lista, elige
+**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor.
+
+Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si el proveedor
+confirma el cobro, busca el pedido original en **Mostrador** y elige **Tarjeta** con el mismo
+proveedor. Waitron registra un cobro guardado que coincida. Si el lector pide la tarjeta, cancela
+sin presentarla. Conserva los datos del cobro si no puedes completar este paso.
+
 ## Mover platos a otra cuenta {#move-dishes}
 
 Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuenta suya. Abre el menú

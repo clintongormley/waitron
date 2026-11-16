@@ -1549,7 +1549,7 @@ describe("card payments stuck after a restart", () => {
     ],
     [
       { code: "server.internal", status: 500 },
-      "Something went wrong while checking this payment. If it is still listed, try again in a minute.",
+      "The payment check failed and the payment is still listed. This check is not retried automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again.",
     ],
   ])("shows the curated text for a %o refusal and refreshes the list", async (refusal, text) => {
     const listStuckPayments = vi.fn().mockResolvedValue(STUCK);
@@ -1565,6 +1565,62 @@ describe("card payments stuck after a restart", () => {
     expect(result(el)!.getAttribute("role")).toBe("alert");
     expect(result(el)!.textContent!.trim()).toBe(`Order 12 · Terrace 3: ${text}`);
     expect(listStuckPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["en", false],
+    ["es", false],
+    ["en", true],
+    ["es", true],
+  ] as const)(
+    "keeps failed-check evidence and gives the supported next step (%s, listed=%s)",
+    async (locale, listed) => {
+      setLocale(locale);
+      try {
+        const listStuckPayments = vi
+          .fn()
+          .mockResolvedValueOnce(STUCK)
+          .mockResolvedValue(listed ? STUCK : []);
+        const api = liveApi({
+          listStuckPayments,
+          resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        });
+        const { el } = await mountChecks(api);
+        await confirmResolve(el);
+        expect(result(el)!.textContent).toContain(
+          t(listed ? "payments.stuck.failed_listed" : "payments.stuck.failed_removed"),
+        );
+        expect(q(el, "[data-test=stuck-pay-1]") !== null).toBe(listed);
+        const evidence = q(el, "[data-test=stuck-failed-evidence]")!.textContent!;
+        for (const value of ["pay-1", "wo-1", "Acme Pay", "Bar till", "12", "50"])
+          expect(evidence).toContain(value);
+        expect(q(el, "[data-test=stuck-failed-evidence] time")!.getAttribute("datetime")).toBe(
+          STUCK[0]!.startedAt,
+        );
+        api.liveData.refresh();
+        await flush(el);
+        expect(api.resolveStuckPayment).toHaveBeenCalledOnce();
+        expect(q(el, "[data-test=stuck-failed-evidence]")).not.toBeNull();
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
+  it("uses the generic next step when the failed check's list refresh also fails", async () => {
+    const { el } = await mountChecks(
+      stubApi({
+        listStuckPayments: vi
+          .fn()
+          .mockResolvedValueOnce(STUCK)
+          .mockRejectedValue({ code: "connection.failed" }),
+        resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      }),
+    );
+    await confirmResolve(el);
+    expect(result(el)!.textContent).toContain(t("payments.stuck.failed"));
+    expect(q(el, "[data-test=stuck-failed-evidence]")!.textContent).toContain("pay-1");
+    expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
   });
 
   it("names a full disk the check met rather than the section's generic failure", async () => {
@@ -1583,7 +1639,7 @@ describe("card payments stuck after a restart", () => {
     );
   });
 
-  it("keeps the section's generic failure for a check that failed inside the server", async () => {
+  it("keeps the check's failure after a successful list refresh", async () => {
     const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
@@ -1594,7 +1650,7 @@ describe("card payments stuck after a restart", () => {
     await confirmResolve(el);
 
     expect(result(el)!.textContent!.trim()).toBe(
-      `Order 12 · Terrace 3: ${t("payments.stuck.failed")}`,
+      `Order 12 · Terrace 3: ${t("payments.stuck.failed_listed")}`,
     );
   });
 
@@ -1623,7 +1679,7 @@ describe("card payments stuck after a restart", () => {
     await confirmResolve(el);
 
     expect(result(el)!.getAttribute("role")).toBe("alert");
-    expect(result(el)!.textContent).toContain("Something went wrong while checking this payment");
+    expect(result(el)!.textContent).toContain(t("payments.stuck.failed"));
   });
 
   it("keeps a successful resolve's result when the refresh after it fails", async () => {
@@ -1754,6 +1810,59 @@ describe("the providers and readers once the server answers again", () => {
         .disabled,
     ).toBe(false);
     expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("refreshes active statuses on a bounded passive interval", async () => {
+    const background = stubApi();
+    const api = liveApi({ background } as Partial<DashboardApi>);
+    api.liveData.setConnected(true);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    const { el } = await mount(api);
+    expect(api.readerStatus).toHaveBeenCalledOnce();
+    // Reconnects and other subscriptions' refreshes must not multiply provider calls.
+    try {
+      api.liveData.refresh();
+      await lockGrantsSettled();
+      expect(background.readerStatus).not.toHaveBeenCalled();
+      const openingCalls = vi.mocked(api.readerStatus).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      await lockGrantsSettled();
+      await el.updateComplete;
+      expect(background.readerStatus).toHaveBeenCalledOnce();
+      expect(background.readerStatus).toHaveBeenCalledWith("r-1");
+      await flush(el);
+      let release!: (value: ReaderStatusView) => void;
+      vi.mocked(background.readerStatus).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      await lockGrantsSettled();
+      expect(background.readerStatus).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(120_000);
+      api.liveData.refresh();
+      await lockGrantsSettled();
+      expect(background.readerStatus).toHaveBeenCalledTimes(2);
+      release({ online: false, printsOwnSlipAutomatically: false } as ReaderStatusView);
+      await lockGrantsSettled();
+      await el.updateComplete;
+      expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Offline");
+      api.liveData.refresh();
+      await lockGrantsSettled();
+      expect(background.readerStatus).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await lockGrantsSettled();
+      expect(background.readerStatus).toHaveBeenCalledTimes(3);
+      expect(api.readerStatus).toHaveBeenCalledTimes(openingCalls);
+      el.remove();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(background.readerStatus).toHaveBeenCalledTimes(3);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
   });
 
   it("does not ask the readers for their status again when the list refreshes in the background", async () => {

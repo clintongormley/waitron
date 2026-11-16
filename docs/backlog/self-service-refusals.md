@@ -55,7 +55,7 @@ referrals, not completed recovery experiments.
 | [Fiscal reply](#fiscal-reply) | Evidence on Fiscal filing → Warnings (2026-11-14); still open: describe only exercised retry behavior and a decision for a persistent malformed reply. |
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
 | [Reconciliation](#fiscal-reconcile) | The caller is the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`); offer evidence and a decision path rather than sending the person to an administrator or adviser. |
-| [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
+| [Payments](#payments) | Persistent recording failures and the shared unknown-outcome fallback remain open. Preserve confirmed-outcome requirements and the existing Counter recovery for a saved whole-order charge. |
 | [Boot recovery](#boot-recovery) | Referral reworked (A1089, 2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). No other row gains a way out; the owner's answer names none for these rows, and its Restart the box button (A1498) was built as a dashboard restart of Waitron's server only (watcher, 2026-11-11 10:31), so the held-database row still says to switch the box off and on. |
 
 Take the four reworks in the order above, one small PR per area. Test the refusal and the available
@@ -672,6 +672,8 @@ State: payments-api.ts:1098 throws this for an unknown provider outcome. payment
 Route: Keep the existing reason-specific handling. Before a fix, exercise the fallback with a real reachable reason and show the missing next step. Never infer no charge from an unknown outcome.
 
 ### Payment check fallback
+
+_2026-11-16: this fallback now distinguishes a payment still listed from one removed, preserves its details, and explains that the check is not retried automatically. The confirmed-charge Counter recovery is in [the guide](../../apps/server/src/guide/en/table-service.md#card-check-failed). Persistent recording failures and the shared unknown-outcome fallback remain open. The rest of this row records the earlier audit._
 
 Message: `payments.stuck.failed`. Fix: [payments](#payments).
 

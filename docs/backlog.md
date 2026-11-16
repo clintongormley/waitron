@@ -1088,7 +1088,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
-- **A1089: charged-but-unsettled and repeated payment-check failures need a recovery route.** Trace the existing pending-payment recovery and reason-specific messages, then offer only confirmed-outcome actions. Never retry a charge or unlock an unknown outcome.
+- **A1089: persistent payment-recording failures and the shared unknown-outcome fallback need a recovery route.** Keep the existing reason-specific handling and confirmed-charge Counter recovery. Diagnose a recording failure that survives retries and exercise the shared unknown-outcome fallback before adding an action. Never retry a charge or unlock an unknown outcome.
   [Audit](backlog/self-service-refusals.md#payments).
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -1119,8 +1119,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
-  same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
-  itself, and polling must go through the passive-session controller.
+  same moment (an accepted race); Stripe's reader list is one page.
 
 - **The SumUp reconciler** — backup-machine hardware/signature qualification. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
