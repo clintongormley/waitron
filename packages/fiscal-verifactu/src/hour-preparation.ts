@@ -179,6 +179,17 @@ export function createHostedHourPreparation(
     );
   return {
     ...preparation,
+    async prepare<T>(
+      operation: ModuleOperationInput,
+      run: (prepared: ModuleOperationInput) => Promise<T>,
+    ): Promise<T> {
+      // The series step's reading is usually over 30 seconds old by Provision.
+      if (options.readClock === undefined)
+        await withFacts(operation.binding, (facts) =>
+          clocks.compare(facts.contextKey, null, { onBox: true }),
+        );
+      return preparation.prepare(operation, run);
+    },
     clockChallenge(binding: ModuleOperationInput["binding"]) {
       return withFacts(binding, (facts) => clocks.challenge(facts.contextKey));
     },

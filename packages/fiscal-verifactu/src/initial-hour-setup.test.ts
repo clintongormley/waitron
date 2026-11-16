@@ -1153,11 +1153,13 @@ it("issuing refuses when the only fresh reading is the box's alone", async () =>
   }
 });
 
-it("issuing refuses clock_stale when the only passing reading is older than thirty seconds", async () => {
+it("issuing refuses when the only passing reading is older than thirty seconds and no fresh second clock exists", async () => {
   startEarly();
   const f = configured();
   await f.clock();
   await f.select();
+  source.internet.mockReset();
+  source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
   const stale = vi.spyOn(performance, "now");
   const start = performance.now();
   stale.mockImplementation(() => start + 30_001);
@@ -1165,7 +1167,7 @@ it("issuing refuses clock_stale when the only passing reading is older than thir
   try {
     await expect(prepareSetup(f)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
-      params: { reason: "clock_stale" },
+      params: { reason: "second_clock_missing" },
     });
   } finally {
     stale.mockRestore();

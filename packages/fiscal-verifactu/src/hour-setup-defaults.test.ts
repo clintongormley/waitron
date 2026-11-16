@@ -92,9 +92,14 @@ function fixture(extra: Partial<ModuleOperationHost> = {}) {
     context(next: string) {
       key = next;
     },
-    select: (comparisonId: string) =>
+    select: (comparisonId: string, confirmed?: true) =>
       withOperationAuthority(binding, "administrator", (authority) =>
-        preparation.select({ binding, authority, comparisonId }),
+        preparation.select({
+          binding,
+          authority,
+          comparisonId,
+          ...(confirmed === undefined ? {} : { confirmed }),
+        }),
       ),
   };
 }
@@ -172,5 +177,71 @@ it.each([
     const compared = await f.preparation.compareClocks(binding, null, { onBox: true });
     expect(compared.clock.usable.some((row) => row.source === "internet")).toBe(usable);
     expect(compared.clock.secondClock).toBe(usable);
+  },
+);
+
+async function selectAfterSettle(
+  f: ReturnType<typeof fixture>,
+  compare: () => Promise<{ id: string }>,
+  confirmed?: true,
+) {
+  expect(await f.select((await compare()).id, confirmed)).toMatchObject({ status: "waiting" });
+  vi.advanceTimersByTime(120_000);
+  const selected = await f.select((await compare()).id, confirmed);
+  if (selected.status !== "selected") throw new Error("expected selected hour");
+  return selected;
+}
+function activate(f: ReturnType<typeof fixture>, input: unknown) {
+  return withOperationAuthority(binding, "administrator", (authority) =>
+    f.preparation.prepare({ binding, authority, input }, (operation) =>
+      withTransaction(suite.db, (tx) =>
+        activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, operation),
+      ),
+    ),
+  );
+}
+it("a synchronised time service lets activation run however long after the series step", async () => {
+  const f = fixture();
+  const selected = await selectAfterSettle(f, () =>
+    f.preparation.compareClocks(binding, null, { onBox: true }),
+  );
+  vi.advanceTimersByTime(31_000);
+  await activate(f, selected.input);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+    expect.objectContaining({ allocationKey: "hour/owned-hour" }),
+  ]);
+});
+it.each([
+  [31_000, "refuses with no second clock", false],
+  [10_000, "still uses the confirmed device reading", true],
+] as const)(
+  "without a time service, activation %i ms after a confirmed device reading %s",
+  async (waitMs, _label, writes) => {
+    outside.internet.mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
+    });
+    const f = fixture();
+    const selected = await selectAfterSettle(
+      f,
+      async () => {
+        const challenge = await f.preparation.clockChallenge(binding);
+        return f.preparation.compareClocks(
+          binding,
+          { challengeId: challenge.id, instantMs: Date.now() },
+          { onBox: false },
+        );
+      },
+      true,
+    );
+    vi.advanceTimersByTime(waitMs);
+    if (writes) await activate(f, selected.input);
+    else
+      await expect(activate(f, selected.input)).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "second_clock_missing" },
+      });
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
   },
 );
