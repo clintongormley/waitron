@@ -498,7 +498,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 7, size M). [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
-- **One language fallback rule** (bundle of 1, size M): the #379 followups. [Detail](backlog/menu.md#bundle-one-language-fallback-rule)
+- **Smaller things #379 surfaced and did not take.** The price input, modifier rules and three
+  interface faults remain outside the language cleanup.
+  [Detail](backlog/menu.md#smaller-things-379-surfaced-and-did-not-take)
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs

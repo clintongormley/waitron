@@ -602,14 +602,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   an extra on a dish sold in a measure is flagged only when the draft is priced — as for a dish
   with decimals or on a scale today. Read, not run.
 
-## Bundle: One language fallback rule
-
-The #379 followups.
-
-- **Smaller things #379 surfaced and did not take.** The price input, modifier rules and three
-  interface faults remain outside the language cleanup.
-  [Detail](menu.md#smaller-things-379-surfaced-and-did-not-take)
-
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
 7 entries, size M.
