@@ -122,7 +122,7 @@ also sends its record to AEAT.
   due on it the moment it is received (LIVA 75.Dos), so it needs a ticket of its own at that moment
   (RD 1619/2012 art. 2.1). This applies when what the money pays for is clearly identified (European
   Court of Justice, C‑419/02, BUPA). Whether "€30 towards the bill", or €1,000 put towards a
-  tab, is identified enough is Thursday's question 15.
+  tab, is identified enough is Thursday's question 14.
 - Once the meal is over, several payments may share one ticket, but that ticket is due **when the
   meal ends**. In the adviser's words, "its issue cannot be made conditional on the bill being paid in
   full". If the table leaves with part unpaid, it still gets a ticket for everything it was served,
@@ -151,14 +151,14 @@ to the kitchen. A bill that holds any payment cannot be recorded as an unpaid de
 1. Issue the ticket when the table's visit ends, for everything served, whether fully paid or not.
 2. Let a part-paid bill be recorded as "left without paying", with the ticket for the whole amount.
 3. Stop unserved dishes from holding the ticket back: leave them off, or settle them first.
-4. If question 15 confirms that a payment towards the bill during the meal is an advance: give it
+4. If question 14 confirms that a payment towards the bill during the meal is an advance: give it
    its own ticket, and have the final ticket deduct it the way a deposit is deducted (Part C).
 
 This is the biggest change in the adviser's answers. It also touches the "date of the sale" work (Part B11),
 whose worked example 3 is Example 3 above and relies on the ticket waiting for full payment.
 
 **Your decision (D1).** *Owner, 16 November: yes. The ticket is issued when the meal ends, even if
-the bill is paid much later.* Changes 1 to 3 are designed now; change 4 waits for question 15. (You
+the bill is paid much later.* Changes 1 to 3 are designed now; change 4 waits for question 14. (You
 have already decided, under D10, to tell lane L about the date-of-sale points after Thursday.)
 
 ### B2. A ticket can end up never delivered
@@ -206,10 +206,10 @@ the customer never got an original.
 
 **Your decision (D2).** *Owner, 16 November: keep None. Most customers don't want the ticket, and
 printing every one wastes paper.* By the adviser's answer, a ticket the customer never receives
-breaches the delivery rule, so this is a risk you are choosing to take. Thursday's question 16 asks
+breaches the delivery rule, so this is a risk you are choosing to take. Thursday's question 15 asks
 what it costs, and whether something short of printing, such as a QR code to download the ticket,
 would meet the rule. Changes 2 and 3 are not yet decided; change 2 reverses your 9 October decision
-on email consent. *Recommended: make them.* Question 16 also asks what counts as delivered when a
+on email consent. *Recommended: make them.* Question 15 also asks what counts as delivered when a
 customer leaves the paper behind, and whether the sentence above is enough consent.
 
 ### B3. Undoing a ticket when nothing was served or paid
@@ -303,7 +303,7 @@ needed). Waitron holds no figure for what a dish costs: recipes and stock are no
 
 **What should change.** Let the venue mark each discount reason as either "self-supply at cost" or
 "business invitation, outside VAT", and issue the matching document. Valuing at cost needs a cost
-figure, which Waitron doesn't have. Thursday's question 17 asks what "cost" means, which document is
+figure, which Waitron doesn't have. Thursday's question 16 asks what "cost" means, which document is
 issued, and how staff meals are treated.
 
 **Your decision (D5).** Let each venue choose per discount reason, built after Thursday? Or one
@@ -407,7 +407,7 @@ own bucket can be with any provider in any country. Nothing warns about this or 
 **What should change.** For a venue's own bucket, either allow only providers established in the
 EU, or warn that one established outside it must first be notified to AEAT.
 
-**Your decision (D8).** Wait for Thursday's question 20 (which company is the third party, and
+**Your decision (D8).** Wait for Thursday's question 19 (which company is the third party, and
 whether the provider's home or the data's location counts), then choose? *Recommended: wait, then
 warn rather than restrict.*
 
@@ -430,7 +430,7 @@ breakdown and totals, but not its dishes. Waitron discards those.
   but are not on the server. Today Waitron can show their numbers and nothing more.
 
 **What should change.** Keep everything AEAT's reply carries for those invoices, so that a copy can
-be rebuilt and shown. Thursday's question 21 asks whether a copy without the dishes is acceptable.
+be rebuilt and shown. Thursday's question 20 asks whether a copy without the dishes is acceptable.
 
 **Your decision (D9).** Build this after Thursday? *Recommended: yes.*
 
@@ -486,7 +486,7 @@ return on a dish that was served.
 - *Example.* A guest complains after paying €62, and the manager gives €10 back. With no
   corrective, the venue goes on declaring VAT on €62: about €0.91 more than on €52.
 
-**Your decision (D11).** None until Thursday's question 19 asks whether the corrective is required
+**Your decision (D11).** None until Thursday's question 18 asks whether the corrective is required
 or only allowed.
 
 ### B13. Changes to a quarter whose VAT return is already filed
@@ -527,7 +527,7 @@ corrections, by quarter, which the accountant files as a complementary return. Q
   left. *Example:* a €40 deposit (€36.36 plus €3.64 VAT) for a meal that comes to €160 (€145.45
   plus €14.55 VAT). The final ticket shows €160, minus the deposit, €120 to pay, and its record
   carries €109.09 plus €10.91 VAT. What happens to the deposit's VAT after a no-show is Thursday's
-  question 18.
+  question 17.
 - **Cash rounding (answer 1.5). Not built.** Cents added by rounding a cash total up are part of the
   price (DGT V1919-18). Cents left off by rounding down are a discount and must be on the ticket,
   so the ticket never shows more than was collected. *Example:* €12.37 rounded down to €12.35 shows
@@ -551,17 +551,17 @@ Each is explained in full in its section.
 
 | Decision | About | Section | Recommendation |
 | --- | --- | --- | --- |
-| D1 | Issue the ticket when the meal ends, paid or not | B1 | Decided 16 November: yes; advance tickets after question 15 |
+| D1 | Issue the ticket when the meal ends, paid or not | B1 | Decided 16 November: yes; advance tickets after question 14 |
 | D2 | Print every ticket; consent wording for email | B2 | Decided 16 November: keep None. Consent wording and reprint-as-original: recommended, not decided |
 | D3 | Cancellation record instead of a corrective when nothing was served or paid | B3 | Yes |
 | D4 | A free item takes its share of the price | B4 | Build A445 now |
-| D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 17 |
+| D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 16 |
 | D6 | Wrong VAT rate: who works out the difference | B6 | Decided 16 November: a corrections report the accountant files |
 | D7 | Supplier invoice duplicates: number and date | B7 | Yes |
-| D8 | Own backup bucket outside the EU | B9 | Warn, after question 20 |
-| D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 21 |
+| D8 | Own backup bucket outside the EU | B9 | Warn, after question 19 |
+| D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 20 |
 | D10 | Date of the sale on lane L's branch | B11 | Decided: after Thursday |
-| D11 | Goodwill refunds without a corrective | B12 | After question 19 |
+| D11 | Goodwill refunds without a corrective | B12 | After question 18 |
 | D12 | A filed report never changes: reductions in the current quarter, additions on a corrections report | B13 | Decided 16 November; questions 3(c) and 7 ask the adviser to confirm |
 
 ## Evidence

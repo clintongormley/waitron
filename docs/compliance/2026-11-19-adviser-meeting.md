@@ -2,22 +2,24 @@
 
 Written 15 November 2026 for the owner, and rewritten the same day so that each question can be
 read on its own. Updated 16 November: questions 3 and 7 now carry the owner's decisions on when a
-ticket is issued and on changes to a quarter already filed, question 15 asks whether we read the
-answers on money paid towards a bill correctly, question 16 asks what keeping "None" risks, and the
-Spanish question 12 now matches the English. Nothing here has been sent.
+ticket is issued and on changes to a quarter already filed, question 14 asks whether we read the
+answers on money paid towards a bill correctly, question 15 asks what keeping "None" risks, and the
+Spanish question 11 now matches the English. Question 2 now asks about a clock set back (it was
+question 9; the old question 2 was dropped), and question 5 points to an example of the whole
+declaration. Questions 10 to 22 became 9 to 21. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question explains the situation, says what Waitron
 does or proposes and why, and ends with what we ask, so it can be read without the others. Questions
-1 and 2 need the adviser's judgement. Questions 3 to 14 are confirmations, ordered by what is filed
-or signed from the first day of trading. Questions 15 to 22 follow up the adviser's answers of 15 November.
+1 and 2 need the adviser's judgement. Questions 3 to 13 are confirmations, ordered by what is filed
+or signed from the first day of trading. Questions 14 to 21 follow up the adviser's answers of 15 November.
 
 **What the adviser already has.** S1 to S19 and R1 to R6, the
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09), went to the adviser around 15 October
 (the owner's estimate). **The adviser answered S1 to S16 and R1 to R6 on 15 November**, in a draft whose
 numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What the adviser's answers change is in
 [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md). Questions 3 and 4 were rewritten
-that day as follow-ups to the adviser's answers, and questions 15 to 22 were added; question 22 chases S17 to
+that day as follow-ups to the adviser's answers, and questions 15 to 22 (now 14 to 21) were added; question 21 chases S17 to
 S19, which the adviser has not answered.
 
 **Where the questions come from.** The [6 November list](2026-11-06-adviser-questions.md), whose
@@ -32,12 +34,13 @@ Ley 37/1992 (the VAT law, LIVA), RD 1619/2012 (the invoicing regulation) and Ord
 DGT rulings V2884-16, V1665-22, V0902-22, V1924-23 and V2611-24 from the DGT's PETETE database; and
 AEAT's developer FAQ v1.3, the PDF kept in [sources/](sources/). As a control, the date rulings'
 phrase «deberá constar en serie específica de factura» was confirmed absent from V2884-16. The
-downloads are not committed; fetch them again from those sites to re-check. The annex is copied
-from the repository's declaration template, not from a law. The rewrite of 15 November kept those
+downloads are not committed; fetch them again from those sites to re-check. The annex is an
+example printed by the declaration's own code from the repository's template, with the two
+additions question 5 proposes; it is not from a law. The rewrite of 15 November kept those
 quotations unchanged where they remain. One was added on
 16 November and was not checked by the script: question 7's quotation of AEAT's web service
 description v1.0.3 (§6.4, p. 30). Every other word in « » is ours, and "where applicable" in
-question 19 is the adviser's own English.
+question 18 is the adviser's own English.
 
 ## Part 1: English (for the owner)
 
@@ -66,19 +69,21 @@ answered, Waitron keeps set menus off takeaway orders.
 
 Yes / No / Note: ____________________________________________
 
-**2. Keeping a date that nothing shows to be wrong (T2).**
+**2. A later invoice timed earlier than the one before (T5).**
 
-*The situation.* Waitron runs on a server, a computer in the restaurant or in Waitron Cloud, and
-that server's clock dates every invoice. After every start, the server records no sale until its
-time has been confirmed: by internet time, by two of the venue's devices agreeing with it, or by a
-person. That confirmation could itself be wrong, for example a person confirming a time an hour
-off. For a cash sale nothing outside the server records the real time; a card payment at least
-carries the card provider's own time.
+*The situation.* Each record sent to AEAT carries the exact date and time it was made (Orden
+HAC/1177/2024 art. 7.e). The server's clock can be wrong and then be put right. Example: the server
+restarts, its clock is found to be 2 hours fast, and it is set back 2 hours. Invoice 5, made after
+the correction, now carries an earlier time than invoice 4, made before it.
 
-*What Waitron proposes.* When nothing shows that the date stamped on an invoice is wrong, the
-restaurant keeps it.
+*What Waitron does.* It allows this, and marks and corrects nothing. The one rule against it, art.
+7.i of the same Orden, does not apply to Veri\*Factu systems (art. 3). An invoice shows its date,
+not its time (RD 1619/2012 arts. 6.1.b and 7.1.b), so the invoice itself is wrong only if the 2
+hours moved it onto another day, for example a sale at 23:30 stamped 01:30 the next day. That
+invoice is corrected as a wrong date (question 7).
 
-*We ask:* Is that right, and does the restaurant need anything more to rely on it?
+*We ask:* Is that right? Or does a later invoice timed earlier than the one before need a
+correction, or a note, even when the day is right?
 
 Yes / No / Note: ____________________________________________
 
@@ -148,7 +153,9 @@ Yes / No / Note: ____________________________________________
 *The situation.* The maker of invoicing software must sign, for each version, a declaration that it
 complies with the rules (the declaración responsable, Orden HAC/1177/2024 art. 15). Its item d)
 lists the system's hardware and software components and says briefly what the system does. None has
-been signed yet. The current draft of item d) is copied in the annex at the end of Part 2.
+been signed yet. The annex at the end of Part 2 is an example of the whole declaration as a first
+version would print it, made by the declaration's own code from today's template with the two
+additions below.
 
 *What Waitron proposes.* The draft names the third-party components (Node.js, SQLite, Litestream,
 Linux and Docker) as part of the system, says the producer answers for them, and names the version
@@ -156,7 +163,8 @@ of the Veri\*Factu library used and what it does. We think it is enough with two
 print agent does (the program that sends documents to the venue's printers), and that the
 terminals (tills, order-taking devices, kitchen screens) ask the server for invoices and display
 them (the draft already says they produce no invoice records). The sentence about a standby server would appear
-only in a version that can actually switch to one.
+only in a version that can actually switch to one, and the words "or a server in the cloud" only
+in one that can run in Waitron Cloud; the example leaves both out.
 
 *We ask:* With those two additions, is item d) sufficient?
 
@@ -237,23 +245,7 @@ cancelled and issued again instead. We found no source covering this case.
 
 Yes / No / Note: ____________________________________________
 
-**9. A record timed earlier than the one before (T5).**
-
-*The situation.* Each record sent to AEAT carries the exact date and time it was made (Orden
-HAC/1177/2024 art. 7.e). If the server's clock ran fast and is then set right, the next record
-carries an earlier time than the last one. Example: invoices 2, 3 and 4 are stamped by a clock an
-hour fast; once it is set right, invoice 5 carries an earlier time than invoice 4.
-
-*What Waitron does.* It allows this and marks nothing. The one rule against it, art. 7.i of the
-same Orden, does not apply to Veri\*Factu systems (art. 3). Invoices 2 to 4 are corrected only if
-the wrong hour moved one of them onto another day; they are then corrected as a wrong date (a
-corrective stating the real date).
-
-*We ask:* Is that right?
-
-Yes / No / Note: ____________________________________________
-
-**10. Only the hour is wrong (T6).**
+**9. Only the hour is wrong (T6).**
 
 *The situation.* The server's clock was wrong by less than the time to midnight, so only the hour on
 the ticket is wrong. Example: a ticket stamped 21:10 for a sale at 20:50 the same day.
@@ -267,7 +259,7 @@ says an error in an internal field of a record needs a correcting record.
 
 Yes / No / Note: ____________________________________________
 
-**11. Telling AEAT about a clock incident (T8).**
+**10. Telling AEAT about a clock incident (T8).**
 
 *The situation.* The server's clock was found to be wrong and the affected invoices were corrected,
 or left as they were because only the hour was wrong.
@@ -283,7 +275,7 @@ Yes / No / Note: ____________________________________________
 
 ### Confirmations: keeping records and giving access
 
-**12. "Online access" without the internet (T4).**
+**11. "Online access" without the internet (T4).**
 
 *The situation.* Invoices kept electronically must be accessible to the tax authorities online (RD
 1619/2012 arts. 21.2 and 23). A venue's Waitron server usually sits in the restaurant, on a private
@@ -307,7 +299,7 @@ invoice <number>"?
 
 Yes / No / Note: ____________________________________________
 
-**13. What a restaurant company keeps (T11).**
+**12. What a restaurant company keeps (T11).**
 
 *The situation.* Waitron is designing how long it keeps each kind of record, and wants one list of
 what a restaurant company must keep for tax and commercial law.
@@ -322,7 +314,7 @@ version used; proof of payment of sales of €1,000 or more, kept five years (Le
 
 Yes / No / Note: ____________________________________________
 
-**14. Records AEAT does not hold (T12).**
+**13. Records AEAT does not hold (T12).**
 
 *The situation.* Normally every record reaches AEAT, which then holds it. Some never do: a record
 still waiting to be sent, or one AEAT refused. In the developer FAQ's words, such a record would
@@ -337,7 +329,7 @@ Yes / No / Note: ____________________________________________
 
 ### Follow-ups on the adviser's answers of 15 November
 
-**15. Money paid towards the bill before the meal ends (answers 1.3 and 1.8).**
+**14. Money paid towards the bill before the meal ends (answers 1.3 and 1.8).**
 
 *The situation.* Guests sometimes pay part of the bill before the meal is over without naming what
 it pays for: one guest leaves early and pays something, or a group puts money towards a tab. The
@@ -374,7 +366,7 @@ for Ana alone is possible only if she pays for particular dishes, as a separate 
 
 Yes / No / Note: ____________________________________________
 
-**16. Delivering the ticket in practice (answer 1.11).**
+**15. Delivering the ticket in practice (answer 1.11).**
 
 *The situation.* The adviser answered that the ticket must be delivered and the customer cannot waive it.
 Printing it only on request, or never, breaches the rule; showing it on a screen is not delivery;
@@ -398,7 +390,7 @@ ticket, and printing every one wastes paper (owner, 16 November).
 
 Yes / No / Note: ____________________________________________
 
-**17. A whole table, or a staff meal, given free (answer 1.10).**
+**16. A whole table, or a staff meal, given free (answer 1.10).**
 
 *The situation.* Sometimes a restaurant charges a table nothing: the owner invites regulars or
 friends, or staff eat a meal on the house. The adviser answered that the risk-free treatment is a
@@ -421,7 +413,7 @@ pays.
 
 Yes / No / Note: ____________________________________________
 
-**18. A deposit kept after a no-show (answers 1.7 and 1.8).**
+**17. A deposit kept after a no-show (answers 1.7 and 1.8).**
 
 *The situation.* The adviser answered that a deposit for an identified booking is an advance payment with
 its own ticket (answer 1.8), and cited DGT V0839-20: money kept as compensation when a booking is
@@ -436,7 +428,7 @@ the deposit's ticket stand?
 
 Yes / No / Note: ____________________________________________
 
-**19. Money given back as goodwill after the ticket (answer 1.5).**
+**18. Money given back as goodwill after the ticket (answer 1.5).**
 
 *The situation.* A guest complains after paying, and the manager gives some money back. The ticket
 was already issued for the full price. The adviser answered that a price reduction after the ticket "will,
@@ -450,7 +442,7 @@ declaring VAT on the full €62?
 
 Yes / No / Note: ____________________________________________
 
-**20. Who is the third party for copies held outside Spain (answer 1.15).**
+**19. Who is the third party for copies held outside Spain (answer 1.15).**
 
 *The situation.* Waitron keeps a continuous copy of the venue's data away from the restaurant, as a
 backup. The adviser answered that a copy abroad, while the original stays on the server in Spain, is not in
@@ -471,7 +463,7 @@ a storage provider of its own choosing.
 
 Yes / No / Note: ____________________________________________
 
-**21. Invoice copies rebuilt from AEAT's records after a restore (answer 1.16).**
+**20. Invoice copies rebuilt from AEAT's records after a restore (answer 1.16).**
 
 *The situation.* If the venue's server has to be restored from an old backup, the invoices issued
 after that backup are missing from it, although their records reached AEAT. The adviser answered that the
@@ -487,7 +479,7 @@ way, such as its continuous backup copy?
 
 Yes / No / Note: ____________________________________________
 
-**22. Three questions from October still awaited.**
+**21. Three questions from October still awaited.**
 
 *The situation.* The adviser's answers of 15 November did not cover three questions of the October list:
 
@@ -530,8 +522,8 @@ Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un sof
 venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un servidor, un equipo
 en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta explica la
 situación, lo que hace o propone Waitron y por qué, y lo que preguntamos, de modo que puede leerse
-por separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15
-a la 22 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
+por separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 13 son confirmaciones; de la 14
+a la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
 1.16 y 2.1 a 2.6), que le agradecemos.
 
 ### Requieren su criterio
@@ -561,18 +553,22 @@ menús en los pedidos para llevar.
 
 Sí / No / Nota: ____________________________________________
 
-**2. Mantener una fecha que nada indica que sea errónea.**
+**2. Una factura posterior con hora anterior a la de la anterior.**
 
-*Situación.* El reloj del servidor fecha cada factura. Tras cada arranque, el servidor no registra
-ventas hasta confirmar su hora: por la hora de internet, por dos dispositivos del local que
-coinciden con él o por una persona. Esa confirmación podría ser errónea; por ejemplo, una persona
-que confirma una hora equivocada en una hora. En una venta en efectivo nada fuera del servidor
-registra la hora real; un pago con tarjeta lleva al menos la hora del proveedor de pagos.
+*Situación.* Cada registro debe incorporar «la fecha y hora exactas» de su generación (Orden
+HAC/1177/2024, art. 7.e). El reloj del servidor puede ir mal y corregirse después. Ejemplo: el
+servidor se reinicia, se descubre que su reloj iba 2 horas adelantado y se atrasa 2 horas. La
+factura 5, generada después de la corrección, lleva una hora anterior a la de la factura 4, generada
+antes.
 
-*Propuesta de Waitron.* Si nada indica que la fecha de una factura sea errónea, el restaurante la
-mantiene.
+*Lo que hace Waitron.* Lo permite, sin marcarlo ni corregir nada: el art. 3 de la misma Orden
+excluye para VERI\*FACTU el art. 7.i), que contiene la única regla en contra. La factura indica la
+fecha, no la hora (RD 1619/2012, arts. 6.1.b y 7.1.b), de modo que solo es errónea si esas 2 horas
+la pasaron a otro día, por ejemplo una venta de las 23:30 fechada a la 01:30 del día siguiente; esa
+factura se corrige como fecha errónea (pregunta 7).
 
-*Preguntamos:* ¿Es correcto? ¿Necesita el restaurante algo más para sostenerla?
+*Preguntamos:* ¿Es correcto? ¿O una factura posterior con hora anterior a la de la anterior necesita
+corrección, o una anotación, aunque el día sea correcto?
 
 Sí / No / Nota: ____________________________________________
 
@@ -646,8 +642,9 @@ Sí / No / Nota: ____________________________________________
 *Situación.* El productor de un sistema informático de facturación firma, para cada versión, una
 declaración responsable de que cumple la norma (Orden HAC/1177/2024, art. 15). Su apartado d) recoge
 los componentes de hardware y software y una breve descripción de lo que hace el sistema. Aún no se
-ha firmado ninguna. El texto actual del apartado d) está en el
-[anexo](#anexo-el-apartado-d-tal-como-está-hoy).
+ha firmado ninguna. El [anexo](#anexo-ejemplo-de-declaración-responsable) recoge un ejemplo de la
+declaración completa tal como la imprimiría una primera versión, generado por el propio código de la
+declaración a partir de la plantilla actual, con los dos añadidos que se proponen a continuación.
 
 *Propuesta de Waitron.* El texto nombra los componentes de terceros (Node.js, SQLite, Litestream,
 Linux y Docker) como parte del sistema, dice que el productor responde de ellos, e indica la versión
@@ -655,7 +652,8 @@ de la biblioteca Veri\*Factu que se usa y lo que hace. Creemos que basta con dos
 agente de impresión (el programa que envía los documentos a las impresoras del local), y que los
 terminales (cajas, comanderos y pantallas de cocina) solicitan las facturas al servidor y las
 muestran (el texto ya dice que no generan registros de facturación). La frase sobre un servidor de reserva solo figurará
-en una versión que pueda pasar a él.
+en una versión que pueda pasar a él, y las palabras «o un servidor en la nube» solo en una que pueda
+funcionar en Waitron Cloud; el ejemplo no incluye ninguna de las dos.
 
 *Preguntamos:* Con esos dos añadidos, ¿es suficiente el apartado d)?
 
@@ -742,23 +740,7 @@ tiques. No hemos encontrado norma sobre este caso.
 
 Sí / No / Nota: ____________________________________________
 
-**9. Un registro con hora anterior a la del anterior.**
-
-*Situación.* Cada registro debe incorporar «la fecha y hora exactas» de su generación (Orden
-HAC/1177/2024, art. 7.e). Si el reloj del servidor iba adelantado y se corrige, el siguiente registro
-lleva una hora anterior a la del último. Ejemplo: las facturas 2, 3 y 4 se fechan con el reloj una
-hora adelantado; corregido el reloj, la factura 5 lleva una hora anterior a la de la 4.
-
-*Lo que hace Waitron.* Lo permite sin marcarlo: el art. 3 de la misma Orden excluye para VERI\*FACTU
-el art. 7.i), que contiene la única regla en contra. Las facturas 2 a 4 solo se rectifican si la hora
-errónea pasó alguna a otro día; entonces se corrigen como fecha errónea, con una rectificativa que
-indica la fecha real.
-
-*Preguntamos:* ¿Es correcto?
-
-Sí / No / Nota: ____________________________________________
-
-**10. Solo la hora es errónea.**
+**9. Solo la hora es errónea.**
 
 *Situación.* El reloj del servidor estaba mal, pero sin cambiar el día: solo la hora del tique es
 errónea. Ejemplo: un tique fechado a las 21:10 por una venta de las 20:50 del mismo día.
@@ -773,7 +755,7 @@ error en un campo interno.
 
 Sí / No / Nota: ____________________________________________
 
-**11. Comunicar a la AEAT un incidente de reloj.**
+**10. Comunicar a la AEAT un incidente de reloj.**
 
 *Situación.* Se descubre que el reloj del servidor estaba mal, y las facturas afectadas se han
 rectificado, o se han dejado como estaban porque solo era errónea la hora.
@@ -789,7 +771,7 @@ Sí / No / Nota: ____________________________________________
 
 ### Confirmaciones: conservación y acceso
 
-**12. Acceso en línea sin internet.**
+**11. Acceso en línea sin internet.**
 
 *Situación.* Las facturas conservadas por medios electrónicos deben permitir el acceso en línea de
 la Administración (RD 1619/2012, arts. 21.2 y 23). El servidor de Waitron suele estar en el propio
@@ -813,7 +795,7 @@ La exportación prevista recoge las columnas de la lista.
 
 Sí / No / Nota: ____________________________________________
 
-**13. Qué conserva una sociedad de restauración.**
+**12. Qué conserva una sociedad de restauración.**
 
 *Situación.* Waitron está definiendo cuánto tiempo conserva cada tipo de registro, y quiere una
 lista única de lo que una sociedad de restauración debe conservar por normativa fiscal y mercantil.
@@ -828,7 +810,7 @@ versión utilizada; justificantes de pago de ventas de 1.000 € o más, cinco a
 
 Sí / No / Nota: ____________________________________________
 
-**14. Registros que la AEAT no tiene.**
+**13. Registros que la AEAT no tiene.**
 
 *Situación.* Normalmente todo registro llega a la AEAT, que lo conserva. Algunos no llegan nunca: un
 registro pendiente de envío, o uno rechazado. Ese registro «no figuraría jamás en los sistemas de la
@@ -844,7 +826,7 @@ Sí / No / Nota: ____________________________________________
 
 ### A partir de sus respuestas del 15 de noviembre
 
-**15. Lo pagado a cuenta antes de terminar la comida (sus respuestas 1.3 y 1.8).**
+**14. Lo pagado a cuenta antes de terminar la comida (sus respuestas 1.3 y 1.8).**
 
 *Situación.* A veces los clientes pagan parte de la cuenta antes de terminar la comida sin indicar
 qué pagan: un comensal se marcha antes y paga algo, o un grupo deja dinero a cuenta de su consumo.
@@ -882,7 +864,7 @@ tique aparte solo para Ana es posible si paga platos concretos, como cuenta sepa
 
 Sí / No / Nota: ____________________________________________
 
-**16. La entrega del tique en la práctica (su respuesta 1.11).**
+**15. La entrega del tique en la práctica (su respuesta 1.11).**
 
 *Situación.* Indica que el tique debe entregarse y que el cliente no puede renunciar a ello. Imprimirlo
 solo si se pide, o nunca, lo incumple; mostrarlo en pantalla no es entregarlo; el correo electrónico o
@@ -907,7 +889,7 @@ malgasta papel.
 
 Sí / No / Nota: ____________________________________________
 
-**17. Una mesa invitada, o una comida de personal (su respuesta 1.10).**
+**16. Una mesa invitada, o una comida de personal (su respuesta 1.10).**
 
 *Situación.* A veces el restaurante no cobra nada a una mesa: el propietario invita a clientes
 habituales o amigos, o el personal come a cargo de la casa. Indica que el tratamiento sin riesgo es
@@ -931,7 +913,7 @@ local.
 
 Sí / No / Nota: ____________________________________________
 
-**18. Señal retenida cuando el cliente no se presenta (sus respuestas 1.7 y 1.8).**
+**17. Señal retenida cuando el cliente no se presenta (sus respuestas 1.7 y 1.8).**
 
 *Situación.* Indica que la señal de una reserva identificada es un pago anticipado con su propio
 tique (su respuesta 1.8), y cita la V0839-20: lo que se retiene como indemnización si se cancela la
@@ -946,7 +928,7 @@ mantiene el tique de la señal?
 
 Sí / No / Nota: ____________________________________________
 
-**19. Devolución de cortesía tras el tique (su respuesta 1.5).**
+**18. Devolución de cortesía tras el tique (su respuesta 1.5).**
 
 *Situación.* Un cliente se queja después de pagar y el encargado le devuelve parte del dinero; el
 tique ya se expidió por el precio completo. Indica que una rebaja posterior al tique requiere, en su
@@ -960,7 +942,7 @@ seguir declarando el IVA sobre los 62 €?
 
 Sí / No / Nota: ____________________________________________
 
-**20. Quién es el tercero para las copias fuera de España (su respuesta 1.15).**
+**19. Quién es el tercero para las copias fuera de España (su respuesta 1.15).**
 
 *Situación.* Waitron guarda, como copia de seguridad, una copia continua de los datos del local
 fuera del restaurante. Indica que una copia en el extranjero, mientras el original sigue en el
@@ -982,7 +964,7 @@ copia a un proveedor de almacenamiento de su elección.
 
 Sí / No / Nota: ____________________________________________
 
-**21. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta
+**20. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta
 1.16).**
 
 *Situación.* Si el servidor del local se restaura desde una copia antigua, le faltan las facturas
@@ -999,7 +981,7 @@ completa por otra vía, como su copia de seguridad continua?
 
 Sí / No / Nota: ____________________________________________
 
-**22. Tres preguntas de octubre aún pendientes.**
+**21. Tres preguntas de octubre aún pendientes.**
 
 *Situación.* Sus respuestas del 15 de noviembre no tratan tres preguntas de la lista de octubre:
 
@@ -1020,34 +1002,62 @@ Sí / No / Nota: ____________________________________________
 
 Nota: ____________________________________________
 
-### Anexo: el apartado d), tal como está hoy
+### Anexo: ejemplo de declaración responsable
 
-Texto de la plantilla de la declaración (`packages/fiscal-verifactu/declarations/template.md`, líneas 13 a 36). Los valores entre ‹ › los rellena cada versión.
+Generado el 16 de noviembre de 2026 por el propio código que produce la declaración
+(`packages/fiscal-verifactu/src/declaration/`), a partir de la plantilla del repositorio
+(`packages/fiscal-verifactu/declarations/template.md`) y de su lista de funcionalidades. Respecto a la
+plantilla, el apartado d) lleva los dos añadidos de la pregunta 5, y omite «o un servidor en la nube»
+y la frase sobre el servidor de reserva, porque una primera versión funciona solo en un equipo del
+propio local. La versión (1.0.0) y la fecha son de ejemplo; los datos entre corchetes los rellena el
+productor al firmar.
 
-> **1.d) Componentes, hardware y software, de que consta el sistema informático a que se refiere
-> esta declaración responsable, junto con una breve descripción de lo que hace dicho sistema
-> informático y de sus principales funcionalidades:**
+> DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN
 >
-> Waitron es un software de punto de venta para restaurantes y bares. Se ejecuta en un servidor
-> —un equipo del propio establecimiento o un servidor en la nube— con Linux y Docker, y los
-> terminales del establecimiento (cajas, comanderos, pantallas de cocina y el panel de gestión) se
-> conectan a él por la red mediante un navegador. Opcionalmente, un segundo servidor de reserva en
-> el establecimiento mantiene una copia continua de los datos y puede sustituir al principal si este
-> falla.
+> 1.a) Nombre del sistema informático a que se refiere esta declaración responsable: Waitron
 >
-> Hardware: Waitron no incluye hardware propio; funciona en cualquier ordenador que cumpla lo
-> anterior.
+> 1.b) Código identificador del sistema informático a que se refiere el apartado a) de esta declaración responsable: W1
 >
-> Software: el servidor Waitron, que genera, encadena, conserva y remite los registros de
-> facturación; la biblioteca @waitron/verifactu (versión ‹versión de @waitron/verifactu›), que
-> construye cada registro, su huella y el contenido del código QR, y lo remite, y que cuenta con su propia declaración
-> responsable; las aplicaciones de los terminales, que no generan registros de facturación; el
-> agente de impresión; y los componentes de terceros de los que nos hacemos responsables: Node.js,
-> SQLite, Litestream, Linux y Docker (la lista completa se muestra en el propio sistema).
+> 1.c) Identificador completo de la versión concreta del sistema informático a que se refiere esta declaración responsable: 1.0.0
 >
-> Cada instalación lleva la facturación de un único obligado tributario y aplica una única modalidad
-> de cumplimiento, determinada por el paquete de país instalado; esta versión solo funciona como
-> VERI*FACTU.
+> 1.d) Componentes, hardware y software, de que consta el sistema informático a que se refiere esta declaración responsable, junto con una breve descripción de lo que hace dicho sistema informático y de sus principales funcionalidades:
+>
+> Waitron es un software de punto de venta para restaurantes y bares. Se ejecuta en un servidor —un equipo del propio establecimiento— con Linux y Docker, y los terminales del establecimiento (cajas, comanderos, pantallas de cocina y el panel de gestión) se conectan a él por la red mediante un navegador.
+>
+> Hardware: Waitron no incluye hardware propio; funciona en cualquier ordenador que cumpla lo anterior.
+>
+> Software: el servidor Waitron, que genera, encadena, conserva y remite los registros de facturación; la biblioteca @waitron/verifactu (versión 0.2.1), que construye cada registro, su huella y el contenido del código QR, y lo remite, y que cuenta con su propia declaración responsable; las aplicaciones de los terminales, que solicitan al servidor las facturas y las muestran, y no generan registros de facturación; el agente de impresión, que envía a las impresoras del establecimiento los documentos que prepara el servidor y no genera registros de facturación; y los componentes de terceros de los que nos hacemos responsables: Node.js, SQLite, Litestream, Linux y Docker (la lista completa se muestra en el propio sistema).
+>
+> Cada instalación lleva la facturación de un único obligado tributario y aplica una única modalidad de cumplimiento, determinada por el paquete de país instalado; esta versión solo funciona como VERI\*FACTU.
+>
+> Principales funcionalidades: toma de pedidos por mesa o en barra, cobro en efectivo y con tarjeta, expedición de facturas simplificadas, facturas rectificativas, consulta de las facturas emitidas e informes de ventas.
+>
+> 1.e) Indicación de si el sistema informático a que se refiere esta declaración responsable se ha producido de tal manera que, a los efectos de cumplir con el Reglamento, solo pueda funcionar exclusivamente como «VERI\*FACTU»: S - Sí
+>
+> 1.f) Indicación de si el sistema informático a que se refiere la declaración responsable permite ser usado por varios obligados tributarios o por un mismo usuario para dar soporte a la facturación de varios obligados tributarios: N - No
+>
+> 1.g) Tipos de firma utilizados para firmar los registros de facturación y de evento en el caso de que el sistema informático a que se refiere esta declaración responsable no sea utilizado como «VERI\*FACTU». Dado que se trata de un producto de facturación que solo puede ser utilizado exclusivamente en la modalidad de «VERI\*FACTU», no se realiza una firma electrónica expresa de los registros de facturación generados, ya que la normativa considera que quedan firmados al ser remitidos correctamente a los servicios electrónicos de la Agencia Tributaria con la debida autenticación mediante el adecuado certificado electrónico cualificado.
+>
+> 1.h) Nombre y apellidos de la persona productora del sistema informático a que se refiere esta declaración responsable: [nombre y apellidos del productor]
+>
+> 1.i) Número de identificación fiscal (NIF) español de la persona productora del sistema informático a que se refiere esta declaración responsable: [NIF del productor]
+>
+> 1.j) Dirección postal completa de contacto de la persona productora del sistema informático a que se refiere esta declaración responsable: [dirección postal del productor]
+>
+> 1.k) La persona productora del sistema informático a que se refiere esta declaración responsable hace constar que dicho sistema informático, en la versión indicada en ella, cumple con lo dispuesto en el artículo 29.2.j) de la Ley 58/2003, de 17 de diciembre, General Tributaria, en el Reglamento que establece los requisitos que deben adoptar los sistemas y programas informáticos o electrónicos que soporten los procesos de facturación de empresarios y profesionales, y la estandarización de formatos de los registros de facturación, aprobado por el Real Decreto 1007/2023, de 5 de diciembre, en la Orden HAC/1177/2024, de 17 de octubre, y en la sede electrónica de la Agencia Estatal de Administración Tributaria para todo aquello que complete las especificaciones de dicha orden.
+>
+> 1.l)
+>
+> - Fecha en que la persona productora de este sistema informático suscribe esta declaración responsable del mismo: 1 de diciembre de 2026.
+> - Lugar en que la persona productora de este sistema informático suscribe esta declaración responsable del mismo: [lugar de firma] – España.
+>
+> ANEXO
+>
+> 2.a) Otras formas de contacto con la persona productora del sistema informático a que se refiere esta declaración responsable: Correo electrónico: info@waitron.io
+>
+> 2.b) Direcciones de internet de la persona productora del sistema informático a que se refiere esta declaración responsable:
+>
+> - Histórico de declaraciones responsables de las versiones de este producto: https://github.com/clintongormley/waitron/releases
 
 ### Apéndice: laboral y privacidad (para otro asesor)
 
@@ -1064,6 +1074,7 @@ Texto de la plantilla de la declaración (`packages/fiscal-verifactu/declaration
 
 | Item | Why it is not asked | Receipt |
 | --- | --- | --- |
+| T2, keeping a date that nothing shows to be wrong | Owner, 16 November: the explanation of how the clock is confirmed is not needed; what matters is a later invoice timed earlier than the one before, now question 2 | the owner's review of this sheet, 16 November |
 | T13, the long-term archive | Owner, 15 November: "Agree, no archive now" (A1531) | `~/waitron-campaign-l/questions.md:1783-1785`; [backlog.md:2235](../backlog.md) |
 | T16, a change of producer | Owner, 11 November, "Later": A993 is built only once a change is scheduled. Its venue-move half is now in question 6 | commit `e59fac8c94`; [backlog.md:246-249](../backlog.md) |
 | T9 and T10, tips | Held by the owner on 6 November until A793 is revived, and A793 is still not approved | [2026-11-06-adviser-questions.md:71-72](2026-11-06-adviser-questions.md); [backlog.md:1283-1286](../backlog.md) |
