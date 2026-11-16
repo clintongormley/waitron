@@ -357,6 +357,7 @@ describe("a card sale in flight when the box steps down", () => {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         id: workingOrderId,
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
@@ -381,6 +382,7 @@ describe("a card sale in flight when the box steps down", () => {
       method: "POST",
       headers: { cookie: venue.cookie2, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         id: randomUUID(),
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],

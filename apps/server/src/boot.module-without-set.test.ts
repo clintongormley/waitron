@@ -100,6 +100,7 @@ it("a trading boot never names a module with no set of its own as waiting to be 
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
         tender: { method: "cash", amount: "3.00" },
