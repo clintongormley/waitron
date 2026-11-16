@@ -1,32 +1,33 @@
 # Stripe durable reconciler reversal
 
-Draft only: Claude plan review, then watcher clearance precede building. No owner design approval is claimed. Root owns checks and commits.
+Plan only: Claude review and watcher clearance precede building. No owner design approval is claimed.
 
-**Request:** STRIPE-DURABLE-REVERSAL, `/Users/clintongormley/waitron-campaign-f/queue.md:63–64`: “Record the attempt before sending, reuse its key on a retry, and settle an uncertain outcome from Stripe's own record rather than a new refund”.
+**Request:** STRIPE-DURABLE-REVERSAL in `/Users/clintongormley/waitron-campaign-f/queue.md`: “Record the attempt before sending, reuse its key on a retry, and settle an uncertain outcome from Stripe's own record rather than a new refund”.
 
-**Smallest outcome:** an abandoned capture is refunded once; a later public reconciler sweep after process restart records a refund whose reply/local write was lost.
+**Finish line:** a later scheduled sweep, including after restart and outside the original period, records a reversal whose provider reply or local write was lost, without another refund key.
 
-## Approach and boundaries
+## Smallest route
 
-Reuse the committed `payments.reconcile_remediated_at` claim as the durable attempt reservation, with the payment's existing ID determining `sr_<paymentId>` and refund metadata `reconcile_payment_id`. No new column/table or migration. `reconcile.ts:386–428` already commits the claim before calling reverse; its permanent gate prevents recovery today. Preserve its abandoned/captured/hold/drift gates and concurrent claim assertions.
+Reuse the committed `payments.reconcile_remediated_at` claim before send (`reconcile.ts:386–428`), payment ID for `sr_<paymentId>`, and refund metadata `reconcile_payment_id`. No migration or pending refund row. Preserve abandoned/captured/hold/drift gates and concurrent claim tests. Ordinary terminal/on-device reversal calls, bill refunds, SumUp, invoices, fiscal records and UI stay outside this change.
 
-Reuse `store.ts:731`'s period-independent marked-row read pattern, existing `getPaymentByRef`, `recordRefund`, and `recordFailedRefund`; follow SumUp's recovery-before-audit pattern (`reconciler.ts:112–120`). Keep `payment_refunds` terminal-only. Reuse Stripe's existing `createRefund`/paginated `listRefunds` and metadata support (`stripe-client.ts:87–122`), rather than extending `report-client.ts`. Follow tender refunds' reservation/network/outcome transaction split (`apps/server/src/tender-refund-sends.ts:300–327`).
+Use `listAbandonedRefundOutcomes`, not a new query/export. Add payment ID and a failed-refund indicator to its existing projection; Stripe skips confirmed/failed rows. Inside `StripeReconciler`, recover marked rows before the ordinary period audit. Reuse `getPaymentByRef`, `recordRefund`, `recordFailedRefund` and short outcome transactions with a final terminal-state check. Network calls stay outside transactions.
 
-Leave ordinary terminal/on-device `reverseViaStripe` callers (`provider.ts:630`, `device-provider.ts:125`), bill/tender refunds, SumUp, fiscal hashes/invoices/write paths, UI and generic refund protocols untouched.
+Extract existing `StripeTerminalProvider.sendRefund`/`lookupRefund` logic and status/refusal helpers into `refund.ts`, parameterising the metadata key; provider delegates without changing its contract. Reconciler uses the same helpers. Its lookup treats refunds without matching metadata as ambiguous, with no send; bill-refund lookup retains its current matching behavior. Preserve missing-status/5xx uncertainty and lookup after 4xx; a documented refusal is terminal only after one HTTP attempt and no conflicting evidence.
 
-## Build, test first by owning layer
+A matching succeeded refund records its provider ID once; failed/canceled or a definite documented refusal records one failed outcome. Pending, ambiguous, unknown or unreadable evidence remains unconfirmed. An unpaid hosted session records one terminal failure with no send, preserving the existing subsequent-sweep behavior. Resolve paid hosted sessions through the existing report client. Send the saved captured amount explicitly; correct the old “no amount” comment.
 
-For each step, root writes the regression, observes the intended failure, implements minimally, then reruns it.
+Lookup precedes recovery resend. Only resend the same key when claim age is non-negative and under 24 hours; older attempts are lookup-only. Automatic retry is deliberate under the request. Only a fresh uncertain attempt asks for one re-sweep in one hour; recovery never schedules successors, so stuck rows rely on the daily cadence. Fold recovery into existing remediated/failures/unconfirmed counts and raise the existing remediation-failed incident for new terminal failures.
 
-- [ ] **Payments storage:** modify `packages/payments/src/store.ts` and `index.ts`; test in `store.test.ts`. Add/export `listPendingReconcileReversals(tx, provider)`, returning payment ID/ref, external ref, decimal amount and claim time across all periods. Select claimed abandoned captured payments without sale/hold or terminal refund rows. Assert provider isolation, inclusion outside the audit window, and exclusion after success/failure. Existing claim behavior stays unchanged.
-- [ ] **Stripe orchestration:** create `packages/payments-stripe/src/reconcile-reversal.ts`; modify `reconciler.ts`. Narrow the account refund seat to `Pick<StripeClient, "createRefund" | "listRefunds">`. Fresh reversals use the already-committed claim and explicit full captured amount; retain hosted-session resolution. Every sweep first recovers stored attempts independently of its period/report. Match provider evidence by metadata; succeeded records the provider refund ID once, failed/canceled records terminal failure, pending/unknown or unreadable evidence stays unconfirmed. Recheck local terminal state inside the outcome transaction. Lookup precedes retry; never mint another key. Permit same-key resend only within the verified retention window; older uncertainty is lookup-only. Return recovery counts/failures/unconfirmed refs and `resweepAfter` while pending.
-- [ ] **Stripe behavior:** extend `reconciler.test.ts` for committed reservation/key at send, same-key retry, pending-to-success, terminal failure, unreadable evidence, and expired-key no-resend. Preserve hosted/terminal, unpaid-session no-send, held/drift assertions. Adapt `stripe-report-client.test.ts` assertions to `createRefundCalls`. Do not repeat SDK failure/pagination matrices already in `stripe-client.test.ts`.
-- [ ] **Restart proof:** create `reconciler.restart.test.ts` and `testing/reconcile-reversal-child.ts`. Seed with `useVenueDb`, archive to a disposable venue folder, retain fake provider evidence in the parent, and terminate the child after provider acceptance before local recording. A fresh child runs public `reconcile` for a later period: assert one provider refund and one successful ledger row. Bound children and clean up only owned resources.
+## Build and focused proof
 
-## Completion
+Write each regression, observe its expected failure, then implement minimally:
 
-Verified 16 November: [Stripe API v1](https://docs.stripe.com/api/idempotent_requests) may prune keys ‘after they’re at least 24 hours old’. Reuse the existing 24-hour policy (`provider.ts:77–81`); older attempts are lookup-only. No provider calls. Reuse existing scheduler forwarding/enqueue tests. Narrow permanent-marker prose in `reconcile.ts` and `schema/payments.ts`; delete the completed entry and stale W44 references in `docs/backlog.md` and `docs/backlog/payments.md`.
+- `packages/payments/src/store.ts`, `store.test.ts`: extend the existing marked-outcome reader/test for payment ID and failed outcome; preserve its provider isolation and existing semantics. Update permanent-marker prose in `reconcile.ts` and `schema/payments.ts`.
+- `packages/payments-stripe/src/{refund,provider,reconciler}.ts`: narrow the account refund seat to existing `createRefund`/`listRefunds`. Update affected doubles/assertions in `reconciler.test.ts`, `stripe-report-client.test.ts`, `apps/server/src/boot.payments-off-alerts.test.ts`; run `provider.test.ts` for unchanged send/lookup behavior.
+- Real-database reconciler tests own committed reservation/key-at-send, lost reply followed by a fresh reconciler/later period, pending-to-success, failed/refused terminal outcome, unreadable/ambiguous evidence, expired/negative-age no-resend and bounded scheduling. Reuse FakeStripe's lost-reply/key-replay support; no child-process fixture. Preserve hosted/terminal, unpaid-session, held/drift and concurrency assertions. SDK HTTP/pagination matrices stay in `stripe-client.test.ts`.
 
-Estimated handwritten lines: production +150–180/−20–35; tests +230–280/−10–20; support +60–80/−0. Generated schema lines: zero. Focused checks belong to root; none run during drafting.
+## Completion and size
 
-Root's focused commands: `pnpm --filter @waitron/payments exec vitest run src/store.test.ts src/reconcile.concurrency.test.ts`; `pnpm --filter @waitron/payments-stripe exec vitest run src/reconciler.test.ts src/reconciler.restart.test.ts src/stripe-report-client.test.ts src/stripe-client.test.ts`.
+Run the named changed files, payments `reconcile.concurrency.test.ts` and Stripe `stripe-client.test.ts`, then normal hook and scoped CI. Delete this completed backlog gap and stale W44 wording only after proof. No provider API calls. Verified 16 November: [Stripe API v1](https://docs.stripe.com/api/idempotent_requests) may prune keys ‘after they’re at least 24 hours old’; existing 24-hour policy is conservative.
+
+Forecast handwritten production +125–160/−20–35; tests +150–200/−10–20; support and generated lines zero. Source-checked separate Sol-high draft, then driver corrections accepting Claude's smaller route. Watcher clearance pending.
