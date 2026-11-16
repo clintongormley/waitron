@@ -158,7 +158,11 @@ async function placeAndFire(): Promise<string> {
   const park = await app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ id, lines: [{ menuItemId: coffeeOffer, quantity: "1" }] }),
+    body: JSON.stringify({
+      dining: "eat_in",
+      id,
+      lines: [{ menuItemId: coffeeOffer, quantity: "1" }],
+    }),
   });
   expect(park.status).toBe(200);
   const place = await app.request(`/api/working-orders/${id}/place`, {

@@ -152,6 +152,7 @@ describe("receipt issue facts independent of recipient and current venue zone", 
       zoneId: v.zoneId,
       lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
       tender: { method: "cash", amount: "35.00" },
+      dining: "eat_in",
     };
     const pay = () =>
       app.request("/api/sales", {

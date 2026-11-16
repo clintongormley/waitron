@@ -335,6 +335,7 @@ async function send(v: Lunch, method: string, path: string, body?: object): Prom
 
 const pay = (v: Lunch, lines: object[]) =>
   send(v, "POST", "/api/sales", {
+    dining: "eat_in",
     zoneId: v.zoneId,
     lines,
     tender: { method: "cash", amount: "50.00" },
@@ -531,6 +532,7 @@ describe("a basket that spans a scheduled activation", () => {
     ).versionId;
     const heldId = randomUUID();
     const held = await send(v, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: heldId,
       zoneId: v.zoneId,
       lines: [lemonadeLine(v, v1)],
@@ -691,6 +693,7 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
     };
     const sell = () =>
       send(v, "POST", "/api/sales", {
+        dining: "eat_in",
         zoneId: v.zoneId,
         // 250 ml as three lines: a unit without the Measure switch sells whole portions, at most
         // 99 of one dish in one line.
@@ -891,6 +894,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const bacon = await withBacon(v, "public");
     const id = randomUUID();
     const parked = await send(v, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: v.zoneId,
       lines: [baconLine(bacon)],
@@ -908,6 +912,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
 
     const paid = await send(v, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       zoneId: v.zoneId,
       lines: [{ workingOrderLineId: stored!.id, ...baconLine(bacon) }],
@@ -987,6 +992,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     );
     expect(fired.status).toBe(200);
     const paid = await send(v, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "cash", amount: "50.00" },
       workingOrderId: party.tabId,

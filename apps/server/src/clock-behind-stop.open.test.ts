@@ -59,6 +59,7 @@ function latest(db: Database): { at: Date; offsetMinutes: number } | undefined {
 
 function cashSale(open: OpenVenue, app: Hono, id: string) {
   return send(app, open.venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: id,
     zoneId: open.counter.zoneId,
     lines: [{ menuItemId: open.counter.offerFor(open.productId), quantity: "1" }],

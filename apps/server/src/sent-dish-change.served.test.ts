@@ -122,6 +122,7 @@ async function saveBasket(
 ) {
   const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
+    dining: "eat_in",
     lines,
     revision: order!.revision,
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),

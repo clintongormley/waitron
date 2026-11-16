@@ -65,6 +65,7 @@ function lines(n: number) {
 
 function cashSale(n: number) {
   return send(venue.app, venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: randomUUID(),
     lines: lines(n),
     zoneId: counter.zoneId,
@@ -123,6 +124,7 @@ describe("a full database", () => {
       fillDatabase();
       const before = counts();
       const answer = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+        dining: "eat_in",
         id: randomUUID(),
         lines: lines(20),
         zoneId: counter.zoneId,

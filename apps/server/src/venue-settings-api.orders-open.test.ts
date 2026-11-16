@@ -131,6 +131,7 @@ function refusedFor(count: number) {
 async function counterSale(): Promise<string> {
   const id = randomUUID();
   const sold = await till("POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: id,
     zoneId: counter.zoneId,
     lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
@@ -144,6 +145,7 @@ async function counterSale(): Promise<string> {
 async function paidPartyBill(): Promise<{ partyId: string; tabId: string }> {
   const party = await seatedWith(venue, "Paella");
   const paid = await till("POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: party.tabId,
     lines: [],
     tender: { method: "cash", amount: "35.00" },
@@ -158,6 +160,7 @@ describe("a receipt-language change while orders are open", () => {
     reset();
     const id = randomUUID();
     const parked = await till("POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: counter.zoneId,
       lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
@@ -168,6 +171,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(language()).toEqual(["es-ES"]);
 
     const paid = await till("POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
       tender: { method: "cash", amount: "35.00" },
@@ -203,6 +207,7 @@ describe("a receipt-language change while orders are open", () => {
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const paying = till("POST", "/api/pay", {
+      dining: "eat_in",
       id,
       zoneId: counter.zoneId,
       lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
@@ -312,6 +317,7 @@ describe("a receipt-language change while orders are open", () => {
       ),
     ).toEqual([{ state: "closed", party_id: merged.partyId }]);
     const paid = await till("POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: survivor.tabId,
       lines: [],
       tender: { method: "cash", amount: "18.00" },
@@ -334,6 +340,7 @@ describe("a receipt-language change while orders are open", () => {
     venue.db.run(sql`update kitchen_stations set active = 0`);
     try {
       const sold = await till("POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         zoneId: counter.zoneId,
         lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
@@ -365,6 +372,7 @@ describe("a receipt-language change while orders are open", () => {
     venue.db.run(sql`update kitchen_stations set active = 0 where is_default = 1`);
     try {
       const sold = await till("POST", "/api/sales", {
+        dining: "eat_in",
         workingOrderId: id,
         zoneId: counter.zoneId,
         lines: [
@@ -394,6 +402,7 @@ describe("a receipt-language change while orders are open", () => {
     const id = randomUUID();
     try {
       const parked = await till("POST", "/api/working-orders", {
+        dining: "eat_in",
         id,
         zoneId: placing.zoneId,
         lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
@@ -444,6 +453,7 @@ describe("a receipt-language change while orders are open", () => {
     });
     try {
       const parked = await till("POST", "/api/working-orders", {
+        dining: "eat_in",
         id,
         zoneId: placing.zoneId,
         lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],

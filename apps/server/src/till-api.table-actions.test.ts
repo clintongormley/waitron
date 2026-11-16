@@ -2094,6 +2094,7 @@ describe("A803 split: the panel's read", () => {
         "POST",
         `/api/parties/${anna.partyId}/drafts/${draft.id}/submit`,
         {
+          dining: "eat_in",
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(anna.partyId),
           draftRevision: draft.revision,

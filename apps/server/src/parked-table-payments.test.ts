@@ -37,6 +37,7 @@ describe("parked bills paid with their retrieved edit observation", () => {
         method: "POST",
         headers: { cookie: venue.cookie, "content-type": "application/json" },
         body: JSON.stringify({
+          dining: "eat_in",
           id,
           zoneId: counterZone,
           lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
@@ -64,6 +65,7 @@ describe("parked bills paid with their retrieved edit observation", () => {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         lines: retrieved.lines,
         tender: { method, amount: "35.00" },
@@ -97,6 +99,7 @@ it.each(["missing", "stale"] as const)(
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         lines: retrieved.lines,
         tender: { method: "cash", amount: "35.00" },

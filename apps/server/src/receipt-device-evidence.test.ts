@@ -13,6 +13,7 @@ it("returns stored invoice evidence on a cash sale and on its replay and receipt
     zoneId: v.zoneId,
     lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
     tender: { method: "cash", amount: "35.00" },
+    dining: "eat_in",
   };
   const pay = () =>
     v.app.request("/api/sales", {

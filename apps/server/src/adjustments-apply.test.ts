@@ -4200,6 +4200,7 @@ describe("a counter order (B11c)", () => {
 
     await adjust(orderId, { action: "discount_percent", percentBp: 1000 });
     const paid = await send(venue.app, venue.cookie.staff, "POST", "/api/sales", {
+      dining: "eat_in",
       lines: [],
       tender: { method: "cash", amount: "27.00" },
       workingOrderId: orderId,

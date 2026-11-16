@@ -139,6 +139,7 @@ async function revisionOf(partyId: string): Promise<number> {
 
 async function submitBody(partyId: string, draft: DraftAnswer, lineIds = draft.lines) {
   return {
+    dining: "eat_in",
     submissionId: randomUUID(),
     draftRevision: draft.revision,
     expectedPartyRevision: await revisionOf(partyId),
@@ -1476,6 +1477,7 @@ describe("per-group HTTP destinations draft", () => {
       { release: "hold", afterGroupId: first.toUpperCase(), lineIds: [draft.lines[3]!.id] },
     ];
     const body = {
+      dining: "eat_in",
       submissionId: randomUUID(),
       expectedPartyRevision: (await submitBody(party.partyId, draft)).expectedPartyRevision,
       groups,
@@ -1535,6 +1537,7 @@ describe("per-group HTTP destinations draft", () => {
           "POST",
           `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
           {
+            dining: "eat_in",
             submissionId: randomUUID(),
             expectedPartyRevision: (await submitBody(party.partyId, draft)).expectedPartyRevision,
             draftRevision: draft.revision,

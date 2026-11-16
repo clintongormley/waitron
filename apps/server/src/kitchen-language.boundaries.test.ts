@@ -287,6 +287,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
   });
   const id = randomUUID();
   const paid = await send(v.app, v.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     zoneId: offers.zoneId,
     lines: [{ menuItemId: offers.menuItemId, quantity: "1" }],

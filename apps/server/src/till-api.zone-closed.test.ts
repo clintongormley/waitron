@@ -94,8 +94,14 @@ async function seat(v: BillVenue) {
 async function park(v: BillVenue) {
   const id = randomUUID();
   expect(
-    (await request(v, "POST", "/api/working-orders", { id, zoneId: v.zoneId, lines: [line(v)] }))
-      .status,
+    (
+      await request(v, "POST", "/api/working-orders", {
+        dining: "eat_in",
+        id,
+        zoneId: v.zoneId,
+        lines: [line(v)],
+      })
+    ).status,
   ).toBe(200);
   return id;
 }
@@ -140,6 +146,7 @@ describe("closed zones take no new service", () => {
     expect(
       (
         await request(v, "POST", "/api/working-orders", {
+          dining: "eat_in",
           id: randomUUID(),
           zoneId: v.zoneId,
           lines: [line(v)],
@@ -150,6 +157,7 @@ describe("closed zones take no new service", () => {
     const duringClosure = await orderRows();
     expect(
       await request(v, "POST", "/api/working-orders", {
+        dining: "eat_in",
         id: randomUUID(),
         zoneId: v.zoneId,
         lines: [line(v)],
@@ -161,6 +169,7 @@ describe("closed zones take no new service", () => {
     await seat(v);
     const before = await orderRows();
     const answer = await request(v, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: randomUUID(),
       zoneId: v.zoneId,
       lines: [line(v)],
@@ -177,6 +186,7 @@ describe("closed zones take no new service", () => {
     expect(await orderRows()).toEqual(before);
     const id = randomUUID();
     const confirmed = await request(v, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: v.zoneId,
       lines: [line(v)],
@@ -213,6 +223,7 @@ describe("closed zones take no new service", () => {
           zoneId: v.zoneId,
           lines: [line(v)],
           tender: { method: "cash", amount: "3.00" },
+          dining: "eat_in",
         }),
       ).toEqual(refused(v));
       expect(await orderRows()).toEqual(before);
@@ -226,6 +237,7 @@ describe("closed zones take no new service", () => {
     at("23:45");
     expect(
       await request(v, "POST", "/api/sales", {
+        dining: "eat_in",
         id: randomUUID(),
         deliveryTableId: t.id,
         lines: [line(v)],
@@ -269,6 +281,7 @@ describe("existing service in a closed zone", () => {
               quantity: "2",
             })
           : await request(v, "PUT", `/api/working-orders/${id}`, {
+              dining: "eat_in",
               revision: before.json.revision,
               zoneId: v.zoneId,
               lines: [
@@ -409,6 +422,7 @@ describe("existing service in a closed zone", () => {
     expect(
       (
         await request(v, "POST", "/api/sales", {
+          dining: "eat_in",
           workingOrderId: id,
           lines: [],
           tender: { method: "cash", amount: "3.00" },
@@ -564,6 +578,7 @@ describe("existing service in a closed zone", () => {
               groups: [{ lines: [line(v)], release: "fire" }],
             })
           : await request(v, "POST", `/api/parties/${seated.partyId}/drafts/${draft.id}/submit`, {
+              dining: "eat_in",
               submissionId: randomUUID(),
               expectedPartyRevision: party!.revision,
               draftRevision: draft.revision,

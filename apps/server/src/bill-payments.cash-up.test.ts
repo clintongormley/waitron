@@ -298,6 +298,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
       method: "POST",
       headers: { "content-type": "application/json", cookie: venue.cookie },
       body: JSON.stringify({
+        dining: "eat_in",
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
         tender: { method: "cash", amount: "6.00" },
         zoneId: venue.zoneId,

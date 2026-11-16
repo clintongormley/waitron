@@ -189,14 +189,26 @@ function productLine(productId: string): { menuItemId: string; quantity: string 
 }
 
 const ROUTES = [
-  ["/api/working-orders", (line: object) => ({ id: randomUUID(), lines: [line] })],
+  [
+    "/api/working-orders",
+    (line: object) => ({ dining: "eat_in", id: randomUUID(), lines: [line] }),
+  ],
   [
     "/api/sales",
-    (line: object) => ({ lines: [line], tender: { method: "cash", amount: "10.00" } }),
+    (line: object) => ({
+      dining: "eat_in",
+      lines: [line],
+      tender: { method: "cash", amount: "10.00" },
+    }),
   ],
   [
     "/api/pay",
-    (line: object) => ({ id: randomUUID(), lines: [line], simulationOutcome: "captured" }),
+    (line: object) => ({
+      dining: "eat_in",
+      id: randomUUID(),
+      lines: [line],
+      simulationOutcome: "captured",
+    }),
   ],
 ] as const;
 

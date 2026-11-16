@@ -136,6 +136,7 @@ describe("authority clock alerts and sales", () => {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         zoneId: venue.zoneId,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
         tender: { method: "cash", amount: "3.00" },

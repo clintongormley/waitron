@@ -235,6 +235,7 @@ async function placeOrder(names: string[]): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
+      dining: "eat_in",
       id,
       zoneId: counterOffers.zoneId,
       lines: names.map((d) => ({ menuItemId: ids.get(d)!, quantity: "1" })),

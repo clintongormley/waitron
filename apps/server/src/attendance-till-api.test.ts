@@ -185,6 +185,7 @@ describe("till attendance recorder admission", () => {
                   workingOrderId: id,
                   zoneId: v.counter.zoneId,
                   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+                  dining: "eat_in",
                 }
               : {}),
             ...(path === "collection"
@@ -217,6 +218,7 @@ describe("till attendance recorder admission", () => {
       method: "POST",
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
+        dining: "eat_in",
         id: newId(),
         zoneId: v.counter.zoneId,
         lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],

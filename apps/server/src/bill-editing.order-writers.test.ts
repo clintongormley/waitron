@@ -192,6 +192,7 @@ function httpBody(
     operatorId: venue.adminId,
     ...(op === "whole"
       ? {
+          dining: "eat_in",
           lines: [
             {
               workingOrderLineId: p.line.id,

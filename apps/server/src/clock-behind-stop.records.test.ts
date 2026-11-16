@@ -154,6 +154,7 @@ async function freshDraft(now: number) {
 
 async function submit(app: Hono, partyId: string, tabId: string, draft: Draft) {
   return send(app, venue.cookie, "POST", `/api/parties/${partyId}/drafts/${draft.id}/submit`, {
+    dining: "eat_in",
     submissionId: randomUUID(),
     expectedPartyRevision: await partyRevisionOf(venue, tabId),
     draftRevision: draft.revision,
@@ -306,6 +307,7 @@ describe("a held-order save", () => {
   /** Save the bill keeping one of its two beers, which completes it. */
   async function keepOneBeer(app: Hono, billId: string) {
     return send(app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
+      dining: "eat_in",
       revision: revisionOf(billId),
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       lines: heldRow(
@@ -414,6 +416,7 @@ describe("a cancel's credit", () => {
   async function placed(now: number, issued: boolean): Promise<string> {
     const id = randomUUID();
     const parked = await send(at(now), venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       zoneId: counterZone,
       lines: [{ menuItemId: counterOffer("Caña"), quantity: "1" }],

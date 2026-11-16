@@ -59,6 +59,7 @@ async function placed(kind: Kind): Promise<string> {
   const id = randomUUID();
   const zone = zoneOf[kind];
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id,
     zoneId: zone.zoneId,
     lines: [{ menuItemId: zone.offerFor(beerId), quantity: "1" }],
@@ -83,7 +84,7 @@ async function placed(kind: Kind): Promise<string> {
 }
 
 function pay(id: string, cookie = venue.cookie) {
-  return send(venue.app, cookie, "POST", "/api/pay", { id, lines: [] });
+  return send(venue.app, cookie, "POST", "/api/pay", { dining: "eat_in", id, lines: [] });
 }
 
 function collect(id: string, tender: { method: "cash" | "card"; amount: string }) {

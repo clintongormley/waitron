@@ -1083,6 +1083,7 @@ describe("the line-editing routes act as the session's operator", () => {
     }));
 
     const saved = await call("PUT", `/api/working-orders/${party.tabId}`, {
+      dining: "eat_in",
       lines: [...kept, dish("Octopus")],
       revision: tab.revision,
       operatorId: venue.adminId,
@@ -1100,6 +1101,7 @@ describe("the line-editing routes act as the session's operator", () => {
     const id = randomUUID();
 
     const parked = await call("POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines: [dish("Tarta")],
       zoneId: venue.zoneId,

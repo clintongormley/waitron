@@ -250,6 +250,7 @@ function payBody(readerId?: string) {
     id: randomUUID(),
     zoneId: venue.zoneId,
     lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+    dining: "eat_in",
     ...(readerId === undefined ? {} : { readerId }),
   };
 }

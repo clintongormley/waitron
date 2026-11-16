@@ -61,6 +61,7 @@ function ledger() {
 
 function cashSale(iso: string, workingOrderId: string) {
   return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId,
     lines: [{ menuItemId: counter.offerFor(productId), quantity: "1" }],
     zoneId: counter.zoneId,

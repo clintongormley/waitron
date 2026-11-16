@@ -191,6 +191,7 @@ function post(path: string, body: unknown) {
 async function sell() {
   const workingOrderId = randomUUID();
   const answer = await post("/api/sales", {
+    dining: "eat_in",
     lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
     tender: { method: "cash", amount: "20.00" },
     workingOrderId,

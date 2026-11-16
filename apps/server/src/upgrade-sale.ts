@@ -237,6 +237,7 @@ export async function checkUpgradeSale(
       zoneId: fixture.zoneId,
       lines: [{ menuItemId: fixture.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.00" },
+      dining: "eat_in",
     });
     if (
       ticket.total !== "1.00" ||

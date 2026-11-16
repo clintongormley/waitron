@@ -455,6 +455,7 @@ async function withCounterIn(dining: DiningPolicy, body: () => Promise<void>): P
 /** Save a parked cola order with a set lunch added. */
 async function addSetLunch(id: string) {
   return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+    dining: "takeaway",
     lines: [menu.cola, menu.setLunch].map((productId) => ({
       menuItemId: counter.offerFor(productId),
       quantity: "1",
@@ -697,6 +698,7 @@ describe("the part of a line cut off within its order", () => {
 
   async function payWhole(id: string): Promise<void> {
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "takeaway",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "10.00" },

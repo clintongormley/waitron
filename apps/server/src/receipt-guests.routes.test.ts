@@ -254,7 +254,11 @@ async function sell(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
-      ...(observedWholePaymentBody(v.db, "/api/sales", { workingOrderId: id }) as object),
+      dining: "eat_in",
+      ...(observedWholePaymentBody(v.db, "/api/sales", {
+        dining: "eat_in",
+        workingOrderId: id,
+      }) as object),
       workingOrderId: id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       tender,
@@ -537,7 +541,8 @@ async function payByReader(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
-      ...(observedWholePaymentBody(v.db, "/api/pay", { id }) as object),
+      dining: "eat_in",
+      ...(observedWholePaymentBody(v.db, "/api/pay", { dining: "eat_in", id }) as object),
       id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       simulationOutcome: "captured",

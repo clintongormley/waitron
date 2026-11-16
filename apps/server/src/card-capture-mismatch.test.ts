@@ -113,6 +113,7 @@ it.each([
       }),
     );
     const taken = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       zoneId: venue.zoneId,
@@ -173,6 +174,7 @@ it.each([
       captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
     });
     const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       zoneId: venue.zoneId,
@@ -362,7 +364,12 @@ it("retains a short capture after a lost reader answer and warns the next operat
     }),
   );
   const pay = () =>
-    send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: venue.zoneId });
+    send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+      zoneId: venue.zoneId,
+    });
   expect((await pay()).json).toEqual({ outcome: "timeout" });
   confirmed = true;
   await provider.resolvePending(venue.clock.now().instant, await ownsEveryPayment(suite.db));

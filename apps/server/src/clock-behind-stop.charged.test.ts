@@ -51,6 +51,7 @@ useVenueDb({
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
     const first = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: randomUUID(),
       zoneId: counter.zoneId,
       lines: dish(),
@@ -97,11 +98,21 @@ function dish() {
 }
 
 function cardSale(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", { id, lines: dish(), zoneId: counter.zoneId });
+  return send(app, venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
+    id,
+    lines: dish(),
+    zoneId: counter.zoneId,
+  });
 }
 
 function payStored(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId });
+  return send(app, venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
+    id,
+    lines: [],
+    zoneId: counter.zoneId,
+  });
 }
 
 function payBill(app: BillVenue["app"], billId: string, amount: string) {

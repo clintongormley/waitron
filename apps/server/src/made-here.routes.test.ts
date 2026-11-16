@@ -206,6 +206,7 @@ async function assertMadeHere(orderId: string) {
 async function parkedLager(): Promise<{ orderId: string; lineId: string }> {
   const orderId = randomUUID();
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+    dining: "eat_in",
     id: orderId,
     lines: [{ menuItemId: counterOffer, quantity: "1" }],
   });
@@ -568,6 +569,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
+        dining: "eat_in",
         revision: order!.revision,
         lines: [
           { workingOrderLineId: drink!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
@@ -617,6 +619,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
+        dining: "eat_in",
         revision: order!.revision,
         lines: [
           { workingOrderLineId: drink!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
@@ -644,6 +647,7 @@ describe("made-here route wiring", () => {
     ]);
     const orderId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: orderId,
       lines: [
         { menuItemId: counterPaellaOffer, quantity: "1", courseId: first.id },
@@ -695,6 +699,7 @@ describe("made-here route wiring", () => {
       tx.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
     );
     const edited = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${orderId}`, {
+      dining: "eat_in",
       revision: order!.revision,
       lines: [
         {
@@ -727,6 +732,7 @@ describe("made-here route wiring", () => {
   it("adds another of an already-made drink on a counter order as a new line", async () => {
     const orderId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: orderId,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -756,6 +762,7 @@ describe("made-here route wiring", () => {
     );
 
     const raised = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${orderId}`, {
+      dining: "eat_in",
       revision: order!.revision,
       lines: [{ workingOrderLineId: drink!.id, menuItemId: counterOffer, quantity: "2" }],
     });
@@ -805,6 +812,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
+        dining: "eat_in",
         revision: order!.revision,
         lines: [
           { workingOrderLineId: line!.id, menuItemId: venue.offerFor("Caña"), quantity: "2" },
@@ -1023,6 +1031,7 @@ describe("made-here route wiring", () => {
   it("groups an already-made counter drink as released when its bill joins a table", async () => {
     const orderId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: orderId,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -1261,6 +1270,7 @@ describe("made-here route wiring", () => {
     const id = randomUUID();
     const check = await assertMadeHere(id);
     const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
       tender: { method: "cash", amount: "3.00" },
@@ -1272,6 +1282,7 @@ describe("made-here route wiring", () => {
     expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("Caña de cerveza");
     expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("CANA");
     const replay = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
       tender: { method: "cash", amount: "3.00" },
@@ -1283,6 +1294,7 @@ describe("made-here route wiring", () => {
   it("does not add a made-here key or replay row when the sending device makes nothing here", async () => {
     const id = randomUUID();
     const answer = await send(venue.app, venue.cookie2, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
       tender: { method: "cash", amount: "3.00" },
@@ -1298,6 +1310,7 @@ describe("made-here route wiring", () => {
   it("refuses a client's reserved submission id before storing made-here replay facts", async () => {
     const id = randomUUID();
     await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -1352,6 +1365,7 @@ describe("made-here route wiring", () => {
         zoneId,
         lines: [{ menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "3.00" },
+        dining: "eat_in",
       };
       const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", body);
       expect(answer.status).toBe(200);
@@ -1369,6 +1383,7 @@ describe("made-here route wiring", () => {
     const id = randomUUID();
     const check = await assertMadeHere(id);
     const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -1454,6 +1469,7 @@ describe("made-here route wiring", () => {
       "POST",
       `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
       {
+        dining: "eat_in",
         submissionId: randomUUID(),
         draftRevision: draft.revision,
         expectedPartyRevision: party.revision,
@@ -1497,6 +1513,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
+        dining: "eat_in",
         revision: order!.revision,
         lines: [
           { workingOrderLineId: lines[0]!.id, menuItemId: venue.offerFor("Paella"), quantity: "1" },
@@ -1526,6 +1543,7 @@ describe("made-here route wiring", () => {
   it("/place sends a parked counter order from the device", async () => {
     const id = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -1545,6 +1563,7 @@ describe("made-here route wiring", () => {
   it("a bill payment route sends a pay-first bill when its cash payment completes it", async () => {
     const id = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id,
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
@@ -1640,6 +1659,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
+        dining: "eat_in",
         lines: [
           { workingOrderLineId: fired!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
           { menuItemId: venue.offerFor("Caña"), quantity: "1" },
@@ -1666,6 +1686,7 @@ describe("made-here route wiring", () => {
   it("replays a made-here line added by a fully paid unsent edit with the device till", async () => {
     const billId = randomUUID();
     const submitted = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: billId,
       lines: [{ menuItemId: counterPaellaOffer, quantity: "1" }],
     });
@@ -1698,6 +1719,7 @@ describe("made-here route wiring", () => {
     );
 
     const edited = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
+      dining: "eat_in",
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
       revision: order!.revision,
     });
@@ -1888,6 +1910,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${dish.tabId}`,
       {
+        dining: "eat_in",
         revision: order!.revision,
         lines: [
           {
@@ -1931,6 +1954,7 @@ describe("made-here route wiring", () => {
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
     const raised = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${dish.tabId}`, {
+      dining: "eat_in",
       revision: order!.revision,
       lines: [
         { workingOrderLineId: dish.lineId, menuItemId: venue.offerFor("Caña"), quantity: "2" },

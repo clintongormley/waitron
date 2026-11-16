@@ -626,6 +626,7 @@ describe("A669 notices", () => {
         );
         url = `/api/parties/${p.partyId}/drafts/${d.id}/submit`;
         body = {
+          dining: "eat_in",
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(v, p.partyId),
           draftRevision: d.revision,

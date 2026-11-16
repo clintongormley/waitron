@@ -465,7 +465,12 @@ it.each(["save", "line", "move-dishes", "merge", "adjustment"] as const)(
     const expectedEdit = await withTransaction(venue.db, (tx) => readBillEditState(tx, id));
     const body =
       operation === "save"
-        ? { revision: 0, expectedEdit, lines: [{ menuItemId: offer, quantity: "1" }] }
+        ? {
+            revision: 0,
+            expectedEdit,
+            lines: [{ menuItemId: offer, quantity: "1" }],
+            dining: "eat_in",
+          }
         : operation === "line"
           ? { revision: 0, expectedEdit, quantity: "1", portionLineNos: [] }
           : operation === "move-dishes"

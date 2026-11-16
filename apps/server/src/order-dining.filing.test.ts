@@ -133,6 +133,7 @@ describe("a parked order paid whole", () => {
   it.each(["takeaway", "eat_in"] as const)("files each line %s at its class", async (dining) => {
     const id = await parked(dining, [menu.cola, menu.cheeseBoard]);
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining,
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "5.80" },
@@ -144,6 +145,7 @@ describe("a parked order paid whole", () => {
   it("files the backend's VAT breakdown in the takeaway bands", async () => {
     const id = await parked("takeaway", [menu.cola, menu.cheeseBoard]);
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "takeaway",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "5.80" },
@@ -230,6 +232,7 @@ describe("the menu republished between adding a line and switching the order", (
     });
 
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "takeaway",
       workingOrderId: id,
       lines: [],
       tender: { method: "cash", amount: "1.80" },
@@ -247,6 +250,7 @@ describe("the menu republished between adding a line and switching the order", (
       dining: "takeaway",
     });
     const freshSold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "takeaway",
       workingOrderId: fresh,
       lines: [],
       tender: { method: "cash", amount: "1.80" },

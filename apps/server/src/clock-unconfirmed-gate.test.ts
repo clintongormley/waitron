@@ -471,21 +471,29 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   "POST /api/pay, a counter card sale with no saved order": async () => {
     const id = randomUUID();
     return {
-      send: (app) => as(app, "POST", "/api/pay", { id, lines: tarta(), zoneId: counter.zoneId }),
+      send: (app) =>
+        as(app, "POST", "/api/pay", {
+          dining: "eat_in",
+          id,
+          lines: tarta(),
+          zoneId: counter.zoneId,
+        }),
       grows: ["collects", "payments", "sales", "records"],
     };
   },
   "POST /api/pay, a card payment of a stored open order": async () => {
     const id = await counterOrder(false);
     return {
-      send: (app) => as(app, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId }),
+      send: (app) =>
+        as(app, "POST", "/api/pay", { dining: "eat_in", id, lines: [], zoneId: counter.zoneId }),
       grows: ["collects", "payments", "sales", "records"],
     };
   },
   "POST /api/pay, a card payment of an order whose invoice was filed": async () => {
     const id = await counterOrder(true);
     return {
-      send: (app) => as(app, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId }),
+      send: (app) =>
+        as(app, "POST", "/api/pay", { dining: "eat_in", id, lines: [], zoneId: counter.zoneId }),
       grows: ["collects", "payments", "tenders"],
     };
   },
@@ -493,7 +501,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     const { tabId } = await seatedWith(venue, threeEuroDish());
     await giveAway(venue, tabId, 1);
     return {
-      send: (app) => as(app, "POST", "/api/pay", { id: tabId, lines: [] }),
+      send: (app) => as(app, "POST", "/api/pay", { dining: "eat_in", id: tabId, lines: [] }),
       grows: ["sales", "records"],
     };
   },
@@ -502,6 +510,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     return {
       send: (app) =>
         as(app, "POST", "/api/sales", {
+          dining: "eat_in",
           workingOrderId: id,
           zoneId: counter.zoneId,
           lines: tarta(),
@@ -681,6 +690,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     const body = {
       revision: revisionOf(billId),
       expectedEdit: await readBillEditState(venue.db, billId),
+      dining: "eat_in",
       lines: heldRow(
         dishes.map((line) => line.id),
         "1",
@@ -859,6 +869,7 @@ const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
   "a held payment's outcome": async () => {
     const id = randomUUID();
     const paid = await as(venue.app, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: tarta(),
       zoneId: counter.zoneId,
@@ -1146,6 +1157,7 @@ describe("money already moved while the start waits", () => {
       );
 
     const charged = await as(app, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: tarta(),
       zoneId: counter.zoneId,
@@ -1160,7 +1172,12 @@ describe("money already moved while the start waits", () => {
     expect(moneyState()).toMatchObject({ collects: before.collects + 1, records: before.records });
 
     state.confirm("by_person", {});
-    const paid = await as(app, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId });
+    const paid = await as(app, "POST", "/api/pay", {
+      dining: "eat_in",
+      id,
+      lines: [],
+      zoneId: counter.zoneId,
+    });
 
     expect(paid.status).toBe(200);
     expect(paid.json.outcome).toBe("captured");

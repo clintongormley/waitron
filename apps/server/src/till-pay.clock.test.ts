@@ -48,6 +48,7 @@ const dish = () => [{ menuItemId: counter.offerFor(productId), quantity: "1" }];
 
 function cardSale(iso: string, id: string) {
   return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: dish(),
     zoneId: counter.zoneId,
@@ -56,6 +57,7 @@ function cardSale(iso: string, id: string) {
 
 function payStored(iso: string, id: string) {
   return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: [],
     zoneId: counter.zoneId,

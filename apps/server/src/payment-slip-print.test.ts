@@ -321,6 +321,7 @@ it.each(["whole", "short", "presented", "issued"])(
       ).toBe(200);
     const before = (await venue.db.select().from(printJobs)).length;
     const invalid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       printCardSlip: "true",
@@ -337,6 +338,7 @@ it.each(["whole", "short", "presented", "issued"])(
       );
     }
     const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       printCardSlip: true,
@@ -353,6 +355,7 @@ it.each(["whole", "short", "presented", "issued"])(
     expect(decodeTicket(slips[0]!.payload)).toContain(kind === "short" ? "20,00" : "0,00");
     expect(opensDrawer(slips[0]!.payload)).toBe(false);
     const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       printCardSlip: true,
@@ -592,6 +595,7 @@ it("rolls back the whole-card attempt when preparing its optional slip fails", a
   venue.db.run(sql`create temp table printers (broken text)`);
   try {
     const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       id,
       lines: [],
       printCardSlip: true,

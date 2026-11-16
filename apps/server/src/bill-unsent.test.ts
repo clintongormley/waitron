@@ -45,6 +45,7 @@ describe("payment reservations and previously received money", () => {
     const billId = await tabWith(venue, "Tarta");
     await unsent(billId);
     const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
       workingOrderId: billId,
       lines: [],
       tender: { method, amount: "18.00" },
@@ -58,7 +59,11 @@ describe("payment reservations and previously received money", () => {
     const billId = await tabWith(venue, "Tarta");
     await unsent(billId);
     const calls = venue.card.collectCalls.length;
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] });
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      dining: "eat_in",
+      id: billId,
+      lines: [],
+    });
     expect(paid.status).toBe(409);
     expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
     expect(venue.card.collectCalls.length).toBe(calls);
@@ -151,7 +156,11 @@ describe("payment reservations and previously received money", () => {
               tip: "0.00",
               submissionId: randomUUID(),
             })
-          : send(venue.app, venue.cookie, "POST", "/api/pay", { id: p.tabId, lines: [] });
+          : send(venue.app, venue.cookie, "POST", "/api/pay", {
+              dining: "eat_in",
+              id: p.tabId,
+              lines: [],
+            });
       try {
         await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
         await expect(unsent(p.tabId)).rejects.toMatchObject({ code: "order.payment_in_flight" });

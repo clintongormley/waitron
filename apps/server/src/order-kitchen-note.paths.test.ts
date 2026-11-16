@@ -76,6 +76,7 @@ describe("initial kitchen notes on ordering paths", () => {
           lines: lines(),
           tender: { method: "cash", amount: "12.00" },
           kitchenNote: "Shared kitchen instruction",
+          dining: "eat_in",
         }),
       });
       expect(response.status, JSON.stringify(await response.json())).toBe(200);

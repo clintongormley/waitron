@@ -98,6 +98,7 @@ function statusOfOrder(id: string): string | undefined {
 
 function sale(app: Hono, id: string, tender: Record<string, unknown>) {
   return send(app, venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: id,
     zoneId: venue.zoneId,
     lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
@@ -266,7 +267,12 @@ describe("the sale routes while the full-disk stop holds", () => {
       venue.cookie,
       "POST",
       "/api/pay",
-      { id, zoneId: free.zoneId, lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }] },
+      {
+        dining: "eat_in",
+        id,
+        zoneId: free.zoneId,
+        lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }],
+      },
     );
 
     expect(refusal(refused)).toEqual(REFUSED);
@@ -279,6 +285,7 @@ describe("the sale routes while the full-disk stop holds", () => {
       "POST",
       "/api/pay",
       {
+        dining: "eat_in",
         id: randomUUID(),
         zoneId: free.zoneId,
         lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }],
@@ -304,6 +311,7 @@ describe("the sale routes while the full-disk stop holds", () => {
       );
       await creditWholeInvoice(id);
       const answer = await send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
+        dining: "eat_in",
         id,
         zoneId: venue.zoneId,
         lines: [],

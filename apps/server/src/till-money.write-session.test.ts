@@ -72,10 +72,20 @@ async function requestFor(path: Path, cardRefund = false) {
     return {
       id,
       path: "/api/sales",
-      body: { workingOrderId: id, zoneId: counter.zoneId, lines: lines(), tender: cash },
+      body: {
+        dining: "eat_in",
+        workingOrderId: id,
+        zoneId: counter.zoneId,
+        lines: lines(),
+        tender: cash,
+      },
     };
   if (path === "integrated pay")
-    return { id, path: "/api/pay", body: { id, zoneId: counter.zoneId, lines: lines() } };
+    return {
+      id,
+      path: "/api/pay",
+      body: { dining: "eat_in", id, zoneId: counter.zoneId, lines: lines() },
+    };
   if (path === "collection") {
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
     await parkOrder(deps, venue.cfg, { id, zoneId: counter.zoneId, lines: lines() });
@@ -344,6 +354,7 @@ it.each(
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const answer = send(venue.app, cookie, "POST", "/api/pay", {
+      dining: "eat_in",
       ...(issued ? { id: request.id, lines: [] } : request.body),
     });
     try {

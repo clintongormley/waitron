@@ -102,6 +102,7 @@ function capturingLog() {
 
 function walkUpPay(id: string, log?: Logger, lineCount = 1) {
   return send(venue.appWith(log === undefined ? {} : { log }), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: lines(lineCount),
     zoneId: counter.zoneId,
@@ -110,6 +111,7 @@ function walkUpPay(id: string, log?: Logger, lineCount = 1) {
 
 function payAgain(id: string, log?: Logger) {
   return send(venue.appWith(log === undefined ? {} : { log }), venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
     id,
     lines: [],
     zoneId: counter.zoneId,
@@ -641,12 +643,18 @@ describe.each(REAL_PROVIDERS)(
         chargedLines,
         walkUp: (id: string) =>
           send(app, venue.cookie, "POST", "/api/pay", {
+            dining: "eat_in",
             id,
             lines: lines(),
             zoneId: counter.zoneId,
           }),
         payAgain: (id: string) =>
-          send(app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId }),
+          send(app, venue.cookie, "POST", "/api/pay", {
+            dining: "eat_in",
+            id,
+            lines: [],
+            zoneId: counter.zoneId,
+          }),
         payBill: (billId: string) =>
           send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
             submissionId: randomUUID(),

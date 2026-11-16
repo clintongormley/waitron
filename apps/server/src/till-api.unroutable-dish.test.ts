@@ -199,6 +199,7 @@ async function park(id: string, dishes: Dish[], label = "Mesa 3"): Promise<void>
     method: "POST",
     headers: { "content-type": "application/json", cookie: session },
     body: JSON.stringify({
+      dining: "eat_in",
       id,
       lines: dishes.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
       label,
@@ -216,6 +217,7 @@ async function payCash(
     method: "POST",
     headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie}` },
     body: JSON.stringify({
+      dining: "eat_in",
       workingOrderId,
       lines: walkUpLines.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
       tender: { method: "cash", amount: "50.00" },
@@ -965,6 +967,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       method: "PUT",
       headers: { "content-type": "application/json", cookie: session },
       body: JSON.stringify({
+        dining: "eat_in",
         revision: order.revision,
         lines: order.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -990,6 +993,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       method: "PUT",
       headers: { "content-type": "application/json", cookie: session },
       body: JSON.stringify({
+        dining: "eat_in",
         revision: copy.revision,
         lines: order.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -1011,6 +1015,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       method: "PUT",
       headers: { "content-type": "application/json", cookie: session },
       body: JSON.stringify({
+        dining: "eat_in",
         revision: next.revision,
         lines: order.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -1038,6 +1043,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       method: "POST",
       headers: { "content-type": "application/json", cookie: session },
       body: JSON.stringify({
+        dining: "eat_in",
         id,
         lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
       }),
@@ -1061,13 +1067,14 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const same = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: session },
-      body: JSON.stringify({ revision: order.revision, lines: [bodyLine] }),
+      body: JSON.stringify({ dining: "eat_in", revision: order.revision, lines: [bodyLine] }),
     });
     expect(same.status, await same.clone().text()).toBe(200);
     const withNote = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: session },
       body: JSON.stringify({
+        dining: "eat_in",
         revision: ((await same.json()) as { revision: number }).revision,
         lines: [{ ...bodyLine, note: "extra cold" }],
       }),
@@ -1356,6 +1363,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${session}; ${await enrolTill()}` },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         zoneId: v.counter.zoneId,
         lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
@@ -1387,6 +1395,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         cookie: `${session}; ${await enrolTill()}`,
       },
       body: JSON.stringify({
+        dining: "eat_in",
         workingOrderId: id,
         lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
         tender: { method: "cash", amount: "50.00" },

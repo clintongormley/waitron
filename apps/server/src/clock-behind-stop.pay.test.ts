@@ -64,15 +64,26 @@ function clockAt(ms: number): TrustedClock {
 const dish = () => [{ menuItemId: counter.offerFor(dishId), quantity: "1" }];
 
 function cardSale(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", { id, lines: dish(), zoneId: counter.zoneId });
+  return send(app, venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
+    id,
+    lines: dish(),
+    zoneId: counter.zoneId,
+  });
 }
 
 function payStored(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId });
+  return send(app, venue.cookie, "POST", "/api/pay", {
+    dining: "eat_in",
+    id,
+    lines: [],
+    zoneId: counter.zoneId,
+  });
 }
 
 function cashSale(app: BillVenue["app"], id: string) {
   return send(app, venue.cookie, "POST", "/api/sales", {
+    dining: "eat_in",
     workingOrderId: id,
     zoneId: counter.zoneId,
     lines: dish(),

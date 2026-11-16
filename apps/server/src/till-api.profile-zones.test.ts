@@ -578,6 +578,7 @@ const ROUTES: readonly Row[] = [
     "POST",
     () => "/api/sales",
     (x) => ({
+      dining: "eat_in",
       lines: saleLines(x),
       zoneId: x.deliCounter,
       tender: { method: "cash", amount: "2.00" },
@@ -588,35 +589,40 @@ const ROUTES: readonly Row[] = [
     "POST /api/sales (order)",
     "POST",
     () => "/api/sales",
-    (x) => ({ workingOrderId: x.deliOrder, lines: [], tender: { method: "cash", amount: "2.00" } }),
+    (x) => ({
+      dining: "eat_in",
+      workingOrderId: x.deliOrder,
+      lines: [],
+      tender: { method: "cash", amount: "2.00" },
+    }),
     deliOrderZone,
   ],
   [
     "POST /api/pay (zone)",
     "POST",
     () => "/api/pay",
-    (x) => ({ id: randomUUID(), lines: saleLines(x), zoneId: x.deliCounter }),
+    (x) => ({ dining: "eat_in", id: randomUUID(), lines: saleLines(x), zoneId: x.deliCounter }),
     deliOrderZone,
   ],
   [
     "POST /api/pay (order)",
     "POST",
     () => "/api/pay",
-    (x) => ({ id: x.deliOrder, lines: [] }),
+    (x) => ({ dining: "eat_in", id: x.deliOrder, lines: [] }),
     deliOrderZone,
   ],
   [
     "POST /api/working-orders (zone)",
     "POST",
     () => "/api/working-orders",
-    (x) => ({ id: randomUUID(), lines: saleLines(x), zoneId: x.deliCounter }),
+    (x) => ({ dining: "eat_in", id: randomUUID(), lines: saleLines(x), zoneId: x.deliCounter }),
     deliOrderZone,
   ],
   [
     "POST /api/working-orders (order)",
     "POST",
     () => "/api/working-orders",
-    (x) => ({ id: x.deliOrder, lines: saleLines(x) }),
+    (x) => ({ dining: "eat_in", id: x.deliOrder, lines: saleLines(x) }),
     deliOrderZone,
   ],
   [
@@ -637,7 +643,7 @@ const ROUTES: readonly Row[] = [
     "PUT /api/working-orders/:id",
     "PUT",
     (x) => `/api/working-orders/${x.deliOrder}`,
-    () => ({}),
+    () => ({ dining: "eat_in" }),
     deliOrderZone,
   ],
   [
@@ -1142,6 +1148,7 @@ const ROUTES: readonly Row[] = [
       revision: 0,
       draftRevision: 0,
       groups: [],
+      ...(verb === "submit" ? { dining: "eat_in" } : {}),
     }),
     deliTableZone,
   ]),
@@ -1819,6 +1826,7 @@ describe("a Restaurant profile in its own zones", () => {
   it("orders a Deli menu's item where the bar offers it", async () => {
     const orderId = randomUUID();
     const answer = await send(restaurant, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: orderId,
       lines: [{ menuItemId: f.deliSpecial, quantity: "1" }],
       zoneId: f.bar,
@@ -1831,6 +1839,7 @@ describe("a Restaurant profile in its own zones", () => {
   it("opens a new order with no zone named in the profile's starting zone", async () => {
     const orderId = randomUUID();
     const answer = await send(restaurant, "POST", "/api/working-orders", {
+      dining: "eat_in",
       id: orderId,
       lines: [{ menuItemId: f.deliSpecial, quantity: "1" }],
     });
