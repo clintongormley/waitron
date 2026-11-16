@@ -20,11 +20,7 @@ export const ENROL_RATE_WINDOW_MS = 60_000;
 export const ENROL_RATE_MAX = 30;
 
 export interface EnrolRateLimiterOptions {
-  /**
-   * Only the clock is injectable: the window and cap are baked in, so this limiter can never be
-   * constructed with a different rate policy than the one it ships.
-   */
-  /** Elapsed milliseconds from a clock that never steps back. */
+  /** Elapsed milliseconds from a clock that only moves forward; the window and cap stay fixed. */
   now?: () => number;
 }
 

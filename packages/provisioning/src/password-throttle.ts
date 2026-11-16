@@ -58,7 +58,7 @@ export function passwordThrottleBucket(secret: Uint8Array, email: string): numbe
   return placeOf(secret, email).bucket;
 }
 
-/** The PIN delay policy per key, with one attempt in flight per key; `now` never steps back. */
+/** The PIN delay policy per key, with one attempt in flight per key; `now` only moves forward. */
 export function createPasswordThrottle(
   now: () => number = steadyNow,
   secret: Uint8Array = randomBytes(32),

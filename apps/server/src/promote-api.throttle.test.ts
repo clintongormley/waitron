@@ -115,6 +115,8 @@ it.each(["legacy", "module", "preparation"])(
   async (kind) => {
     let now = Date.now();
     vi.spyOn(Date, "now").mockImplementation(() => now);
+    let steady = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
     const service = app();
     const suffix = kind === "preparation" ? "/preparation" : "";
     const request = (password: string, personId = ADMIN) =>
@@ -132,6 +134,7 @@ it.each(["legacy", "module", "preparation"])(
     });
     expect((await send(service, suffix, request(PASSWORD, OTHER))).status).toBe(200);
     now += 2000;
+    steady += 2000;
     expect((await send(service, suffix, request(PASSWORD))).status).toBe(200);
     // A successful sign-in resets the prior failures, and still issues no browser cookie.
     expect(await send(service, suffix, request("wrong"))).toMatchObject({

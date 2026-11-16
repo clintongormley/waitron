@@ -19,25 +19,24 @@ exception is recorded under [Decisions and deliberate limits](#decisions-and-del
 ### Inventory scope
 
 Source inspection on 2026-11-16 at `99a2f741c6694f5b8914bcdf47fd863e341c12d1`, not runtime
-verification. Reproduced the driver's search with
-`git grep -n -i -E 'went backwards|step(s|ped)? back|backward' -- apps packages scripts ':!*.test.*' ':!*.spec.*'`:
-93 matching lines in 58 files, byte-for-byte equal to the supplied `site-search.txt` receipt.
-There are **41 files with clock-related code**, four related prose/type-description files, ten
-textual false-positive files and three support files. Multiple guards in one file share a row;
-the original first slice accounted for `pin-throttle.ts`, `password-throttle.ts`,
-`account-rate-limit.ts` and `enrol-rate-limit.ts`; their open rows have been removed.
-The rules below name the remaining sites. This is an inventory of this search, not a claim that it discovers
-every timer: split-line wording and guards with other words can be missed.
+verification. Reproduce the source search with
+`git grep -n -i -E 'went backwards|step(s|ped)? back|backward' -- apps packages scripts ':!*.test.*' ':!*.spec.*'`.
+Multiple guards in one file share a row. The original first slice accounted for
+`pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`;
+their open rows have been removed. The tables account for the remaining matched files and exclusions.
+This search does not discover every timer: split-line wording and guards with other words can be missed.
 
-The unrestricted root search, with the same test exclusions, has 475 matching lines in 248 files
-at that commit. Its additional 382 lines are 378 documentation matches and four matches in
+Already-steady readers such as `apps/server/src/live-operation-rate-limit.ts` and
+`packages/provisioning/src/first-setup-owner.ts` call `performance.now()` directly and are outside
+this search. This slice leaves them unchanged.
+
+The unrestricted root search, with the same test exclusions, also matches documentation,
 `CLAUDE.md`, `.github/workflows/ci.yml`, `deploy/README.md` and `deploy/waitron.sh`. These describe
 history, policy, version ordering or backward compatibility, not additional elapsed-time guards.
-The tables below account for the matched files and their exclusions.
 
 ### Other code sites: retain for later scope decisions
 
-These 37 files from the source snapshot remain open. A persisted date, ordering invariant or calendar
+These files from the source snapshot remain open. A persisted date, ordering invariant or calendar
 rule is not made process-relative by replacing its clock read. Later slices must choose their
 scope and preserve the rules shown here before proposing any conversion.
 
@@ -83,7 +82,7 @@ scope and preserve the rules shown here before proposing any conversion.
 
 ### Related descriptions and excluded matches
 
-| File(s) from the 58-file search | Classification and rule/meaning |
+| File(s) from the source search | Classification and rule/meaning |
 | --- | --- |
 | `apps/dashboard/src/api/client.ts:2225–2227` | Backup-evidence interface description: latest load failure is ordered by recording order, not wall dates. Server implementation is `apps/server/src/backup-settings-evidence.ts`; no duration guard here. |
 | `apps/dashboard/src/i18n/alert-messages.ts:289–291`; `packages/fiscal/src/errors.ts:10–12` | Wording/type declaration for the trusted clock's backward-jump report; associated with `packages/fiscal/src/clock.ts`, not two extra guards. |
