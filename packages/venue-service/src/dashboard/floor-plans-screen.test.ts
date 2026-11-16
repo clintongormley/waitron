@@ -1,6 +1,6 @@
 import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
 import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
@@ -584,3 +584,28 @@ it("offers localized remembered column choices for waitron.floor-plans.table", a
     setLocale("en");
   }
 });
+
+it.each(["en", "es"] as const)(
+  "at 390 px in %s shows a long period name whole, clear of the pinned Actions column",
+  async (locale) => {
+    setLocale(locale);
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(...before));
+    const model = casaMarina();
+    model.departments[0]!.sets[0]!.usedBy = [
+      { id: "lunch", name: "Weekday lunch service", colour: "blue" },
+      { id: "brunch", name: "Saturday and Sunday brunch", colour: "green" },
+    ];
+    const { table } = await mountScreen({ model });
+    const usedBy = cell(table, "set:standard", "usedBy");
+    const chips = [...usedBy.querySelectorAll<HTMLElement>('[part~="chip"]')];
+    expect(chips).toHaveLength(2);
+    for (const chip of chips) {
+      expect(chip.scrollWidth).toBeLessThanOrEqual(chip.clientWidth);
+      expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
+        cell(table, "set:standard", "actions").getBoundingClientRect().left + 0.5,
+      );
+    }
+  },
+);

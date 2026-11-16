@@ -1038,6 +1038,8 @@ page, so that table, with its turn arrow and reason, sits above `bottomInset` an
 height. The floor-plan editor sets `bottomInset` to how far its phone sheet reaches over the canvas,
 and calls `reveal` when the selection changes or the sheet opens, and again whenever the sheet's
 height changes, until the person's next press or wheel (the page under the modal cannot scroll).
+`showTables()` scrolls a canvas where no table shows whole to the plan's tables, as far as they
+fit, keeping the plan's top left corner; the editor calls it each time it loads a layout.
 
 `wt-sheet` is a bar with a top border on the surface colour, whose toggle (at least `--wt-tap-min`
 tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`. Pressing it flips
@@ -6933,9 +6935,11 @@ counter-service zone shows its own value there, so those zones' shared value app
 (owner, 2026-11-14). The row menus stay pinned at the end.
 
 Beside the plan, or in its bottom sheet on a phone, you see Add tables and Add joined table
-above the selected table's form and the tables list. The form reserves its space even when no
-table is selected, so selecting or clearing a table does not move the list. That space stays
-empty without a selection. There is no subtitle, selection hint or colour key. Add buttons sit
+above the selected table's form and the tables list. Beside the plan the form reserves its space
+even when no table is selected, so selecting or clearing a table does not move the list; that
+space stays empty without a selection. In the phone sheet the list sits straight under the Add
+buttons when nothing is selected, and a refusal, a failed check or a tap on a row in the list
+scrolls the sheet so the table's form, or the refused field with its label, shows. There is no subtitle, selection hint or colour key. Add buttons sit
 side by side where they fit and wrap otherwise.
 
 The form holds Name, then Short name, then Seats, Shape and Moveable in one row of equal-height
@@ -7068,7 +7072,8 @@ zones, as an always-open tree whose indent and arrows are taken out, so departme
 flush left. A department row is bold on the `--wt-color-bg` band, and one with no sets says "No
 sets yet". A set row shows its name in bold, with a "Default" badge (`--wt-color-on-primary` on
 `--wt-color-primary`) on the department's default set; its Used by cell holds a chip, with the
-period's colour swatch, for each period that names the set, or says "Not used"; its row menu, in
+period's colour swatch, for each period that names the set, or says "Not used" (a long period name
+wraps inside its chip, so on a phone it is not hidden under the pinned column); its row menu, in
 the pinned `actions` column, holds Rename…, Copy… and, on a set that is not the default, Make
 default and Delete…. A zone row's name is a link to that set's layout of the zone in the floor plan
 editor (`layoutPath`), named "{zone} · {set}", and its Tables cell counts the tables on the layout

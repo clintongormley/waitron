@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import "@waitron/dashboard-modules";
 import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
@@ -1390,4 +1390,72 @@ it("a table named 1+2 stored with no short name shows its proposal 1 2, which sa
       .mocked(api.saveFloorPlan)
       .mock.calls[0]![2].tables.find((t: { key: string }) => t.key === "m1")!.shortName,
   ).toBe("1 2");
+});
+
+describe("at 390 px with the sheet scrolled down to its list", () => {
+  /** Enough placed tables that the sheet's body scrolls. */
+  const crowded = (): FloorPlan => ({
+    ...plan(),
+    tables: [
+      ...plan().tables,
+      ...Array.from({ length: 14 }, (_, i) => ({
+        ...plan().tables[0]!,
+        id: `x${i}`,
+        liveTableId: `lx${i}`,
+        label: `Extra ${i + 10}`,
+        placement: { ...placement, x: (i % 7) * 10, y: 20 + Math.floor(i / 7) * 10 },
+      })),
+    ],
+  });
+
+  async function scrolledDown(
+    overrides: Partial<DashboardApi> = {},
+  ): Promise<{ el: FloorPlanEditor; body: Element }> {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(...before));
+    const el = await open(
+      stubApi({ getFloorPlan: vi.fn().mockResolvedValue(crowded()), ...overrides }),
+    );
+    const sheet = () => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+    await expect.poll(sheet).not.toBeNull();
+    sheet()!.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+    await el.updateComplete;
+    const body = sheet()!.shadowRoot!.querySelector(".body")!;
+    await expect.poll(() => body.scrollHeight > body.clientHeight + 100).toBe(true);
+    body.scrollTop = body.scrollHeight;
+    await expect.poll(() => body.scrollTop > 0).toBe(true);
+    return { el, body };
+  }
+
+  /** The field, label included, shows whole inside the sheet's body, below its heading. */
+  const shownWhole = (field: HTMLElement, body: Element): boolean => {
+    const box = field.getBoundingClientRect();
+    const view = body.getBoundingClientRect();
+    return box.height > 0 && box.top >= view.top - 0.5 && box.bottom <= view.bottom + 0.5;
+  };
+
+  it("a refused name brings its field, label included, into view", async () => {
+    const { el, body } = await scrolledDown({ saveFloorPlan: vi.fn().mockRejectedValue(taken) });
+    await change(el, renamed(draftFromPlan(crowded()), "m1", "Patio 1"));
+    await press(el, "save");
+    expect(tablePanel(el).tableKey).toBe("m1");
+    await expect.poll(() => shownWhole(panelField(el, "table-name"), body)).toBe(true);
+  });
+
+  it("a checked short name brings its field into view", async () => {
+    const { el, body } = await scrolledDown();
+    await change(el, patchTable(draftFromPlan(crowded()), "x13", { shortName: "" }));
+    await press(el, "save");
+    expect(el.fieldError?.field).toBe("shortName");
+    await expect.poll(() => shownWhole(panelField(el, "short-name"), body)).toBe(true);
+  });
+
+  it("tapping a row in the list brings the table's form into view", async () => {
+    const { el, body } = await scrolledDown();
+    panelRow(el, "x13")!.querySelector<HTMLElement>("[data-action=select]")!.click();
+    await el.updateComplete;
+    expect(tablePanel(el).tableKey).toBe("x13");
+    await expect.poll(() => shownWhole(panelField(el, "table-name"), body)).toBe(true);
+  });
 });

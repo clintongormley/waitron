@@ -1539,3 +1539,48 @@ it.each([
     expect(save.bottom).toBeCloseTo(header.bottom, 0);
   },
 );
+
+it("at 390 px with nothing selected puts the list straight under Add tables", async () => {
+  await viewport(390, 844);
+  const el = await open();
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  sheet(el)!.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+  await el.updateComplete;
+  const panel = sheet(el)!.querySelector("floor-plan-tables-panel")!.shadowRoot!;
+  const foot = panel.querySelector(".foot")!.getBoundingClientRect();
+  const heads = panel.querySelector(".heads")!.getBoundingClientRect();
+  const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+  expect(foot.height).toBeGreaterThan(0);
+  expect(heads.top - foot.bottom).toBeLessThanOrEqual(2 * gap + 0.5);
+});
+
+it("at 1280 px opens a zone whose tables lie far from the grid's corner with them in view", async () => {
+  await viewport(1280, 800);
+  const far = (x: number, y: number, id: string): FloorPlan["tables"][number] => ({
+    ...terrace().tables[0]!,
+    id,
+    liveTableId: `l${id}`,
+    label: id,
+    placement: { ...placement, x, y },
+  });
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue({
+        ...terrace(),
+        tables: [far(74, 6, "t1"), far(92, 6, "t2"), far(74, 19, "t3"), far(92, 19, "t4")],
+      }),
+    }),
+  );
+  await expect.poll(() => canvas(el).shadowRoot!.querySelector(".viewport")).not.toBeNull();
+  const root = canvas(el).shadowRoot!;
+  const view = root.querySelector(".viewport")!.getBoundingClientRect();
+  await expect
+    .poll(
+      () =>
+        [...root.querySelectorAll("button.table")].filter((node) => {
+          const box = node.getBoundingClientRect();
+          return box.left >= view.left && box.right <= view.right && box.bottom <= view.bottom;
+        }).length,
+    )
+    .toBe(4);
+});
