@@ -1,10 +1,19 @@
 import { once } from "node:events";
 import PDFDocument from "pdfkit";
-import { dpiValue, textGrid, type EscSetting } from "@waitron/printing";
-import { invoiceFontBytes } from "./invoice-font.js";
+import {
+  DOTS_PER_COLUMN,
+  dpiValue,
+  gridForWidth,
+  TEXT_BAND_HEIGHT,
+  textGrid,
+  type EscSetting,
+} from "@waitron/printing";
+import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { previewPrintJob, type PrintPreviewBlock } from "./print-job-preview.js";
 
 type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;
+
+let monoFont: Promise<Buffer> | undefined;
 
 /** A ticket's commands drawn dot for dot on one page the printer's paper wide. */
 export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): Promise<Buffer> {
@@ -32,10 +41,12 @@ export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): P
   // Whole-dot margins keep every dot on the dot grid.
   const margin = Math.floor(((paperMm / 25.4) * dpi - widthDots) / 2);
   const drawn = images.reduce((sum, image) => sum + image.height, 0);
+  monoFont ??= loadRecoveryPackFonts().then((fonts) => fonts.mono);
   const pdf = new PDFDocument({
     autoFirstPage: false,
-    // PDFKit accepts font bytes here; its constructor option type names only a path.
-    font: invoiceFontBytes as unknown as string,
+    // PDFKit accepts font bytes here; its constructor option type names only a path. A fixed-width
+    // font puts each hidden character over the grid cell its glyph was printed in.
+    font: (await monoFont) as unknown as string,
   });
   const chunks: Buffer[] = [];
   pdf.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -66,16 +77,19 @@ export async function renderTicketPdf(bytes: Uint8Array, printer: EscSetting): P
       }
     }
     pdf.fill("black");
-    if (image.text !== undefined && image.text.trim() !== "") {
-      const size = image.height * dot;
-      const width = image.width * dot;
-      pdf.fontSize(size);
-      const natural = pdf.widthOfString(image.text);
+    const text = image.text?.trimStart() ?? "";
+    if (text !== "") {
+      // The text holds one character a grid cell from the first, trailing blanks dropped.
+      const cell = (DOTS_PER_COLUMN * image.height) / TEXT_BAND_HEIGHT;
+      const start =
+        left + gridForWidth(image.width).offsetDots + (image.text!.length - text.length) * cell;
+      pdf.fontSize(image.height * dot);
+      const natural = pdf.widthOfString(text);
       pdf
         .fillOpacity(0)
-        .text(image.text, left * dot, top * dot, {
+        .text(text, start * dot, top * dot, {
           lineBreak: false,
-          horizontalScaling: (width / natural) * 100,
+          horizontalScaling: ([...text].length * cell * dot * 100) / natural,
         } as PDFKit.Mixins.TextOptions)
         .fillOpacity(1);
     }
